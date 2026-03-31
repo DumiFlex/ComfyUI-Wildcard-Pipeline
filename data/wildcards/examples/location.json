@@ -1,0 +1,10 @@
+{
+  "name": "location",
+  "version": "1.0",
+  "options": [
+    { "value": "misty forest", "weight": 80, "tags": ["nature", "dark"] },
+    { "value": "urban rooftop", "weight": 50, "tags": ["urban"] },
+    { "value": "desert canyon", "weight": 30, "tags": ["nature"] },
+    { "value": "frozen tundra", "weight": 20, "tags": ["nature", "cold"] }
+  ]
+}

@@ -1,0 +1,2 @@
+# No additional dependencies beyond what ComfyUI ships with.
+# torch, numpy, PIL/Pillow, aiohttp are already available.

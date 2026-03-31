@@ -1,0 +1,10 @@
+{
+  "name": "lighting",
+  "version": "1.0",
+  "options": [
+    { "value": "golden hour", "weight": 90, "tags": ["warm"] },
+    { "value": "overcast", "weight": 60, "tags": ["neutral"] },
+    { "value": "moonlight", "weight": 40, "tags": ["cold", "night"] },
+    { "value": "midday sun", "weight": 20, "tags": ["warm", "harsh"] }
+  ]
+}
