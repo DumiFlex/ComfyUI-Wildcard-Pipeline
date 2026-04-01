@@ -1,34 +1,27 @@
 """Generic JSON file store for CRUD operations on data directories.
 
 Each resource type (wildcards, constraints, pipelines) lives in its own
-subdirectory of ``data/``.  Files are stored as ``{name}.json`` where
-*name* is the slugified resource name.
+subdirectory of ``data/``.  Files are stored as ``{uuid}.json`` where
+*uuid* is an 8-character hex identifier generated at creation time.
+
+Categories are expressed as directory structure (max 2 levels deep).
+A category string like ``"character > anime"`` maps to the subdirectory
+``base_dir/character/anime/``.  Root-level documents have ``category=""``.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
 
-def _slugify(name: str) -> str:
-    """Convert a human name to a filesystem-safe slug.
-
-    ``"Lighting Weather"`` → ``"lighting-weather"``
-    """
-    slug = name.lower().strip()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug or "unnamed"
-
-
 class FileStore:
-    """Read/write JSON documents in a single directory.
+    """Read/write JSON documents in a directory tree.
 
     Parameters
     ----------
@@ -47,64 +40,158 @@ class FileStore:
     # -- Read -----------------------------------------------------------------
 
     def list_all(self) -> list[dict[str, Any]]:
-        """Return all JSON documents in the directory (non-recursive)."""
+        """Return all JSON documents in the directory tree.
+
+        Each document is enriched with a ``"category"`` field derived from
+        its path relative to ``base_dir`` (max 2 directory levels).
+        """
         items: list[dict[str, Any]] = []
         if not self._base.is_dir():
             return items
 
-        for path in sorted(self._base.glob("*.json")):
+        for path in sorted(self._base.rglob("*.json")):
             data = self._read_file(path)
             if data is not None:
+                rel = path.relative_to(self._base)
+                parts = rel.parts[:-1]  # exclude filename
+                parts = parts[:2]  # max 2 levels
+                data["category"] = " > ".join(parts) if parts else ""
                 items.append(data)
         return items
 
-    def get(self, name: str) -> dict[str, Any] | None:
-        """Return a single document by name, or *None* if not found."""
-        path = self._path_for(name)
-        if not path.is_file():
+    def get(self, id: str) -> dict[str, Any] | None:
+        """Return a single document by id, or *None* if not found."""
+        path = self._find_by_id(id)
+        if path is None:
             return None
         return self._read_file(path)
 
+    def list_categories(self) -> list[str]:
+        """Return unique category strings derived from directory structure.
+
+        Scans subdirectories up to 2 levels deep. Root-level documents
+        (no subdirectory) are excluded — they have ``category=""``.
+        """
+        categories: set[str] = set()
+        if not self._base.is_dir():
+            return []
+        for path in self._base.rglob("*.json"):
+            rel = path.relative_to(self._base)
+            parts = rel.parts[:-1]  # exclude filename
+            if not parts:
+                continue
+            parts = parts[:2]
+            categories.add(" > ".join(parts))
+        return sorted(categories)
+
+    def list_tags(self) -> list[str]:
+        """Return all unique tags across all documents (sorted)."""
+        tags: set[str] = set()
+        for item in self.list_all():
+            for tag in item.get("tags", []):
+                if isinstance(tag, str):
+                    tags.add(tag)
+        return sorted(tags)
+
+    def list_filtered(
+        self,
+        category: str | None = None,
+        tag: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Filter ``list_all()`` by category and/or tag.
+
+        Parameters
+        ----------
+        category:
+            Exact category string to match (e.g. ``"character > anime"``).
+            Pass ``""`` to match root-level documents.  Pass ``None`` to
+            skip category filtering.
+        tag:
+            A single tag string that must appear in the document's
+            ``"tags"`` list.  Pass ``None`` to skip tag filtering.
+        """
+        items = self.list_all()
+        if category is not None:
+            items = [i for i in items if i.get("category") == category]
+        if tag is not None:
+            items = [i for i in items if tag in i.get("tags", [])]
+        return items
+
     # -- Write ----------------------------------------------------------------
 
-    def create(self, data: dict[str, Any]) -> Path:
-        """Write a new document.  Raises ``FileExistsError`` if duplicate."""
-        name = data.get("name", "unnamed")
-        path = self._path_for(name)
-        if path.is_file():
-            raise FileExistsError(f"Resource '{name}' already exists")
-        self._write_file(path, data)
-        return path
+    def create(self, data: dict[str, Any], category: str = "") -> dict[str, Any]:
+        """Write a new document with a generated UUID id.
 
-    def update(self, name: str, data: dict[str, Any]) -> Path:
-        """Overwrite an existing document.  Raises ``FileNotFoundError``."""
-        path = self._path_for(name)
-        if not path.is_file():
-            raise FileNotFoundError(f"Resource '{name}' not found")
+        Parameters
+        ----------
+        data:
+            Document payload (must not include ``"id"``).
+        category:
+            Optional ``"a"`` or ``"a > b"`` string (max 2 levels).
+            Defaults to root level (``""``).
 
-        new_name = data.get("name", name)
-        new_path = self._path_for(new_name)
+        Returns the full data dict including the injected ``"id"``.
+        """
+        target_dir = self._resolve_category_dir(category)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        new_id = self._generate_id_in(target_dir)
+        record = dict(data)
+        record["id"] = new_id
+        path = target_dir / f"{new_id}.json"
+        self._write_file(path, record)
+        return record
 
-        # If name changed, rename the file
-        if new_path != path:
-            if new_path.is_file():
-                raise FileExistsError(f"Resource '{new_name}' already exists")
-            path.unlink()
+    def update(self, id: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Overwrite an existing document.  Raises ``FileNotFoundError``.
 
-        self._write_file(new_path, data)
-        return new_path
+        The ``id`` field is always preserved from the URL parameter.
+        No rename logic — UUID filenames never change.
+        """
+        path = self._find_by_id(id)
+        if path is None:
+            raise FileNotFoundError(f"Resource '{id}' not found")
+        record = dict(data)
+        record["id"] = id  # ensure id field is preserved
+        self._write_file(path, record)
+        return record
 
-    def delete(self, name: str) -> None:
-        """Delete a document.  Raises ``FileNotFoundError``."""
-        path = self._path_for(name)
-        if not path.is_file():
-            raise FileNotFoundError(f"Resource '{name}' not found")
+    def delete(self, id: str) -> bool:
+        """Delete a document.  Returns True if deleted, raises ``FileNotFoundError`` if not found."""
+        path = self._find_by_id(id)
+        if path is None:
+            raise FileNotFoundError(f"Resource '{id}' not found")
         path.unlink()
+        return True
 
     # -- Helpers --------------------------------------------------------------
 
-    def _path_for(self, name: str) -> Path:
-        return self._base / f"{_slugify(name)}.json"
+    def _find_by_id(self, id: str) -> Path | None:
+        """Find a file by id anywhere in the store (including subdirectories)."""
+        for path in self._base.rglob(f"{id}.json"):
+            return path  # return first match
+        return None
+
+    def _resolve_category_dir(self, category: str) -> Path:
+        """Return the target directory for a category string (max 2 levels)."""
+        if not category:
+            return self._base
+        parts = [p.strip() for p in category.split(" > ") if p.strip()]
+        parts = parts[:2]  # enforce max 2 levels
+        result = self._base
+        for part in parts:
+            result = result / part
+        return result
+
+    def _generate_id(self) -> str:
+        """Generate a unique 8-char hex UUID in base_dir (backward compat)."""
+        return self._generate_id_in(self._base)
+
+    def _generate_id_in(self, target_dir: Path) -> str:
+        """Generate a unique 8-char hex UUID in the given directory."""
+        while True:
+            new_id = uuid4().hex[:8]
+            if not (target_dir / f"{new_id}.json").exists():
+                return new_id
 
     def _read_file(self, path: Path) -> dict[str, Any] | None:
         try:

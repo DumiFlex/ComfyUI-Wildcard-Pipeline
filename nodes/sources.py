@@ -100,9 +100,21 @@ def _load_json(file_path: Path, source: str) -> dict[str, Any] | None:
 
 
 def _find_json_file(source: str, base: Path) -> Path | None:
-    """Locate a JSON file by name in *base* and its ``examples/`` subdirectory."""
+    """Locate a JSON file by UUID or filename in *base* (recursive).
+
+    Resolution order:
+
+    1. Direct: ``base/{source}.json`` (or ``base/{source}`` if already has ``.json``)
+    2. Examples subdir: ``base/examples/{source}.json``
+    3. Recursive rglob: scan all subdirectories for ``{source}.json``
+
+    The rglob fallback handles category subdirectories (e.g. ``character/anime/``).
+    Both UUID references (``"1a2b3c4d"``) and legacy filename references
+    (``"location.json"``) are supported.
+    """
     name = source if source.endswith(".json") else f"{source}.json"
 
+    # Fast path: check known locations first
     candidates = [
         base / name,
         base / "examples" / name,
@@ -110,5 +122,9 @@ def _find_json_file(source: str, base: Path) -> Path | None:
     for candidate in candidates:
         if candidate.is_file():
             return candidate
+
+    # Fallback: recursive scan (handles category subdirectories)
+    for path in base.rglob(name):
+        return path
 
     return None

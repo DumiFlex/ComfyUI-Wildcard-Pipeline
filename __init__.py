@@ -9,13 +9,14 @@ try:
 
     from .nodes.pipeline_node import WildcardPipeline
     from .nodes.prompt_assembler import PromptAssembler
+    from .nodes.context_inject import ContextInject
 
     WEB_DIRECTORY = "./js"
 
     class WildcardPipelineExtension(ComfyExtension):
         @override
         async def get_node_list(self) -> list[type[io.ComfyNode]]:
-            return [WildcardPipeline, PromptAssembler]
+            return [WildcardPipeline, PromptAssembler, ContextInject]
 
         @override
         async def on_load(self):

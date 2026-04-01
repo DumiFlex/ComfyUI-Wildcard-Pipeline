@@ -26,11 +26,13 @@ def _make_crud_routes(
 
     Routes created:
 
-    - ``GET  {prefix}``        → list all
-    - ``GET  {prefix}/{name}`` → get one
-    - ``POST {prefix}``        → create
-    - ``PUT  {prefix}/{name}`` → update
-    - ``DELETE {prefix}/{name}`` → delete
+    - ``GET  {prefix}``             → list all
+    - ``GET  {prefix}/categories``  → list unique categories
+    - ``GET  {prefix}/tags``        → list unique tags
+    - ``GET  {prefix}/{id}``        → get one
+    - ``POST {prefix}``             → create
+    - ``PUT  {prefix}/{id}``        → update
+    - ``DELETE {prefix}/{id}``      → delete
     """
     routes = web.RouteTableDef()
 
@@ -39,13 +41,23 @@ def _make_crud_routes(
         items = store.list_all()
         return web.json_response(items)
 
-    @routes.get(f"{prefix}/{{name}}")
+    # Static sub-routes MUST come before the {id} catch-all route so aiohttp
+    # does not treat the literal string "categories" or "tags" as an id.
+    @routes.get(f"{prefix}/categories")
+    async def list_categories(request: web.Request) -> web.Response:
+        return web.json_response(store.list_categories())
+
+    @routes.get(f"{prefix}/tags")
+    async def list_tags(request: web.Request) -> web.Response:
+        return web.json_response(store.list_tags())
+
+    @routes.get(f"{prefix}/{{id}}")
     async def get_one(request: web.Request) -> web.Response:
-        name = request.match_info["name"]
-        item = store.get(name)
+        id = request.match_info["id"]
+        item = store.get(id)
         if item is None:
             raise web.HTTPNotFound(
-                text=json.dumps({"error": f"'{name}' not found"}),
+                text=json.dumps({"error": f"'{id}' not found"}),
                 content_type="application/json",
             )
         return web.json_response(item)
@@ -60,17 +72,17 @@ def _make_crud_routes(
                 content_type="application/json",
             )
         try:
-            store.create(data)
+            created = store.create(data)
         except FileExistsError as exc:
             raise web.HTTPConflict(
                 text=json.dumps({"error": str(exc)}),
                 content_type="application/json",
             )
-        return web.json_response(data, status=201)
+        return web.json_response(created, status=201)
 
-    @routes.put(f"{prefix}/{{name}}")
+    @routes.put(f"{prefix}/{{id}}")
     async def update(request: web.Request) -> web.Response:
-        name = request.match_info["name"]
+        id = request.match_info["id"]
         data = await _parse_json_body(request)
         errors = validator(data)
         if errors:
@@ -79,30 +91,25 @@ def _make_crud_routes(
                 content_type="application/json",
             )
         try:
-            store.update(name, data)
+            updated = store.update(id, data)
         except FileNotFoundError as exc:
             raise web.HTTPNotFound(
                 text=json.dumps({"error": str(exc)}),
                 content_type="application/json",
             )
-        except FileExistsError as exc:
-            raise web.HTTPConflict(
-                text=json.dumps({"error": str(exc)}),
-                content_type="application/json",
-            )
-        return web.json_response(data)
+        return web.json_response(updated)
 
-    @routes.delete(f"{prefix}/{{name}}")
+    @routes.delete(f"{prefix}/{{id}}")
     async def delete(request: web.Request) -> web.Response:
-        name = request.match_info["name"]
+        id = request.match_info["id"]
         try:
-            store.delete(name)
+            store.delete(id)
         except FileNotFoundError as exc:
             raise web.HTTPNotFound(
                 text=json.dumps({"error": str(exc)}),
                 content_type="application/json",
             )
-        return web.json_response({"deleted": name})
+        return web.json_response({"deleted": id})
 
     return routes
 

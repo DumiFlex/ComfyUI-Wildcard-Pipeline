@@ -45,7 +45,9 @@ def setup_routes(app: web.Application) -> None:
 
 async def _spa_catch_all(request: web.Request) -> web.StreamResponse:
     """Serve the SPA ``index.html`` for all non-API ``/wp`` routes."""
-    index = _WEB_DIST / "index.html"
+    index = _WEB_DIST / "src" / "manager.html"
     if not index.is_file():
-        raise web.HTTPNotFound(text="Manager SPA not built. Run: npm run build:manager")
+        raise web.HTTPNotFound(
+            text="Manager SPA not built. Run: pnpm run build:manager"
+        )
     return web.FileResponse(index)

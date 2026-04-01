@@ -4,48 +4,81 @@ import type {
   ComfyWidget,
   ComfyNodeType,
   ComfyNodeData,
+  ComfyApp,
 } from "#comfyui/app";
-import { createPipelineWidget, createAssemblerWidget } from "./extension/widgets";
+import { pipelineConfigWidgetFactory, injectConfigWidgetFactory, mountAssemblerPreview } from "./extension/widgets";
+import { findDownstreamAssemblers } from "./extension/graph";
+
+const ASSEMBLER_NODE_CLASS = "WP_PromptAssembler";
 
 app.registerExtension({
-  name: "wildcard-pipeline",
+  name: "Wildcard Pipeline",
 
-  getCustomWidgets() {
+  getCustomWidgets(/* _app: ComfyApp */) {
     return {
-      PIPELINE_MODULES(node: ComfyNode, inputName: string) {
-        return createPipelineWidget(node, inputName);
+      WP_PIPELINE_CONFIG(node: ComfyNode, inputName: string, _inputData: unknown, _app: ComfyApp) {
+        return pipelineConfigWidgetFactory(node, inputName);
       },
-      ASSEMBLER_TEMPLATE(node: ComfyNode, inputName: string) {
-        return createAssemblerWidget(node, inputName);
+      WP_INJECT_CONFIG(node: ComfyNode, inputName: string, _inputData: unknown, _app: ComfyApp) {
+        return injectConfigWidgetFactory(node, inputName);
       },
     };
   },
 
   async beforeRegisterNodeDef(nodeType: ComfyNodeType, nodeData: ComfyNodeData) {
-    if (nodeData.name === "WP_WildcardPipeline") {
+    // Assembler preview is an additive display widget — still uses onNodeCreated
+    if (nodeData.name === ASSEMBLER_NODE_CLASS) {
       const origOnCreated = nodeType.prototype.onNodeCreated;
       nodeType.prototype.onNodeCreated = function (this: ComfyNode, ...args: unknown[]) {
         origOnCreated?.apply(this, args);
-        const moduleWidget = this.widgets?.find(
-          (w: ComfyWidget) => w.name === "module_config"
-        );
-        if (moduleWidget) {
-          moduleWidget.type = "PIPELINE_MODULES";
+
+        const templateWidget = this.widgets?.find((w) => w.name === "template");
+        const refreshPreview = mountAssemblerPreview(this, templateWidget ?? null);
+
+        const self = this as ComfyNode & { _wpRefreshPreview?: () => void };
+        self._wpRefreshPreview = refreshPreview;
+
+        if (templateWidget) {
+          const origCallback = templateWidget.callback;
+          templateWidget.callback = (...args: unknown[]) => {
+            origCallback?.(...args);
+            refreshPreview();
+          };
         }
+
+        refreshPreview();
       };
     }
 
-    if (nodeData.name === "WP_PromptAssembler") {
-      const origOnCreated = nodeType.prototype.onNodeCreated;
-      nodeType.prototype.onNodeCreated = function (this: ComfyNode, ...args: unknown[]) {
-        origOnCreated?.apply(this, args);
-        const templateWidget = this.widgets?.find(
-          (w: ComfyWidget) => w.name === "template"
-        );
-        if (templateWidget) {
-          templateWidget.type = "ASSEMBLER_TEMPLATE";
-        }
+    // Universal onConnectionsChange — refreshes inject/assembler previews on any link change
+    type ConnectionsChangeHandler = (...args: [number, number, boolean, unknown, unknown]) => void;
+    const origConn = (nodeType.prototype as Record<string, ConnectionsChangeHandler | undefined>)[
+      "onConnectionsChange"
+    ];
+    nodeType.prototype.onConnectionsChange = function (
+      this: ComfyNode,
+      type: number,
+      slotIndex: number,
+      isConnected: boolean,
+      linkInfo: unknown,
+      ioSlot: unknown,
+    ) {
+      origConn?.call(this, type, slotIndex, isConnected, linkInfo, ioSlot);
+
+      const self = this as ComfyNode & {
+        _wpRefreshPreview?: () => void;
+        _wpRefreshInject?: () => void;
       };
-    }
+
+      self._wpRefreshInject?.();
+      self._wpRefreshPreview?.();
+
+      try {
+        for (const asm of findDownstreamAssemblers(this)) {
+          (asm as ComfyNode & { _wpRefreshPreview?: () => void })._wpRefreshPreview?.();
+        }
+      } catch {
+      }
+    };
   },
 });

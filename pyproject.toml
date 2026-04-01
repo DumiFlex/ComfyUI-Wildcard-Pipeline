@@ -6,7 +6,7 @@ license = "MIT"
 requires-python = ">=3.10"
 
 [project.urls]
-Repository = "https://github.com/DumiFlex/comfyui-wildcard-pipeline"
+Repository = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline"
 
 [tool.comfy]
 PublisherId = "dumiflex"

@@ -11,6 +11,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@primeuix/themes": "^2.0.3",
     "axios": "^1.7.0",
     "pinia": "^2.3.0",
     "primevue": "^4.2.5",
@@ -22,6 +23,7 @@
     "@vitejs/plugin-vue": "^5.2.3",
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
+    "vite-plugin-css-injected-by-js": "^4.0.1",
     "vue-tsc": "^2.1.10"
   }
 }

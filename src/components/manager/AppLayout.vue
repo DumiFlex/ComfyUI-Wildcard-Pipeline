@@ -1,47 +1,49 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import Menu from 'primevue/menu'
+import { useRoute } from 'vue-router'
+import { computed } from 'vue'
 import Toolbar from 'primevue/toolbar'
+import Toast from 'primevue/toast'
 
-const router = useRouter()
 const route = useRoute()
 
-const menuItems = ref([
-  {
-    label: 'Wildcards',
-    icon: 'pi pi-fw pi-tags',
-    command: () => router.push('/wildcards')
-  },
-  {
-    label: 'Constraints',
-    icon: 'pi pi-fw pi-filter',
-    command: () => router.push('/constraints')
-  },
-  {
-    label: 'Pipelines',
-    icon: 'pi pi-fw pi-share-alt',
-    command: () => router.push('/pipelines')
+const menuItems = [
+  { label: 'Dashboard', icon: 'pi pi-fw pi-home', path: '/' },
+  { label: 'Wildcards', icon: 'pi pi-fw pi-tags', path: '/wildcards' },
+  { label: 'Constraints', icon: 'pi pi-fw pi-filter', path: '/constraints' },
+  { label: 'Pipelines', icon: 'pi pi-fw pi-share-alt', path: '/pipelines' }
+]
+
+const pageTitle = computed(() => {
+  if (route.name && typeof route.name === 'string') {
+    const name = route.name
+    return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
   }
-])
+  return route.path === '/' ? 'Dashboard' : route.path.replace('/', '')
+})
 </script>
 
 <template>
-  <div class="layout-wrapper">
+  <div class="layout-wrapper app-dark">
+    <Toast />
     <aside class="sidebar">
-      <div class="logo">WP-MANAGER</div>
-      <Menu :model="menuItems" class="nav-menu" />
+      <div class="logo">Wildcard Pipeline</div>
+      <nav class="nav-menu">
+        <router-link
+          v-for="item in menuItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          :class="{ 'is-active': route.path === item.path }"
+        >
+          <i :class="item.icon"></i>
+          <span>{{ item.label }}</span>
+        </router-link>
+      </nav>
     </aside>
     <main class="content-area">
       <Toolbar class="topbar">
         <template #start>
-          <h2 class="page-title">{{ route.path.replace('/', '').toUpperCase() }}</h2>
-        </template>
-        <template #end>
-          <div class="status-indicator">
-            <span class="status-dot"></span>
-            SYS_ONLINE
-          </div>
+          <h2 class="page-title">{{ pageTitle }}</h2>
         </template>
       </Toolbar>
       <div class="page-content">
@@ -55,35 +57,60 @@ const menuItems = ref([
 .layout-wrapper {
   display: flex;
   min-height: 100vh;
-  background-color: var(--bg-base);
+  background-color: var(--p-surface-100);
 }
 
 .sidebar {
   width: 250px;
-  background-color: var(--bg-panel);
-  border-right: 1px solid var(--border-color);
+  background-color: var(--p-surface-50);
+  border-right: 1px solid var(--p-surface-200);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .logo {
-  padding: var(--space-6) var(--space-4);
-  font-size: var(--text-xl);
-  font-weight: 800;
-  color: var(--accent-primary);
-  border-bottom: 1px solid var(--border-color);
-  letter-spacing: 0.1em;
-  text-shadow: 0 0 8px rgba(0, 229, 89, 0.3);
+  padding: 1.5rem 1rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--p-primary-color);
+  border-bottom: 1px solid var(--p-surface-200);
+  text-align: center;
 }
 
 .nav-menu {
-  border: none;
-  background: transparent;
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+  gap: 0.25rem;
 }
 
-:deep(.p-menu) {
-  border: none !important;
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--p-text-muted-color);
+  font-size: 1rem;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.nav-item:hover {
+  background-color: var(--p-surface-100);
+  color: var(--p-text-color);
+  border-left-color: var(--p-surface-300);
+}
+
+.nav-item.is-active {
+  background-color: var(--p-highlight-background);
+  color: var(--p-primary-color);
+  border-left-color: var(--p-primary-color);
+}
+
+.nav-item i {
+  font-size: 1.125rem;
 }
 
 .content-area {
@@ -91,49 +118,28 @@ const menuItems = ref([
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
 }
 
 .topbar {
-  background-color: var(--bg-panel);
+  background-color: var(--p-surface-0);
   border: none;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--p-surface-200);
   border-radius: 0;
-  padding: var(--space-4) var(--space-6);
+  padding: 1rem 1.5rem;
+  margin: 0;
 }
 
 .page-title {
   margin: 0;
-  font-size: var(--text-lg);
-  color: var(--text-primary);
-  letter-spacing: 0.1em;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--accent-primary);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  background-color: var(--accent-primary);
-  border-radius: 50%;
-  box-shadow: 0 0 6px var(--accent-primary);
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.4; }
-  100% { opacity: 1; }
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--p-text-color);
 }
 
 .page-content {
   flex: 1;
-  padding: var(--space-6);
+  padding: 1.5rem;
   overflow-y: auto;
 }
 </style>

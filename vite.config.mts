@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 import { resolve } from "path";
 
 // Two build targets controlled by --mode flag:
@@ -9,23 +10,21 @@ import { resolve } from "path";
 export default defineConfig(({ mode }) => {
   const isExtension = mode === "extension" || mode === "development";
 
-  const shared = {
-    plugins: [vue()],
-    resolve: {
-      alias: {
-        "@": resolve(__dirname, "./src"),
-        // Map type-safe alias to ComfyUI runtime import
-        "#comfyui/app": "../../../scripts/app.js",
-      },
-    },
-    define: {
-      "process.env.NODE_ENV": JSON.stringify("production"),
-    },
-  };
-
   if (isExtension) {
     return {
-      ...shared,
+      plugins: [
+        vue(),
+        cssInjectedByJsPlugin(), // Inject CSS into JS for ComfyUI compatibility
+      ],
+      resolve: {
+        alias: {
+          "@": resolve(__dirname, "./src"),
+          "#comfyui/app": "/scripts/app.js",
+        },
+      },
+      define: {
+        "process.env.NODE_ENV": JSON.stringify("production"),
+      },
       build: {
         lib: {
           entry: resolve(__dirname, "./src/main.ts"),
@@ -33,7 +32,7 @@ export default defineConfig(({ mode }) => {
           fileName: "main",
         },
         rollupOptions: {
-          external: ["../../../scripts/app.js"],
+          external: ["/scripts/app.js"],
           output: {
             dir: "js",
             entryFileNames: "main.js",
@@ -47,9 +46,17 @@ export default defineConfig(({ mode }) => {
     };
   }
 
-  // Manager SPA build
+  // Manager SPA build — no CSS injection needed (served with HTML)
   return {
-    ...shared,
+    plugins: [vue()],
+    resolve: {
+      alias: {
+        "@": resolve(__dirname, "./src"),
+      },
+    },
+    define: {
+      "process.env.NODE_ENV": JSON.stringify("production"),
+    },
     base: "/wp/",
     build: {
       outDir: "web_dist",

@@ -16,7 +16,7 @@ _MODULE_SCHEMAS: dict[str, set[str]] = {
     "wildcard": {"capture_as"},
     "fixed": {"value", "capture_as"},
     "combine": {"template", "capture_as"},
-    "constrain": {"target"},
+    "constrain": set(),
     "condition": {"variable"},
     "export": {"variables"},
 }
@@ -61,12 +61,13 @@ def resolve_variables(template: str, ctx: dict[str, Any]) -> str:
 def apply_constraints(
     options: list[dict[str, Any]],
     rules: list[dict[str, Any]],
-    trigger_value: str,
+    ctx: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Apply constraint rules to a set of wildcard options.
+    """Apply constraint rules to a set of wildcard options using context variable lookup.
 
-    Rules are only applied when ``trigger_value`` matches the rule's
-    ``when_value``.  Two rule types are supported:
+    For each rule, looks up ``ctx[rule["when_variable"]]`` and compares to
+    ``rule["when_value"]``.  Only applies the rule if they match.  Two rule
+    types are supported:
 
     - ``exclusion`` — remove options whose ``value`` is in the rule's
       ``values`` list.
@@ -78,8 +79,9 @@ def apply_constraints(
     result = [opt.copy() for opt in options]
 
     for rule in rules:
+        when_var = rule.get("when_variable", "")
         when_value = rule.get("when_value", "")
-        if when_value != trigger_value:
+        if ctx.get(when_var, "") != when_value:
             continue
 
         rule_type = rule.get("rule_type", "")
@@ -178,24 +180,47 @@ class PipelineEngine:
     def _handle_wildcard(
         self, module: dict[str, Any], ctx: dict[str, Any]
     ) -> dict[str, Any]:
-        """Weighted random sample from options, capture result as ``$var``."""
+        """Weighted random sample from options, capture result as ``$var``.
+
+        Before sampling, applies any registered constraints from
+        ``ctx["__constraints__"]`` whose ``target`` matches this wildcard's
+        ``capture_as`` variable.
+        """
         options = module.get("options", [])
         capture_as = module.get("capture_as", "")
 
         if not options or not capture_as:
             return ctx
 
+        capture_as_normalized = _normalize_capture(capture_as)
+
+        # Apply registered constraints targeting this variable
+        registered_constraints = ctx.get("__constraints__", [])
+        matching_rules = [
+            r
+            for r in registered_constraints
+            if r.get("target") == capture_as_normalized
+        ]
+        if matching_rules:
+            options = apply_constraints(options, matching_rules, ctx)
+
+        # If all options excluded, log warning and return without capturing
+        if not options:
+            logger.warning(
+                "All options excluded by constraints for '$%s'", capture_as_normalized
+            )
+            return ctx
+
         weights = [opt.get("weight", 1.0) for opt in options]
 
         # all-zero weights → uniform sampling
         if all(w == 0 for w in weights):
-            weights = [1.0] * len(weights)
+            weights = [1.0] * len(options)
 
         chosen = random.choices(options, weights=weights, k=1)[0]
         value = chosen.get("value", "")
 
-        capture_as = _normalize_capture(capture_as)
-        ctx[capture_as] = value
+        ctx[capture_as_normalized] = value
 
         return ctx
 
@@ -232,48 +257,16 @@ class PipelineEngine:
     def _handle_constrain(
         self, module: dict[str, Any], ctx: dict[str, Any]
     ) -> dict[str, Any]:
-        """Apply constraint rules to a target wildcard in the context.
+        """Register constraint rules into ctx for later application by wildcard handlers.
 
-        The ``target`` specifies which context variable triggers the rules.
-        ``rules`` is a list of constraint rule dicts (exclusion / weight_bias).
-
-        The constrain module modifies ``__constrained_options__`` in the
-        context, which downstream wildcard modules can use.  If a
-        ``capture_as`` is specified, the module also re-samples from the
-        constrained options and stores the result.
+        Does NOT resample or capture any variable. Rules are stored in
+        ``ctx["__constraints__"]`` and applied by ``_handle_wildcard()`` before
+        sampling.
         """
-        target = module.get("target", "")
         rules = module.get("rules", [])
-
-        if not target:
-            return ctx
-
-        target = _normalize_capture(target)
-        trigger_value = ctx.get(target, "")
-
-        if not trigger_value or not rules:
-            return ctx
-
-        source_options = module.get("options", [])
-        if not source_options:
-            return ctx
-
-        constrained = apply_constraints(source_options, rules, trigger_value)
-
-        capture_as = module.get("capture_as", "")
-        if capture_as:
-            capture_as = _normalize_capture(capture_as)
-            if constrained:
-                weights = [opt.get("weight", 1.0) for opt in constrained]
-                if all(w == 0 for w in weights):
-                    weights = [1.0] * len(constrained)
-                chosen = random.choices(constrained, weights=weights, k=1)[0]
-                ctx[capture_as] = chosen.get("value", "")
-            else:
-                logger.warning(
-                    "All options excluded by constraints for target '$%s'", target
-                )
-
+        if rules:
+            constraints = ctx.setdefault("__constraints__", [])
+            constraints.extend(rules)
         return ctx
 
     def _handle_condition(

@@ -1,4 +1,4 @@
-"""Tests for the API CRUD routes and server setup.
+"""Tests for the API CRUD routes using UUID-based ids.
 
 Uses aiohttp.test_utils.TestClient for async HTTP testing without
 requiring pytest-aiohttp as an extra dependency.
@@ -24,7 +24,7 @@ from api.services.file_store import FileStore
 # -- Helpers ------------------------------------------------------------------
 
 
-def _make_app(tmp_path) -> tuple[web.Application, FileStore]:
+def _make_wildcard_app(tmp_path) -> tuple[web.Application, FileStore]:
     """Create a test app with wildcard CRUD routes pointing at tmp_path."""
     store = FileStore(tmp_path)
     app = web.Application()
@@ -53,7 +53,7 @@ def _make_pipeline_app(tmp_path) -> tuple[web.Application, FileStore]:
 class TestWildcardRoutes:
     @pytest_asyncio.fixture
     async def client(self, tmp_path):
-        app, self.store = _make_app(tmp_path)
+        app, self.store = _make_wildcard_app(tmp_path)
         async with TestClient(TestServer(app)) as client:
             yield client
 
@@ -63,11 +63,13 @@ class TestWildcardRoutes:
         data = await resp.json()
         assert data == []
 
-    async def test_create(self, client):
+    async def test_create_returns_201_with_id(self, client):
         payload = {"name": "location", "options": [{"value": "forest"}]}
         resp = await client.post("/wp/api/wildcards", json=payload)
         assert resp.status == 201
         data = await resp.json()
+        assert "id" in data
+        assert len(data["id"]) == 8
         assert data["name"] == "location"
 
     async def test_create_then_list(self, client):
@@ -78,11 +80,16 @@ class TestWildcardRoutes:
         assert len(data) == 1
         assert data[0]["name"] == "colors"
 
-    async def test_create_duplicate_returns_409(self, client):
+    async def test_create_duplicate_names_allowed(self, client):
+        """UUIDs are always unique — duplicate names are allowed."""
         payload = {"name": "dupe", "options": []}
-        await client.post("/wp/api/wildcards", json=payload)
-        resp = await client.post("/wp/api/wildcards", json=payload)
-        assert resp.status == 409
+        r1 = await client.post("/wp/api/wildcards", json=payload)
+        r2 = await client.post("/wp/api/wildcards", json=payload)
+        assert r1.status == 201
+        assert r2.status == 201
+        d1 = await r1.json()
+        d2 = await r2.json()
+        assert d1["id"] != d2["id"]
 
     async def test_create_missing_fields_returns_400(self, client):
         resp = await client.post("/wp/api/wildcards", json={"name": "no-options"})
@@ -98,111 +105,204 @@ class TestWildcardRoutes:
         )
         assert resp.status == 400
 
-    async def test_get_existing(self, client):
+    async def test_get_existing_by_id(self, client):
         payload = {"name": "test-item", "options": [{"value": "a"}]}
-        await client.post("/wp/api/wildcards", json=payload)
-        resp = await client.get("/wp/api/wildcards/test-item")
+        create_resp = await client.post("/wp/api/wildcards", json=payload)
+        created = await create_resp.json()
+        item_id = created["id"]
+
+        resp = await client.get(f"/wp/api/wildcards/{item_id}")
         assert resp.status == 200
         data = await resp.json()
         assert data["name"] == "test-item"
+        assert data["id"] == item_id
 
     async def test_get_nonexistent_returns_404(self, client):
-        resp = await client.get("/wp/api/wildcards/nonexistent")
+        resp = await client.get("/wp/api/wildcards/deadbeef")
         assert resp.status == 404
 
-    async def test_update_existing(self, client):
+    async def test_update_existing_by_id(self, client):
         payload = {"name": "updatable", "options": [{"value": "old"}]}
-        await client.post("/wp/api/wildcards", json=payload)
+        create_resp = await client.post("/wp/api/wildcards", json=payload)
+        item_id = (await create_resp.json())["id"]
+
         updated = {"name": "updatable", "options": [{"value": "new"}]}
-        resp = await client.put("/wp/api/wildcards/updatable", json=updated)
+        resp = await client.put(f"/wp/api/wildcards/{item_id}", json=updated)
         assert resp.status == 200
         data = await resp.json()
         assert data["options"][0]["value"] == "new"
 
+    async def test_update_preserves_id(self, client):
+        payload = {"name": "item", "options": []}
+        create_resp = await client.post("/wp/api/wildcards", json=payload)
+        item_id = (await create_resp.json())["id"]
+
+        resp = await client.put(
+            f"/wp/api/wildcards/{item_id}",
+            json={"name": "renamed", "options": []},
+        )
+        assert resp.status == 200
+        # id is preserved, file path unchanged
+        get_resp = await client.get(f"/wp/api/wildcards/{item_id}")
+        assert get_resp.status == 200
+
     async def test_update_nonexistent_returns_404(self, client):
         payload = {"name": "ghost", "options": []}
-        resp = await client.put("/wp/api/wildcards/ghost", json=payload)
+        resp = await client.put("/wp/api/wildcards/deadbeef", json=payload)
         assert resp.status == 404
 
     async def test_update_invalid_body_returns_400(self, client):
-        self.store.create({"name": "valid", "options": []})
-        resp = await client.put("/wp/api/wildcards/valid", json={"name": "valid"})
+        payload = {"name": "valid", "options": []}
+        create_resp = await client.post("/wp/api/wildcards", json=payload)
+        item_id = (await create_resp.json())["id"]
+        # Missing "options" field
+        resp = await client.put(f"/wp/api/wildcards/{item_id}", json={"name": "valid"})
         assert resp.status == 400
 
     async def test_delete_existing(self, client):
         payload = {"name": "deletable", "options": []}
-        await client.post("/wp/api/wildcards", json=payload)
-        resp = await client.delete("/wp/api/wildcards/deletable")
+        create_resp = await client.post("/wp/api/wildcards", json=payload)
+        item_id = (await create_resp.json())["id"]
+
+        resp = await client.delete(f"/wp/api/wildcards/{item_id}")
         assert resp.status == 200
         data = await resp.json()
-        assert data["deleted"] == "deletable"
+        assert data["deleted"] == item_id
+
         # Verify actually deleted
-        resp2 = await client.get("/wp/api/wildcards/deletable")
+        resp2 = await client.get(f"/wp/api/wildcards/{item_id}")
         assert resp2.status == 404
 
     async def test_delete_nonexistent_returns_404(self, client):
-        resp = await client.delete("/wp/api/wildcards/nope")
+        resp = await client.delete("/wp/api/wildcards/deadbeef")
         assert resp.status == 404
 
 
-# -- Constraint CRUD tests (verify same pattern works) ------------------------
+# -- Constraint CRUD tests ---------------------------------------------------
 
 
 @pytest.mark.asyncio
 class TestConstraintRoutes:
     @pytest_asyncio.fixture
     async def client(self, tmp_path):
-        app, _ = _make_constraint_app(tmp_path)
+        app, self.store = _make_constraint_app(tmp_path)
         async with TestClient(TestServer(app)) as client:
             yield client
 
-    async def test_create_and_get(self, client):
+    async def test_create_and_get_by_id(self, client):
         payload = {
             "name": "light-rules",
             "rules": [
                 {
+                    "target": "weather",
+                    "when_variable": "lighting",
                     "when_value": "moonlight",
                     "rule_type": "exclusion",
                     "values": ["sunny"],
                 }
             ],
         }
-        resp = await client.post("/wp/api/constraints", json=payload)
-        assert resp.status == 201
+        create_resp = await client.post("/wp/api/constraints", json=payload)
+        assert create_resp.status == 201
+        item_id = (await create_resp.json())["id"]
 
-        resp = await client.get("/wp/api/constraints/light-rules")
+        resp = await client.get(f"/wp/api/constraints/{item_id}")
         assert resp.status == 200
         data = await resp.json()
         assert data["name"] == "light-rules"
         assert len(data["rules"]) == 1
+        assert data["rules"][0]["target"] == "weather"
 
     async def test_create_missing_rules_returns_400(self, client):
         resp = await client.post("/wp/api/constraints", json={"name": "bad"})
         assert resp.status == 400
 
-    async def test_list_and_delete(self, client):
-        payload = {"name": "temp-rule", "rules": []}
-        await client.post("/wp/api/constraints", json=payload)
-        resp = await client.get("/wp/api/constraints")
-        assert len(await resp.json()) == 1
+    async def test_create_rule_missing_required_fields_returns_400(self, client):
+        payload = {
+            "name": "bad-rule",
+            "rules": [{"rule_type": "exclusion", "values": ["x"]}],
+        }
+        resp = await client.post("/wp/api/constraints", json=payload)
+        assert resp.status == 400
+        data = await resp.json()
+        assert "errors" in data
 
-        await client.delete("/wp/api/constraints/temp-rule")
-        resp = await client.get("/wp/api/constraints")
-        assert len(await resp.json()) == 0
+    async def test_list_and_delete_by_id(self, client):
+        payload = {
+            "name": "temp-rule",
+            "rules": [
+                {
+                    "target": "x",
+                    "when_variable": "v",
+                    "when_value": "t",
+                    "rule_type": "exclusion",
+                    "values": [],
+                }
+            ],
+        }
+        create_resp = await client.post("/wp/api/constraints", json=payload)
+        item_id = (await create_resp.json())["id"]
+
+        list_resp = await client.get("/wp/api/constraints")
+        assert len(await list_resp.json()) == 1
+
+        del_resp = await client.delete(f"/wp/api/constraints/{item_id}")
+        assert del_resp.status == 200
+        assert (await del_resp.json())["deleted"] == item_id
+
+        list_resp2 = await client.get("/wp/api/constraints")
+        assert len(await list_resp2.json()) == 0
+
+    async def test_update_constraint(self, client):
+        payload = {
+            "name": "initial",
+            "rules": [
+                {
+                    "target": "x",
+                    "when_variable": "v",
+                    "when_value": "old",
+                    "rule_type": "exclusion",
+                    "values": [],
+                }
+            ],
+        }
+        create_resp = await client.post("/wp/api/constraints", json=payload)
+        item_id = (await create_resp.json())["id"]
+
+        updated = {
+            "name": "updated",
+            "rules": [
+                {
+                    "target": "y",
+                    "when_variable": "v",
+                    "when_value": "new",
+                    "rule_type": "weight_bias",
+                    "values": ["a"],
+                    "multiplier": 2.0,
+                }
+            ],
+        }
+        resp = await client.put(f"/wp/api/constraints/{item_id}", json=updated)
+        assert resp.status == 200
+
+        get_resp = await client.get(f"/wp/api/constraints/{item_id}")
+        data = await get_resp.json()
+        assert data["name"] == "updated"
+        assert data["rules"][0]["target"] == "y"
 
 
-# -- Pipeline CRUD tests (verify same pattern works) --------------------------
+# -- Pipeline CRUD tests -----------------------------------------------------
 
 
 @pytest.mark.asyncio
 class TestPipelineRoutes:
     @pytest_asyncio.fixture
     async def client(self, tmp_path):
-        app, _ = _make_pipeline_app(tmp_path)
+        app, self.store = _make_pipeline_app(tmp_path)
         async with TestClient(TestServer(app)) as client:
             yield client
 
-    async def test_create_and_get(self, client):
+    async def test_create_and_get_by_id(self, client):
         payload = {
             "name": "env-pipeline",
             "modules": [
@@ -213,10 +313,11 @@ class TestPipelineRoutes:
                 }
             ],
         }
-        resp = await client.post("/wp/api/pipelines", json=payload)
-        assert resp.status == 201
+        create_resp = await client.post("/wp/api/pipelines", json=payload)
+        assert create_resp.status == 201
+        item_id = (await create_resp.json())["id"]
 
-        resp = await client.get("/wp/api/pipelines/env-pipeline")
+        resp = await client.get(f"/wp/api/pipelines/{item_id}")
         assert resp.status == 200
         data = await resp.json()
         assert data["name"] == "env-pipeline"
@@ -226,27 +327,38 @@ class TestPipelineRoutes:
         resp = await client.post("/wp/api/pipelines", json={"name": "bad"})
         assert resp.status == 400
 
-    async def test_update_pipeline(self, client):
+    async def test_update_pipeline_by_id(self, client):
         payload = {"name": "mypipe", "modules": []}
-        await client.post("/wp/api/pipelines", json=payload)
+        create_resp = await client.post("/wp/api/pipelines", json=payload)
+        item_id = (await create_resp.json())["id"]
+
         updated = {
             "name": "mypipe",
             "modules": [{"type": "fixed", "value": "hello", "capture_as": "$greet"}],
         }
-        resp = await client.put("/wp/api/pipelines/mypipe", json=updated)
+        resp = await client.put(f"/wp/api/pipelines/{item_id}", json=updated)
         assert resp.status == 200
         data = await resp.json()
         assert len(data["modules"]) == 1
 
+    async def test_delete_pipeline(self, client):
+        payload = {"name": "to-delete", "modules": []}
+        create_resp = await client.post("/wp/api/pipelines", json=payload)
+        item_id = (await create_resp.json())["id"]
 
-# -- Validation tests ---------------------------------------------------------
+        del_resp = await client.delete(f"/wp/api/pipelines/{item_id}")
+        assert del_resp.status == 200
+        assert (await del_resp.json())["deleted"] == item_id
+
+
+# -- Validation tests --------------------------------------------------------
 
 
 @pytest.mark.asyncio
 class TestValidation:
     @pytest_asyncio.fixture
     async def client(self, tmp_path):
-        app, _ = _make_app(tmp_path)
+        app, _ = _make_wildcard_app(tmp_path)
         async with TestClient(TestServer(app)) as client:
             yield client
 
@@ -266,3 +378,36 @@ class TestValidation:
             headers={"Content-Type": "application/json"},
         )
         assert resp.status == 400
+
+    async def test_tags_must_be_array(self, client):
+        resp = await client.post(
+            "/wp/api/wildcards",
+            json={"name": "x", "options": [], "tags": "not-list"},
+        )
+        assert resp.status == 400
+        data = await resp.json()
+        assert any("tags" in e for e in data["errors"])
+
+    async def test_constraint_invalid_rule_type_returns_400(self, client_constraint):
+        resp = await client_constraint.post(
+            "/wp/api/constraints",
+            json={
+                "name": "bad-type",
+                "rules": [
+                    {
+                        "target": "x",
+                        "when_variable": "v",
+                        "when_value": "t",
+                        "rule_type": "invalid_type",
+                        "values": [],
+                    }
+                ],
+            },
+        )
+        assert resp.status == 400
+
+    @pytest_asyncio.fixture
+    async def client_constraint(self, tmp_path):
+        app, _ = _make_constraint_app(tmp_path)
+        async with TestClient(TestServer(app)) as client:
+            yield client

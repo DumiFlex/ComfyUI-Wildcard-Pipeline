@@ -1,6 +1,8 @@
 {
+  "id": "5e6f7a8b",
   "name": "lighting",
   "version": "1.0",
+  "tags": [],
   "options": [
     { "value": "golden hour", "weight": 90, "tags": ["warm"] },
     { "value": "overcast", "weight": 60, "tags": ["neutral"] },

@@ -1,0 +1,10 @@
+{
+  "id": "3a4b5c6d",
+  "name": "lighting-weather",
+  "tags": [],
+  "rules": [
+    { "target": "weather", "when_variable": "lighting", "when_value": "moonlight", "rule_type": "exclusion", "values": ["sunny haze"] },
+    { "target": "weather", "when_variable": "lighting", "when_value": "midday sun", "rule_type": "exclusion", "values": ["night fog"] },
+    { "target": "weather", "when_variable": "lighting", "when_value": "golden hour", "rule_type": "weight_bias", "values": ["warm haze"], "multiplier": 2.0 }
+  ]
+}

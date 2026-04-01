@@ -1,12 +1,12 @@
 # PROJECT KNOWLEDGE BASE
 
 **Generated:** 2026-04-01
-**Commit:** 9cd2ac4
+**Commit:** 0abdc01 (latest committed) + significant uncommitted changes
 **Branch:** main
 
 ## OVERVIEW
 
-ComfyUI custom node pack: weighted wildcards, chained pipelines, context passing. V3 API, Vue DOM widgets, aiohttp manager SPA at `/wp`. Two ComfyUI nodes (`WildcardPipeline`, `PromptAssembler`) with modules rendered as Vue components inside a DOM widget — NOT as separate nodes.
+ComfyUI custom node pack: weighted wildcards, chained pipelines, context passing. V3 API, Vue DOM widgets, aiohttp manager SPA at `/wp`. Three ComfyUI nodes (`WildcardPipeline`, `PromptAssembler`, `ContextInject`) with modules rendered as Vue components inside a DOM widget — NOT as separate nodes.
 
 ## STRUCTURE
 
@@ -26,6 +26,7 @@ comfyui-wildcard-pipeline/
 ├── nodes/                   # ComfyUI V3 nodes (import comfy_api)
 │   ├── pipeline_node.py     # WildcardPipeline — defines PIPELINE_CONTEXT type
 │   ├── prompt_assembler.py  # PromptAssembler — resolves $vars in template
+│   ├── context_inject.py    # ContextInject — injects string inputs as named variables
 │   └── sources.py           # resolve_sources() — loads wildcard/constraint JSON files
 │
 ├── api/                     # aiohttp routes — fully implemented
@@ -38,7 +39,7 @@ comfyui-wildcard-pipeline/
 │       └── file_store.py    # FileStore class — JSON file CRUD with slugify
 │
 ├── data/                    # Example JSON files
-│   ├── wildcards/examples/  # location.json, lighting.json
+│   ├── wildcards/examples/  # location.json, lighting.json, weather.json
 │   ├── constraints/examples/# lighting_weather.json
 │   └── pipelines/examples/  # environment.json
 │
@@ -51,7 +52,8 @@ comfyui-wildcard-pipeline/
 │   ├── typings/
 │   │   └── comfyui.d.ts     # Local ComfyUI type declarations
 │   ├── extension/
-│   │   └── widgets.ts       # Vue widget mounting into DOM widgets
+│   │   ├── widgets.ts       # Vue widget mounting into DOM widgets
+│   │   └── graph.ts         # Upstream variable collection + downstream assembler finding
 │   ├── api/
 │   │   └── client.ts        # Axios API client for /wp/api/*
 │   ├── assets/
@@ -67,24 +69,22 @@ comfyui-wildcard-pipeline/
 │   │   │   └── AppLayout.vue        # Sidebar + toolbar + router-view
 │   │   ├── pipeline/
 │   │   │   ├── PipelineWidget.vue   # Drag-to-reorder module list
-│   │   │   └── modules/
-│   │   │       ├── WildcardModule.vue
-│   │   │       ├── FixedModule.vue
-│   │   │       ├── CombineModule.vue
-│   │   │       ├── ConstrainModule.vue
-│   │   │       ├── ConditionModule.vue
-│   │   │       └── ExportModule.vue
-│   │   └── assembler/
-│   │       └── AssemblerWidget.vue  # Template textarea + variable chips
+│   │   │   ├── ModulePickerModal.vue # Search + select module type modal
+│   │   │   └── widget-theme.css     # ComfyUI-native color palette variables
+│   │   ├── assembler/
+│   │   │   ├── AssemblerWidget.vue  # Template textarea + variable chips
+│   │   │   └── AssemblerPreview.vue # Read-only upstream variable preview
+│   │   └── inject/
+│   │       └── InjectWidget.vue     # Connected slot display + variable name editing
 │   └── views/
-│       ├── WildcardListView.vue     # DataTable + Dialog CRUD
-│       ├── ConstraintListView.vue   # DataTable + Dialog CRUD
-│       └── PipelineListView.vue     # DataTable + OrderList CRUD
+│       ├── WildcardListView.vue     # DataTable + Dialog CRUD + search + pagination
+│       ├── ConstraintListView.vue   # DataTable + Dialog CRUD + search + pagination
+│       └── PipelineListView.vue     # DataTable + Dialog CRUD + search + pagination
 │
-├── tests/                   # 117 tests — all passing, no ComfyUI deps
+├── tests/                   # 118 tests — all passing, no ComfyUI deps
 │   ├── test_engine.py       # 59 tests — engine handlers, validation, variables
 │   ├── test_sources.py      # 16 tests — wildcard + constraint source resolution
-│   ├── test_file_store.py   # 24 tests — FileStore CRUD + slugify
+│   ├── test_file_store.py   # 25 tests — FileStore CRUD + slugify
 │   └── test_api.py          # 21 tests — API route integration
 │
 ├── .github/workflows/
@@ -103,15 +103,17 @@ comfyui-wildcard-pipeline/
 | Custom type definition | `nodes/pipeline_node.py:13` | `PipelineContext = io.Custom("PIPELINE_CONTEXT")` |
 | Extension registration | `__init__.py` | `WildcardPipelineExtension.get_node_list()` |
 | Source resolution (file loading) | `nodes/sources.py` | `resolve_sources()` searches data_dir + examples/ |
+| Context injection (variable inject) | `nodes/context_inject.py` | Autogrow TemplateNames inputs, injects string→variable |
 | API route registration | `api/server.py` | Routes MUST be before SPA catch-all |
 | API CRUD factory | `api/routes/crud.py` | `_make_crud_routes()` generates routes per resource |
 | Schema validation | `api/models/schemas.py` | `validate_wildcard()`, `validate_constraint()`, `validate_pipeline()` |
 | File persistence | `api/services/file_store.py` | `FileStore` class — JSON CRUD with slugified filenames |
 | Frontend extension entry | `src/main.ts` | `app.registerExtension()` + `getCustomWidgets()` |
 | Frontend manager entry | `src/manager.ts` | Vue app with PrimeVue, Pinia, Router |
+| Graph traversal (upstream/downstream) | `src/extension/graph.ts` | `collectUpstreamVariables()`, `findDownstreamAssemblers()` |
 | API client | `src/api/client.ts` | Axios client at `/wp/api` |
 | Pinia stores | `src/stores/*.ts` | CRUD operations + loading/error state |
-| Vue module components | `src/components/pipeline/modules/*.vue` | One component per module type |
+| Vue module components | `src/components/pipeline/*.vue` | PipelineWidget + ModulePickerModal |
 | Manager views | `src/views/*.vue` | DataTable + Dialog CRUD for each resource |
 | Vite build config | `vite.config.mts` | `--mode extension` vs `--mode manager` |
 | Test engine behavior | `tests/test_engine.py` | Import via `from engine.pipeline import PipelineEngine` |
@@ -130,6 +132,7 @@ comfyui-wildcard-pipeline/
 | `WildcardPipeline` | Class | `nodes/pipeline_node.py` | ComfyUI node — deserializes JSON, runs engine, outputs context |
 | `PipelineContext` | Variable | `nodes/pipeline_node.py` | `io.Custom("PIPELINE_CONTEXT")` — cross-node type |
 | `PromptAssembler` | Class | `nodes/prompt_assembler.py` | Terminal node — resolves `$vars` in template string |
+| `ContextInject` | Class | `nodes/context_inject.py` | Injects string inputs as named pipeline variables |
 | `resolve_sources` | Function | `nodes/sources.py` | Loads wildcard/constraint JSON from data directories |
 | `WildcardPipelineExtension` | Class | `__init__.py` | V3 `ComfyExtension` — registers nodes, mounts routes |
 | `comfy_entrypoint` | Function | `__init__.py` | V3 factory — returns extension instance |
@@ -144,7 +147,7 @@ comfyui-wildcard-pipeline/
 - **Capture normalization**: `$location` → stored as `location` (strip leading `$`).
 - **Import style**: Relative imports within packages (`from ..engine.pipeline`), absolute in tests (`from engine.pipeline`).
 - **Test naming**: `TestPipelineEngine{Feature}` classes, `test_{behavior}` methods, no fixtures.
-- **Node IDs**: `WP_WildcardPipeline`, `WP_PromptAssembler` — prefix `WP_`.
+- **Node IDs**: `WP_WildcardPipeline`, `WP_PromptAssembler`, `WP_ContextInject` — prefix `WP_`.
 - **Category**: `pipeline/wildcards`.
 - **Caching**: `not_idempotent=True` + `fingerprint_inputs() → time.time()` — always re-execute.
 - **Annotations**: `from __future__ import annotations` in all Python modules.
@@ -160,27 +163,30 @@ comfyui-wildcard-pipeline/
 - **Never register SPA catch-all before API routes** — aiohttp matches first registered.
 - **Never suppress types** with `as any`, `@ts-ignore`, `@ts-expect-error`.
 - **Never use V1 patterns** (`NODE_CLASS_MAPPINGS`, `EXTENSION_WEB_DIRS`) — pure V3 only.
+- **Never use `getInputNode()`/`findInputSlot()`** — unreliable in ComfyUI's LiteGraph fork. Use `node.inputs[].link` → `app.graph.links[linkId]` → `graph.getNodeById(link.origin_id)`.
+- **Never use `requestAnimationFrame` in `onConnectionsChange`** — link is already established when the callback fires.
+- **Never use Autogrow `TemplatePrefix`** — may create phantom wrapper slot. Use `TemplateNames` with explicit names.
 
 ## COMMANDS
 
 ```bash
-# Tests (no ComfyUI required) — 117 tests
+# Tests (no ComfyUI required) — 118 tests
 pytest
 
 # Frontend dev (extension watch)
-npm run dev
+pnpm run dev
 
 # Build extension → js/main.js
-npm run build:extension
+pnpm run build:extension
 
 # Build manager SPA → web_dist/
-npm run build:manager
+pnpm run build:manager
 
 # Build both
-npm run build
+pnpm run build
 
 # Type check frontend
-npm run typecheck
+pnpm run typecheck
 ```
 
 ## DATA FORMATS

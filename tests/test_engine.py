@@ -316,12 +316,14 @@ class TestApplyConstraints:
         ]
         rules = [
             {
+                "when_variable": "lighting",
                 "when_value": "moonlight",
                 "rule_type": "exclusion",
                 "values": ["sunny haze"],
             }
         ]
-        result = apply_constraints(options, rules, "moonlight")
+        ctx = {"lighting": "moonlight"}
+        result = apply_constraints(options, rules, ctx)
         values = [o["value"] for o in result]
         assert "sunny haze" not in values
         assert "golden hour" in values
@@ -332,8 +334,16 @@ class TestApplyConstraints:
             {"value": "a", "weight": 1.0},
             {"value": "b", "weight": 1.0},
         ]
-        rules = [{"when_value": "x", "rule_type": "exclusion", "values": ["a"]}]
-        result = apply_constraints(options, rules, "no_match")
+        rules = [
+            {
+                "when_variable": "v",
+                "when_value": "x",
+                "rule_type": "exclusion",
+                "values": ["a"],
+            }
+        ]
+        ctx = {"v": "no_match"}
+        result = apply_constraints(options, rules, ctx)
         assert len(result) == 2
 
     def test_weight_bias_multiplies_matching_weights(self):
@@ -343,13 +353,15 @@ class TestApplyConstraints:
         ]
         rules = [
             {
+                "when_variable": "lighting",
                 "when_value": "golden hour",
                 "rule_type": "weight_bias",
                 "values": ["warm haze"],
                 "multiplier": 3.0,
             }
         ]
-        result = apply_constraints(options, rules, "golden hour")
+        ctx = {"lighting": "golden hour"}
+        result = apply_constraints(options, rules, ctx)
         warm = next(o for o in result if o["value"] == "warm haze")
         cold = next(o for o in result if o["value"] == "cold fog")
         assert warm["weight"] == 3.0
@@ -359,13 +371,15 @@ class TestApplyConstraints:
         options = [{"value": "a"}, {"value": "b"}]
         rules = [
             {
+                "when_variable": "v",
                 "when_value": "trigger",
                 "rule_type": "weight_bias",
                 "values": ["a"],
                 "multiplier": 2.0,
             }
         ]
-        result = apply_constraints(options, rules, "trigger")
+        ctx = {"v": "trigger"}
+        result = apply_constraints(options, rules, ctx)
         a = next(o for o in result if o["value"] == "a")
         assert a["weight"] == 2.0
 
@@ -373,13 +387,14 @@ class TestApplyConstraints:
         options = [{"value": "a", "weight": 1.0}]
         rules = [
             {
+                "when_variable": "v",
                 "when_value": "t",
                 "rule_type": "weight_bias",
                 "values": ["a"],
                 "multiplier": 5.0,
             }
         ]
-        apply_constraints(options, rules, "t")
+        apply_constraints(options, rules, {"v": "t"})
         assert options[0]["weight"] == 1.0
 
     def test_multiple_rules_applied_sequentially(self):
@@ -389,50 +404,140 @@ class TestApplyConstraints:
             {"value": "c", "weight": 1.0},
         ]
         rules = [
-            {"when_value": "t", "rule_type": "exclusion", "values": ["c"]},
             {
+                "when_variable": "v",
+                "when_value": "t",
+                "rule_type": "exclusion",
+                "values": ["c"],
+            },
+            {
+                "when_variable": "v",
                 "when_value": "t",
                 "rule_type": "weight_bias",
                 "values": ["a"],
                 "multiplier": 10.0,
             },
         ]
-        result = apply_constraints(options, rules, "t")
+        ctx = {"v": "t"}
+        result = apply_constraints(options, rules, ctx)
         assert len(result) == 2
         a = next(o for o in result if o["value"] == "a")
         assert a["weight"] == 10.0
 
     def test_empty_rules_returns_copy(self):
         options = [{"value": "a", "weight": 1.0}]
-        result = apply_constraints(options, [], "trigger")
+        result = apply_constraints(options, [], {})
         assert len(result) == 1
         assert result[0] is not options[0]
 
+    def test_weight_bias_zero_multiplier_zeroes_weight(self):
+        options = [{"value": "a", "weight": 1.0}, {"value": "b", "weight": 1.0}]
+        rules = [
+            {
+                "when_variable": "v",
+                "when_value": "t",
+                "rule_type": "weight_bias",
+                "values": ["a"],
+                "multiplier": 0.0,
+            }
+        ]
+        result = apply_constraints(options, rules, {"v": "t"})
+        a = next(o for o in result if o["value"] == "a")
+        assert a["weight"] == 0.0
+
+    def test_ctx_variable_lookup_uses_when_variable_key(self):
+        options = [{"value": "x", "weight": 1.0}, {"value": "y", "weight": 1.0}]
+        rules = [
+            {
+                "when_variable": "scene_type",
+                "when_value": "night",
+                "rule_type": "exclusion",
+                "values": ["x"],
+            }
+        ]
+        ctx_match = {"scene_type": "night"}
+        ctx_no_match = {"scene_type": "day"}
+        result_match = apply_constraints(options, rules, ctx_match)
+        result_no_match = apply_constraints(options, rules, ctx_no_match)
+        assert len(result_match) == 1
+        assert len(result_no_match) == 2
+
 
 class TestPipelineEngineConstrain:
-    def test_constrain_resamples_with_exclusion(self):
+    def test_constrain_registers_rules_and_wildcard_applies_them(self):
         engine = PipelineEngine()
         modules = [
             {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
             {
                 "type": "constrain",
-                "target": "$lighting",
-                "options": [
-                    {"value": "sunny haze", "weight": 1.0},
-                    {"value": "cold fog", "weight": 1.0},
-                ],
                 "rules": [
                     {
+                        "target": "weather",
+                        "when_variable": "lighting",
                         "when_value": "moonlight",
                         "rule_type": "exclusion",
                         "values": ["sunny haze"],
                     }
                 ],
+            },
+            {
+                "type": "wildcard",
                 "capture_as": "$weather",
+                "options": [
+                    {"value": "sunny haze", "weight": 1.0},
+                    {"value": "cold fog", "weight": 1.0},
+                ],
             },
         ]
         ctx = engine.run(modules, {})
         assert ctx["weather"] == "cold fog"
+
+    def test_constrain_stores_rules_in_ctx_constraints(self):
+        engine = PipelineEngine()
+        rules = [
+            {
+                "target": "weather",
+                "when_variable": "lighting",
+                "when_value": "moonlight",
+                "rule_type": "exclusion",
+                "values": ["sunny haze"],
+            }
+        ]
+        modules = [
+            {"type": "constrain", "rules": rules},
+        ]
+        ctx = engine.run(modules, {})
+        assert "__constraints__" in ctx
+        assert len(ctx["__constraints__"]) == 1
+        assert ctx["__constraints__"][0]["target"] == "weather"
+
+    def test_constrain_only_applies_rules_matching_target(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
+            {
+                "type": "constrain",
+                "rules": [
+                    {
+                        "target": "location",
+                        "when_variable": "lighting",
+                        "when_value": "moonlight",
+                        "rule_type": "exclusion",
+                        "values": ["forest"],
+                    }
+                ],
+            },
+            {
+                "type": "wildcard",
+                "capture_as": "$weather",
+                "options": [
+                    {"value": "rainy", "weight": 1.0},
+                    {"value": "sunny", "weight": 1.0},
+                ],
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["weather"] in ("rainy", "sunny")
 
     def test_constrain_without_capture_does_not_sample(self):
         engine = PipelineEngine()
@@ -440,8 +545,6 @@ class TestPipelineEngineConstrain:
             {"type": "fixed", "value": "x", "capture_as": "$trigger"},
             {
                 "type": "constrain",
-                "target": "$trigger",
-                "options": [{"value": "a", "weight": 1.0}],
                 "rules": [],
             },
         ]
@@ -454,16 +557,20 @@ class TestPipelineEngineConstrain:
             {"type": "fixed", "value": "sunlight", "capture_as": "$lighting"},
             {
                 "type": "constrain",
-                "target": "$lighting",
-                "options": [{"value": "a", "weight": 1.0}],
                 "rules": [
                     {
+                        "target": "weather",
+                        "when_variable": "lighting",
                         "when_value": "moonlight",
                         "rule_type": "exclusion",
                         "values": ["a"],
                     }
                 ],
+            },
+            {
+                "type": "wildcard",
                 "capture_as": "$weather",
+                "options": [{"value": "a", "weight": 1.0}],
             },
         ]
         ctx = engine.run(modules, {})
@@ -474,14 +581,83 @@ class TestPipelineEngineConstrain:
         modules = [
             {
                 "type": "constrain",
-                "target": "$nonexistent",
-                "options": [{"value": "a", "weight": 1.0}],
                 "rules": [],
-                "capture_as": "$result",
             },
         ]
         ctx = engine.run(modules, {})
         assert "result" not in ctx
+
+    def test_multiple_constraints_on_same_target_all_applied(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
+            {"type": "fixed", "value": "cold", "capture_as": "$temperature"},
+            {
+                "type": "constrain",
+                "rules": [
+                    {
+                        "target": "weather",
+                        "when_variable": "lighting",
+                        "when_value": "moonlight",
+                        "rule_type": "exclusion",
+                        "values": ["sunny haze"],
+                    }
+                ],
+            },
+            {
+                "type": "constrain",
+                "rules": [
+                    {
+                        "target": "weather",
+                        "when_variable": "temperature",
+                        "when_value": "cold",
+                        "rule_type": "exclusion",
+                        "values": ["warm drizzle"],
+                    }
+                ],
+            },
+            {
+                "type": "wildcard",
+                "capture_as": "$weather",
+                "options": [
+                    {"value": "sunny haze", "weight": 1.0},
+                    {"value": "warm drizzle", "weight": 1.0},
+                    {"value": "cold fog", "weight": 1.0},
+                ],
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["weather"] == "cold fog"
+
+    def test_weight_bias_zero_effectively_excludes_via_uniform_fallback(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "trigger", "capture_as": "$v"},
+            {
+                "type": "constrain",
+                "rules": [
+                    {
+                        "target": "pick",
+                        "when_variable": "v",
+                        "when_value": "trigger",
+                        "rule_type": "weight_bias",
+                        "values": ["a"],
+                        "multiplier": 0.0,
+                    }
+                ],
+            },
+            {
+                "type": "wildcard",
+                "capture_as": "$pick",
+                "options": [
+                    {"value": "a", "weight": 1.0},
+                    {"value": "b", "weight": 1.0},
+                ],
+            },
+        ]
+        for _ in range(20):
+            ctx = engine.run(modules, {})
+            assert ctx.get("pick") in ("a", "b")
 
 
 class TestPipelineEngineCondition:

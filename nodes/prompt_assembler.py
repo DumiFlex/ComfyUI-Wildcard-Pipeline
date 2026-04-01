@@ -15,7 +15,7 @@ class PromptAssembler(io.ComfyNode):
         return io.Schema(
             node_id="WP_PromptAssembler",
             display_name="Prompt Assembler",
-            category="wildcard-pipeline",
+            category="Wildcard Pipeline",
             description="Resolves a template string using pipeline context variables",
             inputs=[
                 PipelineContext.Input("pipeline_context"),

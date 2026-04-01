@@ -1,8 +1,0 @@
-{
-  "name": "lighting-weather",
-  "rules": [
-    { "when_value": "moonlight", "rule_type": "exclusion", "values": ["sunny haze"] },
-    { "when_value": "midday sun", "rule_type": "exclusion", "values": ["night fog"] },
-    { "when_value": "golden hour", "rule_type": "weight_bias", "values": ["warm haze"], "multiplier": 2.0 }
-  ]
-}

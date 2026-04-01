@@ -1,0 +1,13 @@
+{
+  "id": "7e8f9a0b",
+  "name": "Environment Pipeline",
+  "version": "1.0",
+  "tags": [],
+  "modules": [
+    { "type": "wildcard", "source": "1a2b3c4d", "capture_as": "$location" },
+    { "type": "wildcard", "source": "5e6f7a8b", "capture_as": "$lighting" },
+    { "type": "constrain", "source": "3a4b5c6d" },
+    { "type": "wildcard", "source": "9c0d1e2f", "capture_as": "$weather" },
+    { "type": "combine", "template": "$location, $lighting, $weather", "capture_as": "$environment" }
+  ]
+}

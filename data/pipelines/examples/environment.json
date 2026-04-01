@@ -1,9 +1,0 @@
-{
-  "name": "Environment Pipeline",
-  "version": "1.0",
-  "modules": [
-    { "type": "wildcard", "source": "location.json", "capture_as": "$location" },
-    { "type": "wildcard", "source": "lighting.json", "capture_as": "$lighting" },
-    { "type": "combine", "template": "$location, $lighting", "capture_as": "$environment" }
-  ]
-}

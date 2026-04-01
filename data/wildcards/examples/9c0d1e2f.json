@@ -1,0 +1,15 @@
+{
+  "id": "9c0d1e2f",
+  "name": "weather",
+  "version": "1.0",
+  "tags": [],
+  "options": [
+    { "value": "clear skies", "weight": 80, "tags": ["fair"] },
+    { "value": "warm haze", "weight": 60, "tags": ["warm", "fair"] },
+    { "value": "sunny haze", "weight": 50, "tags": ["warm", "day"] },
+    { "value": "light rain", "weight": 40, "tags": ["wet"] },
+    { "value": "night fog", "weight": 30, "tags": ["cold", "night"] },
+    { "value": "heavy storm", "weight": 15, "tags": ["wet", "dramatic"] },
+    { "value": "snow flurries", "weight": 20, "tags": ["cold"] }
+  ]
+}

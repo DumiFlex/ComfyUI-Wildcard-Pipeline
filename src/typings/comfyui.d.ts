@@ -41,7 +41,40 @@ export interface ComfyApp {
     };
   };
   api: ComfyApi;
-  graph: unknown;
+  graph: LGraph;
+}
+
+/** LiteGraph graph instance */
+export interface LGraph {
+  links: Record<number, LLink>;
+  getNodeById(id: number): ComfyNode | null;
+  _nodes: ComfyNode[];
+  _nodes_by_id: Record<number, ComfyNode>;
+  setDirtyCanvas(foreground: boolean, background: boolean): void;
+}
+
+/** LiteGraph link between two node slots */
+export interface LLink {
+  id: number;
+  origin_id: number;
+  origin_slot: number;
+  target_id: number;
+  target_slot: number;
+  type: string;
+}
+
+/** LiteGraph node input slot */
+export interface LNodeInput {
+  name: string;
+  type: string;
+  link: number | null;
+}
+
+/** LiteGraph node output slot */
+export interface LNodeOutput {
+  name: string;
+  type: string;
+  links: number[] | null;
 }
 
 export interface ComfyApi {
@@ -51,8 +84,12 @@ export interface ComfyApi {
 
 export interface ComfyNode {
   id: number;
+  type?: string;
   comfyClass?: string;
   widgets?: ComfyWidget[];
+  inputs: LNodeInput[];
+  outputs: LNodeOutput[];
+  graph: LGraph;
   addDOMWidget(
     name: string,
     type: string,
@@ -66,18 +103,34 @@ export interface ComfyNode {
     callback?: (...args: unknown[]) => void,
     options?: Record<string, unknown>
   ): ComfyWidget;
+  getInputNode(slotIndex: number): ComfyNode | null;
+  getInputLink(slotIndex: number): LLink | null;
+  findInputSlot(name: string): number;
+  setSize(size: [number, number]): void;
+  computeSize(outSize?: [number, number]): [number, number];
+  onConnectionsChange?: (
+    type: number,
+    slotIndex: number,
+    isConnected: boolean,
+    linkInfo: LLink,
+    ioSlot: LNodeInput | LNodeOutput
+  ) => void;
+  onRemoved?: () => void;
 }
 
 export interface ComfyWidget {
   name: string;
   type: string;
   value: unknown;
+  callback?: (...args: unknown[]) => void;
+  hidden?: boolean;
   options?: Record<string, unknown>;
   serializeValue?: (
     node: ComfyNode,
     index: number
   ) => Promise<string> | string;
   computeSize?: (width: number) => [number, number];
+  computeLayoutSize?: () => { minWidth?: number; minHeight?: number; maxHeight?: number };
   onRemove?: () => void;
   beforeQueued?: () => void;
   afterQueued?: () => void;
@@ -85,14 +138,19 @@ export interface ComfyWidget {
 
 export interface DOMWidgetOptions {
   serialize: boolean;
+  hideOnZoom?: boolean;
   getValue: () => string;
   setValue: (v: string) => void;
+  getMinHeight?: () => number;
+  getMaxHeight?: () => number;
 }
 
 export interface ComfyNodeType {
   prototype: {
     onNodeCreated?: (...args: unknown[]) => void;
+    onConnectionsChange?: ComfyNode["onConnectionsChange"];
   };
+  comfyClass?: string;
 }
 
 export interface ComfyNodeData {

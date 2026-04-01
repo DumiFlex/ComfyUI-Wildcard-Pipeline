@@ -1,6 +1,8 @@
 {
+  "id": "1a2b3c4d",
   "name": "location",
   "version": "1.0",
+  "tags": [],
   "options": [
     { "value": "misty forest", "weight": 80, "tags": ["nature", "dark"] },
     { "value": "urban rooftop", "weight": 50, "tags": ["urban"] },

@@ -247,3 +247,55 @@ class TestResolveConstraintSources:
         assert "source" not in result[1]
         assert len(result[1]["rules"]) == 1
         assert result[2] is modules[2]
+
+
+class TestResolveSourcesByUUID:
+    def test_source_resolved_by_uuid(self, tmp_path):
+        uuid = "1a2b3c4d"
+        data = {"name": "uuid-wc", "options": [{"value": "forest", "weight": 1}]}
+        (tmp_path / f"{uuid}.json").write_text(json.dumps(data), encoding="utf-8")
+        modules = [{"type": "wildcard", "source": uuid, "capture_as": "$loc"}]
+        result = resolve_sources(modules, data_dir=tmp_path)
+        assert "source" not in result[0]
+        assert result[0]["options"][0]["value"] == "forest"
+
+    def test_uuid_takes_priority_over_filename(self, tmp_path):
+        uuid = "aabbccdd"
+        options_base = [{"value": "from-base", "weight": 1}]
+        options_examples = [{"value": "from-examples", "weight": 1}]
+
+        (tmp_path / f"{uuid}.json").write_text(
+            json.dumps({"name": "base", "options": options_base}), encoding="utf-8"
+        )
+        examples = tmp_path / "examples"
+        examples.mkdir()
+        (examples / f"{uuid}.json").write_text(
+            json.dumps({"name": "examples", "options": options_examples}),
+            encoding="utf-8",
+        )
+        modules = [{"type": "wildcard", "source": uuid, "capture_as": "$x"}]
+        result = resolve_sources(modules, data_dir=tmp_path)
+        assert result[0]["options"][0]["value"] == "from-base"
+
+    def test_constraint_source_loads_new_format_rules(self, tmp_path):
+        uuid = "deadbeef"
+        rules = [
+            {
+                "target": "weather",
+                "when_variable": "lighting",
+                "when_value": "moonlight",
+                "rule_type": "exclusion",
+                "values": ["sunny haze"],
+            }
+        ]
+        (tmp_path / f"{uuid}.json").write_text(
+            json.dumps({"name": "constraint-wc", "rules": rules}), encoding="utf-8"
+        )
+        modules = [{"type": "constrain", "source": uuid}]
+        result = resolve_sources(modules, constraints_dir=tmp_path)
+        assert "source" not in result[0]
+        assert len(result[0]["rules"]) == 1
+        rule = result[0]["rules"][0]
+        assert rule["target"] == "weather"
+        assert rule["when_variable"] == "lighting"
+        assert rule["when_value"] == "moonlight"
