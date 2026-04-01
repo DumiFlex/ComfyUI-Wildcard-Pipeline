@@ -12,5 +12,4 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 collect_ignore = [
     "__init__.py",
     "nodes",
-    "api",
 ]
