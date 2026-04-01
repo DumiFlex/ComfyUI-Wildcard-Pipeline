@@ -34,8 +34,8 @@ A powerful custom node pack for ComfyUI that implements weighted wildcards, chai
    ```
 4. Build the frontend assets:
    ```bash
-   npm install
-   npm run build
+   pnpm install
+   pnpm run build
    ```
 5. Restart ComfyUI.
 
@@ -110,11 +110,11 @@ When ComfyUI is running, a management interface is available at `/wp/`. This sin
 Use the following commands to work on the project:
 
 * `pytest` — Run the engine tests (no ComfyUI installation required).
-* `npm run dev` — Start the frontend extension in watch mode.
-* `npm run build:extension` — Build the ComfyUI extension artifact (js/main.js).
-* `npm run build:manager` — Build the Manager SPA (web_dist/).
-* `npm run build` — Build both the extension and the manager.
-* `npm run typecheck` — Run TypeScript type checking across the frontend.
+* `pnpm run dev` — Start the frontend extension in watch mode.
+* `pnpm run build:extension` — Build the ComfyUI extension artifact (js/main.js).
+* `pnpm run build:manager` — Build the Manager SPA (web_dist/).
+* `pnpm run build` — Build both the extension and the manager.
+* `pnpm run typecheck` — Run TypeScript type checking across the frontend.
 
 ## Architecture
 The project is structured to maintain strict separation of concerns. The `engine/` directory contains pure Python code with zero ComfyUI imports, allowing for standalone testing and reliability. The `nodes/` directory wraps this engine using the ComfyUI V3 API. The `api/` directory handles aiohttp CRUD endpoints and serves the Manager SPA. The `src/` directory contains the Vue 3 and PrimeVue frontend, split into interactive node widgets and the standalone manager interface.

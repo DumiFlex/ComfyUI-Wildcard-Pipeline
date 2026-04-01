@@ -7,7 +7,7 @@
     "dev": "vite build --watch --mode extension",
     "build:extension": "vite build --mode extension",
     "build:manager": "vite build --mode manager",
-    "build": "npm run build:extension && npm run build:manager",
+    "build": "pnpm run build:extension && pnpm run build:manager",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
@@ -15,7 +15,6 @@
     "pinia": "^2.3.0",
     "primevue": "^4.2.5",
     "vue": "^3.5.13",
-    "vue-i18n": "^9.14.0",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
