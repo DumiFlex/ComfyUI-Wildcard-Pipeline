@@ -44,6 +44,10 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 
+# Local tooling
+.sisyphus/
+.ruff_cache/
+
 # ComfyUI
 *.ckpt
 *.safetensors
