@@ -1,6 +1,8 @@
 """Tests for the pipeline engine."""
 
-from engine.pipeline import PipelineEngine
+from unittest.mock import patch
+
+from engine.pipeline import PipelineEngine, resolve_variables
 
 
 class TestPipelineEngineFixed:
@@ -55,9 +57,9 @@ class TestPipelineEngineCombine:
 
 
 class TestPipelineEngineWildcard:
-    """Test the wildcard module handler (stub — picks first option)."""
+    """Test the wildcard module handler with weighted sampling."""
 
-    def test_wildcard_captures_first_option(self):
+    def test_wildcard_selects_from_options(self):
         engine = PipelineEngine()
         modules = [
             {
@@ -70,7 +72,79 @@ class TestPipelineEngineWildcard:
             },
         ]
         ctx = engine.run(modules, {})
-        assert ctx["location"] == "forest"
+        assert ctx["location"] in ("forest", "desert")
+
+    def test_wildcard_respects_weights(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [
+                    {"value": "heavy", "weight": 100},
+                    {"value": "light", "weight": 0},
+                ],
+                "capture_as": "$pick",
+            },
+        ]
+        with patch(
+            "engine.pipeline.random.choices",
+            return_value=[{"value": "heavy", "weight": 100}],
+        ) as mock:
+            ctx = engine.run(modules, {})
+            mock.assert_called_once()
+            args, kwargs = mock.call_args
+            assert kwargs["weights"] == [100, 0]
+            assert ctx["pick"] == "heavy"
+
+    def test_wildcard_all_zero_weights_uses_uniform(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [
+                    {"value": "a", "weight": 0},
+                    {"value": "b", "weight": 0},
+                ],
+                "capture_as": "$pick",
+            },
+        ]
+        with patch(
+            "engine.pipeline.random.choices", return_value=[{"value": "a", "weight": 0}]
+        ) as mock:
+            engine.run(modules, {})
+            _, kwargs = mock.call_args
+            assert kwargs["weights"] == [1.0, 1.0]
+
+    def test_wildcard_missing_weight_defaults_to_one(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [
+                    {"value": "no_weight"},
+                    {"value": "has_weight", "weight": 5},
+                ],
+                "capture_as": "$pick",
+            },
+        ]
+        with patch(
+            "engine.pipeline.random.choices", return_value=[{"value": "no_weight"}]
+        ) as mock:
+            engine.run(modules, {})
+            _, kwargs = mock.call_args
+            assert kwargs["weights"] == [1.0, 5]
+
+    def test_wildcard_single_option(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [{"value": "only_one", "weight": 10}],
+                "capture_as": "$pick",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["pick"] == "only_one"
 
     def test_wildcard_empty_options_is_noop(self):
         engine = PipelineEngine()
@@ -79,6 +153,42 @@ class TestPipelineEngineWildcard:
         ]
         ctx = engine.run(modules, {})
         assert "x" not in ctx
+
+
+class TestResolveVariables:
+    """Test the resolve_variables function (regex-based $var resolution)."""
+
+    def test_simple_substitution(self):
+        assert resolve_variables("$a and $b", {"a": "X", "b": "Y"}) == "X and Y"
+
+    def test_missing_variable_left_as_is(self):
+        assert (
+            resolve_variables("$known and $unknown", {"known": "X"}) == "X and $unknown"
+        )
+
+    def test_dollar_escape(self):
+        assert resolve_variables("Price is $$100", {"100": "WRONG"}) == "Price is $100"
+
+    def test_internal_keys_not_substituted(self):
+        ctx = {"__internal__": "secret", "visible": "ok"}
+        assert resolve_variables("$__internal__ $visible", ctx) == "$__internal__ ok"
+
+    def test_empty_template(self):
+        assert resolve_variables("", {"a": "1"}) == ""
+
+    def test_no_variables_in_template(self):
+        assert resolve_variables("plain text", {"a": "1"}) == "plain text"
+
+    def test_adjacent_variables(self):
+        assert resolve_variables("$a$b", {"a": "X", "b": "Y"}) == "XY"
+
+    def test_numeric_context_value_converted_to_string(self):
+        assert resolve_variables("count: $n", {"n": 42}) == "count: 42"
+
+    def test_multiline_template(self):
+        template = "line1: $a\nline2: $b"
+        result = resolve_variables(template, {"a": "X", "b": "Y"})
+        assert result == "line1: X\nline2: Y"
 
 
 class TestPipelineEngineChaining:
@@ -116,3 +226,79 @@ class TestPipelineEngineChaining:
         ]
         ctx = engine.run(modules, {})
         assert ctx["result"] == "works"
+
+    def test_internal_keys_preserved_across_modules(self):
+        engine = PipelineEngine()
+        ctx = {"__active_filter__": {"exclude": ["desert"]}}
+        modules = [
+            {"type": "fixed", "value": "forest", "capture_as": "$location"},
+        ]
+        ctx = engine.run(modules, ctx)
+        assert ctx["__active_filter__"] == {"exclude": ["desert"]}
+        assert ctx["location"] == "forest"
+
+
+class TestPipelineEngineValidation:
+    """Test module schema validation and error handling."""
+
+    def test_module_missing_type_is_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {"value": "no type key", "capture_as": "$x"},
+            {"type": "fixed", "value": "ok", "capture_as": "$y"},
+        ]
+        ctx = engine.run(modules, {})
+        assert "x" not in ctx
+        assert ctx["y"] == "ok"
+
+    def test_module_empty_type_is_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "", "value": "empty type", "capture_as": "$x"},
+            {"type": "fixed", "value": "ok", "capture_as": "$y"},
+        ]
+        ctx = engine.run(modules, {})
+        assert "x" not in ctx
+        assert ctx["y"] == "ok"
+
+    def test_fixed_missing_required_key_is_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "capture_as": "$x"},
+            {"type": "fixed", "value": "ok", "capture_as": "$y"},
+        ]
+        ctx = engine.run(modules, {})
+        assert "x" not in ctx
+        assert ctx["y"] == "ok"
+
+    def test_combine_missing_template_is_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "combine", "capture_as": "$x"},
+            {"type": "fixed", "value": "ok", "capture_as": "$y"},
+        ]
+        ctx = engine.run(modules, {})
+        assert "x" not in ctx
+        assert ctx["y"] == "ok"
+
+    def test_wildcard_missing_capture_as_is_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "wildcard", "options": [{"value": "a"}]},
+            {"type": "fixed", "value": "ok", "capture_as": "$y"},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["y"] == "ok"
+
+    def test_malformed_modules_dont_crash_pipeline(self):
+        engine = PipelineEngine()
+        modules = [
+            {},
+            {"type": ""},
+            {"type": "fixed"},
+            {"type": "combine"},
+            {"type": "wildcard"},
+            {"type": "fixed", "value": "survived", "capture_as": "$ok"},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["ok"] == "survived"
