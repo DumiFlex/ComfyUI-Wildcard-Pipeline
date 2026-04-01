@@ -10,10 +10,6 @@ from .pipeline_node import PipelineContext
 
 
 class PromptAssembler(io.ComfyNode):
-    """Terminal node that receives PIPELINE_CONTEXT and resolves a template
-    string into the final prompt by substituting $variables.
-    """
-
     @classmethod
     def define_schema(cls) -> io.Schema:
         return io.Schema(
@@ -41,9 +37,7 @@ class PromptAssembler(io.ComfyNode):
         pipeline_context: dict[str, Any],
         template: str = "",
     ) -> io.NodeOutput:
-        prompt = template
-        for key, value in pipeline_context.items():
-            if key.startswith("__"):
-                continue  # skip internal keys
-            prompt = prompt.replace(f"${key}", str(value))
+        from ..engine.pipeline import resolve_variables
+
+        prompt = resolve_variables(template, pipeline_context)
         return io.NodeOutput(prompt)
