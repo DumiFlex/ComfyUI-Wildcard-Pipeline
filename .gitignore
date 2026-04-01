@@ -20,8 +20,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Build artifacts
-js/main.js
-js/assets/
+js/
 web_dist/
 
 # IDE

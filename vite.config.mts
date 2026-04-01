@@ -14,6 +14,8 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": resolve(__dirname, "./src"),
+        // Map type-safe alias to ComfyUI runtime import
+        "#comfyui/app": "../../../scripts/app.js",
       },
     },
     define: {
