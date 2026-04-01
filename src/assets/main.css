@@ -1,0 +1,172 @@
+/* Industrial Dark Theme Design System */
+:root {
+  /* Colors */
+  --bg-base: #0a0a0c;
+  --bg-panel: #121216;
+  --bg-surface: #1a1a20;
+  --bg-surface-hover: #24242c;
+  
+  --border-color: #2c2c35;
+  --border-focus: #00e559;
+  
+  --text-primary: #e0e0e0;
+  --text-secondary: #888894;
+  --text-muted: #555562;
+  
+  --accent-primary: #00e559;
+  --accent-primary-hover: #00c44c;
+  --accent-primary-active: #00a33f;
+  
+  --semantic-error: #ff3366;
+  --semantic-warning: #ffb300;
+  --semantic-info: #33bbff;
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  --font-sans: 'Helvetica Neue', Helvetica, sans-serif; /* fallback */
+  
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  /* Geometry */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Reset / Utilities */
+* {
+  box-sizing: border-box;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 0;
+  margin-bottom: var(--space-4);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: var(--accent-primary-hover);
+}
+
+/* PrimeVue Overrides */
+.p-component {
+  font-family: var(--font-mono) !important;
+}
+
+.p-button {
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-color);
+  text-transform: uppercase;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+}
+
+.p-button:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.p-inputtext, .p-inputnumber-input {
+  background-color: var(--bg-base) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.p-inputtext:focus {
+  border-color: var(--border-focus) !important;
+  box-shadow: 0 0 0 1px var(--border-focus) !important;
+}
+
+.p-datatable .p-datatable-header {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+}
+
+.p-datatable .p-datatable-thead > tr > th {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+
+.p-datatable .p-datatable-tbody > tr {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+.p-datatable .p-datatable-tbody > tr > td {
+  border: 1px solid var(--border-color);
+}
+
+.p-dialog .p-dialog-header {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.p-dialog .p-dialog-content {
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+
+.p-dialog .p-dialog-footer {
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-color);
+}
+
+.p-menu {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+}
+
+.p-menuitem-link:hover {
+  background: var(--bg-surface-hover) !important;
+}
+
+.p-menuitem-text {
+  color: var(--text-primary) !important;
+}
