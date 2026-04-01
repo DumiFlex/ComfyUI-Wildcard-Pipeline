@@ -32,6 +32,21 @@
             :modelValue="mod" 
             @update:modelValue="updateModule(index, $event)" 
           />
+          <ConstrainModule 
+            v-else-if="mod.type === 'constrain'" 
+            :modelValue="mod" 
+            @update:modelValue="updateModule(index, $event)" 
+          />
+          <ConditionModule 
+            v-else-if="mod.type === 'condition'" 
+            :modelValue="mod" 
+            @update:modelValue="updateModule(index, $event)" 
+          />
+          <ExportModule 
+            v-else-if="mod.type === 'export'" 
+            :modelValue="mod" 
+            @update:modelValue="updateModule(index, $event)" 
+          />
         </div>
       </div>
     </div>
@@ -42,6 +57,9 @@
         <option value="wildcard">Wildcard</option>
         <option value="fixed">Fixed</option>
         <option value="combine">Combine</option>
+        <option value="constrain">Constrain</option>
+        <option value="condition">Condition</option>
+        <option value="export">Export</option>
       </select>
       <button class="btn-add-module" @click="addModule" :disabled="!selectedNewType">Add</button>
     </div>
@@ -56,6 +74,9 @@ import { MODULE_TYPE_LABELS } from '@/types';
 import WildcardModule from './modules/WildcardModule.vue';
 import FixedModule from './modules/FixedModule.vue';
 import CombineModule from './modules/CombineModule.vue';
+import ConstrainModule from './modules/ConstrainModule.vue';
+import ConditionModule from './modules/ConditionModule.vue';
+import ExportModule from './modules/ExportModule.vue';
 
 const props = defineProps<{ modelValue: PipelineModule[] }>();
 const emit = defineEmits<{
@@ -88,6 +109,15 @@ const addModule = () => {
       break;
     case 'combine':
       newModule = { type: 'combine', template: '', capture_as: '' };
+      break;
+    case 'constrain':
+      newModule = { type: 'constrain', target: '', rules: [] };
+      break;
+    case 'condition':
+      newModule = { type: 'condition', variable: '', value: '', capture_as: '', if_equals: '' };
+      break;
+    case 'export':
+      newModule = { type: 'export', variables: [] };
       break;
   }
 

@@ -16,6 +16,9 @@ _MODULE_SCHEMAS: dict[str, set[str]] = {
     "wildcard": {"capture_as"},
     "fixed": {"value", "capture_as"},
     "combine": {"template", "capture_as"},
+    "constrain": {"target"},
+    "condition": {"variable"},
+    "export": {"variables"},
 }
 
 
@@ -51,6 +54,46 @@ def resolve_variables(template: str, ctx: dict[str, Any]) -> str:
 
     # Restore escaped dollars
     result = result.replace(sentinel, "$")
+
+    return result
+
+
+def apply_constraints(
+    options: list[dict[str, Any]],
+    rules: list[dict[str, Any]],
+    trigger_value: str,
+) -> list[dict[str, Any]]:
+    """Apply constraint rules to a set of wildcard options.
+
+    Rules are only applied when ``trigger_value`` matches the rule's
+    ``when_value``.  Two rule types are supported:
+
+    - ``exclusion`` — remove options whose ``value`` is in the rule's
+      ``values`` list.
+    - ``weight_bias`` — multiply the ``weight`` of matching options by
+      the rule's ``multiplier``.
+
+    Returns a new list — original options are not mutated.
+    """
+    result = [opt.copy() for opt in options]
+
+    for rule in rules:
+        when_value = rule.get("when_value", "")
+        if when_value != trigger_value:
+            continue
+
+        rule_type = rule.get("rule_type", "")
+        target_values = rule.get("values", [])
+
+        if rule_type == "exclusion":
+            result = [opt for opt in result if opt.get("value") not in target_values]
+        elif rule_type == "weight_bias":
+            multiplier = rule.get("multiplier", 1.0)
+            for opt in result:
+                if opt.get("value") in target_values:
+                    opt["weight"] = opt.get("weight", 1.0) * multiplier
+        else:
+            logger.warning("Unknown constraint rule_type '%s' — skipped", rule_type)
 
     return result
 
@@ -126,6 +169,9 @@ class PipelineEngine:
             "wildcard": self._handle_wildcard,
             "fixed": self._handle_fixed,
             "combine": self._handle_combine,
+            "constrain": self._handle_constrain,
+            "condition": self._handle_condition,
+            "export": self._handle_export,
         }
         return handlers.get(module_type)
 
@@ -180,5 +226,124 @@ class PipelineEngine:
         if capture_as:
             capture_as = _normalize_capture(capture_as)
             ctx[capture_as] = result
+
+        return ctx
+
+    def _handle_constrain(
+        self, module: dict[str, Any], ctx: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Apply constraint rules to a target wildcard in the context.
+
+        The ``target`` specifies which context variable triggers the rules.
+        ``rules`` is a list of constraint rule dicts (exclusion / weight_bias).
+
+        The constrain module modifies ``__constrained_options__`` in the
+        context, which downstream wildcard modules can use.  If a
+        ``capture_as`` is specified, the module also re-samples from the
+        constrained options and stores the result.
+        """
+        target = module.get("target", "")
+        rules = module.get("rules", [])
+
+        if not target:
+            return ctx
+
+        target = _normalize_capture(target)
+        trigger_value = ctx.get(target, "")
+
+        if not trigger_value or not rules:
+            return ctx
+
+        source_options = module.get("options", [])
+        if not source_options:
+            return ctx
+
+        constrained = apply_constraints(source_options, rules, trigger_value)
+
+        capture_as = module.get("capture_as", "")
+        if capture_as:
+            capture_as = _normalize_capture(capture_as)
+            if constrained:
+                weights = [opt.get("weight", 1.0) for opt in constrained]
+                if all(w == 0 for w in weights):
+                    weights = [1.0] * len(constrained)
+                chosen = random.choices(constrained, weights=weights, k=1)[0]
+                ctx[capture_as] = chosen.get("value", "")
+            else:
+                logger.warning(
+                    "All options excluded by constraints for target '$%s'", target
+                )
+
+        return ctx
+
+    def _handle_condition(
+        self, module: dict[str, Any], ctx: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Conditionally set a variable based on context state.
+
+        Supports two modes:
+        - ``if_equals``: Set ``value`` when ``ctx[variable] == if_equals``.
+        - ``unless_equals``: Set ``value`` when ``ctx[variable] != unless_equals``.
+
+        The ``capture_as`` key stores the result. If the condition is
+        not met and a ``fallback`` is provided, the fallback value is
+        used instead.
+        """
+        variable = module.get("variable", "")
+        capture_as = module.get("capture_as", "")
+
+        if not variable or not capture_as:
+            return ctx
+
+        variable = _normalize_capture(variable)
+        capture_as = _normalize_capture(capture_as)
+
+        current_value = ctx.get(variable)
+        value = module.get("value", "")
+        fallback = module.get("fallback", "")
+
+        if_equals = module.get("if_equals")
+        unless_equals = module.get("unless_equals")
+
+        condition_met = False
+
+        if if_equals is not None:
+            condition_met = current_value == if_equals
+        elif unless_equals is not None:
+            condition_met = current_value != unless_equals
+        else:
+            condition_met = current_value is not None
+
+        if condition_met:
+            ctx[capture_as] = value
+        elif fallback:
+            ctx[capture_as] = fallback
+
+        return ctx
+
+    def _handle_export(
+        self, module: dict[str, Any], ctx: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Copy selected context variables into ``__exports__``.
+
+        ``variables`` is a list of variable names (with or without ``$``
+        prefix) to export.  A ``prefix`` can be specified to namespace
+        the exported keys.
+        """
+        variables = module.get("variables", [])
+        prefix = module.get("prefix", "")
+
+        if not variables:
+            return ctx
+
+        exports = ctx.get("__exports__", {})
+
+        for var in variables:
+            var = _normalize_capture(var)
+            if var in ctx:
+                export_key = f"{prefix}{var}" if prefix else var
+                exports[export_key] = ctx[var]
+
+        ctx["__exports__"] = exports
 
         return ctx

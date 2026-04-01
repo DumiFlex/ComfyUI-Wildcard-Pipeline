@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from engine.pipeline import PipelineEngine, resolve_variables
+from engine.pipeline import PipelineEngine, apply_constraints, resolve_variables
 
 
 class TestPipelineEngineFixed:
@@ -298,7 +298,378 @@ class TestPipelineEngineValidation:
             {"type": "fixed"},
             {"type": "combine"},
             {"type": "wildcard"},
+            {"type": "constrain"},
+            {"type": "condition"},
+            {"type": "export"},
             {"type": "fixed", "value": "survived", "capture_as": "$ok"},
         ]
         ctx = engine.run(modules, {})
         assert ctx["ok"] == "survived"
+
+
+class TestApplyConstraints:
+    def test_exclusion_removes_matching_options(self):
+        options = [
+            {"value": "sunny haze", "weight": 1.0},
+            {"value": "golden hour", "weight": 1.0},
+            {"value": "moonlight", "weight": 1.0},
+        ]
+        rules = [
+            {
+                "when_value": "moonlight",
+                "rule_type": "exclusion",
+                "values": ["sunny haze"],
+            }
+        ]
+        result = apply_constraints(options, rules, "moonlight")
+        values = [o["value"] for o in result]
+        assert "sunny haze" not in values
+        assert "golden hour" in values
+        assert "moonlight" in values
+
+    def test_exclusion_no_match_preserves_all(self):
+        options = [
+            {"value": "a", "weight": 1.0},
+            {"value": "b", "weight": 1.0},
+        ]
+        rules = [{"when_value": "x", "rule_type": "exclusion", "values": ["a"]}]
+        result = apply_constraints(options, rules, "no_match")
+        assert len(result) == 2
+
+    def test_weight_bias_multiplies_matching_weights(self):
+        options = [
+            {"value": "warm haze", "weight": 1.0},
+            {"value": "cold fog", "weight": 1.0},
+        ]
+        rules = [
+            {
+                "when_value": "golden hour",
+                "rule_type": "weight_bias",
+                "values": ["warm haze"],
+                "multiplier": 3.0,
+            }
+        ]
+        result = apply_constraints(options, rules, "golden hour")
+        warm = next(o for o in result if o["value"] == "warm haze")
+        cold = next(o for o in result if o["value"] == "cold fog")
+        assert warm["weight"] == 3.0
+        assert cold["weight"] == 1.0
+
+    def test_weight_bias_default_weight(self):
+        options = [{"value": "a"}, {"value": "b"}]
+        rules = [
+            {
+                "when_value": "trigger",
+                "rule_type": "weight_bias",
+                "values": ["a"],
+                "multiplier": 2.0,
+            }
+        ]
+        result = apply_constraints(options, rules, "trigger")
+        a = next(o for o in result if o["value"] == "a")
+        assert a["weight"] == 2.0
+
+    def test_original_options_not_mutated(self):
+        options = [{"value": "a", "weight": 1.0}]
+        rules = [
+            {
+                "when_value": "t",
+                "rule_type": "weight_bias",
+                "values": ["a"],
+                "multiplier": 5.0,
+            }
+        ]
+        apply_constraints(options, rules, "t")
+        assert options[0]["weight"] == 1.0
+
+    def test_multiple_rules_applied_sequentially(self):
+        options = [
+            {"value": "a", "weight": 1.0},
+            {"value": "b", "weight": 1.0},
+            {"value": "c", "weight": 1.0},
+        ]
+        rules = [
+            {"when_value": "t", "rule_type": "exclusion", "values": ["c"]},
+            {
+                "when_value": "t",
+                "rule_type": "weight_bias",
+                "values": ["a"],
+                "multiplier": 10.0,
+            },
+        ]
+        result = apply_constraints(options, rules, "t")
+        assert len(result) == 2
+        a = next(o for o in result if o["value"] == "a")
+        assert a["weight"] == 10.0
+
+    def test_empty_rules_returns_copy(self):
+        options = [{"value": "a", "weight": 1.0}]
+        result = apply_constraints(options, [], "trigger")
+        assert len(result) == 1
+        assert result[0] is not options[0]
+
+
+class TestPipelineEngineConstrain:
+    def test_constrain_resamples_with_exclusion(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
+            {
+                "type": "constrain",
+                "target": "$lighting",
+                "options": [
+                    {"value": "sunny haze", "weight": 1.0},
+                    {"value": "cold fog", "weight": 1.0},
+                ],
+                "rules": [
+                    {
+                        "when_value": "moonlight",
+                        "rule_type": "exclusion",
+                        "values": ["sunny haze"],
+                    }
+                ],
+                "capture_as": "$weather",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["weather"] == "cold fog"
+
+    def test_constrain_without_capture_does_not_sample(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "x", "capture_as": "$trigger"},
+            {
+                "type": "constrain",
+                "target": "$trigger",
+                "options": [{"value": "a", "weight": 1.0}],
+                "rules": [],
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "weather" not in ctx
+
+    def test_constrain_no_matching_trigger_is_noop(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "sunlight", "capture_as": "$lighting"},
+            {
+                "type": "constrain",
+                "target": "$lighting",
+                "options": [{"value": "a", "weight": 1.0}],
+                "rules": [
+                    {
+                        "when_value": "moonlight",
+                        "rule_type": "exclusion",
+                        "values": ["a"],
+                    }
+                ],
+                "capture_as": "$weather",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["weather"] == "a"
+
+    def test_constrain_missing_target_is_noop(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "constrain",
+                "target": "$nonexistent",
+                "options": [{"value": "a", "weight": 1.0}],
+                "rules": [],
+                "capture_as": "$result",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "result" not in ctx
+
+
+class TestPipelineEngineCondition:
+    def test_condition_if_equals_met(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "night", "capture_as": "$time"},
+            {
+                "type": "condition",
+                "variable": "$time",
+                "if_equals": "night",
+                "value": "dark atmosphere",
+                "capture_as": "$mood",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["mood"] == "dark atmosphere"
+
+    def test_condition_if_equals_not_met_uses_fallback(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "day", "capture_as": "$time"},
+            {
+                "type": "condition",
+                "variable": "$time",
+                "if_equals": "night",
+                "value": "dark atmosphere",
+                "fallback": "bright atmosphere",
+                "capture_as": "$mood",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["mood"] == "bright atmosphere"
+
+    def test_condition_if_equals_not_met_no_fallback(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "day", "capture_as": "$time"},
+            {
+                "type": "condition",
+                "variable": "$time",
+                "if_equals": "night",
+                "value": "dark",
+                "capture_as": "$mood",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "mood" not in ctx
+
+    def test_condition_unless_equals(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "day", "capture_as": "$time"},
+            {
+                "type": "condition",
+                "variable": "$time",
+                "unless_equals": "night",
+                "value": "visible",
+                "capture_as": "$visibility",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["visibility"] == "visible"
+
+    def test_condition_unless_equals_blocked(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "night", "capture_as": "$time"},
+            {
+                "type": "condition",
+                "variable": "$time",
+                "unless_equals": "night",
+                "value": "visible",
+                "capture_as": "$visibility",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "visibility" not in ctx
+
+    def test_condition_no_operator_checks_existence(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "anything", "capture_as": "$x"},
+            {
+                "type": "condition",
+                "variable": "$x",
+                "value": "exists",
+                "capture_as": "$result",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["result"] == "exists"
+
+    def test_condition_no_operator_missing_var(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "condition",
+                "variable": "$missing",
+                "value": "exists",
+                "capture_as": "$result",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "result" not in ctx
+
+    def test_condition_missing_capture_is_noop(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "x", "capture_as": "$a"},
+            {
+                "type": "condition",
+                "variable": "$a",
+                "if_equals": "x",
+                "value": "matched",
+                "capture_as": "",
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "matched" not in ctx.values() or ctx.get("a") == "x"
+
+
+class TestPipelineEngineExport:
+    def test_export_copies_variables(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "forest", "capture_as": "$location"},
+            {"type": "fixed", "value": "golden hour", "capture_as": "$lighting"},
+            {"type": "export", "variables": ["$location", "$lighting"]},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["__exports__"]["location"] == "forest"
+        assert ctx["__exports__"]["lighting"] == "golden hour"
+
+    def test_export_with_prefix(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "x", "capture_as": "$a"},
+            {"type": "export", "variables": ["$a"], "prefix": "env_"},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["__exports__"]["env_a"] == "x"
+
+    def test_export_missing_variable_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "x", "capture_as": "$a"},
+            {"type": "export", "variables": ["$a", "$nonexistent"]},
+        ]
+        ctx = engine.run(modules, {})
+        assert "a" in ctx["__exports__"]
+        assert "nonexistent" not in ctx["__exports__"]
+
+    def test_export_empty_variables_is_noop(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "export", "variables": []},
+        ]
+        ctx = engine.run(modules, {})
+        assert "__exports__" not in ctx
+
+    def test_export_accumulates_across_modules(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "x", "capture_as": "$a"},
+            {"type": "fixed", "value": "y", "capture_as": "$b"},
+            {"type": "export", "variables": ["$a"]},
+            {"type": "export", "variables": ["$b"]},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["__exports__"]["a"] == "x"
+        assert ctx["__exports__"]["b"] == "y"
+
+    def test_export_strips_dollar_prefix(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "v", "capture_as": "$var"},
+            {"type": "export", "variables": ["$var"]},
+        ]
+        ctx = engine.run(modules, {})
+        assert "var" in ctx["__exports__"]
+        assert "$var" not in ctx["__exports__"]
+
+    def test_export_without_dollar_prefix(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "v", "capture_as": "$var"},
+            {"type": "export", "variables": ["var"]},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["__exports__"]["var"] == "v"

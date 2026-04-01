@@ -1,6 +1,6 @@
-"""Source resolution for wildcard modules.
+"""Source resolution for wildcard and constraint modules.
 
-Reads wildcard JSON files and injects their options inline into module configs
+Reads JSON files and injects their data inline into module configs
 before the engine processes them. This keeps the engine pure (no file I/O).
 """
 
@@ -14,63 +14,93 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "wildcards"
+_DEFAULT_CONSTRAINTS_DIR = (
+    Path(__file__).resolve().parent.parent / "data" / "constraints"
+)
 
 
 def resolve_sources(
     modules: list[dict[str, Any]],
     data_dir: Path | None = None,
+    constraints_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Pre-process modules: load ``"source"`` references into inline ``"options"``.
+    """Pre-process modules: load ``"source"`` references into inline data.
 
     For each wildcard module with a ``"source"`` key (e.g. ``"location.json"``),
     read the JSON file from *data_dir* and replace the source with the loaded
-    options array. Modules that already have inline ``"options"`` or are not
-    wildcards are passed through unchanged.
+    options array. For constrain modules with a ``"source"`` key, load constraint
+    rules from *constraints_dir*.
 
     Returns a new list — original modules are not mutated.
     """
-    base = data_dir or _DEFAULT_DATA_DIR
+    wc_base = data_dir or _DEFAULT_DATA_DIR
+    cs_base = constraints_dir or _DEFAULT_CONSTRAINTS_DIR
     resolved: list[dict[str, Any]] = []
 
     for module in modules:
-        if module.get("type") != "wildcard" or "source" not in module:
+        module_type = module.get("type")
+
+        if module_type == "wildcard" and "source" in module:
+            resolved.append(_resolve_wildcard_source(module, wc_base))
+        elif module_type == "constrain" and "source" in module:
+            resolved.append(_resolve_constraint_source(module, cs_base))
+        else:
             resolved.append(module)
-            continue
-
-        source = module["source"]
-        file_path = _find_wildcard_file(source, base)
-        if file_path is None:
-            logger.warning(
-                "Wildcard source '%s' not found in %s — skipped", source, base
-            )
-            resolved.append(module)
-            continue
-
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Failed to load wildcard source '%s': %s", source, exc)
-            resolved.append(module)
-            continue
-
-        options = data.get("options", [])
-        if not options:
-            logger.warning("Wildcard source '%s' has no options", source)
-
-        patched = {**module, "options": options}
-        patched.pop("source", None)
-        resolved.append(patched)
 
     return resolved
 
 
-def _find_wildcard_file(source: str, base: Path) -> Path | None:
-    """Locate a wildcard JSON file by name.
+def _resolve_wildcard_source(module: dict[str, Any], base: Path) -> dict[str, Any]:
+    source = module["source"]
+    file_path = _find_json_file(source, base)
+    if file_path is None:
+        logger.warning("Wildcard source '%s' not found in %s — skipped", source, base)
+        return module
 
-    Searches *base* directory and its ``examples/`` subdirectory.
-    Appends ``.json`` if not already present.
-    """
+    data = _load_json(file_path, source)
+    if data is None:
+        return module
+
+    options = data.get("options", [])
+    if not options:
+        logger.warning("Wildcard source '%s' has no options", source)
+
+    patched = {**module, "options": options}
+    patched.pop("source", None)
+    return patched
+
+
+def _resolve_constraint_source(module: dict[str, Any], base: Path) -> dict[str, Any]:
+    source = module["source"]
+    file_path = _find_json_file(source, base)
+    if file_path is None:
+        logger.warning("Constraint source '%s' not found in %s — skipped", source, base)
+        return module
+
+    data = _load_json(file_path, source)
+    if data is None:
+        return module
+
+    rules = data.get("rules", [])
+    if not rules:
+        logger.warning("Constraint source '%s' has no rules", source)
+
+    patched = {**module, "rules": rules}
+    patched.pop("source", None)
+    return patched
+
+
+def _load_json(file_path: Path, source: str) -> dict[str, Any] | None:
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load source '%s': %s", source, exc)
+        return None
+
+
+def _find_json_file(source: str, base: Path) -> Path | None:
+    """Locate a JSON file by name in *base* and its ``examples/`` subdirectory."""
     name = source if source.endswith(".json") else f"{source}.json"
 
     candidates = [
