@@ -9,6 +9,10 @@ import { resolve } from "path";
 
 export default defineConfig(({ mode }) => {
   const isExtension = mode === "extension" || mode === "development";
+  const test = {
+    environment: "node" as const,
+    include: ["src/**/*.test.ts"],
+  };
 
   if (isExtension) {
     return {
@@ -16,6 +20,7 @@ export default defineConfig(({ mode }) => {
         vue(),
         cssInjectedByJsPlugin(), // Inject CSS into JS for ComfyUI compatibility
       ],
+      test,
       resolve: {
         alias: {
           "@": resolve(__dirname, "./src"),
@@ -49,9 +54,11 @@ export default defineConfig(({ mode }) => {
   // Manager SPA build — no CSS injection needed (served with HTML)
   return {
     plugins: [vue()],
+    test,
     resolve: {
       alias: {
         "@": resolve(__dirname, "./src"),
+        "#comfyui/app": resolve(__dirname, "./src/test-mocks/comfyui-app.ts"),
       },
     },
     define: {

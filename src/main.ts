@@ -1,7 +1,6 @@
 import { app } from "#comfyui/app";
 import type {
   ComfyNode,
-  ComfyWidget,
   ComfyNodeType,
   ComfyNodeData,
   ComfyApp,
@@ -10,6 +9,8 @@ import { pipelineConfigWidgetFactory, injectConfigWidgetFactory, mountAssemblerP
 import { findDownstreamAssemblers } from "./extension/graph";
 
 const ASSEMBLER_NODE_CLASS = "WP_PromptAssembler";
+
+type ConnectionsChangeHandler = (...args: [number, number, boolean, unknown, unknown]) => void;
 
 app.registerExtension({
   name: "Wildcard Pipeline",
@@ -26,7 +27,6 @@ app.registerExtension({
   },
 
   async beforeRegisterNodeDef(nodeType: ComfyNodeType, nodeData: ComfyNodeData) {
-    // Assembler preview is an additive display widget — still uses onNodeCreated
     if (nodeData.name === ASSEMBLER_NODE_CLASS) {
       const origOnCreated = nodeType.prototype.onNodeCreated;
       nodeType.prototype.onNodeCreated = function (this: ComfyNode, ...args: unknown[]) {
@@ -50,8 +50,6 @@ app.registerExtension({
       };
     }
 
-    // Universal onConnectionsChange — refreshes inject/assembler previews on any link change
-    type ConnectionsChangeHandler = (...args: [number, number, boolean, unknown, unknown]) => void;
     const origConn = (nodeType.prototype as Record<string, ConnectionsChangeHandler | undefined>)[
       "onConnectionsChange"
     ];
@@ -68,10 +66,12 @@ app.registerExtension({
       const self = this as ComfyNode & {
         _wpRefreshPreview?: () => void;
         _wpRefreshInject?: () => void;
+        _wpRefreshPipelineConflicts?: () => void;
       };
 
       self._wpRefreshInject?.();
       self._wpRefreshPreview?.();
+      self._wpRefreshPipelineConflicts?.();
 
       try {
         for (const asm of findDownstreamAssemblers(this)) {

@@ -54,7 +54,8 @@ def _resolve_wildcard_source(module: dict[str, Any], base: Path) -> dict[str, An
     source = module["source"]
     file_path = _find_json_file(source, base)
     if file_path is None:
-        logger.warning("Wildcard source '%s' not found in %s — skipped", source, base)
+        msg = f"Wildcard source '{source}' not found in {base} — skipped"
+        logger.warning(msg)
         return module
 
     data = _load_json(file_path, source)
@@ -63,7 +64,8 @@ def _resolve_wildcard_source(module: dict[str, Any], base: Path) -> dict[str, An
 
     options = data.get("options", [])
     if not options:
-        logger.warning("Wildcard source '%s' has no options", source)
+        msg = f"Wildcard source '{source}' has no options"
+        logger.warning(msg)
 
     patched = {**module, "options": options}
     patched.pop("source", None)
@@ -74,7 +76,8 @@ def _resolve_constraint_source(module: dict[str, Any], base: Path) -> dict[str, 
     source = module["source"]
     file_path = _find_json_file(source, base)
     if file_path is None:
-        logger.warning("Constraint source '%s' not found in %s — skipped", source, base)
+        msg = f"Constraint source '{source}' not found in {base} — skipped"
+        logger.warning(msg)
         return module
 
     data = _load_json(file_path, source)
@@ -83,7 +86,8 @@ def _resolve_constraint_source(module: dict[str, Any], base: Path) -> dict[str, 
 
     rules = data.get("rules", [])
     if not rules:
-        logger.warning("Constraint source '%s' has no rules", source)
+        msg = f"Constraint source '{source}' has no rules"
+        logger.warning(msg)
 
     patched = {**module, "rules": rules}
     patched.pop("source", None)
@@ -95,7 +99,8 @@ def _load_json(file_path: Path, source: str) -> dict[str, Any] | None:
         with open(file_path, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("Failed to load source '%s': %s", source, exc)
+        msg = f"Failed to load source '{source}': {exc}"
+        logger.warning(msg)
         return None
 
 

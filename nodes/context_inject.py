@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 @io.comfytype(io_type="WP_INJECT_CONFIG")
 class InjectConfig:
-    """Custom widget type for inject config — sends WP_INJECT_CONFIG to frontend."""
-
     Type = str
 
     class Input(io.WidgetInput):
@@ -49,10 +47,7 @@ class InjectConfig:
             )
 
 
-CONTEXT_INJECT_MAX_INPUTS = 5
-CONTEXT_INJECT_SLOT_NAMES = [
-    f"input_{i}" for i in range(1, CONTEXT_INJECT_MAX_INPUTS + 1)
-]
+CONTEXT_INJECT_SLOT_NAMES = ["input_1", "input_2", "input_3"]
 
 
 class ContextInject(io.ComfyNode):
@@ -65,14 +60,10 @@ class ContextInject(io.ComfyNode):
             description="Injects arbitrary string values into the pipeline context as named variables",
             inputs=[
                 PipelineContext.Input("pipeline_context", optional=True),
-                io.Autogrow.Input(
-                    "inputs",
-                    template=io.Autogrow.TemplateNames(
-                        input=io.String.Input("value", force_input=True, optional=True),
-                        names=CONTEXT_INJECT_SLOT_NAMES,
-                        min=1,
-                    ),
-                ),
+                *[
+                    io.String.Input(name, force_input=True, optional=True)
+                    for name in CONTEXT_INJECT_SLOT_NAMES
+                ],
                 InjectConfig.Input(
                     "inject_config",
                     default="{}",
@@ -88,8 +79,8 @@ class ContextInject(io.ComfyNode):
     def execute(
         cls,
         pipeline_context: dict[str, Any] | None = None,
-        inputs: dict[str, str | None] | None = None,
         inject_config: str = "{}",
+        **kwargs: str | None,
     ) -> io.NodeOutput:
         ctx: dict[str, Any] = {}
 
@@ -102,9 +93,8 @@ class ContextInject(io.ComfyNode):
         except (json.JSONDecodeError, TypeError):
             mapping = {}
 
-        slot_values = inputs or {}
-
-        for slot_name, slot_value in slot_values.items():
+        for slot_name in CONTEXT_INJECT_SLOT_NAMES:
+            slot_value = kwargs.get(slot_name)
             if slot_value is None:
                 continue
             var_name = mapping.get(slot_name, "").strip()
@@ -114,10 +104,8 @@ class ContextInject(io.ComfyNode):
             if not var_name:
                 continue
             if var_name in ctx and not var_name.startswith("__"):
-                logger.warning(
-                    "Variable '$%s' already exists in context — overwriting",
-                    var_name,
-                )
+                msg = f"Variable '${var_name}' already exists in context — overwriting"
+                logger.warning(msg)
             ctx[var_name] = str(slot_value)
 
         return io.NodeOutput(ctx)

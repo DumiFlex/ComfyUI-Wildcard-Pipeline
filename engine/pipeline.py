@@ -95,7 +95,8 @@ def apply_constraints(
                 if opt.get("value") in target_values:
                     opt["weight"] = opt.get("weight", 1.0) * multiplier
         else:
-            logger.warning("Unknown constraint rule_type '%s' — skipped", rule_type)
+            msg = f"Unknown constraint rule_type '{rule_type}' — skipped"
+            logger.warning(msg)
 
     return result
 
@@ -127,9 +128,8 @@ class PipelineEngine:
 
             handler = self._get_handler(module_type)
             if handler is None:
-                logger.warning(
-                    "Unknown module type '%s' at index %d — skipped", module_type, i
-                )
+                msg = f"Unknown module type '{module_type}' at index {i} — skipped"
+                logger.warning(msg)
                 continue
 
             ctx = handler(module, ctx)
@@ -145,22 +145,18 @@ class PipelineEngine:
         """
         module_type = module.get("type", "")
         if not module_type:
-            logger.warning("Module at index %d has no 'type' key — skipped", index)
+            msg = f"Module at index {index} has no 'type' key — skipped"
+            logger.warning(msg)
             return False
 
         required = _MODULE_SCHEMAS.get(module_type)
         if required is None:
-            # Unknown type — validation passes; handler dispatch will skip it
             return True
 
         missing = required - module.keys()
         if missing:
-            logger.warning(
-                "Module '%s' at index %d missing required keys %s — skipped",
-                module_type,
-                index,
-                missing,
-            )
+            msg = f"Module '{module_type}' at index {index} missing required keys {missing} — skipped"
+            logger.warning(msg)
             return False
 
         return True
@@ -204,11 +200,10 @@ class PipelineEngine:
         if matching_rules:
             options = apply_constraints(options, matching_rules, ctx)
 
-        # If all options excluded, log warning and return without capturing
+        # If all options excluded, warn and return without capturing
         if not options:
-            logger.warning(
-                "All options excluded by constraints for '$%s'", capture_as_normalized
-            )
+            msg = f"All options excluded by constraints for '${capture_as_normalized}'"
+            logger.warning(msg)
             return ctx
 
         weights = [opt.get("weight", 1.0) for opt in options]

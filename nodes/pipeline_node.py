@@ -93,10 +93,8 @@ class WildcardPipeline(io.ComfyNode):
         if pipeline_context:
             for key, value in pipeline_context.items():
                 if key in ctx and not key.startswith("__"):
-                    logger.warning(
-                        "Variable '$%s' already exists in context — overwriting",
-                        key,
-                    )
+                    msg = f"Variable '${key}' already exists in context — overwriting"
+                    logger.warning(msg)
                 ctx[key] = value
 
         modules = json.loads(module_config)
@@ -105,4 +103,5 @@ class WildcardPipeline(io.ComfyNode):
         random.seed(seed)
         engine = PipelineEngine()
         ctx = engine.run(modules, ctx)
+
         return io.NodeOutput(ctx)

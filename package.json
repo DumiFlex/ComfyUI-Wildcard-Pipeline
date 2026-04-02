@@ -8,6 +8,7 @@
     "build:extension": "vite build --mode extension",
     "build:manager": "vite build --mode manager",
     "build": "pnpm run build:extension && pnpm run build:manager",
+    "test": "vitest run",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
     "vite-plugin-css-injected-by-js": "^4.0.1",
+    "vitest": "^4.1.2",
     "vue-tsc": "^2.1.10"
   }
 }
