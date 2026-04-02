@@ -1,9 +1,15 @@
 <template>
   <div class="wp-inject-root">
-    <div v-if="rows.length === 0" class="wp-inject-empty">
-      <span class="wp-inject-empty-text">Connect string inputs to map them to context variables</span>
-    </div>
-    <div v-for="row in rows" :key="row.slot" class="wp-inject-row">
+    <div
+      v-for="row in rows"
+      :key="row.slot"
+      class="wp-inject-row"
+      :class="{
+        'wp-inject-row--disabled': !row.connected,
+        'wp-conflict-error': row.hasConflict,
+      }"
+      :title="row.conflictTooltip"
+    >
       <span class="wp-inject-slot-label">{{ row.slot }}</span>
       <span class="wp-inject-arrow">→</span>
       <span class="wp-inject-dollar">$</span>
@@ -11,6 +17,7 @@
         type="text"
         class="wp-inject-var-input"
         :value="row.varName"
+        :disabled="!row.connected"
         placeholder="variable_name"
         spellcheck="false"
         @input="onVarChange(row.slot, ($event.target as HTMLInputElement).value)"
@@ -21,21 +28,34 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import type { Conflict } from '@/extension/conflicts';
 
-const props = defineProps<{
-  modelValue: Record<string, string>;
-  connectedSlots: string[];
-}>();
+const SLOT_NAMES = ["input_1", "input_2", "input_3"];
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: Record<string, string>;
+    connectedSlots: string[];
+    conflicts?: Conflict[];
+  }>(),
+  { conflicts: () => [] },
+);
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: Record<string, string>): void;
 }>();
 
 const rows = computed(() =>
-  props.connectedSlots.map((slot) => ({
-    slot,
-    varName: props.modelValue[slot] ?? "",
-  })),
+  SLOT_NAMES.map((slot, index) => {
+    const moduleConflicts = props.conflicts.filter(c => c.moduleIndex === index);
+    return {
+      slot,
+      varName: props.modelValue[slot] ?? "",
+      connected: props.connectedSlots.includes(slot),
+      hasConflict: moduleConflicts.length > 0,
+      conflictTooltip: moduleConflicts.map(c => `⚠ ${c.message}`).join('\n'),
+    };
+  }),
 );
 
 function onVarChange(slot: string, value: string) {
@@ -65,19 +85,6 @@ function onVarChange(slot: string, value: string) {
   padding: 8px 10px;
 }
 
-.wp-inject-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-}
-
-.wp-inject-empty-text {
-  color: var(--wp-text3);
-  font-size: 11px;
-  font-style: italic;
-}
-
 .wp-inject-row {
   display: flex;
   align-items: center;
@@ -86,6 +93,18 @@ function onVarChange(slot: string, value: string) {
   background: var(--wp-bg3);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-sm);
+  transition: opacity 0.15s;
+}
+
+.wp-inject-row--disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.wp-inject-row.wp-conflict-error {
+  border-color: var(--wp-red);
+  background: var(--wp-red-bg);
+  opacity: 1;
 }
 
 .wp-inject-slot-label {
@@ -128,6 +147,12 @@ function onVarChange(slot: string, value: string) {
 }
 
 .wp-inject-var-input::placeholder {
+  color: var(--wp-text3);
+}
+
+.wp-inject-var-input:disabled {
+  background: transparent;
+  border-color: transparent;
   color: var(--wp-text3);
 }
 </style>

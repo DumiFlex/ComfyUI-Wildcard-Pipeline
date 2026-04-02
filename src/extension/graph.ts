@@ -2,6 +2,11 @@ import { app } from "#comfyui/app";
 import type { ComfyNode } from "#comfyui/app";
 import type { PipelineModule } from "@/types";
 
+export interface UpstreamContext {
+  variables: string[];
+  constraintTargets: string[];
+}
+
 const PIPELINE_NODE_CLASS = "WP_WildcardPipeline";
 const CONTEXT_INJECT_CLASS = "WP_ContextInject";
 
@@ -26,18 +31,30 @@ function extractPipelineVars(node: ComfyNode, variables: string[]): void {
   }
 }
 
+const INJECT_SLOT_NAMES = ["input_1", "input_2", "input_3"];
+
 function extractInjectVars(node: ComfyNode, variables: string[]): void {
   const configWidget = node.widgets?.find((w) => w.name === "inject_config");
   if (!configWidget?.value) return;
   try {
     const mapping: Record<string, string> = JSON.parse(String(configWidget.value));
-    for (const varName of Object.values(mapping)) {
+    for (const [slotName, varName] of Object.entries(mapping)) {
+      if (!INJECT_SLOT_NAMES.includes(slotName)) continue;
+      if (!isSlotConnected(node, slotName)) continue;
       const cleaned = varName.trim().replace(/^\$/, "");
       addUnique(variables, cleaned);
     }
   } catch {
     /* malformed JSON */
   }
+}
+
+function isSlotConnected(node: ComfyNode, slotName: string): boolean {
+  if (!node.inputs) return false;
+  for (const inp of node.inputs) {
+    if (inp.name === slotName && inp.link != null) return true;
+  }
+  return false;
 }
 
 // getInputNode() is unreliable in ComfyUI's LiteGraph fork — use inputs[].link instead
@@ -107,4 +124,47 @@ export function findDownstreamAssemblers(node: ComfyNode, visited = new Set<numb
     }
   }
   return assemblers;
+}
+
+export function collectUpstreamContext(node: ComfyNode): UpstreamContext {
+  const variables: string[] = [];
+  const constraintTargets: string[] = [];
+  const visited = new Set<number>();
+
+  function walk(current: ComfyNode) {
+    if (visited.has(current.id)) return;
+    visited.add(current.id);
+
+    if (current.comfyClass === PIPELINE_NODE_CLASS) {
+      const configWidget = current.widgets?.find((w) => w.name === "module_config");
+      if (configWidget?.value) {
+        try {
+          const modules: PipelineModule[] = JSON.parse(String(configWidget.value));
+          for (const mod of modules) {
+            if ("capture_as" in mod && mod.capture_as) {
+              addUnique(variables, mod.capture_as.replace(/^\$/, ""));
+            }
+            if (mod.type === "constrain" && typeof mod.target === "string") {
+              const target = mod.target.trim();
+              if (target) addUnique(constraintTargets, target);
+            }
+          }
+        } catch {
+          /* malformed JSON */
+        }
+      }
+    } else if (current.comfyClass === CONTEXT_INJECT_CLASS) {
+      extractInjectVars(current, variables);
+    } else {
+      return;
+    }
+
+    const upstream = getUpstreamByInputName(current, "pipeline_context");
+    if (upstream) walk(upstream);
+  }
+
+  const upstream = getUpstreamByInputName(node, "pipeline_context");
+  if (upstream) walk(upstream);
+
+  return { variables, constraintTargets };
 }

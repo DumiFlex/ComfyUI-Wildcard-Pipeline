@@ -4,7 +4,10 @@ import type { ComfyNode, ComfyWidget, DOMWidgetOptions } from "#comfyui/app";
 import PipelineWidget from "@/components/pipeline/PipelineWidget.vue";
 import AssemblerPreview from "@/components/assembler/AssemblerPreview.vue";
 import InjectWidget from "@/components/inject/InjectWidget.vue";
-import { collectUpstreamVariables, findDownstreamAssemblers } from "./graph";
+import { collectUpstreamVariables, collectUpstreamContext, findDownstreamAssemblers } from "./graph";
+import { analyzePipelineConflicts, analyzeInjectConflicts } from "./conflicts";
+import type { Conflict } from "./conflicts";
+import type { PipelineModule } from "@/types";
 
 // Shared Pinia instance for all standalone widget apps — one fetch serves all nodes
 const widgetPinia = createPinia();
@@ -107,26 +110,114 @@ function createVueWidgetFactory(
 
 /**
  * getCustomWidgets factory for WP_PIPELINE_CONFIG.
- * Called by ComfyUI when a node declares an input of type "WP_PIPELINE_CONFIG".
+ * Custom reactive factory that computes and passes conflict data to PipelineWidget.
  */
 export function pipelineConfigWidgetFactory(
   node: ComfyNode,
   inputName: string,
 ): { widget: ComfyWidget } {
-  return createVueWidgetFactory(
-    node,
-    inputName,
-    PipelineWidget,
-    [],
-    JSON_SERIALIZER,
-    PIPELINE_MIN_HEIGHT,
-  );
+  const container = document.createElement("div");
+  container.classList.add("wp-widget-container");
+  container.style.width = "100%";
+  container.style.display = "flex";
+  container.style.flexDirection = "column";
+  container.style.overflow = "hidden";
+
+  const rootProps = reactive<{
+    modelValue: PipelineModule[];
+    conflicts: Conflict[];
+    "onUpdate:modelValue": (val: PipelineModule[]) => void;
+  }>({
+    modelValue: [],
+    conflicts: [],
+    "onUpdate:modelValue": (val: PipelineModule[]) => {
+      rootProps.modelValue = val;
+      // Recompute conflicts when modules change
+      const ctx = collectUpstreamContext(node);
+      rootProps.conflicts = analyzePipelineConflicts(rootProps.modelValue, ctx.variables);
+      try {
+        for (const asm of findDownstreamAssemblers(node)) {
+          (asm as ComfyNode & { _wpRefreshPreview?: () => void })._wpRefreshPreview?.();
+        }
+      } catch {
+      }
+      node.graph?.setDirtyCanvas(true, true);
+    },
+  });
+
+  let vueApp: VueApp | null = null;
+  let mounted = false;
+
+  const mountVue = () => {
+    if (vueApp) return;
+    vueApp = createApp({
+      render: () =>
+        h(PipelineWidget, {
+          modelValue: rootProps.modelValue,
+          conflicts: rootProps.conflicts,
+          "onUpdate:modelValue": rootProps["onUpdate:modelValue"],
+        }),
+    });
+    vueApp.use(widgetPinia);
+    vueApp.mount(container);
+    mounted = true;
+  };
+
+  const unmountVue = () => {
+    if (vueApp) {
+      vueApp.unmount();
+      vueApp = null;
+    }
+  };
+
+  const widget = node.addDOMWidget(inputName, "custom", container, {
+    serialize: true,
+    hideOnZoom: true,
+    getValue: () => JSON.stringify(rootProps.modelValue),
+    setValue: (v: string) => {
+      try {
+        rootProps.modelValue = JSON.parse(v) as PipelineModule[];
+      } catch {
+        rootProps.modelValue = [];
+      }
+      unmountVue();
+      requestAnimationFrame(mountVue);
+    },
+    getMinHeight: () => PIPELINE_MIN_HEIGHT,
+  } as DOMWidgetOptions);
+
+  widget.serializeValue = async () => JSON.stringify(rootProps.modelValue);
+
+  widget.computeSize = (width: number): [number, number] => {
+    if (!mounted || container.scrollHeight <= 0) return [width, PIPELINE_MIN_HEIGHT];
+    return [width, Math.max(PIPELINE_MIN_HEIGHT, container.scrollHeight + 10)];
+  };
+
+  widget.computeLayoutSize = () => ({ minHeight: PIPELINE_MIN_HEIGHT });
+
+  widget.onRemove = unmountVue;
+
+  const refreshConflicts = () => {
+    requestAnimationFrame(() => {
+      const ctx = collectUpstreamContext(node);
+      rootProps.conflicts = analyzePipelineConflicts(rootProps.modelValue, ctx.variables);
+      node.graph?.setDirtyCanvas(true, true);
+    });
+  };
+
+  const self = node as ComfyNode & { _wpRefreshPipelineConflicts?: () => void };
+  self._wpRefreshPipelineConflicts = refreshConflicts;
+
+  requestAnimationFrame(() => {
+    mountVue();
+    refreshConflicts();
+  });
+
+  return { widget };
 }
 
-/**
- * getCustomWidgets factory for WP_INJECT_CONFIG.
- * Called by ComfyUI when a node declares an input of type "WP_INJECT_CONFIG".
- */
+const INJECT_SLOT_NAMES = ["input_1", "input_2", "input_3"];
+
 export function injectConfigWidgetFactory(
   node: ComfyNode,
   inputName: string,
@@ -143,12 +234,23 @@ export function injectConfigWidgetFactory(
   const rootProps = reactive<{
     modelValue: Record<string, string>;
     connectedSlots: string[];
+    conflicts: Conflict[];
     "onUpdate:modelValue": (val: Record<string, string>) => void;
   }>({
     modelValue: {},
     connectedSlots: [],
+    conflicts: [],
     "onUpdate:modelValue": (val: Record<string, string>) => {
       rootProps.modelValue = val;
+      const upstreamVars = collectUpstreamVariables(node);
+      rootProps.conflicts = analyzeInjectConflicts(val, rootProps.connectedSlots, upstreamVars);
+      try {
+        for (const asm of findDownstreamAssemblers(node)) {
+          (asm as ComfyNode & { _wpRefreshPreview?: () => void })._wpRefreshPreview?.();
+        }
+      } catch {
+      }
+      node.graph?.setDirtyCanvas(true, true);
     },
   });
 
@@ -162,6 +264,7 @@ export function injectConfigWidgetFactory(
         h(InjectWidget, {
           modelValue: rootProps.modelValue,
           connectedSlots: rootProps.connectedSlots,
+          conflicts: rootProps.conflicts,
           "onUpdate:modelValue": rootProps["onUpdate:modelValue"],
         }),
     });
@@ -204,10 +307,15 @@ export function injectConfigWidgetFactory(
 
   widget.onRemove = unmountVue;
 
-  // Expose refresh function on the node for onConnectionsChange
   const refresh = () => {
     requestAnimationFrame(() => {
-      rootProps.connectedSlots = getConnectedAutogrowSlots(node);
+      rootProps.connectedSlots = getConnectedSlots(node);
+      const upstreamVars = collectUpstreamVariables(node);
+      rootProps.conflicts = analyzeInjectConflicts(
+        rootProps.modelValue,
+        rootProps.connectedSlots,
+        upstreamVars,
+      );
       node.graph?.setDirtyCanvas(true, true);
     });
   };
@@ -223,15 +331,14 @@ export function injectConfigWidgetFactory(
   return { widget };
 }
 
-function getConnectedAutogrowSlots(node: ComfyNode): string[] {
+function getConnectedSlots(node: ComfyNode): string[] {
   const slots: string[] = [];
   if (!node.inputs) return slots;
   for (const inp of node.inputs) {
-    if (inp.name.startsWith("input_") && inp.link != null) {
+    if (INJECT_SLOT_NAMES.includes(inp.name) && inp.link != null) {
       slots.push(inp.name);
     }
   }
-  slots.sort();
   return slots;
 }
 

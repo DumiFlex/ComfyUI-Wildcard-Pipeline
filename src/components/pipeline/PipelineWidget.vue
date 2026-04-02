@@ -12,7 +12,10 @@
         :class="{
           dragging: draggedIndex === index,
           'drag-over': dragOverIndex === index,
+          'wp-conflict-error': hasConflict(index, 'error'),
+          'wp-conflict-warning': hasConflict(index, 'warning'),
         }"
+        :title="getConflictTooltip(index)"
         draggable="true"
         @dragstart="onDragStart($event, index)"
         @dragenter.prevent="onDragEnter(index)"
@@ -100,8 +103,15 @@ import { onMounted, ref, watch } from 'vue';
 import type { ConstrainModule, PipelineModule } from '@/types';
 import ModulePickerModal from './ModulePickerModal.vue';
 import { useConstraintStore } from '@/stores/constraints';
+import type { Conflict, ConflictSeverity } from '@/extension/conflicts';
 
-const props = defineProps<{ modelValue: PipelineModule[] }>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: PipelineModule[];
+    conflicts?: Conflict[];
+  }>(),
+  { conflicts: () => [] },
+);
 const emit = defineEmits<{
   (e: 'update:modelValue', value: PipelineModule[]): void;
 }>();
@@ -227,6 +237,22 @@ function onDragEnd() {
   draggedIndex.value = null;
   dragOverIndex.value = null;
 }
+
+/* ── Conflict helpers ── */
+
+function getConflictsForModule(index: number): Conflict[] {
+  return props.conflicts.filter(c => c.moduleIndex === index);
+}
+
+function hasConflict(index: number, severity: ConflictSeverity): boolean {
+  return getConflictsForModule(index).some(c => c.severity === severity);
+}
+
+function getConflictTooltip(index: number): string {
+  const conflicts = getConflictsForModule(index);
+  if (!conflicts.length) return '';
+  return conflicts.map(c => `⚠ ${c.message}`).join('\n');
+}
 </script>
 
 <style>
@@ -281,6 +307,22 @@ function onDragEnd() {
 .wp-module.drag-over {
   border-color: var(--wp-accent);
   background: var(--wp-accent-glow);
+}
+
+/* ── Conflict highlighting ── */
+.wp-module.wp-conflict-warning {
+  border-color: var(--wp-amber);
+  background: var(--wp-amber-bg);
+}
+.wp-module.wp-conflict-warning:hover {
+  border-color: var(--wp-amber);
+}
+.wp-module.wp-conflict-error {
+  border-color: var(--wp-red);
+  background: var(--wp-red-bg);
+}
+.wp-module.wp-conflict-error:hover {
+  border-color: var(--wp-red);
 }
 
 .wp-module-drag {
