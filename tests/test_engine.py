@@ -300,7 +300,6 @@ class TestPipelineEngineValidation:
             {"type": "wildcard"},
             {"type": "constrain"},
             {"type": "condition"},
-            {"type": "export"},
             {"type": "fixed", "value": "survived", "capture_as": "$ok"},
         ]
         ctx = engine.run(modules, {})
@@ -780,72 +779,266 @@ class TestPipelineEngineCondition:
         assert "matched" not in ctx.values() or ctx.get("a") == "x"
 
 
-class TestPipelineEngineExport:
-    def test_export_copies_variables(self):
-        engine = PipelineEngine()
-        modules = [
-            {"type": "fixed", "value": "forest", "capture_as": "$location"},
-            {"type": "fixed", "value": "golden hour", "capture_as": "$lighting"},
-            {"type": "export", "variables": ["$location", "$lighting"]},
-        ]
-        ctx = engine.run(modules, {})
-        assert ctx["__exports__"]["location"] == "forest"
-        assert ctx["__exports__"]["lighting"] == "golden hour"
+class TestPipelineEngineCrossNodeConstraints:
+    """Constraints registered in one node's run() and applied in another's."""
 
-    def test_export_with_prefix(self):
+    def test_constraint_from_upstream_ctx_applies_to_downstream_wildcard(self):
         engine = PipelineEngine()
-        modules = [
-            {"type": "fixed", "value": "x", "capture_as": "$a"},
-            {"type": "export", "variables": ["$a"], "prefix": "env_"},
+        node1_modules = [
+            {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
+            {
+                "type": "constrain",
+                "rules": [
+                    {
+                        "target": "weather",
+                        "when_variable": "lighting",
+                        "when_value": "moonlight",
+                        "rule_type": "exclusion",
+                        "values": ["sunny haze"],
+                    }
+                ],
+            },
         ]
-        ctx = engine.run(modules, {})
-        assert ctx["__exports__"]["env_a"] == "x"
+        ctx = engine.run(node1_modules, {})
+        assert "__constraints__" in ctx
+        assert ctx["lighting"] == "moonlight"
 
-    def test_export_missing_variable_skipped(self):
-        engine = PipelineEngine()
-        modules = [
-            {"type": "fixed", "value": "x", "capture_as": "$a"},
-            {"type": "export", "variables": ["$a", "$nonexistent"]},
+        node2_modules = [
+            {
+                "type": "wildcard",
+                "capture_as": "$weather",
+                "options": [
+                    {"value": "sunny haze", "weight": 1.0},
+                    {"value": "cold fog", "weight": 1.0},
+                ],
+            },
         ]
-        ctx = engine.run(modules, {})
-        assert "a" in ctx["__exports__"]
-        assert "nonexistent" not in ctx["__exports__"]
+        ctx = engine.run(node2_modules, ctx)
+        assert ctx["weather"] == "cold fog"
 
-    def test_export_empty_variables_is_noop(self):
+    def test_when_variable_from_earlier_node_triggers_constraint_in_later_node(self):
         engine = PipelineEngine()
-        modules = [
-            {"type": "export", "variables": []},
-        ]
-        ctx = engine.run(modules, {})
-        assert "__exports__" not in ctx
+        node1_ctx = engine.run(
+            [{"type": "fixed", "value": "golden hour", "capture_as": "$lighting"}],
+            {},
+        )
+        node2_ctx = engine.run(
+            [
+                {
+                    "type": "constrain",
+                    "rules": [
+                        {
+                            "target": "weather",
+                            "when_variable": "lighting",
+                            "when_value": "golden hour",
+                            "rule_type": "weight_bias",
+                            "values": ["warm haze"],
+                            "multiplier": 100.0,
+                        }
+                    ],
+                },
+            ],
+            node1_ctx,
+        )
+        assert "__constraints__" in node2_ctx
 
-    def test_export_accumulates_across_modules(self):
-        engine = PipelineEngine()
-        modules = [
-            {"type": "fixed", "value": "x", "capture_as": "$a"},
-            {"type": "fixed", "value": "y", "capture_as": "$b"},
-            {"type": "export", "variables": ["$a"]},
-            {"type": "export", "variables": ["$b"]},
-        ]
-        ctx = engine.run(modules, {})
-        assert ctx["__exports__"]["a"] == "x"
-        assert ctx["__exports__"]["b"] == "y"
+        with patch(
+            "engine.pipeline.random.choices",
+            return_value=[{"value": "warm haze", "weight": 100.0}],
+        ) as mock:
+            node3_ctx = engine.run(
+                [
+                    {
+                        "type": "wildcard",
+                        "capture_as": "$weather",
+                        "options": [
+                            {"value": "warm haze", "weight": 1.0},
+                            {"value": "cold fog", "weight": 1.0},
+                        ],
+                    }
+                ],
+                node2_ctx,
+            )
+            _, kwargs = mock.call_args
+            assert kwargs["weights"] == [100.0, 1.0]
+            assert node3_ctx["weather"] == "warm haze"
 
-    def test_export_strips_dollar_prefix(self):
+    def test_constraint_registered_after_target_has_no_effect(self):
         engine = PipelineEngine()
-        modules = [
-            {"type": "fixed", "value": "v", "capture_as": "$var"},
-            {"type": "export", "variables": ["$var"]},
-        ]
-        ctx = engine.run(modules, {})
-        assert "var" in ctx["__exports__"]
-        assert "$var" not in ctx["__exports__"]
+        node1_ctx = engine.run(
+            [
+                {
+                    "type": "wildcard",
+                    "capture_as": "$weather",
+                    "options": [{"value": "sunny haze", "weight": 1.0}],
+                },
+            ],
+            {},
+        )
+        assert node1_ctx["weather"] == "sunny haze"
 
-    def test_export_without_dollar_prefix(self):
+        node2_ctx = engine.run(
+            [
+                {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
+                {
+                    "type": "constrain",
+                    "rules": [
+                        {
+                            "target": "weather",
+                            "when_variable": "lighting",
+                            "when_value": "moonlight",
+                            "rule_type": "exclusion",
+                            "values": ["sunny haze"],
+                        }
+                    ],
+                },
+            ],
+            node1_ctx,
+        )
+        assert node2_ctx["weather"] == "sunny haze"
+
+    def test_three_node_chain_lighting_constrain_weather(self):
         engine = PipelineEngine()
-        modules = [
-            {"type": "fixed", "value": "v", "capture_as": "$var"},
-            {"type": "export", "variables": ["var"]},
-        ]
-        ctx = engine.run(modules, {})
-        assert ctx["__exports__"]["var"] == "v"
+        ctx = engine.run(
+            [{"type": "fixed", "value": "moonlight", "capture_as": "$lighting"}],
+            {},
+        )
+        ctx = engine.run(
+            [
+                {
+                    "type": "constrain",
+                    "rules": [
+                        {
+                            "target": "weather",
+                            "when_variable": "lighting",
+                            "when_value": "moonlight",
+                            "rule_type": "exclusion",
+                            "values": ["sunny haze"],
+                        }
+                    ],
+                },
+            ],
+            ctx,
+        )
+        ctx = engine.run(
+            [
+                {
+                    "type": "wildcard",
+                    "capture_as": "$weather",
+                    "options": [
+                        {"value": "sunny haze", "weight": 1.0},
+                        {"value": "cold fog", "weight": 1.0},
+                    ],
+                },
+            ],
+            ctx,
+        )
+        assert ctx["weather"] == "cold fog"
+
+    def test_constraints_accumulate_across_multiple_nodes(self):
+        engine = PipelineEngine()
+        ctx = engine.run(
+            [
+                {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
+                {"type": "fixed", "value": "cold", "capture_as": "$temperature"},
+            ],
+            {},
+        )
+        ctx = engine.run(
+            [
+                {
+                    "type": "constrain",
+                    "rules": [
+                        {
+                            "target": "weather",
+                            "when_variable": "lighting",
+                            "when_value": "moonlight",
+                            "rule_type": "exclusion",
+                            "values": ["sunny haze"],
+                        }
+                    ],
+                },
+            ],
+            ctx,
+        )
+        ctx = engine.run(
+            [
+                {
+                    "type": "constrain",
+                    "rules": [
+                        {
+                            "target": "weather",
+                            "when_variable": "temperature",
+                            "when_value": "cold",
+                            "rule_type": "exclusion",
+                            "values": ["warm drizzle"],
+                        }
+                    ],
+                },
+            ],
+            ctx,
+        )
+        ctx = engine.run(
+            [
+                {
+                    "type": "wildcard",
+                    "capture_as": "$weather",
+                    "options": [
+                        {"value": "sunny haze", "weight": 1.0},
+                        {"value": "warm drizzle", "weight": 1.0},
+                        {"value": "cold fog", "weight": 1.0},
+                    ],
+                },
+            ],
+            ctx,
+        )
+        assert ctx["weather"] == "cold fog"
+
+    def test_constraints_persist_through_unrelated_modules(self):
+        engine = PipelineEngine()
+        ctx = engine.run(
+            [
+                {"type": "fixed", "value": "moonlight", "capture_as": "$lighting"},
+                {
+                    "type": "constrain",
+                    "rules": [
+                        {
+                            "target": "weather",
+                            "when_variable": "lighting",
+                            "when_value": "moonlight",
+                            "rule_type": "exclusion",
+                            "values": ["sunny haze"],
+                        }
+                    ],
+                },
+            ],
+            {},
+        )
+        ctx = engine.run(
+            [
+                {"type": "fixed", "value": "forest", "capture_as": "$location"},
+                {
+                    "type": "combine",
+                    "template": "$location under $lighting",
+                    "capture_as": "$scene",
+                },
+            ],
+            ctx,
+        )
+        assert ctx["scene"] == "forest under moonlight"
+        assert "__constraints__" in ctx
+
+        ctx = engine.run(
+            [
+                {
+                    "type": "wildcard",
+                    "capture_as": "$weather",
+                    "options": [
+                        {"value": "sunny haze", "weight": 1.0},
+                        {"value": "cold fog", "weight": 1.0},
+                    ],
+                },
+            ],
+            ctx,
+        )
+        assert ctx["weather"] == "cold fog"

@@ -165,29 +165,6 @@
             </div>
           </template>
 
-          <!-- Export: inline form -->
-          <template v-else-if="activeTab === 'export'">
-            <div class="wp-modal-form">
-              <label class="wp-form-label">Variables (comma-separated)</label>
-              <input
-                v-model="exportForm.variablesRaw"
-                class="wp-form-input"
-                placeholder="location, lighting, mood"
-              />
-              <label class="wp-form-label">Prefix (optional)</label>
-              <input
-                v-model="exportForm.prefix"
-                class="wp-form-input"
-                placeholder="env_"
-              />
-              <button
-                type="button"
-                class="wp-form-submit"
-                :disabled="!exportForm.variablesRaw.trim()"
-                @click="submitExport"
-              >Add Export Module</button>
-            </div>
-          </template>
         </div>
       </div>
     </div>
@@ -212,7 +189,6 @@ const categories = [
   { type: 'fixed' as const, label: 'Fixed' },
   { type: 'combine' as const, label: 'Combine' },
   { type: 'condition' as const, label: 'Condition' },
-  { type: 'export' as const, label: 'Export' },
 ];
 
 const activeTab = ref<PipelineModule['type']>('wildcard');
@@ -254,7 +230,6 @@ const loadingConstraints = ref(false);
 const fixedForm = ref({ value: '', capture_as: '' });
 const combineForm = ref({ template: '', capture_as: '' });
 const conditionForm = ref({ variable: '', if_equals: '', value: '', capture_as: '' });
-const exportForm = ref({ variablesRaw: '', prefix: '' });
 
 /* ── Fetch data when modal opens ── */
 watch(() => props.visible, async (open) => {
@@ -264,7 +239,6 @@ watch(() => props.visible, async (open) => {
   fixedForm.value = { value: '', capture_as: '' };
   combineForm.value = { template: '', capture_as: '' };
   conditionForm.value = { variable: '', if_equals: '', value: '', capture_as: '' };
-  exportForm.value = { variablesRaw: '', prefix: '' };
 
   loadingWildcards.value = true;
   loadingConstraints.value = true;
@@ -358,17 +332,6 @@ function submitCondition() {
     if_equals: f.if_equals || undefined,
     value: f.value,
     capture_as: capture,
-  });
-  close();
-}
-
-function submitExport() {
-  const f = exportForm.value;
-  const variables = f.variablesRaw.split(',').map(v => v.trim()).filter(Boolean);
-  emit('select', {
-    type: 'export',
-    variables,
-    prefix: f.prefix || undefined,
   });
   close();
 }
@@ -469,8 +432,6 @@ function submitExport() {
 .wp-tab.active.tab-fixed { color: var(--p-text-color, #f8fafc); border-bottom-color: var(--p-text-color, #f8fafc); }
 .wp-tab.active.tab-combine { color: var(--wp-teal); border-bottom-color: var(--wp-teal); }
 .wp-tab.active.tab-condition { color: var(--wp-green); border-bottom-color: var(--wp-green); }
-.wp-tab.active.tab-export { color: var(--wp-pink); border-bottom-color: var(--wp-pink); }
-
 /* ── Search ── */
 .wp-modal-search {
   padding: 8px 10px;

@@ -126,6 +126,109 @@ export function findDownstreamAssemblers(node: ComfyNode, visited = new Set<numb
   return assemblers;
 }
 
+/**
+ * Find all downstream WP_WildcardPipeline and WP_ContextInject nodes
+ * (direct and transitive) connected via pipeline_context outputs.
+ */
+export function findDownstreamPipelineNodes(node: ComfyNode, visited = new Set<number>()): ComfyNode[] {
+  const nodes: ComfyNode[] = [];
+  const graph = app.graph;
+  if (!graph) return nodes;
+
+  for (const output of node.outputs) {
+    if (!output.links) continue;
+    for (const linkId of output.links) {
+      const link = graph.links[linkId];
+      if (!link) continue;
+      const target = graph.getNodeById(link.target_id);
+      if (!target) continue;
+      if (visited.has(target.id)) continue;
+      visited.add(target.id);
+      if (
+        target.comfyClass === PIPELINE_NODE_CLASS ||
+        target.comfyClass === CONTEXT_INJECT_CLASS
+      ) {
+        nodes.push(target);
+        nodes.push(...findDownstreamPipelineNodes(target, visited));
+      }
+    }
+  }
+  return nodes;
+}
+
+/**
+ * Find all upstream WP_WildcardPipeline and WP_ContextInject nodes
+ * (direct and transitive) connected via pipeline_context inputs.
+ */
+export function findUpstreamPipelineNodes(node: ComfyNode, visited = new Set<number>()): ComfyNode[] {
+  const nodes: ComfyNode[] = [];
+  if (visited.has(node.id)) return nodes;
+  visited.add(node.id);
+
+  const upstream = getUpstreamByInputName(node, "pipeline_context");
+  if (!upstream) return nodes;
+  if (visited.has(upstream.id)) return nodes;
+
+  if (
+    upstream.comfyClass === PIPELINE_NODE_CLASS ||
+    upstream.comfyClass === CONTEXT_INJECT_CLASS
+  ) {
+    nodes.push(upstream);
+    nodes.push(...findUpstreamPipelineNodes(upstream, visited));
+  }
+
+  return nodes;
+}
+
+/**
+ * Collect variables defined in all downstream pipeline/inject nodes
+ * (everything AFTER this node in the execution chain).
+ */
+export function collectDownstreamVariables(node: ComfyNode): string[] {
+  const variables: string[] = [];
+  const visited = new Set<number>();
+
+  function walk(current: ComfyNode) {
+    if (visited.has(current.id)) return;
+    visited.add(current.id);
+
+    if (current.comfyClass === PIPELINE_NODE_CLASS) {
+      extractPipelineVars(current, variables);
+    } else if (current.comfyClass === CONTEXT_INJECT_CLASS) {
+      extractInjectVars(current, variables);
+    } else {
+      return;
+    }
+
+    const graph = app.graph;
+    if (!graph || !current.outputs) return;
+    for (const output of current.outputs) {
+      if (!output.links) continue;
+      for (const linkId of output.links) {
+        const link = graph.links[linkId];
+        if (!link) continue;
+        const target = graph.getNodeById(link.target_id);
+        if (target) walk(target);
+      }
+    }
+  }
+
+  const graph = app.graph;
+  if (graph && node.outputs) {
+    for (const output of node.outputs) {
+      if (!output.links) continue;
+      for (const linkId of output.links) {
+        const link = graph.links[linkId];
+        if (!link) continue;
+        const target = graph.getNodeById(link.target_id);
+        if (target) walk(target);
+      }
+    }
+  }
+
+  return variables;
+}
+
 export function collectUpstreamContext(node: ComfyNode): UpstreamContext {
   const variables: string[] = [];
   const constraintTargets: string[] = [];

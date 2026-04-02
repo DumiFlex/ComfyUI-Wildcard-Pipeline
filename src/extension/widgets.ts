@@ -4,8 +4,8 @@ import type { ComfyNode, ComfyWidget, DOMWidgetOptions } from "#comfyui/app";
 import PipelineWidget from "@/components/pipeline/PipelineWidget.vue";
 import AssemblerPreview from "@/components/assembler/AssemblerPreview.vue";
 import InjectWidget from "@/components/inject/InjectWidget.vue";
-import { collectUpstreamVariables, collectUpstreamContext, findDownstreamAssemblers } from "./graph";
-import { analyzePipelineConflicts, analyzeInjectConflicts } from "./conflicts";
+import { collectUpstreamVariables, collectUpstreamContext, collectDownstreamVariables, findDownstreamAssemblers, findDownstreamPipelineNodes, findUpstreamPipelineNodes } from "./graph";
+import { analyzePipelineConflicts, analyzeInjectConflicts, resolveConstrainSources } from "./conflicts";
 import type { Conflict } from "./conflicts";
 import type { PipelineModule } from "@/types";
 
@@ -123,6 +123,14 @@ export function pipelineConfigWidgetFactory(
   container.style.flexDirection = "column";
   container.style.overflow = "hidden";
 
+  const computeConflicts = async () => {
+    const ctx = collectUpstreamContext(node);
+    const downstream = collectDownstreamVariables(node);
+    const resolved = await resolveConstrainSources(rootProps.modelValue);
+    rootProps.conflicts = analyzePipelineConflicts(resolved, ctx.variables, downstream);
+    node.graph?.setDirtyCanvas(true, true);
+  };
+
   const rootProps = reactive<{
     modelValue: PipelineModule[];
     conflicts: Conflict[];
@@ -132,12 +140,22 @@ export function pipelineConfigWidgetFactory(
     conflicts: [],
     "onUpdate:modelValue": (val: PipelineModule[]) => {
       rootProps.modelValue = val;
-      // Recompute conflicts when modules change
-      const ctx = collectUpstreamContext(node);
-      rootProps.conflicts = analyzePipelineConflicts(rootProps.modelValue, ctx.variables);
+      computeConflicts();
       try {
         for (const asm of findDownstreamAssemblers(node)) {
           (asm as ComfyNode & { _wpRefreshPreview?: () => void })._wpRefreshPreview?.();
+        }
+        for (const downstream of findDownstreamPipelineNodes(node)) {
+          const dn = downstream as ComfyNode & {
+            _wpRefreshPipelineConflicts?: () => void;
+            _wpRefreshInject?: () => void;
+          };
+          dn._wpRefreshPipelineConflicts?.();
+          dn._wpRefreshInject?.();
+        }
+        for (const upstream of findUpstreamPipelineNodes(node)) {
+          const un = upstream as ComfyNode & { _wpRefreshPipelineConflicts?: () => void };
+          un._wpRefreshPipelineConflicts?.();
         }
       } catch {
       }
@@ -199,9 +217,7 @@ export function pipelineConfigWidgetFactory(
 
   const refreshConflicts = () => {
     requestAnimationFrame(() => {
-      const ctx = collectUpstreamContext(node);
-      rootProps.conflicts = analyzePipelineConflicts(rootProps.modelValue, ctx.variables);
-      node.graph?.setDirtyCanvas(true, true);
+      computeConflicts();
     });
   };
 
@@ -247,6 +263,18 @@ export function injectConfigWidgetFactory(
       try {
         for (const asm of findDownstreamAssemblers(node)) {
           (asm as ComfyNode & { _wpRefreshPreview?: () => void })._wpRefreshPreview?.();
+        }
+        for (const downstream of findDownstreamPipelineNodes(node)) {
+          const dn = downstream as ComfyNode & {
+            _wpRefreshPipelineConflicts?: () => void;
+            _wpRefreshInject?: () => void;
+          };
+          dn._wpRefreshPipelineConflicts?.();
+          dn._wpRefreshInject?.();
+        }
+        for (const upstream of findUpstreamPipelineNodes(node)) {
+          const un = upstream as ComfyNode & { _wpRefreshPipelineConflicts?: () => void };
+          un._wpRefreshPipelineConflicts?.();
         }
       } catch {
       }

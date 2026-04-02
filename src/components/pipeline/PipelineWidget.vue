@@ -64,15 +64,14 @@
             <span v-else>${{ mod.variable }}</span>
           </div>
 
-          <!-- Export: show variable list -->
-          <div v-else-if="mod.type === 'export'" class="wp-module-detail wp-export-info">
-            {{ mod.variables?.join(', ') || '(none)' }}
-            <span v-if="mod.prefix" class="wp-text-muted"> prefix={{ mod.prefix }}</span>
-          </div>
-
           <!-- Capture label -->
           <div v-if="getCapture(mod)" class="wp-module-capture">
             → ${{ getCapture(mod) }}
+            <span
+              v-if="hasOverwrite(index)"
+              class="wp-overwrite-icon"
+              :title="getOverwriteTooltip(index)"
+            >⟲</span>
           </div>
         </div>
 
@@ -150,8 +149,6 @@ function getModuleName(mod: PipelineModule): string {
       return 'Constrain';
     case 'condition':
       return mod.variable?.replace(/^\$/, '') ?? 'Condition';
-    case 'export':
-      return mod.variables?.length ? `Export (${mod.variables.length})` : 'Export';
   }
 }
 
@@ -245,11 +242,33 @@ function getConflictsForModule(index: number): Conflict[] {
 }
 
 function hasConflict(index: number, severity: ConflictSeverity): boolean {
-  return getConflictsForModule(index).some(c => c.severity === severity);
+  const mod = localModules.value[index];
+  return getConflictsForModule(index).some(c => {
+    if (c.type === 'context_overwrite' && mod?.type === 'condition') return false;
+    return c.severity === severity;
+  });
+}
+
+function getOverwriteTooltip(index: number): string {
+  const mod = localModules.value[index];
+  if (mod?.type !== 'condition') return '';
+  const overwrites = getConflictsForModule(index).filter(c => c.type === 'context_overwrite');
+  if (!overwrites.length) return '';
+  return overwrites.map(c => c.message).join('\n');
+}
+
+function hasOverwrite(index: number): boolean {
+  const mod = localModules.value[index];
+  if (mod?.type !== 'condition') return false;
+  return getConflictsForModule(index).some(c => c.type === 'context_overwrite');
 }
 
 function getConflictTooltip(index: number): string {
-  const conflicts = getConflictsForModule(index);
+  const mod = localModules.value[index];
+  const conflicts = getConflictsForModule(index).filter(c => {
+    if (c.type === 'context_overwrite' && mod?.type === 'condition') return false;
+    return true;
+  });
   if (!conflicts.length) return '';
   return conflicts.map(c => `⚠ ${c.message}`).join('\n');
 }
@@ -304,10 +323,6 @@ function getConflictTooltip(index: number): string {
   opacity: 0.4;
   cursor: grabbing;
 }
-.wp-module.drag-over {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent-glow);
-}
 
 /* ── Conflict highlighting ── */
 .wp-module.wp-conflict-warning {
@@ -323,6 +338,11 @@ function getConflictTooltip(index: number): string {
 }
 .wp-module.wp-conflict-error:hover {
   border-color: var(--wp-red);
+}
+
+.wp-module.drag-over {
+  border-color: var(--wp-accent);
+  background: var(--wp-accent-glow);
 }
 
 .wp-module-drag {
@@ -382,11 +402,6 @@ function getConflictTooltip(index: number): string {
   color: var(--wp-green);
   border: 1px solid rgba(74, 222, 128, 0.2);
 }
-.tag-export {
-  background: var(--wp-pink-bg);
-  color: var(--wp-pink);
-  border: 1px solid rgba(244, 114, 182, 0.2);
-}
 
 .wp-module-name {
   font-size: 12px;
@@ -428,10 +443,6 @@ function getConflictTooltip(index: number): string {
   color: var(--wp-green);
   background: var(--wp-green-bg);
 }
-.wp-export-info {
-  color: var(--wp-pink);
-  background: var(--wp-pink-bg);
-}
 .wp-text-muted {
   color: var(--wp-text3);
 }
@@ -443,6 +454,16 @@ function getConflictTooltip(index: number): string {
   font-family: var(--wp-font-mono, monospace);
   color: var(--wp-green);
   padding-left: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wp-overwrite-icon {
+  color: var(--wp-amber);
+  font-size: 12px;
+  cursor: help;
+  opacity: 0.8;
 }
 
 /* ── Delete button ── */

@@ -1,4 +1,5 @@
-import type { PipelineModule } from "@/types";
+import type { PipelineModule, ConstraintRule } from "@/types";
+import { constraintApi } from "@/api/client";
 
 export type ConflictSeverity = "error" | "warning";
 export type ConflictType =
@@ -43,21 +44,110 @@ function stripDollar(name: string): string {
   return name.replace(/^\$/, "");
 }
 
+// Cache for resolved constraint rules: source ID → rules[]
+const constraintCache = new Map<string, ConstraintRule[]>();
+
+/**
+ * Fetch constraint rules for a source ID, using cache when available.
+ * Returns empty array on fetch failure (graceful degradation).
+ */
+async function fetchConstraintRules(sourceId: string): Promise<ConstraintRule[]> {
+  const cached = constraintCache.get(sourceId);
+  if (cached) return cached;
+
+  try {
+    const data = await constraintApi.get(sourceId);
+    const rules = (data.rules ?? []) as ConstraintRule[];
+    constraintCache.set(sourceId, rules);
+    return rules;
+  } catch {
+    return [];
+  }
+}
+
+export function invalidateConstraintCache(sourceId?: string): void {
+  if (sourceId) {
+    constraintCache.delete(sourceId);
+  } else {
+    constraintCache.clear();
+  }
+}
+
+/**
+ * Resolve constrain modules that reference external sources.
+ * Returns a new array with source-based constrain modules augmented with fetched rules.
+ */
+export async function resolveConstrainSources(
+  modules: PipelineModule[],
+): Promise<PipelineModule[]> {
+  const resolved: PipelineModule[] = [];
+
+  for (const mod of modules) {
+    if (mod.type === "constrain" && mod.source && (!mod.rules || mod.rules.length === 0)) {
+      const rules = await fetchConstraintRules(mod.source);
+      resolved.push({ ...mod, rules });
+    } else {
+      resolved.push(mod);
+    }
+  }
+
+  return resolved;
+}
+
+function getConstrainRuleTargets(mod: PipelineModule): string[] {
+  if (mod.type !== "constrain") return [];
+  const targets: string[] = [];
+  if (mod.target) targets.push(stripDollar(mod.target));
+  if (mod.rules) {
+    for (const rule of mod.rules) {
+      if (rule.target) {
+        const t = stripDollar(rule.target);
+        if (t && !targets.includes(t)) targets.push(t);
+      }
+    }
+  }
+  return targets;
+}
+
+function getConstrainRuleWhenVariables(mod: PipelineModule): string[] {
+  if (mod.type !== "constrain" || !mod.rules) return [];
+  const vars: string[] = [];
+  for (const rule of mod.rules) {
+    if (rule.when_variable) {
+      const v = stripDollar(rule.when_variable);
+      if (v && !vars.includes(v)) vars.push(v);
+    }
+  }
+  return vars;
+}
+
 /**
  * Analyzes a list of pipeline modules for variable conflicts.
+ * Constrain modules should be pre-resolved via resolveConstrainSources()
+ * so that source-based rules are available for inspection.
  *
  * @param modules - Ordered list of pipeline modules to analyze
  * @param upstreamVariables - Variable names already defined by upstream nodes
+ * @param downstreamVariables - Variable names defined by downstream nodes
  * @returns Array of detected conflicts (may be empty)
  */
 export function analyzePipelineConflicts(
   modules: PipelineModule[],
   upstreamVariables: string[],
+  downstreamVariables: string[] = [],
 ): Conflict[] {
   const conflicts: Conflict[] = [];
   const upstreamSet = new Set(upstreamVariables);
-  // capturedSoFar starts with all upstream vars
   const capturedSoFar = new Set<string>(upstreamVariables);
+  const downstreamSet = new Set(downstreamVariables);
+
+  const allChainVars = new Set<string>(upstreamVariables);
+  for (const v of downstreamVariables) allChainVars.add(v);
+  for (const mod of modules) {
+    if ("capture_as" in mod && mod.capture_as) {
+      allChainVars.add(stripDollar(mod.capture_as));
+    }
+  }
 
   for (let i = 0; i < modules.length; i++) {
     const mod = modules[i];
@@ -89,12 +179,27 @@ export function analyzePipelineConflicts(
       capturedSoFar.add(varName);
     }
 
-    // Check 4 + 5: constrain modules
+    // Check 4 + 5: constrain modules — ordering-aware, checks per-rule targets
     if (mod.type === "constrain") {
-      // Check 4: unresolved_constraint_target
-      if (mod.target !== undefined && mod.target !== null && mod.target !== "") {
-        const target = stripDollar(mod.target);
-        if (!capturedSoFar.has(target)) {
+      const futureCaptures = new Set<string>(downstreamSet);
+      for (let j = i + 1; j < modules.length; j++) {
+        const futureModule = modules[j];
+        if ("capture_as" in futureModule && futureModule.capture_as) {
+          futureCaptures.add(stripDollar(futureModule.capture_as));
+        }
+      }
+
+      // Check 4: each rule's target — must be a future wildcard, not already sampled
+      const ruleTargets = getConstrainRuleTargets(mod);
+      for (const target of ruleTargets) {
+        if (capturedSoFar.has(target)) {
+          conflicts.push({
+            moduleIndex: i,
+            type: "unresolved_constraint_target",
+            severity: "warning",
+            message: `Constraint target '$${target}' was already sampled — move this constraint before it`,
+          });
+        } else if (!futureCaptures.has(target)) {
           conflicts.push({
             moduleIndex: i,
             type: "unresolved_constraint_target",
@@ -104,17 +209,59 @@ export function analyzePipelineConflicts(
         }
       }
 
-      // Check 5: unresolved_constraint_when_variable
-      if (mod.rules && mod.rules.length > 0) {
-        for (const rule of mod.rules) {
-          if (rule.when_variable && !capturedSoFar.has(rule.when_variable)) {
-            conflicts.push({
-              moduleIndex: i,
-              type: "unresolved_constraint_when_variable",
-              severity: "warning",
-              message: `Constraint rule references undefined variable '$${rule.when_variable}'`,
-            });
+      // Check 5: each rule's when_variable — must exist somewhere in the pipeline
+      const whenVars = getConstrainRuleWhenVariables(mod);
+      for (const whenVar of whenVars) {
+        if (!allChainVars.has(whenVar)) {
+          conflicts.push({
+            moduleIndex: i,
+            type: "unresolved_constraint_when_variable",
+            severity: "warning",
+            message: `Constraint rule references undefined variable '$${whenVar}'`,
+          });
+        }
+      }
+
+      for (const rule of mod.rules ?? []) {
+        if (!rule.when_variable || !rule.target) continue;
+        const whenVar = stripDollar(rule.when_variable);
+        const target = stripDollar(rule.target ?? mod.target ?? "");
+        if (!whenVar || !target) continue;
+
+        if (capturedSoFar.has(whenVar)) continue;
+
+        if (!allChainVars.has(whenVar)) continue;
+
+        if (capturedSoFar.has(target)) continue;
+
+        let whenVarFutureIdx = -1;
+        let targetFutureIdx = -1;
+        for (let j = i + 1; j < modules.length; j++) {
+          const futureModule = modules[j];
+          if ("capture_as" in futureModule && futureModule.capture_as) {
+            const cap = stripDollar(futureModule.capture_as);
+            if (cap === whenVar && whenVarFutureIdx === -1) whenVarFutureIdx = j;
+            if (cap === target && targetFutureIdx === -1) targetFutureIdx = j;
           }
+        }
+
+        if (targetFutureIdx !== -1 && whenVarFutureIdx === -1 && downstreamSet.has(whenVar)) {
+          conflicts.push({
+            moduleIndex: i,
+            type: "unresolved_constraint_when_variable",
+            severity: "warning",
+            message: `Constraint's when_variable '$${whenVar}' won't be resolved before target '$${target}' is sampled`,
+          });
+          continue;
+        }
+
+        if (whenVarFutureIdx !== -1 && targetFutureIdx !== -1 && whenVarFutureIdx > targetFutureIdx) {
+          conflicts.push({
+            moduleIndex: i,
+            type: "unresolved_constraint_when_variable",
+            severity: "warning",
+            message: `Constraint's when_variable '$${whenVar}' won't be resolved before target '$${target}' is sampled`,
+          });
         }
       }
     }

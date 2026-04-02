@@ -12,6 +12,7 @@ Repository = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline"
 PublisherId = "dumiflex"
 DisplayName = "Wildcard Pipeline"
 Icon = ""
+includes = ['js', 'web_dist']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

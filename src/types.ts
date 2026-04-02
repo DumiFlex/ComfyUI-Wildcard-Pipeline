@@ -86,19 +86,12 @@ export interface ConditionModule {
   capture_as: string;
 }
 
-export interface ExportModule {
-  type: "export";
-  variables: string[];
-  prefix?: string;
-}
-
 export type PipelineModule =
   | WildcardModule
   | FixedModule
   | CombineModule
   | ConstrainModule
-  | ConditionModule
-  | ExportModule;
+  | ConditionModule;
 
 export type WildcardDraft = Omit<WildcardBase, "id"> & { id?: string };
 export type ConstraintDraft = Omit<ConstraintBase, "id" | "rules"> & { id?: string; rules: ConstraintRuleDraft[] };
@@ -116,5 +109,4 @@ export const MODULE_TYPE_LABELS: Record<ModuleType, string> = {
   combine: "Combine",
   constrain: "Constrain",
   condition: "Condition",
-  export: "Export",
 };

@@ -18,7 +18,6 @@ _MODULE_SCHEMAS: dict[str, set[str]] = {
     "combine": {"template", "capture_as"},
     "constrain": set(),
     "condition": {"variable"},
-    "export": {"variables"},
 }
 
 
@@ -169,7 +168,6 @@ class PipelineEngine:
             "combine": self._handle_combine,
             "constrain": self._handle_constrain,
             "condition": self._handle_condition,
-            "export": self._handle_export,
         }
         return handlers.get(module_type)
 
@@ -306,32 +304,5 @@ class PipelineEngine:
             ctx[capture_as] = value
         elif fallback:
             ctx[capture_as] = fallback
-
-        return ctx
-
-    def _handle_export(
-        self, module: dict[str, Any], ctx: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Copy selected context variables into ``__exports__``.
-
-        ``variables`` is a list of variable names (with or without ``$``
-        prefix) to export.  A ``prefix`` can be specified to namespace
-        the exported keys.
-        """
-        variables = module.get("variables", [])
-        prefix = module.get("prefix", "")
-
-        if not variables:
-            return ctx
-
-        exports = ctx.get("__exports__", {})
-
-        for var in variables:
-            var = _normalize_capture(var)
-            if var in ctx:
-                export_key = f"{prefix}{var}" if prefix else var
-                exports[export_key] = ctx[var]
-
-        ctx["__exports__"] = exports
 
         return ctx

@@ -51,16 +51,31 @@ describe("analyzePipelineConflicts", () => {
     expect(result[0].message).toContain("overwrites");
   });
 
-  it("constrain module with target present in pipeline → no conflict", () => {
+  it("constrain module with target defined AFTER it → no conflict (correct ordering)", () => {
     const modules: PipelineModule[] = [
-      { type: "wildcard", capture_as: "$weather" },
       { type: "constrain", target: "$weather" },
+      { type: "wildcard", capture_as: "$weather" },
     ];
     const result = analyzePipelineConflicts(modules, []);
     expect(result).toEqual([]);
   });
 
-  it("constrain module with target NOT in pipeline → unresolved_constraint_target warning", () => {
+  it("constrain module with target defined BEFORE it → warning (already sampled)", () => {
+    const modules: PipelineModule[] = [
+      { type: "wildcard", capture_as: "$weather" },
+      { type: "constrain", target: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, []);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      moduleIndex: 1,
+      type: "unresolved_constraint_target",
+      severity: "warning",
+    });
+    expect(result[0].message).toContain("already sampled");
+  });
+
+  it("constrain module with target NOT in pipeline at all → warning (not defined)", () => {
     const modules: PipelineModule[] = [
       { type: "constrain", target: "$weather" },
     ];
@@ -71,15 +86,27 @@ describe("analyzePipelineConflicts", () => {
       type: "unresolved_constraint_target",
       severity: "warning",
     });
-    expect(result[0].message).toContain("$weather");
     expect(result[0].message).toContain("not defined");
+  });
+
+  it("constrain module with target from upstream context → warning (already sampled)", () => {
+    const modules: PipelineModule[] = [
+      { type: "constrain", target: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, ["weather"]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      moduleIndex: 0,
+      type: "unresolved_constraint_target",
+      severity: "warning",
+    });
+    expect(result[0].message).toContain("already sampled");
   });
 
   it("constrain rule with when_variable not in pipeline → unresolved_constraint_when_variable warning", () => {
     const modules: PipelineModule[] = [
       {
         type: "constrain",
-        target: undefined,
         rules: [
           {
             target: "weather",
@@ -90,6 +117,7 @@ describe("analyzePipelineConflicts", () => {
           },
         ],
       },
+      { type: "wildcard", capture_as: "$weather" },
     ];
     const result = analyzePipelineConflicts(modules, []);
     expect(result).toHaveLength(1);
@@ -106,7 +134,47 @@ describe("analyzePipelineConflicts", () => {
       { type: "wildcard", capture_as: "$lighting" },
       {
         type: "constrain",
-        target: undefined,
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, []);
+    expect(result).toEqual([]);
+  });
+
+  it("constrain rule with when_variable defined AFTER constrain but in same pipeline → no warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$lighting" },
+      { type: "wildcard", capture_as: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, []);
+    expect(result).toEqual([]);
+  });
+
+  it("constrain rule target already sampled upstream → warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
         rules: [
           {
             target: "weather",
@@ -118,8 +186,39 @@ describe("analyzePipelineConflicts", () => {
         ],
       },
     ];
-    const result = analyzePipelineConflicts(modules, []);
-    expect(result).toEqual([]);
+    const result = analyzePipelineConflicts(modules, ["lighting", "weather"]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      moduleIndex: 0,
+      type: "unresolved_constraint_target",
+      severity: "warning",
+    });
+    expect(result[0].message).toContain("already sampled");
+  });
+
+  it("constrain rule target not in pipeline at all → warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+    ];
+    const result = analyzePipelineConflicts(modules, ["lighting"]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      moduleIndex: 0,
+      type: "unresolved_constraint_target",
+      severity: "warning",
+    });
+    expect(result[0].message).toContain("not defined");
   });
 
   it("combine module referencing existing var → no conflict", () => {
@@ -238,12 +337,231 @@ describe("analyzePipelineConflicts", () => {
     expect(result[1].type).toBe("missing_template_variable");
   });
 
-  it("export module does not cause any conflicts", () => {
+  it("constrain target in downstream node → no conflict", () => {
     const modules: PipelineModule[] = [
-      { type: "wildcard", capture_as: "$location" },
-      { type: "export", variables: ["location"] },
+      { type: "constrain", target: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, [], ["weather"]);
+    expect(result).toEqual([]);
+  });
+
+  it("constrain rule target in downstream node → no conflict", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+    ];
+    const result = analyzePipelineConflicts(modules, ["lighting"], ["weather"]);
+    expect(result).toEqual([]);
+  });
+
+  it("constrain when_variable in downstream node with target future → ordering warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, [], ["lighting"]);
+    const ordering = result.filter((c) => c.type === "unresolved_constraint_when_variable");
+    expect(ordering).toHaveLength(1);
+    expect(ordering[0].message).toContain("won't be resolved before");
+  });
+
+  it("constrain target not in upstream, this node, or downstream → warning", () => {
+    const modules: PipelineModule[] = [
+      { type: "constrain", target: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, ["lighting"], ["location"]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      moduleIndex: 0,
+      type: "unresolved_constraint_target",
+      severity: "warning",
+    });
+    expect(result[0].message).toContain("not defined");
+  });
+
+  it("constrain when_variable not in upstream, this node, or downstream → warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "nonexistent",
+            when_value: "x",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, ["lighting"], ["location"]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      moduleIndex: 0,
+      type: "unresolved_constraint_when_variable",
+      severity: "warning",
+    });
+    expect(result[0].message).toContain("$nonexistent");
+  });
+
+  it("full cross-node scenario: upstream lighting, this node constrain, downstream weather → no conflict", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["sunny haze"],
+          },
+        ],
+      },
+    ];
+    const result = analyzePipelineConflicts(modules, ["lighting"], ["weather"]);
+    expect(result).toEqual([]);
+  });
+
+  it("constrain target in upstream (already sampled) still warns even with downstream vars", () => {
+    const modules: PipelineModule[] = [
+      { type: "constrain", target: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, ["weather"], ["location"]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: "unresolved_constraint_target",
+      severity: "warning",
+    });
+    expect(result[0].message).toContain("already sampled");
+  });
+
+  it("constrain when_variable after target in same node → ordering warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$weather" },
+      { type: "wildcard", capture_as: "$lighting" },
     ];
     const result = analyzePipelineConflicts(modules, []);
+    const ordering = result.filter((c) => c.type === "unresolved_constraint_when_variable");
+    expect(ordering).toHaveLength(1);
+    expect(ordering[0].message).toContain("won't be resolved before");
+    expect(ordering[0].message).toContain("$lighting");
+    expect(ordering[0].message).toContain("$weather");
+  });
+
+  it("constrain when_variable before target in same node → no ordering warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$lighting" },
+      { type: "wildcard", capture_as: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, []);
+    expect(result).toEqual([]);
+  });
+
+  it("constrain when_variable upstream, target future → no ordering warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, ["lighting"]);
+    expect(result).toEqual([]);
+  });
+
+  it("constrain when_variable in downstream, target in this node future → ordering warning", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+      { type: "wildcard", capture_as: "$weather" },
+    ];
+    const result = analyzePipelineConflicts(modules, [], ["lighting"]);
+    const ordering = result.filter((c) => c.type === "unresolved_constraint_when_variable");
+    expect(ordering).toHaveLength(1);
+    expect(ordering[0].message).toContain("won't be resolved before");
+  });
+
+  it("constrain when_variable and target both downstream → no ordering warning from this node", () => {
+    const modules: PipelineModule[] = [
+      {
+        type: "constrain",
+        rules: [
+          {
+            target: "weather",
+            when_variable: "lighting",
+            when_value: "moonlight",
+            rule_type: "exclusion",
+            values: ["fog"],
+          },
+        ],
+      },
+    ];
+    const result = analyzePipelineConflicts(modules, [], ["lighting", "weather"]);
     expect(result).toEqual([]);
   });
 });
