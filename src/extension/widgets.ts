@@ -1,6 +1,6 @@
 import { createApp, h, reactive, ref as vueRef, type App as VueApp, type Component, type Ref } from "vue";
 import { createPinia } from "pinia";
-import type { ComfyNode, ComfyWidget, DOMWidgetOptions } from "#comfyui/app";
+import type { ComfyApp, ComfyNode, ComfyWidget, DOMWidgetOptions, ExecutedEventDetail } from "#comfyui/app";
 import PipelineWidget from "@/components/pipeline/PipelineWidget.vue";
 import AssemblerPreview from "@/components/assembler/AssemblerPreview.vue";
 import InjectWidget from "@/components/inject/InjectWidget.vue";
@@ -116,6 +116,7 @@ function createVueWidgetFactory(
 export function pipelineConfigWidgetFactory(
   node: ComfyNode,
   inputName: string,
+  app: ComfyApp,
 ): { widget: ComfyWidget } {
   const container = document.createElement("div");
   container.classList.add("wp-widget-container");
@@ -229,7 +230,20 @@ export function pipelineConfigWidgetFactory(
 
   widget.computeLayoutSize = () => ({ minHeight: PIPELINE_MIN_HEIGHT });
 
-  widget.onRemove = unmountVue;
+  const executedHandler = (event: CustomEvent) => {
+    const detail = event.detail as ExecutedEventDetail;
+    if (String(detail.node) !== String(node.id)) return;
+    const seed = detail.output?.seed?.[0];
+    if (typeof seed === "number") {
+      lastSeed.value = seed;
+    }
+  };
+  app.api.addEventListener("executed", executedHandler);
+
+  widget.onRemove = () => {
+    app.api.removeEventListener("executed", executedHandler);
+    unmountVue();
+  };
 
   const refreshConflicts = () => {
     requestAnimationFrame(() => {
@@ -237,8 +251,14 @@ export function pipelineConfigWidgetFactory(
     });
   };
 
-  const self = node as ComfyNode & { _wpRefreshPipelineConflicts?: () => void };
+  const self = node as ComfyNode & {
+    _wpRefreshPipelineConflicts?: () => void;
+    _wpSetLastSeedNull?: () => void;
+  };
   self._wpRefreshPipelineConflicts = refreshConflicts;
+  self._wpSetLastSeedNull = () => {
+    lastSeed.value = null;
+  };
 
   requestAnimationFrame(() => {
     mountVue();

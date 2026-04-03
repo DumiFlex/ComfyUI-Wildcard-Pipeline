@@ -105,4 +105,4 @@ class WildcardPipeline(io.ComfyNode):
         engine = PipelineEngine()
         ctx = engine.run(modules, ctx, rng=rng)
 
-        return io.NodeOutput(ctx)
+        return io.NodeOutput(ctx, ui={"seed": [seed]})

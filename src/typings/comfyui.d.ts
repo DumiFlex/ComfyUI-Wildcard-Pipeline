@@ -77,8 +77,15 @@ export interface LNodeOutput {
   links: number[] | null;
 }
 
+export interface ExecutedEventDetail {
+  node: number | string;
+  display_node?: number | string;
+  output: Record<string, unknown[]>;
+}
+
 export interface ComfyApi {
   addEventListener(type: string, callback: (event: CustomEvent) => void): void;
+  removeEventListener(type: string, callback: (event: CustomEvent) => void): void;
   fetchApi(route: string, options?: RequestInit): Promise<Response>;
 }
 

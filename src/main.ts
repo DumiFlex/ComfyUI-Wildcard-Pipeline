@@ -19,7 +19,7 @@ app.registerExtension({
   getCustomWidgets(/* _app: ComfyApp */) {
     return {
       WP_PIPELINE_CONFIG(node: ComfyNode, inputName: string, _inputData: unknown, _app: ComfyApp) {
-        return pipelineConfigWidgetFactory(node, inputName);
+        return pipelineConfigWidgetFactory(node, inputName, _app);
       },
       WP_INJECT_CONFIG(node: ComfyNode, inputName: string, _inputData: unknown, _app: ComfyApp) {
         return injectConfigWidgetFactory(node, inputName);
@@ -68,11 +68,16 @@ app.registerExtension({
         _wpRefreshPreview?: () => void;
         _wpRefreshInject?: () => void;
         _wpRefreshPipelineConflicts?: () => void;
+        _wpSetLastSeedNull?: () => void;
       };
 
       self._wpRefreshInject?.();
       self._wpRefreshPreview?.();
       self._wpRefreshPipelineConflicts?.();
+
+      if (isConnected && (ioSlot as { name?: string })?.name === "seed") {
+        self._wpSetLastSeedNull?.();
+      }
 
       try {
         for (const asm of findDownstreamAssemblers(this)) {
