@@ -59,3 +59,23 @@ export function duplicateModule(modules: PipelineModule[], index: number): Pipel
   nextModules.splice(index + 1, 0, clone);
   return nextModules;
 }
+
+export function insertModuleAt(modules: PipelineModule[], module: PipelineModule, atIndex: number): PipelineModule[] {
+  const clone = JSON.parse(JSON.stringify(module)) as PipelineModule;
+  delete (clone as { __dismissed_conflicts?: unknown }).__dismissed_conflicts;
+
+  const nextModules = [...modules];
+  const index = atIndex < 0 ? 0 : atIndex >= modules.length ? modules.length : atIndex;
+  nextModules.splice(index, 0, clone);
+  return nextModules;
+}
+
+export function removeModuleAt(modules: PipelineModule[], index: number): PipelineModule[] {
+  if (!isValidIndex(modules, index)) {
+    return [...modules];
+  }
+
+  const nextModules = [...modules];
+  nextModules.splice(index, 1);
+  return nextModules;
+}

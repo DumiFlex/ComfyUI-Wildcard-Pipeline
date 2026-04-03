@@ -6,6 +6,8 @@ import {
   moveModuleToTop,
   moveModuleToBottom,
   duplicateModule,
+  insertModuleAt,
+  removeModuleAt,
 } from "../actions";
 import { DISMISSABLE_CONFLICT_TYPES } from "@/types";
 import type { PipelineModule, WildcardModule } from "@/types";
@@ -275,6 +277,107 @@ describe("duplicateModule", () => {
     duplicateModule(mods, 1);
     expect(mods).toEqual(before);
     expect(mods).toHaveLength(3);
+  });
+});
+
+describe("insertModuleAt", () => {
+  it("inserts module at the specified middle index", () => {
+    const mods = makeModules(3);
+    const module: PipelineModule = { type: "fixed", value: "x", capture_as: "$new" };
+    const result = insertModuleAt(mods, module, 1);
+    expect(labels(result)).toEqual(["$var0", "$new", "$var1", "$var2"]);
+  });
+
+  it("inserts at the beginning when index is 0", () => {
+    const mods = makeModules(2);
+    const module: PipelineModule = { type: "fixed", value: "x", capture_as: "$new" };
+    const result = insertModuleAt(mods, module, 0);
+    expect(labels(result)).toEqual(["$new", "$var0", "$var1"]);
+  });
+
+  it("appends to the end when atIndex is greater than or equal to length", () => {
+    const mods = makeModules(2);
+    const module: PipelineModule = { type: "fixed", value: "x", capture_as: "$new" };
+    const result = insertModuleAt(mods, module, 10);
+    expect(labels(result)).toEqual(["$var0", "$var1", "$new"]);
+  });
+
+  it("clamps negative index to the beginning", () => {
+    const mods = makeModules(2);
+    const module: PipelineModule = { type: "fixed", value: "x", capture_as: "$new" };
+    const result = insertModuleAt(mods, module, -5);
+    expect(labels(result)).toEqual(["$new", "$var0", "$var1"]);
+  });
+
+  it("deep-clones the inserted module", () => {
+    const mods = makeModules(1);
+    const module: PipelineModule = {
+      type: "wildcard",
+      capture_as: "$new",
+      options: [{ value: "original", weight: 1 }],
+    };
+    const result = insertModuleAt(mods, module, 1);
+    const inserted = result[1] as WildcardModule;
+    inserted.options![0].value = "mutated";
+    expect((module as WildcardModule).options![0].value).toBe("original");
+  });
+
+  it("strips __dismissed_conflicts from the inserted module", () => {
+    const mods = makeModules(1);
+    const module: PipelineModule = {
+      type: "wildcard",
+      capture_as: "$new",
+      __dismissed_conflicts: ["duplicate_variable"],
+    };
+    const result = insertModuleAt(mods, module, 1);
+    const inserted = result[1] as WildcardModule;
+    expect(inserted.__dismissed_conflicts).toBeUndefined();
+  });
+
+  it("does not mutate the original array", () => {
+    const mods = makeModules(2);
+    const before = [...mods];
+    const module: PipelineModule = { type: "fixed", value: "x", capture_as: "$new" };
+    insertModuleAt(mods, module, 1);
+    expect(mods).toEqual(before);
+    expect(mods).toHaveLength(2);
+  });
+});
+
+describe("removeModuleAt", () => {
+  it("removes the element at the specified index", () => {
+    const mods = makeModules(3);
+    const result = removeModuleAt(mods, 1);
+    expect(labels(result)).toEqual(["$var0", "$var2"]);
+  });
+
+  it("returns an unchanged copy for a negative index", () => {
+    const mods = makeModules(3);
+    const result = removeModuleAt(mods, -1);
+    expect(result).not.toBe(mods);
+    expect(labels(result)).toEqual(["$var0", "$var1", "$var2"]);
+  });
+
+  it("returns an unchanged copy for an index beyond the end", () => {
+    const mods = makeModules(3);
+    const result = removeModuleAt(mods, 3);
+    expect(result).not.toBe(mods);
+    expect(labels(result)).toEqual(["$var0", "$var1", "$var2"]);
+  });
+
+  it("does not mutate the original array", () => {
+    const mods = makeModules(3);
+    const before = [...mods];
+    removeModuleAt(mods, 1);
+    expect(mods).toEqual(before);
+    expect(mods).toHaveLength(3);
+  });
+
+  it("works on a single-element array", () => {
+    const mods = makeModules(1);
+    const result = removeModuleAt(mods, 0);
+    expect(result).toHaveLength(0);
+    expect(result).toEqual([]);
   });
 });
 
