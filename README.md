@@ -77,7 +77,7 @@ Injects external string values from standard ComfyUI nodes into the pipeline con
 | **wildcard** | Random weighted selection from defined options | `source`, `capture_as`, `options` |
 | **fixed** | Constant value assignment to a variable | `value`, `capture_as` |
 | **combine** | Template interpolation of existing variables | `template`, `capture_as` |
-| **constrain** | Applies rules to modify sampling weights | `target`, `source`, `rules` |
+| **constrain** | Applies constraint rules to modify sampling weights | `source`, `rules` |
 | **condition** | Sets values based on current variable state | `variable`, `if_equals`, `value`, `fallback` |
 
 ## Data Formats
