@@ -17,7 +17,7 @@
           :disabled="item.disabled"
           @click="onItemClick(item)"
         >
-          <span v-if="item.icon" class="wp-context-icon">{{ item.icon }}</span>
+          <i v-if="item.icon" :class="item.icon" class="wp-context-icon"></i>
           <span class="wp-context-label">{{ item.label }}</span>
         </button>
       </template>
@@ -155,8 +155,6 @@ onUnmounted(() => {
 
 .wp-context-icon {
   flex-shrink: 0;
-  width: 14px;
-  text-align: center;
   font-size: 12px;
 }
 

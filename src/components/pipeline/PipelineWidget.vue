@@ -53,7 +53,7 @@
             type="button"
             @click="removeModule(index)"
             title="Remove module"
-          >×</button>
+          ><i class="pi pi-times"></i></button>
         </div>
 
         <!-- Detail rows below header -->
@@ -267,23 +267,23 @@ function onContextMenu(event: MouseEvent, index: number) {
   const hasRestoreable = getDismissedConflicts(index).length > 0;
 
   const items: ContextMenuItem[] = [
-    { icon: '↑', label: 'Move Up', action: 'move-up', disabled: isFirst },
-    { icon: '↓', label: 'Move Down', action: 'move-down', disabled: isLast },
-    { icon: '⤒', label: 'Move to Top', action: 'move-top', disabled: isFirst },
-    { icon: '⤓', label: 'Move to Bottom', action: 'move-bottom', disabled: isLast },
+    { icon: 'pi pi-arrow-up', label: 'Move Up', action: 'move-up', disabled: isFirst },
+    { icon: 'pi pi-arrow-down', label: 'Move Down', action: 'move-down', disabled: isLast },
+    { icon: 'pi pi-angle-double-up', label: 'Move to Top', action: 'move-top', disabled: isFirst },
+    { icon: 'pi pi-angle-double-down', label: 'Move to Bottom', action: 'move-bottom', disabled: isLast },
     { separator: true, label: '', action: '' },
-    { icon: '⎘', label: 'Duplicate', action: 'duplicate' },
+    { icon: 'pi pi-clone', label: 'Duplicate', action: 'duplicate' },
     { separator: true, label: '', action: '' },
-    { icon: '×', label: 'Delete', action: 'delete' },
+    { icon: 'pi pi-times', label: 'Delete', action: 'delete' },
   ];
 
   if (hasMarkable || hasRestoreable) {
     items.push({ separator: true, label: '', action: '' });
     if (hasMarkable) {
-      items.push({ icon: '⚑', label: 'Mark as Intended', action: 'mark-intended' });
+      items.push({ icon: 'pi pi-flag-fill', label: 'Mark as Intended', action: 'mark-intended' });
     }
     if (hasRestoreable) {
-      items.push({ icon: '↺', label: 'Restore Warning', action: 'restore-warning' });
+      items.push({ icon: 'pi pi-undo', label: 'Restore Warning', action: 'restore-warning' });
     }
   }
 

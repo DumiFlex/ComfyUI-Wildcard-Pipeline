@@ -7,6 +7,7 @@ import type {
 } from "#comfyui/app";
 import { pipelineConfigWidgetFactory, injectConfigWidgetFactory, mountAssemblerPreview } from "./extension/widgets";
 import { findDownstreamAssemblers, findUpstreamPipelineNodes } from "./extension/graph";
+import "primeicons/primeicons.css";
 
 const ASSEMBLER_NODE_CLASS = "WP_PromptAssembler";
 
