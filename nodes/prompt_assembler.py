@@ -39,5 +39,9 @@ class PromptAssembler(io.ComfyNode):
     ) -> io.NodeOutput:
         from ..engine.pipeline import resolve_variables
 
-        prompt = resolve_variables(template, pipeline_context)
+        internal_vars = pipeline_context.get("__wp_internal_vars__", [])
+        filtered_ctx = {
+            k: v for k, v in pipeline_context.items() if k not in internal_vars
+        }
+        prompt = resolve_variables(template, filtered_ctx)
         return io.NodeOutput(prompt)
