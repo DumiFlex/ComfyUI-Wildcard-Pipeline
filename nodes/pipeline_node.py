@@ -100,6 +100,7 @@ class WildcardPipeline(io.ComfyNode):
         modules = json.loads(module_config)
         modules = resolve_sources(modules)
 
+        ctx["__wp_node_seed__"] = seed
         rng = random.Random(seed)
         engine = PipelineEngine()
         ctx = engine.run(modules, ctx, rng=rng)

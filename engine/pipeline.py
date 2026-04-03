@@ -5,6 +5,7 @@ Pure Python — ZERO ComfyUI imports. Testable standalone via pytest.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import random
 import re
@@ -188,6 +189,13 @@ class PipelineEngine:
     ) -> dict[str, Any]:
         """Weighted random sample from options, capture result as ``$var``.
 
+        Seed derivation uses a stable per-module hash based on the effective
+        seed and the capture_as name.  The effective seed is the module's
+        ``locked_seed`` (if set), otherwise ``ctx["__wp_node_seed__"]``.
+
+        ``rng`` is accepted for API stability but is not used for seed
+        derivation.
+
         Before sampling, applies any registered constraints from
         ``ctx["__constraints__"]`` whose ``target`` matches this wildcard's
         ``capture_as`` variable.
@@ -222,21 +230,27 @@ class PipelineEngine:
         if all(w == 0 for w in weights):
             weights = [1.0] * len(options)
 
+        # Determine effective seed: locked_seed takes precedence, else node seed
         locked_seed = module.get("locked_seed")
         if locked_seed is not None:
-            module_rng = random.Random(int(locked_seed))
-            rng.randint(0, 2**63 - 1)
-            module_seed = int(locked_seed)
+            effective_seed = int(locked_seed)
         else:
-            module_seed = rng.randint(0, 2**63 - 1)
-            module_rng = random.Random(module_seed)
+            effective_seed = int(ctx.get("__wp_node_seed__", 0))
+
+        # Stable cross-process per-module seed via SHA-256
+        module_seed = int(
+            hashlib.sha256(
+                f"{effective_seed}:{capture_as_normalized}".encode()
+            ).hexdigest(),
+            16,
+        )
+        module_rng = random.Random(module_seed)
         chosen = module_rng.choices(options, weights=weights, k=1)[0]
         value = chosen.get("value", "")
 
         ctx[capture_as_normalized] = value
         if module.get("internal"):
             ctx.setdefault("__wp_internal_vars__", []).append(capture_as_normalized)
-        ctx.setdefault("__wp_module_seeds__", {})[capture_as_normalized] = module_seed
 
         return ctx
 
