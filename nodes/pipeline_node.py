@@ -100,8 +100,8 @@ class WildcardPipeline(io.ComfyNode):
         modules = json.loads(module_config)
         modules = resolve_sources(modules)
 
-        random.seed(seed)
+        rng = random.Random(seed)
         engine = PipelineEngine()
-        ctx = engine.run(modules, ctx)
+        ctx = engine.run(modules, ctx, rng=rng)
 
         return io.NodeOutput(ctx)
