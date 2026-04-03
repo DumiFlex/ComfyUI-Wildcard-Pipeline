@@ -14,6 +14,7 @@
           'drag-over': dragOverIndex === index,
           'wp-conflict-error': hasConflict(index, 'error'),
           'wp-conflict-warning': hasConflict(index, 'warning'),
+          'wp-disabled': mod.enabled === false,
         }"
         :title="getConflictTooltip(index)"
         draggable="true"
@@ -25,16 +26,38 @@
         @dragend="onDragEnd"
         @contextmenu.prevent="onContextMenu($event, index)"
       >
-        <div class="wp-module-drag" title="Drag to reorder">⠿</div>
+        <div class="wp-module-header">
+          <div class="wp-module-drag" title="Drag to reorder">⠿</div>
 
-        <div class="wp-module-body">
-          <div class="wp-module-top">
-            <span class="wp-module-tag" :class="'tag-' + mod.type">
-              {{ mod.type }}
-            </span>
-            <span class="wp-module-name">{{ getModuleName(mod) }}</span>
-          </div>
+          <label
+            class="wp-module-toggle"
+            :title="mod.enabled === false ? 'Enable module' : 'Disable module'"
+            @pointerdown.stop
+            @click.stop
+          >
+            <input
+              type="checkbox"
+              :checked="mod.enabled !== false"
+              @change="toggleModule(index)"
+            />
+            <span class="wp-toggle-mark"></span>
+          </label>
 
+          <span class="wp-module-tag" :class="'tag-' + mod.type">
+            {{ mod.type }}
+          </span>
+          <span class="wp-module-name">{{ getModuleName(mod) }}</span>
+
+          <button
+            class="wp-module-delete"
+            type="button"
+            @click="removeModule(index)"
+            title="Remove module"
+          >×</button>
+        </div>
+
+        <!-- Detail rows below header -->
+        <div class="wp-module-details">
           <!-- Wildcard: compact summary -->
           <div v-if="mod.type === 'wildcard'">
             <div v-if="mod.options?.length" class="wp-module-detail wp-module-source">
@@ -58,7 +81,7 @@
             <span v-if="getConstraintTargets(mod as ConstrainModule)">→ {{ getConstraintTargets(mod as ConstrainModule) }}</span>
           </div>
 
-          <!-- Condition: show variable check -->
+          <!-- Condition: show variable check + value preview -->
           <div v-else-if="mod.type === 'condition'" class="wp-module-detail wp-condition-info">
             <span v-if="mod.if_equals">if ${{ mod.variable }} = "{{ mod.if_equals }}"</span>
             <span v-else-if="mod.unless_equals">unless ${{ mod.variable }} = "{{ mod.unless_equals }}"</span>
@@ -67,6 +90,10 @@
 
           <!-- Capture label -->
           <div v-if="getCapture(mod)" class="wp-module-capture">
+            <template v-if="mod.type === 'condition'">
+              <span v-if="mod.value" class="wp-condition-chip wp-chip-value">{{ truncate(mod.value, 20) }}</span>
+              <span v-if="mod.fallback" class="wp-condition-chip wp-chip-fallback">{{ truncate(mod.fallback, 16) }}</span>
+            </template>
             → ${{ getCapture(mod) }}
             <span
               v-if="getDismissedConflicts(index).length > 0"
@@ -75,13 +102,6 @@
             >⚑</span>
           </div>
         </div>
-
-        <button
-          class="wp-module-delete"
-          type="button"
-          @click="removeModule(index)"
-          title="Remove module"
-        >×</button>
       </div>
     </div>
 
@@ -180,8 +200,13 @@ function getModuleName(mod: PipelineModule): string {
       return mod.capture_as?.replace(/^\$/, '') ?? 'Fixed';
     case 'combine':
       return mod.capture_as?.replace(/^\$/, '') ?? 'Combine';
-    case 'constrain':
-      return 'Constrain';
+    case 'constrain': {
+      if (mod.source) {
+        const found = constraintStore.items.find(c => c.id === mod.source || c.name === mod.source);
+        if (found) return found.name;
+      }
+      return mod.target ?? 'Constrain';
+    }
     case 'condition':
       return mod.variable?.replace(/^\$/, '') ?? 'Condition';
   }
@@ -192,6 +217,10 @@ function getCapture(mod: PipelineModule): string | undefined {
     return mod.capture_as.replace(/^\$/, '');
   }
   return undefined;
+}
+
+function truncate(str: string, max: number): string {
+  return str.length > max ? str.slice(0, max) + '…' : str;
 }
 
 function getConstraintTargets(mod: ConstrainModule): string {
@@ -216,6 +245,12 @@ function onModuleSelected(mod: PipelineModule) {
 
 function removeModule(index: number) {
   localModules.value.splice(index, 1);
+  emitUpdate();
+}
+
+function toggleModule(index: number) {
+  const mod = localModules.value[index];
+  mod.enabled = mod.enabled === false ? undefined : false;
   emitUpdate();
 }
 
@@ -417,8 +452,8 @@ function getConflictTooltip(index: number): string {
   border-radius: var(--wp-radius-sm);
   padding: 8px 10px;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   cursor: grab;
   transition: all 0.15s;
   position: relative;
@@ -458,9 +493,48 @@ function getConflictTooltip(index: number): string {
   color: var(--wp-text3);
   font-size: 11px;
   line-height: 1;
-  padding-top: 2px;
   flex-shrink: 0;
   cursor: grab;
+}
+
+/* ── Enable/disable toggle ── */
+.wp-module-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.wp-module-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.wp-toggle-mark {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--wp-border2);
+  background: var(--wp-bg2);
+  transition: all 0.15s;
+  position: relative;
+}
+.wp-module-toggle input:checked + .wp-toggle-mark {
+  background: var(--wp-accent);
+  border-color: var(--wp-accent);
+}
+.wp-module-toggle:hover .wp-toggle-mark {
+  border-color: var(--wp-accent);
+}
+
+/* ── Disabled module ── */
+.wp-module.wp-disabled {
+  opacity: 0.45;
+}
+.wp-module.wp-disabled .wp-module-body {
+  pointer-events: none;
 }
 
 .wp-module-body {
@@ -468,11 +542,20 @@ function getConflictTooltip(index: number): string {
   min-width: 0;
 }
 
+.wp-module-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wp-module-details {
+  min-width: 0;
+}
+
 .wp-module-top {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 5px;
 }
 
 /* ── Module type tags ── */
@@ -519,6 +602,7 @@ function getConflictTooltip(index: number): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
 
 /* ── Module detail lines ── */
@@ -566,6 +650,24 @@ function getConflictTooltip(index: number): string {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.wp-condition-chip {
+  font-size: 9px;
+  font-family: var(--wp-font-mono, monospace);
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+.wp-chip-value {
+  background: var(--wp-green-bg);
+  color: var(--wp-green);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+.wp-chip-fallback {
+  background: rgba(144, 144, 168, 0.08);
+  color: var(--wp-text3);
+  border: 1px solid rgba(144, 144, 168, 0.15);
 }
 
 .wp-dismissed-icon {
