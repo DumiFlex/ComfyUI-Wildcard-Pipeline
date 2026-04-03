@@ -538,6 +538,26 @@ class TestPreviewRoute:
         )
         assert resp.status == 400
 
+    async def test_wildcard_seed_is_used_for_selection(self, client):
+        options = [{"value": str(i), "weight": 1} for i in range(20)]
+        payload = {
+            "modules": [{"type": "wildcard", "capture_as": "x", "options": options}]
+        }
+
+        r1 = await client.post("/wp/api/preview", json={**payload, "seed": 1})
+        r2 = await client.post("/wp/api/preview", json={**payload, "seed": 1})
+        d1, d2 = await r1.json(), await r2.json()
+        assert d1["variables"]["x"] == d2["variables"]["x"]
+
+        picks = set()
+        for s in range(10):
+            r = await client.post("/wp/api/preview", json={**payload, "seed": s})
+            d = await r.json()
+            picks.add(d["variables"]["x"])
+        assert len(picks) > 1, (
+            "All seeds produced the same wildcard pick — seed is not wired"
+        )
+
     async def test_preview_internal_var_not_in_response_variables(self, client):
         resp = await client.post(
             "/wp/api/preview",

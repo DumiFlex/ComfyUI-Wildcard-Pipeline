@@ -38,7 +38,7 @@ async def preview_handler(request: web.Request) -> web.Response:
 
     rng = random.Random(seed)
     engine = PipelineEngine()
-    ctx = engine.run(resolved_modules, {}, rng=rng)
+    ctx = engine.run(resolved_modules, {"__wp_node_seed__": seed}, rng=rng)
 
     internal_vars = ctx.get("__wp_internal_vars__", [])
     variables = {
