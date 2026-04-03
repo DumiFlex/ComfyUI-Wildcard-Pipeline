@@ -203,6 +203,8 @@ const contextMenu = ref<{
 
 const onWindowBlur = () => {
   if (dragStore.isDragging) dragStore.cancelDrag();
+  draggedIndex.value = null;
+  dragOverIndex.value = null;
 };
 
 onMounted(() => {
