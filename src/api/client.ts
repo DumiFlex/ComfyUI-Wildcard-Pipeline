@@ -82,6 +82,7 @@ export interface PreviewRequest {
 
 export interface PreviewResponse {
   variables: Record<string, string>
+  module_seeds?: Record<string, number>
 }
 
 export const previewApi = {

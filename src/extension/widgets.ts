@@ -132,6 +132,22 @@ export function pipelineConfigWidgetFactory(
     node.graph?.setDirtyCanvas(true, true);
   };
 
+  const moduleSeeds = vueRef<Record<string, number>>({});
+
+  let seedsTimer: ReturnType<typeof setTimeout> | null = null;
+  const refreshSeeds = () => {
+    if (seedsTimer) clearTimeout(seedsTimer);
+    seedsTimer = setTimeout(async () => {
+      const allModules = [...collectUpstreamModules(node), ...rootProps.modelValue];
+      try {
+        const result = await previewApi.run({ modules: allModules, seed: 42 });
+        moduleSeeds.value = result.module_seeds ?? {};
+      } catch {
+        // ignore preview errors
+      }
+    }, 300);
+  };
+
   const rootProps = reactive<{
     modelValue: PipelineModule[];
     conflicts: Conflict[];
@@ -142,6 +158,7 @@ export function pipelineConfigWidgetFactory(
     "onUpdate:modelValue": (val: PipelineModule[]) => {
       rootProps.modelValue = val;
       computeConflicts();
+      refreshSeeds();
       try {
         for (const asm of findDownstreamAssemblers(node)) {
           (asm as ComfyNode & { _wpRefreshPreview?: () => void })._wpRefreshPreview?.();
@@ -174,6 +191,7 @@ export function pipelineConfigWidgetFactory(
         h(PipelineWidget, {
           modelValue: rootProps.modelValue,
           conflicts: rootProps.conflicts,
+          moduleSeeds: moduleSeeds.value,
           "onUpdate:modelValue": rootProps["onUpdate:modelValue"],
         }),
     });
@@ -228,6 +246,7 @@ export function pipelineConfigWidgetFactory(
   requestAnimationFrame(() => {
     mountVue();
     refreshConflicts();
+    refreshSeeds();
   });
 
   return { widget };

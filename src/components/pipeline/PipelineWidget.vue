@@ -15,6 +15,8 @@
           'wp-conflict-error': hasConflict(index, 'error'),
           'wp-conflict-warning': hasConflict(index, 'warning'),
           'wp-disabled': mod.enabled === false,
+          'wp-module-locked': mod.type === 'wildcard' && (mod as WildcardModule).locked_seed !== undefined,
+          'wp-module-internal': hasInternal(mod),
         }"
         :title="getConflictTooltip(index)"
         draggable="true"
@@ -47,6 +49,22 @@
             {{ mod.type }}
           </span>
           <span class="wp-module-name">{{ getModuleName(mod) }}</span>
+
+          <button
+            v-if="mod.type === 'wildcard'"
+            class="wp-module-lock"
+            type="button"
+            @click.stop="toggleLock(index)"
+            :title="(mod as WildcardModule).locked_seed !== undefined ? 'Unlock seed' : 'Lock seed'"
+          ><i :class="(mod as WildcardModule).locked_seed !== undefined ? 'pi pi-lock' : 'pi pi-lock-open'"></i></button>
+
+          <button
+            v-if="hasCaptureAs(mod)"
+            class="wp-module-internal-btn"
+            type="button"
+            @click.stop="toggleInternal(index)"
+            :title="isInternal(mod) ? 'Make visible in assembler' : 'Hide from assembler'"
+          ><i :class="isInternal(mod) ? 'pi pi-eye-slash' : 'pi pi-eye'"></i></button>
 
           <button
             class="wp-module-delete"
@@ -129,7 +147,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
-import type { ConstrainModule, DismissableConflictType, PipelineModule } from '@/types';
+import type { ConstrainModule, DismissableConflictType, PipelineModule, WildcardModule } from '@/types';
 import { DISMISSABLE_CONFLICT_TYPES } from '@/types';
 import ModulePickerModal from './ModulePickerModal.vue';
 import ContextMenu from './ContextMenu.vue';
@@ -149,6 +167,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: PipelineModule[];
     conflicts?: Conflict[];
+    moduleSeeds?: Record<string, number>;
   }>(),
   { conflicts: () => [] },
 );
@@ -219,6 +238,19 @@ function getCapture(mod: PipelineModule): string | undefined {
   return undefined;
 }
 
+function hasCaptureAs(mod: PipelineModule): boolean {
+  return 'capture_as' in mod;
+}
+
+function isInternal(mod: PipelineModule): boolean {
+  if (!hasCaptureAs(mod)) return false;
+  return (mod as { internal?: boolean }).internal === true;
+}
+
+function hasInternal(mod: PipelineModule): boolean {
+  return hasCaptureAs(mod) && isInternal(mod);
+}
+
 function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '…' : str;
 }
@@ -254,6 +286,28 @@ function toggleModule(index: number) {
   emitUpdate();
 }
 
+function toggleLock(index: number) {
+  const mod = localModules.value[index] as WildcardModule;
+  if (mod.locked_seed !== undefined) {
+    mod.locked_seed = undefined;
+  } else {
+    const key = mod.capture_as?.replace(/^\$/, '') ?? '';
+    const seed = props.moduleSeeds?.[key];
+    if (seed !== undefined) {
+      mod.locked_seed = seed;
+    }
+  }
+  emitUpdate();
+}
+
+function toggleInternal(index: number) {
+  const mod = localModules.value[index];
+  if (mod.type === 'constrain') return;
+  const m = mod as { internal?: boolean };
+  m.internal = m.internal ? undefined : true;
+  emitUpdate();
+}
+
 /* ── Context menu ── */
 
 function onContextMenu(event: MouseEvent, index: number) {
@@ -273,9 +327,20 @@ function onContextMenu(event: MouseEvent, index: number) {
     { icon: 'pi pi-angle-double-down', label: 'Move to Bottom', action: 'move-bottom', disabled: isLast },
     { separator: true, label: '', action: '' },
     { icon: 'pi pi-clone', label: 'Duplicate', action: 'duplicate' },
+  ];
+
+  const mod = localModules.value[index];
+  if (mod.type === 'wildcard') {
+    const wm = mod as WildcardModule;
+    const key = wm.capture_as?.replace(/^\$/, '') ?? '';
+    const hasSeed = wm.locked_seed !== undefined || Boolean(props.moduleSeeds?.[key]);
+    items.push({ icon: 'pi pi-copy', label: 'Copy seed', action: 'copy-seed', disabled: !hasSeed });
+  }
+
+  items.push(
     { separator: true, label: '', action: '' },
     { icon: 'pi pi-times', label: 'Delete', action: 'delete' },
-  ];
+  );
 
   if (hasMarkable || hasRestoreable) {
     items.push({ separator: true, label: '', action: '' });
@@ -315,6 +380,13 @@ function handleMenuSelect(action: string) {
   } else if (action === 'duplicate') {
     localModules.value = duplicateModule(localModules.value, idx);
     emitUpdate();
+  } else if (action === 'copy-seed') {
+    const mod = localModules.value[idx] as WildcardModule;
+    const key = mod.capture_as?.replace(/^\$/, '') ?? '';
+    const seed = mod.locked_seed ?? props.moduleSeeds?.[key];
+    if (seed !== undefined) {
+      navigator.clipboard.writeText(String(seed)).catch(() => {});
+    }
   } else if (action === 'delete') {
     removeModule(idx);
   } else if (action === 'mark-intended') {
@@ -692,6 +764,55 @@ function getConflictTooltip(index: number): string {
 }
 .wp-module-delete:hover {
   color: var(--wp-red);
+}
+
+/* ── Internal button ── */
+.wp-module-internal-btn {
+  background: none;
+  border: none;
+  color: var(--wp-text3);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: color 0.15s;
+}
+.wp-module-internal-btn:hover {
+  color: var(--wp-teal);
+}
+.wp-module-internal .wp-module-internal-btn {
+  color: var(--wp-teal);
+}
+
+/* ── Lock button ── */
+.wp-module-lock {
+  background: none;
+  border: none;
+  color: var(--wp-text3);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: color 0.15s;
+}
+.wp-module-lock:hover {
+  color: var(--wp-accent);
+}
+.wp-module-locked .wp-module-lock {
+  color: var(--wp-accent);
+}
+
+/* ── Locked card ── */
+.wp-module-locked {
+  border-color: rgba(124, 106, 247, 0.4);
+}
+
+.wp-module-internal {
+  border-color: rgba(45, 212, 191, 0.4);
 }
 
 /* ── Add module button ── */

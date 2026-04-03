@@ -23,6 +23,7 @@ function extractPipelineVars(node: ComfyNode, variables: string[]): void {
     const modules: PipelineModule[] = JSON.parse(String(configWidget.value));
     for (const mod of modules) {
       if ("enabled" in mod && mod.enabled === false) continue;
+      if ("capture_as" in mod && "internal" in mod && (mod as { internal?: boolean }).internal === true) continue;
       if ("capture_as" in mod && mod.capture_as) {
         addUnique(variables, mod.capture_as.replace(/^\$/, ""));
       }
@@ -282,6 +283,7 @@ export function collectUpstreamContext(node: ComfyNode): UpstreamContext {
           const modules: PipelineModule[] = JSON.parse(String(configWidget.value));
           for (const mod of modules) {
             if ("enabled" in mod && mod.enabled === false) continue;
+            if ("capture_as" in mod && "internal" in mod && (mod as { internal?: boolean }).internal === true) continue;
             if ("capture_as" in mod && mod.capture_as) {
               addUnique(variables, mod.capture_as.replace(/^\$/, ""));
             }

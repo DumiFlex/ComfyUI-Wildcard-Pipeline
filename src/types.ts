@@ -31,6 +31,8 @@ export interface WildcardModule {
   source?: string;
   options?: WildcardOption[];
   capture_as: string;
+  locked_seed?: number;
+  internal?: boolean;
   __dismissed_conflicts?: DismissableConflictType[];
 }
 
@@ -39,6 +41,7 @@ export interface FixedModule {
   enabled?: boolean;
   value: string;
   capture_as: string;
+  internal?: boolean;
   __dismissed_conflicts?: DismissableConflictType[];
 }
 
@@ -47,6 +50,7 @@ export interface CombineModule {
   enabled?: boolean;
   template: string;
   capture_as: string;
+  internal?: boolean;
   __dismissed_conflicts?: DismissableConflictType[];
 }
 
@@ -92,6 +96,7 @@ export interface ConditionModule {
   value: string;
   fallback?: string;
   capture_as: string;
+  internal?: boolean;
   __dismissed_conflicts?: DismissableConflictType[];
 }
 
