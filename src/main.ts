@@ -6,7 +6,7 @@ import type {
   ComfyApp,
 } from "#comfyui/app";
 import { pipelineConfigWidgetFactory, injectConfigWidgetFactory, mountAssemblerPreview } from "./extension/widgets";
-import { findDownstreamAssemblers, findUpstreamPipelineNodes } from "./extension/graph";
+import { findDownstreamAssemblers, findDownstreamPipelineNodes, findUpstreamPipelineNodes } from "./extension/graph";
 import "primeicons/primeicons.css";
 
 const ASSEMBLER_NODE_CLASS = "WP_PromptAssembler";
@@ -86,6 +86,14 @@ app.registerExtension({
         for (const upstream of findUpstreamPipelineNodes(this)) {
           const un = upstream as ComfyNode & { _wpRefreshPipelineConflicts?: () => void };
           un._wpRefreshPipelineConflicts?.();
+        }
+        for (const downstream of findDownstreamPipelineNodes(this)) {
+          const dn = downstream as ComfyNode & {
+            _wpRefreshPipelineConflicts?: () => void;
+            _wpRefreshInject?: () => void;
+          };
+          dn._wpRefreshPipelineConflicts?.();
+          dn._wpRefreshInject?.();
         }
       } catch {
       }
