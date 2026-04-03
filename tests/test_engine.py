@@ -1290,3 +1290,125 @@ class TestPipelineEngineRNG:
         ctx1 = engine.run(modules, {}, rng=random.Random(42))
         ctx2 = engine.run(modules, {}, rng=random.Random(42))
         assert ctx1["pick"] == ctx2["pick"]
+
+
+class TestPipelineEngineLockedSeed:
+    """Tests for locked_seed support on wildcard modules."""
+
+    def test_locked_seed_produces_deterministic_result(self):
+        """A module with locked_seed always chooses the same option regardless of main rng."""
+        engine = PipelineEngine()
+        opts = [
+            {"value": "a", "weight": 1},
+            {"value": "b", "weight": 1},
+            {"value": "c", "weight": 1},
+        ]
+        mod = {
+            "type": "wildcard",
+            "capture_as": "$test",
+            "options": opts,
+            "locked_seed": 12345,
+        }
+        r1 = engine.run([mod], {}, rng=random.Random(1))["test"]
+        r2 = engine.run([mod], {}, rng=random.Random(999))["test"]
+        assert r1 == r2
+
+    def test_locked_seed_independent_of_node_seed(self):
+        """Same locked_seed with wildly different main rng seeds produces the same choice."""
+        engine = PipelineEngine()
+        opts = [
+            {"value": "x", "weight": 1},
+            {"value": "y", "weight": 1},
+            {"value": "z", "weight": 1},
+        ]
+        mod = {
+            "type": "wildcard",
+            "capture_as": "$color",
+            "options": opts,
+            "locked_seed": 99999,
+        }
+        results = {
+            engine.run([mod], {}, rng=random.Random(seed))["color"]
+            for seed in [0, 1, 42, 100, 9999, 2**32]
+        }
+        assert len(results) == 1
+
+    def test_locked_seed_stored_in_module_seeds(self):
+        """ctx['__wp_module_seeds__'][name] stores locked_seed (not the consumed randint)."""
+        engine = PipelineEngine()
+        locked = 12345
+        mod = {
+            "type": "wildcard",
+            "capture_as": "$item",
+            "options": [{"value": "a", "weight": 1}],
+            "locked_seed": locked,
+        }
+        ctx = engine.run([mod], {}, rng=random.Random(42))
+        assert ctx["__wp_module_seeds__"]["item"] == locked
+
+    def test_locked_seed_does_not_shift_subsequent_modules(self):
+        """Locking module N does not change the output of module N+1."""
+        engine = PipelineEngine()
+        opts = [{"value": "a", "weight": 1}, {"value": "b", "weight": 1}]
+        mods_unlocked = [
+            {"type": "wildcard", "capture_as": "$first", "options": opts},
+            {"type": "wildcard", "capture_as": "$second", "options": opts},
+        ]
+        mods_locked = [
+            {
+                "type": "wildcard",
+                "capture_as": "$first",
+                "options": opts,
+                "locked_seed": 999,
+            },
+            {"type": "wildcard", "capture_as": "$second", "options": opts},
+        ]
+        ctx1 = engine.run(mods_unlocked, {}, rng=random.Random(42))
+        ctx2 = engine.run(mods_locked, {}, rng=random.Random(42))
+        assert ctx1["second"] == ctx2["second"]
+
+    def test_locked_seed_with_constraints(self):
+        """Locked module still respects constraint filtering."""
+        engine = PipelineEngine()
+        mods = [
+            {"type": "fixed", "value": "night", "capture_as": "$time"},
+            {
+                "type": "constrain",
+                "rules": [
+                    {
+                        "target": "scene",
+                        "when_variable": "time",
+                        "when_value": "night",
+                        "rule_type": "exclusion",
+                        "values": ["bright meadow"],
+                    }
+                ],
+            },
+            {
+                "type": "wildcard",
+                "capture_as": "$scene",
+                "options": [
+                    {"value": "bright meadow", "weight": 1},
+                    {"value": "dark alley", "weight": 1},
+                ],
+                "locked_seed": 12345,
+            },
+        ]
+        engine2 = PipelineEngine()
+        for seed in range(10):
+            ctx = engine2.run(mods, {}, rng=random.Random(seed))
+            assert ctx["scene"] == "dark alley"
+
+    def test_locked_seed_disabled_module(self):
+        """Disabled module with locked_seed is skipped entirely."""
+        engine = PipelineEngine()
+        mod = {
+            "type": "wildcard",
+            "capture_as": "$item",
+            "options": [{"value": "a", "weight": 1}],
+            "locked_seed": 12345,
+            "enabled": False,
+        }
+        ctx = engine.run([mod], {}, rng=random.Random(42))
+        assert "item" not in ctx
+        assert ctx.get("__wp_module_seeds__", {}).get("item") is None

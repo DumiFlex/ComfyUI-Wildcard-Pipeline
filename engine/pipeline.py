@@ -222,8 +222,14 @@ class PipelineEngine:
         if all(w == 0 for w in weights):
             weights = [1.0] * len(options)
 
-        module_seed = rng.randint(0, 2**63 - 1)
-        module_rng = random.Random(module_seed)
+        locked_seed = module.get("locked_seed")
+        if locked_seed is not None:
+            module_rng = random.Random(int(locked_seed))
+            rng.randint(0, 2**63 - 1)
+            module_seed = int(locked_seed)
+        else:
+            module_seed = rng.randint(0, 2**63 - 1)
+            module_rng = random.Random(module_seed)
         chosen = module_rng.choices(options, weights=weights, k=1)[0]
         value = chosen.get("value", "")
 
