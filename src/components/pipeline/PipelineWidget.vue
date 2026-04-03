@@ -23,6 +23,7 @@
         @drop.stop="onDrop($event, index)"
         @dragover.prevent
         @dragend="onDragEnd"
+        @contextmenu.prevent="onContextMenu($event, index)"
       >
         <div class="wp-module-drag" title="Drag to reorder">⠿</div>
 
@@ -68,10 +69,10 @@
           <div v-if="getCapture(mod)" class="wp-module-capture">
             → ${{ getCapture(mod) }}
             <span
-              v-if="hasOverwrite(index)"
-              class="wp-overwrite-icon"
-              :title="getOverwriteTooltip(index)"
-            >⟲</span>
+              v-if="getDismissedConflicts(index).length > 0"
+              class="wp-dismissed-icon"
+              :title="getDismissedTooltip(index)"
+            >⚑</span>
           </div>
         </div>
 
@@ -94,13 +95,33 @@
       v-model:visible="showPicker"
       @select="onModuleSelected"
     />
+
+    <ContextMenu
+      :visible="contextMenu.visible"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :items="contextMenu.items"
+      @select="handleMenuSelect"
+      @close="contextMenu.visible = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
-import type { ConstrainModule, PipelineModule } from '@/types';
+import type { ConstrainModule, DismissableConflictType, PipelineModule } from '@/types';
+import { DISMISSABLE_CONFLICT_TYPES } from '@/types';
 import ModulePickerModal from './ModulePickerModal.vue';
+import ContextMenu from './ContextMenu.vue';
+import type { ContextMenuItem } from './ContextMenu.vue';
+import {
+  moveModule,
+  moveModuleUp,
+  moveModuleDown,
+  moveModuleToTop,
+  moveModuleToBottom,
+  duplicateModule,
+} from './actions';
 import { useConstraintStore } from '@/stores/constraints';
 import type { Conflict, ConflictSeverity } from '@/extension/conflicts';
 
@@ -120,6 +141,20 @@ const showPicker = ref(false);
 const draggedIndex = ref<number | null>(null);
 const dragOverIndex = ref<number | null>(null);
 const constraintStore = useConstraintStore();
+
+const contextMenu = ref<{
+  visible: boolean;
+  x: number;
+  y: number;
+  targetIndex: number;
+  items: ContextMenuItem[];
+}>({
+  visible: false,
+  x: 0,
+  y: 0,
+  targetIndex: -1,
+  items: [],
+});
 
 onMounted(() => {
   if (constraintStore.items.length === 0) {
@@ -184,6 +219,85 @@ function removeModule(index: number) {
   emitUpdate();
 }
 
+/* ── Context menu ── */
+
+function onContextMenu(event: MouseEvent, index: number) {
+  const last = localModules.value.length - 1;
+  const isFirst = index === 0;
+  const isLast = index === last;
+
+  const hasMarkable = getActiveConflicts(index).some(
+    c => DISMISSABLE_CONFLICT_TYPES.includes(c.type as DismissableConflictType),
+  );
+  const hasRestoreable = getDismissedConflicts(index).length > 0;
+
+  const items: ContextMenuItem[] = [
+    { icon: '↑', label: 'Move Up', action: 'move-up', disabled: isFirst },
+    { icon: '↓', label: 'Move Down', action: 'move-down', disabled: isLast },
+    { icon: '⤒', label: 'Move to Top', action: 'move-top', disabled: isFirst },
+    { icon: '⤓', label: 'Move to Bottom', action: 'move-bottom', disabled: isLast },
+    { separator: true, label: '', action: '' },
+    { icon: '⎘', label: 'Duplicate', action: 'duplicate' },
+    { separator: true, label: '', action: '' },
+    { icon: '×', label: 'Delete', action: 'delete' },
+  ];
+
+  if (hasMarkable || hasRestoreable) {
+    items.push({ separator: true, label: '', action: '' });
+    if (hasMarkable) {
+      items.push({ icon: '⚑', label: 'Mark as Intended', action: 'mark-intended' });
+    }
+    if (hasRestoreable) {
+      items.push({ icon: '↺', label: 'Restore Warning', action: 'restore-warning' });
+    }
+  }
+
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    targetIndex: index,
+    items,
+  };
+}
+
+function handleMenuSelect(action: string) {
+  const idx = contextMenu.value.targetIndex;
+  contextMenu.value.visible = false;
+  if (idx < 0 || idx >= localModules.value.length) return;
+  if (action === 'move-up') {
+    localModules.value = moveModuleUp(localModules.value, idx);
+    emitUpdate();
+  } else if (action === 'move-down') {
+    localModules.value = moveModuleDown(localModules.value, idx);
+    emitUpdate();
+  } else if (action === 'move-top') {
+    localModules.value = moveModuleToTop(localModules.value, idx);
+    emitUpdate();
+  } else if (action === 'move-bottom') {
+    localModules.value = moveModuleToBottom(localModules.value, idx);
+    emitUpdate();
+  } else if (action === 'duplicate') {
+    localModules.value = duplicateModule(localModules.value, idx);
+    emitUpdate();
+  } else if (action === 'delete') {
+    removeModule(idx);
+  } else if (action === 'mark-intended') {
+    const dismissableTypes = getActiveConflicts(idx)
+      .map(c => c.type)
+      .filter((t): t is DismissableConflictType =>
+        DISMISSABLE_CONFLICT_TYPES.includes(t as DismissableConflictType),
+      );
+    const mod = localModules.value[idx];
+    (mod as { __dismissed_conflicts?: DismissableConflictType[] }).__dismissed_conflicts = dismissableTypes;
+    emitUpdate();
+  } else if (action === 'restore-warning') {
+    const mod = localModules.value[idx];
+    delete (mod as Record<string, unknown>).__dismissed_conflicts;
+    emitUpdate();
+  }
+}
+
 /* ── Drag & Drop ── */
 
 function onDragStart(event: DragEvent, index: number) {
@@ -215,11 +329,7 @@ function onDragOver(_event: DragEvent) {
 function onDrop(_event: DragEvent, index: number) {
   if (draggedIndex.value === null || draggedIndex.value === index) return;
 
-  const newList = [...localModules.value];
-  const [movedItem] = newList.splice(draggedIndex.value, 1);
-  newList.splice(index, 0, movedItem);
-
-  localModules.value = newList;
+  localModules.value = moveModule(localModules.value, draggedIndex.value, index);
   emitUpdate();
   draggedIndex.value = null;
   dragOverIndex.value = null;
@@ -241,34 +351,33 @@ function getConflictsForModule(index: number): Conflict[] {
   return props.conflicts.filter(c => c.moduleIndex === index);
 }
 
+function isDismissed(index: number, conflictType: string): boolean {
+  const mod = localModules.value[index];
+  if (!('__dismissed_conflicts' in mod)) return false;
+  const m = mod as { __dismissed_conflicts?: DismissableConflictType[] };
+  return m.__dismissed_conflicts?.includes(conflictType as DismissableConflictType) ?? false;
+}
+
+function getActiveConflicts(index: number): Conflict[] {
+  return getConflictsForModule(index).filter(c => !isDismissed(index, c.type));
+}
+
+function getDismissedConflicts(index: number): Conflict[] {
+  return getConflictsForModule(index).filter(c => isDismissed(index, c.type));
+}
+
+function getDismissedTooltip(index: number): string {
+  const dismissed = getDismissedConflicts(index);
+  if (!dismissed.length) return '';
+  return 'Marked as intended:\n' + dismissed.map(c => c.message).join('\n');
+}
+
 function hasConflict(index: number, severity: ConflictSeverity): boolean {
-  const mod = localModules.value[index];
-  return getConflictsForModule(index).some(c => {
-    if (c.type === 'context_overwrite' && mod?.type === 'condition') return false;
-    return c.severity === severity;
-  });
-}
-
-function getOverwriteTooltip(index: number): string {
-  const mod = localModules.value[index];
-  if (mod?.type !== 'condition') return '';
-  const overwrites = getConflictsForModule(index).filter(c => c.type === 'context_overwrite');
-  if (!overwrites.length) return '';
-  return overwrites.map(c => c.message).join('\n');
-}
-
-function hasOverwrite(index: number): boolean {
-  const mod = localModules.value[index];
-  if (mod?.type !== 'condition') return false;
-  return getConflictsForModule(index).some(c => c.type === 'context_overwrite');
+  return getActiveConflicts(index).some(c => c.severity === severity);
 }
 
 function getConflictTooltip(index: number): string {
-  const mod = localModules.value[index];
-  const conflicts = getConflictsForModule(index).filter(c => {
-    if (c.type === 'context_overwrite' && mod?.type === 'condition') return false;
-    return true;
-  });
+  const conflicts = getActiveConflicts(index);
   if (!conflicts.length) return '';
   return conflicts.map(c => `⚠ ${c.message}`).join('\n');
 }
@@ -459,11 +568,11 @@ function getConflictTooltip(index: number): string {
   gap: 4px;
 }
 
-.wp-overwrite-icon {
+.wp-dismissed-icon {
   color: var(--wp-amber);
-  font-size: 12px;
+  font-size: 11px;
   cursor: help;
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 /* ── Delete button ── */

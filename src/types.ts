@@ -30,18 +30,21 @@ export interface WildcardModule {
   source?: string;
   options?: WildcardOption[];
   capture_as: string;
+  __dismissed_conflicts?: DismissableConflictType[];
 }
 
 export interface FixedModule {
   type: "fixed";
   value: string;
   capture_as: string;
+  __dismissed_conflicts?: DismissableConflictType[];
 }
 
 export interface CombineModule {
   type: "combine";
   template: string;
   capture_as: string;
+  __dismissed_conflicts?: DismissableConflictType[];
 }
 
 export interface ConstraintRule {
@@ -84,7 +87,15 @@ export interface ConditionModule {
   value: string;
   fallback?: string;
   capture_as: string;
+  __dismissed_conflicts?: DismissableConflictType[];
 }
+
+export type DismissableConflictType = "context_overwrite" | "duplicate_variable";
+
+export const DISMISSABLE_CONFLICT_TYPES: readonly DismissableConflictType[] = [
+  "context_overwrite",
+  "duplicate_variable",
+];
 
 export type PipelineModule =
   | WildcardModule
