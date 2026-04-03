@@ -89,7 +89,7 @@ class ContextInject(io.ComfyNode):
                 ctx[key] = value
 
         try:
-            mapping: dict[str, str] = json.loads(inject_config)
+            mapping: dict[str, str | dict[str, object]] = json.loads(inject_config)
         except (json.JSONDecodeError, TypeError):
             mapping = {}
 
@@ -97,8 +97,20 @@ class ContextInject(io.ComfyNode):
             slot_value = kwargs.get(slot_name)
             if slot_value is None:
                 continue
-            var_name = mapping.get(slot_name, "").strip()
-            if not var_name:
+            slot_cfg = mapping.get(slot_name)
+            if slot_cfg is None:
+                continue
+            if isinstance(slot_cfg, str):
+                var_name = slot_cfg.strip()
+                enabled = True
+                internal = False
+            elif isinstance(slot_cfg, dict):
+                var_name = str(slot_cfg.get("varName", "")).strip()
+                enabled = slot_cfg.get("enabled", True)
+                internal = bool(slot_cfg.get("internal", False))
+            else:
+                continue
+            if not enabled:
                 continue
             var_name = var_name.lstrip("$")
             if not var_name:
@@ -106,6 +118,8 @@ class ContextInject(io.ComfyNode):
             if var_name in ctx and not var_name.startswith("__"):
                 msg = f"Variable '${var_name}' already exists in context — overwriting"
                 logger.warning(msg)
+            if internal:
+                ctx.setdefault("__wp_internal_vars__", []).append(var_name)
             ctx[var_name] = str(slot_value)
 
         return io.NodeOutput(ctx)

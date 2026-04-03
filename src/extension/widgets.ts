@@ -7,7 +7,7 @@ import InjectWidget from "@/components/inject/InjectWidget.vue";
 import { collectUpstreamVariables, collectUpstreamContext, collectUpstreamModules, collectDownstreamVariables, findDownstreamAssemblers, findDownstreamPipelineNodes, findUpstreamPipelineNodes } from "./graph";
 import { analyzePipelineConflicts, analyzeInjectConflicts, resolveConstrainSources } from "./conflicts";
 import type { Conflict } from "./conflicts";
-import type { PipelineModule } from "@/types";
+import type { PipelineModule, InjectSlotConfig } from "@/types";
 import { previewApi } from "@/api/client";
 
 // Shared Pinia instance for all standalone widget apps — one fetch serves all nodes
@@ -284,15 +284,15 @@ export function injectConfigWidgetFactory(
   const INJECT_MIN_HEIGHT = 60;
 
   const rootProps = reactive<{
-    modelValue: Record<string, string>;
+    modelValue: Record<string, string | InjectSlotConfig>;
     connectedSlots: string[];
     conflicts: Conflict[];
-    "onUpdate:modelValue": (val: Record<string, string>) => void;
+    "onUpdate:modelValue": (val: Record<string, string | InjectSlotConfig>) => void;
   }>({
     modelValue: {},
     connectedSlots: [],
     conflicts: [],
-    "onUpdate:modelValue": (val: Record<string, string>) => {
+    "onUpdate:modelValue": (val: Record<string, string | InjectSlotConfig>) => {
       rootProps.modelValue = val;
       const upstreamVars = collectUpstreamVariables(node);
       rootProps.conflicts = analyzeInjectConflicts(val, rootProps.connectedSlots, upstreamVars);
@@ -350,7 +350,7 @@ export function injectConfigWidgetFactory(
     getValue: () => JSON.stringify(rootProps.modelValue),
     setValue: (v: string) => {
       try {
-        rootProps.modelValue = JSON.parse(v) as Record<string, string>;
+        rootProps.modelValue = JSON.parse(v) as Record<string, string | InjectSlotConfig>;
       } catch {
         rootProps.modelValue = {};
       }

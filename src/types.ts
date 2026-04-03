@@ -122,6 +122,12 @@ export type WildcardResource = WildcardBase | WildcardDraft;
 export type ConstraintResource = ConstraintBase | ConstraintDraft;
 export type PipelineResource = PipelineBase | PipelineDraft;
 
+export interface InjectSlotConfig {
+  varName: string;
+  enabled?: boolean;
+  internal?: boolean;
+}
+
 export type ModuleType = PipelineModule["type"];
 
 export const MODULE_TYPE_LABELS: Record<ModuleType, string> = {

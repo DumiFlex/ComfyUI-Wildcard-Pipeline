@@ -1,6 +1,6 @@
 import { app } from "#comfyui/app";
 import type { ComfyNode } from "#comfyui/app";
-import type { PipelineModule } from "@/types";
+import type { InjectSlotConfig, PipelineModule } from "@/types";
 
 export interface UpstreamContext {
   variables: string[];
@@ -39,11 +39,16 @@ function extractInjectVars(node: ComfyNode, variables: string[]): void {
   const configWidget = node.widgets?.find((w) => w.name === "inject_config");
   if (!configWidget?.value) return;
   try {
-    const mapping: Record<string, string> = JSON.parse(String(configWidget.value));
-    for (const [slotName, varName] of Object.entries(mapping)) {
+    const mapping: Record<string, string | InjectSlotConfig> = JSON.parse(String(configWidget.value));
+    for (const [slotName, slotVal] of Object.entries(mapping)) {
       if (!INJECT_SLOT_NAMES.includes(slotName)) continue;
       if (!isSlotConnected(node, slotName)) continue;
-      const cleaned = varName.trim().replace(/^\$/, "");
+      const cfg: InjectSlotConfig = typeof slotVal === "string"
+        ? { varName: slotVal }
+        : slotVal;
+      if (cfg.enabled === false) continue;
+      if (cfg.internal === true) continue;
+      const cleaned = cfg.varName.trim().replace(/^\$/, "");
       addUnique(variables, cleaned);
     }
   } catch {

@@ -1,4 +1,4 @@
-import type { PipelineModule, ConstraintRule } from "@/types";
+import type { PipelineModule, ConstraintRule, InjectSlotConfig } from "@/types";
 import { constraintApi } from "@/api/client";
 
 export type ConflictSeverity = "error" | "warning";
@@ -313,7 +313,7 @@ const INJECT_SLOT_NAMES = ["input_1", "input_2", "input_3"] as const;
  * @returns Array of detected conflicts (may be empty)
  */
 export function analyzeInjectConflicts(
-  mapping: Record<string, string>,
+  mapping: Record<string, string | InjectSlotConfig>,
   connectedSlots: string[] | Set<string>,
   upstreamVariables: string[],
 ): Conflict[] {
@@ -322,20 +322,27 @@ export function analyzeInjectConflicts(
   const connectedSet =
     connectedSlots instanceof Set ? connectedSlots : new Set(connectedSlots);
 
-  // Track variable names seen so far among connected slots in this inject node
-  const seenVars = new Map<string, number>(); // varName → first moduleIndex
+  const seenVars = new Map<string, number>();
 
   for (let slotIdx = 0; slotIdx < INJECT_SLOT_NAMES.length; slotIdx++) {
     const slotName = INJECT_SLOT_NAMES[slotIdx];
     if (!connectedSet.has(slotName)) continue;
 
-    const rawVar = mapping[slotName];
+    const slotVal = mapping[slotName];
+    if (!slotVal) continue;
+
+    const cfg: InjectSlotConfig = typeof slotVal === "string"
+      ? { varName: slotVal }
+      : slotVal;
+
+    if (cfg.enabled === false) continue;
+
+    const rawVar = cfg.varName;
     if (!rawVar || rawVar.trim() === "") continue;
 
     const varName = stripDollar(rawVar.trim());
     if (!varName) continue;
 
-    // Check: context_overwrite
     if (upstreamSet.has(varName)) {
       conflicts.push({
         moduleIndex: slotIdx,
@@ -345,7 +352,6 @@ export function analyzeInjectConflicts(
       });
     }
 
-    // Check: duplicate_variable (same var in another connected slot of this node)
     if (seenVars.has(varName)) {
       conflicts.push({
         moduleIndex: slotIdx,
