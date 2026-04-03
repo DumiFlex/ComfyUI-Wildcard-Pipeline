@@ -11,6 +11,7 @@ from .routes.crud import (
     create_pipeline_routes,
     create_wildcard_routes,
 )
+from .routes.preview import create_preview_routes
 from .services.file_store import FileStore
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -32,6 +33,7 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_routes(create_wildcard_routes(wildcard_store))
     app.router.add_routes(create_constraint_routes(constraint_store))
     app.router.add_routes(create_pipeline_routes(pipeline_store))
+    app.router.add_routes(create_preview_routes())
 
     # -- SPA static assets + catch-all (MUST be last) -------------------------
     if _WEB_DIST.is_dir():
