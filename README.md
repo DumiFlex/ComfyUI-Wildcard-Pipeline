@@ -2,37 +2,39 @@
 A powerful custom node pack for ComfyUI that implements weighted wildcards, chained pipelines, and context passing through a robust execution engine.
 
 [![ComfyUI Registry](https://img.shields.io/badge/ComfyUI-Registry-blue)](https://registry.comfy.org/publishers/dumiflex)
+[![CI](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 
+The Wildcard Pipeline extension brings a systematic approach to prompt engineering in ComfyUI. It allows you to build complex, modular prompt generation workflows using a dedicated execution engine that supports weighted sampling, conditional logic, and cross-node state management.
+
 ## Features
-* Weighted wildcard sampling using standard probability distributions.
-* 6 distinct module types for flexible pipeline construction.
-* Chained pipelines that pass state between nodes.
-* Seamless context passing using the PIPELINE_CONTEXT custom type.
-* Advanced Vue-based DOM widgets rendered directly inside ComfyUI nodes.
-* Dedicated Manager SPA hosted at /wp for comprehensive resource management.
-* Sophisticated constraint system to modify weights based on active variables.
-* Dynamic variable resolution with $var syntax and literal escaping.
+* **Weighted Sampling**: Use standard probability distributions for wildcard selection.
+* **Modular Design**: Construct pipelines using 5 distinct module types for maximum flexibility.
+* **Chained Context**: Seamlessly pass variables and state between nodes using the `PIPELINE_CONTEXT` type.
+* **Vue-Powered UI**: Interactive DOM widgets rendered directly inside ComfyUI nodes for an industrial feel.
+* **Resource Manager**: A standalone SPA at `/wp/` for managing wildcards, constraints, and pipelines.
+* **Advanced Constraints**: Modify sampling weights dynamically based on active variables (e.g., exclude "sunny" if "night" is selected).
+* **Variable Resolution**: Clean `$var` syntax with support for literal escaping using `$$`.
 
 ## Installation
 
 ### ComfyUI Manager (Recommended)
 1. Open the ComfyUI Manager in your browser.
-2. Search for "Wildcard Pipeline" by dumiflex.
-3. Click Install and restart ComfyUI.
+2. Search for **Wildcard Pipeline** by **dumiflex**.
+3. Click **Install** and restart ComfyUI.
 
 ### Manual Installation
-1. Navigate to your ComfyUI custom_nodes directory.
+1. Navigate to your ComfyUI `custom_nodes` directory.
 2. Clone the repository:
    ```bash
-   git clone https://github.com/DumiFlex/comfyui-wildcard-pipeline
+   git clone https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline
    ```
-3. Install the Python dependencies (if any are listed in pyproject.toml):
+3. Install the Python dependencies:
    ```bash
    pip install -e .
    ```
-4. Build the frontend assets:
+4. Build the frontend assets (requires Node.js and pnpm):
    ```bash
    pnpm install
    pnpm run build
@@ -42,82 +44,117 @@ A powerful custom node pack for ComfyUI that implements weighted wildcards, chai
 ## Nodes
 
 ### WildcardPipeline (WP_WildcardPipeline)
-The core execution node that processes your pipeline configuration. It takes a module_config (JSON provided via the Vue DOM widget) and an optional data_dir path. It initializes the execution engine, runs all defined modules in sequence, and outputs a PIPELINE_CONTEXT object containing the resolved state.
+The core execution node that processes your pipeline configuration. It serves as the entry point for your wildcard logic.
+* **Inputs**:
+  * `pipeline_context` (Optional): An existing context to build upon.
+  * `seed`: For reproducible random sampling.
+  * `module_config`: A JSON array of modules configured via the interactive Vue widget.
+* **Outputs**:
+  * `PIPELINE_CONTEXT`: The resulting state containing all resolved variables.
 
 ### PromptAssembler (WP_PromptAssembler)
-A terminal node that converts the pipeline context into a final prompt string. It accepts a PIPELINE_CONTEXT and a template string. It replaces all occurrences of $variable with their captured values from the context. Use $$ to escape a literal dollar sign. Keys prefixed with __ (double underscore) are automatically skipped during resolution to maintain clean outputs.
+A terminal node that converts the abstract pipeline state into a final string for use in CLIP Text Encode or other nodes.
+* **Inputs**:
+  * `PIPELINE_CONTEXT`: The context containing your variables.
+  * `template`: A string with `$variable` placeholders.
+* **Outputs**:
+  * `prompt`: The fully resolved string.
+* **Notes**: Use `$$` to escape a literal dollar sign. Variables prefixed with `__` are internal and skipped during resolution.
+
+### ContextInject (WP_ContextInject)
+Injects external string values from standard ComfyUI nodes into the pipeline context.
+* **Inputs**:
+  * `pipeline_context` (Optional): The context to inject into.
+  * `input_1`, `input_2`, `input_3`: Optional string slots for connecting other nodes.
+  * `inject_config`: A JSON mapping that links slot names to variable names (e.g., `{"input_1": "subject"}`).
+* **Outputs**:
+  * `PIPELINE_CONTEXT`: The updated context with injected variables.
 
 ## Module Types
 
 | Module | Purpose | Key Fields |
 |--------|---------|------------|
-| wildcard | Random weighted selection from defined options | source, capture_as, options[]{value,weight,tags} |
-| fixed | Constant value assignment | value, capture_as |
-| combine | Template interpolation of existing variables | template, capture_as |
-| constrain | Applies constraint rules to modify sampling weights | target, source/rules |
-| condition | Sets values based on current variable state | variable, if_equals/unless_equals, value, fallback, capture_as |
-| export | Exports specific variables with optional prefixing | variables[], prefix |
+| **wildcard** | Random weighted selection from defined options | `source`, `capture_as`, `options` |
+| **fixed** | Constant value assignment to a variable | `value`, `capture_as` |
+| **combine** | Template interpolation of existing variables | `template`, `capture_as` |
+| **constrain** | Applies rules to modify sampling weights | `target`, `source`, `rules` |
+| **condition** | Sets values based on current variable state | `variable`, `if_equals`, `value`, `fallback` |
 
 ## Data Formats
 
 ### Wildcard
-Stored in `data/wildcards/examples/`.
+Wildcards are JSON files defining options with optional weights and tags.
 ```json
 {
   "name": "location",
   "version": "1.0",
   "options": [
     { "value": "misty forest", "weight": 80, "tags": ["nature", "dark"] },
-    { "value": "urban rooftop", "weight": 50, "tags": ["urban"] },
-    { "value": "desert canyon", "weight": 30, "tags": ["nature"] }
+    { "value": "urban rooftop", "weight": 50, "tags": ["urban"] }
   ]
 }
 ```
 
 ### Constraint
-Stored in `data/constraints/examples/`.
+Constraints allow you to define relationships between variables, such as biasing or excluding certain values.
 ```json
 {
   "name": "lighting-weather",
   "rules": [
-    { "when_value": "moonlight", "rule_type": "exclusion", "values": ["sunny haze"] },
-    { "when_value": "golden hour", "rule_type": "weight_bias", "values": ["warm haze"], "multiplier": 2.0 }
+    { 
+      "target": "weather", 
+      "when_variable": "lighting", 
+      "when_value": "moonlight", 
+      "rule_type": "exclusion", 
+      "values": ["sunny haze"] 
+    },
+    { 
+      "target": "weather", 
+      "when_variable": "lighting", 
+      "when_value": "golden hour", 
+      "rule_type": "weight_bias", 
+      "values": ["warm haze"], 
+      "multiplier": 2.0 
+    }
   ]
 }
 ```
 
 ### Pipeline
-Stored in `data/pipelines/examples/`.
+Pipelines sequence multiple modules into a reusable workflow.
 ```json
 {
   "name": "Environment Pipeline",
   "version": "1.0",
   "modules": [
-    { "type": "wildcard", "source": "location.json", "capture_as": "$location" },
-    { "type": "wildcard", "source": "lighting.json", "capture_as": "$lighting" },
+    { "type": "wildcard", "source": "location", "capture_as": "$location" },
+    { "type": "wildcard", "source": "lighting", "capture_as": "$lighting" },
+    { "type": "constrain", "source": "lighting-weather" },
     { "type": "combine", "template": "$location, $lighting", "capture_as": "$environment" }
   ]
 }
 ```
 
 ## Manager SPA
-When ComfyUI is running, a management interface is available at `/wp/`. This single page application allows for full CRUD operations on wildcards, constraints, and pipelines directly from your browser. You can organize your resources through the following routes:
-* `/wp/wildcards` — Manage weighted option lists.
-* `/wp/constraints` — Define rules for weight modification.
-* `/wp/pipelines` — Sequence modules into reusable chains.
+The extension includes a dedicated management interface available at `/wp/` when ComfyUI is running. This application provides a full-featured dashboard for:
+* **Wildcards**: Create and edit weighted option lists.
+* **Constraints**: Define complex interaction rules between variables.
+* **Pipelines**: Architect and test reusable prompt generation chains.
 
 ## Development
-Use the following commands to work on the project:
 
-* `pytest` — Run the engine tests (no ComfyUI installation required).
-* `pnpm run dev` — Start the frontend extension in watch mode.
-* `pnpm run build:extension` — Build the ComfyUI extension artifact (js/main.js).
-* `pnpm run build:manager` — Build the Manager SPA (web_dist/).
-* `pnpm run build` — Build both the extension and the manager.
-* `pnpm run typecheck` — Run TypeScript type checking across the frontend.
+The project maintains a strict separation between the core logic (`engine/`) and the ComfyUI wrapper (`nodes/`).
 
-## Architecture
-The project is structured to maintain strict separation of concerns. The `engine/` directory contains pure Python code with zero ComfyUI imports, allowing for standalone testing and reliability. The `nodes/` directory wraps this engine using the ComfyUI V3 API. The `api/` directory handles aiohttp CRUD endpoints and serves the Manager SPA. The `src/` directory contains the Vue 3 and PrimeVue frontend, split into interactive node widgets and the standalone manager interface.
+### Commands
+* `pytest`: Run the engine test suite (118+ tests).
+* `pnpm run dev`: Extension development with hot-reload.
+* `pnpm run build:extension`: Compile the ComfyUI extension artifact.
+* `pnpm run build:manager`: Compile the standalone Manager SPA.
+* `pnpm run build`: Build both extension and manager.
+* `pnpm run typecheck`: Run TypeScript static analysis.
+
+## Contributing
+Contributions to improve the engine, nodes, or frontend are welcome. Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions, testing requirements, and our commit message conventions.
 
 ## License
-MIT
+MIT — see [LICENSE](LICENSE) for details.
