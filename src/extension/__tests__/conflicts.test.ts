@@ -564,6 +564,46 @@ describe("analyzePipelineConflicts", () => {
     const result = analyzePipelineConflicts(modules, [], ["lighting", "weather"]);
     expect(result).toEqual([]);
   });
+
+  it("disabled module does not generate duplicate_variable conflict", () => {
+    const modules: PipelineModule[] = [
+      { type: "wildcard", capture_as: "$location" },
+      { type: "wildcard", capture_as: "$location", enabled: false },
+    ];
+    const result = analyzePipelineConflicts(modules, []);
+    expect(result).toEqual([]);
+  });
+
+  it("disabled module does not register captures for subsequent checks", () => {
+    const modules: PipelineModule[] = [
+      { type: "wildcard", capture_as: "$location", enabled: false },
+      { type: "wildcard", capture_as: "$location" },
+    ];
+    const result = analyzePipelineConflicts(modules, []);
+    expect(result).toEqual([]);
+  });
+
+  it("disabled constrain module does not generate ordering warnings", () => {
+    const modules: PipelineModule[] = [
+      { type: "wildcard", capture_as: "$location" },
+      {
+        type: "constrain",
+        source: "test",
+        enabled: false,
+        rules: [
+          {
+            target: "location",
+            when_variable: "mood",
+            when_value: "happy",
+            rule_type: "exclusion",
+            values: ["desert"],
+          },
+        ],
+      },
+    ];
+    const result = analyzePipelineConflicts(modules, []);
+    expect(result).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -144,6 +144,7 @@ export function analyzePipelineConflicts(
   const allChainVars = new Set<string>(upstreamVariables);
   for (const v of downstreamVariables) allChainVars.add(v);
   for (const mod of modules) {
+    if ('enabled' in mod && mod.enabled === false) continue;
     if ("capture_as" in mod && mod.capture_as) {
       allChainVars.add(stripDollar(mod.capture_as));
     }
@@ -151,6 +152,9 @@ export function analyzePipelineConflicts(
 
   for (let i = 0; i < modules.length; i++) {
     const mod = modules[i];
+
+    // Skip disabled modules — they don't participate in conflict analysis
+    if ('enabled' in mod && mod.enabled === false) continue;
 
     // Checks 1 + 2: capture_as-bearing modules
     if ("capture_as" in mod && mod.capture_as) {

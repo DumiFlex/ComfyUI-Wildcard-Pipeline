@@ -138,28 +138,53 @@
                 class="wp-form-input"
                 placeholder="variable_name"
               />
-              <label class="wp-form-label">If equals (optional)</label>
+
+              <label class="wp-form-label">
+                Condition
+                <span class="wp-form-hint">— optional</span>
+                <button type="button" class="wp-help-btn" @click="showConditionHelp = !showConditionHelp">?</button>
+              </label>
+              <div v-if="showConditionHelp" class="wp-help-box">
+                <code>== value</code> — matches when variable equals value<br>
+                <code>!= value</code> — matches when variable differs<br>
+                <em>Leave blank</em> — matches when variable exists
+              </div>
               <input
-                v-model="conditionForm.if_equals"
+                v-model="conditionForm.condition"
                 class="wp-form-input"
-                placeholder="match value"
+                :class="{ 'wp-input-error': conditionError }"
+                placeholder="== sunny  or  != rainy  or  leave blank"
               />
-              <label class="wp-form-label">Value</label>
+              <span v-if="conditionError" class="wp-field-error">{{ conditionError }}</span>
+
+              <label class="wp-form-label">Then set to</label>
               <input
                 v-model="conditionForm.value"
                 class="wp-form-input"
-                placeholder="output value"
+                placeholder="output value when condition is met"
               />
+
+              <label class="wp-form-label">
+                Otherwise set to
+                <span class="wp-form-hint">— used when condition is not met</span>
+              </label>
+              <input
+                v-model="conditionForm.fallback"
+                class="wp-form-input"
+                placeholder="fallback value (optional)"
+              />
+
               <label class="wp-form-label">Capture as</label>
               <input
                 v-model="conditionForm.capture_as"
                 class="wp-form-input"
                 placeholder="$variable_name"
               />
+              <span v-if="conditionOverwrite" class="wp-field-warn">This will overwrite ${{ conditionForm.variable }}</span>
               <button
                 type="button"
                 class="wp-form-submit"
-                :disabled="!conditionForm.variable || !conditionForm.capture_as"
+                :disabled="!conditionForm.variable || !conditionForm.capture_as || !!conditionError"
                 @click="submitCondition"
               >Add Condition Module</button>
             </div>
@@ -229,7 +254,25 @@ const loadingConstraints = ref(false);
 /* ── Inline forms ── */
 const fixedForm = ref({ value: '', capture_as: '' });
 const combineForm = ref({ template: '', capture_as: '' });
-const conditionForm = ref({ variable: '', if_equals: '', value: '', capture_as: '' });
+const conditionForm = ref({ variable: '', condition: '', value: '', fallback: '', capture_as: '' });
+const showConditionHelp = ref(false);
+
+const conditionError = computed(() => {
+  const c = conditionForm.value.condition.trim();
+  if (!c) return ''; // blank = exists check, valid
+  if (c.startsWith('==') || c.startsWith('!=')) {
+    const val = c.slice(2).trim();
+    if (!val) return 'Missing value after operator';
+    return '';
+  }
+  return 'Use == value, != value, or leave blank';
+});
+
+const conditionOverwrite = computed(() => {
+  const variable = conditionForm.value.variable.trim();
+  const capture = conditionForm.value.capture_as.trim().replace(/^\$/, '');
+  return variable && capture && variable === capture;
+});
 
 /* ── Fetch data when modal opens ── */
 watch(() => props.visible, async (open) => {
@@ -238,7 +281,8 @@ watch(() => props.visible, async (open) => {
   selectedModalCategory.value = '';
   fixedForm.value = { value: '', capture_as: '' };
   combineForm.value = { template: '', capture_as: '' };
-  conditionForm.value = { variable: '', if_equals: '', value: '', capture_as: '' };
+  conditionForm.value = { variable: '', condition: '', value: '', fallback: '', capture_as: '' };
+  showConditionHelp.value = false;
 
   loadingWildcards.value = true;
   loadingConstraints.value = true;
@@ -325,12 +369,27 @@ function submitCombine() {
 
 function submitCondition() {
   const f = conditionForm.value;
+  if (conditionError.value) return;
   const capture = f.capture_as.startsWith('$') ? f.capture_as : '$' + f.capture_as;
+  const c = f.condition.trim();
+
+  let if_equals: string | undefined;
+  let unless_equals: string | undefined;
+
+  if (c.startsWith('==')) {
+    if_equals = c.slice(2).trim();
+  } else if (c.startsWith('!=')) {
+    unless_equals = c.slice(2).trim();
+  }
+  // blank = exists check — neither field set
+
   emit('select', {
     type: 'condition',
     variable: f.variable,
-    if_equals: f.if_equals || undefined,
+    if_equals,
+    unless_equals,
     value: f.value,
+    fallback: f.fallback || undefined,
     capture_as: capture,
   });
   close();
@@ -577,6 +636,74 @@ function submitCondition() {
 .wp-form-submit:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Condition form extras ── */
+.wp-form-hint {
+  color: var(--p-text-muted-color, #64748b);
+  font-weight: 400;
+  font-size: 10px;
+}
+
+.wp-help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 4px;
+  padding: 0;
+  background: var(--p-surface-600, #475569);
+  border: none;
+  border-radius: 50%;
+  color: var(--p-text-muted-color, #94a3b8);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.wp-help-btn:hover {
+  background: var(--p-primary-color, #818cf8);
+  color: #fff;
+}
+
+.wp-help-box {
+  padding: 8px 10px;
+  background: var(--p-surface-900, #0f172a);
+  border: 1px solid var(--p-surface-600, #475569);
+  border-radius: var(--wp-radius-sm);
+  font-size: 11px;
+  color: var(--p-text-muted-color, #94a3b8);
+  line-height: 1.6;
+}
+.wp-help-box code {
+  background: var(--p-surface-700, #334155);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--p-primary-color, #818cf8);
+}
+.wp-help-box em {
+  color: var(--p-text-muted-color, #94a3b8);
+  font-style: italic;
+}
+
+.wp-input-error {
+  border-color: var(--wp-red, #ef4444) !important;
+}
+
+.wp-field-error {
+  font-size: 10px;
+  color: var(--wp-red, #ef4444);
+  margin-top: -4px;
+}
+
+.wp-field-warn {
+  font-size: 10px;
+  color: var(--wp-amber, #fbbf24);
+  margin-top: -4px;
 }
 
 /* ── Reuse tag styles from PipelineWidget ── */

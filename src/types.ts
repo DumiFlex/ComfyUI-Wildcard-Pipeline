@@ -27,6 +27,7 @@ export interface PipelineBase extends ResourceData {
 
 export interface WildcardModule {
   type: "wildcard";
+  enabled?: boolean;
   source?: string;
   options?: WildcardOption[];
   capture_as: string;
@@ -35,6 +36,7 @@ export interface WildcardModule {
 
 export interface FixedModule {
   type: "fixed";
+  enabled?: boolean;
   value: string;
   capture_as: string;
   __dismissed_conflicts?: DismissableConflictType[];
@@ -42,6 +44,7 @@ export interface FixedModule {
 
 export interface CombineModule {
   type: "combine";
+  enabled?: boolean;
   template: string;
   capture_as: string;
   __dismissed_conflicts?: DismissableConflictType[];
@@ -65,6 +68,7 @@ export interface ConstraintRuleDraft {
 
 export interface ConstrainModule {
   type: "constrain";
+  enabled?: boolean;
   source?: string;
   target?: string;
   options?: WildcardOption[];
@@ -81,6 +85,7 @@ export interface PipelineConstrainModule extends ConstrainModule {
 
 export interface ConditionModule {
   type: "condition";
+  enabled?: boolean;
   variable: string;
   if_equals?: string;
   unless_equals?: string;
