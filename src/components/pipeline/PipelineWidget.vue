@@ -777,7 +777,6 @@ function getConflictTooltip(index: number): string {
   line-height: 1;
   flex-shrink: 0;
   margin-top: 1px;
-  transition: color 0.15s;
 }
 .wp-module-internal-btn:hover {
   color: var(--wp-teal);
@@ -797,7 +796,6 @@ function getConflictTooltip(index: number): string {
   line-height: 1;
   flex-shrink: 0;
   margin-top: 1px;
-  transition: color 0.15s;
 }
 .wp-module-lock:hover {
   color: var(--wp-accent);
