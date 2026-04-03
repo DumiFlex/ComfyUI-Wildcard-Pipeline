@@ -108,17 +108,26 @@ class PipelineEngine:
     fully testable outside ComfyUI.
     """
 
-    def run(self, modules: list[dict[str, Any]], ctx: dict[str, Any]) -> dict[str, Any]:
+    def run(
+        self,
+        modules: list[dict[str, Any]],
+        ctx: dict[str, Any],
+        rng: random.Random | None = None,
+    ) -> dict[str, Any]:
         """Execute modules top-to-bottom, returning the updated context.
 
         Args:
             modules: List of module config dicts from the Vue widget.
             ctx: Current pipeline context (may contain variables from
                  upstream pipeline nodes).
+            rng: Optional Random instance for deterministic sampling.
+                 Defaults to a fresh random.Random() if not provided.
 
         Returns:
             Updated context dict with all newly resolved variables.
         """
+        if rng is None:
+            rng = random.Random()
         for i, module in enumerate(modules):
             module_type = module.get("type", "")
 
@@ -134,7 +143,7 @@ class PipelineEngine:
                 logger.warning(msg)
                 continue
 
-            ctx = handler(module, ctx)
+            ctx = handler(module, ctx, rng)
 
         return ctx
 
@@ -175,7 +184,7 @@ class PipelineEngine:
         return handlers.get(module_type)
 
     def _handle_wildcard(
-        self, module: dict[str, Any], ctx: dict[str, Any]
+        self, module: dict[str, Any], ctx: dict[str, Any], rng: random.Random
     ) -> dict[str, Any]:
         """Weighted random sample from options, capture result as ``$var``.
 
@@ -213,15 +222,18 @@ class PipelineEngine:
         if all(w == 0 for w in weights):
             weights = [1.0] * len(options)
 
-        chosen = random.choices(options, weights=weights, k=1)[0]
+        module_seed = rng.randint(0, 2**63 - 1)
+        module_rng = random.Random(module_seed)
+        chosen = module_rng.choices(options, weights=weights, k=1)[0]
         value = chosen.get("value", "")
 
         ctx[capture_as_normalized] = value
+        ctx.setdefault("__wp_module_seeds__", {})[capture_as_normalized] = module_seed
 
         return ctx
 
     def _handle_fixed(
-        self, module: dict[str, Any], ctx: dict[str, Any]
+        self, module: dict[str, Any], ctx: dict[str, Any], rng: random.Random
     ) -> dict[str, Any]:
         """Static hardcoded string, captured as ``$var``."""
         value = module.get("value", "")
@@ -236,7 +248,7 @@ class PipelineEngine:
         return ctx
 
     def _handle_combine(
-        self, module: dict[str, Any], ctx: dict[str, Any]
+        self, module: dict[str, Any], ctx: dict[str, Any], rng: random.Random
     ) -> dict[str, Any]:
         """Merge variables using a template string, capture as ``$var``."""
         template = module.get("template", "")
@@ -251,7 +263,7 @@ class PipelineEngine:
         return ctx
 
     def _handle_constrain(
-        self, module: dict[str, Any], ctx: dict[str, Any]
+        self, module: dict[str, Any], ctx: dict[str, Any], rng: random.Random
     ) -> dict[str, Any]:
         """Register constraint rules into ctx for later application by wildcard handlers.
 
@@ -266,7 +278,7 @@ class PipelineEngine:
         return ctx
 
     def _handle_condition(
-        self, module: dict[str, Any], ctx: dict[str, Any]
+        self, module: dict[str, Any], ctx: dict[str, Any], rng: random.Random
     ) -> dict[str, Any]:
         """Conditionally set a variable based on context state.
 
