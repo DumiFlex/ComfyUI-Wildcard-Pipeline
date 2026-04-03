@@ -54,8 +54,9 @@
             v-if="mod.type === 'wildcard'"
             class="wp-module-lock"
             type="button"
+            :disabled="(mod as WildcardModule).locked_seed === undefined && lastSeed == null"
             @click.stop="toggleLock(index)"
-            :title="(mod as WildcardModule).locked_seed !== undefined ? 'Unlock seed' : 'Lock seed'"
+            :title="(mod as WildcardModule).locked_seed !== undefined ? 'Unlock seed' : (lastSeed == null ? 'Run workflow first to capture seed' : 'Lock seed')"
           ><i :class="(mod as WildcardModule).locked_seed !== undefined ? 'pi pi-lock' : 'pi pi-lock-open'"></i></button>
 
           <button
@@ -167,7 +168,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: PipelineModule[];
     conflicts?: Conflict[];
-    moduleSeeds?: Record<string, number>;
+    lastSeed?: number | null;
   }>(),
   { conflicts: () => [] },
 );
@@ -291,10 +292,8 @@ function toggleLock(index: number) {
   if (mod.locked_seed !== undefined) {
     mod.locked_seed = undefined;
   } else {
-    const key = mod.capture_as?.replace(/^\$/, '') ?? '';
-    const seed = props.moduleSeeds?.[key];
-    if (seed !== undefined) {
-      mod.locked_seed = seed;
+    if (props.lastSeed != null) {
+      mod.locked_seed = props.lastSeed;
     }
   }
   emitUpdate();
@@ -332,8 +331,7 @@ function onContextMenu(event: MouseEvent, index: number) {
   const mod = localModules.value[index];
   if (mod.type === 'wildcard') {
     const wm = mod as WildcardModule;
-    const key = wm.capture_as?.replace(/^\$/, '') ?? '';
-    const hasSeed = wm.locked_seed !== undefined || Boolean(props.moduleSeeds?.[key]);
+    const hasSeed = wm.locked_seed !== undefined || props.lastSeed != null;
     items.push({ icon: 'pi pi-copy', label: 'Copy seed', action: 'copy-seed', disabled: !hasSeed });
   }
 
@@ -382,9 +380,8 @@ function handleMenuSelect(action: string) {
     emitUpdate();
   } else if (action === 'copy-seed') {
     const mod = localModules.value[idx] as WildcardModule;
-    const key = mod.capture_as?.replace(/^\$/, '') ?? '';
-    const seed = mod.locked_seed ?? props.moduleSeeds?.[key];
-    if (seed !== undefined) {
+    const seed = mod.locked_seed ?? props.lastSeed;
+    if (seed != null) {
       navigator.clipboard.writeText(String(seed)).catch(() => {});
     }
   } else if (action === 'delete') {

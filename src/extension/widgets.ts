@@ -132,21 +132,7 @@ export function pipelineConfigWidgetFactory(
     node.graph?.setDirtyCanvas(true, true);
   };
 
-  const moduleSeeds = vueRef<Record<string, number>>({});
-
-  let seedsTimer: ReturnType<typeof setTimeout> | null = null;
-  const refreshSeeds = () => {
-    if (seedsTimer) clearTimeout(seedsTimer);
-    seedsTimer = setTimeout(async () => {
-      const allModules = [...collectUpstreamModules(node), ...rootProps.modelValue];
-      try {
-        const result = await previewApi.run({ modules: allModules, seed: 42 });
-        moduleSeeds.value = result.module_seeds ?? {};
-      } catch {
-        // ignore preview errors
-      }
-    }, 300);
-  };
+  const lastSeed = vueRef<number | null>(null);
 
   const rootProps = reactive<{
     modelValue: PipelineModule[];
@@ -158,7 +144,6 @@ export function pipelineConfigWidgetFactory(
     "onUpdate:modelValue": (val: PipelineModule[]) => {
       rootProps.modelValue = val;
       computeConflicts();
-      refreshSeeds();
       try {
         for (const asm of findDownstreamAssemblers(node)) {
           (asm as ComfyNode & { _wpRefreshPreview?: () => void })._wpRefreshPreview?.();
@@ -191,7 +176,7 @@ export function pipelineConfigWidgetFactory(
         h(PipelineWidget, {
           modelValue: rootProps.modelValue,
           conflicts: rootProps.conflicts,
-          moduleSeeds: moduleSeeds.value,
+          lastSeed: lastSeed.value,
           "onUpdate:modelValue": rootProps["onUpdate:modelValue"],
         }),
     });
@@ -225,6 +210,18 @@ export function pipelineConfigWidgetFactory(
 
   widget.serializeValue = async () => JSON.stringify(rootProps.modelValue);
 
+  // Wire beforeQueued hook to capture seed before control_after_generate randomizes it
+  requestAnimationFrame(() => {
+    const seedWidget = node.widgets?.find(w => w.name === 'seed');
+    if (seedWidget) {
+      const origBeforeQueued = seedWidget.beforeQueued;
+      seedWidget.beforeQueued = () => {
+        origBeforeQueued?.call(seedWidget);
+        lastSeed.value = Number(seedWidget.value);
+      };
+    }
+  });
+
   widget.computeSize = (width: number): [number, number] => {
     if (!mounted || container.scrollHeight <= 0) return [width, PIPELINE_MIN_HEIGHT];
     return [width, Math.max(PIPELINE_MIN_HEIGHT, container.scrollHeight + 10)];
@@ -246,7 +243,6 @@ export function pipelineConfigWidgetFactory(
   requestAnimationFrame(() => {
     mountVue();
     refreshConflicts();
-    refreshSeeds();
   });
 
   return { widget };
