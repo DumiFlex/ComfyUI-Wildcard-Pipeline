@@ -36,9 +36,9 @@ async def preview_handler(request: web.Request) -> web.Response:
 
     resolved_modules = resolve_sources(modules)
 
-    random.seed(seed)
+    rng = random.Random(seed)
     engine = PipelineEngine()
-    ctx = engine.run(resolved_modules, {})
+    ctx = engine.run(resolved_modules, {}, rng=rng)
 
     variables = {k: v for k, v in ctx.items() if not k.startswith("__")}
 
