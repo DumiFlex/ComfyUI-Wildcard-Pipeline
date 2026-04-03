@@ -22,6 +22,7 @@ function extractPipelineVars(node: ComfyNode, variables: string[]): void {
   try {
     const modules: PipelineModule[] = JSON.parse(String(configWidget.value));
     for (const mod of modules) {
+      if ("enabled" in mod && mod.enabled === false) continue;
       if ("capture_as" in mod && mod.capture_as) {
         addUnique(variables, mod.capture_as.replace(/^\$/, ""));
       }
@@ -229,6 +230,42 @@ export function collectDownstreamVariables(node: ComfyNode): string[] {
   return variables;
 }
 
+/**
+ * Collect all pipeline modules from upstream WP_WildcardPipeline nodes
+ * in execution order (topmost ancestor first).  ContextInject nodes are
+ * skipped because their values come from wires unavailable at preview time.
+ */
+export function collectUpstreamModules(node: ComfyNode): PipelineModule[] {
+  const chain: PipelineModule[][] = [];
+  const visited = new Set<number>();
+
+  function walk(current: ComfyNode) {
+    if (visited.has(current.id)) return;
+    visited.add(current.id);
+
+    // Recurse deeper first so ancestors appear earlier in the output
+    const upstream = getUpstreamByInputName(current, "pipeline_context");
+    if (upstream) walk(upstream);
+
+    if (current.comfyClass === PIPELINE_NODE_CLASS) {
+      const configWidget = current.widgets?.find((w) => w.name === "module_config");
+      if (configWidget?.value) {
+        try {
+          const modules: PipelineModule[] = JSON.parse(String(configWidget.value));
+          chain.push(modules);
+        } catch {
+          /* malformed JSON */
+        }
+      }
+    }
+  }
+
+  const upstream = getUpstreamByInputName(node, "pipeline_context");
+  if (upstream) walk(upstream);
+
+  return chain.flat();
+}
+
 export function collectUpstreamContext(node: ComfyNode): UpstreamContext {
   const variables: string[] = [];
   const constraintTargets: string[] = [];
@@ -244,6 +281,7 @@ export function collectUpstreamContext(node: ComfyNode): UpstreamContext {
         try {
           const modules: PipelineModule[] = JSON.parse(String(configWidget.value));
           for (const mod of modules) {
+            if ("enabled" in mod && mod.enabled === false) continue;
             if ("capture_as" in mod && mod.capture_as) {
               addUnique(variables, mod.capture_as.replace(/^\$/, ""));
             }

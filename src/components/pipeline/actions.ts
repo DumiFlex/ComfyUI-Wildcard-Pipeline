@@ -52,7 +52,7 @@ export function duplicateModule(modules: PipelineModule[], index: number): Pipel
     return [...modules];
   }
 
-  const clone = structuredClone(modules[index]);
+  const clone = JSON.parse(JSON.stringify(modules[index])) as PipelineModule;
   delete (clone as { __dismissed_conflicts?: unknown }).__dismissed_conflicts;
 
   const nextModules = [...modules];

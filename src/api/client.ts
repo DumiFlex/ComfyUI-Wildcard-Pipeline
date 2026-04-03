@@ -74,3 +74,16 @@ export const pipelineApi = {
   categories: () => api.get<string[]>('/pipelines/categories').then(r => r.data),
   tags: () => api.get<string[]>('/pipelines/tags').then(r => r.data)
 }
+
+export interface PreviewRequest {
+  modules: PipelineModule[]
+  seed: number
+}
+
+export interface PreviewResponse {
+  variables: Record<string, string>
+}
+
+export const previewApi = {
+  run: (data: PreviewRequest) => api.post<PreviewResponse>('/preview', data).then(r => r.data),
+}

@@ -4,10 +4,11 @@ import type { ComfyNode, ComfyWidget, DOMWidgetOptions } from "#comfyui/app";
 import PipelineWidget from "@/components/pipeline/PipelineWidget.vue";
 import AssemblerPreview from "@/components/assembler/AssemblerPreview.vue";
 import InjectWidget from "@/components/inject/InjectWidget.vue";
-import { collectUpstreamVariables, collectUpstreamContext, collectDownstreamVariables, findDownstreamAssemblers, findDownstreamPipelineNodes, findUpstreamPipelineNodes } from "./graph";
+import { collectUpstreamVariables, collectUpstreamContext, collectUpstreamModules, collectDownstreamVariables, findDownstreamAssemblers, findDownstreamPipelineNodes, findUpstreamPipelineNodes } from "./graph";
 import { analyzePipelineConflicts, analyzeInjectConflicts, resolveConstrainSources } from "./conflicts";
 import type { Conflict } from "./conflicts";
 import type { PipelineModule } from "@/types";
+import { previewApi } from "@/api/client";
 
 // Shared Pinia instance for all standalone widget apps — one fetch serves all nodes
 const widgetPinia = createPinia();
@@ -388,10 +389,12 @@ export function mountAssemblerPreview(
   const rootProps = reactive<{
     upstreamVariables: string[];
     template: string;
+    resolvedValues: Record<string, string>;
     onAppendVariable: (varName: string) => void;
   }>({
     upstreamVariables: [],
     template: String(templateWidget?.value ?? ""),
+    resolvedValues: {},
     onAppendVariable: (varName: string) => {
       if (!templateWidget) return;
       const current = String(templateWidget.value ?? "");
@@ -406,13 +409,12 @@ export function mountAssemblerPreview(
 
   const mountVue = () => {
     if (vueApp) return;
-    // Render function wrapper — Vue tracks reactive property access inside render,
-    // so mutating rootProps triggers component re-render.
     vueApp = createApp({
       render: () =>
         h(AssemblerPreview, {
           upstreamVariables: rootProps.upstreamVariables,
           template: rootProps.template,
+          resolvedValues: rootProps.resolvedValues,
           onAppendVariable: rootProps.onAppendVariable,
         }),
     });
@@ -445,10 +447,27 @@ export function mountAssemblerPreview(
 
   domWidget.onRemove = unmountVue;
 
+  const PREVIEW_SEED = 42;
+
   const refresh = () => {
     requestAnimationFrame(() => {
       rootProps.upstreamVariables = collectUpstreamVariables(node);
       rootProps.template = String(templateWidget?.value ?? "");
+
+      const modules = collectUpstreamModules(node);
+      if (modules.length > 0) {
+        previewApi.run({ modules, seed: PREVIEW_SEED })
+          .then((result) => {
+            rootProps.resolvedValues = result.variables;
+            node.graph?.setDirtyCanvas(true, true);
+          })
+          .catch(() => {
+            rootProps.resolvedValues = {};
+          });
+      } else {
+        rootProps.resolvedValues = {};
+      }
+
       node.graph?.setDirtyCanvas(true, true);
     });
   };

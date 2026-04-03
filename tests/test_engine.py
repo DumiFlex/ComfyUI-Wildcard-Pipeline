@@ -462,6 +462,67 @@ class TestApplyConstraints:
         assert len(result_no_match) == 2
 
 
+class TestPipelineEngineEnabled:
+    def test_disabled_module_is_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "a", "capture_as": "$x", "enabled": False},
+            {"type": "fixed", "value": "b", "capture_as": "$y"},
+        ]
+        ctx = engine.run(modules, {})
+        assert "x" not in ctx
+        assert ctx["y"] == "b"
+
+    def test_enabled_true_module_runs(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "a", "capture_as": "$x", "enabled": True},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["x"] == "a"
+
+    def test_enabled_absent_module_runs(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "a", "capture_as": "$x"},
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["x"] == "a"
+
+    def test_disabled_wildcard_skipped(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [{"value": "sun", "weight": 1}],
+                "capture_as": "$weather",
+                "enabled": False,
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "weather" not in ctx
+
+    def test_disabled_constrain_not_registered(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "constrain",
+                "enabled": False,
+                "rules": [
+                    {
+                        "target": "weather",
+                        "when_variable": "lighting",
+                        "when_value": "moonlight",
+                        "rule_type": "exclusion",
+                        "values": ["sunny"],
+                    }
+                ],
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert "__constraints__" not in ctx
+
+
 class TestPipelineEngineConstrain:
     def test_constrain_registers_rules_and_wildcard_applies_them(self):
         engine = PipelineEngine()

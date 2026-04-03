@@ -122,6 +122,9 @@ class PipelineEngine:
         for i, module in enumerate(modules):
             module_type = module.get("type", "")
 
+            if module.get("enabled") is False:
+                continue
+
             if not self._validate_module(module, i):
                 continue
 

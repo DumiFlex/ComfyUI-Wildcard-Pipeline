@@ -50,8 +50,12 @@ watch(() => props.modelValue, (v) => {
   localTemplate.value = v || '';
 });
 
+const ESCAPE_PLACEHOLDER = "\uFFFD\uFFFD";
+const ESCAPE_RE = /\uFFFD\uFFFD/g;
+
 const variables = computed(() => {
-  const matches = localTemplate.value.match(/\$(\w+)/g);
+  const sanitized = localTemplate.value.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
+  const matches = sanitized.match(/\$(\w+)/g);
   if (!matches) return [];
   const unique = new Set(
     matches.map(m => m.slice(1)).filter(v => !v.startsWith('__'))
@@ -63,10 +67,12 @@ const previewHtml = computed(() => {
   if (!localTemplate.value) {
     return '<span class="wp-preview-empty">Enter a template above...</span>';
   }
-  return localTemplate.value.replace(/\$(\w+)/g, (_match, name) => {
+  const escaped = localTemplate.value.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
+  const highlighted = escaped.replace(/\$(\w+)/g, (_match, name) => {
     if (name.startsWith('__')) return _match;
     return `<span class="wp-var-token">$${name}</span>`;
   });
+  return highlighted.replace(ESCAPE_RE, "$");
 });
 
 const emitUpdate = () => {

@@ -411,3 +411,129 @@ class TestValidation:
         app, _ = _make_constraint_app(tmp_path)
         async with TestClient(TestServer(app)) as client:
             yield client
+
+
+# -- Preview route tests ------------------------------------------------------
+
+from api.routes.preview import create_preview_routes
+
+
+def _make_preview_app() -> web.Application:
+    app = web.Application()
+    app.router.add_routes(create_preview_routes())
+    return app
+
+
+@pytest.mark.asyncio
+class TestPreviewRoute:
+    @pytest_asyncio.fixture
+    async def client(self):
+        app = _make_preview_app()
+        async with TestClient(TestServer(app)) as client:
+            yield client
+
+    async def test_fixed_module(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={
+                "modules": [
+                    {"type": "fixed", "value": "hello", "capture_as": "greeting"}
+                ],
+                "seed": 42,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["variables"]["greeting"] == "hello"
+
+    async def test_wildcard_module_deterministic(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={
+                "modules": [
+                    {
+                        "type": "wildcard",
+                        "capture_as": "color",
+                        "options": [
+                            {"value": "red", "weight": 1},
+                            {"value": "blue", "weight": 1},
+                            {"value": "green", "weight": 1},
+                        ],
+                    }
+                ],
+                "seed": 42,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["variables"]["color"] in ("red", "blue", "green")
+
+        resp2 = await client.post(
+            "/wp/api/preview",
+            json={
+                "modules": [
+                    {
+                        "type": "wildcard",
+                        "capture_as": "color",
+                        "options": [
+                            {"value": "red", "weight": 1},
+                            {"value": "blue", "weight": 1},
+                            {"value": "green", "weight": 1},
+                        ],
+                    }
+                ],
+                "seed": 42,
+            },
+        )
+        data2 = await resp2.json()
+        assert data["variables"]["color"] == data2["variables"]["color"]
+
+    async def test_internal_keys_stripped(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={
+                "modules": [
+                    {"type": "fixed", "value": "v", "capture_as": "x"},
+                    {
+                        "type": "constrain",
+                        "rules": [
+                            {
+                                "when_variable": "x",
+                                "when_value": "v",
+                                "rule_type": "exclusion",
+                                "values": [],
+                                "target": "y",
+                            }
+                        ],
+                    },
+                ],
+                "seed": 42,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        assert "__constraints__" not in data["variables"]
+
+    async def test_empty_modules(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={"modules": [], "seed": 42},
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["variables"] == {}
+
+    async def test_invalid_json(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            data=b"not json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status == 400
+
+    async def test_invalid_modules_type(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={"modules": "not a list", "seed": 42},
+        )
+        assert resp.status == 400

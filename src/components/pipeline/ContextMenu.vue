@@ -5,7 +5,7 @@
       ref="menuEl"
       class="wp-context-menu"
       :style="{ left: adjustedX + 'px', top: adjustedY + 'px' }"
-      @mousedown.stop
+      @pointerdown.stop
     >
       <template v-for="(item, i) in items" :key="i">
         <hr v-if="item.separator" class="wp-context-sep" />
@@ -58,7 +58,7 @@ function onItemClick(item: ContextMenuItem) {
   emit('close')
 }
 
-function onDocMouseDown(e: MouseEvent) {
+function onDocPointerDown(e: PointerEvent) {
   if (menuEl.value && !menuEl.value.contains(e.target as Node)) {
     emit('close')
   }
@@ -78,7 +78,7 @@ watch(
     if (val) {
       adjustedX.value = props.x
       adjustedY.value = props.y
-      document.addEventListener('mousedown', onDocMouseDown)
+      window.addEventListener('pointerdown', onDocPointerDown, true)
       document.addEventListener('scroll', onDocScroll, true)
       document.addEventListener('keydown', onKeyDown)
       await nextTick()
@@ -92,7 +92,7 @@ watch(
         }
       }
     } else {
-      document.removeEventListener('mousedown', onDocMouseDown)
+      window.removeEventListener('pointerdown', onDocPointerDown, true)
       document.removeEventListener('scroll', onDocScroll, true)
       document.removeEventListener('keydown', onKeyDown)
     }
@@ -100,7 +100,7 @@ watch(
 )
 
 onUnmounted(() => {
-  document.removeEventListener('mousedown', onDocMouseDown)
+  window.removeEventListener('pointerdown', onDocPointerDown, true)
   document.removeEventListener('scroll', onDocScroll, true)
   document.removeEventListener('keydown', onKeyDown)
 })

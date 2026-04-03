@@ -22,7 +22,9 @@
     </div>
 
     <div v-if="template" class="wp-asm-section">
-      <label class="wp-asm-label">PREVIEW</label>
+      <label class="wp-asm-label">
+        PREVIEW<span v-if="hasResolved" class="wp-asm-seed"> · seed 42</span>
+      </label>
       <div class="wp-asm-rendered" v-html="previewHtml"></div>
     </div>
 
@@ -43,14 +45,19 @@ import { computed } from "vue";
 const props = defineProps<{
   upstreamVariables: string[];
   template: string;
+  resolvedValues?: Record<string, string>;
 }>();
 
 defineEmits<{
   (e: "appendVariable", varName: string): void;
 }>();
 
+const ESCAPE_PLACEHOLDER = "\uFFFD\uFFFD";
+const ESCAPE_RE = /\uFFFD\uFFFD/g;
+
 const templateVars = computed(() => {
-  const matches = props.template.match(/\$(\w+)/g);
+  const sanitized = props.template.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
+  const matches = sanitized.match(/\$(\w+)/g);
   if (!matches) return [];
   return [...new Set(matches.map((m) => m.slice(1)).filter((v) => !v.startsWith("__")))];
 });
@@ -61,12 +68,22 @@ const missingVars = computed(() =>
   templateVars.value.filter((v) => !props.upstreamVariables.includes(v)),
 );
 
+const hasResolved = computed(() =>
+  props.resolvedValues != null && Object.keys(props.resolvedValues).length > 0,
+);
+
 const previewHtml = computed(() => {
-  return props.template.replace(/\$(\w+)/g, (_match, name: string) => {
+  const escaped = props.template.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
+  const resolved = props.resolvedValues ?? {};
+  const highlighted = escaped.replace(/\$(\w+)/g, (_match, name: string) => {
     if (name.startsWith("__")) return _match;
+    if (name in resolved) {
+      return `<span class="wp-tok-resolved">${resolved[name]}</span>`;
+    }
     const cls = props.upstreamVariables.includes(name) ? "wp-tok-ok" : "wp-tok-miss";
     return `<span class="${cls}">$${name}</span>`;
   });
+  return highlighted.replace(ESCAPE_RE, "$");
 });
 </script>
 
@@ -104,6 +121,11 @@ const previewHtml = computed(() => {
   letter-spacing: 0.08em;
   margin-bottom: 6px;
   display: block;
+}
+
+.wp-asm-seed {
+  color: var(--wp-text3);
+  opacity: 0.6;
 }
 
 .wp-asm-label-warn {
@@ -192,5 +214,13 @@ const previewHtml = computed(() => {
   padding: 1px 3px;
   border-radius: 3px;
   text-decoration: underline wavy;
+}
+
+.wp-tok-resolved {
+  color: var(--wp-accent, #4e94ce);
+  background: var(--wp-accent-glow, rgba(78, 148, 206, 0.12));
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
 }
 </style>
