@@ -2,11 +2,14 @@
 name = "comfyui-wildcard-pipeline"
 version = "0.1.0"
 description = "Weighted wildcards, chained pipelines, and context passing for ComfyUI prompt generation"
-license = "MIT"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 
 [project.urls]
 Repository = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline"
+Documentation = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki"
+"Bug Tracker" = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues"
+
 
 [tool.comfy]
 PublisherId = "dumiflex"
