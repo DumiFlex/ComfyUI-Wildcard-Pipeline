@@ -228,6 +228,8 @@ class PipelineEngine:
         value = chosen.get("value", "")
 
         ctx[capture_as_normalized] = value
+        if module.get("internal"):
+            ctx.setdefault("__wp_internal_vars__", []).append(capture_as_normalized)
         ctx.setdefault("__wp_module_seeds__", {})[capture_as_normalized] = module_seed
 
         return ctx
@@ -244,6 +246,8 @@ class PipelineEngine:
 
         capture_as = _normalize_capture(capture_as)
         ctx[capture_as] = value
+        if module.get("internal"):
+            ctx.setdefault("__wp_internal_vars__", []).append(capture_as)
 
         return ctx
 
@@ -259,6 +263,8 @@ class PipelineEngine:
         if capture_as:
             capture_as = _normalize_capture(capture_as)
             ctx[capture_as] = result
+            if module.get("internal"):
+                ctx.setdefault("__wp_internal_vars__", []).append(capture_as)
 
         return ctx
 
@@ -317,7 +323,11 @@ class PipelineEngine:
 
         if condition_met:
             ctx[capture_as] = value
+            if module.get("internal"):
+                ctx.setdefault("__wp_internal_vars__", []).append(capture_as)
         elif fallback:
             ctx[capture_as] = fallback
+            if module.get("internal"):
+                ctx.setdefault("__wp_internal_vars__", []).append(capture_as)
 
         return ctx

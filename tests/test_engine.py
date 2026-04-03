@@ -57,6 +57,123 @@ class TestPipelineEngineCombine:
         assert ctx["sum"] == "1 + 2"
 
 
+class TestPipelineEngineInternal:
+    def test_internal_var_recorded_in_context(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [{"value": "forest", "weight": 1}],
+                "capture_as": "$location",
+                "internal": True,
+            },
+        ]
+        ctx = engine.run(modules, {}, rng=random.Random(42))
+        assert ctx["location"] == "forest"
+        assert "location" in ctx["__wp_internal_vars__"]
+
+    def test_non_internal_var_not_recorded(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [{"value": "forest", "weight": 1}],
+                "capture_as": "$location",
+            },
+        ]
+        ctx = engine.run(modules, {}, rng=random.Random(42))
+        assert ctx["location"] == "forest"
+        assert "__wp_internal_vars__" not in ctx
+
+    def test_internal_wildcard_module(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "wildcard",
+                "options": [{"value": "forest", "weight": 1}],
+                "capture_as": "$location",
+                "internal": True,
+            },
+        ]
+        ctx = engine.run(modules, {}, rng=random.Random(42))
+        assert "location" in ctx["__wp_internal_vars__"]
+
+    def test_internal_fixed_module(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "fixed",
+                "value": "sunny",
+                "capture_as": "$weather",
+                "internal": True,
+            }
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["weather"] == "sunny"
+        assert "weather" in ctx["__wp_internal_vars__"]
+
+    def test_internal_combine_module(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "forest", "capture_as": "$location"},
+            {
+                "type": "combine",
+                "template": "$location scene",
+                "capture_as": "$scene",
+                "internal": True,
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["scene"] == "forest scene"
+        assert "scene" in ctx["__wp_internal_vars__"]
+
+    def test_internal_condition_module(self):
+        engine = PipelineEngine()
+        modules = [
+            {"type": "fixed", "value": "night", "capture_as": "$time"},
+            {
+                "type": "condition",
+                "variable": "$time",
+                "if_equals": "night",
+                "value": "dark",
+                "capture_as": "$mood",
+                "internal": True,
+            },
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["mood"] == "dark"
+        assert "mood" in ctx["__wp_internal_vars__"]
+
+    def test_internal_var_value_still_in_context(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "fixed",
+                "value": "sunny",
+                "capture_as": "$weather",
+                "internal": True,
+            }
+        ]
+        ctx = engine.run(modules, {})
+        assert ctx["weather"] == "sunny"
+        assert ctx["__wp_internal_vars__"] == ["weather"]
+
+    def test_disabled_internal_module_not_recorded(self):
+        engine = PipelineEngine()
+        modules = [
+            {
+                "type": "fixed",
+                "value": "sunny",
+                "capture_as": "$weather",
+                "internal": True,
+                "enabled": False,
+            }
+        ]
+        ctx = engine.run(modules, {})
+        assert "weather" not in ctx
+        assert "__wp_internal_vars__" not in ctx
+
+
 class TestPipelineEngineWildcard:
     """Test the wildcard module handler with weighted sampling."""
 
