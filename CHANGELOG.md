@@ -1,3 +1,10 @@
+## [0.1.1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v0.1.0...v0.1.1) (2026-04-03)
+
+
+### Bug Fixes
+
+* **ci:** use skip_checkout in publish workflow so built js/ is included ([52142fb](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/52142fbeb57730a4367f15c51814386b54fa5569))
+
 # [0.1.0](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v0.0.0...v0.1.0) (2026-04-03)
 
 
