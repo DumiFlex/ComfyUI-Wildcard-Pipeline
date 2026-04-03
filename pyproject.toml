@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-wildcard-pipeline"
-version = "0.0.0"
+version = "0.1.0"
 description = "Weighted wildcards, chained pipelines, and context passing for ComfyUI prompt generation"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
