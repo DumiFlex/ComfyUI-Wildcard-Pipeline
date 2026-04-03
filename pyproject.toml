@@ -15,7 +15,7 @@ Documentation = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki"
 PublisherId = "dumiflex"
 DisplayName = "Wildcard Pipeline"
 Icon = ""
-includes = ['js', 'web_dist']
+includes = ['js']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
