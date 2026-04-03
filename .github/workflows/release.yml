@@ -12,8 +12,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -23,13 +25,31 @@ jobs:
           version: 10
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 'lts/*'
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm run build
+
+      - name: Create distributable zip
+        run: |
+          zip -r ComfyUI-Wildcard-Pipeline.zip \
+            __init__.py \
+            api/ \
+            data/ \
+            engine/ \
+            nodes/ \
+            js/ \
+            web_dist/ \
+            pyproject.toml \
+            requirements.txt \
+            README.md \
+            LICENSE
 
       - name: Release
         run: npx semantic-release
