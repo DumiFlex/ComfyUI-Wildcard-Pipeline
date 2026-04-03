@@ -12,6 +12,7 @@
         :class="{
           dragging: draggedIndex === index,
           'drag-over': dragOverIndex === index,
+          'cross-drag-over': dragOverIndex === index && dragStore.isDragging && dragStore.sourceNodeId !== props.nodeId,
           'wp-conflict-error': hasConflict(index, 'error'),
           'wp-conflict-warning': hasConflict(index, 'warning'),
           'wp-disabled': mod.enabled === false,
@@ -147,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ConstrainModule, DismissableConflictType, PipelineModule, WildcardModule } from '@/types';
 import { DISMISSABLE_CONFLICT_TYPES } from '@/types';
 import ModulePickerModal from './ModulePickerModal.vue';
@@ -160,12 +161,15 @@ import {
   moveModuleToTop,
   moveModuleToBottom,
   duplicateModule,
+  insertModuleAt,
 } from './actions';
 import { useConstraintStore } from '@/stores/constraints';
+import { useDragStore } from '@/stores/drag';
 import type { Conflict, ConflictSeverity } from '@/extension/conflicts';
 
 const props = withDefaults(
   defineProps<{
+    nodeId: number;
     modelValue: PipelineModule[];
     conflicts?: Conflict[];
     lastSeed?: number | null;
@@ -181,6 +185,7 @@ const showPicker = ref(false);
 const draggedIndex = ref<number | null>(null);
 const dragOverIndex = ref<number | null>(null);
 const constraintStore = useConstraintStore();
+const dragStore = useDragStore();
 
 const contextMenu = ref<{
   visible: boolean;
@@ -196,10 +201,19 @@ const contextMenu = ref<{
   items: [],
 });
 
+const onWindowBlur = () => {
+  if (dragStore.isDragging) dragStore.cancelDrag();
+};
+
 onMounted(() => {
   if (constraintStore.items.length === 0) {
     void constraintStore.fetchAll();
   }
+  window.addEventListener('blur', onWindowBlur);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('blur', onWindowBlur);
 });
 
 watch(() => props.modelValue, (newVal) => {
@@ -409,10 +423,23 @@ function onDragStart(event: DragEvent, index: number) {
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move';
   }
+  const sourceModule = localModules.value[index];
+  if (sourceModule) {
+    const cloned = JSON.parse(JSON.stringify(sourceModule)) as PipelineModule;
+    delete (cloned as unknown as Record<string, unknown>).__dismissed_conflicts;
+    dragStore.startDrag(props.nodeId, index, cloned, () => {
+      if (localModules.value[index] === sourceModule) {
+        localModules.value.splice(index, 1);
+        emitUpdate();
+      }
+    });
+  }
 }
 
 function onDragEnter(index: number) {
   if (draggedIndex.value !== null && draggedIndex.value !== index) {
+    dragOverIndex.value = index;
+  } else if (dragStore.isDragging && dragStore.sourceNodeId !== props.nodeId) {
     dragOverIndex.value = index;
   }
 }
@@ -431,6 +458,13 @@ function onDragOver(_event: DragEvent) {
 }
 
 function onDrop(_event: DragEvent, index: number) {
+  if (dragStore.isDragging && dragStore.sourceNodeId !== props.nodeId && dragStore.module) {
+    localModules.value = insertModuleAt(localModules.value, dragStore.module, index);
+    emitUpdate();
+    dragStore.completeDrop();
+    dragOverIndex.value = null;
+    return;
+  }
   if (draggedIndex.value === null || draggedIndex.value === index) return;
 
   localModules.value = moveModule(localModules.value, draggedIndex.value, index);
@@ -440,11 +474,19 @@ function onDrop(_event: DragEvent, index: number) {
 }
 
 function onDropList(_event: DragEvent) {
+  if (dragStore.isDragging && dragStore.sourceNodeId !== props.nodeId && dragStore.module) {
+    localModules.value = insertModuleAt(localModules.value, dragStore.module, localModules.value.length);
+    emitUpdate();
+    dragStore.completeDrop();
+    dragOverIndex.value = null;
+    return;
+  }
   draggedIndex.value = null;
   dragOverIndex.value = null;
 }
 
 function onDragEnd() {
+  if (dragStore.isDragging) dragStore.cancelDrag();
   draggedIndex.value = null;
   dragOverIndex.value = null;
 }
@@ -556,6 +598,12 @@ function getConflictTooltip(index: number): string {
 .wp-module.drag-over {
   border-color: var(--wp-accent);
   background: var(--wp-accent-glow);
+}
+
+.wp-module.cross-drag-over {
+  border-color: var(--wp-teal);
+  background: var(--wp-teal-bg);
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.3);
 }
 
 .wp-module-drag {

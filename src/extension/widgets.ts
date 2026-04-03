@@ -175,6 +175,7 @@ export function pipelineConfigWidgetFactory(
     vueApp = createApp({
       render: () =>
         h(PipelineWidget, {
+          nodeId: node.id,
           modelValue: rootProps.modelValue,
           conflicts: rootProps.conflicts,
           lastSeed: lastSeed.value,

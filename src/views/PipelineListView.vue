@@ -173,7 +173,7 @@ const deletePipeline = async () => {
           <h3 class="section-title">Modules</h3>
         </div>
         <div class="module-editor-wrapper">
-          <PipelineWidget v-model="currentPipeline.modules" />
+          <PipelineWidget :nodeId="0" v-model="currentPipeline.modules" />
         </div>
       </div>
 
