@@ -216,8 +216,8 @@ export function pipelineConfigWidgetFactory(
     if (seedWidget) {
       const origBeforeQueued = seedWidget.beforeQueued;
       seedWidget.beforeQueued = () => {
-        origBeforeQueued?.call(seedWidget);
         lastSeed.value = Number(seedWidget.value);
+        origBeforeQueued?.call(seedWidget);
       };
     }
   });
