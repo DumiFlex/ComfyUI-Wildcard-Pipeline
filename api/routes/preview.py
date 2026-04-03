@@ -40,9 +40,14 @@ async def preview_handler(request: web.Request) -> web.Response:
     engine = PipelineEngine()
     ctx = engine.run(resolved_modules, {}, rng=rng)
 
-    variables = {k: v for k, v in ctx.items() if not k.startswith("__")}
-
-    return web.json_response({"variables": variables})
+    module_seeds = ctx.get("__wp_module_seeds__", {})
+    internal_vars = ctx.get("__wp_internal_vars__", [])
+    variables = {
+        k: v
+        for k, v in ctx.items()
+        if not k.startswith("__") and k not in internal_vars
+    }
+    return web.json_response({"variables": variables, "module_seeds": module_seeds})
 
 
 def create_preview_routes() -> web.RouteTableDef:

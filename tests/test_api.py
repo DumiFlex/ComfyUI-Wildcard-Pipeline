@@ -537,3 +537,95 @@ class TestPreviewRoute:
             json={"modules": "not a list", "seed": 42},
         )
         assert resp.status == 400
+
+    async def test_preview_returns_module_seeds(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={
+                "modules": [
+                    {
+                        "type": "wildcard",
+                        "capture_as": "color",
+                        "options": [
+                            {"value": "red", "weight": 1},
+                            {"value": "blue", "weight": 1},
+                        ],
+                    }
+                ],
+                "seed": 42,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        assert "module_seeds" in data
+        assert isinstance(data["module_seeds"], dict)
+        assert "color" in data["module_seeds"]
+
+    async def test_preview_module_seeds_deterministic(self, client):
+        payload = {
+            "modules": [
+                {
+                    "type": "wildcard",
+                    "capture_as": "color",
+                    "options": [
+                        {"value": "red", "weight": 1},
+                        {"value": "blue", "weight": 1},
+                    ],
+                }
+            ],
+            "seed": 99,
+        }
+        resp1 = await client.post("/wp/api/preview", json=payload)
+        resp2 = await client.post("/wp/api/preview", json=payload)
+        data1 = await resp1.json()
+        data2 = await resp2.json()
+        assert data1["module_seeds"]["color"] == data2["module_seeds"]["color"]
+
+    async def test_preview_filters_internal_vars(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={
+                "modules": [
+                    {
+                        "type": "wildcard",
+                        "capture_as": "hidden",
+                        "internal": True,
+                        "options": [
+                            {"value": "secret", "weight": 1},
+                        ],
+                    }
+                ],
+                "seed": 42,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        assert "hidden" not in data["variables"]
+        assert "hidden" in data["module_seeds"]
+
+    async def test_preview_internal_var_not_in_response_variables(self, client):
+        resp = await client.post(
+            "/wp/api/preview",
+            json={
+                "modules": [
+                    {
+                        "type": "wildcard",
+                        "capture_as": "secret_var",
+                        "internal": True,
+                        "options": [{"value": "hidden_value", "weight": 1}],
+                    },
+                    {
+                        "type": "fixed",
+                        "value": "visible_value",
+                        "capture_as": "public_var",
+                    },
+                ],
+                "seed": 42,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        variables = data["variables"]
+        assert "secret_var" not in variables
+        assert "public_var" in variables
+        assert variables["public_var"] == "visible_value"
