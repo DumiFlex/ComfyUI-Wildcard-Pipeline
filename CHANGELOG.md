@@ -1,3 +1,10 @@
+## [0.1.2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v0.1.1...v0.1.2) (2026-04-03)
+
+
+### Bug Fixes
+
+* **ci:** use publish-node-action@main to support skip_checkout ([a61a9b1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a61a9b111934a15df1e4a4d35cd9b5d416d0c51c))
+
 ## [0.1.1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v0.1.0...v0.1.1) (2026-04-03)
 
 
