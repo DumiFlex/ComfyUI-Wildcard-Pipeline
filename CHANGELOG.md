@@ -1,3 +1,17 @@
+# [0.2.0](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v0.1.2...v0.2.0) (2026-04-04)
+
+
+### Bug Fixes
+
+* **drag:** clear local drag indices on window blur ([c633908](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c633908a2f4e069383d7e4e3d7370b998bff3ed6))
+
+
+### Features
+
+* **drag:** add cross-widget drag Pinia store with tests ([ffe57fe](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ffe57fe9e07130fc0c0679764fccfdc6efe4979d))
+* **drag:** add insertModuleAt/removeModuleAt helpers with tests ([be87980](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/be87980547f84e8e61c093f4204bb9f3b7afb193))
+* **drag:** wire nodeId prop and implement cross-widget drag-and-drop ([a5280da](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a5280dac1690e40cf99912187e419537a81976c5))
+
 ## [0.1.2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v0.1.1...v0.1.2) (2026-04-03)
 
 
