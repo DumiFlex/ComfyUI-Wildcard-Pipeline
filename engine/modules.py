@@ -5,10 +5,8 @@ discriminated union ``Module`` widens as new types land (wildcard, combine,
 constraint, derivation — follow-up specs).
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 
 @dataclass
@@ -42,7 +40,7 @@ class FixedValueModule:
 
 # Discriminated union of all module types. Currently a single member; widens
 # as new module types (wildcard, combine, constraint, derivation) land.
-Module = FixedValueModule
+Module: TypeAlias = FixedValueModule
 
 
 def module_to_dict(module: Module) -> dict[str, Any]:
