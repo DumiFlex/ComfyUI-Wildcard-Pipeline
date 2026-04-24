@@ -1,0 +1,12 @@
+# Normalize line endings across platforms
+* text=auto eol=lf
+
+# Shell scripts and husky hooks MUST use LF (sh doesn't parse CRLF on Linux)
+*.sh         text eol=lf
+.husky/*     text eol=lf
+
+# Binary files — never touch
+*.png        binary
+*.jpg        binary
+*.ico        binary
+*.woff2      binary
