@@ -11,10 +11,9 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "#comfyui/app": ["src/typings/comfyui.d.ts"]
+      "@/*": ["./src/*"],
+      "#comfyui/app": ["./src/typings/comfyui.d.ts"]
     },
     "types": ["vite/client", "vitest/globals"]
   },
