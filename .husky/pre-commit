@@ -1,0 +1,12 @@
+# Lint + typecheck + frontend tests
+pnpm lint || exit 1
+pnpm typecheck || exit 1
+pnpm test || exit 1
+
+# Python checks — only if ruff/pytest reachable on PATH
+if command -v ruff >/dev/null 2>&1; then
+  ruff check . || exit 1
+fi
+if command -v pytest >/dev/null 2>&1; then
+  pytest -q || exit 1
+fi
