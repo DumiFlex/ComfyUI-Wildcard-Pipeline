@@ -5,6 +5,7 @@ Also collects-ignores ComfyUI-dependent directories when comfy_api is absent.
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -14,8 +15,7 @@ if str(ROOT) not in sys.path:
 
 collect_ignore: list[str] = []
 
-try:
-    import comfy_api  # noqa: F401
-except ImportError:
-    # Tests for node wrappers require comfy_api; skip them when unavailable.
+# Tests for node wrappers require comfy_api; skip them when it's unavailable
+# (e.g. running pytest outside ComfyUI's Python environment).
+if importlib.util.find_spec("comfy_api") is None:
     collect_ignore.append("tests/test_nodes.py")
