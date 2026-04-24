@@ -1,0 +1,57 @@
+[project]
+name = "comfyui-wildcard-pipeline"
+version = "0.0.0"
+description = "Modular procedural prompt generation for ComfyUI — wildcards, constraints, derivations, and context pipelines."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "DumiFlex" }]
+keywords = ["comfyui", "wildcards", "prompt-generation", "stable-diffusion"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline"
+Repository = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline"
+Issues = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline/issues"
+
+[tool.comfy]
+PublisherId = "dumiflex"
+DisplayName = "Wildcard Pipeline"
+Icon = ""
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["js", "web_dist", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = []
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra -q"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
