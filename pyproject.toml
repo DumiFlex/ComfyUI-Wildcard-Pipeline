@@ -50,6 +50,12 @@ extraPaths = ["."]
 include = ["engine", "nodes", "tests", "conftest.py"]
 exclude = ["node_modules", "js", "web_dist", ".venv", "**/__pycache__"]
 
+# Dispatch-pattern handlers (engine.handlers.handle_*) share a uniform
+# signature `(module, ctx, rng) -> Context`; handlers that don't consume
+# randomness still accept rng for parity. Suppress the unused-param warning
+# at the project level instead of decorating every handler.
+reportUnusedParameter = "none"
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
