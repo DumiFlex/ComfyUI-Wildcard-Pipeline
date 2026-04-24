@@ -43,6 +43,13 @@ extend-exclude = ["js", "web_dist", "node_modules"]
 select = ["E", "F", "I", "UP", "B"]
 ignore = []
 
+[tool.pyright]
+# conftest.py prepends the project root to sys.path; mirror that for Pyright
+# so `from engine.template import ...` resolves in tests and editor.
+extraPaths = ["."]
+include = ["engine", "nodes", "tests", "conftest.py"]
+exclude = ["node_modules", "js", "web_dist", ".venv", "**/__pycache__"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
