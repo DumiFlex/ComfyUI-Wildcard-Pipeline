@@ -9,6 +9,11 @@ permissions:
   issues: write
   pull-requests: write
 
+# Opt every JS-based action into the Node 24 runner. Removes deprecation
+# warnings for actions still packaged against Node 20 (e.g. pnpm/action-setup@v4).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   release:
     runs-on: ubuntu-latest
