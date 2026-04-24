@@ -6,8 +6,6 @@ mutated) context. ``rng`` is a ``random.Random`` supplied by the pipeline —
 use it in later specs.
 """
 
-from __future__ import annotations
-
 import logging
 import random
 from collections.abc import Callable
@@ -24,9 +22,13 @@ ModuleHandler: TypeAlias = Callable[[Any, Context, random.Random], Context]
 def handle_fixed_values(
     module: FixedValueModule,
     ctx: Context,
-    rng: random.Random,  # noqa: ARG001
+    _rng: random.Random,
 ) -> Context:
-    """Write each entry's value into ``ctx``. Mutates and returns ``ctx``."""
+    """Write each entry's value into ``ctx``. Mutates and returns ``ctx``.
+
+    ``_rng`` is accepted for signature parity with future seed-consuming
+    handlers (wildcard, derivation); ``fixed_values`` doesn't use randomness.
+    """
     for entry in module.entries:
         name = entry.variable_name.lstrip("$")
         if not name:
