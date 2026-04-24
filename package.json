@@ -1,0 +1,39 @@
+{
+  "name": "comfyui-wildcard-pipeline",
+  "version": "0.0.0-dev",
+  "private": true,
+  "description": "Modular procedural prompt generation for ComfyUI",
+  "author": "DumiFlex",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "vite build --watch --mode extension",
+    "build:extension": "vite build --mode extension",
+    "build:manager": "vite build --mode manager",
+    "build": "pnpm build:extension && pnpm build:manager",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint \"src/**/*.{ts,vue}\"",
+    "size": "node scripts/check-bundle-size.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:py": "pytest",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "vue": "^3.5.12"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "@vitejs/plugin-vue": "^5.1.4",
+    "@vue/tsconfig": "^0.5.1",
+    "eslint": "^9.14.0",
+    "eslint-plugin-vue": "^9.31.0",
+    "husky": "^9.1.6",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4",
+    "vue-tsc": "^2.1.10"
+  }
+}
