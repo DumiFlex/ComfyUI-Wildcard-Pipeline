@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+
+# Node / pnpm
+node_modules/
+pnpm-debug.log
+.pnpm-store/
+
+# Build outputs
+js/
+web_dist/
+coverage/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude / Superpowers workspace artifacts
+.superpowers/
+.claude/worktrees/
+
+# Semantic release
+.releaserc.local.js
