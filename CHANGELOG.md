@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.2.0...v1.3.0) (2026-04-26)
+
+
+### Features
+
+* i18n locales (en) + per-node help pages ([#2](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/issues/2)) ([5216547](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/52165471c0da315db59d2b2fb72537d7b06d62ef))
+
 # [1.2.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.1.0...v1.2.0) (2026-04-26)
 
 
