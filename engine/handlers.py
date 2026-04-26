@@ -31,9 +31,9 @@ def handle_fixed_values(
     ``_rng`` is accepted for signature parity with seed-consuming handlers.
     """
     raw = (
-        dataclasses.asdict(module)
-        if dataclasses.is_dataclass(module)
-        else dict(module)
+        dict(module)
+        if isinstance(module, dict)
+        else dataclasses.asdict(module)
     )
     snapshot = coerce_legacy_module(raw)
     bindings = resolve_module(snapshot, ctx=None)
