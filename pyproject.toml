@@ -69,3 +69,17 @@ asyncio_mode = "auto"
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.coverage.run]
+source = ["engine", "wp_api"]
+omit = [
+    "engine/db/migrations_sql/*",
+    "engine/handlers.py",
+    "engine/template.py",
+    "engine/pipeline.py",
+    "engine/context.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
