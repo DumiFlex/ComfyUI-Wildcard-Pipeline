@@ -28,13 +28,18 @@ const isEdit = computed(() => !!props.id);
 onMounted(async () => {
   await categoryStore.fetchAll();
   if (props.id) {
-    const row = await moduleStore.get(props.id);
-    name.value = row.name;
-    description.value = row.description;
-    categoryId.value = row.category_id;
-    tags.value = row.tags;
-    const payload = row.payload as { values?: NamedValue[] };
-    values.value = payload.values ?? [];
+    try {
+      const row = await moduleStore.get(props.id);
+      name.value = row.name;
+      description.value = row.description;
+      categoryId.value = row.category_id;
+      tags.value = row.tags;
+      const payload = row.payload as { values?: NamedValue[] };
+      values.value = payload.values ?? [];
+    } catch {
+      toast.add({ severity: "error", summary: "Module not found", life: 3000 });
+      router.replace("/modules");
+    }
   }
 });
 

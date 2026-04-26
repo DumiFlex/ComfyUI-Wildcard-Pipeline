@@ -4,11 +4,13 @@ import Button from "primevue/button";
 import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Select from "primevue/select";
+import { useToast } from "primevue/usetoast";
 import { api } from "../api/client";
 import { useModuleStore } from "../stores/moduleStore";
 import type { TestResponse } from "../api/types";
 
 const store = useModuleStore();
+const toast = useToast();
 const moduleId = ref<string | null>(null);
 const samples = ref(50);
 const variableBinding = ref("$x");
@@ -39,6 +41,8 @@ async function run() {
       instance,
       samples: samples.value,
     });
+  } catch (e) {
+    toast.add({ severity: "error", summary: "Test failed", detail: String(e), life: 4000 });
   } finally {
     running.value = false;
   }

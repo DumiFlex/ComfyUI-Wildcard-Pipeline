@@ -27,16 +27,30 @@ const newOptions = [
   { label: "Fixed values", icon: "pi pi-tag", command: () => router.push("/modules/fixed-values/new") },
 ];
 
-onMounted(async () => { await store.fetchAll(); });
+onMounted(async () => {
+  try {
+    await store.fetchAll();
+  } catch (e) {
+    toast.add({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
+  }
+});
 
 watch(search, async (q) => {
   store.filter.q = q || undefined;
-  await store.fetchAll();
+  try {
+    await store.fetchAll();
+  } catch (e) {
+    toast.add({ severity: "error", summary: "Search failed", detail: String(e), life: 4000 });
+  }
 });
 
 async function setTypeFilter(type: ModuleType | undefined) {
   store.filter.type = type;
-  await store.fetchAll();
+  try {
+    await store.fetchAll();
+  } catch (e) {
+    toast.add({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
+  }
 }
 
 function rowClass(row: ModuleRow) {
@@ -49,12 +63,20 @@ function edit(row: ModuleRow) {
 }
 
 async function dup(row: ModuleRow) {
-  await store.duplicate(row.id);
-  toast.add({ severity: "success", summary: "Duplicated", detail: row.name, life: 2000 });
+  try {
+    await store.duplicate(row.id);
+    toast.add({ severity: "success", summary: "Duplicated", detail: row.name, life: 2000 });
+  } catch (e) {
+    toast.add({ severity: "error", summary: "Duplicate failed", detail: String(e), life: 4000 });
+  }
 }
 
 async function fav(row: ModuleRow) {
-  await store.toggleFavorite(row.id);
+  try {
+    await store.toggleFavorite(row.id);
+  } catch (e) {
+    toast.add({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 });
+  }
 }
 
 function del(row: ModuleRow) {
@@ -64,8 +86,12 @@ function del(row: ModuleRow) {
     icon: "pi pi-exclamation-triangle",
     acceptClass: "p-button-danger",
     accept: async () => {
-      await store.remove(row.id);
-      toast.add({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
+      try {
+        await store.remove(row.id);
+        toast.add({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
+      } catch (e) {
+        toast.add({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
+      }
     },
   });
 }
