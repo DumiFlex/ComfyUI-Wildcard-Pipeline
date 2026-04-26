@@ -1,0 +1,164 @@
+"""Repository classes wrapping SQL access to library tables.
+
+Repositories take a ``sqlite3.Connection``. Each public method opens a
+transaction via ``with conn:`` so callers don't need explicit commit
+calls. Rows are returned as plain dicts (sqlite3.Row converted).
+"""
+from __future__ import annotations
+
+import datetime as _dt
+import json
+import re
+import secrets
+import sqlite3
+from typing import Any
+
+_TYPE_PREFIX = {"wildcard": "wc", "fixed_values": "fv"}
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+class ModuleNotFound(LookupError):
+    """Raised when a requested module id does not exist."""
+
+
+def _slug(name: str) -> str:
+    s = _SLUG_RE.sub("_", name.lower()).strip("_")
+    return s[:24] or "module"
+
+
+def _now() -> str:
+    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "type": row["type"],
+        "name": row["name"],
+        "description": row["description"],
+        "category_id": row["category_id"],
+        "tags": json.loads(row["tags"]),
+        "is_favorite": bool(row["is_favorite"]),
+        "payload": json.loads(row["payload"]),
+        "version": row["version"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+class ModuleRepository:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def _gen_id(self, type: str, name: str) -> str:
+        prefix = _TYPE_PREFIX.get(type, "mod")
+        return f"{prefix}_{_slug(name)}_{secrets.token_hex(2)}"
+
+    def create(
+        self,
+        *,
+        type: str,
+        name: str,
+        description: str,
+        category_id: str | None,
+        tags: list[str],
+        payload: dict[str, Any],
+        is_favorite: bool = False,
+    ) -> dict[str, Any]:
+        mid = self._gen_id(type, name)
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO modules("
+                "id, type, name, description, category_id, tags, "
+                "is_favorite, payload, version, created_at, updated_at"
+                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
+                (
+                    mid, type, name, description, category_id,
+                    json.dumps(tags), int(is_favorite),
+                    json.dumps(payload), now, now,
+                ),
+            )
+        return self.get(mid)
+
+    def get(self, module_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM modules WHERE id = ?;", (module_id,),
+        ).fetchone()
+        if row is None:
+            raise ModuleNotFound(module_id)
+        return _row_to_module(row)
+
+    def update(
+        self,
+        module_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        category_id: str | None | object = ...,
+        tags: list[str] | None = None,
+        payload: dict[str, Any] | None = None,
+        is_favorite: bool | None = None,
+    ) -> dict[str, Any]:
+        existing = self.get(module_id)
+        new = {
+            "name": existing["name"] if name is None else name,
+            "description": existing["description"] if description is None else description,
+            "category_id": existing["category_id"] if category_id is ... else category_id,
+            "tags": existing["tags"] if tags is None else tags,
+            "payload": existing["payload"] if payload is None else payload,
+            "is_favorite": existing["is_favorite"] if is_favorite is None else is_favorite,
+        }
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "UPDATE modules SET "
+                "name = ?, description = ?, category_id = ?, tags = ?, "
+                "is_favorite = ?, payload = ?, version = version + 1, "
+                "updated_at = ? "
+                "WHERE id = ?;",
+                (
+                    new["name"], new["description"], new["category_id"],
+                    json.dumps(new["tags"]), int(new["is_favorite"]),
+                    json.dumps(new["payload"]), now, module_id,
+                ),
+            )
+        return self.get(module_id)
+
+    def delete(self, module_id: str) -> None:
+        self.get(module_id)  # raises ModuleNotFound if absent
+        with self._conn:
+            self._conn.execute("DELETE FROM modules WHERE id = ?;", (module_id,))
+
+    def list(
+        self,
+        *,
+        type: str | None = None,
+        category_id: str | None = None,
+        query: str | None = None,
+        favorites_only: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if type is not None:
+            clauses.append("type = ?")
+            params.append(type)
+        if category_id is not None:
+            clauses.append("category_id = ?")
+            params.append(category_id)
+        if query:
+            clauses.append("name LIKE ? COLLATE NOCASE")
+            params.append(f"%{query}%")
+        if favorites_only:
+            clauses.append("is_favorite = 1")
+        sql = "SELECT * FROM modules"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY updated_at DESC, id DESC"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        rows = self._conn.execute(sql, params).fetchall()
+        return [_row_to_module(r) for r in rows]
