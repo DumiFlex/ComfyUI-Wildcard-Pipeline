@@ -1,20 +1,53 @@
-/* Shared theme tokens — keep in sync with src/components/shared/theme.css. */
+/* Theme tokens shared with the extension.
+ * Mirrors src/components/shared/theme.css verbatim — keep them in sync.
+ * Brand palette pinned to public/images/favicon.svg — indigo / violet / teal.
+ */
 :root {
+  /* Backgrounds — match ComfyUI's node interior */
   --wp-bg: #1e1e1e;
-  --wp-bg2: #262626;
-  --wp-bg3: #2e2e2e;
+  --wp-bg2: #232323;
+  --wp-bg3: #2a2a2a;
+  --wp-bg4: #333;
+
+  /* Borders */
   --wp-border: #3a3a3a;
+  --wp-border2: #4a4a4a;
+
+  /* Text — four tiers from primary to ghost. */
   --wp-text: #ddd;
-  --wp-text-dim: #999;
-  --wp-text-faint: #6e6e6e;
+  --wp-text2: #aaa;
+  --wp-text3: #666;
+  --wp-text4: #888;
+
+  /* Brand — logo palette */
   --wp-accent: #6366f1;
+  --wp-accent2: #a970ff;
+  --wp-accent-glow: rgba(99, 102, 241, 0.15);
   --wp-violet: #a970ff;
+  --wp-violet-bg: rgba(169, 112, 255, 0.12);
   --wp-teal: #33d6c6;
+  --wp-teal-bg: rgba(51, 214, 198, 0.12);
+  --wp-brand-gradient: linear-gradient(135deg, #6366f1, #33d6c6);
+
+  /* Semantic */
   --wp-green: #6bc96f;
+  --wp-green-bg: rgba(107, 201, 111, 0.12);
   --wp-amber: #fbbf24;
+  --wp-amber-bg: rgba(251, 191, 36, 0.12);
   --wp-red: #f87171;
+  --wp-red-bg: rgba(248, 113, 113, 0.12);
+
+  /* Module-type colors */
   --wp-rose: #f472b6;
+  --wp-rose-bg: rgba(244, 114, 182, 0.12);
+
+  /* Geometry */
   --wp-radius: 6px;
+  --wp-radius-sm: 4px;
+
+  /* Typography — system fallback only inside the SPA (no webfont bundle yet). */
+  --wp-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --wp-font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 
-html, body { background: var(--wp-bg); color: var(--wp-text); margin: 0; }
+html, body { background: var(--wp-bg); color: var(--wp-text); margin: 0; font-family: var(--wp-font-sans); }
