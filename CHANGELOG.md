@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.1.0...v1.2.0) (2026-04-26)
+
+
+### Features
+
+* polish suite — MVP frontend + subgraph support + DX + a11y ([79bdb45](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/79bdb457cbc98e191766e3fa7c84df2e1106ecc2))
+
 # [1.1.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.0.0...v1.1.0) (2026-04-24)
 
 
