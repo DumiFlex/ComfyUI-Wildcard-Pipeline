@@ -17,15 +17,39 @@ const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
 
-interface Option { id: string; value: string; weight: number; }
+interface Option { id: string; value: string; weight: number; sub_category?: string | null; }
 
 const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 const options = ref<Option[]>([]);
+const subCategories = ref<string[]>([]);
+const newSubCategory = ref("");
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
+
+const subCategoryOptions = computed(() => [
+  { label: "(none)", value: null as string | null },
+  ...subCategories.value.map((s) => ({ label: s, value: s })),
+]);
+
+function addSubCategory() {
+  const v = newSubCategory.value.trim();
+  if (!v) return;
+  if (subCategories.value.includes(v)) {
+    toast.add({ severity: "warn", summary: "Duplicate sub-category", life: 1500 });
+    return;
+  }
+  subCategories.value.push(v);
+  newSubCategory.value = "";
+}
+
+function removeSubCategory(s: string) {
+  subCategories.value = subCategories.value.filter((x) => x !== s);
+  // Also clear it from any option assignment
+  for (const o of options.value) if (o.sub_category === s) o.sub_category = null;
+}
 
 const tagSuggestions = ref<string[]>([]);
 function searchTags(event: { query: string }) {
@@ -48,7 +72,9 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
-      options.value = (row.payload as { options?: Option[] }).options ?? [];
+      const payload = row.payload as { options?: Option[]; sub_categories?: string[] };
+      options.value = payload.options ?? [];
+      subCategories.value = payload.sub_categories ?? [];
     } catch {
       toast.add({ severity: "error", summary: "Wildcard not found", life: 3000 });
       router.replace("/wildcards");
@@ -69,7 +95,10 @@ async function save() {
   }
   saving.value = true;
   try {
-    const payload = { options: options.value };
+    const payload = {
+      options: options.value,
+      sub_categories: subCategories.value,
+    };
     if (isEdit.value && props.id) {
       await moduleStore.update(props.id, {
         name: name.value, description: description.value,
@@ -139,14 +168,45 @@ async function save() {
 
       <section class="form-section">
         <div class="flex items-center justify-between mb-2">
+          <h2 class="form-section__label m-0">Sub-categories</h2>
+        </div>
+        <p class="text-xs text-wp-text2 mb-2">
+          Optional groupings inside this wildcard. Tag each option below with one of these to allow filtering at resolve time.
+        </p>
+        <div class="flex gap-2 mb-2">
+          <InputText
+            v-model="newSubCategory"
+            placeholder="e.g. warm-tones"
+            class="flex-1"
+            aria-label="Sub-category name"
+            @keydown.enter="addSubCategory"
+          />
+          <Button label="Add" icon="pi pi-plus" size="small" severity="secondary" outlined @click="addSubCategory" />
+        </div>
+        <div v-if="subCategories.length" class="flex flex-wrap gap-2">
+          <span
+            v-for="s in subCategories"
+            :key="s"
+            class="sub-cat-chip"
+          >
+            {{ s }}
+            <i class="pi pi-times cursor-pointer" @click="removeSubCategory(s)" />
+          </span>
+        </div>
+        <p v-else class="text-xs text-wp-text3">No sub-categories yet.</p>
+      </section>
+
+      <section class="form-section">
+        <div class="flex items-center justify-between mb-2">
           <h2 class="form-section__label m-0">Options</h2>
           <Button label="Add option" icon="pi pi-plus" size="small" severity="primary" @click="addOption" />
         </div>
         <table class="w-full text-sm border border-wp-border rounded">
           <thead>
             <tr class="bg-wp-bg2">
-              <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Weight</th>
+              <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase w-24">Weight</th>
               <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Value</th>
+              <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase w-44">Sub-category</th>
               <th class="w-16"></th>
             </tr>
           </thead>
@@ -156,13 +216,24 @@ async function save() {
                 <InputNumber v-model="opt.weight" :min="0" :max="999" size="small" class="w-full" />
               </td>
               <td class="px-3 py-2"><InputText v-model="opt.value" class="w-full" /></td>
+              <td class="px-3 py-2 w-44">
+                <Select
+                  v-model="opt.sub_category"
+                  :options="subCategoryOptions"
+                  option-label="label"
+                  option-value="value"
+                  placeholder="(none)"
+                  class="w-full"
+                  aria-label="Sub-category for option"
+                />
+              </td>
               <td class="px-3 py-2 text-right">
                 <Button icon="pi pi-trash" text rounded size="small" severity="danger"
                   aria-label="Remove option" @click="removeOption(idx)" />
               </td>
             </tr>
             <tr v-if="!options.length">
-              <td colspan="3" class="text-center text-wp-text2 py-4">No options yet.</td>
+              <td colspan="4" class="text-center text-wp-text2 py-4">No options yet.</td>
             </tr>
           </tbody>
         </table>
@@ -193,4 +264,17 @@ async function save() {
   letter-spacing: 0.5px; color: var(--wp-text2);
   margin: 0 0 8px 0;
 }
+.sub-cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 11px;
+  font-size: 11px;
+  background: var(--wp-violet-bg);
+  color: var(--wp-violet);
+  border: 1px solid var(--wp-violet);
+}
+.sub-cat-chip i { opacity: 0.7; font-size: 10px; }
+.sub-cat-chip i:hover { opacity: 1; }
 </style>
