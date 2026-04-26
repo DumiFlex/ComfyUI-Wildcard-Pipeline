@@ -1,6 +1,9 @@
-"""Root conftest — lets pytest import engine/nodes without installing the package.
+"""Root conftest — lets pytest import engine/wp_nodes without installing the package.
 
-Also collects-ignores ComfyUI-dependent directories when comfy_api is absent.
+If ``comfy_api`` is not importable (running outside ComfyUI), inject the
+``tests/stubs/comfy_api_stub`` module into ``sys.modules`` as both
+``comfy_api`` and ``comfy_api.latest`` so production code that does
+``from comfy_api.latest import ComfyExtension, io`` succeeds in tests.
 """
 
 from __future__ import annotations
@@ -13,9 +16,11 @@ ROOT = Path(__file__).parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-collect_ignore: list[str] = []
-
-# Tests for node wrappers require comfy_api; skip them when it's unavailable
-# (e.g. running pytest outside ComfyUI's Python environment).
 if importlib.util.find_spec("comfy_api") is None:
-    collect_ignore.append("tests/test_nodes.py")
+    from tests.stubs import comfy_api_stub as _stub
+
+    sys.modules.setdefault("comfy_api", _stub)
+    sys.modules.setdefault("comfy_api.latest", _stub)
+    sys.modules.setdefault("comfy_api.latest._io", _stub.io._io)
+
+collect_ignore: list[str] = []

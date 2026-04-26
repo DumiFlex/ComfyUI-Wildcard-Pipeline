@@ -1,0 +1,77 @@
+name: Bundle size delta
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "vite.config.*"
+      - "scripts/check-bundle-size.mjs"
+      - ".github/workflows/bundle-size-pr.yml"
+
+# Compute the gzip-bundle-size delta between the PR head and the base branch
+# and post it as a single sticky comment on the pull request. Lets reviewers
+# spot regressions ("did this 5 KB ship intentionally?") without digging
+# through CI logs.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  size-delta:
+    runs-on: ubuntu-latest
+    permissions:
+      # Setting permissions: explicitly REMOVES default scopes — must list
+      # contents: read so actions/checkout can fetch the repo, otherwise
+      # the runner gets "Repository not found" with a 404.
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+      - name: Checkout base
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+      - uses: pnpm/action-setup@v4
+        with:
+          # Explicit version because both checkouts land in subdirs
+          # (head/, base/) so there's no package.json at the runner's CWD
+          # root for the action to autodetect "packageManager" from.
+          version: 9
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: head/pnpm-lock.yaml
+      - name: Build + measure HEAD
+        working-directory: head
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build:extension
+          node scripts/check-bundle-size.mjs --json ../sizes/head.json
+      - name: Build + measure BASE
+        working-directory: base
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build:extension
+          # The size script resolves ../js relative to its own file URL,
+          # so we overwrite base/scripts/check-bundle-size.mjs with the head
+          # version to guarantee the JSON manifest format matches what
+          # bundle-size-diff expects, while keeping the relative-path read.
+          mkdir -p scripts
+          cp ../head/scripts/check-bundle-size.mjs scripts/check-bundle-size.mjs
+          node scripts/check-bundle-size.mjs --json ../sizes/base.json
+        continue-on-error: true
+      - name: Diff manifests
+        run: node head/scripts/bundle-size-diff.mjs sizes/base.json sizes/head.json > report.md
+      - name: Upsert PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: bundle-size
+          path: report.md

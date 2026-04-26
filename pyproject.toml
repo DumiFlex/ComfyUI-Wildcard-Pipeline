@@ -47,7 +47,7 @@ ignore = []
 # conftest.py prepends the project root to sys.path; mirror that for Pyright
 # so `from engine.template import ...` resolves in tests and editor.
 extraPaths = ["."]
-include = ["engine", "nodes", "tests", "conftest.py"]
+include = ["engine", "wp_nodes", "tests", "conftest.py"]
 exclude = ["node_modules", "js", "web_dist", ".venv", "**/__pycache__"]
 
 # Dispatch-pattern handlers (engine.handlers.handle_*) share a uniform

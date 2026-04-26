@@ -1,0 +1,53 @@
+/* Accessibility overrides driven by ComfyUI settings (see
+ * src/extension/settings.ts). The `.wp-a11y-*` markers are toggled on
+ * <body>; rules here scope the override to our own widgets so we don't
+ * mutate ComfyUI core or other extensions. */
+
+/* ── Reduce motion ──────────────────────────────────────────────────── */
+.wp-a11y-no-motion .wp-context,
+.wp-a11y-no-motion .wp-context *,
+.wp-a11y-no-motion .wp-asm,
+.wp-a11y-no-motion .wp-asm *,
+.wp-a11y-no-motion .wp-toast-stack,
+.wp-a11y-no-motion .wp-toast-stack *,
+.wp-a11y-no-motion .wp-emptystate,
+.wp-a11y-no-motion .wp-emptystate *,
+.wp-a11y-no-motion .wp-medit,
+.wp-a11y-no-motion .wp-medit *,
+.wp-a11y-no-motion .wp-picker,
+.wp-a11y-no-motion .wp-picker * {
+  /* Keep just enough duration that Vue's transitionend listeners still
+   * fire and cleanly tear down — instant 0ms can confuse them. */
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── High contrast — bump border + text tones, thicken focus outlines ── */
+.wp-a11y-high-contrast {
+  --wp-border: #6e6e6e;
+  --wp-border2: #9a9a9a;
+  --wp-text2: #e6e6e6;
+  --wp-text3: #b0b0b0;
+  --wp-text4: #c5c5c5;
+}
+.wp-a11y-high-contrast .wp-module,
+.wp-a11y-high-contrast .wp-recovery,
+.wp-a11y-high-contrast .wp-asm__rendered,
+.wp-a11y-high-contrast .wp-recovery__btn,
+.wp-a11y-high-contrast .wp-emptystate__cta,
+.wp-a11y-high-contrast .wp-add-btn,
+.wp-a11y-high-contrast .wp-toast {
+  border-width: 2px !important;
+}
+.wp-a11y-high-contrast .wp-module:focus,
+.wp-a11y-high-contrast .wp-module:focus-visible,
+.wp-a11y-high-contrast .wp-emptystate__cta:focus-visible,
+.wp-a11y-high-contrast .wp-add-btn:focus-visible {
+  outline: 3px solid var(--wp-violet) !important;
+  outline-offset: 2px;
+}
+.wp-a11y-high-contrast .wp-toggle-mark {
+  border-width: 2px !important;
+}

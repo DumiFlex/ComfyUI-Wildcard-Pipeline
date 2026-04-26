@@ -1,4 +1,10 @@
-# ComfyUI-WildcardPipeline
+<p align="center">
+  <img src="public/images/favicon.svg" width="120" alt="wildcard-pipeline logo" />
+</p>
+
+<h1 align="center">wildcard-pipeline</h1>
+
+<p align="center"><em>Composable prompt context for ComfyUI.</em></p>
 
 Modular procedural prompt generation for ComfyUI — wildcards, constraints, derivations, and context pipelines.
 
