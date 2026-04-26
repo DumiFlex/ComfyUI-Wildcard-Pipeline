@@ -1,0 +1,60 @@
+{
+  "WP_Context": {
+    "display_name": "WP Context",
+    "description": "Holds named values you can plug into a prompt template. Wire into a WP Prompt Assembler to use them. Stack multiple Contexts to layer values from different sources.",
+    "inputs": {
+      "upstream": {
+        "name": "upstream",
+        "tooltip": "Optional: another WP Context to inherit values from. Values you set here override matching ones from upstream."
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Reserved for upcoming randomized module types. Has no effect on the current fixed-values modules."
+      },
+      "modules": {
+        "name": "modules",
+        "tooltip": "Your stack of value modules. Right-click a card → Edit to add or change values."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "context",
+        "tooltip": "Wire into a WP Prompt Assembler, or chain into another WP Context."
+      }
+    }
+  },
+  "WP_PromptAssembler": {
+    "display_name": "WP Prompt Assembler",
+    "description": "Write your prompt as a template with $variable tokens. The Assembler fills them in from the connected Context, then outputs the final prompt string.",
+    "inputs": {
+      "context": {
+        "name": "context",
+        "tooltip": "The WP Context that provides values for your $variables."
+      },
+      "template": {
+        "name": "template",
+        "tooltip": "Your prompt template. Use $name to reference variables. Click chips below to insert at the cursor."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "prompt",
+        "tooltip": "Final prompt string with all $variables filled in. Connect to a CLIP Text Encode (or any text input)."
+      }
+    }
+  },
+  "WP_Debug": {
+    "display_name": "WP Debug",
+    "description": "Read-only window into a WP Context. Shows every variable + value flowing through this point of the chain. Useful for confirming what your Prompt Assembler will see.",
+    "inputs": {
+      "context": {
+        "name": "context",
+        "tooltip": "The WP Context (or Assembler input) to inspect."
+      },
+      "viewer": {
+        "name": "viewer",
+        "tooltip": "Read-only display. Nothing to edit here."
+      }
+    }
+  }
+}
