@@ -32,6 +32,10 @@ const search = ref(props.filter.q ?? "");
 const filterPanelOpen = ref(false);
 const selected = ref<T[]>([]);
 
+// Public asset served by aiohttp at runtime — use dynamic binding so Vite
+// does not try to inline/copy the file during the manager SPA build.
+const faviconUrl = "/wp/images/favicon.svg";
+
 watch(search, async (q) => {
   props.filter.q = q || undefined;
   emit("fetch");
@@ -135,7 +139,7 @@ function confirmBulkDelete() {
       <slot name="columns" />
       <template #empty>
         <div class="text-center p-8">
-          <img src="/wp/images/favicon.svg" alt="" class="mx-auto mb-3 opacity-70" style="width:64px;height:64px" />
+          <img :src="faviconUrl" alt="" class="mx-auto mb-3 opacity-70" style="width:64px;height:64px" />
           <p class="text-wp-text2 mb-3">{{ emptyMessage }}</p>
           <Button :label="newLabel" icon="pi pi-plus" severity="primary" @click="$router.push(newRoute)" />
         </div>
