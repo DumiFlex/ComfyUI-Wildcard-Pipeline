@@ -17,7 +17,10 @@ const variableBinding = ref("$x");
 const result = ref<TestResponse | null>(null);
 const running = ref(false);
 
-onMounted(async () => { await store.fetchAll(); });
+onMounted(async () => {
+  store.filter.type = undefined;
+  await store.fetchAll();
+});
 
 const selectedModule = computed(() => store.items.find((m) => m.id === moduleId.value));
 
@@ -32,14 +35,9 @@ async function run() {
   if (!mod) return;
   running.value = true;
   try {
-    const instance = mod.type === "wildcard"
-      ? { variable_binding: variableBinding.value }
-      : {};
+    const instance = mod.type === "wildcard" ? { variable_binding: variableBinding.value } : {};
     result.value = await api.test({
-      type: mod.type,
-      payload: mod.payload,
-      instance,
-      samples: samples.value,
+      type: mod.type, payload: mod.payload, instance, samples: samples.value,
     });
   } catch (e) {
     toast.add({ severity: "error", summary: "Test failed", detail: String(e), life: 4000 });
@@ -59,20 +57,18 @@ const histogramEntries = computed(() => {
 
 <template>
   <div class="p-6 text-wp-text max-w-3xl">
-    <h1 class="text-xl font-semibold mb-4">Test runner</h1>
+    <h1 class="text-xl font-semibold m-0">Test runner</h1>
+    <p class="text-sm text-wp-text2 m-0 mt-1 mb-6">
+      Run a module against the engine N times, view the resolved-value distribution.
+    </p>
 
     <div class="grid grid-cols-3 gap-3 mb-4">
       <div class="col-span-2">
         <label for="tr-module" class="block text-xs text-wp-text2 mb-1">Module</label>
         <Select
-          id="tr-module"
-          v-model="moduleId"
-          :options="store.items"
-          option-label="name"
-          option-value="id"
-          placeholder="Select a module…"
-          filter
-          class="w-full"
+          id="tr-module" v-model="moduleId"
+          :options="store.items" option-label="name" option-value="id"
+          placeholder="Select a module…" filter class="w-full"
         />
       </div>
       <div>
@@ -95,14 +91,10 @@ const histogramEntries = computed(() => {
     <div v-if="result" class="mt-6">
       <h2 class="text-sm uppercase tracking-wider text-wp-text2 mb-2">Histogram</h2>
       <div class="space-y-1">
-        <div
-          v-for="entry in histogramEntries"
-          :key="entry.value"
-          class="flex items-center gap-2 text-sm"
-        >
+        <div v-for="entry in histogramEntries" :key="entry.value" class="flex items-center gap-2 text-sm">
           <div class="w-48 truncate" :title="entry.value">{{ entry.value }}</div>
           <div class="flex-1 h-3 bg-wp-bg2 rounded overflow-hidden">
-            <div class="h-full bg-wp-accent" :style="{ width: entry.pct + '%' }" />
+            <div class="h-full" :style="{ width: entry.pct + '%', background: 'var(--wp-accent)' }" />
           </div>
           <div class="w-12 text-right text-wp-text2">{{ entry.count }}</div>
         </div>
