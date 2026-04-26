@@ -106,23 +106,27 @@ class ModuleRepository:
         self,
         module_id: str,
         *,
-        name: str | None = None,
-        description: str | None = None,
+        name: str | _Unset = _UNSET,
+        description: str | _Unset = _UNSET,
         category_id: str | None | _Unset = _UNSET,
-        tags: list[str] | None = None,
-        payload: dict[str, Any] | None = None,
-        is_favorite: bool | None = None,
+        tags: list[str] | _Unset = _UNSET,
+        payload: dict[str, Any] | _Unset = _UNSET,
+        is_favorite: bool | _Unset = _UNSET,
     ) -> dict[str, Any]:
         existing = self.get(module_id)
         new = {
-            "name": existing["name"] if name is None else name,
-            "description": existing["description"] if description is None else description,
+            "name": existing["name"] if isinstance(name, _Unset) else name,
+            "description": (
+                existing["description"] if isinstance(description, _Unset) else description
+            ),
             "category_id": (
                 existing["category_id"] if isinstance(category_id, _Unset) else category_id
             ),
-            "tags": existing["tags"] if tags is None else tags,
-            "payload": existing["payload"] if payload is None else payload,
-            "is_favorite": existing["is_favorite"] if is_favorite is None else is_favorite,
+            "tags": existing["tags"] if isinstance(tags, _Unset) else tags,
+            "payload": existing["payload"] if isinstance(payload, _Unset) else payload,
+            "is_favorite": (
+                existing["is_favorite"] if isinstance(is_favorite, _Unset) else is_favorite
+            ),
         }
         now = _now()
         with self._conn:
@@ -141,9 +145,10 @@ class ModuleRepository:
         return self.get(module_id)
 
     def delete(self, module_id: str) -> None:
-        self.get(module_id)  # raises ModuleNotFound if absent
         with self._conn:
-            self._conn.execute("DELETE FROM modules WHERE id = ?;", (module_id,))
+            cur = self._conn.execute("DELETE FROM modules WHERE id = ?;", (module_id,))
+        if cur.rowcount == 0:
+            raise ModuleNotFound(module_id)
 
     def list(
         self,
@@ -215,6 +220,12 @@ class CategoryRepository:
         sort_order: int = 0,
     ) -> dict[str, Any]:
         cid = _slug(name)
+        if cid == "module":
+            # _slug returned its fallback because `name` had no alphanumeric chars.
+            raise ValueError(
+                f"name {name!r} has no alphanumeric characters; "
+                f"category name must produce a usable slug"
+            )
         try:
             with self._conn:
                 self._conn.execute(
@@ -224,7 +235,13 @@ class CategoryRepository:
                     (cid, name, color, icon, sort_order),
                 )
         except sqlite3.IntegrityError as e:
-            raise ValueError(f"category name not unique: {name}") from e
+            err = str(e).lower()
+            if "module_categories.id" in err:
+                raise ValueError(
+                    f"category id collision: {name!r} produces slug {cid!r} "
+                    f"which is already taken"
+                ) from e
+            raise ValueError(f"category name not unique: {name!r}") from e
         return self.get(cid)
 
     def get(self, category_id: str) -> dict[str, Any]:
@@ -240,18 +257,18 @@ class CategoryRepository:
         self,
         category_id: str,
         *,
-        name: str | None = None,
+        name: str | _Unset = _UNSET,
         color: str | None | _Unset = _UNSET,
         icon: str | None | _Unset = _UNSET,
-        sort_order: int | None = None,
+        sort_order: int | _Unset = _UNSET,
     ) -> dict[str, Any]:
         existing = self.get(category_id)
         new = {
-            "name": existing["name"] if name is None else name,
+            "name": existing["name"] if isinstance(name, _Unset) else name,
             "color": existing["color"] if isinstance(color, _Unset) else color,
             "icon": existing["icon"] if isinstance(icon, _Unset) else icon,
             "sort_order": (
-                existing["sort_order"] if sort_order is None else sort_order
+                existing["sort_order"] if isinstance(sort_order, _Unset) else sort_order
             ),
         }
         with self._conn:
