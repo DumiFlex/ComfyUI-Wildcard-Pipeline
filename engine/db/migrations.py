@@ -57,5 +57,8 @@ def migrate(conn: sqlite3.Connection) -> None:
                     conn.execute(stmt)
             conn.execute(
                 "INSERT INTO migrations(version, applied_at) VALUES(?, ?);",
-                (version, _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")),
+                (
+                    version,
+                    _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                ),
             )
