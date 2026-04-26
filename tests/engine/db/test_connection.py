@@ -40,3 +40,20 @@ def test_get_connection_creates_parent_dir(tmp_path):
     conn = get_connection(target)
     assert target.parent.exists()
     conn.close()
+
+
+def test_get_connection_row_factory_supports_name_access(tmp_path):
+    conn = get_connection(tmp_path / "row.db")
+    conn.execute("CREATE TABLE t (val INTEGER);")
+    conn.execute("INSERT INTO t VALUES (42);")
+    row = conn.execute("SELECT val FROM t;").fetchone()
+    assert row["val"] == 42
+    conn.close()
+
+
+def test_resolve_db_path_falls_back_to_home(monkeypatch):
+    from pathlib import Path
+    monkeypatch.delenv("WP_DB_PATH", raising=False)
+    monkeypatch.delenv("COMFYUI_USER_DIR", raising=False)
+    result = resolve_db_path()
+    assert result == Path.home() / ".comfyui" / "wildcard-pipeline.db"
