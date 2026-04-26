@@ -11,6 +11,7 @@ vi.mock("../api/client", () => ({
       create: vi.fn(),
       get: vi.fn(),
       update: vi.fn(),
+      list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     },
     categories: { list: vi.fn().mockResolvedValue({ items: [] }) },
   },
@@ -25,6 +26,7 @@ const apiCat = api.categories as unknown as Record<string, ReturnType<typeof vi.
 beforeEach(() => {
   setActivePinia(createPinia());
   Object.values(apiMod).forEach((fn) => fn.mockReset());
+  apiMod.list.mockResolvedValue({ items: [], total: 0 });
   apiCat.list.mockResolvedValue({ items: [] });
 });
 afterEach(() => {

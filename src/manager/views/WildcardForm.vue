@@ -6,6 +6,7 @@ import InputText from "primevue/inputtext";
 import Textarea from "primevue/textarea";
 import InputNumber from "primevue/inputnumber";
 import Select from "primevue/select";
+import AutoComplete from "primevue/autocomplete";
 import { useToast } from "primevue/usetoast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -26,8 +27,20 @@ const options = ref<Option[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 
+const tagSuggestions = ref<string[]>([]);
+function searchTags(event: { query: string }) {
+  const q = event.query.toLowerCase();
+  const known = new Set<string>();
+  for (const m of moduleStore.items) {
+    for (const t of m.tags ?? []) known.add(t);
+  }
+  tagSuggestions.value = Array.from(known)
+    .filter((t) => t.toLowerCase().includes(q) && !tags.value.includes(t))
+    .slice(0, 10);
+}
+
 onMounted(async () => {
-  await categoryStore.fetchAll();
+  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchAll()]);
   if (props.id) {
     try {
       const row = await moduleStore.get(props.id);
@@ -107,6 +120,19 @@ async function save() {
           <div class="col-span-2">
             <label for="wc-desc" class="block text-xs text-wp-text2 mb-1">Description</label>
             <Textarea id="wc-desc" v-model="description" rows="2" class="w-full" />
+          </div>
+          <div class="col-span-2">
+            <label for="wc-tags" class="block text-xs text-wp-text2 mb-1">Tags</label>
+            <AutoComplete
+              id="wc-tags"
+              v-model="tags"
+              multiple
+              typeahead
+              :suggestions="tagSuggestions"
+              placeholder="Type a tag and press Enter…"
+              class="w-full"
+              @complete="searchTags"
+            />
           </div>
         </div>
       </section>

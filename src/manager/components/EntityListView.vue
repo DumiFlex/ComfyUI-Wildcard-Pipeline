@@ -5,10 +5,24 @@ import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import IconField from "primevue/iconfield";
 import InputIcon from "primevue/inputicon";
+import Select from "primevue/select";
 import { useConfirm } from "primevue/useconfirm";
 import ConfirmDialog from "primevue/confirmdialog";
 
-interface Filter { q?: string; favorites?: boolean; }
+interface Filter {
+  q?: string;
+  favorites?: boolean;
+  category?: string;
+  tags?: string[];
+  sortBy?: string;
+}
+
+const SORT_OPTIONS = [
+  { label: "Updated (newest)", value: "updated-desc" },
+  { label: "Updated (oldest)", value: "updated-asc" },
+  { label: "Name (A → Z)", value: "name-asc" },
+  { label: "Name (Z → A)", value: "name-desc" },
+];
 
 const props = defineProps<{
   title: string;
@@ -46,6 +60,8 @@ const activeFilterCount = computed(() => {
   let n = 0;
   if (props.filter.q) n++;
   if (props.filter.favorites) n++;
+  if (props.filter.category) n++;
+  if (props.filter.tags?.length) n++;
   return n;
 });
 
@@ -53,8 +69,39 @@ function clearFilters() {
   search.value = "";
   props.filter.q = undefined;
   props.filter.favorites = false;
+  props.filter.category = undefined;
+  props.filter.tags = [];
   emit("fetch");
 }
+
+const sortedItems = computed(() => {
+  let list = [...props.items] as (T & {
+    name?: string;
+    updated_at?: string;
+    tags?: string[];
+  })[];
+  // Client-side tags filter (server has no tag query yet).
+  if (props.filter.tags?.length) {
+    const wanted = new Set(props.filter.tags);
+    list = list.filter((m) => (m.tags ?? []).some((t) => wanted.has(t)));
+  }
+  switch (props.filter.sortBy) {
+    case "name-asc":
+      list.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+      break;
+    case "name-desc":
+      list.sort((a, b) => (b.name ?? "").localeCompare(a.name ?? ""));
+      break;
+    case "updated-asc":
+      list.sort((a, b) => (a.updated_at ?? "").localeCompare(b.updated_at ?? ""));
+      break;
+    case "updated-desc":
+    default:
+      list.sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+      break;
+  }
+  return list;
+});
 
 function rowClass(row: T): string {
   return (row as T & { is_favorite?: boolean }).is_favorite ? "wp-row-favorite" : "";
@@ -98,6 +145,20 @@ function confirmBulkDelete() {
         outlined size="small"
         @click="filterPanelOpen = !filterPanelOpen"
       />
+      <Select
+        :model-value="filter.sortBy ?? 'updated-desc'"
+        :options="SORT_OPTIONS" option-label="label" option-value="value"
+        size="small" class="w-44"
+        aria-label="Sort"
+        @update:model-value="(v: string) => { filter.sortBy = v; }"
+      >
+        <template #value="{ value }">
+          <span class="text-xs text-wp-text2">
+            <i class="pi pi-sort-alt mr-1" />
+            {{ SORT_OPTIONS.find((o) => o.value === value)?.label ?? "Sort" }}
+          </span>
+        </template>
+      </Select>
       <span class="ml-auto text-xs text-wp-text2">{{ items.length }} item(s)</span>
     </div>
 
@@ -114,6 +175,14 @@ function confirmBulkDelete() {
       <span v-if="filter.favorites" class="filter-chip filter-chip--favorite">
         favorites only
         <i class="pi pi-times" @click="filter.favorites = false; emit('fetch')" />
+      </span>
+      <span v-if="filter.category" class="filter-chip filter-chip--category">
+        category: {{ filter.category }}
+        <i class="pi pi-times" @click="filter.category = undefined; emit('fetch')" />
+      </span>
+      <span v-for="t in filter.tags" :key="t" class="filter-chip filter-chip--tag">
+        tag: {{ t }}
+        <i class="pi pi-times" @click="filter.tags = filter.tags!.filter((x) => x !== t); emit('fetch')" />
       </span>
       <Button label="Clear all" text size="small" @click="clearFilters" />
     </div>
@@ -134,8 +203,8 @@ function confirmBulkDelete() {
     <DataTable
       v-model:selection="selected"
       v-model:expandedRows="expandedRows"
-      :value="items" :loading="loading" data-key="id"
-      :rows="20" :paginator="items.length > 20"
+      :value="sortedItems" :loading="loading" data-key="id"
+      :rows="20" :paginator="sortedItems.length > 20"
       :row-class="rowClass"
     >
       <slot name="columns" />
@@ -172,6 +241,8 @@ function confirmBulkDelete() {
 }
 .filter-chip--search { color: var(--wp-accent); border-color: var(--wp-accent); background: var(--wp-accent-glow); }
 .filter-chip--favorite { color: var(--wp-amber); border-color: var(--wp-amber); }
+.filter-chip--category { color: var(--wp-violet); border-color: var(--wp-violet); background: var(--wp-violet-bg); }
+.filter-chip--tag { color: var(--wp-teal); border-color: var(--wp-teal); background: var(--wp-teal-bg); }
 .filter-chip i { cursor: pointer; opacity: 0.7; }
 .filter-chip i:hover { opacity: 1; }
 .bulk-bar {
