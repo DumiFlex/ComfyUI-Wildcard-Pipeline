@@ -9,9 +9,10 @@
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev": "vite build --watch --mode extension",
-    "build:extension": "vite build --mode extension",
+    "build:extension": "vite build --mode extension && pnpm docs:copy",
     "build:manager": "vite build --mode manager",
     "build": "pnpm build:extension && pnpm build:manager",
+    "docs:copy": "node scripts/copy-help-docs.mjs",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,vue}\"",
     "size": "node scripts/check-bundle-size.mjs",

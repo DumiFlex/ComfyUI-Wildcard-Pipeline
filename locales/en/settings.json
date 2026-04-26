@@ -1,0 +1,20 @@
+{
+  "wildcardPipeline_a11y_reduceMotion": {
+    "name": "Reduce motion",
+    "tooltip": "Disables Wildcard Pipeline animations and transitions. Match system honors the OS prefers-reduced-motion setting.",
+    "options": {
+      "auto": "Match system (prefers-reduced-motion)",
+      "on": "Always reduce",
+      "off": "Always allow"
+    }
+  },
+  "wildcardPipeline_a11y_contrast": {
+    "name": "Contrast",
+    "tooltip": "Bumps border + text contrast on Wildcard Pipeline widgets. Match system honors the OS prefers-contrast setting.",
+    "options": {
+      "auto": "Match system (prefers-contrast)",
+      "on": "High contrast",
+      "off": "Standard"
+    }
+  }
+}
