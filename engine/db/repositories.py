@@ -186,3 +186,98 @@ class ModuleRepository:
             params.append(offset)
         rows = self._conn.execute(sql, params).fetchall()
         return [_row_to_module(r) for r in rows]
+
+
+class CategoryNotFound(LookupError):
+    """Raised when a requested category id does not exist."""
+
+
+def _row_to_category(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "color": row["color"],
+        "icon": row["icon"],
+        "sort_order": row["sort_order"],
+    }
+
+
+class CategoryRepository:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def create(
+        self,
+        *,
+        name: str,
+        color: str | None,
+        icon: str | None,
+        sort_order: int = 0,
+    ) -> dict[str, Any]:
+        cid = _slug(name)
+        try:
+            with self._conn:
+                self._conn.execute(
+                    "INSERT INTO module_categories("
+                    "id, name, color, icon, sort_order"
+                    ") VALUES(?, ?, ?, ?, ?);",
+                    (cid, name, color, icon, sort_order),
+                )
+        except sqlite3.IntegrityError as e:
+            raise ValueError(f"category name not unique: {name}") from e
+        return self.get(cid)
+
+    def get(self, category_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM module_categories WHERE id = ?;",
+            (category_id,),
+        ).fetchone()
+        if row is None:
+            raise CategoryNotFound(category_id)
+        return _row_to_category(row)
+
+    def update(
+        self,
+        category_id: str,
+        *,
+        name: str | None = None,
+        color: str | None | _Unset = _UNSET,
+        icon: str | None | _Unset = _UNSET,
+        sort_order: int | None = None,
+    ) -> dict[str, Any]:
+        existing = self.get(category_id)
+        new = {
+            "name": existing["name"] if name is None else name,
+            "color": existing["color"] if isinstance(color, _Unset) else color,
+            "icon": existing["icon"] if isinstance(icon, _Unset) else icon,
+            "sort_order": (
+                existing["sort_order"] if sort_order is None else sort_order
+            ),
+        }
+        with self._conn:
+            self._conn.execute(
+                "UPDATE module_categories SET "
+                "name = ?, color = ?, icon = ?, sort_order = ? "
+                "WHERE id = ?;",
+                (
+                    new["name"], new["color"], new["icon"],
+                    new["sort_order"], category_id,
+                ),
+            )
+        return self.get(category_id)
+
+    def delete(self, category_id: str) -> None:
+        with self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM module_categories WHERE id = ?;",
+                (category_id,),
+            )
+        if cur.rowcount == 0:
+            raise CategoryNotFound(category_id)
+
+    def list(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM module_categories "
+            "ORDER BY sort_order ASC, name COLLATE NOCASE ASC;"
+        ).fetchall()
+        return [_row_to_category(r) for r in rows]
