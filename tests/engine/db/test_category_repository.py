@@ -93,3 +93,35 @@ def test_list_orders_by_sort_order_then_name(wp_db):
 def test_list_empty(wp_db):
     repo = CategoryRepository(wp_db)
     assert repo.list() == []
+
+
+def test_delete_nullifies_module_category_id(wp_db):
+    """ON DELETE SET NULL is enforced on modules.category_id."""
+    from engine.db.repositories import ModuleRepository
+
+    cat_repo = CategoryRepository(wp_db)
+    mod_repo = ModuleRepository(wp_db)
+    cat = cat_repo.create(name="Style", color=None, icon=None)
+    mod = mod_repo.create(
+        type="wildcard", name="x", description="",
+        category_id=cat["id"], tags=[],
+        payload={"options": []},
+    )
+    cat_repo.delete(cat["id"])
+    refreshed = mod_repo.get(mod["id"])
+    assert refreshed["category_id"] is None
+
+
+def test_create_slug_collision_distinct_names(wp_db):
+    """Distinct names that collapse to the same slug fail with a clear ValueError."""
+    repo = CategoryRepository(wp_db)
+    repo.create(name="My Cat", color=None, icon=None)
+    with pytest.raises(ValueError, match="slug"):
+        repo.create(name="my-cat", color=None, icon=None)
+
+
+def test_create_blank_name_raises_value_error(wp_db):
+    """Names that produce no usable slug are rejected."""
+    repo = CategoryRepository(wp_db)
+    with pytest.raises(ValueError, match="alphanumeric"):
+        repo.create(name="!@#", color=None, icon=None)
