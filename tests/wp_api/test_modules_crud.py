@@ -127,3 +127,13 @@ async def test_list_search_filter(wp_client):
 async def test_list_invalid_limit_400(wp_client):
     resp = await wp_client.get("/wp/api/modules?limit=abc")
     assert resp.status == 400
+
+
+async def test_list_negative_limit_400(wp_client):
+    resp = await wp_client.get("/wp/api/modules?limit=-1")
+    assert resp.status == 400
+
+
+async def test_list_negative_offset_400(wp_client):
+    resp = await wp_client.get("/wp/api/modules?offset=-1")
+    assert resp.status == 400

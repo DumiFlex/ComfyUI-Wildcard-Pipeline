@@ -6,10 +6,11 @@ them in numeric order.
 """
 from __future__ import annotations
 
-import datetime as _dt
 import re
 import sqlite3
 from pathlib import Path
+
+from engine._utils import now_iso
 
 _SQL_DIR = Path(__file__).parent / "migrations_sql"
 _VERSION_RE = re.compile(r"^(\d{3})_.+\.sql$")
@@ -57,8 +58,5 @@ def migrate(conn: sqlite3.Connection) -> None:
                     conn.execute(stmt)
             conn.execute(
                 "INSERT INTO migrations(version, applied_at) VALUES(?, ?);",
-                (
-                    version,
-                    _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-                ),
+                (version, now_iso()),
             )

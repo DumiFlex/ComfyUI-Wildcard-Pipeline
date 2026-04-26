@@ -10,15 +10,11 @@ in-place to the canonical shape (still detached, ``library_id is None``).
 """
 from __future__ import annotations
 
-import datetime as _dt
 import hashlib
 import json
 from typing import Any
 
-
-def _now_iso() -> str:
-    """UTC ISO timestamp with millisecond precision and ``Z`` suffix."""
-    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+from engine._utils import now_iso as _now_iso
 
 
 def _fresh_instance() -> dict[str, Any]:
