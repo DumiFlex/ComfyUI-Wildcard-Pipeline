@@ -40,3 +40,12 @@ __all__ += [
     "register_handler",
     "resolve_module",
 ]
+
+from engine.modules.wildcard_handler import RecursionLimitExceeded, WildcardHandler  # noqa: E402
+
+register_handler(WildcardHandler)
+
+__all__ += [
+    "RecursionLimitExceeded",
+    "WildcardHandler",
+]
