@@ -36,3 +36,20 @@ class WildcardPipelineExtension(ComfyExtension):
 
 async def comfy_entrypoint() -> WildcardPipelineExtension:
     return WildcardPipelineExtension()
+
+
+# Register SPA + REST API routes on ComfyUI's aiohttp app.
+# Imported lazily inside the try-block so static analysis tools that
+# don't have ComfyUI's `server` module on the path don't fail.
+try:
+    from server import PromptServer  # type: ignore[import-not-found]
+
+    from wp_api import register_routes as _register_wp_routes
+
+    _register_wp_routes(PromptServer.instance.app)
+except Exception:  # noqa: BLE001 - never crash ComfyUI on route registration failure
+    import logging
+
+    logging.getLogger(__name__).exception(
+        "wildcard-pipeline: route registration failed",
+    )
