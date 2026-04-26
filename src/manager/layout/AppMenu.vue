@@ -20,6 +20,7 @@ const sections: Section[] = [
     items: [
       { label: "Wildcards", icon: "pi pi-th-large", to: "/wildcards" },
       { label: "Fixed Values", icon: "pi pi-tag", to: "/fixed-values" },
+      { label: "Constraints", icon: "pi pi-filter", soon: true },
       { label: "Combines", icon: "pi pi-link", soon: true },
       { label: "Derivations", icon: "pi pi-code", soon: true },
     ],
