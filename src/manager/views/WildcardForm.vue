@@ -114,7 +114,7 @@ async function save() {
       <section class="form-section">
         <div class="flex items-center justify-between mb-2">
           <h2 class="form-section__label m-0">Options</h2>
-          <Button label="Add option" icon="pi pi-plus" size="small" severity="secondary" outlined @click="addOption" />
+          <Button label="Add option" icon="pi pi-plus" size="small" severity="primary" @click="addOption" />
         </div>
         <table class="w-full text-sm border border-wp-border rounded">
           <thead>

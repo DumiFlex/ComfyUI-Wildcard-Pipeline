@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
+import InputGroup from "primevue/inputgroup";
+import InputGroupAddon from "primevue/inputgroupaddon";
 import Textarea from "primevue/textarea";
 import Select from "primevue/select";
 import { useToast } from "primevue/usetoast";
@@ -113,7 +115,7 @@ async function save() {
       <section class="form-section">
         <div class="flex items-center justify-between mb-2">
           <h2 class="form-section__label m-0">Values</h2>
-          <Button label="Add value" icon="pi pi-plus" size="small" severity="secondary" outlined @click="addValue" />
+          <Button label="Add value" icon="pi pi-plus" size="small" severity="primary" @click="addValue" />
         </div>
         <table class="w-full text-sm border border-wp-border rounded">
           <thead>
@@ -125,7 +127,12 @@ async function save() {
           </thead>
           <tbody>
             <tr v-for="(v, idx) in values" :key="v.id" class="border-t border-wp-border">
-              <td class="px-3 py-2 w-48"><InputText v-model="v.name" placeholder="$varname" class="w-full" /></td>
+              <td class="px-3 py-2 w-48">
+                <InputGroup>
+                  <InputGroupAddon><i class="pi pi-dollar" /></InputGroupAddon>
+                  <InputText v-model="v.name" placeholder="varname" />
+                </InputGroup>
+              </td>
               <td class="px-3 py-2"><InputText v-model="v.value" class="w-full" /></td>
               <td class="px-3 py-2 text-right">
                 <Button icon="pi pi-trash" text rounded size="small" severity="danger"
