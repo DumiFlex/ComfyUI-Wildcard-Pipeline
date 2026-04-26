@@ -11,8 +11,19 @@ class TestResolveVariables:
     def test_basic_substitution(self):
         assert resolve_variables("$name", {"name": "Alice"}) == "Alice"
 
-    def test_missing_var_left_as_is(self):
-        assert resolve_variables("$unknown", {}) == "$unknown"
+    def test_missing_var_dropped(self):
+        # Missing vars resolve to empty string so the prompt sent to the
+        # model never contains literal "$unknown" tokens.
+        assert resolve_variables("$unknown", {}) == ""
+
+    def test_missing_var_collapses_surrounding_whitespace(self):
+        assert resolve_variables("a $missing b", {}) == "a b"
+
+    def test_missing_var_collapses_comma_gap(self):
+        assert resolve_variables("photo, $missing, cinematic", {}) == "photo, cinematic"
+
+    def test_missing_var_trims_trailing_punct(self):
+        assert resolve_variables("portrait of $subject.", {}) == "portrait of."
 
     def test_dollar_escape(self):
         assert resolve_variables("$$name", {"name": "Alice"}) == "$name"

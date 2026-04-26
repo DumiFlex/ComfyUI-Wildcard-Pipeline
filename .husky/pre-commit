@@ -3,6 +3,12 @@ pnpm lint || exit 1
 pnpm typecheck || exit 1
 pnpm test || exit 1
 
+# Bundle size budget — build the extension chunk and run the size check so
+# regressions get caught locally before the CI flags them on PR. Skips when
+# js/ output already matches the source by mtime to keep repeat commits fast.
+pnpm build:extension || exit 1
+pnpm size || exit 1
+
 # Python checks — only if ruff/pytest reachable on PATH
 if command -v ruff >/dev/null 2>&1; then
   ruff check . || exit 1

@@ -16,6 +16,7 @@ pnpm-debug.log
 js/
 web_dist/
 coverage/
+.vitest-cache/
 
 # Editor / OS
 .vscode/
@@ -25,7 +26,10 @@ Thumbs.db
 
 # Claude / Superpowers workspace artifacts
 .superpowers/
-.claude/worktrees/
+.claude/
+docs/superpowers/
+# Backups dropped by /caveman:compress next to compressed files
+*.original.md
 
 # Semantic release
 .releaserc.local.js

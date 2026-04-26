@@ -1,0 +1,57 @@
+/* Theme tokens shared across WP widgets.
+ * Brand palette pinned to public/images/favicon.svg — indigo / violet / teal.
+ */
+:root {
+  /* Backgrounds — match ComfyUI's node interior */
+  --wp-bg: #1e1e1e;
+  --wp-bg2: #232323;
+  --wp-bg3: #2a2a2a;
+  --wp-bg4: #333;
+
+  /* Borders */
+  --wp-border: #3a3a3a;
+  --wp-border2: #4a4a4a;
+
+  /* Text — four tiers from primary to ghost.
+   * text3 stays #666 to preserve every existing usage; text4 #888 is the
+   * new "slightly brighter ghost" available for cases that need a bit
+   * more readability without bumping all the way to text2. */
+  --wp-text: #ddd;
+  --wp-text2: #aaa;
+  --wp-text3: #666;
+  --wp-text4: #888;
+
+  /* Brand — logo palette (favicon.svg) */
+  --wp-accent: #6366f1;          /* indigo, primary brand */
+  --wp-accent2: #a970ff;         /* violet, hover / second tier */
+  --wp-accent-glow: rgba(99, 102, 241, 0.15);
+  --wp-violet: #a970ff;          /* alias for accent2 — used by module-type tags */
+  --wp-violet-bg: rgba(169, 112, 255, 0.12);
+  --wp-teal: #33d6c6;            /* exact logo teal */
+  --wp-teal-bg: rgba(51, 214, 198, 0.12);
+  --wp-brand-gradient: linear-gradient(135deg, #6366f1, #33d6c6);
+
+  /* Semantic — crisper red/amber/green for sharper alerting on dark */
+  --wp-green: #6bc96f;
+  --wp-green-bg: rgba(107, 201, 111, 0.12);
+  --wp-amber: #fbbf24;
+  --wp-amber-bg: rgba(251, 191, 36, 0.12);
+  --wp-red: #f87171;
+  --wp-red-bg: rgba(248, 113, 113, 0.12);
+
+  /* Module-type colors — one hue per type so the icon alone identifies the
+   * module at a glance. fixed_values uses rose because it's a tag/label
+   * module; the other types reuse brand colors per the type-mapping spec. */
+  --wp-rose: #f472b6;
+  --wp-rose-bg: rgba(244, 114, 182, 0.12);
+
+  /* Geometry */
+  --wp-radius: 6px;
+  --wp-radius-sm: 4px;
+
+  /* Typography — bundled webfonts (Inter + JetBrains Mono) loaded via
+   * src/extension/fonts.ts. System stacks remain as fallback so the UI
+   * stays readable if the woff2 files fail to load. */
+  --wp-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --wp-font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+}
