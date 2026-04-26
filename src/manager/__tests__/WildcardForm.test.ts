@@ -36,7 +36,7 @@ function makeRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: "/", component: { template: "<div/>" } },
-      { path: "/modules", component: { template: "<div/>" } },
+      { path: "/wildcards", component: { template: "<div/>" } },
     ],
   });
 }

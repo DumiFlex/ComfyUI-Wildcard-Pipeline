@@ -35,11 +35,10 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
-      const payload = row.payload as { options?: Option[] };
-      options.value = payload.options ?? [];
+      options.value = (row.payload as { options?: Option[] }).options ?? [];
     } catch {
-      toast.add({ severity: "error", summary: "Module not found", life: 3000 });
-      router.replace("/modules");
+      toast.add({ severity: "error", summary: "Wildcard not found", life: 3000 });
+      router.replace("/wildcards");
     }
   }
 });
@@ -48,10 +47,7 @@ function addOption() {
   const id = `opt_${Math.random().toString(16).slice(2, 8)}`;
   options.value.push({ id, value: "", weight: 1 });
 }
-
-function removeOption(idx: number) {
-  options.value.splice(idx, 1);
-}
+function removeOption(idx: number) { options.value.splice(idx, 1); }
 
 async function save() {
   if (!name.value.trim()) {
@@ -74,7 +70,7 @@ async function save() {
       });
     }
     toast.add({ severity: "success", summary: "Saved", detail: name.value, life: 2000 });
-    router.push("/modules");
+    router.push("/wildcards");
   } catch (e) {
     toast.add({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
   } finally {
@@ -84,66 +80,91 @@ async function save() {
 </script>
 
 <template>
-  <div class="p-6 text-wp-text max-w-4xl">
-    <h1 class="text-xl font-semibold mb-4">{{ isEdit ? "Edit wildcard" : "New wildcard" }}</h1>
-
-    <div class="grid grid-cols-2 gap-4 mb-6">
-      <div>
-        <label for="wc-name" class="block text-xs text-wp-text2 mb-1">Name</label>
-        <InputText id="wc-name" v-model="name" class="w-full" />
-      </div>
-      <div>
-        <label for="wc-cat" class="block text-xs text-wp-text2 mb-1">Category</label>
-        <Select
-          id="wc-cat"
-          v-model="categoryId"
-          :options="categoryStore.items"
-          option-label="name"
-          option-value="id"
-          placeholder="None"
-          show-clear
-          class="w-full"
-        />
-      </div>
-      <div class="col-span-2">
-        <label for="wc-desc" class="block text-xs text-wp-text2 mb-1">Description</label>
-        <Textarea id="wc-desc" v-model="description" rows="2" class="w-full" />
-      </div>
+  <div class="form-page">
+    <div class="form-page__header">
+      <RouterLink to="/wildcards" class="text-xs text-wp-text2 hover:text-wp-text">
+        <i class="pi pi-angle-left text-xs" /> Wildcards
+      </RouterLink>
+      <h1 class="text-xl font-semibold m-0 mt-1">{{ isEdit ? "Edit wildcard" : "New wildcard" }}</h1>
     </div>
 
-    <div class="flex items-center justify-between mb-2">
-      <h2 class="text-sm font-semibold text-wp-text2 uppercase tracking-wider">Options</h2>
-      <Button label="+ Add option" size="small" severity="secondary" @click="addOption" />
-    </div>
-    <table class="w-full text-sm border border-wp-border rounded">
-      <thead>
-        <tr class="bg-wp-bg2">
-          <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Weight</th>
-          <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Value</th>
-          <th class="w-16"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(opt, idx) in options" :key="opt.id" class="border-t border-wp-border">
-          <td class="px-3 py-2 w-24">
-            <InputNumber v-model="opt.weight" :min="0" :max="999" size="small" class="w-full" />
-          </td>
-          <td class="px-3 py-2">
-            <InputText v-model="opt.value" class="w-full" />
-          </td>
-          <td class="px-3 py-2 text-right">
-            <Button icon="pi pi-trash" text rounded size="small" severity="danger" @click="removeOption(idx)" aria-label="Remove option" />
-          </td>
-        </tr>
-        <tr v-if="!options.length">
-          <td colspan="3" class="text-center text-wp-text2 py-4">No options yet.</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="form-page__body">
+      <section class="form-section">
+        <h2 class="form-section__label">Identity</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="wc-name" class="block text-xs text-wp-text2 mb-1">Name</label>
+            <InputText id="wc-name" v-model="name" class="w-full" />
+          </div>
+          <div>
+            <label for="wc-cat" class="block text-xs text-wp-text2 mb-1">Category</label>
+            <Select
+              id="wc-cat" v-model="categoryId"
+              :options="categoryStore.items" option-label="name" option-value="id"
+              placeholder="None" show-clear class="w-full"
+            />
+          </div>
+          <div class="col-span-2">
+            <label for="wc-desc" class="block text-xs text-wp-text2 mb-1">Description</label>
+            <Textarea id="wc-desc" v-model="description" rows="2" class="w-full" />
+          </div>
+        </div>
+      </section>
 
-    <div class="flex gap-2 mt-6">
-      <Button label="Save" severity="primary" :loading="saving" data-test="save-btn" @click="save" />
-      <Button label="Cancel" severity="secondary" outlined @click="router.push('/modules')" />
+      <section class="form-section">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="form-section__label m-0">Options</h2>
+          <Button label="Add option" icon="pi pi-plus" size="small" severity="secondary" outlined @click="addOption" />
+        </div>
+        <table class="w-full text-sm border border-wp-border rounded">
+          <thead>
+            <tr class="bg-wp-bg2">
+              <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Weight</th>
+              <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Value</th>
+              <th class="w-16"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(opt, idx) in options" :key="opt.id" class="border-t border-wp-border">
+              <td class="px-3 py-2 w-24">
+                <InputNumber v-model="opt.weight" :min="0" :max="999" size="small" class="w-full" />
+              </td>
+              <td class="px-3 py-2"><InputText v-model="opt.value" class="w-full" /></td>
+              <td class="px-3 py-2 text-right">
+                <Button icon="pi pi-trash" text rounded size="small" severity="danger"
+                  aria-label="Remove option" @click="removeOption(idx)" />
+              </td>
+            </tr>
+            <tr v-if="!options.length">
+              <td colspan="3" class="text-center text-wp-text2 py-4">No options yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <div class="form-page__footer">
+      <Button label="Cancel" severity="secondary" outlined @click="router.push('/wildcards')" />
+      <Button label="Save" icon="pi pi-check" severity="primary" :loading="saving" data-test="save-btn" @click="save" />
     </div>
   </div>
 </template>
+
+<style scoped>
+.form-page { display: flex; flex-direction: column; min-height: calc(100vh - 56px); }
+.form-page__header { padding: 24px 24px 0; }
+.form-page__body { padding: 16px 24px 96px; max-width: 56rem; flex: 1; }
+.form-page__footer {
+  position: sticky; bottom: 0;
+  background: var(--wp-bg);
+  border-top: 1px solid var(--wp-border);
+  padding: 12px 24px;
+  display: flex; gap: 8px; justify-content: flex-end;
+}
+.form-section { margin-bottom: 24px; }
+.form-section__label {
+  font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--wp-text2);
+  margin: 0 0 8px 0;
+}
+</style>
