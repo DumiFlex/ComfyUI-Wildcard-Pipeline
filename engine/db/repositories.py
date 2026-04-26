@@ -6,12 +6,13 @@ calls. Rows are returned as plain dicts (sqlite3.Row converted).
 """
 from __future__ import annotations
 
-import datetime as _dt
 import json
 import re
 import secrets
 import sqlite3
 from typing import Any
+
+from engine._utils import now_iso as _now
 
 _TYPE_PREFIX = {"wildcard": "wc", "fixed_values": "fv"}
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -37,10 +38,6 @@ class ModuleNotFound(LookupError):
 def _slug(name: str) -> str:
     s = _SLUG_RE.sub("_", name.lower()).strip("_")
     return s[:24] or "module"
-
-
-def _now() -> str:
-    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:

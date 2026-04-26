@@ -22,6 +22,10 @@ async def list_modules(request: web.Request) -> web.Response:
         offset = int(request.query.get("offset", 0))
     except ValueError:
         return json_error("limit/offset must be integers", status=400)
+    if limit is not None and limit < 0:
+        return json_error("limit must be non-negative", status=400)
+    if offset < 0:
+        return json_error("offset must be non-negative", status=400)
 
     with db_session(request) as conn:
         items = ModuleRepository(conn).list(

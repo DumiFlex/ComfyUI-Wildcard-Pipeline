@@ -9,14 +9,6 @@ from aiohttp import web
 from engine.db.connection import get_connection
 
 
-def db_conn(_request: web.Request):
-    """Open a fresh SQLite connection per request.
-
-    Kept for backward-compat; new code should prefer ``db_session()``.
-    """
-    return get_connection()
-
-
 @contextmanager
 def db_session(_request: web.Request):
     """Yield a fresh SQLite connection that is auto-closed on exit.

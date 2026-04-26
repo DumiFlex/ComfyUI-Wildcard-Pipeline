@@ -112,3 +112,20 @@ async def test_export_round_trip_via_import(wp_client):
     body = await re_import.json()
     assert body["modules_imported"] == 0
     assert body["categories_imported"] == 0
+
+
+async def test_import_skips_module_missing_required_field(wp_client):
+    """Modules missing required fields are added to skipped, not raised as 500."""
+    bundle = {
+        "version": 1, "categories": [],
+        "modules": [
+            {"id": "wc_a_aaaa1234", "type": "wildcard", "name": "good",
+             "payload": {"options": []}},
+            {"id": "wc_b_bbbb1234"},  # missing type, name, payload
+        ],
+    }
+    resp = await wp_client.post("/wp/api/import", json=bundle)
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["modules_imported"] == 1
+    assert "wc_b_bbbb1234" in body["skipped"]
