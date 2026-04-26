@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
 import Column from "primevue/column";
@@ -9,15 +9,23 @@ import Checkbox from "primevue/checkbox";
 import EntityListView from "../components/EntityListView.vue";
 import RelativeDate from "../components/RelativeDate.vue";
 import { useModuleStore } from "../stores/moduleStore";
-import type { ModuleRow } from "../api/types";
+import { useCategoryStore } from "../stores/categoryStore";
+import type { ModuleRow, CategoryRow } from "../api/types";
 
 const router = useRouter();
 const store = useModuleStore();
+const categoryStore = useCategoryStore();
 const toast = useToast();
+
+const categoryById = computed(() => {
+  const map = new Map<string, CategoryRow>();
+  for (const c of categoryStore.items) map.set(c.id, c);
+  return map;
+});
 
 onMounted(async () => {
   store.filter.type = "wildcard";
-  await fetch();
+  await Promise.all([fetch(), categoryStore.fetchAll()]);
 });
 
 async function fetch() {
@@ -69,8 +77,14 @@ async function bulkDel(items: ModuleRow[]) {
   for (const item of items) await del(item);
 }
 
-function optionCount(row: ModuleRow): number {
-  return ((row.payload as { options?: unknown[] }).options ?? []).length;
+interface WildcardOption { id: string; value: string; weight: number; }
+
+function options(row: ModuleRow): WildcardOption[] {
+  return ((row.payload as { options?: WildcardOption[] }).options ?? []);
+}
+function optionCount(row: ModuleRow): number { return options(row).length; }
+function topOptions(row: ModuleRow): WildcardOption[] {
+  return [...options(row)].sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1)).slice(0, 3);
 }
 
 function validIcon(row: ModuleRow): string {
@@ -105,6 +119,7 @@ function validIcon(row: ModuleRow): string {
 
     <template #columns>
       <Column selection-mode="multiple" header-style="width:3rem" />
+      <Column expander header-style="width:3rem" />
       <Column header-style="width:3rem">
         <template #body="{ data }">
           <Button
@@ -128,7 +143,19 @@ function validIcon(row: ModuleRow): string {
           </div>
         </template>
       </Column>
-      <Column header="Items" header-style="width:7rem">
+      <Column field="category_id" header="Category" header-style="width:9rem" sortable>
+        <template #body="{ data }">
+          <span
+            v-if="data.category_id && categoryById.get(data.category_id)"
+            class="category-chip"
+            :style="{ background: categoryById.get(data.category_id)!.color || 'var(--wp-bg3)' }"
+          >
+            {{ categoryById.get(data.category_id)!.name }}
+          </span>
+          <span v-else class="text-wp-text3 text-sm">—</span>
+        </template>
+      </Column>
+      <Column header="Items" header-style="width:5rem">
         <template #body="{ data }">
           <Badge :value="String(optionCount(data))" severity="secondary" />
         </template>
@@ -138,7 +165,16 @@ function validIcon(row: ModuleRow): string {
           <i :class="validIcon(data)" :title="optionCount(data) === 0 ? 'No options' : 'Valid'" />
         </template>
       </Column>
-      <Column field="updated_at" header="Updated" sortable header-style="width:10rem">
+      <Column field="tags" header="Tags" header-style="width:13rem">
+        <template #body="{ data }">
+          <div v-if="data.tags?.length" class="flex flex-wrap gap-1">
+            <span v-for="(t, i) in data.tags.slice(0, 3)" :key="i" class="tag-chip">{{ t }}</span>
+            <span v-if="data.tags.length > 3" class="text-xs text-wp-text3">+{{ data.tags.length - 3 }}</span>
+          </div>
+          <span v-else class="text-wp-text3 text-sm">—</span>
+        </template>
+      </Column>
+      <Column field="updated_at" header="Updated" sortable header-style="width:9rem">
         <template #body="{ data }">
           <RelativeDate :value="data.updated_at" />
         </template>
@@ -153,5 +189,44 @@ function validIcon(row: ModuleRow): string {
         </template>
       </Column>
     </template>
+
+    <template #expansion="{ data }">
+      <div class="px-6 py-3">
+        <h5 class="text-xs font-semibold mb-2 uppercase tracking-wider text-wp-text2">
+          Top options for <span class="text-wp-violet">{{ data.name }}</span>
+        </h5>
+        <div v-if="topOptions(data).length === 0" class="text-sm text-wp-text3">
+          No options defined.
+        </div>
+        <div v-else class="flex flex-col gap-1">
+          <div v-for="(opt, i) in topOptions(data)" :key="i" class="flex items-center gap-3 text-sm">
+            <Badge :value="String(opt.weight)" severity="secondary" class="min-w-8" />
+            <span class="font-mono text-wp-text">{{ opt.value || "(empty)" }}</span>
+          </div>
+          <span v-if="optionCount(data) > 3" class="text-xs text-wp-text3 mt-1">
+            … and {{ optionCount(data) - 3 }} more
+          </span>
+        </div>
+      </div>
+    </template>
   </EntityListView>
 </template>
+
+<style scoped>
+.category-chip {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 9px;
+  color: #fff;
+  font-weight: 500;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+}
+.tag-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--wp-bg3);
+  color: var(--wp-text2);
+  border-radius: 3px;
+}
+</style>

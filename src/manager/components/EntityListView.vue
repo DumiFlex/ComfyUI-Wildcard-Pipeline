@@ -31,6 +31,7 @@ const confirm = useConfirm();
 const search = ref(props.filter.q ?? "");
 const filterPanelOpen = ref(false);
 const selected = ref<T[]>([]);
+const expandedRows = ref<Record<string, boolean>>({});
 
 // Public asset served by aiohttp at runtime — use dynamic binding so Vite
 // does not try to inline/copy the file during the manager SPA build.
@@ -132,11 +133,15 @@ function confirmBulkDelete() {
 
     <DataTable
       v-model:selection="selected"
+      v-model:expandedRows="expandedRows"
       :value="items" :loading="loading" data-key="id"
       :rows="20" :paginator="items.length > 20"
       :row-class="rowClass"
     >
       <slot name="columns" />
+      <template v-if="$slots.expansion" #expansion="slotProps">
+        <slot name="expansion" v-bind="slotProps" />
+      </template>
       <template #empty>
         <div class="text-center p-8">
           <img :src="faviconUrl" alt="" class="mx-auto mb-3 opacity-70" style="width:64px;height:64px" />
