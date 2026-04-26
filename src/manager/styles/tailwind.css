@@ -1,3 +1,14 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Declare layer order so PrimeVue's `primevue` layer sits between Tailwind's
+ * base reset and Tailwind's utilities. Matches the cssLayer config in main.ts.
+ * Without layers, PrimeVue + Tailwind utility specificity collide.
+ */
+@layer tailwind-base, primevue, tailwind-utilities;
+
+@layer tailwind-base {
+  @tailwind base;
+}
+
+@layer tailwind-utilities {
+  @tailwind components;
+  @tailwind utilities;
+}
