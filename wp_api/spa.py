@@ -13,7 +13,7 @@ from aiohttp import web
 WEB_DIR = Path(__file__).parent.parent / "web"
 
 
-async def _serve(path: str) -> web.Response:
+async def _serve(path: str) -> web.StreamResponse:
     if path:
         candidate = (WEB_DIR / path).resolve()
         try:
@@ -25,11 +25,11 @@ async def _serve(path: str) -> web.Response:
     return web.FileResponse(WEB_DIR / "index.html")
 
 
-async def serve_root(request: web.Request) -> web.Response:
+async def serve_root(request: web.Request) -> web.StreamResponse:
     return await _serve("")
 
 
-async def serve_path(request: web.Request) -> web.Response:
+async def serve_path(request: web.Request) -> web.StreamResponse:
     return await _serve(request.match_info["path"])
 
 
