@@ -1,4 +1,10 @@
 """Module dataclasses, snapshot helpers, dispatcher, handlers."""
+from engine.modules.dispatcher import (
+    ModuleHandler,
+    UnknownModuleType,
+    register_handler,
+    resolve_module,
+)
 from engine.modules.snapshot import (
     coerce_legacy_module,
     freeze_snapshot,
@@ -26,4 +32,11 @@ __all__ += [
     "coerce_legacy_module",
     "freeze_snapshot",
     "payload_hash",
+]
+
+__all__ += [
+    "ModuleHandler",
+    "UnknownModuleType",
+    "register_handler",
+    "resolve_module",
 ]
