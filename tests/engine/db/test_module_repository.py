@@ -40,17 +40,15 @@ def test_get_raises_module_not_found(wp_db):
 
 
 def test_update_bumps_version_and_updated_at(wp_db):
-    import time
     repo = ModuleRepository(wp_db)
     created = repo.create(
         type="wildcard", name="colors", description="",
         category_id=None, tags=[], payload=_new_payload(),
     )
-    time.sleep(1.05)  # ensure ISO-second-precision updated_at differs
     updated = repo.update(created["id"], name="palette", payload=_new_payload())
     assert updated["name"] == "palette"
     assert updated["version"] == 2
-    assert updated["updated_at"] >= created["updated_at"]
+    assert updated["updated_at"] > created["updated_at"]
 
 
 def test_delete_removes_row(wp_db):
@@ -108,11 +106,9 @@ def test_list_search_matches_name_case_insensitive(wp_db):
 
 
 def test_list_orders_by_updated_at_desc(wp_db):
-    import time
     repo = ModuleRepository(wp_db)
     a = repo.create(type="wildcard", name="a", description="",
                     category_id=None, tags=[], payload=_new_payload())
-    time.sleep(1.05)  # ISO-second-precision: ensure b > a
     b = repo.create(type="wildcard", name="b", description="",
                     category_id=None, tags=[], payload=_new_payload())
     rows = repo.list()
@@ -131,12 +127,10 @@ def test_list_favorites_only(wp_db):
 
 
 def test_list_limit_offset(wp_db):
-    import time
     repo = ModuleRepository(wp_db)
     for n in ["a", "b", "c"]:
         repo.create(type="wildcard", name=n, description="",
                     category_id=None, tags=[], payload=_new_payload())
-        time.sleep(1.05)
     rows = repo.list(limit=1, offset=1)
     assert len(rows) == 1
     assert rows[0]["name"] == "b"
@@ -161,3 +155,35 @@ def test_create_id_uses_fv_prefix_for_fixed_values(wp_db):
         category_id=None, tags=[], payload={"values": []},
     )
     assert row["id"].startswith("fv_lens_")
+
+
+def test_list_search_treats_percent_literally(wp_db):
+    repo = ModuleRepository(wp_db)
+    repo.create(type="wildcard", name="50%_off", description="",
+                category_id=None, tags=[], payload=_new_payload())
+    repo.create(type="wildcard", name="other", description="",
+                category_id=None, tags=[], payload=_new_payload())
+    rows = repo.list(query="50%")
+    assert len(rows) == 1
+    assert rows[0]["name"] == "50%_off"
+
+
+def test_list_search_treats_underscore_literally(wp_db):
+    repo = ModuleRepository(wp_db)
+    repo.create(type="wildcard", name="my_module", description="",
+                category_id=None, tags=[], payload=_new_payload())
+    repo.create(type="wildcard", name="myXmodule", description="",
+                category_id=None, tags=[], payload=_new_payload())
+    rows = repo.list(query="my_")
+    assert len(rows) == 1
+    assert rows[0]["name"] == "my_module"
+
+
+def test_list_offset_without_limit(wp_db):
+    repo = ModuleRepository(wp_db)
+    for n in ["a", "b", "c"]:
+        repo.create(type="wildcard", name=n, description="",
+                    category_id=None, tags=[], payload=_new_payload())
+    rows = repo.list(offset=1)
+    # offset=1 skips the first (most-recent) row → expect 2 rows back
+    assert len(rows) == 2

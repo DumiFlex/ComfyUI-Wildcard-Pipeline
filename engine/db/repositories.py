@@ -17,6 +17,19 @@ _TYPE_PREFIX = {"wildcard": "wc", "fixed_values": "fv"}
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
+class _Unset:
+    """Sentinel for 'argument not provided' where ``None`` is a valid value."""
+    _instance: _Unset | None = None
+
+    def __new__(cls) -> _Unset:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+
+_UNSET = _Unset()
+
+
 class ModuleNotFound(LookupError):
     """Raised when a requested module id does not exist."""
 
@@ -27,7 +40,7 @@ def _slug(name: str) -> str:
 
 
 def _now() -> str:
-    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
@@ -52,7 +65,7 @@ class ModuleRepository:
 
     def _gen_id(self, type: str, name: str) -> str:
         prefix = _TYPE_PREFIX.get(type, "mod")
-        return f"{prefix}_{_slug(name)}_{secrets.token_hex(2)}"
+        return f"{prefix}_{_slug(name)}_{secrets.token_hex(4)}"
 
     def create(
         self,
@@ -95,7 +108,7 @@ class ModuleRepository:
         *,
         name: str | None = None,
         description: str | None = None,
-        category_id: str | None | object = ...,
+        category_id: str | None | _Unset = _UNSET,
         tags: list[str] | None = None,
         payload: dict[str, Any] | None = None,
         is_favorite: bool | None = None,
@@ -104,7 +117,9 @@ class ModuleRepository:
         new = {
             "name": existing["name"] if name is None else name,
             "description": existing["description"] if description is None else description,
-            "category_id": existing["category_id"] if category_id is ... else category_id,
+            "category_id": (
+                existing["category_id"] if isinstance(category_id, _Unset) else category_id
+            ),
             "tags": existing["tags"] if tags is None else tags,
             "payload": existing["payload"] if payload is None else payload,
             "is_favorite": existing["is_favorite"] if is_favorite is None else is_favorite,
@@ -149,8 +164,13 @@ class ModuleRepository:
             clauses.append("category_id = ?")
             params.append(category_id)
         if query:
-            clauses.append("name LIKE ? COLLATE NOCASE")
-            params.append(f"%{query}%")
+            escaped = (
+                query.replace("\\", "\\\\")
+                     .replace("%", "\\%")
+                     .replace("_", "\\_")
+            )
+            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            params.append(f"%{escaped}%")
         if favorites_only:
             clauses.append("is_favorite = 1")
         sql = "SELECT * FROM modules"
@@ -160,5 +180,9 @@ class ModuleRepository:
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
+        elif offset:
+            # SQLite uses LIMIT -1 to mean "unlimited" while still honoring OFFSET.
+            sql += " LIMIT -1 OFFSET ?"
+            params.append(offset)
         rows = self._conn.execute(sql, params).fetchall()
         return [_row_to_module(r) for r in rows]
