@@ -118,3 +118,15 @@ def test_register_handler_overwrites_existing_for_same_type_id():
 def test_unknown_module_type_inherits_keyerror():
     """UnknownModuleType must be a KeyError subclass for caller convenience."""
     assert issubclass(UnknownModuleType, KeyError)
+
+
+def test_resolve_missing_type_key_raises():
+    """Snapshots without a `type` key are malformed; raise UnknownModuleType."""
+    with pytest.raises(UnknownModuleType):
+        resolve_module({"payload": {}, "instance": {}}, ctx=None)
+
+
+def test_resolve_non_string_type_raises():
+    """Snapshots with a non-string type value are malformed."""
+    with pytest.raises(UnknownModuleType):
+        resolve_module({"type": 42, "payload": {}, "instance": {}}, ctx=None)
