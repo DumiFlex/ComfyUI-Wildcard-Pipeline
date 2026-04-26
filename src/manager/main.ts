@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import PrimeVue from "primevue/config";
-import Aura from "@primevue/themes/aura";
+import { WildcardPreset } from "./styles/preset";
 import ToastService from "primevue/toastservice";
 import ConfirmationService from "primevue/confirmationservice";
 import "primeicons/primeicons.css";
@@ -15,7 +15,7 @@ app.use(createPinia());
 app.use(router);
 app.use(PrimeVue, {
   theme: {
-    preset: Aura,
+    preset: WildcardPreset,
     options: {
       darkModeSelector: ":root",
       cssLayer: { name: "primevue", order: "tailwind-base, primevue, tailwind-utilities" },
