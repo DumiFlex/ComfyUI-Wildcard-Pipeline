@@ -1,18 +1,20 @@
 """Per-module-type handlers. One function per module type.
 
 Handler signature is ``(module, ctx, rng) -> Context``. Returns the (possibly
-mutated) context. ``rng`` is a ``random.Random`` supplied by the pipeline —
-``fixed_values`` ignores it; seed-consuming handlers (wildcard, derivation)
-use it in later specs.
+mutated) context. As of this commit, the actual resolution lives in
+``engine.modules.dispatcher``; the function below is now a thin bridge that
+coerces the legacy dataclass shape, calls ``resolve_module``, and writes the
+result back into ``ctx``.
 """
 
+import dataclasses
 import logging
 import random
 from collections.abc import Callable
 from typing import Any, TypeAlias
 
 from .context import Context
-from .modules import FixedValueModule
+from .modules import FixedValueModule, coerce_legacy_module, resolve_module
 
 logger = logging.getLogger(__name__)
 
@@ -24,17 +26,24 @@ def handle_fixed_values(
     ctx: Context,
     _rng: random.Random,
 ) -> Context:
-    """Write each entry's value into ``ctx``. Mutates and returns ``ctx``.
+    """Write each entry's value into ``ctx`` via the new dispatcher bridge.
 
-    ``_rng`` is accepted for signature parity with future seed-consuming
-    handlers (wildcard, derivation); ``fixed_values`` doesn't use randomness.
+    ``_rng`` is accepted for signature parity with seed-consuming handlers.
     """
-    for entry in module.entries:
-        name = entry.variable_name.lstrip("$")
+    raw = (
+        dataclasses.asdict(module)
+        if dataclasses.is_dataclass(module)
+        else dict(module)
+    )
+    snapshot = coerce_legacy_module(raw)
+    bindings = resolve_module(snapshot, ctx=None)
+    for var_name, value in bindings.items():
+        name = var_name.lstrip("$")
         if not name:
             logger.warning(
-                "Skipping entry with empty variable_name in module %s", module.id
+                "Skipping binding with empty variable_name in module %s",
+                module.id,
             )
             continue
-        ctx[name] = entry.value
+        ctx[name] = value
     return ctx

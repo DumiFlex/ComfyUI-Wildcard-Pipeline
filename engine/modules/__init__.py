@@ -49,3 +49,9 @@ __all__ += [
     "RecursionLimitExceeded",
     "WildcardHandler",
 ]
+
+from engine.modules.fixed_values_handler import FixedValuesHandler  # noqa: E402
+
+register_handler(FixedValuesHandler)
+
+__all__ += ["FixedValuesHandler"]
