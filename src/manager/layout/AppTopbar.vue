@@ -29,11 +29,6 @@ const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
         aria-label="Settings"
         @click="router.push('/settings')"
       />
-      <Button
-        icon="pi pi-moon" text rounded severity="secondary"
-        aria-label="Toggle theme"
-        @click="ui.toggleTheme"
-      />
     </div>
   </header>
 </template>

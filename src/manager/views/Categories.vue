@@ -53,9 +53,14 @@ async function remove(row: CategoryRow) {
         <label for="cat-name" class="block text-xs text-wp-text2 mb-1">Name</label>
         <InputText id="cat-name" v-model="newName" placeholder="Style" class="w-full" @keydown.enter="add" />
       </div>
-      <div>
-        <label for="cat-color" class="block text-xs text-wp-text2 mb-1">Color</label>
-        <ColorPicker id="cat-color" v-model="newColor" />
+      <div class="color-input-group">
+        <ColorPicker v-model="newColor" class="color-input-group__picker" />
+        <InputText
+          v-model="newColor" placeholder="hex" maxlength="6"
+          aria-label="Hex color code"
+          class="color-input-group__hex font-mono text-xs"
+          @keydown.enter="add"
+        />
       </div>
       <Button label="Add" icon="pi pi-plus" severity="primary" data-test="add-category-btn" @click="add" />
     </div>
@@ -72,7 +77,6 @@ async function remove(row: CategoryRow) {
           <span class="font-mono text-xs">{{ data.color || "—" }}</span>
         </template>
       </Column>
-      <Column field="sort_order" header="Order" sortable header-style="width:6rem" />
       <Column header="Actions" header-style="width:6rem">
         <template #body="{ data }">
           <Button icon="pi pi-trash" text rounded size="small" severity="danger"
@@ -85,3 +89,28 @@ async function remove(row: CategoryRow) {
     </DataTable>
   </div>
 </template>
+
+<style scoped>
+.color-input-group {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  overflow: hidden;
+  height: 2rem;
+}
+.color-input-group__picker :deep(.p-colorpicker-preview) {
+  width: 2rem;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
+.color-input-group__hex {
+  width: 6rem;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  background: transparent;
+}
+.color-input-group__hex:focus { box-shadow: none !important; }
+</style>

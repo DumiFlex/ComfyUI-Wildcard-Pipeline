@@ -33,6 +33,15 @@ function edit(row: ModuleRow) {
   router.push({ name: "wildcards-edit", params: { id: row.id } });
 }
 
+async function copyId(id: string) {
+  try {
+    await navigator.clipboard.writeText(id);
+    toast.add({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
+  } catch {
+    toast.add({ severity: "error", summary: "Copy failed", life: 2000 });
+  }
+}
+
 async function dup(row: ModuleRow) {
   try {
     await store.duplicate(row.id);
@@ -110,8 +119,12 @@ function validIcon(row: ModuleRow): string {
       <Column field="name" header="Name" sortable>
         <template #body="{ data }">
           <div class="flex flex-col">
-            <span class="cursor-pointer font-medium" @click="edit(data)">{{ data.name }}</span>
-            <span class="text-xs text-wp-text3 font-mono">{{ data.id }}</span>
+            <span class="cursor-pointer font-medium hover:text-white" @click="edit(data)">{{ data.name }}</span>
+            <span
+              class="text-xs text-wp-text3 font-mono cursor-pointer hover:text-wp-text2 select-all"
+              :title="`Click to copy ${data.id}`"
+              @click.stop="copyId(data.id)"
+            >{{ data.id }}</span>
           </div>
         </template>
       </Column>

@@ -77,13 +77,21 @@ const recent = computed(() => [...moduleStore.items].slice(0, 5));
 
 <style scoped>
 .hero-card {
-  display: flex; gap: 16px; align-items: center;
+  display: flex; gap: 20px; align-items: center;
   padding: 24px;
   background: var(--wp-brand-gradient);
   border-radius: var(--wp-radius);
   color: #fff;
 }
-.hero-card__logo { width: 64px; height: 64px; }
+.hero-card__logo {
+  width: 64px;
+  height: 64px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  box-sizing: content-box;
+  flex-shrink: 0;
+}
 .stat-card {
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);

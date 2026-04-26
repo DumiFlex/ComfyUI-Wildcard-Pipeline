@@ -12,3 +12,41 @@
   @tailwind components;
   @tailwind utilities;
 }
+
+/* Compact button + form-control density for the SPA. PrimeVue Aura defaults
+ * are sized for large touch targets; this app is keyboard-first so we use
+ * a tighter rhythm (matches the old project). */
+.p-button {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+}
+.p-button-sm,
+.p-button[data-pc-section="root"][size="small"] {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8125rem;
+}
+.p-button-icon-only {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+}
+.p-button-icon-only.p-button-sm {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+/* Tighter inputs, dropdowns, selects to match button density. */
+.p-inputtext,
+.p-select,
+.p-inputnumber-input {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.875rem;
+}
+.p-textarea {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.875rem;
+}
+/* DataTable rows */
+.p-datatable-tbody > tr > td,
+.p-datatable-thead > tr > th {
+  padding: 0.55rem 0.75rem;
+}
