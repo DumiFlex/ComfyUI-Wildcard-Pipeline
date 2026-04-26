@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
 import Column from "primevue/column";
@@ -9,15 +9,23 @@ import Checkbox from "primevue/checkbox";
 import EntityListView from "../components/EntityListView.vue";
 import RelativeDate from "../components/RelativeDate.vue";
 import { useModuleStore } from "../stores/moduleStore";
-import type { ModuleRow } from "../api/types";
+import { useCategoryStore } from "../stores/categoryStore";
+import type { ModuleRow, CategoryRow } from "../api/types";
 
 const router = useRouter();
 const store = useModuleStore();
+const categoryStore = useCategoryStore();
 const toast = useToast();
+
+const categoryById = computed(() => {
+  const map = new Map<string, CategoryRow>();
+  for (const c of categoryStore.items) map.set(c.id, c);
+  return map;
+});
 
 onMounted(async () => {
   store.filter.type = "fixed_values";
-  await fetch();
+  await Promise.all([fetch(), categoryStore.fetchAll()]);
 });
 
 async function fetch() {
@@ -69,9 +77,13 @@ async function bulkDel(items: ModuleRow[]) {
   for (const item of items) await del(item);
 }
 
-function valueCount(row: ModuleRow): number {
-  return ((row.payload as { values?: unknown[] }).values ?? []).length;
+interface NamedValue { id: string; name: string; value: string; }
+
+function values(row: ModuleRow): NamedValue[] {
+  return ((row.payload as { values?: NamedValue[] }).values ?? []);
 }
+function valueCount(row: ModuleRow): number { return values(row).length; }
+function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 3); }
 </script>
 
 <template>
@@ -99,6 +111,7 @@ function valueCount(row: ModuleRow): number {
 
     <template #columns>
       <Column selection-mode="multiple" header-style="width:3rem" />
+      <Column expander header-style="width:3rem" />
       <Column header-style="width:3rem">
         <template #body="{ data }">
           <Button
@@ -122,12 +135,33 @@ function valueCount(row: ModuleRow): number {
           </div>
         </template>
       </Column>
-      <Column header="Values" header-style="width:7rem">
+      <Column field="category_id" header="Category" header-style="width:9rem" sortable>
+        <template #body="{ data }">
+          <span
+            v-if="data.category_id && categoryById.get(data.category_id)"
+            class="category-chip"
+            :style="{ background: categoryById.get(data.category_id)!.color || 'var(--wp-bg3)' }"
+          >
+            {{ categoryById.get(data.category_id)!.name }}
+          </span>
+          <span v-else class="text-wp-text3 text-sm">—</span>
+        </template>
+      </Column>
+      <Column header="Values" header-style="width:5rem">
         <template #body="{ data }">
           <Badge :value="String(valueCount(data))" severity="secondary" />
         </template>
       </Column>
-      <Column field="updated_at" header="Updated" sortable header-style="width:10rem">
+      <Column field="tags" header="Tags" header-style="width:13rem">
+        <template #body="{ data }">
+          <div v-if="data.tags?.length" class="flex flex-wrap gap-1">
+            <span v-for="(t, i) in data.tags.slice(0, 3)" :key="i" class="tag-chip">{{ t }}</span>
+            <span v-if="data.tags.length > 3" class="text-xs text-wp-text3">+{{ data.tags.length - 3 }}</span>
+          </div>
+          <span v-else class="text-wp-text3 text-sm">—</span>
+        </template>
+      </Column>
+      <Column field="updated_at" header="Updated" sortable header-style="width:9rem">
         <template #body="{ data }">
           <RelativeDate :value="data.updated_at" />
         </template>
@@ -142,5 +176,45 @@ function valueCount(row: ModuleRow): number {
         </template>
       </Column>
     </template>
+
+    <template #expansion="{ data }">
+      <div class="px-6 py-3">
+        <h5 class="text-xs font-semibold mb-2 uppercase tracking-wider text-wp-text2">
+          First values for <span class="text-wp-rose">{{ data.name }}</span>
+        </h5>
+        <div v-if="topValues(data).length === 0" class="text-sm text-wp-text3">
+          No values defined.
+        </div>
+        <div v-else class="flex flex-col gap-1">
+          <div v-for="(v, i) in topValues(data)" :key="i" class="flex items-center gap-3 text-sm">
+            <span class="font-mono text-wp-violet">${{ v.name.replace(/^\$/, "") || "?" }}</span>
+            <span class="text-wp-text2">=</span>
+            <span class="font-mono text-wp-text">{{ v.value || "(empty)" }}</span>
+          </div>
+          <span v-if="valueCount(data) > 3" class="text-xs text-wp-text3 mt-1">
+            … and {{ valueCount(data) - 3 }} more
+          </span>
+        </div>
+      </div>
+    </template>
   </EntityListView>
 </template>
+
+<style scoped>
+.category-chip {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 9px;
+  color: #fff;
+  font-weight: 500;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+}
+.tag-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--wp-bg3);
+  color: var(--wp-text2);
+  border-radius: 3px;
+}
+</style>
