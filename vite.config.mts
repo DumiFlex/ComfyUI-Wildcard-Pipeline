@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 import { resolve } from "node:path";
+import { copyFileSync, rmSync } from "node:fs";
 
 // Two build targets controlled by --mode flag:
 //   pnpm build:extension → js/main.js  (ComfyUI web extension, critical-path bundle)
@@ -69,16 +70,38 @@ export default defineConfig(({ mode }) => {
     };
   }
 
-  // Manager SPA — post-MVP, built as empty stub
+  // Manager SPA — Vue 3 + PrimeVue + Tailwind, served by aiohttp at /wp/
+  // The inline plugin renames src/manager.html → index.html so aiohttp's
+  // SPA fallback (which serves web/index.html) picks it up correctly.
+  // Post-write plugin: Vite preserves the input path for HTML outputs
+  // (src/manager.html → web/src/manager.html). After the write, promote it
+  // to web/index.html so aiohttp's SPA fallback can serve it.
+  const renameManagerHtml = {
+    name: "rename-manager-html",
+    closeBundle() {
+      const src = resolve(__dirname, "web/src/manager.html");
+      const dest = resolve(__dirname, "web/index.html");
+      copyFileSync(src, dest);
+      rmSync(resolve(__dirname, "web/src"), { recursive: true, force: true });
+    },
+  };
+
   return {
     ...common,
-    base: "/wildcard-pipeline/",
+    base: "/wp/",
+    plugins: [...(common.plugins as []), renameManagerHtml],
     build: {
-      outDir: "web_dist",
+      outDir: "web",
       emptyOutDir: true,
       rollupOptions: {
         input: resolve(__dirname, "src/manager.html"),
       },
+    },
+    test: {
+      environment: "jsdom",
+      globals: true,
+      include: ["src/**/*.test.ts", "src/manager/**/*.test.ts"],
+      setupFiles: ["./src/test-setup.ts"],
     },
   };
 });
