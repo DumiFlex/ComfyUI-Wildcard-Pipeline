@@ -37,12 +37,13 @@ def handle_fixed_values(
     )
     snapshot = coerce_legacy_module(raw)
     bindings = resolve_module(snapshot, ctx=None)
+    module_id = raw.get("id", "<unknown>")
     for var_name, value in bindings.items():
         name = var_name.lstrip("$")
         if not name:
             logger.warning(
                 "Skipping binding with empty variable_name in module %s",
-                module.id,
+                module_id,
             )
             continue
         ctx[name] = value
