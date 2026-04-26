@@ -51,8 +51,11 @@ def migrate(conn: sqlite3.Connection) -> None:
             continue
         sql = sql_file.read_text(encoding="utf-8")
         with conn:
-            conn.executescript(sql)
+            for stmt in sql.split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    conn.execute(stmt)
             conn.execute(
                 "INSERT INTO migrations(version, applied_at) VALUES(?, ?);",
-                (version, _dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"),
+                (version, _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")),
             )
