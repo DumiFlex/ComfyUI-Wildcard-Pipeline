@@ -1,0 +1,20 @@
+/* Shared theme tokens — keep in sync with src/components/shared/theme.css. */
+:root {
+  --wp-bg: #1e1e1e;
+  --wp-bg2: #262626;
+  --wp-bg3: #2e2e2e;
+  --wp-border: #3a3a3a;
+  --wp-text: #ddd;
+  --wp-text-dim: #999;
+  --wp-text-faint: #6e6e6e;
+  --wp-accent: #6366f1;
+  --wp-violet: #a970ff;
+  --wp-teal: #33d6c6;
+  --wp-green: #6bc96f;
+  --wp-amber: #fbbf24;
+  --wp-red: #f87171;
+  --wp-rose: #f472b6;
+  --wp-radius: 6px;
+}
+
+html, body { background: var(--wp-bg); color: var(--wp-text); margin: 0; }
