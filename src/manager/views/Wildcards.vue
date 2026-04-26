@@ -6,6 +6,8 @@ import Column from "primevue/column";
 import Button from "primevue/button";
 import Badge from "primevue/badge";
 import Checkbox from "primevue/checkbox";
+import MultiSelect from "primevue/multiselect";
+import Select from "primevue/select";
 import EntityListView from "../components/EntityListView.vue";
 import RelativeDate from "../components/RelativeDate.vue";
 import { useModuleStore } from "../stores/moduleStore";
@@ -21,6 +23,12 @@ const categoryById = computed(() => {
   const map = new Map<string, CategoryRow>();
   for (const c of categoryStore.items) map.set(c.id, c);
   return map;
+});
+
+const allTags = computed(() => {
+  const set = new Set<string>();
+  for (const m of store.items) for (const t of m.tags ?? []) set.add(t);
+  return Array.from(set).sort();
 });
 
 onMounted(async () => {
@@ -109,11 +117,32 @@ function validIcon(row: ModuleRow): string {
     @bulk-delete="bulkDel"
   >
     <template #filter-panel="{ filter, emitFetch }">
-      <div class="flex items-center gap-4">
-        <label class="flex items-center gap-2 text-sm cursor-pointer">
-          <Checkbox v-model="filter.favorites" :binary="true" @change="emitFetch" />
-          Favorites only
-        </label>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs text-wp-text2 mb-1">Category</label>
+          <Select
+            v-model="filter.category"
+            :options="categoryStore.items" option-label="name" option-value="id"
+            placeholder="All categories" show-clear class="w-full"
+            aria-label="Filter by category"
+            @change="emitFetch"
+          />
+        </div>
+        <div>
+          <label class="block text-xs text-wp-text2 mb-1">Tags</label>
+          <MultiSelect
+            v-model="filter.tags"
+            :options="allTags"
+            placeholder="Any tag" display="chip" filter class="w-full"
+            @change="emitFetch"
+          />
+        </div>
+        <div class="col-span-2 flex items-center gap-4 pt-1">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox v-model="filter.favorites" :binary="true" @change="emitFetch" />
+            Favorites only
+          </label>
+        </div>
       </div>
     </template>
 
