@@ -26,22 +26,9 @@ const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>
 beforeEach(() => {
   setActivePinia(createPinia());
   Object.values(apiMod).forEach((fn) => fn.mockReset());
-  // jsdom does not implement matchMedia; PrimeVue's TieredMenu (used by
-  // SplitButton) binds a matchMedia listener on mount.
-  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({
-    matches: false,
-    media: "",
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }));
 });
 afterEach(() => {
   vi.clearAllMocks();
-  vi.unstubAllGlobals();
 });
 
 function makeRouter() {

@@ -31,8 +31,13 @@ async function add() {
 }
 
 async function remove(row: CategoryRow) {
-  await store.remove(row.id);
-  toast.add({ severity: "success", summary: "Deleted", life: 2000 });
+  try {
+    await store.remove(row.id);
+    toast.add({ severity: "success", summary: "Deleted", life: 2000 });
+  } catch (e) {
+    const msg = e instanceof ApiError ? e.message : String(e);
+    toast.add({ severity: "error", summary: "Delete failed", detail: msg, life: 4000 });
+  }
 }
 </script>
 

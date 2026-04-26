@@ -17,3 +17,18 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect() {}
   } as never;
 }
+
+// PrimeVue overlays (TieredMenu, Select dropdown, etc.) call window.matchMedia.
+// jsdom doesn't ship with it, so we stub it for every test.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+}

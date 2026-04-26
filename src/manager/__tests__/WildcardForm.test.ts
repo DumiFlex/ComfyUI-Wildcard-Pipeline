@@ -26,14 +26,9 @@ beforeEach(() => {
   setActivePinia(createPinia());
   Object.values(apiMod).forEach((fn) => fn.mockReset());
   apiCat.list.mockResolvedValue({ items: [] });
-  // jsdom lacks matchMedia, used by some PrimeVue overlays
-  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({
-    matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-  }));
 });
 afterEach(() => {
   vi.clearAllMocks();
-  vi.unstubAllGlobals();
 });
 
 function makeRouter() {
