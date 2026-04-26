@@ -44,6 +44,8 @@ def register_handler(handler: type[ModuleHandler]) -> None:
 def resolve_module(snapshot: dict[str, Any], ctx: Any) -> dict[str, str]:
     """Route a snapshot to its registered handler and return the resolution."""
     type_id = snapshot.get("type")
+    if not isinstance(type_id, str):
+        raise UnknownModuleType(type_id)
     handler = _HANDLERS.get(type_id)
     if handler is None:
         raise UnknownModuleType(type_id)
