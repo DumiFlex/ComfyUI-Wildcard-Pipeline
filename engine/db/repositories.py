@@ -14,7 +14,15 @@ from typing import Any
 
 from engine._utils import now_iso as _now
 
-_TYPE_PREFIX = {"wildcard": "wc", "fixed_values": "fv"}
+_TYPE_PREFIX = {
+    "wildcard": "wc",
+    "fixed_values": "fv",
+    "combine": "cb",
+    "derivation": "dr",
+    "constraint": "ct",
+    "pipeline": "pl",
+}
+_VALID_TYPES: frozenset[str] = frozenset(_TYPE_PREFIX.keys())
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -75,6 +83,10 @@ class ModuleRepository:
         payload: dict[str, Any],
         is_favorite: bool = False,
     ) -> dict[str, Any]:
+        if type not in _VALID_TYPES:
+            raise ValueError(
+                f"unknown module type {type!r}; expected one of {sorted(_VALID_TYPES)}"
+            )
         mid = self._gen_id(type, name)
         now = _now()
         with self._conn:

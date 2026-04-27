@@ -2,6 +2,7 @@
 from engine.modules.dispatcher import (
     ModuleHandler,
     UnknownModuleType,
+    get_handler,
     register_handler,
     resolve_module,
 )
@@ -37,6 +38,7 @@ __all__ += [
 __all__ += [
     "ModuleHandler",
     "UnknownModuleType",
+    "get_handler",
     "register_handler",
     "resolve_module",
 ]
@@ -55,3 +57,20 @@ from engine.modules.fixed_values_handler import FixedValuesHandler  # noqa: E402
 register_handler(FixedValuesHandler)
 
 __all__ += ["FixedValuesHandler"]
+
+from engine.modules.combine_handler import CombineHandler  # noqa: E402
+from engine.modules.constraint_handler import ConstraintHandler  # noqa: E402
+from engine.modules.derivation_handler import DerivationHandler  # noqa: E402
+from engine.modules.pipeline_handler import PipelineHandler  # noqa: E402
+
+register_handler(CombineHandler)
+register_handler(DerivationHandler)
+register_handler(ConstraintHandler)
+register_handler(PipelineHandler)
+
+__all__ += [
+    "CombineHandler",
+    "ConstraintHandler",
+    "DerivationHandler",
+    "PipelineHandler",
+]
