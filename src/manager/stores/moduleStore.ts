@@ -5,9 +5,13 @@ import type { ModuleCreateInput, ModuleRow, ModuleType, ModuleUpdateInput } from
 
 interface Filter {
   type?: ModuleType;
-  category?: string;
+  category?: string | null;
   q?: string;
   favorites?: boolean;
+  /** Client-side AND-mode tag filter — server has no tag query yet. */
+  tags?: string[];
+  /** Client-side sort key. One of "updated-desc" / "updated-asc" / "name-asc" / "name-desc". */
+  sortBy?: string;
 }
 
 export const useModuleStore = defineStore("modules", () => {
@@ -20,7 +24,7 @@ export const useModuleStore = defineStore("modules", () => {
     try {
       const params: Record<string, string | boolean | undefined> = {};
       if (filter.type) params.type = filter.type;
-      if (filter.category) params.category = filter.category;
+      if (filter.category) params.category = filter.category ?? undefined;
       if (filter.q) params.q = filter.q;
       if (filter.favorites) params.favorites = true;
       const res = await api.modules.list(params);

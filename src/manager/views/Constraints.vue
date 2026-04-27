@@ -2,14 +2,10 @@
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
-import Column from "primevue/column";
-import Button from "primevue/button";
-import Badge from "primevue/badge";
-import Checkbox from "primevue/checkbox";
-import MultiSelect from "primevue/multiselect";
-import Select from "primevue/select";
-import EntityListView from "../components/EntityListView.vue";
-import RelativeDate from "../components/RelativeDate.vue";
+import ModuleListView from "../components/ModuleListView.vue";
+import Button from "../components/ui/Button.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import Select from "../components/ui/Select.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import type {
@@ -31,10 +27,8 @@ const categoryById = computed(() => {
   return map;
 });
 
-// All loaded modules — used for wildcard-name lookup. We rely on whatever
-// wildcards happen to be in the moduleStore at the moment; if they're not
-// present we fall back to the raw id. NOTE: a future moduleStore.lookupById
-// helper that fetches a single record on-demand would be cleaner.
+// Best-effort module-by-id lookup. Only resolves wildcards already loaded into
+// the moduleStore — see Constraints.vue port note in v1 for context.
 const moduleNameById = computed(() => {
   const map = new Map<string, ModuleRow>();
   for (const m of store.items) map.set(m.id, m);
@@ -46,6 +40,11 @@ const allTags = computed(() => {
   for (const m of store.items) for (const t of m.tags ?? []) set.add(t);
   return Array.from(set).sort();
 });
+
+const categoryOptions = computed(() => [
+  { value: null, label: "All categories" },
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name })),
+]);
 
 onMounted(async () => {
   store.filter.type = "constraint";
@@ -101,9 +100,13 @@ async function bulkDel(items: ModuleRow[]) {
   for (const item of items) await del(item);
 }
 
+function toggleTag(t: string, currentTags: string[] | undefined): string[] {
+  const cur = currentTags ?? [];
+  return cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t];
+}
+
 function payloadOf(row: ModuleRow): ConstraintPayload {
   const p = row.payload as Partial<ConstraintPayload> & {
-    // Backwards-compat: tolerate older array-of-arrays payloads silently.
     matrix?: ConstraintMatrix | unknown[];
   };
   const matrix: ConstraintMatrix =
@@ -143,7 +146,6 @@ function matrixSamples(row: ModuleRow, max = 5): MatrixSample[] {
             : mode === "reduce"
               ? 0.5
               : 1;
-      // Skip plain "allow" cells from the preview to surface meaningful entries.
       if (mode === "allow") continue;
       out.push({ source: sourceVal, target: targetSub, mode, factor });
     }
@@ -159,179 +161,216 @@ function formatFactor(f: number): string {
 </script>
 
 <template>
-  <EntityListView
+  <ModuleListView
     title="Constraints"
-    subtitle="Constraint modules apply rules between two wildcards' categories."
+    subtitle="Constraints set rules between two wildcards' sub-categories — exclude, boost, or reduce specific combinations, with per-pair exceptions."
     new-label="New Constraint"
     new-route="/constraints/new"
     :items="store.items"
     :loading="store.loading"
     :filter="store.filter"
+    :mid-cols="4"
     empty-message="No constraints yet. Use these to set rules between wildcards."
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
     <template #filter-panel="{ filter, emitFetch }">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs text-wp-text2 mb-1">Category</label>
+      <div class="wp-filters-grid">
+        <div class="wp-field">
+          <label class="wp-field__label">Category</label>
           <Select
-            v-model="filter.category"
-            :options="categoryStore.items" option-label="name" option-value="id"
-            placeholder="All categories" show-clear class="w-full"
+            :model-value="filter.category ?? null"
+            :options="categoryOptions"
+            placeholder="Any category"
             aria-label="Filter by category"
-            @change="emitFetch"
+            @update:model-value="(v) => { filter.category = v as string | null; emitFetch(); }"
           />
         </div>
-        <div>
-          <label class="block text-xs text-wp-text2 mb-1">Tags</label>
-          <MultiSelect
-            v-model="filter.tags"
-            :options="allTags"
-            placeholder="Any tag" display="chip" filter class="w-full"
-            @change="emitFetch"
-          />
-        </div>
-        <div class="col-span-2 flex items-center gap-4 pt-1">
-          <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <Checkbox v-model="filter.favorites" :binary="true" @change="emitFetch" />
-            Favorites only
+        <div class="wp-field">
+          <label class="wp-field__label">Favorites</label>
+          <label class="wp-fav-toggle">
+            <Checkbox
+              :model-value="!!filter.favorites"
+              @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+            />
+            <span>Favorites only</span>
           </label>
         </div>
+        <div class="wp-field wp-field--full">
+          <label class="wp-field__label">
+            Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
+          </label>
+          <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
+          <div v-else class="wp-tags-row">
+            <button
+              v-for="t in allTags" :key="t"
+              type="button"
+              class="wp-tag-chip"
+              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
+            >
+              {{ t }}
+            </button>
+          </div>
+        </div>
       </div>
     </template>
 
-    <template #columns>
-      <Column selection-mode="multiple" header-style="width:3rem" />
-      <Column expander header-style="width:3rem" />
-      <Column header-style="width:3rem">
-        <template #body="{ data }">
-          <Button
-            :icon="data.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'"
-            text rounded size="small"
-            :severity="data.is_favorite ? 'warning' : 'secondary'"
-            aria-label="Toggle favorite"
-            @click.stop="fav(data)"
-          />
-        </template>
-      </Column>
-      <Column field="name" header="Name" sortable>
-        <template #body="{ data }">
-          <div class="flex items-center gap-2">
-            <i class="wp-kind-constraint pi pi-sitemap text-wp-amber" aria-hidden="true" />
-            <div class="flex flex-col">
-              <span class="cursor-pointer font-medium hover:text-white" @click="edit(data)">{{ data.name }}</span>
-              <span
-                class="text-xs text-wp-text3 font-mono cursor-pointer hover:text-wp-text2 select-all"
-                :title="`Click to copy ${data.id}`"
-                @click.stop="copyId(data.id)"
-              >{{ data.id }}</span>
-            </div>
-          </div>
-        </template>
-      </Column>
-      <Column field="category_id" header="Category" header-style="width:9rem" sortable>
-        <template #body="{ data }">
-          <span
-            v-if="data.category_id && categoryById.get(data.category_id)"
-            class="category-chip"
-            :style="{ background: categoryById.get(data.category_id)!.color || 'var(--wp-bg3)' }"
-          >
-            {{ categoryById.get(data.category_id)!.name }}
+    <template #favorite="{ row }">
+      <button
+        type="button"
+        class="wp-row-fav-btn"
+        :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
+        @click.stop="fav(row)"
+      >
+        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
+      </button>
+    </template>
+
+    <template #name="{ row }">
+      <div class="wp-row-name">
+        <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
+        <span
+          class="wp-id"
+          :title="`Click to copy ${row.id}`"
+          @click.stop="copyId(row.id)"
+        >{{ row.id }}</span>
+      </div>
+    </template>
+
+    <template #columns-head>
+      <th style="width: 130px">Category</th>
+      <th style="width: 130px">Source</th>
+      <th style="width: 130px">Target</th>
+      <th style="width: 90px">Exceptions</th>
+    </template>
+
+    <template #columns="{ row }">
+      <td>
+        <span
+          v-if="row.category_id && categoryById.get(row.category_id)"
+          class="category-chip"
+          :style="{ background: categoryById.get(row.category_id)!.color || 'var(--wp-bg-3)' }"
+        >
+          {{ categoryById.get(row.category_id)!.name }}
+        </span>
+        <span v-else class="wp-dim">—</span>
+      </td>
+      <td><span class="wp-cn-name">{{ lookupName(payloadOf(row).source_wildcard_id) }}</span></td>
+      <td><span class="wp-cn-name">{{ lookupName(payloadOf(row).target_wildcard_id) }}</span></td>
+      <td><span class="wp-mono">{{ exceptionCount(row) }}</span></td>
+    </template>
+
+    <template #actions="{ row }">
+      <Button variant="ghost" size="sm" icon="pi pi-pencil" aria-label="Edit" @click="edit(row)" />
+      <Button variant="ghost" size="sm" icon="pi pi-clone" aria-label="Duplicate" @click="dup(row)" />
+      <Button variant="ghost" size="sm" icon="pi pi-trash" aria-label="Delete" @click="del(row)" />
+    </template>
+
+    <template #expansion="{ row }">
+      <div class="wp-row-expand__title">
+        Sample matrix entries for <span class="wp-row-expand__name">{{ (row.name ?? '').toUpperCase() }}</span>
+      </div>
+      <div v-if="!matrixSamples(row).length" class="wp-dim">No non-default matrix cells defined.</div>
+      <ul v-else class="wp-matrix-list">
+        <li
+          v-for="(s, i) in matrixSamples(row)" :key="i"
+          class="wp-matrix-item"
+        >
+          <span class="wp-cn-name">{{ s.source }}</span>
+          <span class="wp-dim wp-matrix-arrow">→</span>
+          <span class="wp-cn-name">{{ s.target }}</span>
+          <span class="wp-dim wp-matrix-sep">:</span>
+          <span class="wp-token-key">{{ s.mode }}</span>
+          <span v-if="s.mode === 'boost' || s.mode === 'reduce'" class="wp-dim">
+            ×{{ formatFactor(s.factor) }}
           </span>
-          <span v-else class="text-wp-text3 text-sm">—</span>
-        </template>
-      </Column>
-      <Column header="Source" header-style="width:11rem">
-        <template #body="{ data }">
-          <span class="text-sm">{{ lookupName(payloadOf(data).source_wildcard_id) }}</span>
-        </template>
-      </Column>
-      <Column header="Target" header-style="width:11rem">
-        <template #body="{ data }">
-          <span class="text-sm">{{ lookupName(payloadOf(data).target_wildcard_id) }}</span>
-        </template>
-      </Column>
-      <Column header="Exceptions" header-style="width:7rem">
-        <template #body="{ data }">
-          <Badge :value="String(exceptionCount(data))" severity="secondary" />
-        </template>
-      </Column>
-      <Column field="tags" header="Tags" header-style="width:13rem">
-        <template #body="{ data }">
-          <div v-if="data.tags?.length" class="flex flex-wrap gap-1">
-            <span v-for="(t, i) in data.tags.slice(0, 3)" :key="i" class="tag-chip">{{ t }}</span>
-            <span v-if="data.tags.length > 3" class="text-xs text-wp-text3">+{{ data.tags.length - 3 }}</span>
-          </div>
-          <span v-else class="text-wp-text3 text-sm">—</span>
-        </template>
-      </Column>
-      <Column field="updated_at" header="Updated" sortable header-style="width:9rem">
-        <template #body="{ data }">
-          <RelativeDate :value="data.updated_at" />
-        </template>
-      </Column>
-      <Column header="Actions" header-style="width:11rem">
-        <template #body="{ data }">
-          <div class="flex gap-1" @click.stop>
-            <Button icon="pi pi-pencil" text rounded size="small" aria-label="Edit" @click="edit(data)" />
-            <Button icon="pi pi-copy" text rounded size="small" aria-label="Duplicate" @click="dup(data)" />
-            <Button icon="pi pi-trash" text rounded size="small" severity="danger" aria-label="Delete" @click="del(data)" />
-          </div>
-        </template>
-      </Column>
-    </template>
-
-    <template #expansion="{ data }">
-      <div class="px-6 py-3">
-        <h5 class="text-xs font-semibold mb-2 uppercase tracking-wider text-wp-text2">
-          Sample matrix entries for <span class="text-wp-rose">{{ data.name }}</span>
-        </h5>
-        <div v-if="matrixSamples(data).length === 0" class="text-sm text-wp-text3">
-          No non-default matrix cells defined.
-        </div>
-        <ul v-else class="matrix-list">
-          <li
-            v-for="(s, i) in matrixSamples(data)" :key="i"
-            class="matrix-list__item font-mono text-xs"
-          >
-            <span class="text-wp-text2">{{ s.source }}</span>
-            <span class="text-wp-text3 mx-2">→</span>
-            <span class="text-wp-text2">{{ s.target }}</span>
-            <span class="text-wp-text3 mx-2">:</span>
-            <span class="text-wp-violet">{{ s.mode }}</span>
-            <span v-if="s.mode === 'boost' || s.mode === 'reduce'" class="ml-2 text-wp-text3">
-              ×{{ formatFactor(s.factor) }}
-            </span>
-          </li>
-        </ul>
-        <div v-if="exceptionCount(data)" class="mt-2 text-xs text-wp-text3">
-          {{ exceptionCount(data) }} per-pair exception{{ exceptionCount(data) === 1 ? "" : "s" }}
-        </div>
+        </li>
+      </ul>
+      <div v-if="exceptionCount(row)" class="wp-dim wp-matrix-meta">
+        {{ exceptionCount(row) }} per-pair exception{{ exceptionCount(row) === 1 ? "" : "s" }}
       </div>
     </template>
-  </EntityListView>
+  </ModuleListView>
 </template>
 
 <style scoped>
-.category-chip {
-  display: inline-block;
+.wp-filters-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wp-field--full { grid-column: 1 / -1; }
+.wp-field__label {
+  display: block;
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 9px;
-  color: #fff;
-  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wp-text-muted);
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.wp-fav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+}
+.wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-tags-empty { font-size: 12px; }
+.wp-tag-chip {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  background: var(--wp-bg-3); color: var(--wp-text-muted);
+  border: 1px solid var(--wp-border);
+  cursor: pointer;
+}
+.wp-tag-chip[data-active="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  color: var(--wp-accent-text);
+}
+
+.wp-row-fav-btn {
+  background: transparent; border: none; cursor: pointer; padding: 4px;
+  color: var(--wp-text-dim);
+  display: inline-flex; align-items: center;
+}
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
+.wp-row-fav-btn .pi { font-size: 13px; }
+
+.wp-row-name { display: flex; flex-direction: column; gap: 2px; }
+.wp-row-name__text { font-weight: 500; cursor: pointer; }
+.wp-id {
+  font-family: var(--wp-font-mono);
+  font-size: 10.5px;
+  color: var(--wp-text-dim);
+  cursor: pointer;
+  user-select: all;
+}
+
+.category-chip {
+  display: inline-block; font-size: 11px;
+  padding: 2px 8px; border-radius: 9px;
+  color: #fff; font-weight: 500;
   text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
 }
-.tag-chip {
-  font-size: 10px;
-  padding: 1px 6px;
-  background: var(--wp-bg3);
-  color: var(--wp-text2);
-  border-radius: 3px;
+
+.wp-cn-name { font-size: 12px; color: var(--wp-text); }
+.wp-row-expand__title {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-dim);
+  margin-bottom: 8px;
+  font-weight: 600;
 }
-.matrix-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
-.text-wp-amber { color: var(--wp-kind-constraint, var(--wp-amber, #f7b955)); }
-.text-wp-violet { color: var(--wp-violet, #b4a0ff); }
+.wp-row-expand__name { color: var(--wp-accent-text, #c4b5fd); }
+.wp-matrix-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.wp-matrix-item { font-family: var(--wp-font-mono); font-size: 11.5px; }
+.wp-matrix-arrow, .wp-matrix-sep { margin: 0 6px; }
+.wp-matrix-meta { margin-top: 8px; font-size: 11px; }
 </style>
