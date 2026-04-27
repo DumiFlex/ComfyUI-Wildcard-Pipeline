@@ -3,6 +3,7 @@ import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
+import TweaksPanel from "../components/TweaksPanel.vue";
 import { useUiStore } from "../stores/uiStore";
 
 const ui = useUiStore();
@@ -18,5 +19,6 @@ const ui = useUiStore();
       </main>
     </div>
     <ToastHost />
+    <TweaksPanel />
   </div>
 </template>

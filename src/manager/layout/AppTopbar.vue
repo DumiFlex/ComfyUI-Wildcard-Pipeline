@@ -5,11 +5,13 @@ import Button from "../components/ui/Button.vue";
 import Icon from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommunityStore } from "../stores/communityStore";
+import { useTweaksStore } from "../stores/tweaksStore";
 
 const ui = useUiStore();
 const router = useRouter();
 const route = useRoute();
 const community = useCommunityStore();
+const tweaks = useTweaksStore();
 
 const version = "1.4.0-dev";
 const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
@@ -115,6 +117,17 @@ onBeforeUnmount(() => {
       @click="ui.cycleTheme"
     >
       <Icon :name="themeIcon" />
+    </button>
+
+    <button
+      type="button"
+      class="wp-topbar__icon-btn"
+      aria-label="Tweaks"
+      title="Tweaks"
+      data-test="topbar-tweaks"
+      @click="tweaks.togglePanel"
+    >
+      <Icon name="pi-sliders-h" />
     </button>
 
     <template v-if="onCommunity">
