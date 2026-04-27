@@ -14,7 +14,8 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import type {
   CategoryRow,
-  ConstraintMatrixCell,
+  ConstraintCell,
+  ConstraintMatrix,
   ConstraintPayload,
   ModuleRow,
 } from "../api/types";
@@ -101,11 +102,16 @@ async function bulkDel(items: ModuleRow[]) {
 }
 
 function payloadOf(row: ModuleRow): ConstraintPayload {
-  const p = row.payload as Partial<ConstraintPayload>;
+  const p = row.payload as Partial<ConstraintPayload> & {
+    // Backwards-compat: tolerate older array-of-arrays payloads silently.
+    matrix?: ConstraintMatrix | unknown[];
+  };
+  const matrix: ConstraintMatrix =
+    p.matrix && !Array.isArray(p.matrix) ? (p.matrix as ConstraintMatrix) : {};
   return {
     source_wildcard_id: p.source_wildcard_id ?? null,
     target_wildcard_id: p.target_wildcard_id ?? null,
-    matrix: p.matrix ?? [],
+    matrix,
     exceptions: p.exceptions ?? [],
   };
 }
@@ -121,31 +127,25 @@ interface MatrixSample { source: string; target: string; mode: string; factor: n
 
 function matrixSamples(row: ModuleRow, max = 5): MatrixSample[] {
   const p = payloadOf(row);
-  const sourceWc = p.source_wildcard_id ? moduleNameById.value.get(p.source_wildcard_id) : undefined;
-  const targetWc = p.target_wildcard_id ? moduleNameById.value.get(p.target_wildcard_id) : undefined;
-  const sourceSubs: string[] =
-    (sourceWc?.payload as { sub_categories?: string[] } | undefined)?.sub_categories ?? [];
-  const targetSubs: string[] =
-    (targetWc?.payload as { sub_categories?: string[] } | undefined)?.sub_categories ?? [];
-
   const out: MatrixSample[] = [];
-  for (let ti = 0; ti < p.matrix.length && out.length < max; ti++) {
-    const row = p.matrix[ti] ?? [];
-    for (let si = 0; si < row.length && out.length < max; si++) {
-      const cell: ConstraintMatrixCell = row[si];
-      const mode = typeof cell === "string" ? cell : (cell?.mode ?? "allow");
+  for (const [sourceVal, byTarget] of Object.entries(p.matrix)) {
+    if (out.length >= max) break;
+    if (!byTarget || typeof byTarget !== "object") continue;
+    for (const [targetSub, cellRaw] of Object.entries(byTarget)) {
+      if (out.length >= max) break;
+      const cell = cellRaw as Partial<ConstraintCell>;
+      const mode = cell?.mode ?? "allow";
       const factor =
-        typeof cell === "string"
-          ? (cell === "boost" ? 2 : cell === "reduce" ? 0.5 : 1)
-          : (typeof cell?.factor === "number" ? cell.factor : (cell?.mode === "boost" ? 2 : cell?.mode === "reduce" ? 0.5 : 1));
+        typeof cell?.factor === "number"
+          ? cell.factor
+          : mode === "boost"
+            ? 2
+            : mode === "reduce"
+              ? 0.5
+              : 1;
       // Skip plain "allow" cells from the preview to surface meaningful entries.
       if (mode === "allow") continue;
-      out.push({
-        source: sourceSubs[si] ?? `col ${si + 1}`,
-        target: targetSubs[ti] ?? `row ${ti + 1}`,
-        mode,
-        factor,
-      });
+      out.push({ source: sourceVal, target: targetSub, mode, factor });
     }
   }
   return out;
