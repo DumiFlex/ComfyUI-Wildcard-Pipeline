@@ -53,7 +53,7 @@ const categoryStore = useCategoryStore();
 
 const categoryOptions = computed<SelectOption[]>(() => [
   { value: null, label: "None" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name })),
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
 ]);
 
 // `varBinding` auto-tracks slugified name until the user touches it.

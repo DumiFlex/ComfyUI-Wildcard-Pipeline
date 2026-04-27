@@ -35,7 +35,7 @@ const allTags = computed(() => {
 
 const categoryOptions = computed(() => [
   { value: null, label: "All categories" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name })),
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
 ]);
 
 // Reactive ref-graph computed off the store. Rebuilds on every change since
@@ -376,19 +376,42 @@ function isValid(row: ModuleRow): boolean {
 }
 .wp-syntax-pill .pi { font-size: 9.5px; }
 .wp-syntax-pill--ref {
-  color: var(--wp-kind-wildcard, #f0abfc);
-  background: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 28%, transparent);
+  /* @ref token color — pink/magenta, intentionally distinct from wildcard KIND violet */
+  color: #f0abfc;
+  background: rgba(192, 38, 211, 0.18);
+  background: color-mix(in oklab, #c026d3 18%, transparent);
+  border-color: rgba(192, 38, 211, 0.32);
+  border-color: color-mix(in oklab, #c026d3 32%, transparent);
 }
 .wp-syntax-pill--in {
   color: var(--wp-accent-text, #c4b5fd);
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 32%, transparent);
+  background: rgba(139, 92, 246, 0.18);
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 18%, transparent);
+  border-color: rgba(139, 92, 246, 0.35);
+  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 35%, transparent);
 }
 .wp-syntax-pill--dp {
   color: var(--wp-warn, #fcd34d);
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #facc15) 30%, transparent);
+  background: rgba(250, 204, 21, 0.18);
+  background: color-mix(in oklab, var(--wp-warn, #facc15) 18%, transparent);
+  border-color: rgba(250, 204, 21, 0.32);
+  border-color: color-mix(in oklab, var(--wp-warn, #facc15) 32%, transparent);
+}
+
+/* Light-mode overrides — must repeat here because scoped [data-v-xxx] wins specificity */
+.wp-theme-light .wp-syntax-pill--ref {
+  color: #86198f;
+  background: rgba(192, 38, 211, 0.13);
+  border-color: rgba(192, 38, 211, 0.38);
+}
+.wp-theme-light .wp-syntax-pill--in {
+  background: rgba(139, 92, 246, 0.13);
+  border-color: rgba(139, 92, 246, 0.40);
+}
+.wp-theme-light .wp-syntax-pill--dp {
+  color: #92400e;
+  background: rgba(234, 179, 8, 0.15);
+  border-color: rgba(234, 179, 8, 0.45);
 }
 
 .wp-opts-grid {

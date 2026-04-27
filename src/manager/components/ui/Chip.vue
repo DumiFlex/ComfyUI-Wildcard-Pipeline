@@ -32,8 +32,8 @@ const colorStyle = computed(() => {
   const c = props.color;
   return {
     color: c,
-    background: `color-mix(in oklab, ${c} 14%, transparent)`,
-    borderColor: `color-mix(in oklab, ${c} 35%, transparent)`,
+    background: `color-mix(in oklab, ${c} 18%, transparent)`,
+    borderColor: `color-mix(in oklab, ${c} 42%, transparent)`,
   };
 });
 

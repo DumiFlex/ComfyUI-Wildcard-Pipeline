@@ -8,6 +8,7 @@ import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useToast } from "../composables/useToast";
+import { catChipStyle } from "../utils/catChip";
 import { api } from "../api/client";
 import type { CategoryRow, ImportBundle, ModuleRow } from "../api/types";
 import {
@@ -609,8 +610,8 @@ watch(
                 <span class="wp-io-row__name">{{ row.name }}</span>
                 <span
                   v-if="row.category_id && categoryById.get(row.category_id)"
-                  class="wp-io-row__catchip"
-                  :style="{ background: categoryById.get(row.category_id)?.color || 'var(--wp-bg-3)' }"
+                  class="wp-cat-chip"
+                  :style="catChipStyle(categoryById.get(row.category_id)!.color)"
                 >{{ categoryById.get(row.category_id)?.name }}</span>
                 <span class="wp-id">{{ row.id }}</span>
               </div>
@@ -890,16 +891,6 @@ watch(
 }
 .wp-io-row:hover { background: var(--wp-bg-2); }
 .wp-io-row__name { flex: 1; font-weight: 500; }
-.wp-io-row__catchip {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  color: #fff;
-  text-shadow: 0 1px 0 rgba(0,0,0,.3);
-  white-space: nowrap;
-}
 .wp-io-row__empty {
   padding: 10px 12px 10px 36px;
   font-size: 12px;
