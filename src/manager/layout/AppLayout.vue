@@ -2,19 +2,21 @@
 import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
+import ToastHost from "../components/ui/ToastHost.vue";
 import { useUiStore } from "../stores/uiStore";
 
 const ui = useUiStore();
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen">
+  <div class="wp-app">
     <AppTopbar />
-    <div class="flex flex-1 min-h-0">
-      <AppSidebar v-show="!ui.sidebarCollapsed" />
-      <main class="flex-1 overflow-auto bg-wp-bg">
+    <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
+      <AppSidebar />
+      <main class="wp-content">
         <RouterView />
       </main>
     </div>
+    <ToastHost />
   </div>
 </template>

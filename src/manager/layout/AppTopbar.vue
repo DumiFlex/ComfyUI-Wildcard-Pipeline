@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import Button from "primevue/button";
-import Menu from "primevue/menu";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import Button from "../components/ui/Button.vue";
+import Icon from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommunityStore } from "../stores/communityStore";
 
@@ -10,41 +10,47 @@ const ui = useUiStore();
 const router = useRouter();
 const route = useRoute();
 const community = useCommunityStore();
+
 const version = "1.4.0-dev";
 const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
 
-/** Icon for the theme button reflects the *next* state in the cycle. */
+/** Theme button icon — mirrors prototype (current state, not next). */
 const themeIcon = computed(() => {
   switch (ui.themeMode) {
-    case "dark":  return "pi pi-sun";        // next: light
-    case "light": return "pi pi-desktop";    // next: auto
-    default:      return "pi pi-moon";       // next: dark
+    case "light": return "pi-sun";
+    case "dark":  return "pi-moon";
+    default:      return "pi-desktop";
   }
 });
-const themeLabel = computed(() =>
-  ui.themeMode === "dark"  ? "Switch to light theme" :
-  ui.themeMode === "light" ? "Switch to auto (system) theme" :
-                             "Switch to dark theme",
-);
+const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
 
-/** Status + user pill render only when the user is on a community route. */
+/** Status pill + user pill render only on community routes. */
 const onCommunity = computed(() => (route.path || "").startsWith("/community"));
 
 const statusColor = computed(() => {
-  if (community.apiStatus === "online")   return "var(--wp-success)";
-  if (community.apiStatus === "degraded") return "var(--wp-warn)";
-  return "var(--wp-danger)";
+  if (community.apiStatus === "online")   return "var(--wp-success, #10b981)";
+  if (community.apiStatus === "degraded") return "var(--wp-warn, #f59e0b)";
+  return "var(--wp-danger, #ef4444)";
 });
 
-const userMenu = ref<InstanceType<typeof Menu> | null>(null);
-const userMenuItems = computed(() => [
-  { label: "My profile", icon: "pi pi-user", command: () => router.push("/community/profile") },
-  { label: "Sign out",   icon: "pi pi-sign-out", command: () => community.signOut() },
-]);
-function toggleUserMenu(event: Event) {
-  userMenu.value?.toggle(event);
-}
+/* User dropdown — outside-click closes it. */
+const userMenuOpen = ref(false);
+const userMenuRef = ref<HTMLDivElement | null>(null);
 
+function toggleUserMenu() {
+  userMenuOpen.value = !userMenuOpen.value;
+}
+function closeUserMenu() {
+  userMenuOpen.value = false;
+}
+function onProfile() {
+  closeUserMenu();
+  router.push("/community/profile");
+}
+async function onSignOut() {
+  closeUserMenu();
+  await community.signOut();
+}
 async function onSignIn() {
   try {
     await community.signIn();
@@ -53,117 +59,133 @@ async function onSignIn() {
   }
 }
 
+function onDocumentClick(event: MouseEvent) {
+  if (!userMenuOpen.value) return;
+  const el = userMenuRef.value;
+  if (el && event.target instanceof Node && !el.contains(event.target)) {
+    closeUserMenu();
+  }
+}
+
 onMounted(() => {
-  // Lazy probe — ensures the dot reflects current state on community routes.
   if (onCommunity.value) community.refreshApiStatus();
+  document.addEventListener("click", onDocumentClick);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("click", onDocumentClick);
 });
 </script>
 
 <template>
-  <header class="topbar">
-    <div class="topbar-left">
-      <Button
-        icon="pi pi-bars" text rounded severity="secondary"
-        aria-label="Toggle menu"
-        @click="ui.toggleSidebar"
-      />
-      <RouterLink to="/" class="brand">
-        <img :src="logoSrc" alt="" class="brand-logo" />
-        <span class="brand-name">Wildcard Pipeline</span>
-        <span class="brand-version">v{{ version }}</span>
-      </RouterLink>
-    </div>
-    <div class="topbar-right">
-      <span
-        v-if="onCommunity"
-        class="topbar-status"
-        :title="`Community API: ${community.apiStatus}`"
+  <header class="wp-topbar">
+    <button
+      type="button"
+      class="wp-topbar__icon-btn"
+      aria-label="Toggle sidebar"
+      data-test="topbar-toggle"
+      @click="ui.toggleSidebar"
+    >
+      <Icon name="pi-bars" />
+    </button>
+
+    <RouterLink to="/" class="wp-topbar__brand" data-test="topbar-brand">
+      <img :src="logoSrc" alt="" />
+      <span>Wildcard Pipeline</span>
+      <span class="wp-topbar__version">v{{ version }}</span>
+    </RouterLink>
+
+    <div class="wp-topbar__spacer" />
+
+    <span
+      v-if="onCommunity"
+      class="wp-topbar-status"
+      :title="`Community API: ${community.apiStatus}`"
+      data-test="topbar-status"
+    >
+      <span class="wp-topbar-status__dot" :style="{ background: statusColor }" />
+      <span class="wp-topbar-status__label">{{ community.apiStatus }}</span>
+    </span>
+
+    <button
+      type="button"
+      class="wp-topbar__icon-btn"
+      :aria-label="themeLabel"
+      :title="themeLabel"
+      data-test="topbar-theme"
+      @click="ui.cycleTheme"
+    >
+      <Icon :name="themeIcon" />
+    </button>
+
+    <template v-if="onCommunity">
+      <div
+        v-if="community.currentUser"
+        ref="userMenuRef"
+        class="wp-topbar-user-wrap"
       >
-        <span class="topbar-status__dot" :style="{ background: statusColor }" />
-        <span class="topbar-status__label">{{ community.apiStatus }}</span>
-      </span>
-      <Button
-        :icon="themeIcon" text rounded severity="secondary"
-        :aria-label="themeLabel"
-        :title="themeLabel"
-        @click="ui.cycleTheme"
-      />
-      <template v-if="onCommunity">
         <button
-          v-if="community.currentUser"
           type="button"
-          class="topbar-user"
-          aria-haspopup="true"
-          aria-controls="topbar-user-menu"
+          class="wp-topbar-user"
+          aria-haspopup="menu"
+          :aria-expanded="userMenuOpen"
           :title="`Signed in as @${community.currentUser.login}`"
-          @click="toggleUserMenu"
+          data-test="topbar-user"
+          @click.stop="toggleUserMenu"
         >
           <span
-            class="topbar-user__avatar"
+            class="wp-topbar-user__avatar"
             :style="{ backgroundImage: `url(${community.currentUser.avatar_url})` }"
             aria-hidden="true"
           />
-          <span class="topbar-user__login">@{{ community.currentUser.login }}</span>
-          <i class="pi pi-chevron-down topbar-user__caret" aria-hidden="true" />
+          <span class="wp-topbar-user__login">@{{ community.currentUser.login }}</span>
+          <Icon name="pi-chevron-down" :size="10" />
         </button>
-        <Menu
-          v-if="community.currentUser"
-          id="topbar-user-menu"
-          ref="userMenu"
-          :model="userMenuItems"
-          :popup="true"
-        />
-        <Button
-          v-else
-          label="Sign in with GitHub"
-          icon="pi pi-github"
-          severity="secondary"
-          outlined
-          @click="onSignIn"
-        />
-      </template>
+        <div
+          v-if="userMenuOpen"
+          class="wp-topbar-user__menu"
+          role="menu"
+          data-test="topbar-user-menu"
+        >
+          <button type="button" class="wp-topbar-user__item" role="menuitem" @click="onProfile">
+            <Icon name="pi-user" />
+            <span>My profile</span>
+          </button>
+          <button type="button" class="wp-topbar-user__item" role="menuitem" @click="onSignOut">
+            <Icon name="pi-sign-out" />
+            <span>Sign out</span>
+          </button>
+        </div>
+      </div>
       <Button
-        icon="pi pi-cog" text rounded severity="secondary"
-        aria-label="Settings"
-        @click="router.push('/settings')"
-      />
-    </div>
+        v-else
+        variant="outline"
+        icon="pi-github"
+        data-test="topbar-signin"
+        @click="onSignIn"
+      >
+        Sign in with GitHub
+      </Button>
+    </template>
+
+    <button
+      type="button"
+      class="wp-topbar__icon-btn"
+      aria-label="Settings"
+      title="Settings"
+      data-test="topbar-settings"
+      @click="router.push('/settings')"
+    >
+      <Icon name="pi-cog" />
+    </button>
   </header>
 </template>
 
 <style scoped>
-.topbar {
-  height: var(--wp-topbar-h, 56px);
-  background: var(--wp-bg);
-  border-bottom: 1px solid var(--wp-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.topbar-left, .topbar-right { display: flex; align-items: center; gap: 8px; }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-  color: var(--wp-text);
-  font-weight: 600;
-}
-.brand:hover { color: var(--wp-text); filter: brightness(1.1); }
-.brand-logo { width: 24px; height: 24px; }
-.brand-name { letter-spacing: 0.2px; }
-.brand-version {
-  font-size: 11px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font-weight: 400;
-}
+/* Layout for things not already covered by tokens.css.
+   .wp-topbar, .wp-topbar__brand, .wp-topbar__version, .wp-topbar__spacer,
+   .wp-topbar__icon-btn are all defined globally in tokens.css. */
 
-/* Community-only chrome */
-.topbar-status {
+.wp-topbar-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -173,14 +195,16 @@ onMounted(() => {
   font-size: 11px;
   color: var(--wp-text-muted);
 }
-.topbar-status__dot {
+.wp-topbar-status__dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
   display: inline-block;
 }
-.topbar-status__label { text-transform: capitalize; }
-.topbar-user {
+.wp-topbar-status__label { text-transform: capitalize; }
+
+.wp-topbar-user-wrap { position: relative; }
+.wp-topbar-user {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -192,8 +216,8 @@ onMounted(() => {
   font: inherit;
   color: var(--wp-text);
 }
-.topbar-user:hover { background: var(--wp-bg-3); }
-.topbar-user__avatar {
+.wp-topbar-user:hover { background: var(--wp-bg-3); }
+.wp-topbar-user__avatar {
   width: 22px; height: 22px;
   border-radius: 999px;
   background-size: cover;
@@ -201,11 +225,35 @@ onMounted(() => {
   background-color: var(--wp-bg-3);
   display: inline-block;
 }
-.topbar-user__login {
-  font-size: 12px;
+.wp-topbar-user__login { font-size: 12px; }
+
+.wp-topbar-user__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.topbar-user__caret {
-  font-size: 10px;
-  color: var(--wp-text-muted);
+.wp-topbar-user__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--wp-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
+.wp-topbar-user__item:hover { background: var(--wp-bg-3); }
 </style>
