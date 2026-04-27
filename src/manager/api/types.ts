@@ -1,4 +1,77 @@
-export type ModuleType = "wildcard" | "fixed_values";
+export type ModuleType =
+  | "wildcard"
+  | "fixed_values"
+  | "combine"
+  | "derivation"
+  | "constraint"
+  | "pipeline";
+
+// ----- Per-type payload shapes (cross-referenced from data.jsx prototype) -----
+
+export interface CombinePayload {
+  template: string;
+  output_var: string;
+  input_vars: string[];
+}
+
+export interface DerivationCondition {
+  kind: "always" | "contains" | "equals" | "absent" | string;
+  var?: string;
+  value?: string;
+}
+
+export interface DerivationAction {
+  kind: "append" | "prepend" | "replace" | "remove" | "set" | string;
+  target: string;
+  value?: string;
+}
+
+export interface DerivationBranch {
+  condition: DerivationCondition;
+  action: DerivationAction;
+}
+
+export interface DerivationRule {
+  id: string;
+  branches: DerivationBranch[];
+  else?: DerivationAction;
+}
+
+export interface DerivationPayload {
+  rules: DerivationRule[];
+}
+
+export type ConstraintMatrixCell =
+  | "allow"
+  | "exclude"
+  | "boost"
+  | "reduce"
+  | { mode: string; factor?: number };
+
+export interface ConstraintException {
+  from: string;
+  to: string;
+  mode: string;
+  note?: string;
+}
+
+export interface ConstraintPayload {
+  source_wildcard_id: string | null;
+  target_wildcard_id: string | null;
+  matrix: ConstraintMatrixCell[][];
+  exceptions: ConstraintException[];
+}
+
+export interface PipelineStep {
+  id: string;
+  module_id: string;
+  enabled: boolean;
+  instance?: Record<string, unknown>;
+}
+
+export interface PipelinePayload {
+  steps: PipelineStep[];
+}
 
 export interface ModuleRow {
   id: string;
