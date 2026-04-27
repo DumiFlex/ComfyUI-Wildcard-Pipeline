@@ -77,4 +77,43 @@ describe("Wildcards.vue", () => {
     await flushPromises();
     expect(wrap.text()).toContain("No wildcards yet");
   });
+
+  it("renders syntax indicator pills for refs / inline / referenced-by", async () => {
+    // Two wildcards: `outfit` references `@hat` (outgoing) and contains an
+    // inline `{a|b}` choice; `hat` is referenced by `outfit` (incoming).
+    apiMod.list.mockResolvedValue({
+      items: [
+        {
+          id: "wc_outfit", type: "wildcard", name: "outfit", category_id: null,
+          tags: [], is_favorite: false,
+          payload: {
+            options: [{ id: "o1", value: "wear a @hat with a {red|blue} scarf", weight: 1 }],
+            sub_categories: [],
+            var_binding: "outfit",
+          },
+          version: 1, description: "", created_at: "", updated_at: "",
+        },
+        {
+          id: "wc_hat", type: "wildcard", name: "hat", category_id: null,
+          tags: [], is_favorite: false,
+          payload: {
+            options: [{ id: "o1", value: "fedora", weight: 1 }],
+            sub_categories: [],
+            var_binding: "hat",
+          },
+          version: 1, description: "", created_at: "", updated_at: "",
+        },
+      ],
+      total: 2,
+    });
+    const wrap = mountView();
+    await flushPromises();
+    const pills = wrap.findAll(".wp-syntax-pill");
+    // Outfit row: outgoing pill + inline pill. Hat row: incoming pill.
+    expect(pills.length).toBeGreaterThanOrEqual(3);
+    const html = wrap.html();
+    expect(html).toContain("wp-syntax-pill--ref");
+    expect(html).toContain("wp-syntax-pill--dp");
+    expect(html).toContain("wp-syntax-pill--in");
+  });
 });
