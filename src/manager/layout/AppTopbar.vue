@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import Button from "primevue/button";
 import { useRouter } from "vue-router";
 import { useUiStore } from "../stores/uiStore";
@@ -7,6 +8,20 @@ const ui = useUiStore();
 const router = useRouter();
 const version = "1.4.0-dev";
 const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
+
+/** Icon for the theme button reflects the *next* state in the cycle. */
+const themeIcon = computed(() => {
+  switch (ui.themeMode) {
+    case "dark":  return "pi pi-sun";        // next: light
+    case "light": return "pi pi-desktop";    // next: auto
+    default:      return "pi pi-moon";       // next: dark
+  }
+});
+const themeLabel = computed(() =>
+  ui.themeMode === "dark"  ? "Switch to light theme" :
+  ui.themeMode === "light" ? "Switch to auto (system) theme" :
+                             "Switch to dark theme",
+);
 </script>
 
 <template>
@@ -25,6 +40,12 @@ const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
     </div>
     <div class="topbar-right">
       <Button
+        :icon="themeIcon" text rounded severity="secondary"
+        :aria-label="themeLabel"
+        :title="themeLabel"
+        @click="ui.cycleTheme"
+      />
+      <Button
         icon="pi pi-cog" text rounded severity="secondary"
         aria-label="Settings"
         @click="router.push('/settings')"
@@ -35,7 +56,7 @@ const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
 
 <style scoped>
 .topbar {
-  height: 56px;
+  height: var(--wp-topbar-h, 56px);
   background: var(--wp-bg);
   border-bottom: 1px solid var(--wp-border);
   display: flex;
@@ -55,8 +76,12 @@ const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
   color: var(--wp-text);
   font-weight: 600;
 }
-.brand:hover { color: #fff; }
+.brand:hover { color: var(--wp-text); filter: brightness(1.1); }
 .brand-logo { width: 24px; height: 24px; }
 .brand-name { letter-spacing: 0.2px; }
-.brand-version { font-size: 11px; color: var(--wp-text3); font-weight: 400; }
+.brand-version {
+  font-size: 11px;
+  color: var(--wp-text-dim, var(--wp-text3));
+  font-weight: 400;
+}
 </style>
