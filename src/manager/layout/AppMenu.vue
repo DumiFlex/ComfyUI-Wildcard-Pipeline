@@ -37,6 +37,7 @@ const sections: Section[] = [
   {
     label: "Get Started",
     items: [
+      { label: "Community", icon: "pi pi-globe", to: "/community" },
       {
         label: "Documentation", icon: "pi pi-book",
         url: "https://github.com/DumiFlex/ComfyUI-WildcardPipeline/wiki",
