@@ -47,15 +47,18 @@ async def create_module(request: web.Request) -> web.Response:
     if missing:
         return json_error(f"missing fields: {sorted(missing)}", status=400)
 
-    with db_session(request) as conn:
-        row = ModuleRepository(conn).create(
-            type=body["type"], name=body["name"],
-            description=body.get("description", ""),
-            category_id=body.get("category_id"),
-            tags=body.get("tags", []),
-            payload=body["payload"],
-            is_favorite=bool(body.get("is_favorite", False)),
-        )
+    try:
+        with db_session(request) as conn:
+            row = ModuleRepository(conn).create(
+                type=body["type"], name=body["name"],
+                description=body.get("description", ""),
+                category_id=body.get("category_id"),
+                tags=body.get("tags", []),
+                payload=body["payload"],
+                is_favorite=bool(body.get("is_favorite", False)),
+            )
+    except ValueError as e:
+        return json_error(str(e), status=400)
     return json_ok(row, status=201)
 
 

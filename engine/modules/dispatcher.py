@@ -30,6 +30,15 @@ class ModuleHandler(ABC):
     ) -> dict[str, str]:
         """Return a mapping of variable_name → resolved string."""
 
+    @classmethod
+    def validate_payload(cls, payload: dict[str, Any]) -> None:
+        """Validate the payload shape. Default is no-op.
+
+        Handlers override this to reject malformed payloads at create/update
+        time; raise ``ValueError`` with a helpful message on failure.
+        """
+        return None
+
 
 _HANDLERS: dict[str, type[ModuleHandler]] = {}
 
@@ -39,6 +48,11 @@ def register_handler(handler: type[ModuleHandler]) -> None:
     if not handler.type_id:
         raise ValueError(f"{handler.__name__} missing type_id")
     _HANDLERS[handler.type_id] = handler
+
+
+def get_handler(type_id: str) -> type[ModuleHandler] | None:
+    """Return the handler registered for ``type_id`` or ``None`` if unknown."""
+    return _HANDLERS.get(type_id)
 
 
 def resolve_module(snapshot: dict[str, Any], ctx: Any) -> dict[str, str]:

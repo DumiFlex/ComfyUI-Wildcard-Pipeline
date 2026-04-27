@@ -27,15 +27,18 @@ def test_migrate_creates_modules_and_categories_and_migrations(tmp_path):
 def test_migrate_records_version(tmp_path):
     conn = get_connection(tmp_path / "v2.db")
     migrate(conn)
-    assert current_version(conn) == 1
+    # Keep this assertion in sync with the highest-numbered migration in
+    # ``engine/db/migrations_sql``.
+    assert current_version(conn) == 2
     conn.close()
 
 
 def test_migrate_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
+    before = current_version(conn)
     migrate(conn)
-    assert current_version(conn) == 1
+    assert current_version(conn) == before
     conn.close()
 
 

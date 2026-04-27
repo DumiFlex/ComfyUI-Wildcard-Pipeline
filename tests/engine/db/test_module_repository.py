@@ -187,3 +187,31 @@ def test_list_offset_without_limit(wp_db):
     rows = repo.list(offset=1)
     # offset=1 skips the first (most-recent) row → expect 2 rows back
     assert len(rows) == 2
+
+
+@pytest.mark.parametrize(
+    "type_,prefix",
+    [
+        ("combine", "cb_"),
+        ("derivation", "dr_"),
+        ("constraint", "ct_"),
+        ("pipeline", "pl_"),
+    ],
+)
+def test_create_accepts_new_module_types(wp_db, type_, prefix):
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type=type_, name="thing", description="",
+        category_id=None, tags=[], payload={},
+    )
+    assert row["type"] == type_
+    assert row["id"].startswith(prefix)
+
+
+def test_create_rejects_unknown_type(wp_db):
+    repo = ModuleRepository(wp_db)
+    with pytest.raises(ValueError, match="unknown module type"):
+        repo.create(
+            type="bogus", name="x", description="",
+            category_id=None, tags=[], payload={},
+        )
