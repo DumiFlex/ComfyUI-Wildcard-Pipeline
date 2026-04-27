@@ -120,8 +120,8 @@ describe("ModuleListView.vue", () => {
     await flushPromises();
     expect(wrap.find(".wp-filter-panel").exists()).toBe(true);
     // Extra filter chip is rendered inside.
-    expect(wrap.find(".wp-filter-toggle").exists()).toBe(true);
-    expect(wrap.find(".wp-filter-toggle").text()).toContain("Favorited");
+    expect(wrap.find(".wp-chip--toggle").exists()).toBe(true);
+    expect(wrap.find(".wp-chip--toggle").text()).toContain("Favorited");
   });
 
   it("paginates 20 items into pages of 10 then 10 when pageSize=10", async () => {

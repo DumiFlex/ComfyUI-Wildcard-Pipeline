@@ -345,7 +345,7 @@ defineExpose({
         </span>
       </Button>
       <div class="wp-page-toolbar__sort">
-        <Select v-model="sortBy" :options="SORT_OPTIONS" aria-label="Sort" size="sm" />
+        <Select v-model="sortBy" :options="SORT_OPTIONS" aria-label="Sort" />
       </div>
       <span class="wp-toolbar__count">{{ filteredItems.length }} / {{ items.length }} items</span>
     </div>
@@ -360,12 +360,12 @@ defineExpose({
             <button
               v-for="ef in extraFilters" :key="ef.key"
               type="button"
-              class="wp-filter-toggle"
-              :data-active="extraActive[ef.key] ? 'true' : 'false'"
+              class="wp-chip wp-chip--toggle"
+              :data-active="extraActive[ef.key] ? '' : null"
               @click="extraActive[ef.key] = !extraActive[ef.key]"
             >
               {{ ef.label }}
-              <span class="wp-filter-toggle__count">{{ matchCount(ef) }}</span>
+              <span class="wp-dim wp-chip__count">{{ matchCount(ef) }}</span>
             </button>
           </div>
         </div>
@@ -484,7 +484,7 @@ defineExpose({
               <slot name="columns" :row="row" />
               <td v-if="showTags">
                 <div v-if="(row.tags ?? []).length" class="wp-row-tags">
-                  <span v-for="(t, i) in (row.tags ?? []).slice(0, 3)" :key="i" class="wp-row-tag">{{ t }}</span>
+                  <Chip v-for="(t, i) in (row.tags ?? []).slice(0, 3)" :key="i">{{ t }}</Chip>
                   <span v-if="(row.tags ?? []).length > 3" class="wp-row-tag-more">+{{ (row.tags ?? []).length - 3 }}</span>
                 </div>
                 <span v-else class="wp-dim">—</span>
@@ -617,31 +617,21 @@ defineExpose({
   display: flex;
   justify-content: flex-end;
 }
-.wp-filter-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 11px;
-  font-size: 11.5px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-2);
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.wp-filter-toggle:hover {
-  background: var(--wp-bg-3);
+/* Toggle-able chip used in the extra-filter row. Inherits the global
+   `.wp-chip` pill (999 radius, 2/8 padding, 11px font) and overrides the
+   active state with the accent tint per prototype `lists.jsx:185-211`. */
+.wp-chip--toggle { cursor: pointer; transition: all 0.12s ease; }
+.wp-chip--toggle:hover {
+  background: var(--wp-bg-4);
   color: var(--wp-text);
 }
-.wp-filter-toggle[data-active="true"] {
+.wp-chip--toggle[data-active] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
   color: var(--wp-accent-text);
 }
-.wp-filter-toggle__count {
+.wp-chip__count {
   font-size: 10.5px;
-  color: var(--wp-text-dim);
   margin-left: 2px;
 }
 
@@ -724,13 +714,6 @@ defineExpose({
   flex-wrap: wrap;
   gap: 4px;
 }
-.wp-row-tag {
-  font-size: 10px;
-  padding: 1px 6px;
-  background: var(--wp-bg-3);
-  color: var(--wp-text-muted);
-  border-radius: 3px;
-}
 .wp-row-tag-more {
   font-size: 10px;
   color: var(--wp-text-dim);
@@ -807,12 +790,15 @@ defineExpose({
 
 .filter-collapse-enter-active,
 .filter-collapse-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease, max-height 0.22s ease;
+  overflow: hidden;
+  max-height: 600px;
 }
 .filter-collapse-enter-from,
 .filter-collapse-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(-6px);
+  max-height: 0;
 }
 
 .wp-row-favorite > td:first-child {

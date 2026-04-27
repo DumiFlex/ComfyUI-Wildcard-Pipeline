@@ -259,6 +259,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
           :model-value="rule"
           :index="idx"
           :var-suggestions="varSuggestions"
+          :default-collapsed="rules.length > 1"
           :data-test="`rule-${idx}`"
           @update:model-value="(v) => updateRule(idx, v)"
           @remove="removeRule(idx)"

@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import Card from "./ui/Card.vue";
 import Button from "./ui/Button.vue";
 import Input from "./ui/Input.vue";
-import Textarea from "./ui/Textarea.vue";
 import Select from "./ui/Select.vue";
-import Pill from "./ui/Pill.vue";
+import Chip from "./ui/Chip.vue";
 import type {
   DerivationAction,
   DerivationBranch,
@@ -19,11 +18,17 @@ interface Props {
   modelValue: DerivationRule;
   index: number;
   varSuggestions?: string[];
+  /** Default-collapsed when many rules exist (set by editor). */
+  defaultCollapsed?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   varSuggestions: () => [],
+  defaultCollapsed: false,
 });
+
+const collapsed = ref<boolean>(props.defaultCollapsed);
+function toggleCollapsed() { collapsed.value = !collapsed.value; }
 
 const emit = defineEmits<{
   "update:modelValue": [value: DerivationRule];
@@ -152,8 +157,15 @@ const branchCount = computed(() => rule.value.branches.length);
 
 <template>
   <Card class="derivation-rule-card" :data-test="`rule-card-${index}`">
-    <div class="rule-head">
-      <Pill tone="info" data-test="rule-label">Rule {{ ruleNumber }}</Pill>
+    <button
+      type="button"
+      class="rule-head"
+      :aria-expanded="!collapsed"
+      :data-test="`toggle-rule-${index}`"
+      @click="toggleCollapsed"
+    >
+      <i :class="collapsed ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" class="rule-head__chev" aria-hidden="true" />
+      <Chip tone="info" data-test="rule-label">Rule {{ ruleNumber }}</Chip>
       <span class="rule-meta">
         {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
         <span v-if="rule.else"> + ELSE</span>
@@ -165,11 +177,11 @@ const branchCount = computed(() => rule.value.branches.length);
         size="sm"
         :aria-label="`Remove rule ${ruleNumber}`"
         :data-test="`remove-rule-${index}`"
-        @click="emit('remove')"
+        @click.stop="emit('remove')"
       />
-    </div>
+    </button>
 
-    <div class="branches">
+    <div v-show="!collapsed" class="branches">
       <div
         v-for="(branch, bi) in rule.branches"
         :key="bi"
@@ -241,16 +253,14 @@ const branchCount = computed(() => rule.value.branches.length);
             />
           </div>
         </div>
-        <div class="row row--textarea">
+        <div class="row">
           <span class="row-label">Value</span>
-          <Textarea
+          <Input
             :model-value="branch.action.value"
-            :rows="2"
-            auto-resize
-            class="field-textarea"
+            class="field-value-full"
             placeholder="The new / appended / prepended value"
             :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
-            @update:model-value="(v) => onActionValue(bi, v ?? '')"
+            @update:model-value="(v) => onActionValue(bi, String(v ?? ''))"
           />
         </div>
       </div>
@@ -288,22 +298,20 @@ const branchCount = computed(() => rule.value.branches.length);
             />
           </div>
         </div>
-        <div class="row row--textarea">
+        <div class="row">
           <span class="row-label">Value</span>
-          <Textarea
+          <Input
             :model-value="rule.else.action.value"
-            :rows="2"
-            auto-resize
-            class="field-textarea"
+            class="field-value-full"
             placeholder="The new / appended / prepended value"
             :aria-label="`ELSE action value for rule ${ruleNumber}`"
-            @update:model-value="(v) => onElseValue(v ?? '')"
+            @update:model-value="(v) => onElseValue(String(v ?? ''))"
           />
         </div>
       </div>
     </div>
 
-    <div class="addbar">
+    <div v-show="!collapsed" class="addbar">
       <Button
         icon="pi-plus"
         variant="ghost"
@@ -335,7 +343,23 @@ const branchCount = computed(() => rule.value.branches.length);
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--wp-text);
+}
+.rule-head[aria-expanded="true"] { margin-bottom: 10px; }
+.rule-head__chev {
+  font-size: 11px;
+  color: var(--wp-text-muted);
+  width: 12px;
+  text-align: center;
+  transition: transform 0.15s ease;
 }
 .rule-meta {
   font-size: 11.5px;
@@ -415,7 +439,7 @@ const branchCount = computed(() => rule.value.branches.length);
 .field-var { min-width: 160px; flex: 1 1 160px; }
 .field-op { min-width: 150px; }
 .field-value { flex: 1 1 200px; min-width: 200px; }
-.field-textarea { width: 100%; }
+.field-value-full { width: 100%; }
 
 .addbar {
   display: flex;
