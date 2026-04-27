@@ -9,16 +9,16 @@ import "./styles/theme.css";
 import "./styles/tailwind.css";
 import App from "./App.vue";
 import router from "./router";
-
-// Force PrimeVue dark mode by adding the matching class on the html root.
-// PrimeVue 4 treats `darkModeSelector` as a CSS selector that toggles dark
-// scope tokens; `":root"` is not a recognized variant, so we use a class
-// and apply it eagerly. Light mode is not supported in v1.
-document.documentElement.classList.add("wp-dark");
+import { useUiStore } from "./stores/uiStore";
 
 const app = createApp(App);
-app.use(createPinia());
+const pinia = createPinia();
+app.use(pinia);
 app.use(router);
+
+// Apply persisted theme before mount so the first paint is correct.
+// `useUiStore` reads localStorage and listens to OS preference changes.
+useUiStore(pinia).initializeTheme();
 app.use(PrimeVue, {
   theme: {
     preset: WildcardPreset,

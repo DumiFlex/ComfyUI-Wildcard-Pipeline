@@ -207,3 +207,15 @@ html.wp-theme-light {
 .wp-theme-dark {
   color-scheme: dark;
 }
+
+/* ---------- Theme-switch flash suppression ----------
+   Briefly added by uiStore.cycleTheme() so the dark/light swap paints in
+   one frame instead of every transition fading independently. */
+.wp-theme-switching,
+.wp-theme-switching *,
+.wp-theme-switching *::before,
+.wp-theme-switching *::after {
+  transition: none !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
