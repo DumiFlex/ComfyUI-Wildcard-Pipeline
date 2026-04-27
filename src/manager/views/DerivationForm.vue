@@ -10,7 +10,14 @@ import AutoComplete from "primevue/autocomplete";
 import { useToast } from "primevue/usetoast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import type { DerivationPayload } from "../api/types";
+import DerivationRuleCard from "../components/DerivationRuleCard.vue";
+import type {
+  DerivationAction,
+  DerivationBranch,
+  DerivationElse,
+  DerivationPayload,
+  DerivationRule,
+} from "../api/types";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -22,9 +29,14 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
-const payload = ref<DerivationPayload>({ rules: [] });
+const rules = ref<DerivationRule[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
+
+// Variable suggestions are populated by the parent surface in the future. For
+// now this is intentionally an empty list — the rule card falls back to a free
+// InputText when no suggestions are provided.
+const varSuggestions = ref<string[]>([]);
 
 const tagSuggestions = ref<string[]>([]);
 function searchTags(event: { query: string }) {
@@ -38,6 +50,82 @@ function searchTags(event: { query: string }) {
     .slice(0, 10);
 }
 
+let ruleSeq = 0;
+function newRuleId(): string {
+  ruleSeq += 1;
+  return `r_${Date.now().toString(36)}_${ruleSeq}`;
+}
+
+function blankAction(): DerivationAction {
+  return { target_var: "", mode: "replace", value: "" };
+}
+function blankBranch(): DerivationBranch {
+  return {
+    condition: { var: "", op: "equals", value: "" },
+    action: blankAction(),
+  };
+}
+function blankRule(): DerivationRule {
+  return { id: newRuleId(), branches: [blankBranch()] };
+}
+
+function migrateRule(raw: unknown): DerivationRule {
+  const r = (raw ?? {}) as Partial<DerivationRule> & {
+    else?: Partial<DerivationElse> | DerivationAction | null;
+  };
+  const id = typeof r.id === "string" && r.id ? r.id : newRuleId();
+  const branchesIn = Array.isArray(r.branches) ? r.branches : [];
+  const branches: DerivationBranch[] = branchesIn.length
+    ? branchesIn.map((b) => migrateBranch(b))
+    : [blankBranch()];
+  const out: DerivationRule = { id, branches };
+  if (r.else && typeof r.else === "object") {
+    // Tolerate either {action: ...} (canonical) or a bare action object (older
+    // designs / the simplified handoff spec).
+    const wrapped = (r.else as Partial<DerivationElse>).action;
+    const action = wrapped
+      ? migrateAction(wrapped)
+      : migrateAction(r.else as Partial<DerivationAction>);
+    out.else = { action };
+  }
+  return out;
+}
+
+function migrateBranch(raw: unknown): DerivationBranch {
+  const b = (raw ?? {}) as Partial<DerivationBranch>;
+  const cIn = (b.condition ?? {}) as Record<string, unknown>;
+  const aIn = (b.action ?? {}) as Record<string, unknown>;
+  const op = typeof cIn.op === "string" ? cIn.op : "equals";
+  return {
+    condition: {
+      var: typeof cIn.var === "string" ? cIn.var : "",
+      op: (op === "equals" || op === "not_equals" || op === "contains" || op === "matches"
+        ? op
+        : "equals") as DerivationBranch["condition"]["op"],
+      value: typeof cIn.value === "string" ? cIn.value : "",
+    },
+    action: migrateAction(aIn),
+  };
+}
+
+function migrateAction(raw: unknown): DerivationAction {
+  const a = (raw ?? {}) as Record<string, unknown>;
+  const target =
+    typeof a.target_var === "string"
+      ? a.target_var
+      : typeof a.target === "string"
+        ? a.target
+        : "";
+  const mode = typeof a.mode === "string" ? a.mode : "replace";
+  return {
+    target_var: target,
+    mode: (mode === "replace" || mode === "append" || mode === "prepend"
+      ? mode
+      : "replace") as DerivationAction["mode"],
+    value: typeof a.value === "string" ? a.value : "",
+  };
+}
+
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchAll()]);
   if (props.id) {
@@ -48,13 +136,26 @@ onMounted(async () => {
       categoryId.value = row.category_id;
       tags.value = row.tags;
       const p = row.payload as Partial<DerivationPayload>;
-      payload.value = { rules: p.rules ?? [] };
+      const incoming = Array.isArray(p.rules) ? p.rules : [];
+      rules.value = incoming.length ? incoming.map(migrateRule) : [];
     } catch {
       toast.add({ severity: "error", summary: "Derivation not found", life: 3000 });
       router.replace("/derivations");
     }
   }
 });
+
+function addRule() {
+  rules.value = [...rules.value, blankRule()];
+}
+
+function removeRule(idx: number) {
+  rules.value = rules.value.filter((_, i) => i !== idx);
+}
+
+function updateRule(idx: number, value: DerivationRule) {
+  rules.value = rules.value.map((r, i) => (i === idx ? value : r));
+}
 
 async function save() {
   if (!name.value.trim()) {
@@ -63,12 +164,13 @@ async function save() {
   }
   saving.value = true;
   try {
+    const payload: DerivationPayload = { rules: rules.value };
     const body = {
       name: name.value,
       description: description.value,
       category_id: categoryId.value,
       tags: tags.value,
-      payload: payload.value as unknown as Record<string, unknown>,
+      payload: payload as unknown as Record<string, unknown>,
     };
     if (isEdit.value && props.id) {
       await moduleStore.update(props.id, body);
@@ -83,6 +185,8 @@ async function save() {
     saving.value = false;
   }
 }
+
+defineExpose({ rules, addRule, removeRule });
 </script>
 
 <template>
@@ -95,6 +199,7 @@ async function save() {
     </div>
 
     <div class="form-page__body">
+      <!-- A) Identity -->
       <section class="form-section">
         <h2 class="form-section__label">Identity</h2>
         <div class="grid grid-cols-2 gap-4">
@@ -130,16 +235,44 @@ async function save() {
         </div>
       </section>
 
+      <!-- B) Rules -->
       <section class="form-section">
-        <h2 class="form-section__label">Rules</h2>
-        <Card>
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="form-section__label m-0">Rules ({{ rules.length }})</h2>
+          <Button
+            label="Add rule"
+            icon="pi pi-plus"
+            size="small"
+            severity="primary"
+            data-test="add-rule"
+            aria-label="Add rule"
+            @click="addRule"
+          />
+        </div>
+        <p class="text-xs text-wp-text2 mb-3">
+          All rules evaluate independently. Each rule may have multiple ELIF branches and an optional ELSE.
+        </p>
+
+        <Card v-if="rules.length === 0" data-test="rules-empty">
           <template #content>
-            <p class="text-sm text-wp-text2 m-0 mb-2">
-              Editor coming soon — payload shown below.
-            </p>
-            <pre class="payload-preview" data-test="payload-preview">{{ JSON.stringify(payload, null, 2) }}</pre>
+            <div class="text-sm text-wp-text2 py-6 text-center">
+              No rules yet. Click <strong>Add rule</strong> to start defining IF / ELIF / ELSE behaviour.
+            </div>
           </template>
         </Card>
+
+        <div v-else class="rules-stack" data-test="rules-stack">
+          <DerivationRuleCard
+            v-for="(rule, idx) in rules"
+            :key="rule.id"
+            :model-value="rule"
+            :index="idx"
+            :var-suggestions="varSuggestions"
+            :data-test="`rule-${idx}`"
+            @update:model-value="(v) => updateRule(idx, v)"
+            @remove="removeRule(idx)"
+          />
+        </div>
       </section>
     </div>
 
@@ -167,17 +300,9 @@ async function save() {
   letter-spacing: 0.5px; color: var(--wp-text2);
   margin: 0 0 8px 0;
 }
-.payload-preview {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  padding: 8px 10px;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin: 0;
-  color: var(--wp-text);
-  max-height: 320px;
-  overflow: auto;
+.rules-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 </style>
