@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
+import InputGroup from "primevue/inputgroup";
+import InputGroupAddon from "primevue/inputgroupaddon";
 import Textarea from "primevue/textarea";
 import InputNumber from "primevue/inputnumber";
 import Select from "primevue/select";
@@ -12,7 +14,7 @@ import RichTextInput from "../components/RichTextInput.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
-import type { WildcardOption, WildcardPayload } from "../api/types";
+import type { CombinePayload, WildcardOption, WildcardPayload } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -43,7 +45,7 @@ const subCategoryOptions = computed(() => [
 
 // Suggestions for option-value RichTextInput: every other wildcard's
 // var_binding (or slug fallback). Self is excluded so authors don't write
-// a recursive reference by accident.
+// a recursive reference by accident. Powers `@`-trigger autocomplete.
 const otherWildcardBindings = computed<string[]>(() => {
   const out: string[] = [];
   for (const m of moduleStore.items) {
@@ -54,6 +56,37 @@ const otherWildcardBindings = computed<string[]>(() => {
     if (binding && !out.includes(binding)) out.push(binding);
   }
   return out;
+});
+
+// `$varname` suggestions for option-value RichTextInput. Authors can splice
+// upstream context values into a wildcard option (e.g. `$character_name`).
+// Pulls the union of:
+//   * other wildcards' `var_binding`
+//   * fixed_values entries' `name`
+//   * combines' `output_var`
+// Self is excluded so the editor never suggests its own binding.
+const varSuggestions = computed<string[]>(() => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of moduleStore.items) {
+    if (props.id && m.id === props.id) continue;
+    if (m.type === "wildcard") {
+      const p = (m.payload ?? {}) as Partial<WildcardPayload>;
+      const binding = (p.var_binding && p.var_binding.trim()) || toIdentifier(m.name);
+      if (binding && !seen.has(binding)) { seen.add(binding); out.push(binding); }
+    } else if (m.type === "fixed_values") {
+      const values = ((m.payload ?? {}) as { values?: { name?: string }[] }).values ?? [];
+      for (const row of values) {
+        const n = (row.name ?? "").replace(/^\$+/, "").trim();
+        if (n && !seen.has(n)) { seen.add(n); out.push(n); }
+      }
+    } else if (m.type === "combine") {
+      const p = (m.payload ?? {}) as Partial<CombinePayload>;
+      const o = (p.output_var ?? "").replace(/^\$+/, "").trim();
+      if (o && !seen.has(o)) { seen.add(o); out.push(o); }
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
 });
 
 watch(name, (next) => {
@@ -189,17 +222,19 @@ async function save() {
             <InputText id="wc-name" v-model="name" class="w-full" />
           </div>
           <div>
-            <label for="wc-var" class="block text-xs text-wp-text2 mb-1">Variable name</label>
-            <InputText
-              id="wc-var"
-              :model-value="varBinding"
-              data-test="wc-var-binding"
-              class="w-full"
-              :class="{ 'p-invalid': !!varBindingError }"
-              @update:model-value="onVarBindingInput"
-            />
+            <label for="wc-var" class="block text-xs text-wp-text2 mb-1">Variable</label>
+            <InputGroup>
+              <InputGroupAddon><i class="pi pi-dollar" /></InputGroupAddon>
+              <InputText
+                id="wc-var"
+                :model-value="varBinding"
+                data-test="wc-var-binding"
+                :class="{ 'p-invalid': !!varBindingError }"
+                @update:model-value="onVarBindingInput"
+              />
+            </InputGroup>
             <p class="text-xs text-wp-text2 mt-1">
-              Other modules will reference this wildcard's resolved value as <span class="wc-var-mono">${{ varBinding || "name" }}</span>.
+              Resolved options bind to this variable. Auto-suggested from name; you can edit it.
             </p>
             <p v-if="varBindingError" class="text-xs text-wp-danger mt-1" data-test="wc-var-error">
               {{ varBindingError }}
@@ -286,6 +321,8 @@ async function save() {
                 <RichTextInput
                   v-model="opt.value"
                   :ref-suggestions="otherWildcardBindings"
+                  :var-suggestions="varSuggestions"
+                  placeholder="e.g. red, green, or @hair_color"
                   aria-label="Option value"
                 />
               </td>
@@ -310,6 +347,11 @@ async function save() {
             </tr>
           </tbody>
         </table>
+        <p class="text-xs text-wp-text2 mt-2">
+          <code>@</code> autocompletes other wildcards.
+          <code>{a|b|c}</code> picks one randomly.
+          <code>$$</code> and <code>@@</code> escape literal characters.
+        </p>
       </section>
     </div>
 
@@ -350,8 +392,4 @@ async function save() {
 }
 .sub-cat-chip i { opacity: 0.7; font-size: 10px; }
 .sub-cat-chip i:hover { opacity: 1; }
-.wc-var-mono {
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  color: var(--wp-accent-text, #c4b5fd);
-}
 </style>
