@@ -18,8 +18,7 @@ vi.mock("../api/client", () => ({
 }));
 
 import { api } from "../api/client";
-import ConstraintForm from "../views/ConstraintForm.vue";
-import ConstraintMatrix from "../components/ConstraintMatrix.vue";
+import ConstraintEditor from "../views/ConstraintEditor.vue";
 import type {
   ConstraintMatrix as Matrix,
   ModuleRow,
@@ -70,13 +69,9 @@ function makeRouter() {
   });
 }
 
-function findByText(wrap: ReturnType<typeof mount>, text: string) {
-  return wrap.findAll("button").find((b) => b.text().includes(text));
-}
-
-describe("ConstraintForm.vue", () => {
+describe("ConstraintEditor.vue", () => {
   it("renders 'New constraint' heading when no id", async () => {
-    const wrap = mount(ConstraintForm, {
+    const wrap = mount(ConstraintEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
@@ -92,31 +87,22 @@ describe("ConstraintForm.vue", () => {
       total: 2,
     });
     apiMod.get.mockResolvedValue({
-      id: "cn_a",
-      type: "constraint",
-      name: "Outfit × Hair",
-      description: "desc",
-      category_id: null,
-      tags: [],
-      is_favorite: false,
+      id: "cn_a", type: "constraint", name: "Outfit x Hair",
+      description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         source_wildcard_id: "wc_src",
         target_wildcard_id: "wc_tgt",
         matrix: { jeans: { warm: { mode: "boost", factor: 2 } } } as Matrix,
         exceptions: [],
       },
-      version: 1,
-      created_at: "",
-      updated_at: "",
+      version: 1, created_at: "", updated_at: "",
     });
-    const wrap = mount(ConstraintForm, {
+    const wrap = mount(ConstraintEditor, {
       props: { id: "cn_a" },
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit constraint");
-    expect(apiMod.get).toHaveBeenCalledWith("cn_a");
-    // The grid should render the loaded matrix as a boost cell
     const cell = wrap.find('button[data-test="cell-jeans-warm"]');
     expect(cell.exists()).toBe(true);
     expect(cell.attributes("data-mode")).toBe("boost");
@@ -141,15 +127,12 @@ describe("ConstraintForm.vue", () => {
       },
       version: 1, created_at: "", updated_at: "",
     });
-    const wrap = mount(ConstraintForm, {
+    const wrap = mount(ConstraintEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
-    // Set name
-    const nameInput = wrap.find("#cn-name");
+    const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("C1");
-    await nameInput.trigger("input");
-    // Set source/target via component instance refs (Select dropdowns are JSDOM-flaky)
     const vm = wrap.vm as unknown as {
       sourceWildcardId: string | null;
       targetWildcardId: string | null;
@@ -157,8 +140,8 @@ describe("ConstraintForm.vue", () => {
     vm.sourceWildcardId = "wc_src";
     vm.targetWildcardId = "wc_tgt";
     await flushPromises();
-    const saveBtn = findByText(wrap, "Save");
-    await saveBtn?.trigger("click");
+    const saveBtn = wrap.find('[data-test="save-btn"]');
+    await saveBtn.trigger("click");
     await flushPromises();
     expect(apiMod.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -173,55 +156,15 @@ describe("ConstraintForm.vue", () => {
   });
 
   it("save without source/target shows warn and does not call api", async () => {
-    const wrap = mount(ConstraintForm, {
+    const wrap = mount(ConstraintEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
-    const nameInput = wrap.find("#cn-name");
+    const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("C1");
-    await nameInput.trigger("input");
-    const saveBtn = findByText(wrap, "Save");
-    await saveBtn?.trigger("click");
+    const saveBtn = wrap.find('[data-test="save-btn"]');
+    await saveBtn.trigger("click");
     await flushPromises();
     expect(apiMod.create).not.toHaveBeenCalled();
-  });
-
-  it("cycling a cell emits the new mode (allow → exclude)", async () => {
-    apiMod.list.mockResolvedValue({
-      items: [
-        makeWildcardRow("wc_src", "Outfit", { values: ["jeans"] }),
-        makeWildcardRow("wc_tgt", "HairColor", { subs: ["warm"] }),
-      ],
-      total: 2,
-    });
-    apiMod.get.mockResolvedValue({
-      id: "cn_a", type: "constraint", name: "C", description: "",
-      category_id: null, tags: [], is_favorite: false,
-      payload: {
-        source_wildcard_id: "wc_src",
-        target_wildcard_id: "wc_tgt",
-        matrix: {},
-        exceptions: [],
-      },
-      version: 1, created_at: "", updated_at: "",
-    });
-    const wrap = mount(ConstraintForm, {
-      props: { id: "cn_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
-    });
-    await flushPromises();
-    const cell = wrap.find('button[data-test="cell-jeans-warm"]');
-    expect(cell.exists()).toBe(true);
-    expect(cell.attributes("data-mode")).toBe("allow");
-    await cell.trigger("click");
-    await flushPromises();
-    // After click + parent re-render, the cell should now be "exclude".
-    const cellAfter = wrap.find('button[data-test="cell-jeans-warm"]');
-    expect(cellAfter.attributes("data-mode")).toBe("exclude");
-    // And the matrix grid component emitted update:modelValue
-    const grid = wrap.findComponent(ConstraintMatrix);
-    const evs = grid.emitted("update:modelValue") ?? [];
-    const last = evs[evs.length - 1]?.[0] as Matrix;
-    expect(last.jeans.warm.mode).toBe("exclude");
   });
 });

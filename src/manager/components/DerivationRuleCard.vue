@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Card from "primevue/card";
-import Button from "primevue/button";
-import InputText from "primevue/inputtext";
-import Textarea from "primevue/textarea";
-import Select from "primevue/select";
-import Tag from "primevue/tag";
+import Card from "./ui/Card.vue";
+import Button from "./ui/Button.vue";
+import Input from "./ui/Input.vue";
+import Textarea from "./ui/Textarea.vue";
+import Select from "./ui/Select.vue";
+import Pill from "./ui/Pill.vue";
 import type {
   DerivationAction,
   DerivationBranch,
@@ -55,10 +55,6 @@ function blankBranch(): DerivationBranch {
 }
 
 const rule = computed<DerivationRule>(() => props.modelValue);
-
-const varOptions = computed(() =>
-  (props.varSuggestions ?? []).map((v) => ({ label: v, value: v })),
-);
 
 function patch(next: Partial<DerivationRule>) {
   emit("update:modelValue", { ...rule.value, ...next });
@@ -156,205 +152,176 @@ const branchCount = computed(() => rule.value.branches.length);
 
 <template>
   <Card class="derivation-rule-card" :data-test="`rule-card-${index}`">
-    <template #content>
-      <div class="rule-head">
-        <Tag severity="info" :value="`Rule ${ruleNumber}`" data-test="rule-label" />
-        <span class="rule-meta">
-          {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
-          <span v-if="rule.else"> + ELSE</span>
-        </span>
-        <span class="spacer" />
-        <Button
-          icon="pi pi-trash"
-          severity="danger"
-          text
-          rounded
-          size="small"
-          :aria-label="`Remove rule ${ruleNumber}`"
-          :data-test="`remove-rule-${index}`"
-          @click="emit('remove')"
-        />
-      </div>
+    <div class="rule-head">
+      <Pill tone="info" data-test="rule-label">Rule {{ ruleNumber }}</Pill>
+      <span class="rule-meta">
+        {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
+        <span v-if="rule.else"> + ELSE</span>
+      </span>
+      <span class="spacer" />
+      <Button
+        icon="pi pi-trash"
+        variant="ghost"
+        size="sm"
+        :aria-label="`Remove rule ${ruleNumber}`"
+        :data-test="`remove-rule-${index}`"
+        @click="emit('remove')"
+      />
+    </div>
 
-      <div class="branches">
-        <div
-          v-for="(branch, bi) in rule.branches"
-          :key="bi"
-          class="branch"
-          :data-kind="bi === 0 ? 'if' : 'elif'"
-          :data-test="`branch-${index}-${bi}`"
-        >
-          <div class="branch-head">
-            <span class="branch-tag" :data-kind="bi === 0 ? 'if' : 'elif'">
-              {{ bi === 0 ? "IF" : "ELIF" }}
-            </span>
-            <span class="spacer" />
-            <Button
-              v-if="bi > 0"
-              icon="pi pi-times"
-              severity="danger"
-              text
-              size="small"
-              :aria-label="`Remove ELIF branch ${bi} from rule ${ruleNumber}`"
-              :data-test="`remove-elif-${index}-${bi}`"
-              @click="removeBranch(bi)"
+    <div class="branches">
+      <div
+        v-for="(branch, bi) in rule.branches"
+        :key="bi"
+        class="branch"
+        :data-kind="bi === 0 ? 'if' : 'elif'"
+        :data-test="`branch-${index}-${bi}`"
+      >
+        <div class="branch-head">
+          <span class="branch-tag" :data-kind="bi === 0 ? 'if' : 'elif'">
+            {{ bi === 0 ? "IF" : "ELIF" }}
+          </span>
+          <span class="spacer" />
+          <Button
+            v-if="bi > 0"
+            icon="pi pi-times"
+            variant="ghost"
+            size="sm"
+            :aria-label="`Remove ELIF branch ${bi} from rule ${ruleNumber}`"
+            :data-test="`remove-elif-${index}-${bi}`"
+            @click="removeBranch(bi)"
+          />
+        </div>
+
+        <!-- Condition row -->
+        <div class="row">
+          <span class="row-label">When</span>
+          <div class="row-fields">
+            <Input
+              :model-value="branch.condition.var"
+              placeholder="$variable"
+              class="field-var"
+              :aria-label="`Condition variable for rule ${ruleNumber} branch ${bi + 1}`"
+              @update:model-value="(v) => onConditionVar(bi, String(v ?? ''))"
             />
-          </div>
-
-          <!-- Condition row -->
-          <div class="row">
-            <span class="row-label">When</span>
-            <div class="row-fields">
-              <Select
-                v-if="varOptions.length"
-                :model-value="branch.condition.var"
-                :options="varOptions"
-                option-label="label"
-                option-value="value"
-                editable
-                placeholder="$variable"
-                class="field-var"
-                :aria-label="`Condition variable for rule ${ruleNumber} branch ${bi + 1}`"
-                @update:model-value="(v: string) => onConditionVar(bi, v ?? '')"
-              />
-              <InputText
-                v-else
-                :model-value="branch.condition.var"
-                placeholder="$variable"
-                class="field-var"
-                :aria-label="`Condition variable for rule ${ruleNumber} branch ${bi + 1}`"
-                @update:model-value="(v: string | undefined) => onConditionVar(bi, v ?? '')"
-              />
-              <Select
-                :model-value="branch.condition.op"
-                :options="OP_OPTIONS"
-                option-label="label"
-                option-value="value"
-                class="field-op"
-                :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
-                @update:model-value="(v: DerivationOp) => onConditionOp(bi, v)"
-              />
-              <InputText
-                :model-value="branch.condition.value"
-                placeholder="value"
-                class="field-value"
-                :aria-label="`Condition value for rule ${ruleNumber} branch ${bi + 1}`"
-                @update:model-value="(v: string | undefined) => onConditionValue(bi, v ?? '')"
-              />
-            </div>
-          </div>
-
-          <!-- Action row -->
-          <div class="row">
-            <span class="row-label">Then</span>
-            <div class="row-fields">
-              <InputText
-                :model-value="branch.action.target_var"
-                placeholder="target_var"
-                class="field-var"
-                :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}`"
-                @update:model-value="(v: string | undefined) => onActionTarget(bi, v ?? '')"
-              />
-              <Select
-                :model-value="branch.action.mode"
-                :options="MODE_OPTIONS"
-                option-label="label"
-                option-value="value"
-                class="field-op"
-                :aria-label="`Action mode for rule ${ruleNumber} branch ${bi + 1}`"
-                @update:model-value="(v: DerivationMode) => onActionMode(bi, v)"
-              />
-            </div>
-          </div>
-          <div class="row row--textarea">
-            <span class="row-label">Value</span>
-            <Textarea
-              :model-value="branch.action.value"
-              rows="2"
-              auto-resize
-              class="field-textarea"
-              placeholder="The new / appended / prepended value"
-              :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
-              @update:model-value="(v: string | undefined) => onActionValue(bi, v ?? '')"
+            <Select
+              :model-value="branch.condition.op"
+              :options="OP_OPTIONS"
+              class="field-op"
+              :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
+              @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
+            />
+            <Input
+              :model-value="branch.condition.value"
+              placeholder="value"
+              class="field-value"
+              :aria-label="`Condition value for rule ${ruleNumber} branch ${bi + 1}`"
+              @update:model-value="(v) => onConditionValue(bi, String(v ?? ''))"
             />
           </div>
         </div>
 
-        <!-- ELSE branch -->
-        <div v-if="rule.else" class="branch branch--else" data-kind="else" :data-test="`branch-else-${index}`">
-          <div class="branch-head">
-            <span class="branch-tag" data-kind="else">ELSE</span>
-            <span class="spacer" />
-            <Button
-              icon="pi pi-times"
-              severity="danger"
-              text
-              size="small"
-              :aria-label="`Remove ELSE branch from rule ${ruleNumber}`"
-              :data-test="`remove-else-${index}`"
-              @click="removeElse"
+        <!-- Action row -->
+        <div class="row">
+          <span class="row-label">Then</span>
+          <div class="row-fields">
+            <Input
+              :model-value="branch.action.target_var"
+              placeholder="target_var"
+              class="field-var"
+              :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}`"
+              @update:model-value="(v) => onActionTarget(bi, String(v ?? ''))"
             />
-          </div>
-          <div class="row">
-            <span class="row-label">Then</span>
-            <div class="row-fields">
-              <InputText
-                :model-value="rule.else.action.target_var"
-                placeholder="target_var"
-                class="field-var"
-                :aria-label="`ELSE action target variable for rule ${ruleNumber}`"
-                @update:model-value="(v: string | undefined) => onElseTarget(v ?? '')"
-              />
-              <Select
-                :model-value="rule.else.action.mode"
-                :options="MODE_OPTIONS"
-                option-label="label"
-                option-value="value"
-                class="field-op"
-                :aria-label="`ELSE action mode for rule ${ruleNumber}`"
-                @update:model-value="(v: DerivationMode) => onElseMode(v)"
-              />
-            </div>
-          </div>
-          <div class="row row--textarea">
-            <span class="row-label">Value</span>
-            <Textarea
-              :model-value="rule.else.action.value"
-              rows="2"
-              auto-resize
-              class="field-textarea"
-              placeholder="The new / appended / prepended value"
-              :aria-label="`ELSE action value for rule ${ruleNumber}`"
-              @update:model-value="(v: string | undefined) => onElseValue(v ?? '')"
+            <Select
+              :model-value="branch.action.mode"
+              :options="MODE_OPTIONS"
+              class="field-op"
+              :aria-label="`Action mode for rule ${ruleNumber} branch ${bi + 1}`"
+              @update:model-value="(v) => onActionMode(bi, v as DerivationMode)"
             />
           </div>
         </div>
+        <div class="row row--textarea">
+          <span class="row-label">Value</span>
+          <Textarea
+            :model-value="branch.action.value"
+            :rows="2"
+            auto-resize
+            class="field-textarea"
+            placeholder="The new / appended / prepended value"
+            :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
+            @update:model-value="(v) => onActionValue(bi, v ?? '')"
+          />
+        </div>
       </div>
 
-      <div class="addbar">
-        <Button
-          icon="pi pi-plus"
-          label="Add elif"
-          severity="secondary"
-          text
-          size="small"
-          :aria-label="`Add ELIF branch to rule ${ruleNumber}`"
-          :data-test="`add-elif-${index}`"
-          @click="addBranch"
-        />
-        <Button
-          v-if="!rule.else"
-          icon="pi pi-plus"
-          label="Add else"
-          severity="secondary"
-          text
-          size="small"
-          :aria-label="`Add ELSE branch to rule ${ruleNumber}`"
-          :data-test="`add-else-${index}`"
-          @click="addElse"
-        />
+      <!-- ELSE branch -->
+      <div v-if="rule.else" class="branch branch--else" data-kind="else" :data-test="`branch-else-${index}`">
+        <div class="branch-head">
+          <span class="branch-tag" data-kind="else">ELSE</span>
+          <span class="spacer" />
+          <Button
+            icon="pi pi-times"
+            variant="ghost"
+            size="sm"
+            :aria-label="`Remove ELSE branch from rule ${ruleNumber}`"
+            :data-test="`remove-else-${index}`"
+            @click="removeElse"
+          />
+        </div>
+        <div class="row">
+          <span class="row-label">Then</span>
+          <div class="row-fields">
+            <Input
+              :model-value="rule.else.action.target_var"
+              placeholder="target_var"
+              class="field-var"
+              :aria-label="`ELSE action target variable for rule ${ruleNumber}`"
+              @update:model-value="(v) => onElseTarget(String(v ?? ''))"
+            />
+            <Select
+              :model-value="rule.else.action.mode"
+              :options="MODE_OPTIONS"
+              class="field-op"
+              :aria-label="`ELSE action mode for rule ${ruleNumber}`"
+              @update:model-value="(v) => onElseMode(v as DerivationMode)"
+            />
+          </div>
+        </div>
+        <div class="row row--textarea">
+          <span class="row-label">Value</span>
+          <Textarea
+            :model-value="rule.else.action.value"
+            :rows="2"
+            auto-resize
+            class="field-textarea"
+            placeholder="The new / appended / prepended value"
+            :aria-label="`ELSE action value for rule ${ruleNumber}`"
+            @update:model-value="(v) => onElseValue(v ?? '')"
+          />
+        </div>
       </div>
-    </template>
+    </div>
+
+    <div class="addbar">
+      <Button
+        icon="pi pi-plus"
+        variant="ghost"
+        size="sm"
+        :aria-label="`Add ELIF branch to rule ${ruleNumber}`"
+        :data-test="`add-elif-${index}`"
+        @click="addBranch"
+      >Add elif</Button>
+      <Button
+        v-if="!rule.else"
+        icon="pi pi-plus"
+        variant="ghost"
+        size="sm"
+        :aria-label="`Add ELSE branch to rule ${ruleNumber}`"
+        :data-test="`add-else-${index}`"
+        @click="addElse"
+      >Add else</Button>
+    </div>
   </Card>
 </template>
 
@@ -362,12 +329,6 @@ const branchCount = computed(() => rule.value.branches.length);
 .derivation-rule-card {
   border-left: 3px solid var(--wp-kind-derivation, #fbbf24);
   background: var(--wp-bg, #1e1e22);
-}
-.derivation-rule-card :deep(.p-card-body) {
-  padding: 12px 14px;
-}
-.derivation-rule-card :deep(.p-card-content) {
-  padding: 0;
 }
 
 .rule-head {

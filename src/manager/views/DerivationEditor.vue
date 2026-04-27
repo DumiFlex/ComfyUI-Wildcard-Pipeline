@@ -1,17 +1,21 @@
 <script setup lang="ts">
+/**
+ * DerivationEditor — Wave 4 port of `DerivationEditor` in `screens/editors.jsx`.
+ *
+ * Sections:
+ *  1. Identity
+ *  2. Rules list (DerivationRuleCard, with add/remove)
+ */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
-import Card from "primevue/card";
-import InputText from "primevue/inputtext";
-import Textarea from "primevue/textarea";
-import Select from "primevue/select";
-import AutoComplete from "primevue/autocomplete";
-import { useToast } from "primevue/usetoast";
+import EditorFrame from "../components/EditorFrame.vue";
+import IdentityCard from "../components/IdentityCard.vue";
+import Card from "../components/ui/Card.vue";
+import Button from "../components/ui/Button.vue";
+import DerivationRuleCard from "../components/DerivationRuleCard.vue";
+import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import DerivationRuleCard from "../components/DerivationRuleCard.vue";
-import HistoryPanel from "../components/HistoryPanel.vue";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   DerivationAction,
@@ -36,24 +40,8 @@ const rules = ref<DerivationRule[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
-const historyOpen = ref(false);
 
-// Variable suggestions are populated by the parent surface in the future. For
-// now this is intentionally an empty list — the rule card falls back to a free
-// InputText when no suggestions are provided.
 const varSuggestions = ref<string[]>([]);
-
-const tagSuggestions = ref<string[]>([]);
-function searchTags(event: { query: string }) {
-  const q = event.query.toLowerCase();
-  const known = new Set<string>();
-  for (const m of moduleStore.items) {
-    for (const t of m.tags ?? []) known.add(t);
-  }
-  tagSuggestions.value = Array.from(known)
-    .filter((t) => t.toLowerCase().includes(q) && !tags.value.includes(t))
-    .slice(0, 10);
-}
 
 let ruleSeq = 0;
 function newRuleId(): string {
@@ -85,8 +73,6 @@ function migrateRule(raw: unknown): DerivationRule {
     : [blankBranch()];
   const out: DerivationRule = { id, branches };
   if (r.else && typeof r.else === "object") {
-    // Tolerate either {action: ...} (canonical) or a bare action object (older
-    // designs / the simplified handoff spec).
     const wrapped = (r.else as Partial<DerivationElse>).action;
     const action = wrapped
       ? migrateAction(wrapped)
@@ -145,7 +131,7 @@ onMounted(async () => {
       rules.value = incoming.length ? incoming.map(migrateRule) : [];
       historyEntries.value = readHistory(row.payload);
     } catch {
-      toast.add({ severity: "error", summary: "Derivation not found", life: 3000 });
+      toast.push({ severity: "error", summary: "Derivation not found" });
       router.replace("/derivations");
     }
   }
@@ -154,11 +140,9 @@ onMounted(async () => {
 function addRule() {
   rules.value = [...rules.value, blankRule()];
 }
-
 function removeRule(idx: number) {
   rules.value = rules.value.filter((_, i) => i !== idx);
 }
-
 function updateRule(idx: number, value: DerivationRule) {
   rules.value = rules.value.map((r, i) => (i === idx ? value : r));
 }
@@ -171,8 +155,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   const p = (entry.payload ?? {}) as Partial<DerivationPayload>;
   const incoming = Array.isArray(p.rules) ? p.rules : [];
   rules.value = incoming.length ? incoming.map(migrateRule) : [];
-  historyOpen.value = false;
-  toast.add({
+  toast.push({
     severity: "info",
     summary: "Version restored",
     detail: `Restored from ${new Date(entry.saved_at).toLocaleString()}; click Save to commit.`,
@@ -182,7 +165,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
 
 async function save() {
   if (!name.value.trim()) {
-    toast.add({ severity: "warn", summary: "Name required", life: 2000 });
+    toast.push({ severity: "warn", summary: "Name required" });
     return;
   }
   saving.value = true;
@@ -219,145 +202,85 @@ async function save() {
         payload: newPayload,
       });
     }
-    toast.add({ severity: "success", summary: "Saved", detail: name.value, life: 2000 });
+    toast.push({ severity: "success", summary: "Saved", detail: name.value });
     router.push("/derivations");
   } catch (e) {
-    toast.add({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
+    toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
   } finally {
     saving.value = false;
   }
 }
 
-defineExpose({ rules, addRule, removeRule, historyEntries, historyOpen, applyRestore });
+function cancel() { router.push("/derivations"); }
+
+defineExpose({ rules, addRule, removeRule, applyRestore });
 </script>
 
 <template>
-  <div class="form-page">
-    <div class="form-page__header">
-      <RouterLink to="/derivations" class="text-xs text-wp-text2 hover:text-wp-text">
-        <i class="pi pi-angle-left text-xs" /> Derivations
-      </RouterLink>
-      <h1 class="text-xl font-semibold m-0 mt-1">{{ isEdit ? "Edit derivation" : "New derivation" }}</h1>
-    </div>
-
-    <div class="form-page__body">
-      <!-- A) Identity -->
-      <section class="form-section">
-        <h2 class="form-section__label">Identity</h2>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label for="dv-name" class="block text-xs text-wp-text2 mb-1">Name</label>
-            <InputText id="dv-name" v-model="name" class="w-full" />
-          </div>
-          <div>
-            <label for="dv-cat" class="block text-xs text-wp-text2 mb-1">Category</label>
-            <Select
-              id="dv-cat" v-model="categoryId"
-              :options="categoryStore.items" option-label="name" option-value="id"
-              placeholder="None" show-clear class="w-full"
-            />
-          </div>
-          <div class="col-span-2">
-            <label for="dv-desc" class="block text-xs text-wp-text2 mb-1">Description</label>
-            <Textarea id="dv-desc" v-model="description" rows="2" class="w-full" />
-          </div>
-          <div class="col-span-2">
-            <label for="dv-tags" class="block text-xs text-wp-text2 mb-1">Tags</label>
-            <AutoComplete
-              id="dv-tags"
-              v-model="tags"
-              multiple
-              typeahead
-              :suggestions="tagSuggestions"
-              placeholder="Type a tag and press Enter…"
-              class="w-full"
-              @complete="searchTags"
-            />
-          </div>
-        </div>
-      </section>
-
-      <!-- B) Rules -->
-      <section class="form-section">
-        <div class="flex items-center justify-between mb-1">
-          <h2 class="form-section__label m-0">Rules ({{ rules.length }})</h2>
-          <Button
-            label="Add rule"
-            icon="pi pi-plus"
-            size="small"
-            severity="primary"
-            data-test="add-rule"
-            aria-label="Add rule"
-            @click="addRule"
-          />
-        </div>
-        <p class="text-xs text-wp-text2 mb-3">
-          All rules evaluate independently. Each rule may have multiple ELIF branches and an optional ELSE.
-        </p>
-
-        <Card v-if="rules.length === 0" data-test="rules-empty">
-          <template #content>
-            <div class="text-sm text-wp-text2 py-6 text-center">
-              No rules yet. Click <strong>Add rule</strong> to start defining IF / ELIF / ELSE behaviour.
-            </div>
-          </template>
-        </Card>
-
-        <div v-else class="rules-stack" data-test="rules-stack">
-          <DerivationRuleCard
-            v-for="(rule, idx) in rules"
-            :key="rule.id"
-            :model-value="rule"
-            :index="idx"
-            :var-suggestions="varSuggestions"
-            :data-test="`rule-${idx}`"
-            @update:model-value="(v) => updateRule(idx, v)"
-            @remove="removeRule(idx)"
-          />
-        </div>
-      </section>
-    </div>
-
-    <div class="form-page__footer">
-      <Button
-        v-if="historyEntries.length"
-        :label="`History (${historyEntries.length})`"
-        icon="pi pi-history"
-        severity="secondary"
-        outlined
-        data-test="history-btn"
-        @click="historyOpen = true"
-      />
-      <div class="form-page__footer-spacer" />
-      <Button label="Cancel" severity="secondary" outlined @click="router.push('/derivations')" />
-      <Button label="Save" icon="pi pi-check" severity="primary" :loading="saving" data-test="save-btn" @click="save" />
-    </div>
-    <HistoryPanel
-      :open="historyOpen"
-      :entries="historyEntries"
-      @update:open="(v) => (historyOpen = v)"
-      @restore="applyRestore"
+  <EditorFrame
+    :title="isEdit ? 'Edit derivation' : 'New derivation'"
+    back-route="/derivations"
+    back-label="Derivations"
+    :saving="saving"
+    :history-entries="historyEntries"
+    @save="save"
+    @cancel="cancel"
+    @restore="applyRestore"
+  >
+    <IdentityCard
+      :name="name"
+      :description="description"
+      :category-id="categoryId"
+      :tags="tags"
+      @update:name="(v) => (name = v)"
+      @update:description="(v) => (description = v)"
+      @update:category-id="(v) => (categoryId = v)"
+      @update:tags="(v) => (tags = v)"
     />
-  </div>
+
+    <Card :title="`Rules (${rules.length})`">
+      <template #actions>
+        <Button size="sm" variant="primary" icon="pi pi-plus" data-test="add-rule" @click="addRule">
+          Add rule
+        </Button>
+      </template>
+      <p class="dv-hint">
+        Each rule runs independently. Inside a rule, branches evaluate top-to-bottom — the first matching IF/ELIF wins; the optional ELSE only fires when no branch matched.
+      </p>
+
+      <div v-if="rules.length === 0" class="dv-empty" data-test="rules-empty">
+        No rules yet. Click <strong>Add rule</strong> to start defining IF / ELIF / ELSE behaviour.
+      </div>
+
+      <div v-else class="rules-stack" data-test="rules-stack">
+        <DerivationRuleCard
+          v-for="(rule, idx) in rules"
+          :key="rule.id"
+          :model-value="rule"
+          :index="idx"
+          :var-suggestions="varSuggestions"
+          :data-test="`rule-${idx}`"
+          @update:model-value="(v) => updateRule(idx, v)"
+          @remove="removeRule(idx)"
+        />
+      </div>
+    </Card>
+  </EditorFrame>
 </template>
 
 <style scoped>
-.form-page { display: flex; flex-direction: column; min-height: calc(100vh - 56px); }
-.form-page__header { padding: 24px 24px 0; }
-.form-page__body { padding: 16px 24px 96px; max-width: 56rem; flex: 1; }
-.form-page__footer {
-  position: sticky; bottom: 0;
-  background: var(--wp-bg);
-  border-top: 1px solid var(--wp-border);
-  padding: 12px 24px;
-  display: flex; gap: 8px; align-items: center;
+.dv-hint {
+  font-size: 11.5px;
+  color: var(--wp-text-dim);
+  margin: 0 0 10px;
 }
-.form-page__footer-spacer { flex: 1; }
-.form-section { margin-bottom: 24px; }
-.form-section__label {
-  font-size: 11px; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--wp-text2);
-  margin: 0 0 8px 0;
+.dv-empty {
+  font-size: 13px;
+  color: var(--wp-text-muted);
+  padding: 16px;
+  text-align: center;
+  border: 1px dashed var(--wp-border);
+  border-radius: var(--wp-radius);
 }
 .rules-stack {
   display: flex;

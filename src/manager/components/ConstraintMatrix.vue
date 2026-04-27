@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import Button from "primevue/button";
-import InputNumber from "primevue/inputnumber";
+import Button from "./ui/Button.vue";
+import Input from "./ui/Input.vue";
 import type {
   ConstraintCell,
   ConstraintMatrix,
@@ -173,10 +173,11 @@ function applyPreset(p: number) {
   setCellFactor(tune.value.row, tune.value.col, p);
 }
 
-function onTuneInput(value: number | null) {
+function onTuneInput(value: string | number) {
   if (!tune.value) return;
-  if (typeof value !== "number" || !Number.isFinite(value)) return;
-  setCellFactor(tune.value.row, tune.value.col, value);
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return;
+  setCellFactor(tune.value.row, tune.value.col, n);
 }
 
 defineExpose({ cellAt, cycleCell });
@@ -256,16 +257,10 @@ defineExpose({ cellAt, cycleCell });
         <span class="font-mono text-sm text-wp-text">×{{ fmtFactor(tuneCell.factor) }}</span>
       </div>
       <div class="wp-tune-pop__row">
-        <InputNumber
+        <Input
           :model-value="tuneCell.factor"
-          :min="0.1"
-          :max="10"
-          :step="0.1"
-          :max-fraction-digits="2"
-          show-buttons
-          button-layout="horizontal"
+          type="number"
           aria-label="Factor value"
-          class="w-full"
           @update:model-value="onTuneInput"
         />
         <div class="wp-tune-pop__presets">
@@ -280,15 +275,13 @@ defineExpose({ cellAt, cycleCell });
           >×{{ fmtFactor(p) }}</button>
         </div>
       </div>
-      <div class="flex justify-end">
+      <div class="wp-tune-pop__done">
         <Button
-          label="Done"
-          size="small"
-          severity="secondary"
-          text
+          size="sm"
+          variant="ghost"
           aria-label="Close tune popover"
           @click="closeTune"
-        />
+        >Done</Button>
       </div>
     </div>
   </div>
@@ -473,4 +466,5 @@ defineExpose({ cellAt, cycleCell });
 }
 .text-wp-success { color: var(--wp-success); }
 .text-wp-warn { color: var(--wp-warn); }
+.wp-tune-pop__done { display: flex; justify-content: flex-end; }
 </style>

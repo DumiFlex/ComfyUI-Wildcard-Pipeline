@@ -1,0 +1,452 @@
+<script setup lang="ts">
+/**
+ * ConstraintEditor — Wave 4 port of `ConstraintEditor` in `screens/editors.jsx`.
+ *
+ * Sections:
+ *  1. Identity
+ *  2. Source / Target wildcards
+ *  3. Rule matrix (ConstraintMatrix)
+ *  4. Exceptions table
+ */
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import EditorFrame from "../components/EditorFrame.vue";
+import IdentityCard from "../components/IdentityCard.vue";
+import Card from "../components/ui/Card.vue";
+import Field from "../components/ui/Field.vue";
+import Button from "../components/ui/Button.vue";
+import Input from "../components/ui/Input.vue";
+import Select from "../components/ui/Select.vue";
+import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
+import { useToast } from "../composables/useToast";
+import { useModuleStore } from "../stores/moduleStore";
+import { useCategoryStore } from "../stores/categoryStore";
+import { appendSnapshot, readHistory } from "../utils/history";
+import type {
+  ConstraintCell,
+  ConstraintException,
+  ConstraintMatrix,
+  ConstraintMode,
+  ConstraintPayload,
+  ModuleHistoryEntry,
+  ModuleRow,
+} from "../api/types";
+
+const props = defineProps<{ id?: string }>();
+const router = useRouter();
+const moduleStore = useModuleStore();
+const categoryStore = useCategoryStore();
+const toast = useToast();
+
+interface WildcardOption { id: string; value: string; weight: number; sub_category?: string | null; }
+interface WildcardPayloadShape {
+  options?: WildcardOption[];
+  sub_categories?: string[];
+}
+
+const name = ref("");
+const description = ref("");
+const categoryId = ref<string | null>(null);
+const tags = ref<string[]>([]);
+const sourceWildcardId = ref<string | null>(null);
+const targetWildcardId = ref<string | null>(null);
+const matrix = ref<ConstraintMatrix>({});
+const exceptions = ref<ConstraintException[]>([]);
+const saving = ref(false);
+const isEdit = computed(() => !!props.id);
+const historyEntries = ref<ModuleHistoryEntry[]>([]);
+
+const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
+  allow: 1,
+  exclude: 0,
+  boost: 2,
+  reduce: 0.5,
+};
+const MODE_OPTIONS = [
+  { label: "Allow", value: "allow" },
+  { label: "Exclude", value: "exclude" },
+  { label: "Boost", value: "boost" },
+  { label: "Reduce", value: "reduce" },
+];
+
+const wildcardOptions = computed(() =>
+  moduleStore.items
+    .filter((m) => m.type === "wildcard")
+    .map((m) => ({ label: m.name, value: m.id })),
+);
+
+function wildcardById(id: string | null): ModuleRow | undefined {
+  if (!id) return undefined;
+  return moduleStore.items.find((m) => m.id === id);
+}
+
+const sourceWildcard = computed(() => wildcardById(sourceWildcardId.value));
+const targetWildcard = computed(() => wildcardById(targetWildcardId.value));
+
+const sourceValues = computed<string[]>(() => {
+  const wc = sourceWildcard.value;
+  if (!wc) return [];
+  const payload = wc.payload as WildcardPayloadShape;
+  const values = (payload.options ?? [])
+    .map((o) => o.value)
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+  return Array.from(new Set(values));
+});
+
+const targetSubCategories = computed<string[]>(() => {
+  const wc = targetWildcard.value;
+  if (!wc) return [];
+  const payload = wc.payload as WildcardPayloadShape;
+  return payload.sub_categories ?? [];
+});
+
+const targetValues = computed<string[]>(() => {
+  const wc = targetWildcard.value;
+  if (!wc) return [];
+  const payload = wc.payload as WildcardPayloadShape;
+  const values = (payload.options ?? [])
+    .map((o) => o.value)
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+  return Array.from(new Set(values));
+});
+
+function normalizeMatrix(raw: unknown): ConstraintMatrix {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: ConstraintMatrix = {};
+  for (const [r, byCol] of Object.entries(raw as Record<string, unknown>)) {
+    if (!byCol || typeof byCol !== "object") continue;
+    out[r] = {};
+    for (const [c, cellRaw] of Object.entries(byCol as Record<string, unknown>)) {
+      const cell = cellRaw as Partial<ConstraintCell>;
+      const mode = (cell?.mode ?? "allow") as ConstraintMode;
+      const factor =
+        typeof cell?.factor === "number" ? cell.factor : MODE_DEFAULT_FACTOR[mode];
+      out[r][c] = { mode, factor };
+    }
+  }
+  return out;
+}
+
+function normalizeExceptions(raw: unknown): ConstraintException[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((e) => {
+      if (!e || typeof e !== "object") return null;
+      const r = e as Record<string, unknown>;
+      const source = typeof r.source === "string" ? r.source : "";
+      const target = typeof r.target === "string" ? r.target : "";
+      const mode = (typeof r.mode === "string" ? r.mode : "allow") as ConstraintMode;
+      const factor =
+        typeof r.factor === "number" ? r.factor : MODE_DEFAULT_FACTOR[mode] ?? 1;
+      return { source, target, mode, factor } as ConstraintException;
+    })
+    .filter((x): x is ConstraintException => x !== null);
+}
+
+onMounted(async () => {
+  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchAll()]);
+  if (props.id) {
+    try {
+      const row = await moduleStore.get(props.id);
+      name.value = row.name;
+      description.value = row.description;
+      categoryId.value = row.category_id;
+      tags.value = row.tags;
+      const p = row.payload as Partial<ConstraintPayload>;
+      sourceWildcardId.value = p.source_wildcard_id ?? null;
+      targetWildcardId.value = p.target_wildcard_id ?? null;
+      matrix.value = normalizeMatrix(p.matrix);
+      exceptions.value = normalizeExceptions(p.exceptions);
+      historyEntries.value = readHistory(row.payload);
+    } catch {
+      toast.push({ severity: "error", summary: "Constraint not found" });
+      router.replace("/constraints");
+    }
+  }
+});
+
+function onMatrixUpdate(next: ConstraintMatrix) {
+  matrix.value = next;
+}
+
+function addException() {
+  exceptions.value.push({ source: "", target: "", mode: "allow", factor: 1 });
+}
+function removeException(idx: number) {
+  exceptions.value.splice(idx, 1);
+}
+function setExceptionMode(idx: number, mode: ConstraintMode) {
+  const ex = exceptions.value[idx];
+  if (!ex) return;
+  ex.mode = mode;
+  ex.factor = MODE_DEFAULT_FACTOR[mode] ?? 1;
+}
+
+function applyRestore(entry: ModuleHistoryEntry): void {
+  name.value = entry.name;
+  description.value = entry.description ?? "";
+  categoryId.value = entry.category_id ?? null;
+  tags.value = entry.tags ? [...entry.tags] : [];
+  const p = (entry.payload ?? {}) as Partial<ConstraintPayload>;
+  sourceWildcardId.value = p.source_wildcard_id ?? null;
+  targetWildcardId.value = p.target_wildcard_id ?? null;
+  matrix.value = normalizeMatrix(p.matrix);
+  exceptions.value = normalizeExceptions(p.exceptions);
+  toast.push({
+    severity: "info",
+    summary: "Version restored",
+    detail: `Restored from ${new Date(entry.saved_at).toLocaleString()}; click Save to commit.`,
+    life: 4000,
+  });
+}
+
+async function save() {
+  if (!name.value.trim()) {
+    toast.push({ severity: "warn", summary: "Name required" });
+    return;
+  }
+  if (!sourceWildcardId.value || !targetWildcardId.value) {
+    toast.push({
+      severity: "warn",
+      summary: "Source and target wildcards are required",
+    });
+    return;
+  }
+  saving.value = true;
+  try {
+    const payload: ConstraintPayload = {
+      source_wildcard_id: sourceWildcardId.value,
+      target_wildcard_id: targetWildcardId.value,
+      matrix: matrix.value,
+      exceptions: exceptions.value,
+    };
+    const newPayload = payload as unknown as Record<string, unknown>;
+    if (isEdit.value && props.id) {
+      const prev = await moduleStore.get(props.id);
+      const nextHistory = appendSnapshot(
+        {
+          name: prev.name,
+          description: prev.description,
+          category_id: prev.category_id,
+          tags: prev.tags,
+          payload: prev.payload as Record<string, unknown>,
+        },
+        prev.payload as Record<string, unknown>,
+      );
+      await moduleStore.update(props.id, {
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: { ...newPayload, history: nextHistory },
+      });
+      historyEntries.value = nextHistory;
+    } else {
+      await moduleStore.create({
+        type: "constraint",
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: newPayload,
+      });
+    }
+    toast.push({ severity: "success", summary: "Saved", detail: name.value });
+    router.push("/constraints");
+  } catch (e) {
+    toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
+  } finally {
+    saving.value = false;
+  }
+}
+
+function cancel() { router.push("/constraints"); }
+
+defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore });
+</script>
+
+<template>
+  <EditorFrame
+    :title="isEdit ? 'Edit constraint' : 'New constraint'"
+    back-route="/constraints"
+    back-label="Constraints"
+    :saving="saving"
+    :history-entries="historyEntries"
+    @save="save"
+    @cancel="cancel"
+    @restore="applyRestore"
+  >
+    <IdentityCard
+      :name="name"
+      :description="description"
+      :category-id="categoryId"
+      :tags="tags"
+      @update:name="(v) => (name = v)"
+      @update:description="(v) => (description = v)"
+      @update:category-id="(v) => (categoryId = v)"
+      @update:tags="(v) => (tags = v)"
+    />
+
+    <Card title="Wildcards">
+      <template #actions>
+        <span class="wp-dim cn-hint">Pick the two wildcards whose sub-categories form the matrix</span>
+      </template>
+      <div class="cn-pair">
+        <Field label="Target wildcard" hint="Rows of the matrix">
+          <Select
+            :model-value="targetWildcardId"
+            :options="wildcardOptions"
+            placeholder="Pick target"
+            clearable
+            data-test="target-wildcard-select"
+            aria-label="Target wildcard"
+            @update:model-value="(v) => { targetWildcardId = v as string | null; matrix = {}; }"
+          />
+        </Field>
+        <div class="cn-cross"><i class="pi pi-times" /></div>
+        <Field label="Source wildcard" hint="Columns of the matrix">
+          <Select
+            :model-value="sourceWildcardId"
+            :options="wildcardOptions"
+            placeholder="Pick source"
+            clearable
+            data-test="source-wildcard-select"
+            aria-label="Source wildcard"
+            @update:model-value="(v) => { sourceWildcardId = v as string | null; matrix = {}; }"
+          />
+        </Field>
+      </div>
+    </Card>
+
+    <Card title="Rule matrix">
+      <template #actions>
+        <span class="wp-dim cn-hint">Click cycles · cog tunes factor</span>
+      </template>
+      <div
+        v-if="!sourceWildcardId || !targetWildcardId"
+        class="cn-empty"
+        data-test="matrix-empty"
+      >
+        Pick a source and target wildcard to populate the matrix.
+      </div>
+      <div
+        v-else-if="sourceValues.length === 0 || targetSubCategories.length === 0"
+        class="cn-empty"
+        data-test="matrix-need-subs"
+      >
+        <i class="pi pi-info-circle" />
+        <span v-if="sourceValues.length === 0">Source wildcard needs at least one option value. </span>
+        <span v-if="targetSubCategories.length === 0">Target wildcard needs at least one sub-category. </span>
+        Add them on the wildcard editor to define rules.
+      </div>
+      <ConstraintMatrixGrid
+        v-else
+        :rows="sourceValues"
+        :cols="targetSubCategories"
+        :model-value="matrix"
+        data-test="matrix-grid"
+        @update:model-value="onMatrixUpdate"
+      />
+    </Card>
+
+    <Card :title="`Exceptions (${exceptions.length})`" :padding="false">
+      <template #actions>
+        <Button size="sm" variant="primary" icon="pi pi-plus" data-test="add-exception" @click="addException">
+          Add exception
+        </Button>
+      </template>
+      <div v-if="!exceptions.length" class="cn-empty">
+        <i class="pi pi-info-circle" />
+        Per-pair overrides for specific option values that the matrix doesn't cover.
+      </div>
+      <table v-else class="wp-table wp-options-table">
+        <thead>
+          <tr>
+            <th>Source value</th>
+            <th>Target value</th>
+            <th class="cn-col-mode">Mode</th>
+            <th class="cn-col-factor">Factor</th>
+            <th class="cn-col-trash" />
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(ex, idx) in exceptions" :key="idx">
+            <td>
+              <Select
+                v-model="ex.source"
+                :options="sourceValues.map((v) => ({ label: v, value: v }))"
+                placeholder="Pick value"
+                aria-label="Exception source value"
+              />
+            </td>
+            <td>
+              <Select
+                v-model="ex.target"
+                :options="targetValues.map((v) => ({ label: v, value: v }))"
+                placeholder="Pick value"
+                aria-label="Exception target value"
+              />
+            </td>
+            <td>
+              <Select
+                :model-value="ex.mode"
+                :options="MODE_OPTIONS"
+                aria-label="Exception mode"
+                @update:model-value="(v) => setExceptionMode(idx, v as ConstraintMode)"
+              />
+            </td>
+            <td>
+              <Input
+                v-if="ex.mode === 'boost' || ex.mode === 'reduce'"
+                :model-value="ex.factor"
+                type="number"
+                size="sm"
+                aria-label="Exception factor"
+                @update:model-value="(v) => (ex.factor = Number(v) || 0)"
+              />
+              <span v-else class="wp-dim wp-mono cn-dash">—</span>
+            </td>
+            <td>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="pi pi-trash"
+                class="wp-btn--danger"
+                aria-label="Remove exception"
+                @click="removeException(idx)"
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </Card>
+  </EditorFrame>
+</template>
+
+<style scoped>
+.cn-hint { font-size: 11.5px; }
+.cn-pair {
+  display: grid;
+  grid-template-columns: 1fr 24px 1fr;
+  gap: 12px;
+  align-items: end;
+}
+.cn-cross {
+  padding-bottom: 8px;
+  color: var(--wp-text-dim);
+  text-align: center;
+}
+.cn-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px 12px;
+  color: var(--wp-text-muted);
+  font-size: 13px;
+}
+.cn-col-mode { width: 130px; }
+.cn-col-factor { width: 120px; }
+.cn-col-trash { width: 40px; }
+.cn-dash { font-size: 11.5px; }
+</style>

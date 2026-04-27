@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Select from "primevue/select";
+import Select from "./ui/Select.vue";
 import type { ModuleRow, ModuleType, PipelineStep } from "../api/types";
 
 interface Props {
@@ -36,7 +36,9 @@ const rows = computed(() =>
     const mod = props.modulesById.get(step.module_id) ?? null;
     const kind: ModuleType | null = mod?.type ?? null;
     const meta = kind ? KIND_META[kind] : null;
-    const sameKindOptions = kind ? props.modulesByKind[kind] ?? [] : [];
+    const sameKindOptions = kind
+      ? (props.modulesByKind[kind] ?? []).map((m) => ({ value: m.id, label: m.name }))
+      : [];
     return { step, idx, mod, kind, meta, sameKindOptions };
   }),
 );
@@ -158,12 +160,10 @@ function move(idx: number, dir: -1 | 1) {
             v-if="row.kind"
             :model-value="row.step.module_id"
             :options="row.sameKindOptions"
-            option-label="name"
-            option-value="id"
             :placeholder="`Pick a ${row.meta?.label.toLowerCase()}`"
             :aria-label="`Pick reference for step ${row.idx + 1}`"
             class="wp-pl-row__refselect"
-            :pt="{ root: { 'data-test': `step-ref-${row.idx}` } }"
+            :data-test="`step-ref-${row.idx}`"
             @update:model-value="(v) => changeModule(row.idx, v as string)"
           />
           <span v-else class="wp-pl-row__id">{{ row.step.module_id }}</span>

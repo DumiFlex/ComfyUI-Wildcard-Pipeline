@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import Dialog from "primevue/dialog";
-import InputText from "primevue/inputtext";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import Input from "./ui/Input.vue";
 import type { CategoryRow, ModuleRow, ModuleType } from "../api/types";
 
 interface Props {
@@ -92,21 +91,33 @@ function kindLabel(t: ModuleType): string {
   const tab = KIND_TABS.find((x) => x.type === t);
   return tab?.label ?? t;
 }
+
+// Esc closes when visible.
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && props.visible) close();
+}
+watch(() => props.visible, (v) => {
+  if (typeof window === "undefined") return;
+  if (v) {
+    window.addEventListener("keydown", onKeydown);
+    document.body.style.overflow = "hidden";
+  } else {
+    window.removeEventListener("keydown", onKeydown);
+    document.body.style.overflow = "";
+  }
+});
+onBeforeUnmount(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("keydown", onKeydown);
+    document.body.style.overflow = "";
+  }
+});
 </script>
 
 <template>
-  <Dialog
-    :visible="visible"
-    modal
-    :draggable="false"
-    :dismissable-mask="true"
-    :block-scroll="true"
-    :show-header="false"
-    :pt="{ root: { 'data-test': 'pipeline-picker' } }"
-    class="wp-pl-picker-dialog"
-    @update:visible="emit('update:visible', $event)"
-  >
-    <div class="wp-pl-picker">
+  <Teleport v-if="visible" to="body">
+    <div class="wp-pl-picker__backdrop" data-test="pipeline-picker" @mousedown.self="close">
+    <div class="wp-pl-picker" @mousedown.stop>
       <div class="wp-pl-picker__head">
         <i class="pi pi-plus" />
         <span class="wp-pl-picker__title">Add module to pipeline</span>
@@ -142,7 +153,7 @@ function kindLabel(t: ModuleType): string {
 
         <div class="wp-pl-picker__search">
           <span class="wp-pl-picker__searchicon"><i class="pi pi-search" /></span>
-          <InputText
+          <Input
             v-model="search"
             placeholder="Search modules…"
             class="wp-pl-picker__searchinput"
@@ -183,10 +194,21 @@ function kindLabel(t: ModuleType): string {
         </div>
       </div>
     </div>
-  </Dialog>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
+.wp-pl-picker__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
 .wp-pl-picker {
   display: flex;
   flex-direction: column;
@@ -312,8 +334,7 @@ function kindLabel(t: ModuleType): string {
   padding: 0 8px;
   height: 100%;
 }
-:deep(.wp-pl-picker__searchinput .p-inputtext),
-:deep(input.wp-pl-picker__searchinput) {
+:deep(.wp-pl-picker__searchinput.wp-input) {
   border: none;
   background: transparent;
   height: 100%;
