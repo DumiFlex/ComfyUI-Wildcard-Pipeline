@@ -133,22 +133,24 @@ describe("TestRunner.vue", () => {
   it("kind selector switches the module dropdown to that kind only", async () => {
     const wrap = mountRunner();
     await flushPromises();
-    // Locate the SelectButton DOM and click the Combine option.
+    // Click the Combine button in the segmented kind picker.
     const kindSelector = wrap.find('[data-test="kind-selector"]');
     const combineOpt = kindSelector
-      .findAll("div, span, button")
-      .find((el) => el.text().trim() === "Combine");
+      .findAll("button")
+      .find((el) => el.text().trim().includes("Combine"));
     expect(combineOpt).toBeTruthy();
     await combineOpt!.trigger("click");
     await flushPromises();
-    const select = wrap.find('[data-test="module-select"]');
-    await select.trigger("click");
+    // ui/Select renders the options inline once open. Click the trigger button.
+    const trigger = wrap
+      .find('[data-test="module-select"]')
+      .find('[data-test="select-trigger"]');
+    await trigger.trigger("click");
     await flushPromises();
-    // The PrimeVue overlay panel renders the option list. Combine modules
-    // should appear; non-combine ones should not.
-    const overlayText = document.body.textContent ?? "";
-    expect(overlayText).toContain("Subject Phrase");
-    expect(overlayText).not.toContain("Hair Color");
+    // Combine modules should appear in the menu; non-combine ones should not.
+    const html = wrap.html();
+    expect(html).toContain("Subject Phrase");
+    expect(html).not.toContain("Hair Color");
   });
 
   it("runs wildcard kind and renders histogram panel", async () => {
@@ -157,6 +159,7 @@ describe("TestRunner.vue", () => {
     const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
     expect(runBtn).toBeTruthy();
     await runBtn!.trigger("click");
+    await flushPromises();
     await flushPromises();
     expect(wrap.find('[data-test="result-wildcard"]').exists()).toBe(true);
   });
@@ -173,6 +176,7 @@ describe("TestRunner.vue", () => {
     const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
     await runBtn!.trigger("click");
     await flushPromises();
+    await flushPromises();
     expect(wrap.find('[data-test="result-fixed"]').exists()).toBe(true);
     expect(wrap.text()).toContain("$name");
     expect(wrap.text()).toContain("Mira");
@@ -183,12 +187,13 @@ describe("TestRunner.vue", () => {
     await flushPromises();
     const kindSelector = wrap.find('[data-test="kind-selector"]');
     const plOpt = kindSelector
-      .findAll("div, span, button")
+      .findAll("button")
       .find((el) => el.text().trim() === "Pipeline");
     await plOpt!.trigger("click");
     await flushPromises();
     const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
     await runBtn!.trigger("click");
+    await flushPromises();
     await flushPromises();
     expect(wrap.find('[data-test="result-pipeline"]').exists()).toBe(true);
   });
@@ -205,6 +210,7 @@ describe("TestRunner.vue", () => {
     const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
     await runBtn!.trigger("click");
     await flushPromises();
+    await flushPromises();
     expect(wrap.find('[data-test="result-derivation"]').exists()).toBe(true);
   });
 
@@ -219,6 +225,7 @@ describe("TestRunner.vue", () => {
     await flushPromises();
     const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
     await runBtn!.trigger("click");
+    await flushPromises();
     await flushPromises();
     expect(wrap.find('[data-test="result-constraint"]').exists()).toBe(true);
   });

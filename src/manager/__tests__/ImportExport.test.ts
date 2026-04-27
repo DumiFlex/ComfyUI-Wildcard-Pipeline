@@ -218,10 +218,9 @@ describe("ImportExport.vue — Import tab", () => {
     await wrap.find('[data-test="io-export-select-none"]').trigger("click");
     await flushPromises();
 
-    // Find the group's checkbox (PrimeVue Checkbox uses an inner <input>).
+    // ui/Checkbox is a custom <button role="checkbox"> — click it to toggle on.
     const groupCheckEl = wrap.get('[data-test="io-export-group-check-wildcard"]');
-    const input = groupCheckEl.find("input");
-    await input.setValue(true);
+    await groupCheckEl.trigger("click");
     await flushPromises();
 
     // Both rows should now be selected → download should be enabled.
