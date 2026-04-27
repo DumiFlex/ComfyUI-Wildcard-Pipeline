@@ -118,7 +118,13 @@ export const api = {
   exportBundle() {
     return request<ImportBundle>("/wp/api/export", { method: "GET" });
   },
-  importBundle(bundle: ImportBundle) {
+  /**
+   * POST a bundle to /wp/api/import. The backend processes only what's in
+   * the payload, so a "partial" bundle (subset of modules / categories) is a
+   * valid input — the import-export UI relies on this to ship per-item
+   * selections without inventing a new endpoint.
+   */
+  importBundle(bundle: ImportBundle | Partial<ImportBundle> & { version: 1 }) {
     return request<ImportResult>("/wp/api/import", {
       method: "POST", body: JSON.stringify(bundle),
     });
