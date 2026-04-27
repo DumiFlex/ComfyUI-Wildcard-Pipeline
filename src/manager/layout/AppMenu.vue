@@ -18,11 +18,12 @@ const sections: Section[] = [
   {
     label: "Assets",
     items: [
+      { label: "Pipelines", icon: "pi pi-list", to: "/pipelines" },
       { label: "Wildcards", icon: "pi pi-th-large", to: "/wildcards" },
       { label: "Fixed Values", icon: "pi pi-tag", to: "/fixed-values" },
-      { label: "Constraints", icon: "pi pi-filter", soon: true },
-      { label: "Combines", icon: "pi pi-link", soon: true },
-      { label: "Derivations", icon: "pi pi-code", soon: true },
+      { label: "Combines", icon: "pi pi-share-alt", to: "/combines" },
+      { label: "Derivations", icon: "pi pi-code", to: "/derivations" },
+      { label: "Constraints", icon: "pi pi-sitemap", to: "/constraints" },
     ],
   },
   {
