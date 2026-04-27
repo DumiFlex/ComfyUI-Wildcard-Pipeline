@@ -11,12 +11,15 @@ import { useToast } from "primevue/usetoast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
+import HistoryPanel from "../components/HistoryPanel.vue";
+import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   DerivationAction,
   DerivationBranch,
   DerivationElse,
   DerivationPayload,
   DerivationRule,
+  ModuleHistoryEntry,
 } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
@@ -32,6 +35,8 @@ const tags = ref<string[]>([]);
 const rules = ref<DerivationRule[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
+const historyEntries = ref<ModuleHistoryEntry[]>([]);
+const historyOpen = ref(false);
 
 // Variable suggestions are populated by the parent surface in the future. For
 // now this is intentionally an empty list — the rule card falls back to a free
@@ -138,6 +143,7 @@ onMounted(async () => {
       const p = row.payload as Partial<DerivationPayload>;
       const incoming = Array.isArray(p.rules) ? p.rules : [];
       rules.value = incoming.length ? incoming.map(migrateRule) : [];
+      historyEntries.value = readHistory(row.payload);
     } catch {
       toast.add({ severity: "error", summary: "Derivation not found", life: 3000 });
       router.replace("/derivations");
@@ -157,6 +163,23 @@ function updateRule(idx: number, value: DerivationRule) {
   rules.value = rules.value.map((r, i) => (i === idx ? value : r));
 }
 
+function applyRestore(entry: ModuleHistoryEntry): void {
+  name.value = entry.name;
+  description.value = entry.description ?? "";
+  categoryId.value = entry.category_id ?? null;
+  tags.value = entry.tags ? [...entry.tags] : [];
+  const p = (entry.payload ?? {}) as Partial<DerivationPayload>;
+  const incoming = Array.isArray(p.rules) ? p.rules : [];
+  rules.value = incoming.length ? incoming.map(migrateRule) : [];
+  historyOpen.value = false;
+  toast.add({
+    severity: "info",
+    summary: "Version restored",
+    detail: `Restored from ${new Date(entry.saved_at).toLocaleString()}; click Save to commit.`,
+    life: 4000,
+  });
+}
+
 async function save() {
   if (!name.value.trim()) {
     toast.add({ severity: "warn", summary: "Name required", life: 2000 });
@@ -165,17 +188,36 @@ async function save() {
   saving.value = true;
   try {
     const payload: DerivationPayload = { rules: rules.value };
-    const body = {
-      name: name.value,
-      description: description.value,
-      category_id: categoryId.value,
-      tags: tags.value,
-      payload: payload as unknown as Record<string, unknown>,
-    };
+    const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
-      await moduleStore.update(props.id, body);
+      const prev = await moduleStore.get(props.id);
+      const nextHistory = appendSnapshot(
+        {
+          name: prev.name,
+          description: prev.description,
+          category_id: prev.category_id,
+          tags: prev.tags,
+          payload: prev.payload as Record<string, unknown>,
+        },
+        prev.payload as Record<string, unknown>,
+      );
+      await moduleStore.update(props.id, {
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: { ...newPayload, history: nextHistory },
+      });
+      historyEntries.value = nextHistory;
     } else {
-      await moduleStore.create({ type: "derivation", ...body });
+      await moduleStore.create({
+        type: "derivation",
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: newPayload,
+      });
     }
     toast.add({ severity: "success", summary: "Saved", detail: name.value, life: 2000 });
     router.push("/derivations");
@@ -186,7 +228,7 @@ async function save() {
   }
 }
 
-defineExpose({ rules, addRule, removeRule });
+defineExpose({ rules, addRule, removeRule, historyEntries, historyOpen, applyRestore });
 </script>
 
 <template>
@@ -277,9 +319,25 @@ defineExpose({ rules, addRule, removeRule });
     </div>
 
     <div class="form-page__footer">
+      <Button
+        v-if="historyEntries.length"
+        :label="`History (${historyEntries.length})`"
+        icon="pi pi-history"
+        severity="secondary"
+        outlined
+        data-test="history-btn"
+        @click="historyOpen = true"
+      />
+      <div class="form-page__footer-spacer" />
       <Button label="Cancel" severity="secondary" outlined @click="router.push('/derivations')" />
       <Button label="Save" icon="pi pi-check" severity="primary" :loading="saving" data-test="save-btn" @click="save" />
     </div>
+    <HistoryPanel
+      :open="historyOpen"
+      :entries="historyEntries"
+      @update:open="(v) => (historyOpen = v)"
+      @restore="applyRestore"
+    />
   </div>
 </template>
 
@@ -292,8 +350,9 @@ defineExpose({ rules, addRule, removeRule });
   background: var(--wp-bg);
   border-top: 1px solid var(--wp-border);
   padding: 12px 24px;
-  display: flex; gap: 8px; justify-content: flex-end;
+  display: flex; gap: 8px; align-items: center;
 }
+.form-page__footer-spacer { flex: 1; }
 .form-section { margin-bottom: 24px; }
 .form-section__label {
   font-size: 11px; text-transform: uppercase;

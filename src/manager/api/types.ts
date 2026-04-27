@@ -119,6 +119,23 @@ export interface ModuleRow {
   updated_at: string;
 }
 
+/**
+ * Per-module version-history entry. Stored as a sidecar inside `payload.history`
+ * (max 3 entries). Soft contract — we never add `history` to the typed payload
+ * shapes themselves; helpers in `utils/history.ts` access it via runtime checks.
+ *
+ * `payload` here is the snapshotted module payload **with the `history` key
+ * stripped** so saved snapshots never recurse.
+ */
+export interface ModuleHistoryEntry {
+  saved_at: string;
+  name: string;
+  description?: string;
+  category_id?: string | null;
+  tags?: string[];
+  payload: Record<string, unknown>;
+}
+
 export interface ModuleListResponse {
   items: ModuleRow[];
   total: number;

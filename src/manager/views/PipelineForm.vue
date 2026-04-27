@@ -13,10 +13,13 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import PipelineSteps from "../components/PipelineSteps.vue";
 import PipelineStepPicker from "../components/PipelineStepPicker.vue";
+import HistoryPanel from "../components/HistoryPanel.vue";
+import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   CombinePayload,
   DerivationPayload,
   ConstraintPayload,
+  ModuleHistoryEntry,
   ModuleRow,
   ModuleType,
   PipelinePayload,
@@ -36,6 +39,8 @@ const tags = ref<string[]>([]);
 const steps = ref<PipelineStep[]>([]);
 const saving = ref(false);
 const pickerOpen = ref(false);
+const historyEntries = ref<ModuleHistoryEntry[]>([]);
+const historyOpen = ref(false);
 
 // All modules (cross-kind) used by step rows + picker.
 const allModules = ref<ModuleRow[]>([]);
@@ -99,6 +104,7 @@ onMounted(async () => {
         enabled: s.enabled !== false,
         ...(s.instance ? { instance: s.instance } : {}),
       }));
+      historyEntries.value = readHistory(row.payload);
     } catch {
       toast.add({ severity: "error", summary: "Pipeline not found", life: 3000 });
       router.replace("/pipelines");
@@ -202,6 +208,27 @@ function previewKindIcon(k: ModuleType | null): string {
   return k ? KIND_ICON[k] : "pi pi-circle";
 }
 
+function applyRestore(entry: ModuleHistoryEntry): void {
+  name.value = entry.name;
+  description.value = entry.description ?? "";
+  categoryId.value = entry.category_id ?? null;
+  tags.value = entry.tags ? [...entry.tags] : [];
+  const p = (entry.payload ?? {}) as Partial<PipelinePayload>;
+  steps.value = (p.steps ?? []).map((s) => ({
+    id: s.id || `step_${Math.random().toString(16).slice(2, 8)}`,
+    module_id: s.module_id,
+    enabled: s.enabled !== false,
+    ...(s.instance ? { instance: s.instance } : {}),
+  }));
+  historyOpen.value = false;
+  toast.add({
+    severity: "info",
+    summary: "Version restored",
+    detail: `Restored from ${new Date(entry.saved_at).toLocaleString()}; click Save to commit.`,
+    life: 4000,
+  });
+}
+
 async function save() {
   if (!name.value.trim()) {
     toast.add({ severity: "warn", summary: "Name required", life: 2000 });
@@ -217,17 +244,36 @@ async function save() {
         ...(s.instance ? { instance: s.instance } : {}),
       })),
     };
-    const body = {
-      name: name.value,
-      description: description.value,
-      category_id: categoryId.value,
-      tags: tags.value,
-      payload: payload as unknown as Record<string, unknown>,
-    };
+    const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
-      await moduleStore.update(props.id, body);
+      const prev = await moduleStore.get(props.id);
+      const nextHistory = appendSnapshot(
+        {
+          name: prev.name,
+          description: prev.description,
+          category_id: prev.category_id,
+          tags: prev.tags,
+          payload: prev.payload as Record<string, unknown>,
+        },
+        prev.payload as Record<string, unknown>,
+      );
+      await moduleStore.update(props.id, {
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: { ...newPayload, history: nextHistory },
+      });
+      historyEntries.value = nextHistory;
     } else {
-      await moduleStore.create({ type: "pipeline", ...body });
+      await moduleStore.create({
+        type: "pipeline",
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: newPayload,
+      });
     }
     toast.add({ severity: "success", summary: "Saved", detail: name.value, life: 2000 });
     router.push("/pipelines");
@@ -347,9 +393,25 @@ async function save() {
 
     <!-- E) Footer -->
     <div class="form-page__footer">
+      <Button
+        v-if="historyEntries.length"
+        :label="`History (${historyEntries.length})`"
+        icon="pi pi-history"
+        severity="secondary"
+        outlined
+        data-test="history-btn"
+        @click="historyOpen = true"
+      />
+      <div class="form-page__footer-spacer" />
       <Button label="Cancel" severity="secondary" outlined @click="router.push('/pipelines')" />
       <Button label="Save" icon="pi pi-check" severity="primary" :loading="saving" data-test="save-btn" @click="save" />
     </div>
+    <HistoryPanel
+      :open="historyOpen"
+      :entries="historyEntries"
+      @update:open="(v) => (historyOpen = v)"
+      @restore="applyRestore"
+    />
   </div>
 </template>
 
@@ -362,8 +424,9 @@ async function save() {
   background: var(--wp-bg);
   border-top: 1px solid var(--wp-border);
   padding: 12px 24px;
-  display: flex; gap: 8px; justify-content: flex-end;
+  display: flex; gap: 8px; align-items: center;
 }
+.form-page__footer-spacer { flex: 1; }
 .form-section { margin-bottom: 24px; }
 .form-section__label {
   font-size: 11px; text-transform: uppercase;

@@ -12,12 +12,15 @@ import { useToast } from "primevue/usetoast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
+import HistoryPanel from "../components/HistoryPanel.vue";
+import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   ConstraintCell,
   ConstraintException,
   ConstraintMatrix,
   ConstraintMode,
   ConstraintPayload,
+  ModuleHistoryEntry,
   ModuleRow,
 } from "../api/types";
 
@@ -43,6 +46,8 @@ const matrix = ref<ConstraintMatrix>({});
 const exceptions = ref<ConstraintException[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
+const historyEntries = ref<ModuleHistoryEntry[]>([]);
+const historyOpen = ref(false);
 
 const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   allow: 1,
@@ -158,6 +163,7 @@ onMounted(async () => {
       targetWildcardId.value = p.target_wildcard_id ?? null;
       matrix.value = normalizeMatrix(p.matrix);
       exceptions.value = normalizeExceptions(p.exceptions);
+      historyEntries.value = readHistory(row.payload);
     } catch {
       toast.add({ severity: "error", summary: "Constraint not found", life: 3000 });
       router.replace("/constraints");
@@ -182,6 +188,25 @@ function setExceptionMode(idx: number, mode: ConstraintMode) {
   ex.factor = MODE_DEFAULT_FACTOR[mode] ?? 1;
 }
 
+function applyRestore(entry: ModuleHistoryEntry): void {
+  name.value = entry.name;
+  description.value = entry.description ?? "";
+  categoryId.value = entry.category_id ?? null;
+  tags.value = entry.tags ? [...entry.tags] : [];
+  const p = (entry.payload ?? {}) as Partial<ConstraintPayload>;
+  sourceWildcardId.value = p.source_wildcard_id ?? null;
+  targetWildcardId.value = p.target_wildcard_id ?? null;
+  matrix.value = normalizeMatrix(p.matrix);
+  exceptions.value = normalizeExceptions(p.exceptions);
+  historyOpen.value = false;
+  toast.add({
+    severity: "info",
+    summary: "Version restored",
+    detail: `Restored from ${new Date(entry.saved_at).toLocaleString()}; click Save to commit.`,
+    life: 4000,
+  });
+}
+
 async function save() {
   if (!name.value.trim()) {
     toast.add({ severity: "warn", summary: "Name required", life: 2000 });
@@ -203,17 +228,36 @@ async function save() {
       matrix: matrix.value,
       exceptions: exceptions.value,
     };
-    const body = {
-      name: name.value,
-      description: description.value,
-      category_id: categoryId.value,
-      tags: tags.value,
-      payload: payload as unknown as Record<string, unknown>,
-    };
+    const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
-      await moduleStore.update(props.id, body);
+      const prev = await moduleStore.get(props.id);
+      const nextHistory = appendSnapshot(
+        {
+          name: prev.name,
+          description: prev.description,
+          category_id: prev.category_id,
+          tags: prev.tags,
+          payload: prev.payload as Record<string, unknown>,
+        },
+        prev.payload as Record<string, unknown>,
+      );
+      await moduleStore.update(props.id, {
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: { ...newPayload, history: nextHistory },
+      });
+      historyEntries.value = nextHistory;
     } else {
-      await moduleStore.create({ type: "constraint", ...body });
+      await moduleStore.create({
+        type: "constraint",
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: newPayload,
+      });
     }
     toast.add({ severity: "success", summary: "Saved", detail: name.value, life: 2000 });
     router.push("/constraints");
@@ -224,7 +268,7 @@ async function save() {
   }
 }
 
-defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions });
+defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, historyEntries, historyOpen, applyRestore });
 </script>
 
 <template>
@@ -457,6 +501,16 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions });
 
     <!-- E) Footer -->
     <div class="form-page__footer">
+      <Button
+        v-if="historyEntries.length"
+        :label="`History (${historyEntries.length})`"
+        icon="pi pi-history"
+        severity="secondary"
+        outlined
+        data-test="history-btn"
+        @click="historyOpen = true"
+      />
+      <div class="form-page__footer-spacer" />
       <Button label="Cancel" severity="secondary" outlined @click="router.push('/constraints')" />
       <Button
         label="Save"
@@ -467,6 +521,12 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions });
         @click="save"
       />
     </div>
+    <HistoryPanel
+      :open="historyOpen"
+      :entries="historyEntries"
+      @update:open="(v) => (historyOpen = v)"
+      @restore="applyRestore"
+    />
   </div>
 </template>
 
@@ -479,8 +539,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions });
   background: var(--wp-bg);
   border-top: 1px solid var(--wp-border);
   padding: 12px 24px;
-  display: flex; gap: 8px; justify-content: flex-end;
+  display: flex; gap: 8px; align-items: center;
 }
+.form-page__footer-spacer { flex: 1; }
 .form-section { margin-bottom: 24px; }
 .form-section__label {
   font-size: 11px; text-transform: uppercase;
