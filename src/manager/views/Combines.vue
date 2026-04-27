@@ -2,14 +2,10 @@
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
-import Column from "primevue/column";
-import Button from "primevue/button";
-import Badge from "primevue/badge";
-import Checkbox from "primevue/checkbox";
-import MultiSelect from "primevue/multiselect";
-import Select from "primevue/select";
-import EntityListView from "../components/EntityListView.vue";
-import RelativeDate from "../components/RelativeDate.vue";
+import ModuleListView from "../components/ModuleListView.vue";
+import Button from "../components/ui/Button.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import Select from "../components/ui/Select.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { CategoryRow, CombinePayload, ModuleRow } from "../api/types";
@@ -30,6 +26,11 @@ const allTags = computed(() => {
   for (const m of store.items) for (const t of m.tags ?? []) set.add(t);
   return Array.from(set).sort();
 });
+
+const categoryOptions = computed(() => [
+  { value: null, label: "All categories" },
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name })),
+]);
 
 onMounted(async () => {
   store.filter.type = "combine";
@@ -85,6 +86,11 @@ async function bulkDel(items: ModuleRow[]) {
   for (const item of items) await del(item);
 }
 
+function toggleTag(t: string, currentTags: string[] | undefined): string[] {
+  const cur = currentTags ?? [];
+  return cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t];
+}
+
 function payloadOf(row: ModuleRow): CombinePayload {
   const p = row.payload as Partial<CombinePayload>;
   return {
@@ -102,149 +108,215 @@ function outputVar(row: ModuleRow): string {
 function inputVars(row: ModuleRow): string[] { return payloadOf(row).input_vars; }
 function inputCount(row: ModuleRow): number { return inputVars(row).length; }
 function templateOf(row: ModuleRow): string { return payloadOf(row).template; }
+
+interface TemplatePart { kind: "key" | "var" | "text"; text: string; }
+function templateParts(row: ModuleRow): TemplatePart[] {
+  const tpl = templateOf(row);
+  if (!tpl) return [];
+  const parts = tpl.split(/(\{[^}]+\}|\$[a-z_][a-z0-9_]*)/i);
+  return parts
+    .filter((p) => p !== "")
+    .map((p) => {
+      if (/^\{[^}]+\}$/.test(p)) return { kind: "key" as const, text: p };
+      if (/^\$[a-z_]/i.test(p)) return { kind: "var" as const, text: p };
+      return { kind: "text" as const, text: p };
+    });
+}
 </script>
 
 <template>
-  <EntityListView
+  <ModuleListView
     title="Combines"
-    subtitle="Combine modules merge resolved variables into a new value via templates."
+    subtitle="Combine modules merge upstream resolved values via a template, storing into a new variable for downstream."
     new-label="New Combine"
     new-route="/combines/new"
     :items="store.items"
     :loading="store.loading"
     :filter="store.filter"
+    :mid-cols="3"
     empty-message="No combines yet. Use these to merge resolved variables into named outputs."
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
     <template #filter-panel="{ filter, emitFetch }">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs text-wp-text2 mb-1">Category</label>
+      <div class="wp-filters-grid">
+        <div class="wp-field">
+          <label class="wp-field__label">Category</label>
           <Select
-            v-model="filter.category"
-            :options="categoryStore.items" option-label="name" option-value="id"
-            placeholder="All categories" show-clear class="w-full"
+            :model-value="filter.category ?? null"
+            :options="categoryOptions"
+            placeholder="Any category"
             aria-label="Filter by category"
-            @change="emitFetch"
+            @update:model-value="(v) => { filter.category = v as string | null; emitFetch(); }"
           />
         </div>
-        <div>
-          <label class="block text-xs text-wp-text2 mb-1">Tags</label>
-          <MultiSelect
-            v-model="filter.tags"
-            :options="allTags"
-            placeholder="Any tag" display="chip" filter class="w-full"
-            @change="emitFetch"
-          />
-        </div>
-        <div class="col-span-2 flex items-center gap-4 pt-1">
-          <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <Checkbox v-model="filter.favorites" :binary="true" @change="emitFetch" />
-            Favorites only
+        <div class="wp-field">
+          <label class="wp-field__label">Favorites</label>
+          <label class="wp-fav-toggle">
+            <Checkbox
+              :model-value="!!filter.favorites"
+              @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+            />
+            <span>Favorites only</span>
           </label>
         </div>
-      </div>
-    </template>
-
-    <template #columns>
-      <Column selection-mode="multiple" header-style="width:3rem" />
-      <Column expander header-style="width:3rem" />
-      <Column header-style="width:3rem">
-        <template #body="{ data }">
-          <Button
-            :icon="data.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'"
-            text rounded size="small"
-            :severity="data.is_favorite ? 'warning' : 'secondary'"
-            aria-label="Toggle favorite"
-            @click.stop="fav(data)"
-          />
-        </template>
-      </Column>
-      <Column field="name" header="Name" sortable>
-        <template #body="{ data }">
-          <div class="flex items-center gap-2">
-            <i class="wp-kind-combine pi pi-share-alt text-wp-violet" aria-hidden="true" />
-            <div class="flex flex-col">
-              <span class="cursor-pointer font-medium hover:text-white" @click="edit(data)">{{ data.name }}</span>
-              <span
-                class="text-xs text-wp-text3 font-mono cursor-pointer hover:text-wp-text2 select-all"
-                :title="`Click to copy ${data.id}`"
-                @click.stop="copyId(data.id)"
-              >{{ data.id }}</span>
-            </div>
+        <div class="wp-field wp-field--full">
+          <label class="wp-field__label">
+            Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
+          </label>
+          <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
+          <div v-else class="wp-tags-row">
+            <button
+              v-for="t in allTags" :key="t"
+              type="button"
+              class="wp-tag-chip"
+              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
+            >
+              {{ t }}
+            </button>
           </div>
-        </template>
-      </Column>
-      <Column field="category_id" header="Category" header-style="width:9rem" sortable>
-        <template #body="{ data }">
-          <span
-            v-if="data.category_id && categoryById.get(data.category_id)"
-            class="category-chip"
-            :style="{ background: categoryById.get(data.category_id)!.color || 'var(--wp-bg3)' }"
-          >
-            {{ categoryById.get(data.category_id)!.name }}
-          </span>
-          <span v-else class="text-wp-text3 text-sm">—</span>
-        </template>
-      </Column>
-      <Column header="Output" header-style="width:10rem">
-        <template #body="{ data }">
-          <span class="font-mono text-wp-violet">{{ outputVar(data) }}</span>
-        </template>
-      </Column>
-      <Column header="Inputs" header-style="width:5rem">
-        <template #body="{ data }">
-          <Badge :value="String(inputCount(data))" severity="secondary" />
-        </template>
-      </Column>
-      <Column field="tags" header="Tags" header-style="width:13rem">
-        <template #body="{ data }">
-          <div v-if="data.tags?.length" class="flex flex-wrap gap-1">
-            <span v-for="(t, i) in data.tags.slice(0, 3)" :key="i" class="tag-chip">{{ t }}</span>
-            <span v-if="data.tags.length > 3" class="text-xs text-wp-text3">+{{ data.tags.length - 3 }}</span>
-          </div>
-          <span v-else class="text-wp-text3 text-sm">—</span>
-        </template>
-      </Column>
-      <Column field="updated_at" header="Updated" sortable header-style="width:9rem">
-        <template #body="{ data }">
-          <RelativeDate :value="data.updated_at" />
-        </template>
-      </Column>
-      <Column header="Actions" header-style="width:11rem">
-        <template #body="{ data }">
-          <div class="flex gap-1" @click.stop>
-            <Button icon="pi pi-pencil" text rounded size="small" aria-label="Edit" @click="edit(data)" />
-            <Button icon="pi pi-copy" text rounded size="small" aria-label="Duplicate" @click="dup(data)" />
-            <Button icon="pi pi-trash" text rounded size="small" severity="danger" aria-label="Delete" @click="del(data)" />
-          </div>
-        </template>
-      </Column>
-    </template>
-
-    <template #expansion="{ data }">
-      <div class="px-6 py-3">
-        <h5 class="text-xs font-semibold mb-2 uppercase tracking-wider text-wp-text2">
-          Template for <span class="text-wp-rose">{{ data.name }}</span>
-        </h5>
-        <pre v-if="templateOf(data)" class="combine-template font-mono text-xs">{{ templateOf(data) }}</pre>
-        <div v-else class="text-sm text-wp-text3 mb-2">No template defined.</div>
-        <div class="mt-2 flex flex-wrap items-center gap-1">
-          <span class="text-xs text-wp-text3 mr-1">Reads:</span>
-          <span v-if="!inputVars(data).length" class="text-xs text-wp-text3">no inputs</span>
-          <span
-            v-for="(v, i) in inputVars(data)" :key="i"
-            class="input-var-chip font-mono"
-          >{{ v.startsWith("$") ? v : `$${v}` }}</span>
         </div>
       </div>
     </template>
-  </EntityListView>
+
+    <template #favorite="{ row }">
+      <button
+        type="button"
+        class="wp-row-fav-btn"
+        :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
+        @click.stop="fav(row)"
+      >
+        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
+      </button>
+    </template>
+
+    <template #name="{ row }">
+      <div class="wp-row-name">
+        <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
+        <span
+          class="wp-id"
+          :title="`Click to copy ${row.id}`"
+          @click.stop="copyId(row.id)"
+        >{{ row.id }}</span>
+      </div>
+    </template>
+
+    <template #columns-head>
+      <th style="width: 130px">Category</th>
+      <th style="width: 140px">Output</th>
+      <th style="width: 70px">Inputs</th>
+    </template>
+
+    <template #columns="{ row }">
+      <td>
+        <span
+          v-if="row.category_id && categoryById.get(row.category_id)"
+          class="category-chip"
+          :style="{ background: categoryById.get(row.category_id)!.color || 'var(--wp-bg-3)' }"
+        >
+          {{ categoryById.get(row.category_id)!.name }}
+        </span>
+        <span v-else class="wp-dim">—</span>
+      </td>
+      <td><span class="wp-mono wp-output-var">{{ outputVar(row) }}</span></td>
+      <td><span class="wp-mono">{{ inputCount(row) }}</span></td>
+    </template>
+
+    <template #actions="{ row }">
+      <Button variant="ghost" size="sm" icon="pi pi-pencil" aria-label="Edit" @click="edit(row)" />
+      <Button variant="ghost" size="sm" icon="pi pi-clone" aria-label="Duplicate" @click="dup(row)" />
+      <Button variant="ghost" size="sm" icon="pi pi-trash" aria-label="Delete" @click="del(row)" />
+    </template>
+
+    <template #expansion="{ row }">
+      <div class="wp-row-expand__title">Template</div>
+      <div v-if="templateOf(row)" class="wp-snippet">
+        <template v-for="(p, i) in templateParts(row)" :key="i">
+          <span v-if="p.kind === 'key'" class="wp-token-key">{{ p.text }}</span>
+          <span v-else-if="p.kind === 'var'" class="wp-token-var">{{ p.text }}</span>
+          <span v-else>{{ p.text }}</span>
+        </template>
+      </div>
+      <div v-else class="wp-dim">No template defined.</div>
+      <div class="wp-input-vars">
+        <span class="wp-dim wp-input-vars__label">Reads:</span>
+        <span v-if="!inputVars(row).length" class="wp-dim">no inputs</span>
+        <span
+          v-for="(v, i) in inputVars(row)" :key="i"
+          class="wp-input-var-chip"
+        >
+          <i :class="v.startsWith('@') ? 'pi pi-th-large' : 'pi pi-tag'" />
+          {{ v }}
+        </span>
+      </div>
+    </template>
+  </ModuleListView>
 </template>
 
 <style scoped>
+.wp-filters-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wp-field--full { grid-column: 1 / -1; }
+.wp-field__label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wp-text-muted);
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.wp-fav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+}
+.wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-tags-empty { font-size: 12px; }
+.wp-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--wp-bg-3);
+  color: var(--wp-text-muted);
+  border: 1px solid var(--wp-border);
+  cursor: pointer;
+}
+.wp-tag-chip[data-active="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  color: var(--wp-accent-text);
+}
+
+.wp-row-fav-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--wp-text-dim);
+  display: inline-flex;
+  align-items: center;
+}
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
+.wp-row-fav-btn .pi { font-size: 13px; }
+
+.wp-row-name { display: flex; flex-direction: column; gap: 2px; }
+.wp-row-name__text { font-weight: 500; cursor: pointer; }
+.wp-id {
+  font-family: var(--wp-font-mono);
+  font-size: 10.5px;
+  color: var(--wp-text-dim);
+  cursor: pointer;
+  user-select: all;
+}
+
 .category-chip {
   display: inline-block;
   font-size: 11px;
@@ -254,31 +326,36 @@ function templateOf(row: ModuleRow): string { return payloadOf(row).template; }
   font-weight: 500;
   text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
 }
-.tag-chip {
-  font-size: 10px;
-  padding: 1px 6px;
-  background: var(--wp-bg3);
-  color: var(--wp-text2);
-  border-radius: 3px;
+
+.wp-output-var { color: var(--wp-accent-text, #c4b5fd); }
+
+.wp-row-expand__title {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-dim);
+  margin-bottom: 8px;
+  font-weight: 600;
 }
-.combine-template {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  padding: 8px 10px;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--wp-text);
-  max-width: 720px;
+.wp-input-vars {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
 }
-.input-var-chip {
+.wp-input-vars__label { font-size: 11.5px; margin-right: 4px; }
+.wp-input-var-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--wp-violet-bg, var(--wp-bg3));
-  color: var(--wp-violet, var(--wp-text2));
-  border: 1px solid var(--wp-violet, var(--wp-border));
+  background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
+  color: var(--wp-accent-text);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
+  font-family: var(--wp-font-mono);
 }
-.text-wp-violet { color: var(--wp-kind-combine, var(--wp-violet, #b4a0ff)); }
+.wp-input-var-chip .pi { font-size: 9.5px; }
 </style>

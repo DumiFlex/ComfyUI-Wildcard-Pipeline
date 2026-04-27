@@ -2,15 +2,11 @@
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
-import Column from "primevue/column";
-import Button from "primevue/button";
-import Badge from "primevue/badge";
-import Checkbox from "primevue/checkbox";
-import MultiSelect from "primevue/multiselect";
-import Select from "primevue/select";
-import EntityListView from "../components/EntityListView.vue";
-import RelativeDate from "../components/RelativeDate.vue";
+import ModuleListView from "../components/ModuleListView.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
+import Button from "../components/ui/Button.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import Select from "../components/ui/Select.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { ModuleRow, CategoryRow } from "../api/types";
@@ -37,6 +33,11 @@ const allTags = computed(() => {
   return Array.from(set).sort();
 });
 
+const categoryOptions = computed(() => [
+  { value: null, label: "All categories" },
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name })),
+]);
+
 // Reactive ref-graph computed off the store. Rebuilds on every change since
 // `getWildcardSyntax` is cheap (linear over tokens) and graphs are small.
 const wildcardGraph = computed(() => buildWildcardGraph(store.items));
@@ -62,17 +63,17 @@ function syntaxView(row: ModuleRow): SyntaxView {
 const extraFilters = computed(() => [
   {
     key: "has-refs",
-    label: "Has nested refs",
+    label: "Uses nested refs",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasRefs,
   },
   {
     key: "has-inline",
-    label: "Has inline choices",
+    label: "Has inline {a|b|c}",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasInline,
   },
   {
     key: "is-referenced",
-    label: "Is referenced",
+    label: "Referenced by others",
     check: (m: ModuleRow) => {
       const inc = wildcardGraph.value.incoming.get(wildcardVarName(m));
       return !!inc && inc.size > 0;
@@ -134,6 +135,11 @@ async function bulkDel(items: ModuleRow[]) {
   for (const item of items) await del(item);
 }
 
+function toggleTag(t: string, currentTags: string[] | undefined): string[] {
+  const cur = currentTags ?? [];
+  return cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t];
+}
+
 interface WildcardOption { id: string; value: string; weight: number; }
 
 function options(row: ModuleRow): WildcardOption[] {
@@ -141,18 +147,20 @@ function options(row: ModuleRow): WildcardOption[] {
 }
 function optionCount(row: ModuleRow): number { return options(row).length; }
 function topOptions(row: ModuleRow): WildcardOption[] {
-  return [...options(row)].sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1)).slice(0, 3);
+  return [...options(row)].sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1)).slice(0, 4);
 }
 
-function validIcon(row: ModuleRow): string {
-  return optionCount(row) === 0
-    ? "pi pi-exclamation-triangle text-wp-amber"
-    : "pi pi-check-circle text-wp-green";
+function totalWeight(row: ModuleRow): number {
+  return options(row).reduce((a, b) => a + (b.weight ?? 1), 0) || 1;
+}
+
+function isValid(row: ModuleRow): boolean {
+  return options(row).every((o) => !!o.value);
 }
 </script>
 
 <template>
-  <EntityListView
+  <ModuleListView
     title="Wildcards"
     subtitle="Wildcard modules pick one weighted option per resolution. Use $variable in prompts."
     new-label="New Wildcard"
@@ -161,171 +169,261 @@ function validIcon(row: ModuleRow): string {
     :loading="store.loading"
     :filter="store.filter"
     :extra-filters="extraFilters"
+    :mid-cols="4"
     empty-message="No wildcards yet. Create your first to start building dynamic prompts."
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
     <template #filter-panel="{ filter, emitFetch }">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs text-wp-text2 mb-1">Category</label>
+      <div class="wp-filters-grid">
+        <div class="wp-field">
+          <label class="wp-field__label">Category</label>
           <Select
-            v-model="filter.category"
-            :options="categoryStore.items" option-label="name" option-value="id"
-            placeholder="All categories" show-clear class="w-full"
+            :model-value="filter.category ?? null"
+            :options="categoryOptions"
+            placeholder="Any category"
             aria-label="Filter by category"
-            @change="emitFetch"
+            @update:model-value="(v) => { filter.category = v as string | null; emitFetch(); }"
           />
         </div>
-        <div>
-          <label class="block text-xs text-wp-text2 mb-1">Tags</label>
-          <MultiSelect
-            v-model="filter.tags"
-            :options="allTags"
-            placeholder="Any tag" display="chip" filter class="w-full"
-            @change="emitFetch"
-          />
-        </div>
-        <div class="col-span-2 flex items-center gap-4 pt-1">
-          <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <Checkbox v-model="filter.favorites" :binary="true" @change="emitFetch" />
-            Favorites only
+        <div class="wp-field">
+          <label class="wp-field__label">
+            Favorites
+          </label>
+          <label class="wp-fav-toggle">
+            <Checkbox
+              :model-value="!!filter.favorites"
+              @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+            />
+            <span>Favorites only</span>
           </label>
         </div>
-      </div>
-    </template>
-
-    <template #columns>
-      <Column selection-mode="multiple" header-style="width:3rem" />
-      <Column expander header-style="width:3rem" />
-      <Column header-style="width:3rem">
-        <template #body="{ data }">
-          <Button
-            :icon="data.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'"
-            text rounded size="small"
-            :severity="data.is_favorite ? 'warning' : 'secondary'"
-            aria-label="Toggle favorite"
-            @click.stop="fav(data)"
-          />
-        </template>
-      </Column>
-      <Column field="name" header="Name" sortable>
-        <template #body="{ data }">
-          <div class="flex flex-col">
-            <span class="cursor-pointer font-medium hover:text-white" @click="edit(data)">{{ data.name }}</span>
-            <span
-              class="text-xs text-wp-text3 font-mono cursor-pointer hover:text-wp-text2 select-all"
-              :title="`Click to copy ${data.id}`"
-              @click.stop="copyId(data.id)"
-            >{{ data.id }}</span>
-          </div>
-        </template>
-      </Column>
-      <Column header="Syntax" header-style="width:8rem">
-        <template #body="{ data }">
-          <template v-for="v in [syntaxView(data)]" :key="data.id">
-            <div
-              v-if="v.outgoing.length || v.incoming.length || v.hasInline"
-              class="wp-syntax-cell"
+        <div class="wp-field wp-field--full">
+          <label class="wp-field__label">
+            Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
+          </label>
+          <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
+          <div v-else class="wp-tags-row">
+            <button
+              v-for="t in allTags" :key="t"
+              type="button"
+              class="wp-tag-chip"
+              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
             >
-              <span
-                v-if="v.outgoing.length"
-                class="wp-syntax-pill wp-syntax-pill--ref"
-                :title="`References ${v.outgoing.length} wildcard${v.outgoing.length === 1 ? '' : 's'}: ${v.outgoing.join(', ')}`"
-              >
-                <i class="pi pi-arrow-right-arrow-left" />
-                {{ v.outgoing.length }}
-              </span>
-              <span
-                v-if="v.hasInline"
-                class="wp-syntax-pill wp-syntax-pill--dp"
-                title="Contains inline {a|b|c} alternatives"
-              >{{ "{ }" }}</span>
-              <span
-                v-if="v.incoming.length"
-                class="wp-syntax-pill wp-syntax-pill--in"
-                :title="`Referenced by ${v.incoming.length} wildcard${v.incoming.length === 1 ? '' : 's'}: ${v.incoming.join(', ')}`"
-              >
-                <i class="pi pi-arrow-left" />
-                {{ v.incoming.length }}
-              </span>
-            </div>
-            <span v-else class="text-wp-text3 text-sm">—</span>
-          </template>
-        </template>
-      </Column>
-      <Column field="category_id" header="Category" header-style="width:9rem" sortable>
-        <template #body="{ data }">
-          <span
-            v-if="data.category_id && categoryById.get(data.category_id)"
-            class="category-chip"
-            :style="{ background: categoryById.get(data.category_id)!.color || 'var(--wp-bg3)' }"
-          >
-            {{ categoryById.get(data.category_id)!.name }}
-          </span>
-          <span v-else class="text-wp-text3 text-sm">—</span>
-        </template>
-      </Column>
-      <Column header="Items" header-style="width:5rem">
-        <template #body="{ data }">
-          <Badge :value="String(optionCount(data))" severity="secondary" />
-        </template>
-      </Column>
-      <Column header="Valid" header-style="width:5rem">
-        <template #body="{ data }">
-          <i :class="validIcon(data)" :title="optionCount(data) === 0 ? 'No options' : 'Valid'" />
-        </template>
-      </Column>
-      <Column field="tags" header="Tags" header-style="width:13rem">
-        <template #body="{ data }">
-          <div v-if="data.tags?.length" class="flex flex-wrap gap-1">
-            <span v-for="(t, i) in data.tags.slice(0, 3)" :key="i" class="tag-chip">{{ t }}</span>
-            <span v-if="data.tags.length > 3" class="text-xs text-wp-text3">+{{ data.tags.length - 3 }}</span>
+              {{ t }}
+            </button>
           </div>
-          <span v-else class="text-wp-text3 text-sm">—</span>
-        </template>
-      </Column>
-      <Column field="updated_at" header="Updated" sortable header-style="width:9rem">
-        <template #body="{ data }">
-          <RelativeDate :value="data.updated_at" />
-        </template>
-      </Column>
-      <Column header="Actions" header-style="width:11rem">
-        <template #body="{ data }">
-          <div class="flex gap-1" @click.stop>
-            <Button icon="pi pi-pencil" text rounded size="small" aria-label="Edit" @click="edit(data)" />
-            <Button icon="pi pi-copy" text rounded size="small" aria-label="Duplicate" @click="dup(data)" />
-            <Button icon="pi pi-trash" text rounded size="small" severity="danger" aria-label="Delete" @click="del(data)" />
-          </div>
-        </template>
-      </Column>
-    </template>
-
-    <template #expansion="{ data }">
-      <div class="px-6 py-3">
-        <h5 class="text-xs font-semibold mb-2 uppercase tracking-wider text-wp-text2">
-          Top options for <span class="text-wp-violet">{{ data.name }}</span>
-        </h5>
-        <div v-if="topOptions(data).length === 0" class="text-sm text-wp-text3">
-          No options defined.
-        </div>
-        <div v-else class="flex flex-col gap-1">
-          <div v-for="(opt, i) in topOptions(data)" :key="i" class="flex items-center gap-3 text-sm">
-            <Badge :value="String(opt.weight)" severity="secondary" class="min-w-8" />
-            <RichTextPreview v-if="opt.value" :value="opt.value" />
-            <span v-else class="font-mono text-wp-text3">(empty)</span>
-          </div>
-          <span v-if="optionCount(data) > 3" class="text-xs text-wp-text3 mt-1">
-            … and {{ optionCount(data) - 3 }} more
-          </span>
         </div>
       </div>
     </template>
-  </EntityListView>
+
+    <template #favorite="{ row }">
+      <button
+        type="button"
+        class="wp-row-fav-btn"
+        :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
+        @click.stop="fav(row)"
+      >
+        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
+      </button>
+    </template>
+
+    <template #name="{ row }">
+      <div class="wp-row-name">
+        <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
+        <span
+          class="wp-id"
+          :title="`Click to copy ${row.id}`"
+          @click.stop="copyId(row.id)"
+        >{{ row.id }}</span>
+      </div>
+    </template>
+
+    <template #columns-head>
+      <th style="width: 130px">Category</th>
+      <th style="width: 60px">Items</th>
+      <th style="width: 84px">Syntax</th>
+      <th style="width: 60px">Valid</th>
+    </template>
+
+    <template #columns="{ row }">
+      <td>
+        <span
+          v-if="row.category_id && categoryById.get(row.category_id)"
+          class="category-chip"
+          :style="{ background: categoryById.get(row.category_id)!.color || 'var(--wp-bg-3)' }"
+        >
+          {{ categoryById.get(row.category_id)!.name }}
+        </span>
+        <span v-else class="wp-dim">—</span>
+      </td>
+      <td><span class="wp-mono">{{ optionCount(row) }}</span></td>
+      <td>
+        <template v-for="v in [syntaxView(row)]" :key="row.id">
+          <div
+            v-if="v.outgoing.length || v.incoming.length || v.hasInline"
+            class="wp-syntax-cell"
+          >
+            <span
+              v-if="v.outgoing.length"
+              class="wp-syntax-pill wp-syntax-pill--ref"
+              :title="`Nests ${v.outgoing.length} other wildcard${v.outgoing.length === 1 ? '' : 's'}`"
+            >
+              <i class="pi pi-arrow-right" /> {{ v.outgoing.length }}
+            </span>
+            <span
+              v-if="v.incoming.length"
+              class="wp-syntax-pill wp-syntax-pill--in"
+              :title="`Referenced by ${v.incoming.length} wildcard${v.incoming.length === 1 ? '' : 's'}`"
+            >
+              <i class="pi pi-arrow-left" /> {{ v.incoming.length }}
+            </span>
+            <span
+              v-if="v.hasInline"
+              class="wp-syntax-pill wp-syntax-pill--dp"
+              title="Contains inline {a|b|c} alternatives"
+            >{{ "{ }" }}</span>
+          </div>
+          <span v-else class="wp-dim">—</span>
+        </template>
+      </td>
+      <td>
+        <i
+          v-if="isValid(row)"
+          class="pi pi-check-circle"
+          style="color: var(--wp-success, #86efac);"
+          title="Valid"
+        />
+        <i
+          v-else
+          class="pi pi-exclamation-triangle"
+          style="color: var(--wp-warn, #fcd34d);"
+          title="Empty option present"
+        />
+      </td>
+    </template>
+
+    <template #actions="{ row }">
+      <Button variant="ghost" size="sm" icon="pi pi-pencil" aria-label="Edit" @click="edit(row)" />
+      <Button variant="ghost" size="sm" icon="pi pi-clone" aria-label="Duplicate" @click="dup(row)" />
+      <Button variant="ghost" size="sm" icon="pi pi-trash" aria-label="Delete" @click="del(row)" />
+    </template>
+
+    <template #expansion="{ row }">
+      <div class="wp-row-expand__title">
+        Top options for <span class="wp-row-expand__name">{{ (row.name ?? '').toUpperCase() }}</span>
+      </div>
+      <div v-if="!options(row).length" class="wp-dim">No options defined.</div>
+      <div v-else class="wp-opts-grid">
+        <template v-for="(opt, i) in topOptions(row)" :key="i">
+          <span class="wp-mono wp-dim">{{ opt.weight ?? 1 }}×</span>
+          <span class="wp-mono wp-opts-grid__val">
+            <RichTextPreview v-if="opt.value" :value="opt.value" />
+            <span v-else class="wp-dim">(empty)</span>
+          </span>
+          <div class="wp-opts-grid__bar">
+            <div
+              class="wp-opts-grid__bar-fill"
+              :style="{ width: `${((opt.weight ?? 1) / totalWeight(row)) * 100}%` }"
+            />
+          </div>
+        </template>
+      </div>
+      <div v-if="optionCount(row) > 4" class="wp-dim wp-opts-more">
+        … and {{ optionCount(row) - 4 }} more
+      </div>
+    </template>
+  </ModuleListView>
 </template>
 
 <style scoped>
+.wp-filters-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.wp-field--full { grid-column: 1 / -1; }
+.wp-field__label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wp-text-muted);
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.wp-fav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+}
+.wp-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wp-tags-empty { font-size: 12px; }
+.wp-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--wp-bg-3);
+  color: var(--wp-text-muted);
+  border: 1px solid var(--wp-border);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.wp-tag-chip:hover {
+  color: var(--wp-text);
+  background: var(--wp-bg-4);
+}
+.wp-tag-chip[data-active="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  color: var(--wp-accent-text);
+}
+
+.wp-row-fav-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--wp-text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
+.wp-row-fav-btn .pi { font-size: 13px; }
+
+.wp-row-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wp-row-name__text {
+  font-weight: 500;
+  cursor: pointer;
+}
+.wp-row-name__text:hover { color: var(--wp-text); }
+
+.wp-id {
+  font-family: var(--wp-font-mono);
+  font-size: 10.5px;
+  color: var(--wp-text-dim);
+  cursor: pointer;
+  user-select: all;
+}
+.wp-id:hover { color: var(--wp-text-muted); }
+
 .category-chip {
   display: inline-block;
   font-size: 11px;
@@ -335,15 +433,7 @@ function validIcon(row: ModuleRow): string {
   font-weight: 500;
   text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
 }
-.tag-chip {
-  font-size: 10px;
-  padding: 1px 6px;
-  background: var(--wp-bg3);
-  color: var(--wp-text2);
-  border-radius: 3px;
-}
 
-/* Syntax indicator pills (mirrors design-handoff styles.css). */
 .wp-syntax-cell {
   display: inline-flex;
   gap: 4px;
@@ -366,21 +456,53 @@ function validIcon(row: ModuleRow): string {
 }
 .wp-syntax-pill .pi { font-size: 9.5px; }
 .wp-syntax-pill--ref {
-  /* outgoing nested @refs — pink/magenta to match @ref token color */
   color: var(--wp-kind-wildcard, #f0abfc);
   background: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 14%, transparent);
   border-color: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 28%, transparent);
 }
 .wp-syntax-pill--in {
-  /* incoming references — accent (purple) */
   color: var(--wp-accent-text, #c4b5fd);
   background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 14%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 32%, transparent);
 }
 .wp-syntax-pill--dp {
-  /* inline {a|b|c} — amber/yellow to match dp-brace token color */
   color: var(--wp-warn, #fcd34d);
   background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
   border-color: color-mix(in oklab, var(--wp-warn, #facc15) 30%, transparent);
 }
+
+.wp-row-expand__title {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-dim);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.wp-row-expand__name { color: var(--wp-accent-text, #c4b5fd); }
+
+.wp-opts-grid {
+  display: grid;
+  grid-template-columns: 30px 1fr 120px;
+  gap: 4px 12px;
+  max-width: 760px;
+  font-size: 12.5px;
+  align-items: center;
+}
+.wp-opts-grid__val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-opts-grid__bar {
+  background: var(--wp-bg-3);
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.wp-opts-grid__bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--wp-accent-500, #8b5cf6), var(--wp-accent-400, #a78bfa));
+}
+.wp-opts-more { margin-top: 8px; font-size: 11.5px; }
 </style>
