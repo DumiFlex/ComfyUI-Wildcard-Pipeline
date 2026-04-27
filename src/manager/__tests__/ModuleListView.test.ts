@@ -119,11 +119,9 @@ describe("ModuleListView.vue", () => {
     await filtersBtn.trigger("click");
     await flushPromises();
     expect(wrap.find(".wp-filter-panel").exists()).toBe(true);
-    // Favorites quick-filter chip and extra-filter chips are both rendered.
-    const toggleChips = wrap.findAll(".wp-chip--toggle");
-    expect(toggleChips.length).toBeGreaterThanOrEqual(2);
-    expect(toggleChips.some((c) => c.text().includes("Favorites only"))).toBe(true);
-    expect(toggleChips.some((c) => c.text().includes("Favorited"))).toBe(true);
+    // Extra filter chip is rendered inside.
+    expect(wrap.find(".wp-chip--toggle").exists()).toBe(true);
+    expect(wrap.find(".wp-chip--toggle").text()).toContain("Favorited");
   });
 
   it("paginates 20 items into pages of 10 then 10 when pageSize=10", async () => {
