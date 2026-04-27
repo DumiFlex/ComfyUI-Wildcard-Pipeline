@@ -14,7 +14,7 @@
  * with the `restore` event.
  */
 import { computed, onMounted, onBeforeUnmount, watch } from "vue";
-import Button from "primevue/button";
+import Button from "./ui/Button.vue";
 import RelativeDate from "./RelativeDate.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 
@@ -100,9 +100,7 @@ watch(
           </div>
           <Button
             icon="pi pi-times"
-            severity="secondary"
-            text
-            rounded
+            variant="ghost"
             aria-label="Close history"
             data-test="history-close"
             @click="close"
@@ -137,13 +135,12 @@ watch(
                   </div>
                 </div>
                 <Button
-                  label="Restore this version"
                   icon="pi pi-refresh"
-                  severity="primary"
-                  size="small"
+                  variant="primary"
+                  size="sm"
                   :data-test="`history-restore-${idx}`"
                   @click="restore(entry)"
-                />
+                >Restore this version</Button>
               </div>
               <pre class="wp-history-item__json">{{ previewJson(entry) }}</pre>
             </li>

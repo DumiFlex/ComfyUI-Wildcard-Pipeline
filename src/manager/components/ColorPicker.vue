@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import InputText from "primevue/inputtext";
+import Input from "./ui/Input.vue";
 
 interface Props {
   modelValue: string;
@@ -117,9 +117,8 @@ function isActivePreset(preset: string): boolean {
       :aria-label="swatchAriaLabel"
     >
       <div class="wp-color-picker__row">
-        <InputText
+        <Input
           :model-value="hexDraft"
-          maxlength="7"
           aria-label="Hex color value"
           class="wp-color-picker__hex font-mono"
           data-test="color-hex-input"

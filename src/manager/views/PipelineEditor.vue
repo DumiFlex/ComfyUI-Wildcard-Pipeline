@@ -1,24 +1,28 @@
 <script setup lang="ts">
+/**
+ * PipelineEditor — Wave 4 port of `PipelineEditor` in `screens/editors.jsx`.
+ *
+ * Sections:
+ *  1. Identity
+ *  2. Steps stack (PipelineSteps + PipelineStepPicker modal)
+ *  3. Resolution preview (synthetic flow)
+ */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
-import Card from "primevue/card";
-import InputText from "primevue/inputtext";
-import Textarea from "primevue/textarea";
-import Select from "primevue/select";
-import AutoComplete from "primevue/autocomplete";
-import { useToast } from "primevue/usetoast";
+import EditorFrame from "../components/EditorFrame.vue";
+import IdentityCard from "../components/IdentityCard.vue";
+import Card from "../components/ui/Card.vue";
+import PipelineSteps from "../components/PipelineSteps.vue";
+import PipelineStepPicker from "../components/PipelineStepPicker.vue";
+import { useToast } from "../composables/useToast";
 import { api } from "../api/client";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import PipelineSteps from "../components/PipelineSteps.vue";
-import PipelineStepPicker from "../components/PipelineStepPicker.vue";
-import HistoryPanel from "../components/HistoryPanel.vue";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   CombinePayload,
-  DerivationPayload,
   ConstraintPayload,
+  DerivationPayload,
   ModuleHistoryEntry,
   ModuleRow,
   ModuleType,
@@ -40,9 +44,7 @@ const steps = ref<PipelineStep[]>([]);
 const saving = ref(false);
 const pickerOpen = ref(false);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
-const historyOpen = ref(false);
 
-// All modules (cross-kind) used by step rows + picker.
 const allModules = ref<ModuleRow[]>([]);
 const isEdit = computed(() => !!props.id);
 
@@ -64,27 +66,12 @@ const modulesByKind = computed(() => {
   return groups;
 });
 
-const tagSuggestions = ref<string[]>([]);
-function searchTags(event: { query: string }) {
-  const q = event.query.toLowerCase();
-  const known = new Set<string>();
-  for (const m of moduleStore.items) {
-    for (const t of m.tags ?? []) known.add(t);
-  }
-  for (const m of allModules.value) {
-    for (const t of m.tags ?? []) known.add(t);
-  }
-  tagSuggestions.value = Array.from(known)
-    .filter((t) => t.toLowerCase().includes(q) && !tags.value.includes(t))
-    .slice(0, 10);
-}
-
 async function loadAllModules() {
   try {
     const res = await api.modules.list({});
     allModules.value = res.items;
   } catch (e) {
-    toast.add({ severity: "error", summary: "Failed to load modules", detail: String(e), life: 3000 });
+    toast.push({ severity: "error", summary: "Failed to load modules", detail: String(e), life: 3000 });
   }
 }
 
@@ -106,7 +93,7 @@ onMounted(async () => {
       }));
       historyEntries.value = readHistory(row.payload);
     } catch {
-      toast.add({ severity: "error", summary: "Pipeline not found", life: 3000 });
+      toast.push({ severity: "error", summary: "Pipeline not found" });
       router.replace("/pipelines");
     }
   }
@@ -125,8 +112,6 @@ function onPick(mod: ModuleRow) {
   steps.value = [...steps.value, newStep];
   pickerOpen.value = false;
 }
-
-// ------ Resolution preview helpers ----------------------------------
 
 interface PreviewBinding {
   text: string;
@@ -220,8 +205,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
     enabled: s.enabled !== false,
     ...(s.instance ? { instance: s.instance } : {}),
   }));
-  historyOpen.value = false;
-  toast.add({
+  toast.push({
     severity: "info",
     summary: "Version restored",
     detail: `Restored from ${new Date(entry.saved_at).toLocaleString()}; click Save to commit.`,
@@ -231,7 +215,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
 
 async function save() {
   if (!name.value.trim()) {
-    toast.add({ severity: "warn", summary: "Name required", life: 2000 });
+    toast.push({ severity: "warn", summary: "Name required" });
     return;
   }
   saving.value = true;
@@ -275,165 +259,90 @@ async function save() {
         payload: newPayload,
       });
     }
-    toast.add({ severity: "success", summary: "Saved", detail: name.value, life: 2000 });
+    toast.push({ severity: "success", summary: "Saved", detail: name.value });
     router.push("/pipelines");
   } catch (e) {
-    toast.add({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
+    toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
   } finally {
     saving.value = false;
   }
 }
+
+function cancel() { router.push("/pipelines"); }
 </script>
 
 <template>
-  <div class="form-page">
-    <div class="form-page__header">
-      <RouterLink to="/pipelines" class="text-xs text-wp-text2 hover:text-wp-text">
-        <i class="pi pi-angle-left text-xs" /> Pipelines
-      </RouterLink>
-      <h1 class="text-xl font-semibold m-0 mt-1">{{ isEdit ? "Edit pipeline" : "New pipeline" }}</h1>
-    </div>
+  <EditorFrame
+    :title="isEdit ? 'Edit pipeline' : 'New pipeline'"
+    back-route="/pipelines"
+    back-label="Pipelines"
+    :saving="saving"
+    :history-entries="historyEntries"
+    @save="save"
+    @cancel="cancel"
+    @restore="applyRestore"
+  >
+    <IdentityCard
+      :name="name"
+      :description="description"
+      :category-id="categoryId"
+      :tags="tags"
+      @update:name="(v) => (name = v)"
+      @update:description="(v) => (description = v)"
+      @update:category-id="(v) => (categoryId = v)"
+      @update:tags="(v) => (tags = v)"
+    />
 
-    <div class="form-page__body">
-      <!-- A) Identity -->
-      <section class="form-section">
-        <h2 class="form-section__label">Identity</h2>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label for="pl-name" class="block text-xs text-wp-text2 mb-1">Name</label>
-            <InputText id="pl-name" v-model="name" class="w-full" />
+    <Card :title="`Modules (${steps.length})`">
+      <template #actions>
+        <span class="wp-dim pl-hint">Resolve top to bottom — each appends to context</span>
+      </template>
+      <PipelineSteps
+        :steps="steps"
+        :modules-by-id="modulesById"
+        :modules-by-kind="modulesByKind"
+        @update:steps="onStepsUpdate"
+        @open-picker="pickerOpen = true"
+      />
+    </Card>
+
+    <Card v-if="preview.length" title="Resolution preview">
+      <template #actions>
+        <span class="wp-dim pl-hint">Synthetic example — picks first option per wildcard</span>
+      </template>
+      <div class="wp-pl-flow" data-test="pipeline-preview">
+        <div
+          v-for="ps in preview" :key="ps.index"
+          class="wp-pl-flow__step"
+          :data-kind="ps.kind ?? 'unknown'"
+        >
+          <div class="wp-pl-flow__head">
+            <span class="wp-pl-flow__idx">{{ String(ps.index + 1).padStart(2, "0") }}</span>
+            <i :class="previewKindIcon(ps.kind)" class="wp-pl-flow__icon" aria-hidden="true" />
+            <span class="wp-pl-flow__name">{{ ps.name }}</span>
           </div>
-          <div>
-            <label for="pl-cat" class="block text-xs text-wp-text2 mb-1">Category</label>
-            <Select
-              id="pl-cat" v-model="categoryId"
-              :options="categoryStore.items" option-label="name" option-value="id"
-              placeholder="None" show-clear class="w-full"
-            />
-          </div>
-          <div class="col-span-2">
-            <label for="pl-desc" class="block text-xs text-wp-text2 mb-1">Description</label>
-            <Textarea id="pl-desc" v-model="description" rows="2" class="w-full" />
-          </div>
-          <div class="col-span-2">
-            <label for="pl-tags" class="block text-xs text-wp-text2 mb-1">Tags</label>
-            <AutoComplete
-              id="pl-tags"
-              v-model="tags"
-              multiple
-              typeahead
-              :suggestions="tagSuggestions"
-              placeholder="Type a tag and press Enter…"
-              class="w-full"
-              @complete="searchTags"
-            />
+          <div v-if="ps.bindings.length" class="wp-pl-flow__adds">
+            <div
+              v-for="(b, j) in ps.bindings" :key="j"
+              class="wp-pl-flow__binding"
+              :class="{ 'wp-pl-flow__binding--mut': b.isMutation }"
+            >{{ b.text }}</div>
           </div>
         </div>
-      </section>
+      </div>
+    </Card>
 
-      <!-- B) Steps stack -->
-      <section class="form-section">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="form-section__label m-0">Modules ({{ steps.length }})</h2>
-          <span class="text-xs text-wp-text3">Resolve top to bottom — each appends to context</span>
-        </div>
-        <Card>
-          <template #content>
-            <PipelineSteps
-              :steps="steps"
-              :modules-by-id="modulesById"
-              :modules-by-kind="modulesByKind"
-              @update:steps="onStepsUpdate"
-              @open-picker="pickerOpen = true"
-            />
-          </template>
-        </Card>
-      </section>
-
-      <!-- D) Resolution preview -->
-      <section v-if="preview.length" class="form-section">
-        <h2 class="form-section__label">Resolution preview</h2>
-        <Card>
-          <template #content>
-            <p class="text-xs text-wp-text3 m-0 mb-2">
-              Synthetic flow — shows the variables each enabled step binds into the resolved context.
-            </p>
-            <div class="wp-pl-flow" data-test="pipeline-preview">
-              <div
-                v-for="ps in preview" :key="ps.index"
-                class="wp-pl-flow__step"
-                :data-kind="ps.kind ?? 'unknown'"
-              >
-                <div class="wp-pl-flow__head">
-                  <span class="wp-pl-flow__idx">{{ String(ps.index + 1).padStart(2, "0") }}</span>
-                  <i :class="previewKindIcon(ps.kind)" class="wp-pl-flow__icon" aria-hidden="true" />
-                  <span class="wp-pl-flow__name">{{ ps.name }}</span>
-                </div>
-                <div v-if="ps.bindings.length" class="wp-pl-flow__adds">
-                  <div
-                    v-for="(b, j) in ps.bindings" :key="j"
-                    class="wp-pl-flow__binding"
-                    :class="{ 'wp-pl-flow__binding--mut': b.isMutation }"
-                  >{{ b.text }}</div>
-                </div>
-              </div>
-            </div>
-          </template>
-        </Card>
-      </section>
-    </div>
-
-    <!-- C) Picker modal -->
     <PipelineStepPicker
       v-model:visible="pickerOpen"
       :modules="allModules"
       :categories="categoryStore.items"
       @pick="onPick"
     />
-
-    <!-- E) Footer -->
-    <div class="form-page__footer">
-      <Button
-        v-if="historyEntries.length"
-        :label="`History (${historyEntries.length})`"
-        icon="pi pi-history"
-        severity="secondary"
-        outlined
-        data-test="history-btn"
-        @click="historyOpen = true"
-      />
-      <div class="form-page__footer-spacer" />
-      <Button label="Cancel" severity="secondary" outlined @click="router.push('/pipelines')" />
-      <Button label="Save" icon="pi pi-check" severity="primary" :loading="saving" data-test="save-btn" @click="save" />
-    </div>
-    <HistoryPanel
-      :open="historyOpen"
-      :entries="historyEntries"
-      @update:open="(v) => (historyOpen = v)"
-      @restore="applyRestore"
-    />
-  </div>
+  </EditorFrame>
 </template>
 
 <style scoped>
-.form-page { display: flex; flex-direction: column; min-height: calc(100vh - 56px); }
-.form-page__header { padding: 24px 24px 0; }
-.form-page__body { padding: 16px 24px 96px; max-width: 60rem; flex: 1; }
-.form-page__footer {
-  position: sticky; bottom: 0;
-  background: var(--wp-bg);
-  border-top: 1px solid var(--wp-border);
-  padding: 12px 24px;
-  display: flex; gap: 8px; align-items: center;
-}
-.form-page__footer-spacer { flex: 1; }
-.form-section { margin-bottom: 24px; }
-.form-section__label {
-  font-size: 11px; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--wp-text2);
-  margin: 0 0 8px 0;
-}
-
+.pl-hint { font-size: 11.5px; }
 .wp-pl-flow {
   display: flex;
   flex-direction: column;
@@ -475,10 +384,10 @@ async function save() {
   border-radius: 3px;
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
-  color: var(--wp-text3);
+  color: var(--wp-text-dim);
 }
 .wp-pl-flow__icon {
-  color: var(--step-color, var(--wp-text2));
+  color: var(--step-color, var(--wp-text-muted));
   font-size: 12px;
 }
 .wp-pl-flow__name {
@@ -497,5 +406,5 @@ async function save() {
   color: var(--wp-text);
   line-height: 1.4;
 }
-.wp-pl-flow__binding--mut { color: var(--wp-text2); font-style: italic; }
+.wp-pl-flow__binding--mut { color: var(--wp-text-muted); font-style: italic; }
 </style>

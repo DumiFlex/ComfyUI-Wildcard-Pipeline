@@ -18,7 +18,7 @@ vi.mock("../api/client", () => ({
 }));
 
 import { api } from "../api/client";
-import PipelineForm from "../views/PipelineForm.vue";
+import PipelineEditor from "../views/PipelineEditor.vue";
 
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const apiCat = api.categories as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -43,13 +43,9 @@ function makeRouter() {
   });
 }
 
-function findByText(wrap: ReturnType<typeof mount>, text: string) {
-  return wrap.findAll("button").find((b) => b.text().includes(text));
-}
-
-describe("PipelineForm.vue", () => {
+describe("PipelineEditor.vue", () => {
   it("renders 'New pipeline' heading when no id", async () => {
-    const wrap = mount(PipelineForm, {
+    const wrap = mount(PipelineEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
@@ -63,7 +59,7 @@ describe("PipelineForm.vue", () => {
       payload: { steps: [{ id: "s1", module_id: "wc_a", enabled: true }] },
       version: 1, created_at: "", updated_at: "", is_favorite: false,
     });
-    const wrap = mount(PipelineForm, {
+    const wrap = mount(PipelineEditor, {
       props: { id: "pl_a" },
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
@@ -73,12 +69,12 @@ describe("PipelineForm.vue", () => {
   });
 
   it("save without name shows warn toast and skips API", async () => {
-    const wrap = mount(PipelineForm, {
+    const wrap = mount(PipelineEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
-    const saveBtn = findByText(wrap, "Save");
-    await saveBtn?.trigger("click");
+    const saveBtn = wrap.find('[data-test="save-btn"]');
+    await saveBtn.trigger("click");
     await flushPromises();
     expect(apiMod.create).not.toHaveBeenCalled();
   });
@@ -89,15 +85,15 @@ describe("PipelineForm.vue", () => {
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: { steps: [] }, version: 1, created_at: "", updated_at: "",
     });
-    const wrap = mount(PipelineForm, {
+    const wrap = mount(PipelineEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
-    const nameInput = wrap.find("#pl-name");
+    const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("Portrait");
-    await nameInput.trigger("input");
-    const saveBtn = findByText(wrap, "Save");
-    await saveBtn?.trigger("click");
+    await flushPromises();
+    const saveBtn = wrap.find('[data-test="save-btn"]');
+    await saveBtn.trigger("click");
     await flushPromises();
     expect(apiMod.create).toHaveBeenCalledWith(
       expect.objectContaining({ type: "pipeline", name: "Portrait" }),

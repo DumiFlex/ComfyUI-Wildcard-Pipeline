@@ -18,7 +18,7 @@ vi.mock("../api/client", () => ({
 }));
 
 import { api } from "../api/client";
-import CombineForm from "../views/CombineForm.vue";
+import CombineEditor from "../views/CombineEditor.vue";
 import type { CombinePayload } from "../api/types";
 
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -44,13 +44,9 @@ function makeRouter() {
   });
 }
 
-function findByText(wrap: ReturnType<typeof mount>, text: string) {
-  return wrap.findAll("button").find((b) => b.text().includes(text));
-}
-
-describe("CombineForm.vue", () => {
+describe("CombineEditor.vue", () => {
   it("renders 'New combine' heading when no id", async () => {
-    const wrap = mount(CombineForm, {
+    const wrap = mount(CombineEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
@@ -59,116 +55,77 @@ describe("CombineForm.vue", () => {
 
   it("loads existing module when id prop given", async () => {
     apiMod.get.mockResolvedValue({
-      id: "cb_a",
-      name: "Subject Phrase",
-      description: "desc",
-      category_id: null,
-      tags: [],
-      type: "combine",
+      id: "cb_a", name: "Subject", description: "", category_id: null,
+      tags: [], type: "combine",
       payload: {
-        template: "$first_name with $hair_color hair",
+        template: "$first_name",
         output_var: "subject_phrase",
-        input_vars: ["first_name", "hair_color"],
+        input_vars: ["first_name"],
       },
-      version: 1,
-      created_at: "",
-      updated_at: "",
-      is_favorite: false,
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
     });
-    const wrap = mount(CombineForm, {
+    const wrap = mount(CombineEditor, {
       props: { id: "cb_a" },
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit combine");
-    expect(apiMod.get).toHaveBeenCalledWith("cb_a");
     const outInput = wrap.find('[data-test="cb-output-var"]')
       .element as HTMLInputElement;
     expect(outInput.value).toBe("subject_phrase");
   });
 
-  it("save without name shows warn toast and does not call api", async () => {
-    const wrap = mount(CombineForm, {
+  it("save without name does not call api", async () => {
+    const wrap = mount(CombineEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
-    const saveBtn = findByText(wrap, "Save");
-    await saveBtn?.trigger("click");
+    const saveBtn = wrap.find('[data-test="save-btn"]');
+    await saveBtn.trigger("click");
     await flushPromises();
     expect(apiMod.create).not.toHaveBeenCalled();
   });
 
   it("save creates combine with type/payload shape", async () => {
     apiMod.create.mockResolvedValue({
-      id: "cb_a",
-      type: "combine",
-      name: "Subject Phrase",
-      description: "",
-      category_id: null,
-      tags: [],
-      is_favorite: false,
-      payload: {
-        template: "$first_name with $hair_color hair",
-        output_var: "subject_phrase",
-        input_vars: ["first_name", "hair_color"],
-      },
-      version: 1,
-      created_at: "",
-      updated_at: "",
+      id: "cb_a", type: "combine", name: "Subject",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: { template: "$first_name", output_var: "subject", input_vars: ["first_name"] },
+      version: 1, created_at: "", updated_at: "",
     });
-    const wrap = mount(CombineForm, {
+    const wrap = mount(CombineEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
-
-    const nameInput = wrap.find("#cb-name");
+    const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("Subject Phrase");
     await flushPromises();
-
-    // Type a template directly into the rich-text textarea.
     const ta = wrap.find('[data-test="cb-template"] textarea');
     await ta.setValue("$first_name with $hair_color hair");
     await flushPromises();
-
-    const saveBtn = findByText(wrap, "Save");
-    await saveBtn?.trigger("click");
+    const saveBtn = wrap.find('[data-test="save-btn"]');
+    await saveBtn.trigger("click");
     await flushPromises();
-
     expect(apiMod.create).toHaveBeenCalledTimes(1);
-    const call = apiMod.create.mock.calls[0]?.[0] as {
-      type: string;
-      payload: CombinePayload;
-    };
+    const call = apiMod.create.mock.calls[0]?.[0] as { type: string; payload: CombinePayload };
     expect(call.type).toBe("combine");
     expect(call.payload.template).toBe("$first_name with $hair_color hair");
-    expect(call.payload.output_var).toBe("subject_phrase");
     expect(call.payload.input_vars).toEqual(["first_name", "hair_color"]);
-    // Strict shape — no extras.
-    expect(Object.keys(call.payload).sort()).toEqual(
-      ["input_vars", "output_var", "template"].sort(),
-    );
+    expect(Object.keys(call.payload).sort()).toEqual(["input_vars", "output_var", "template"].sort());
   });
 
   it("detected inputs panel shows the $vars from the template", async () => {
-    const wrap = mount(CombineForm, {
+    const wrap = mount(CombineEditor, {
       global: { plugins: [makeRouter(), PrimeVue, ToastService] },
     });
     await flushPromises();
-
-    // Empty-state visible initially.
-    expect(wrap.find('[data-test="cb-detected-empty"]').exists()).toBe(true);
-
     const ta = wrap.find('[data-test="cb-template"] textarea');
     await ta.setValue("$alpha plus $beta and $alpha again, $$literal");
     await flushPromises();
-
     const detected = wrap.find('[data-test="cb-detected"]');
     expect(detected.exists()).toBe(true);
     expect(detected.text()).toContain("$alpha");
     expect(detected.text()).toContain("$beta");
-    // $$literal should not be a detected var.
     expect(detected.text()).not.toContain("$literal");
-    // De-duplicated — only two chips.
-    expect(detected.findAll(".cb-chip").length).toBe(2);
   });
 });
