@@ -2,24 +2,18 @@
 /**
  * Test Runner — kind-aware module dry-run.
  *
- * The user picks a module kind, then a module of that kind, then runs N
- * samples through the in-browser resolver (`utils/resolver.ts`). Each kind
- * gets a tailored result panel modelled after the React prototype at
- * `docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx`
- * (`TestRunnerScreen` → `TR*Results`).
- *
- * Resolution runs client-side so the page can show step-by-step traces,
- * before/after deltas, and weighted-matrix previews without round-tripping
- * to the backend on every sample. The backend `/wp/api/test` endpoint is
- * still used for plain wildcard histograms (see `runWildcardHistogram`).
+ * Faithful port of `TestRunnerScreen` from
+ * `docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx`.
+ * Uses ui/* primitives only — no PrimeVue.
  */
 import { computed, onMounted, ref, watch } from "vue";
-import Button from "primevue/button";
-import Card from "primevue/card";
-import InputNumber from "primevue/inputnumber";
-import Select from "primevue/select";
-import SelectButton from "primevue/selectbutton";
-import { useToast } from "primevue/usetoast";
+import Button from "../components/ui/Button.vue";
+import Card from "../components/ui/Card.vue";
+import Field from "../components/ui/Field.vue";
+import Icon from "../components/ui/Icon.vue";
+import Input from "../components/ui/Input.vue";
+import Select from "../components/ui/Select.vue";
+import { useToast } from "../composables/useToast";
 import { api } from "../api/client";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import {
@@ -52,12 +46,12 @@ const toast = useToast();
 
 interface KindOption { value: ModuleType; label: string; icon: string; color: string }
 const KINDS: KindOption[] = [
-  { value: "pipeline",     label: "Pipeline",   icon: "pi pi-list",       color: "var(--wp-kind-pipeline)" },
-  { value: "wildcard",     label: "Wildcard",   icon: "pi pi-th-large",   color: "var(--wp-kind-wildcard)" },
-  { value: "combine",      label: "Combine",    icon: "pi pi-share-alt",  color: "var(--wp-kind-combine)" },
-  { value: "constraint",   label: "Constraint", icon: "pi pi-sitemap",    color: "var(--wp-kind-constraint)" },
-  { value: "derivation",   label: "Derivation", icon: "pi pi-code",       color: "var(--wp-kind-derivation)" },
-  { value: "fixed_values", label: "Fixed",      icon: "pi pi-tag",        color: "var(--wp-kind-fixed)" },
+  { value: "pipeline",     label: "Pipeline",   icon: "pi-list",       color: "var(--wp-kind-pipeline)" },
+  { value: "wildcard",     label: "Wildcard",   icon: "pi-th-large",   color: "var(--wp-kind-wildcard)" },
+  { value: "combine",      label: "Combine",    icon: "pi-share-alt",  color: "var(--wp-kind-combine)" },
+  { value: "constraint",   label: "Constraint", icon: "pi-sitemap",    color: "var(--wp-kind-constraint)" },
+  { value: "derivation",   label: "Derivation", icon: "pi-code",       color: "var(--wp-kind-derivation)" },
+  { value: "fixed_values", label: "Fixed",      icon: "pi-tag",        color: "var(--wp-kind-fixed)" },
 ];
 
 const KIND_HINT: Record<ModuleType, string> = {
@@ -103,6 +97,10 @@ const filteredModules = computed(() =>
   allModules.value.filter((m) => m.type === kind.value),
 );
 
+const moduleOptions = computed(() =>
+  filteredModules.value.map((m) => ({ value: m.id, label: m.name })),
+);
+
 const selectedModule = computed(() =>
   allModules.value.find((m) => m.id === moduleId.value) ?? null,
 );
@@ -112,7 +110,6 @@ const wildcards = computed(() => allModules.value.filter((m) => m.type === "wild
 watch(kind, (k) => {
   result.value = null;
   traceIndex.value = 0;
-  // Auto-pick first module of the new kind, plus reset samples to kind default.
   const first = allModules.value.find((m) => m.type === k);
   moduleId.value = first?.id ?? null;
   samples.value = KIND_DEFAULT_SAMPLES[k];
@@ -123,17 +120,14 @@ watch(moduleId, () => {
   traceIndex.value = 0;
 });
 
-/* ----------------------------- mount ------------------------------ */
-
 onMounted(async () => {
   try {
     const res = await api.modules.list({});
     allModules.value = res.items;
-    // Auto-select first wildcard so the page is immediately usable.
     const first = allModules.value.find((m) => m.type === kind.value);
     if (first) moduleId.value = first.id;
   } catch (e) {
-    toast.add({ severity: "error", summary: "Failed to load modules", detail: String(e), life: 3000 });
+    toast.push({ severity: "error", summary: "Failed to load modules", detail: String(e), life: 3000 });
   }
 });
 
@@ -202,7 +196,6 @@ function runCombine(mod: ModuleRow, n: number): CombineResult {
 }
 
 function seedDerivationCtx(payload: DerivationPayload): Record<string, string> {
-  // Resolve the variables each rule references against the wildcard catalog.
   const ctx: Record<string, string> = { subject: "portrait of a person", scene: "outdoor", negative: "" };
   const wcs = wildcards.value;
   const byVar = new Map<string, ModuleRow>();
@@ -285,7 +278,6 @@ function runPipeline(mod: ModuleRow, n: number): PipelineResult {
       const trace = runStep(step, allModules.value, ctx);
       stepTrace.push({ kind: trace.kind, name: trace.name, note: trace.note });
     }
-    // Pick primary output: last combine's output_var if any, else longest value.
     let primary = "";
     for (let s = (payload.steps ?? []).length - 1; s >= 0; s--) {
       const stp = payload.steps[s];
@@ -318,8 +310,8 @@ async function run() {
   running.value = true;
   result.value = null;
   traceIndex.value = 0;
-  // Defer to next tick so the loading state paints before heavy work.
-  await new Promise((r) => setTimeout(r, 0));
+  // Yield once so the loading state paints before heavy work.
+  await Promise.resolve();
   try {
     const n = Math.max(1, samples.value || 1);
     if (mod.type === "wildcard")          result.value = runWildcardHistogram(mod, n);
@@ -329,7 +321,7 @@ async function run() {
     else if (mod.type === "derivation")   result.value = runDerivation(mod, n);
     else if (mod.type === "pipeline")     result.value = runPipeline(mod, n);
   } catch (e) {
-    toast.add({ severity: "error", summary: "Run failed", detail: String(e), life: 4000 });
+    toast.push({ severity: "error", summary: "Run failed", detail: String(e), life: 4000 });
   } finally {
     running.value = false;
   }
@@ -346,9 +338,9 @@ const subtitle = computed(() => KIND_HINT[kind.value]);
 const selectedKindMeta = computed(() => KINDS.find((k) => k.value === kind.value) ?? KINDS[0]);
 
 function modeColor(mode: "allow" | "exclude" | "boost" | "reduce"): string {
-  if (mode === "boost")   return "var(--wp-success, #34d399)";
-  if (mode === "reduce")  return "var(--wp-warn, #fbbf24)";
-  if (mode === "exclude") return "var(--wp-danger, #f87171)";
+  if (mode === "boost")   return "var(--wp-success)";
+  if (mode === "reduce")  return "var(--wp-warn)";
+  if (mode === "exclude") return "var(--wp-danger)";
   return "var(--wp-text)";
 }
 
@@ -376,493 +368,524 @@ const wildcardVarPreview = computed(() => {
   const payload = mod.payload as Partial<WildcardPayload>;
   return (payload.var_binding ?? "").trim() || toIdentifier(mod.name);
 });
+
+function pickKind(k: ModuleType) {
+  kind.value = k;
+}
 </script>
 
 <template>
-  <div class="p-6 text-wp-text max-w-4xl">
-    <h1 class="text-xl font-semibold m-0">Test runner</h1>
-    <p class="text-sm text-wp-text2 m-0 mt-1 mb-4">
-      Resolve any module against the engine and inspect its output. Pipelines run end-to-end with a per-step trace.
-    </p>
+  <div class="wp-page wp-tr-page">
+    <div class="wp-page__header">
+      <div class="wp-page__title-wrap">
+        <h1 class="wp-page__title">Test runner</h1>
+        <p class="wp-page__subtitle">
+          Resolve any module against the engine and inspect the output. Pipelines run end-to-end with a per-step trace.
+        </p>
+      </div>
+    </div>
 
-    <Card>
-      <template #content>
-        <div class="tr-config">
-          <div class="tr-row">
-            <label class="tr-label">Module kind</label>
-            <SelectButton
-              v-model="kind"
-              :options="KINDS"
-              option-label="label"
-              option-value="value"
-              data-test="kind-selector"
-              aria-label="Module kind"
-              :allow-empty="false"
+    <Card title="Configuration">
+      <div class="wp-tr-config">
+        <Field label="Module kind">
+          <div class="wp-seg" data-test="kind-selector" role="radiogroup" aria-label="Module kind">
+            <button
+              v-for="k in KINDS"
+              :key="k.value"
+              type="button"
+              class="wp-seg__btn"
+              role="radio"
+              :aria-checked="kind === k.value"
+              :data-active="kind === k.value ? 'true' : 'false'"
+              :style="kind === k.value ? {
+                borderColor: k.color,
+                background: `color-mix(in oklab, ${k.color} 18%, transparent)`,
+                color: k.color,
+              } : undefined"
+              @click="pickKind(k.value)"
             >
-              <template #option="slotProps">
-                <span class="tr-kind-opt">
-                  <i :class="slotProps.option.icon" class="text-xs" aria-hidden="true" />
-                  <span>{{ slotProps.option.label }}</span>
-                </span>
-              </template>
-            </SelectButton>
+              <Icon :name="k.icon" :size="11" /> {{ k.label }}
+            </button>
           </div>
+        </Field>
 
-          <div class="tr-row tr-row--inputs">
-            <div class="tr-input tr-input--module">
-              <label for="tr-module" class="tr-label">Module</label>
-              <Select
-                id="tr-module"
-                v-model="moduleId"
-                :options="filteredModules"
-                option-label="name"
-                option-value="id"
-                placeholder="Select a module…"
-                filter
-                class="w-full"
-                data-test="module-select"
-              />
-            </div>
-            <div v-if="usesSamples" class="tr-input tr-input--samples">
-              <label for="tr-samples" class="tr-label">Samples</label>
-              <InputNumber id="tr-samples" v-model="samples" :min="1" :max="10000" class="w-full" />
-            </div>
-            <div class="tr-input tr-input--run">
-              <Button
-                label="Run"
-                icon="pi pi-bolt"
-                severity="primary"
-                :loading="running"
-                :disabled="!moduleId || running"
-                data-test="run-btn"
-                @click="run"
-              />
-            </div>
-          </div>
-
-          <div class="tr-hint" data-test="kind-hint">
-            <i :class="selectedKindMeta.icon" class="text-xs" aria-hidden="true" :style="{ color: selectedKindMeta.color }" />
-            <span>{{ subtitle }}</span>
-            <span v-if="kind === 'wildcard' && wildcardVarPreview" class="tr-hint__var">
-              · resolves into <code>${{ wildcardVarPreview }}</code>
-            </span>
+        <div class="wp-tr-row" :data-with-samples="usesSamples ? 'true' : 'false'">
+          <Field label="Module" class="wp-tr-row__module">
+            <Select
+              v-model="moduleId"
+              :options="moduleOptions"
+              placeholder="Select a module…"
+              data-test="module-select"
+              aria-label="Module"
+            />
+          </Field>
+          <Field v-if="usesSamples" label="Samples" class="wp-tr-row__samples">
+            <Input
+              type="number"
+              :model-value="samples"
+              aria-label="Samples"
+              @update:model-value="(v) => samples = Number(v) || 1"
+            />
+          </Field>
+          <div class="wp-tr-row__run">
+            <Button
+              variant="primary"
+              icon="pi-bolt"
+              :loading="running"
+              :disabled="!moduleId || running"
+              data-test="run-btn"
+              @click="run"
+            >{{ running ? "Running…" : "Run" }}</Button>
           </div>
         </div>
-      </template>
+
+        <div class="wp-tr-hint" data-test="kind-hint">
+          <Icon :name="selectedKindMeta.icon" :size="11" />
+          <span>{{ subtitle }}</span>
+          <span v-if="kind === 'wildcard' && wildcardVarPreview" class="wp-tr-hint__var">
+            · resolves into <code class="wp-mono">${{ wildcardVarPreview }}</code>
+          </span>
+        </div>
+      </div>
     </Card>
 
     <!-- Wildcard panel -->
-    <div v-if="result?.type === 'wildcard'" class="mt-4" data-test="result-wildcard">
-      <Card>
-        <template #title>
-          <div class="tr-card-title">
-            <span>Histogram — {{ result.samples }} samples</span>
-          </div>
-        </template>
-        <template #content>
-          <div v-if="result.hasInline || result.hasRefs" class="tr-flags">
-            <span>Bins by template;</span>
-            <span v-if="result.hasInline" class="tr-flag-chip"><code>{a|b|c}</code> expanded</span>
-            <span v-if="result.hasRefs" class="tr-flag-chip">@refs resolved</span>
-          </div>
-          <div class="tr-hist">
-            <div v-for="entry in result.entries" :key="entry.template" class="tr-hist-row">
-              <div class="tr-hist-template">
-                <RichTextPreview :value="entry.template" />
-                <div v-if="entry.resolved.length" class="tr-hist-resolved">
-                  <div v-for="(s, j) in entry.resolved" :key="j" class="tr-hist-resolved-line">↳ {{ s }}</div>
-                </div>
-              </div>
-              <div class="tr-hist-bar">
-                <div class="tr-hist-bar-fill" :style="{ width: entry.pct + '%' }" />
-              </div>
-              <div class="tr-hist-count">{{ entry.count }}</div>
+    <Card
+      v-if="result?.type === 'wildcard'"
+      :title="`Histogram — ${result.samples} samples`"
+      data-test="result-wildcard"
+    >
+      <template #actions>
+        <Button variant="ghost" size="sm" icon="pi-refresh" @click="run">Re-run</Button>
+      </template>
+      <div v-if="result.hasInline || result.hasRefs" class="wp-tr-flags wp-dim">
+        <span>Bins by template;</span>
+        <span v-if="result.hasInline" class="wp-tr-flag-chip"><code>{a|b|c}</code> expanded</span>
+        <span v-if="result.hasRefs" class="wp-tr-flag-chip">@refs resolved</span>
+      </div>
+      <div class="wp-hist">
+        <div v-for="entry in result.entries" :key="entry.template" class="wp-hist__row">
+          <div class="wp-hist__template">
+            <RichTextPreview :value="entry.template" />
+            <div v-if="entry.resolved.length" class="wp-hist__resolved wp-mono wp-dim">
+              <div v-for="(s, j) in entry.resolved" :key="j" class="wp-hist__resolved-line">↳ {{ s }}</div>
             </div>
           </div>
-        </template>
-      </Card>
-    </div>
+          <div class="wp-bar">
+            <div
+              class="wp-bar__fill"
+              :style="{
+                width: entry.pct + '%',
+                background: `linear-gradient(90deg, var(--wp-kind-wildcard), color-mix(in oklab, var(--wp-kind-wildcard) 60%, white))`,
+              }"
+            />
+          </div>
+          <div class="wp-mono wp-hist__count">{{ entry.count }}</div>
+        </div>
+      </div>
+    </Card>
 
     <!-- Fixed panel -->
-    <div v-else-if="result?.type === 'fixed_values'" class="mt-4" data-test="result-fixed">
-      <Card>
-        <template #title>Resolved bindings</template>
-        <template #content>
-          <p class="text-xs text-wp-text2 m-0 mb-3">
-            Fixed values are deterministic — every run emits the same {{ result.bindings.length }} binding(s).
-          </p>
-          <div class="tr-fixed-grid">
-            <template v-for="b in result.bindings" :key="b.name">
-              <code class="tr-var">${{ b.name }}</code>
-              <span class="tr-mono">{{ b.value }}</span>
-            </template>
-          </div>
+    <Card
+      v-else-if="result?.type === 'fixed_values'"
+      title="Resolved bindings"
+      data-test="result-fixed"
+    >
+      <template #actions>
+        <Button variant="ghost" size="sm" icon="pi-refresh" @click="run">Re-run</Button>
+      </template>
+      <p class="wp-dim wp-tr-help">
+        Fixed values are deterministic — every run emits the same {{ result.bindings.length }} binding(s).
+      </p>
+      <div class="wp-tr-fixed-grid">
+        <template v-for="b in result.bindings" :key="b.name">
+          <code class="wp-tr-var wp-mono">${{ b.name }}</code>
+          <span class="wp-mono">{{ b.value }}</span>
         </template>
-      </Card>
-    </div>
+      </div>
+    </Card>
 
     <!-- Combine panel -->
-    <div v-else-if="result?.type === 'combine'" class="mt-4 space-y-4" data-test="result-combine">
-      <Card>
-        <template #title>Sample renderings</template>
-        <template #content>
-          <div class="tr-combine-list">
-            <div v-for="(s, i) in result.rendered" :key="i" class="tr-combine-row">
-              <RichTextPreview :value="s" />
-            </div>
+    <template v-else-if="result?.type === 'combine'">
+      <Card title="Sample renderings" data-test="result-combine">
+        <template #actions>
+          <Button variant="ghost" size="sm" icon="pi-refresh" @click="run">Re-run</Button>
+        </template>
+        <div class="wp-tr-combine-list">
+          <div v-for="(s, i) in result.rendered" :key="i" class="wp-tr-combine-row">
+            <RichTextPreview :value="s" />
           </div>
-        </template>
+        </div>
       </Card>
-      <Card>
-        <template #title>
-          Distribution — {{ result.samples }} samples · {{ result.distribution.length }} unique
-        </template>
-        <template #content>
-          <div class="tr-hist">
-            <div v-for="entry in result.distribution" :key="entry.value" class="tr-hist-row">
-              <div class="tr-hist-template tr-mono tr-truncate">{{ entry.value }}</div>
-              <div class="tr-hist-bar"><div class="tr-hist-bar-fill" :style="{ width: entry.pct + '%' }" /></div>
-              <div class="tr-hist-count">{{ entry.count }}</div>
+      <Card :title="`Distribution — ${result.samples} samples · ${result.distribution.length} unique`">
+        <div class="wp-hist">
+          <div v-for="entry in result.distribution" :key="entry.value" class="wp-hist__row">
+            <div class="wp-hist__template wp-mono wp-truncate">{{ entry.value }}</div>
+            <div class="wp-bar">
+              <div
+                class="wp-bar__fill"
+                :style="{ width: entry.pct + '%', background: 'var(--wp-kind-combine)' }"
+              />
             </div>
+            <div class="wp-mono wp-hist__count">{{ entry.count }}</div>
           </div>
-        </template>
+        </div>
       </Card>
-    </div>
+    </template>
 
     <!-- Constraint panel -->
-    <div v-else-if="result?.type === 'constraint'" class="mt-4" data-test="result-constraint">
-      <Card>
-        <template #title>Effective weights — before vs after</template>
-        <template #content>
-          <p class="text-xs text-wp-text2 m-0 mb-3">
-            Each column shows resolved weights of <strong>{{ result.targetName }}</strong>
-            conditioned on a value of <strong>{{ result.sourceName }}</strong>.
-          </p>
-          <div v-if="result.rows.length" class="tr-cn-scroll">
-            <table class="tr-cn-table">
-              <thead>
-                <tr>
-                  <th class="text-left">{{ result.targetName }}</th>
-                  <th class="text-right">w</th>
-                  <th v-for="sv in result.sourceValues" :key="sv" class="text-right tr-truncate">{{ sv }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in result.rows" :key="row.value">
-                  <td class="tr-mono">{{ row.value }}</td>
-                  <td class="tr-mono text-right text-wp-text2">{{ row.before }}</td>
-                  <td
-                    v-for="cell in row.after" :key="cell.source"
-                    class="tr-mono text-right"
-                    :style="{ color: modeColor(cell.mode), opacity: cell.mode === 'exclude' ? 0.55 : 1 }"
-                  >{{ cell.weight === 0 ? "—" : (Number.isInteger(cell.weight) ? cell.weight : cell.weight.toFixed(2)) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div v-else class="text-xs text-wp-text2">Constraint references a wildcard that no longer exists.</div>
-          <div class="tr-cn-legend">
-            <span><span class="tr-dot" style="color: var(--wp-success, #34d399)">●</span> boost</span>
-            <span><span class="tr-dot">●</span> allow</span>
-            <span><span class="tr-dot" style="color: var(--wp-warn, #fbbf24)">●</span> reduce</span>
-            <span><span class="tr-dot" style="color: var(--wp-danger, #f87171)">●</span> exclude</span>
-          </div>
-        </template>
-      </Card>
-    </div>
+    <Card
+      v-else-if="result?.type === 'constraint'"
+      title="Effective weights — before vs after"
+      data-test="result-constraint"
+    >
+      <template #actions>
+        <Button variant="ghost" size="sm" icon="pi-refresh" @click="run">Recompute</Button>
+      </template>
+      <p class="wp-dim wp-tr-help">
+        Each column shows resolved weights of <strong>{{ result.targetName }}</strong>
+        conditioned on a value of <strong>{{ result.sourceName }}</strong>.
+      </p>
+      <div v-if="result.rows.length" class="wp-tr-cn-scroll">
+        <table class="wp-tr-cn-table">
+          <thead>
+            <tr>
+              <th class="wp-tr-cn-table__lhs">{{ result.targetName }}</th>
+              <th class="wp-tr-cn-table__w">w</th>
+              <th
+                v-for="sv in result.sourceValues"
+                :key="sv"
+                class="wp-tr-cn-table__sv wp-truncate"
+              >{{ sv }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in result.rows" :key="row.value">
+              <td class="wp-mono">{{ row.value }}</td>
+              <td class="wp-mono wp-tr-cn-table__w wp-dim">{{ row.before }}</td>
+              <td
+                v-for="cell in row.after"
+                :key="cell.source"
+                class="wp-mono wp-tr-cn-table__sv"
+                :style="{ color: modeColor(cell.mode), opacity: cell.mode === 'exclude' ? 0.55 : 1 }"
+              >{{ cell.weight === 0 ? "—" : (Number.isInteger(cell.weight) ? cell.weight : cell.weight.toFixed(2)) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="wp-dim">Constraint references a wildcard that no longer exists.</div>
+      <div class="wp-tr-cn-legend">
+        <span><span class="wp-tr-dot" style="color: var(--wp-success)">●</span> boost</span>
+        <span><span class="wp-tr-dot">●</span> allow</span>
+        <span><span class="wp-tr-dot" style="color: var(--wp-warn)">●</span> reduce</span>
+        <span><span class="wp-tr-dot" style="color: var(--wp-danger)">●</span> exclude</span>
+      </div>
+    </Card>
 
     <!-- Derivation panel -->
-    <div v-else-if="result?.type === 'derivation'" class="mt-4 space-y-4" data-test="result-derivation">
-      <Card>
-        <template #title>
-          <div class="tr-card-title-row">
-            <span>Rule trace — sample {{ traceIndex + 1 }} of {{ result.perSample.length }}</span>
-            <div class="tr-trace-nav">
-              <Button size="small" severity="secondary" outlined icon="pi pi-chevron-left" :disabled="traceIndex <= 0" @click="prevSample" />
-              <Button size="small" severity="secondary" outlined icon="pi pi-chevron-right" :disabled="traceIndex >= result.perSample.length - 1" @click="nextSample" />
+    <template v-else-if="result?.type === 'derivation'">
+      <Card data-test="result-derivation"
+        :title="`Rule trace — sample ${traceIndex + 1} of ${result.perSample.length}`">
+        <template #actions>
+          <Button variant="ghost" size="sm" icon="pi-chevron-left" :disabled="traceIndex <= 0" @click="prevSample" />
+          <Button variant="ghost" size="sm" icon="pi-chevron-right" :disabled="traceIndex >= result.perSample.length - 1" @click="nextSample" />
+          <Button variant="ghost" size="sm" icon="pi-refresh" @click="run">Re-run</Button>
+        </template>
+        <div class="wp-tr-rule-trace">
+          <div v-for="(t, i) in result.perSample[traceIndex].trace" :key="i" class="wp-tr-rule-row">
+            <span class="wp-tr-rule-id wp-mono">rule {{ String(i + 1).padStart(2, '0') }}</span>
+            <span class="wp-tr-rule-status" :data-status="t.fired">
+              {{ t.fired === 'skip' ? 'skipped' : t.fired === 'else' ? 'else fired' : `branch ${ (t.branchIndex ?? 0) + 1 } fired` }}
+            </span>
+            <div class="wp-tr-rule-delta wp-mono">
+              <template v-for="(v, k) in t.delta" :key="k">
+                <code>${{ k }} = "{{ v }}"</code>
+              </template>
+              <span v-if="!Object.keys(t.delta).length" class="wp-dim">(no change)</span>
             </div>
           </div>
-        </template>
-        <template #content>
-          <div class="tr-rule-trace">
-            <div v-for="(t, i) in result.perSample[traceIndex].trace" :key="i" class="tr-rule-row">
-              <span class="tr-rule-id">rule {{ String(i + 1).padStart(2, '0') }} <code class="text-wp-text3">{{ t.ruleId }}</code></span>
-              <span class="tr-rule-status" :data-status="t.fired">{{ t.fired === 'skip' ? 'skipped' : t.fired === 'else' ? 'else fired' : `branch ${ (t.branchIndex ?? 0) + 1 } fired` }}</span>
-              <div class="tr-rule-delta">
-                <template v-for="(v, k) in t.delta" :key="k">
-                  <code>${{ k }} = "{{ v }}"</code>
-                </template>
-                <span v-if="!Object.keys(t.delta).length" class="text-wp-text3">(no change)</span>
-              </div>
-            </div>
-          </div>
-        </template>
+        </div>
       </Card>
-      <Card>
-        <template #title>Per-rule fire rate — {{ result.samples }} samples</template>
-        <template #content>
-          <div class="tr-hist">
-            <div v-for="rule in result.rules" :key="rule.id" class="tr-hist-row">
-              <div class="tr-hist-template">
-                <code>{{ rule.id }}</code>
-                <div class="text-wp-text3 text-xs">
-                  branch {{ result.fireCounts[rule.id]?.branch ?? 0 }} · else {{ result.fireCounts[rule.id]?.else ?? 0 }} · skip {{ result.fireCounts[rule.id]?.skip ?? 0 }}
-                </div>
-              </div>
-              <div class="tr-hist-bar">
-                <div
-                  class="tr-hist-bar-fill"
-                  :style="{ width: ((((result.fireCounts[rule.id]?.branch ?? 0) + (result.fireCounts[rule.id]?.else ?? 0)) / Math.max(1, result.samples)) * 100) + '%' }"
-                />
-              </div>
-              <div class="tr-hist-count">
-                {{ Math.round(((((result.fireCounts[rule.id]?.branch ?? 0) + (result.fireCounts[rule.id]?.else ?? 0)) / Math.max(1, result.samples)) * 100)) }}%
+      <Card :title="`Per-rule fire rate — ${result.samples} samples`">
+        <div class="wp-hist">
+          <div v-for="rule in result.rules" :key="rule.id" class="wp-hist__row">
+            <div class="wp-hist__template">
+              <code class="wp-mono">{{ rule.id }}</code>
+              <div class="wp-dim wp-tr-rule-fire-meta">
+                branch {{ result.fireCounts[rule.id]?.branch ?? 0 }} ·
+                else {{ result.fireCounts[rule.id]?.else ?? 0 }} ·
+                skip {{ result.fireCounts[rule.id]?.skip ?? 0 }}
               </div>
             </div>
+            <div class="wp-bar">
+              <div
+                class="wp-bar__fill"
+                :style="{
+                  width: ((((result.fireCounts[rule.id]?.branch ?? 0) + (result.fireCounts[rule.id]?.else ?? 0)) / Math.max(1, result.samples)) * 100) + '%',
+                  background: 'var(--wp-kind-derivation)',
+                }"
+              />
+            </div>
+            <div class="wp-mono wp-hist__count">
+              {{ Math.round(((((result.fireCounts[rule.id]?.branch ?? 0) + (result.fireCounts[rule.id]?.else ?? 0)) / Math.max(1, result.samples)) * 100)) }}%
+            </div>
           </div>
-        </template>
+        </div>
       </Card>
-    </div>
+    </template>
 
     <!-- Pipeline panel -->
-    <div v-else-if="result?.type === 'pipeline'" class="mt-4 space-y-4" data-test="result-pipeline">
-      <Card>
-        <template #title>
-          <div class="tr-card-title-row">
-            <span>Pipeline trace — sample {{ traceIndex + 1 }} of {{ result.runs.length }}</span>
-            <div class="tr-trace-nav">
-              <Button size="small" severity="secondary" outlined icon="pi pi-chevron-left" :disabled="traceIndex <= 0" @click="prevSample" />
-              <Button size="small" severity="secondary" outlined icon="pi pi-chevron-right" :disabled="traceIndex >= result.runs.length - 1" @click="nextSample" />
-            </div>
-          </div>
+    <template v-else-if="result?.type === 'pipeline'">
+      <Card data-test="result-pipeline"
+        :title="`Pipeline trace — sample ${traceIndex + 1} of ${result.runs.length}`">
+        <template #actions>
+          <Button variant="ghost" size="sm" icon="pi-chevron-left" :disabled="traceIndex <= 0" @click="prevSample" />
+          <Button variant="ghost" size="sm" icon="pi-chevron-right" :disabled="traceIndex >= result.runs.length - 1" @click="nextSample" />
+          <Button variant="ghost" size="sm" icon="pi-refresh" @click="run">Re-run</Button>
         </template>
-        <template #content>
-          <div class="tr-step-trace">
-            <div v-for="(s, i) in result.runs[traceIndex].steps" :key="i" class="tr-step-row" :data-kind="s.kind">
-              <span class="tr-step-idx">{{ String(i + 1).padStart(2, '0') }}</span>
-              <span class="tr-step-kind">{{ s.kind }}</span>
-              <span class="tr-step-name">{{ s.name }}</span>
-              <span class="tr-step-note">{{ s.note }}</span>
-            </div>
+        <div class="wp-tr-step-trace">
+          <div
+            v-for="(s, i) in result.runs[traceIndex].steps"
+            :key="i"
+            class="wp-tr-step-row"
+            :data-kind="s.kind"
+          >
+            <span class="wp-mono wp-tr-step-idx">{{ String(i + 1).padStart(2, '0') }}</span>
+            <span class="wp-mono wp-tr-step-kind">{{ s.kind }}</span>
+            <span class="wp-tr-step-name">{{ s.name }}</span>
+            <span class="wp-mono wp-tr-step-note">{{ s.note }}</span>
           </div>
-        </template>
+        </div>
       </Card>
-      <Card>
-        <template #title>Resolved context (final)</template>
-        <template #content>
-          <div class="tr-fixed-grid">
-            <template v-for="(v, k) in result.runs[traceIndex].ctx" :key="k">
-              <code class="tr-var">${{ k }}</code>
-              <span class="tr-mono tr-truncate">{{ v }}</span>
-            </template>
-          </div>
-        </template>
+      <Card title="Resolved context (final)">
+        <div class="wp-tr-fixed-grid">
+          <template v-for="(v, k) in result.runs[traceIndex].ctx" :key="k">
+            <code class="wp-tr-var wp-mono">${{ k }}</code>
+            <span class="wp-mono wp-truncate">{{ v }}</span>
+          </template>
+        </div>
       </Card>
-      <Card>
-        <template #title>
-          Output distribution — {{ result.samples }} run(s) · {{ result.finalCounts.length }} unique
-        </template>
-        <template #content>
-          <div class="tr-hist">
-            <div v-for="entry in result.finalCounts" :key="entry.value" class="tr-hist-row">
-              <div class="tr-hist-template tr-mono tr-truncate">{{ entry.value || '(empty)' }}</div>
-              <div class="tr-hist-bar"><div class="tr-hist-bar-fill" :style="{ width: entry.pct + '%' }" /></div>
-              <div class="tr-hist-count">{{ entry.count }}</div>
+      <Card :title="`Output distribution — ${result.samples} run(s) · ${result.finalCounts.length} unique`">
+        <div class="wp-hist">
+          <div v-for="entry in result.finalCounts" :key="entry.value" class="wp-hist__row">
+            <div class="wp-hist__template wp-mono wp-truncate">{{ entry.value || '(empty)' }}</div>
+            <div class="wp-bar">
+              <div
+                class="wp-bar__fill"
+                :style="{ width: entry.pct + '%', background: 'var(--wp-kind-pipeline)' }"
+              />
             </div>
+            <div class="wp-mono wp-hist__count">{{ entry.count }}</div>
           </div>
-        </template>
+        </div>
       </Card>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.tr-config { display: flex; flex-direction: column; gap: 12px; }
-.tr-row { display: flex; flex-direction: column; gap: 6px; }
-.tr-row--inputs {
+.wp-tr-page {
+  padding: 18px 22px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.wp-tr-config { display: flex; flex-direction: column; gap: 12px; }
+
+.wp-seg {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.wp-seg__btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px; font-size: 12.5px; cursor: pointer;
+  border: 1px solid var(--wp-border);
+  background: var(--wp-bg-2);
+  color: var(--wp-text);
+}
+.wp-seg__btn:hover { border-color: var(--wp-border-strong); }
+
+.wp-tr-row {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 140px auto;
   gap: 12px;
   align-items: end;
 }
-.tr-row--inputs .tr-input--run { align-self: end; }
-.tr-label {
-  font-size: 11px; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--wp-text2);
+.wp-tr-row[data-with-samples="false"] {
+  grid-template-columns: minmax(220px, 1fr) auto;
 }
-.tr-kind-opt { display: inline-flex; align-items: center; gap: 6px; }
-.tr-hint {
-  font-size: 11.5px; color: var(--wp-text2);
+.wp-tr-row__run { align-self: end; }
+
+.wp-tr-hint {
+  font-size: 11.5px; color: var(--wp-text-muted);
   display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
   margin-top: 4px;
 }
-.tr-hint__var code {
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  color: var(--wp-accent-text, #c4b5fd);
-}
+.wp-tr-hint__var code { color: var(--wp-accent-text); }
 
-.tr-card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.tr-card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.tr-trace-nav { display: flex; gap: 4px; }
-
-.tr-flags {
-  font-size: 11.5px; color: var(--wp-text2);
+.wp-tr-flags {
+  font-size: 11.5px;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 10px;
 }
-.tr-flag-chip {
+.wp-tr-flag-chip {
   padding: 1px 6px; border-radius: 4px;
-  background: var(--wp-bg2);
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  background: var(--wp-bg-3);
+  font-family: var(--wp-font-mono);
   font-size: 11px;
 }
 
-.tr-hist { display: flex; flex-direction: column; gap: 6px; }
-.tr-hist-row {
+.wp-tr-help {
+  font-size: 11.5px;
+  margin: 0 0 10px;
+}
+
+.wp-hist { display: flex; flex-direction: column; gap: 7px; }
+.wp-hist__row {
   display: grid;
   grid-template-columns: minmax(180px, 280px) 1fr 50px;
   gap: 10px;
   align-items: center;
 }
-.tr-hist-template { min-width: 0; font-size: 12px; }
-.tr-hist-resolved { margin-top: 2px; font-size: 11px; color: var(--wp-text3); line-height: 1.45; }
-.tr-hist-resolved-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tr-hist-bar {
-  height: 14px;
-  background: var(--wp-bg3);
-  border-radius: 5px;
-  overflow: hidden;
-}
-.tr-hist-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--wp-accent-500, #8b5cf6), color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 60%, white));
-  border-radius: 5px;
-  transition: width .25s;
-}
-.tr-hist-count {
+.wp-hist__template { min-width: 0; font-size: 12px; }
+.wp-hist__resolved { font-size: 11px; line-height: 1.45; margin-top: 2px; }
+.wp-hist__resolved-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-hist__count {
   text-align: right;
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 12px;
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
 }
 
-.tr-fixed-grid {
+.wp-bar {
+  height: 18px;
+  background: var(--wp-bg-3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.wp-bar__fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width .25s;
+}
+
+.wp-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.wp-tr-fixed-grid {
   display: grid;
   grid-template-columns: 200px 1fr;
   gap: 6px 14px;
   font-size: 12.5px;
   align-items: center;
 }
-.tr-var {
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  color: var(--wp-accent-text, #c4b5fd);
+.wp-tr-var {
+  color: var(--wp-accent-text);
   font-size: 12px;
 }
-.tr-mono {
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 12px;
-  min-width: 0;
-}
-.tr-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.tr-combine-list { display: flex; flex-direction: column; gap: 6px; }
-.tr-combine-row {
+.wp-tr-combine-list { display: flex; flex-direction: column; gap: 6px; }
+.wp-tr-combine-row {
   padding: 8px 10px;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: 6px;
 }
 
-.tr-cn-scroll { overflow-x: auto; }
-.tr-cn-table {
+.wp-tr-cn-scroll { overflow-x: auto; }
+.wp-tr-cn-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
-.tr-cn-table th {
+.wp-tr-cn-table th {
   padding: 6px 8px;
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
   font-weight: 500;
   border-bottom: 1px solid var(--wp-border);
   white-space: nowrap;
 }
-.tr-cn-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--wp-border);
-}
-.tr-cn-legend {
+.wp-tr-cn-table th.wp-tr-cn-table__lhs { text-align: left; }
+.wp-tr-cn-table th.wp-tr-cn-table__w,
+.wp-tr-cn-table th.wp-tr-cn-table__sv { text-align: right; }
+.wp-tr-cn-table td { padding: 6px 8px; border-bottom: 1px solid var(--wp-border); }
+.wp-tr-cn-table td.wp-tr-cn-table__w,
+.wp-tr-cn-table td.wp-tr-cn-table__sv { text-align: right; }
+.wp-tr-cn-legend {
   display: flex; gap: 14px; margin-top: 12px;
-  font-size: 11px; color: var(--wp-text2);
+  font-size: 11px; color: var(--wp-text-muted);
 }
-.tr-dot { color: var(--wp-text); }
+.wp-tr-dot { color: var(--wp-text); }
 
-.tr-rule-trace { display: flex; flex-direction: column; gap: 6px; }
-.tr-rule-row {
+.wp-tr-rule-trace { display: flex; flex-direction: column; gap: 6px; }
+.wp-tr-rule-row {
   display: grid;
   grid-template-columns: 220px auto 1fr;
   gap: 10px;
   align-items: center;
   padding: 6px 10px;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: 6px;
   font-size: 12px;
 }
-.tr-rule-id { font-family: var(--wp-font-mono, ui-monospace, monospace); color: var(--wp-text); }
-.tr-rule-status {
+.wp-tr-rule-id { color: var(--wp-text); }
+.wp-tr-rule-status {
   font-size: 11px; padding: 2px 8px; border-radius: 4px;
-  background: var(--wp-bg3); color: var(--wp-text2);
+  background: var(--wp-bg-3); color: var(--wp-text-muted);
 }
-.tr-rule-status[data-status="branch"] { background: color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 18%, transparent); color: var(--wp-kind-derivation, #fbbf24); }
-.tr-rule-status[data-status="else"]   { background: color-mix(in oklab, var(--wp-info, #60a5fa) 18%, transparent); color: var(--wp-info, #60a5fa); }
-.tr-rule-delta {
+.wp-tr-rule-status[data-status="branch"] {
+  background: color-mix(in oklab, var(--wp-kind-derivation) 18%, transparent);
+  color: var(--wp-kind-derivation);
+}
+.wp-tr-rule-status[data-status="else"] {
+  background: color-mix(in oklab, var(--wp-info) 18%, transparent);
+  color: var(--wp-info);
+}
+.wp-tr-rule-delta {
   display: flex; flex-wrap: wrap; gap: 6px;
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 11.5px;
   min-width: 0;
 }
-.tr-rule-delta code {
-  background: var(--wp-bg3);
+.wp-tr-rule-delta code {
+  background: var(--wp-bg-3);
   padding: 1px 6px; border-radius: 4px;
 }
+.wp-tr-rule-fire-meta { font-size: 11px; }
 
-.tr-step-trace { display: flex; flex-direction: column; gap: 4px; }
-.tr-step-row {
+.wp-tr-step-trace { display: flex; flex-direction: column; gap: 4px; }
+.wp-tr-step-row {
   display: grid;
   grid-template-columns: 32px 110px 180px 1fr;
   gap: 10px;
   padding: 6px 8px;
   border-radius: 5px;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border-left: 3px solid var(--step-color, var(--wp-border));
   align-items: center;
 }
-.tr-step-row[data-kind="wildcard"]     { --step-color: var(--wp-kind-wildcard); }
-.tr-step-row[data-kind="fixed_values"] { --step-color: var(--wp-kind-fixed); }
-.tr-step-row[data-kind="combine"]      { --step-color: var(--wp-kind-combine); }
-.tr-step-row[data-kind="derivation"]   { --step-color: var(--wp-kind-derivation); }
-.tr-step-row[data-kind="constraint"]   { --step-color: var(--wp-kind-constraint); }
-.tr-step-row[data-kind="pipeline"]     { --step-color: var(--wp-kind-pipeline); }
-.tr-step-idx {
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11px; color: var(--wp-text3);
-}
-.tr-step-kind {
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
+.wp-tr-step-row[data-kind="wildcard"]     { --step-color: var(--wp-kind-wildcard); }
+.wp-tr-step-row[data-kind="fixed_values"] { --step-color: var(--wp-kind-fixed); }
+.wp-tr-step-row[data-kind="combine"]      { --step-color: var(--wp-kind-combine); }
+.wp-tr-step-row[data-kind="derivation"]   { --step-color: var(--wp-kind-derivation); }
+.wp-tr-step-row[data-kind="constraint"]   { --step-color: var(--wp-kind-constraint); }
+.wp-tr-step-row[data-kind="pipeline"]     { --step-color: var(--wp-kind-pipeline); }
+.wp-tr-step-idx { font-size: 11px; color: var(--wp-text-dim); }
+.wp-tr-step-kind {
   font-size: 11px;
-  color: var(--step-color, var(--wp-text2));
+  color: var(--step-color, var(--wp-text-muted));
 }
-.tr-step-name { font-size: 12.5px; color: var(--wp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tr-step-note {
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11.5px; color: var(--wp-text2);
+.wp-tr-step-name {
+  font-size: 12.5px; color: var(--wp-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-tr-step-note {
+  font-size: 11.5px; color: var(--wp-text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 @media (max-width: 720px) {
-  .tr-row--inputs { grid-template-columns: 1fr; }
-  .tr-rule-row { grid-template-columns: 1fr; }
-  .tr-step-row { grid-template-columns: 28px 90px 1fr; }
-  .tr-step-row > .tr-step-note { grid-column: 1 / -1; padding-left: 130px; }
+  .wp-tr-row { grid-template-columns: 1fr; }
+  .wp-tr-rule-row { grid-template-columns: 1fr; }
+  .wp-tr-step-row { grid-template-columns: 28px 90px 1fr; }
+  .wp-tr-step-row > .wp-tr-step-note { grid-column: 1 / -1; padding-left: 130px; }
 }
 </style>

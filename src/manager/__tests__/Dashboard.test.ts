@@ -90,7 +90,23 @@ describe("Dashboard.vue", () => {
     apiMod.list.mockResolvedValue({ items: [], total: 0 });
     const wrap = mountView();
     await flushPromises();
+    // Default tab is Recent — empty-state copy.
     expect(wrap.text()).toContain("No edits yet.");
+    // Switch to Favorites tab and confirm its empty-state copy.
+    await wrap.get('[data-test="dashboard-tab-favorites"]').trigger("click");
     expect(wrap.text()).toContain("No favorites yet.");
+  });
+
+  it("clicking a stat card navigates to that kind list", async () => {
+    apiMod.list.mockResolvedValue({ items: [], total: 0 });
+    const router = makeRouter();
+    const push = vi.spyOn(router, "push");
+    const wrap = mount(Dashboard, {
+      global: { plugins: [router, PrimeVue, ToastService, ConfirmationService] },
+    });
+    await flushPromises();
+    const stats = wrap.findAll(".dashboard__stat");
+    await stats[0]!.trigger("click"); // wildcards
+    expect(push).toHaveBeenCalledWith("/wildcards");
   });
 });

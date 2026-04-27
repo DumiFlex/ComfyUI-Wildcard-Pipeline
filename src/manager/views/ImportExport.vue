@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import Button from "primevue/button";
-import Card from "primevue/card";
-import Checkbox from "primevue/checkbox";
-import InputText from "primevue/inputtext";
-import InputGroup from "primevue/inputgroup";
-import InputGroupAddon from "primevue/inputgroupaddon";
-import Select from "primevue/select";
-import { useToast } from "primevue/usetoast";
+import Button from "../components/ui/Button.vue";
+import Card from "../components/ui/Card.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
+import Field from "../components/ui/Field.vue";
+import Icon from "../components/ui/Icon.vue";
+import Input from "../components/ui/Input.vue";
+import Select from "../components/ui/Select.vue";
+import { useToast } from "../composables/useToast";
 import { api } from "../api/client";
 import type { CategoryRow, ImportBundle, ModuleRow } from "../api/types";
 import {
@@ -39,10 +39,8 @@ const mode = ref<Mode>("export");
 
 const localModules = ref<ModuleRow[]>([]);
 const localCategories = ref<CategoryRow[]>([]);
-const loadingLib = ref(false);
 
 async function loadLibrary() {
-  loadingLib.value = true;
   try {
     const [mods, cats] = await Promise.all([
       api.modules.list({ limit: 1000 }),
@@ -51,13 +49,11 @@ async function loadLibrary() {
     localModules.value = mods.items;
     localCategories.value = cats.items;
   } catch (e) {
-    toast.add({
+    toast.push({
       severity: "error",
       summary: "Failed to load library",
       detail: String(e), life: 4000,
     });
-  } finally {
-    loadingLib.value = false;
   }
 }
 
@@ -71,27 +67,14 @@ const exportOpenGroups = ref<Set<GroupKey>>(
   new Set(["wildcard", "fixed_values"]),
 );
 
-/** Default selection = full library, applied once the data lands. */
-function resetExportToFull() {
-  exportSelected.value = presetFull(
-    localModules.value, localCategories.value,
-  );
-}
-
-/**
- * Initial selection: "Full library" once the source data arrives. We
- * watch the modules list length transitioning from 0 to non-zero and
- * apply the preset at that moment so the user lands on a useful state.
- */
+// Initial seed: "Full library" once data lands.
 let didSeedExport = false;
 function seedExportIfReady() {
   if (didSeedExport) return;
   if (localModules.value.length === 0 && localCategories.value.length === 0) return;
-  resetExportToFull();
+  exportSelected.value = presetFull(localModules.value, localCategories.value);
   didSeedExport = true;
 }
-
-// Re-run seed after fetch.
 const seedWatcher = computed(() => localModules.value.length + localCategories.value.length);
 
 function modulesForGroup(g: GroupMeta, list: ModuleRow[]): ModuleRow[] {
@@ -101,10 +84,8 @@ function modulesForGroup(g: GroupMeta, list: ModuleRow[]): ModuleRow[] {
 
 function matchesSearch(name: string, id: string, q: string): boolean {
   if (!q.trim()) return true;
-  const n = name.toLowerCase();
-  const i = id.toLowerCase();
   const t = q.trim().toLowerCase();
-  return n.includes(t) || i.includes(t);
+  return name.toLowerCase().includes(t) || id.toLowerCase().includes(t);
 }
 
 interface RowItem {
@@ -183,7 +164,6 @@ const filteredBundle = computed<ImportBundle>(() =>
     selected: exportSelected.value,
   }),
 );
-
 const bundleBytes = computed(() => bundleSizeBytes(filteredBundle.value));
 
 const categoryById = computed(() => {
@@ -193,9 +173,7 @@ const categoryById = computed(() => {
 });
 
 function presetApplyFull() {
-  exportSelected.value = presetFull(
-    localModules.value, localCategories.value,
-  );
+  exportSelected.value = presetFull(localModules.value, localCategories.value);
 }
 function presetApplyWildcards() {
   exportSelected.value = presetWildcardsOnly(localModules.value);
@@ -218,7 +196,7 @@ function downloadBundle() {
   a.download = `wildcard-pipeline-${bundle.modules.length}-modules-${yyyymmdd}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  toast.add({
+  toast.push({
     severity: "success", summary: "Exported",
     detail: `${bundle.modules.length} modules · ${bundle.categories.length} categories`,
     life: 2500,
@@ -295,18 +273,15 @@ function parsedRowsForGroup(g: GroupMeta): ImportRow[] {
 function importRowKey(group: GroupKey, id: string): string {
   return selectionKey(group, id);
 }
-
 function isImportSelected(group: GroupKey, id: string): boolean {
   return importSelected.value.has(importRowKey(group, id));
 }
-
 function toggleImportRow(group: GroupKey, id: string) {
   const k = importRowKey(group, id);
   const next = new Set(importSelected.value);
   if (next.has(k)) next.delete(k); else next.add(k);
   importSelected.value = next;
 }
-
 function setImportGroupAll(g: GroupMeta, on: boolean) {
   const next = new Set(importSelected.value);
   for (const r of parsedRowsForGroup(g)) {
@@ -315,18 +290,15 @@ function setImportGroupAll(g: GroupMeta, on: boolean) {
   }
   importSelected.value = next;
 }
-
 function importGroupCheckState(g: GroupMeta): GroupCheckState {
   const rows = parsedRowsForGroup(g);
   if (rows.length === 0) return { all: false, some: false };
   const sel = rows.filter((r) => isImportSelected(g.key, r.id)).length;
   return { all: sel === rows.length, some: sel > 0 && sel < rows.length };
 }
-
 function isImportGroupOpen(key: GroupKey): boolean {
   return importOpenGroups.value.has(key);
 }
-
 function toggleImportGroupOpen(key: GroupKey) {
   const next = new Set(importOpenGroups.value);
   if (next.has(key)) next.delete(key); else next.add(key);
@@ -350,7 +322,6 @@ interface FinalActionTotals {
   willSkip: number;
   conflictCount: number;
 }
-
 const finalActionTotals = computed<FinalActionTotals>(() => {
   let willCreate = 0;
   let willUpdate = 0;
@@ -364,10 +335,9 @@ const finalActionTotals = computed<FinalActionTotals>(() => {
     if (c === "new") {
       willCreate += 1;
     } else {
-      // Conflict — outcome depends on chosen mode.
       if (conflictMode.value === "skip") willSkip += 1;
       else if (conflictMode.value === "overwrite") willUpdate += 1;
-      else willCreate += 1; // rename — backend keeps both
+      else willCreate += 1;
     }
   }
   return { willCreate, willUpdate, willSkip, conflictCount };
@@ -378,7 +348,6 @@ function badgeClass(kind: ConflictKind): string {
   if (kind === "modified") return "wp-io-badge wp-io-badge--mod";
   return "wp-io-badge wp-io-badge--exists";
 }
-
 function badgeLabel(kind: ConflictKind): string {
   if (kind === "new") return "new";
   if (kind === "modified") return "modified";
@@ -389,14 +358,12 @@ function onPickFile(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (f) handleFile(f);
 }
-
 function onDrop(e: DragEvent) {
   e.preventDefault();
   dropActive.value = false;
   const f = e.dataTransfer?.files?.[0];
   if (f) handleFile(f);
 }
-
 function onDragOver(e: DragEvent) {
   e.preventDefault();
   dropActive.value = true;
@@ -424,7 +391,6 @@ async function handleFile(file: File) {
       categories: Array.isArray(data.categories) ? data.categories : [],
     };
     parsedBundle.value = bundle;
-    // Default selection: tick everything that's actually new or modified.
     selectAllParsed();
   } catch (err) {
     parseError.value = err instanceof Error ? err.message : String(err);
@@ -458,9 +424,6 @@ async function runImport() {
     } else {
       const mod = b.modules.find((m) => m.id === r.id);
       if (!mod) continue;
-      // For "rename" we let the backend insert as a new row by giving the
-      // module a fresh id (suffix). The DB unique constraint is on `id`,
-      // and the existing import handler skips on IntegrityError.
       if (r.conflict.kind !== "new" && conflictMode.value === "rename") {
         pickedModules.push({
           ...mod,
@@ -468,10 +431,6 @@ async function runImport() {
           name: `${mod.name} (imported)`,
         });
       } else if (r.conflict.kind !== "new" && conflictMode.value === "overwrite") {
-        // Backend currently only INSERTs, so overwrite isn't natively
-        // supported — pass through with original id and let the import
-        // handler skip via IntegrityError. We surface the count in the
-        // toast so the user sees the outcome.
         pickedModules.push(mod);
       } else {
         pickedModules.push(mod);
@@ -489,7 +448,7 @@ async function runImport() {
   importing.value = true;
   try {
     const result = await api.importBundle(partial);
-    toast.add({
+    toast.push({
       severity: "success",
       summary: "Imported",
       detail: `${result.modules_imported} modules · ${result.categories_imported} categories`
@@ -499,7 +458,7 @@ async function runImport() {
     clearImport();
     await loadLibrary();
   } catch (e) {
-    toast.add({
+    toast.push({
       severity: "error", summary: "Import failed",
       detail: String(e), life: 5000,
     });
@@ -525,377 +484,333 @@ watch(
 </script>
 
 <template>
-  <div class="wp-io-page">
-    <header class="wp-io-header">
-      <h1>Import / Export</h1>
-      <p class="wp-io-subtitle">
-        Pick exactly what to ship in or out — full library, by kind, or individual modules. Workflow files are NOT handled here.
-      </p>
-    </header>
+  <div class="wp-page wp-io-page">
+    <div class="wp-page__header">
+      <div class="wp-page__title-wrap">
+        <h1 class="wp-page__title">Import / Export</h1>
+        <p class="wp-page__subtitle">
+          Pick exactly what to ship in or out — full library, by kind, or individual modules. Workflow files are NOT handled here.
+        </p>
+      </div>
+    </div>
 
-    <div class="wp-io-tabs" role="tablist" aria-label="Import / Export mode">
+    <div class="wp-tabs wp-io-tabs" role="tablist" aria-label="Import / Export mode">
       <button
-        type="button" role="tab" class="wp-io-tab"
-        :data-active="mode === 'export' ? '' : null"
+        type="button" role="tab" class="wp-tab"
+        :data-active="mode === 'export' ? 'true' : 'false'"
         :aria-selected="mode === 'export'"
         data-test="io-tab-export"
         @click="setMode('export')"
       >
-        <i class="pi pi-download" /> Export
+        <Icon name="pi-download" /> Export
       </button>
       <button
-        type="button" role="tab" class="wp-io-tab"
-        :data-active="mode === 'import' ? '' : null"
+        type="button" role="tab" class="wp-tab"
+        :data-active="mode === 'import' ? 'true' : 'false'"
         :aria-selected="mode === 'import'"
         data-test="io-tab-import"
         @click="setMode('import')"
       >
-        <i class="pi pi-upload" /> Import
+        <Icon name="pi-upload" /> Import
       </button>
     </div>
 
-    <!-- ---------- Export tab ---------- -->
+    <!-- Export tab -->
     <div v-if="mode === 'export'" class="wp-io-grid" data-test="io-export-pane">
-      <Card class="wp-io-card">
-        <template #title>
-          <div class="wp-io-card-title">
-            <span>Pick what to export</span>
-            <div class="wp-io-card-actions">
-              <Button
-                size="small" severity="secondary" text
-                label="Select all"
-                data-test="io-export-select-all"
-                @click="presetApplyFull"
-              />
-              <Button
-                size="small" severity="secondary" text
-                label="None"
-                data-test="io-export-select-none"
-                @click="exportSelected = new Set()"
-              />
-            </div>
-          </div>
+      <Card title="Pick what to export" :padding="false">
+        <template #actions>
+          <Button
+            variant="ghost" size="sm"
+            data-test="io-export-select-all"
+            @click="presetApplyFull"
+          >Select all</Button>
+          <Button
+            variant="ghost" size="sm"
+            data-test="io-export-select-none"
+            @click="exportSelected = new Set()"
+          >None</Button>
         </template>
-        <template #content>
+
+        <div class="wp-io-toolbar">
           <div class="wp-io-presets">
             <Button
-              size="small" severity="secondary" outlined
-              icon="pi pi-database" label="Full library"
+              variant="ghost" size="sm" icon="pi-database"
               data-test="io-preset-full"
               @click="presetApplyFull"
-            />
+            >Full library</Button>
             <Button
-              size="small" severity="secondary" outlined
-              icon="pi pi-th-large" label="Wildcards only"
+              variant="ghost" size="sm" icon="pi-th-large"
               data-test="io-preset-wildcards"
               @click="presetApplyWildcards"
-            />
+            >Wildcards only</Button>
             <Button
-              size="small" severity="secondary" outlined
-              icon="pi pi-star-fill" label="Favorites only"
+              variant="ghost" size="sm" icon="pi-star-fill"
               data-test="io-preset-favorites"
               @click="presetApplyFavorites"
-            />
+            >Favorites only</Button>
           </div>
+          <Input
+            v-model="exportSearch"
+            icon="pi-search"
+            placeholder="Search modules to filter…"
+            aria-label="Search modules"
+            data-test="io-export-search"
+            class="wp-io-search"
+          />
+        </div>
 
-          <div class="wp-io-search">
-            <InputGroup>
-              <InputGroupAddon>
-                <i class="pi pi-search" />
-              </InputGroupAddon>
-              <InputText
-                v-model="exportSearch"
-                placeholder="Search modules to filter…"
-                aria-label="Search modules"
-                data-test="io-export-search"
-              />
-            </InputGroup>
-          </div>
-
-          <div class="wp-io-tree">
-            <div
-              v-for="g in GROUPS"
-              :key="g.key"
-              class="wp-io-group"
-              :data-test="`io-export-group-${g.key}`"
-            >
-              <div class="wp-io-group__head" @click="toggleGroupOpen(g.key)">
-                <span class="wp-io-group__check" @click.stop>
-                  <Checkbox
-                    :model-value="groupCheckState(g, exportSearch).all"
-                    :indeterminate="groupCheckState(g, exportSearch).some"
-                    :binary="true"
-                    :data-test="`io-export-group-check-${g.key}`"
-                    @update:model-value="(v: boolean) => setGroupAll(g, v, exportSearch)"
-                  />
-                </span>
-                <span
-                  class="wp-io-group__icon"
-                  :style="{ color: g.color, background: `color-mix(in oklab, ${g.color} 18%, transparent)` }"
-                >
-                  <i :class="g.icon" />
-                </span>
-                <span class="wp-io-group__label">{{ g.label }}</span>
-                <span class="wp-io-group__count">
-                  {{ rowsForGroup(g, exportSearch).filter((r) => isExportSelected(g, r.id)).length }}
-                  /
-                  {{ rowsForGroup(g, exportSearch).length }}
-                </span>
-                <span class="wp-io-spacer" />
-                <i
-                  class="wp-io-group__chev"
-                  :class="isGroupOpen(g, exportSearch) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
+        <div class="wp-io-tree">
+          <div
+            v-for="g in GROUPS"
+            :key="g.key"
+            class="wp-io-group"
+            :data-test="`io-export-group-${g.key}`"
+          >
+            <div class="wp-io-group__head" @click="toggleGroupOpen(g.key)">
+              <span class="wp-io-group__check" @click.stop>
+                <Checkbox
+                  :model-value="groupCheckState(g, exportSearch).all"
+                  :data-test="`io-export-group-check-${g.key}`"
+                  :aria-label="`Select all ${g.label}`"
+                  @update:model-value="(v: boolean) => setGroupAll(g, v, exportSearch)"
                 />
+              </span>
+              <span
+                class="wp-io-group__icon"
+                :style="{ color: g.color, background: `color-mix(in oklab, ${g.color} 18%, transparent)` }"
+              >
+                <Icon :name="g.icon" />
+              </span>
+              <span class="wp-io-group__label">{{ g.label }}</span>
+              <span class="wp-io-group__count">
+                {{ rowsForGroup(g, exportSearch).filter((r) => isExportSelected(g, r.id)).length }}
+                /
+                {{ rowsForGroup(g, exportSearch).length }}
+              </span>
+              <span class="wp-spacer" />
+              <Icon
+                :name="isGroupOpen(g, exportSearch) ? 'pi-chevron-down' : 'pi-chevron-right'"
+                :size="11"
+              />
+            </div>
+            <div v-if="isGroupOpen(g, exportSearch)" class="wp-io-group__body">
+              <div
+                v-for="row in rowsForGroup(g, exportSearch)"
+                :key="`${g.key}:${row.id}`"
+                class="wp-io-row"
+                :data-test="`io-export-row-${row.id}`"
+                @click="toggleExportRow(g, row.id)"
+              >
+                <Checkbox
+                  :model-value="isExportSelected(g, row.id)"
+                  @update:model-value="toggleExportRow(g, row.id)"
+                  @click.stop
+                />
+                <span class="wp-io-row__name">{{ row.name }}</span>
+                <span
+                  v-if="row.category_id && categoryById.get(row.category_id)"
+                  class="wp-io-row__catchip"
+                  :style="{ background: categoryById.get(row.category_id)?.color || 'var(--wp-bg-3)' }"
+                >{{ categoryById.get(row.category_id)?.name }}</span>
+                <span class="wp-id">{{ row.id }}</span>
               </div>
-              <div v-if="isGroupOpen(g, exportSearch)" class="wp-io-group__body">
-                <div
-                  v-for="row in rowsForGroup(g, exportSearch)"
-                  :key="`${g.key}:${row.id}`"
-                  class="wp-io-row"
-                  :data-test="`io-export-row-${row.id}`"
-                  @click="toggleExportRow(g, row.id)"
-                >
-                  <Checkbox
-                    :model-value="isExportSelected(g, row.id)"
-                    :binary="true"
-                    @click.stop
-                    @update:model-value="toggleExportRow(g, row.id)"
-                  />
-                  <span class="wp-io-row__name">{{ row.name }}</span>
-                  <span
-                    v-if="row.category_id && categoryById.get(row.category_id)"
-                    class="wp-io-row__catchip"
-                    :style="{ background: categoryById.get(row.category_id)?.color || 'var(--wp-bg3)' }"
-                  >{{ categoryById.get(row.category_id)?.name }}</span>
-                  <span
-                    v-if="row.tags && row.tags.length"
-                    class="wp-io-row__tags"
-                  ><i class="pi pi-tag" /> {{ row.tags.length }}</span>
-                  <span class="wp-io-row__id">{{ row.id }}</span>
-                </div>
-                <div
-                  v-if="rowsForGroup(g, exportSearch).length === 0"
-                  class="wp-io-row__empty"
-                >No matches.</div>
-              </div>
+              <div
+                v-if="rowsForGroup(g, exportSearch).length === 0"
+                class="wp-io-row__empty wp-dim"
+              >No matches.</div>
             </div>
           </div>
-        </template>
+        </div>
       </Card>
 
       <div class="wp-io-side">
-        <Card class="wp-io-card">
-          <template #title>Bundle summary</template>
-          <template #content>
-            <dl class="wp-io-stats" data-test="io-export-summary">
-              <dt>Wildcards</dt><dd>{{ exportCounts.wildcard }}</dd>
-              <dt>Fixed values</dt><dd>{{ exportCounts.fixed_values }}</dd>
-              <dt>Combines</dt><dd>{{ exportCounts.combine }}</dd>
-              <dt>Derivations</dt><dd>{{ exportCounts.derivation }}</dd>
-              <dt>Constraints</dt><dd>{{ exportCounts.constraint }}</dd>
-              <dt>Pipelines</dt><dd>{{ exportCounts.pipeline }}</dd>
-              <dt>Categories</dt><dd>{{ exportCounts.category }}</dd>
-            </dl>
-            <div class="wp-io-divider" />
-            <dl class="wp-io-stats">
-              <dt>Total selected</dt><dd>{{ exportCounts.total }}</dd>
-              <dt>Bundle version</dt><dd>1</dd>
-              <dt>Est. size</dt><dd data-test="io-export-size">{{ formatBytes(bundleBytes) }}</dd>
-            </dl>
-            <Button
-              class="wp-io-download"
-              severity="primary"
-              icon="pi pi-download"
-              label="Download bundle"
-              :disabled="exportCounts.total === 0"
-              data-test="io-export-download"
-              @click="downloadBundle"
-            />
-          </template>
+        <Card title="Bundle summary">
+          <dl class="wp-io-stats" data-test="io-export-summary">
+            <dt>Wildcards</dt><dd>{{ exportCounts.wildcard }}</dd>
+            <dt>Fixed values</dt><dd>{{ exportCounts.fixed_values }}</dd>
+            <dt>Combines</dt><dd>{{ exportCounts.combine }}</dd>
+            <dt>Derivations</dt><dd>{{ exportCounts.derivation }}</dd>
+            <dt>Constraints</dt><dd>{{ exportCounts.constraint }}</dd>
+            <dt>Pipelines</dt><dd>{{ exportCounts.pipeline }}</dd>
+            <dt>Categories</dt><dd>{{ exportCounts.category }}</dd>
+          </dl>
+          <div class="wp-divider" />
+          <dl class="wp-io-stats">
+            <dt>Total selected</dt><dd>{{ exportCounts.total }}</dd>
+            <dt>Bundle version</dt><dd>1</dd>
+            <dt>Est. size</dt><dd data-test="io-export-size">{{ formatBytes(bundleBytes) }}</dd>
+          </dl>
+          <Button
+            variant="primary"
+            icon="pi-download"
+            class="wp-io-download"
+            :disabled="exportCounts.total === 0"
+            data-test="io-export-download"
+            @click="downloadBundle"
+          >Download bundle</Button>
         </Card>
       </div>
     </div>
 
-    <!-- ---------- Import tab ---------- -->
+    <!-- Import tab -->
     <div v-else class="wp-io-grid" data-test="io-import-pane">
       <div class="wp-io-import-main">
-        <Card class="wp-io-card">
-          <template #title>Source bundle</template>
-          <template #content>
-            <p class="wp-io-help">
-              Drop a <code>.json</code> bundle. You'll see its contents listed
-              before anything is merged — pick exactly what you want.
-            </p>
-            <input
-              ref="fileInputRef"
-              type="file"
-              accept="application/json,.json"
-              class="wp-io-file-hidden"
-              data-test="io-file-input"
-              aria-label="Bundle JSON file"
-              @change="onPickFile"
-            />
-            <div
-              class="wp-io-drop"
-              :data-active="dropActive ? '' : null"
-              data-test="io-dropzone"
-              @click="fileInputRef?.click()"
-              @dragover="onDragOver"
-              @dragleave="onDragLeave"
-              @drop="onDrop"
-            >
-              <i class="pi pi-cloud-upload wp-io-drop__icon" />
-              <div class="wp-io-drop__title">
-                {{ parsedFileName || "Drop a .json file or click to browse" }}
-              </div>
-              <div class="wp-io-drop__hint">
-                <template v-if="parsedFileName">{{ parsedFileSizeKb }} KB · click to replace</template>
-                <template v-else>Up to 10 MB</template>
-              </div>
+        <Card title="Source bundle">
+          <p class="wp-io-help wp-dim">
+            Drop a <code class="wp-mono">.json</code> bundle. You'll see its contents listed
+            before anything is merged — pick exactly what you want.
+          </p>
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="application/json,.json"
+            class="wp-io-file-hidden"
+            data-test="io-file-input"
+            aria-label="Bundle JSON file"
+            @change="onPickFile"
+          />
+          <div
+            class="wp-io-drop"
+            :data-active="dropActive ? 'true' : 'false'"
+            data-test="io-dropzone"
+            @click="fileInputRef?.click()"
+            @dragover="onDragOver"
+            @dragleave="onDragLeave"
+            @drop="onDrop"
+          >
+            <Icon name="pi-cloud-upload" :size="22" />
+            <div class="wp-io-drop__title">
+              {{ parsedFileName || "Drop a .json file or click to browse" }}
             </div>
-            <div v-if="parseError" class="wp-io-error" data-test="io-parse-error">
-              <i class="pi pi-exclamation-triangle" /> {{ parseError }}
+            <div class="wp-io-drop__hint wp-dim">
+              <template v-if="parsedFileName">{{ parsedFileSizeKb }} KB · click to replace</template>
+              <template v-else>Up to 10 MB</template>
             </div>
-          </template>
+          </div>
+          <div v-if="parseError" class="wp-io-error" data-test="io-parse-error">
+            <Icon name="pi-exclamation-triangle" /> {{ parseError }}
+          </div>
         </Card>
 
-        <Card v-if="parsedBundle" class="wp-io-card">
-          <template #title>
-            <div class="wp-io-card-title">
-              <span>Pick what to import</span>
-              <div class="wp-io-card-actions">
-                <Button
-                  size="small" severity="secondary" text
-                  label="Select all"
-                  data-test="io-import-select-all"
-                  @click="selectAllParsed"
-                />
-                <Button
-                  size="small" severity="secondary" text
-                  label="None"
-                  data-test="io-import-select-none"
-                  @click="clearParsedSelection"
-                />
-              </div>
-            </div>
+        <Card v-if="parsedBundle" title="Pick what to import" :padding="false">
+          <template #actions>
+            <Button
+              variant="ghost" size="sm"
+              data-test="io-import-select-all"
+              @click="selectAllParsed"
+            >Select all</Button>
+            <Button
+              variant="ghost" size="sm"
+              data-test="io-import-select-none"
+              @click="clearParsedSelection"
+            >None</Button>
           </template>
-          <template #content>
-            <div class="wp-io-tree">
-              <template v-for="g in GROUPS" :key="g.key">
-                <div
-                  v-if="parsedRowsForGroup(g).length > 0"
-                  class="wp-io-group"
-                  :data-test="`io-import-group-${g.key}`"
-                >
-                  <div class="wp-io-group__head" @click="toggleImportGroupOpen(g.key)">
-                    <span class="wp-io-group__check" @click.stop>
-                      <Checkbox
-                        :model-value="importGroupCheckState(g).all"
-                        :indeterminate="importGroupCheckState(g).some"
-                        :binary="true"
-                        :data-test="`io-import-group-check-${g.key}`"
-                        @update:model-value="(v: boolean) => setImportGroupAll(g, v)"
-                      />
-                    </span>
-                    <span
-                      class="wp-io-group__icon"
-                      :style="{ color: g.color, background: `color-mix(in oklab, ${g.color} 18%, transparent)` }"
-                    >
-                      <i :class="g.icon" />
-                    </span>
-                    <span class="wp-io-group__label">{{ g.label }}</span>
-                    <span class="wp-io-group__count">{{ parsedRowsForGroup(g).length }} in bundle</span>
-                    <span class="wp-io-spacer" />
-                    <i
-                      class="wp-io-group__chev"
-                      :class="isImportGroupOpen(g.key) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
+          <div class="wp-io-tree">
+            <template v-for="g in GROUPS" :key="g.key">
+              <div
+                v-if="parsedRowsForGroup(g).length > 0"
+                class="wp-io-group"
+                :data-test="`io-import-group-${g.key}`"
+              >
+                <div class="wp-io-group__head" @click="toggleImportGroupOpen(g.key)">
+                  <span class="wp-io-group__check" @click.stop>
+                    <Checkbox
+                      :model-value="importGroupCheckState(g).all"
+                      :data-test="`io-import-group-check-${g.key}`"
+                      :aria-label="`Select all ${g.label}`"
+                      @update:model-value="(v: boolean) => setImportGroupAll(g, v)"
                     />
-                  </div>
-                  <div v-if="isImportGroupOpen(g.key)" class="wp-io-group__body">
-                    <div
-                      v-for="row in parsedRowsForGroup(g)"
-                      :key="`${row.group}:${row.id}`"
-                      class="wp-io-row"
-                      :data-test="`io-import-row-${row.id}`"
-                      @click="toggleImportRow(row.group, row.id)"
-                    >
-                      <Checkbox
-                        :model-value="isImportSelected(row.group, row.id)"
-                        :binary="true"
-                        @click.stop
-                        @update:model-value="toggleImportRow(row.group, row.id)"
-                      />
-                      <span class="wp-io-row__name">{{ row.name }}</span>
-                      <span
-                        :class="badgeClass(row.conflict.kind)"
-                        :data-test="`io-import-badge-${row.id}`"
-                      >{{ badgeLabel(row.conflict.kind) }}</span>
-                      <span
-                        v-if="row.conflict.existingId"
-                        class="wp-io-row__id"
-                        :title="`Existing local id: ${row.conflict.existingId}`"
-                      >{{ row.conflict.existingId }}</span>
-                      <span v-else class="wp-io-row__id">{{ row.id }}</span>
-                    </div>
+                  </span>
+                  <span
+                    class="wp-io-group__icon"
+                    :style="{ color: g.color, background: `color-mix(in oklab, ${g.color} 18%, transparent)` }"
+                  >
+                    <Icon :name="g.icon" />
+                  </span>
+                  <span class="wp-io-group__label">{{ g.label }}</span>
+                  <span class="wp-io-group__count">{{ parsedRowsForGroup(g).length }} in bundle</span>
+                  <span class="wp-spacer" />
+                  <Icon
+                    :name="isImportGroupOpen(g.key) ? 'pi-chevron-down' : 'pi-chevron-right'"
+                    :size="11"
+                  />
+                </div>
+                <div v-if="isImportGroupOpen(g.key)" class="wp-io-group__body">
+                  <div
+                    v-for="row in parsedRowsForGroup(g)"
+                    :key="`${row.group}:${row.id}`"
+                    class="wp-io-row"
+                    :data-test="`io-import-row-${row.id}`"
+                    @click="toggleImportRow(row.group, row.id)"
+                  >
+                    <Checkbox
+                      :model-value="isImportSelected(row.group, row.id)"
+                      @update:model-value="toggleImportRow(row.group, row.id)"
+                      @click.stop
+                    />
+                    <span class="wp-io-row__name">{{ row.name }}</span>
+                    <span
+                      :class="badgeClass(row.conflict.kind)"
+                      :data-test="`io-import-badge-${row.id}`"
+                    >{{ badgeLabel(row.conflict.kind) }}</span>
+                    <span
+                      v-if="row.conflict.existingId"
+                      class="wp-id"
+                      :title="`Existing local id: ${row.conflict.existingId}`"
+                    >{{ row.conflict.existingId }}</span>
+                    <span v-else class="wp-id">{{ row.id }}</span>
                   </div>
                 </div>
-              </template>
-            </div>
-          </template>
+              </div>
+            </template>
+          </div>
         </Card>
       </div>
 
       <div v-if="parsedBundle" class="wp-io-side">
-        <Card class="wp-io-card">
-          <template #title>Import summary</template>
-          <template #content>
-            <dl class="wp-io-stats" data-test="io-import-summary">
-              <dt>In bundle</dt><dd>{{ parsedRows.length }}</dd>
-              <dt>Selected</dt><dd>{{ importCounts.total }}</dd>
-              <dt>Conflicts</dt><dd :class="finalActionTotals.conflictCount ? 'wp-io-warn' : ''">
-                {{ finalActionTotals.conflictCount }}
-              </dd>
-            </dl>
-            <div class="wp-io-divider" />
+        <Card title="Import summary">
+          <dl class="wp-io-stats" data-test="io-import-summary">
+            <dt>In bundle</dt><dd>{{ parsedRows.length }}</dd>
+            <dt>Selected</dt><dd>{{ importCounts.total }}</dd>
+            <dt>Conflicts</dt>
+            <dd :class="finalActionTotals.conflictCount ? 'wp-io-warn' : ''">
+              {{ finalActionTotals.conflictCount }}
+            </dd>
+          </dl>
+          <div class="wp-divider" />
 
-            <label class="wp-io-field-label" for="io-conflict-mode">On conflict</label>
+          <Field label="On conflict">
             <Select
-              id="io-conflict-mode"
               v-model="conflictMode"
               :options="conflictModeOptions"
-              option-label="label"
-              option-value="value"
+              aria-label="On conflict"
               data-test="io-conflict-mode"
-              class="w-full"
             />
+          </Field>
 
-            <div class="wp-io-divider" />
-            <dl class="wp-io-stats">
-              <dt>Will create</dt><dd>{{ finalActionTotals.willCreate }}</dd>
-              <dt>Will update</dt><dd>{{ finalActionTotals.willUpdate }}</dd>
-              <dt>Will skip</dt><dd>{{ finalActionTotals.willSkip }}</dd>
-            </dl>
+          <div class="wp-divider" />
+          <dl class="wp-io-stats">
+            <dt>Will create</dt><dd>{{ finalActionTotals.willCreate }}</dd>
+            <dt>Will update</dt><dd>{{ finalActionTotals.willUpdate }}</dd>
+            <dt>Will skip</dt><dd>{{ finalActionTotals.willSkip }}</dd>
+          </dl>
 
-            <div class="wp-io-actions">
-              <Button
-                severity="primary"
-                icon="pi pi-check"
-                :label="`Import ${importCounts.total} selected`"
-                :disabled="importCounts.total === 0 || importing"
-                :loading="importing"
-                data-test="io-import-submit"
-                @click="runImport"
-              />
-              <Button
-                severity="secondary"
-                outlined
-                icon="pi pi-times"
-                label="Cancel"
-                data-test="io-import-cancel"
-                @click="clearImport"
-              />
-            </div>
-          </template>
+          <div class="wp-io-actions">
+            <Button
+              variant="primary"
+              icon="pi-check"
+              :disabled="importCounts.total === 0 || importing"
+              :loading="importing"
+              data-test="io-import-submit"
+              @click="runImport"
+            >Import {{ importCounts.total }} selected</Button>
+            <Button
+              variant="ghost"
+              icon="pi-times"
+              data-test="io-import-cancel"
+              @click="clearImport"
+            >Cancel</Button>
+          </div>
         </Card>
       </div>
     </div>
@@ -904,51 +819,12 @@ watch(
 
 <style scoped>
 .wp-io-page {
-  padding: 24px;
-  color: var(--wp-text);
-  max-width: 1180px;
+  padding: 18px 22px 40px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.wp-io-header h1 {
-  font-size: 20px;
-  margin: 0;
-  font-weight: 600;
-}
-.wp-io-subtitle {
-  margin: 4px 0 18px;
-  color: var(--wp-text2);
-  font-size: 13px;
-  max-width: 720px;
-}
-
-.wp-io-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--wp-border);
-}
-.wp-io-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  border-radius: 6px 6px 0 0;
-  background: transparent;
-  color: var(--wp-text2);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.wp-io-tab[data-active] {
-  color: var(--wp-text);
-  border-bottom-color: var(--wp-accent-500);
-  background: var(--wp-bg2);
-}
-.wp-io-tab:hover {
-  color: var(--wp-text);
-}
+.wp-io-tabs { gap: 4px; margin-bottom: 4px; }
 
 .wp-io-grid {
   display: grid;
@@ -960,37 +836,21 @@ watch(
   .wp-io-grid { grid-template-columns: 1fr; }
 }
 
-.wp-io-card-title {
+.wp-io-toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--wp-border);
 }
-.wp-io-card-actions {
-  display: flex;
-  gap: 4px;
-}
-
 .wp-io-presets {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
 }
+.wp-io-search { width: 100%; }
 
-.wp-io-search {
-  margin-bottom: 12px;
-}
-
-.wp-io-tree {
-  border: 1px solid var(--wp-border);
-  border-radius: 8px;
-  overflow: hidden;
-  max-height: 540px;
-  overflow-y: auto;
-}
-
+.wp-io-tree { max-height: 540px; overflow-y: auto; }
 .wp-io-group { border-bottom: 1px solid var(--wp-border); }
 .wp-io-group:last-child { border-bottom: 0; }
 
@@ -999,11 +859,11 @@ watch(
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   cursor: pointer;
   user-select: none;
 }
-.wp-io-group__head:hover { background: var(--wp-bg3); }
+.wp-io-group__head:hover { background: var(--wp-bg-3); }
 
 .wp-io-group__check { display: inline-flex; }
 .wp-io-group__icon {
@@ -1012,19 +872,12 @@ watch(
   display: grid; place-items: center;
   font-size: 11px;
 }
-.wp-io-group__label { font-weight: 500; }
+.wp-io-group__label { font-weight: 500; font-size: 13px; }
 .wp-io-group__count {
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
   font-size: 11.5px;
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  font-family: var(--wp-font-mono);
 }
-.wp-io-group__chev {
-  font-size: 11px;
-  color: var(--wp-text2);
-}
-.wp-io-spacer { flex: 1; }
-
-.wp-io-group__body { background: var(--wp-bg); }
 
 .wp-io-row {
   display: flex;
@@ -1035,13 +888,8 @@ watch(
   cursor: pointer;
   font-size: 12.5px;
 }
-.wp-io-row:hover { background: var(--wp-bg2); }
+.wp-io-row:hover { background: var(--wp-bg-2); }
 .wp-io-row__name { flex: 1; font-weight: 500; }
-.wp-io-row__id {
-  color: var(--wp-text3, var(--wp-text2));
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11px;
-}
 .wp-io-row__catchip {
   display: inline-flex;
   align-items: center;
@@ -1052,16 +900,8 @@ watch(
   text-shadow: 0 1px 0 rgba(0,0,0,.3);
   white-space: nowrap;
 }
-.wp-io-row__tags {
-  color: var(--wp-text2);
-  font-size: 11px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
 .wp-io-row__empty {
   padding: 10px 12px 10px 36px;
-  color: var(--wp-text2);
   font-size: 12px;
 }
 
@@ -1080,25 +920,14 @@ watch(
   margin: 0;
   font-size: 12.5px;
 }
-.wp-io-stats dt {
-  color: var(--wp-text2);
-}
+.wp-io-stats dt { color: var(--wp-text-muted); }
 .wp-io-stats dd {
   margin: 0;
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  font-family: var(--wp-font-mono);
   text-align: right;
 }
-.wp-io-warn { color: var(--wp-warn, #f59e0b); }
-
-.wp-io-divider {
-  height: 1px;
-  background: var(--wp-border);
-  margin: 12px 0;
-}
-.wp-io-download {
-  margin-top: 12px;
-  width: 100%;
-}
+.wp-io-warn { color: var(--wp-warn); }
+.wp-io-download { width: 100%; margin-top: 10px; }
 
 .wp-io-import-main {
   display: flex;
@@ -1108,11 +937,10 @@ watch(
 
 .wp-io-help {
   font-size: 12.5px;
-  color: var(--wp-text2);
   margin: 0 0 8px;
 }
 .wp-io-help code {
-  background: var(--wp-bg3);
+  background: var(--wp-bg-3);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 12px;
@@ -1121,30 +949,26 @@ watch(
 .wp-io-file-hidden { display: none; }
 
 .wp-io-drop {
-  border: 1px dashed var(--wp-border-strong, var(--wp-border));
+  border: 1px dashed var(--wp-border-strong);
   border-radius: 10px;
   padding: 28px 16px;
   text-align: center;
   cursor: pointer;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   transition: background .15s, border-color .15s;
+  color: var(--wp-text-muted);
 }
-.wp-io-drop[data-active] {
+.wp-io-drop[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent);
   border-color: var(--wp-accent-500);
 }
-.wp-io-drop__icon {
-  font-size: 22px;
-  color: var(--wp-text2);
-  display: block;
-  margin: 0 auto 6px;
-}
 .wp-io-drop__title {
   font-size: 13px;
+  color: var(--wp-text);
+  margin-top: 6px;
 }
 .wp-io-drop__hint {
   font-size: 11.5px;
-  color: var(--wp-text2);
   margin-top: 4px;
 }
 
@@ -1152,9 +976,12 @@ watch(
   margin-top: 10px;
   padding: 8px 10px;
   border-radius: 6px;
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+  color: var(--wp-danger);
   font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .wp-io-badge {
@@ -1167,23 +994,16 @@ watch(
   text-transform: lowercase;
 }
 .wp-io-badge--new {
-  background: color-mix(in oklab, var(--wp-success, #10b981) 18%, transparent);
-  color: var(--wp-success, #10b981);
+  background: color-mix(in oklab, var(--wp-success) 18%, transparent);
+  color: var(--wp-success);
 }
 .wp-io-badge--exists {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent);
-  color: var(--wp-warn, #f59e0b);
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
+  color: var(--wp-warn);
 }
 .wp-io-badge--mod {
   background: color-mix(in oklab, #fb923c 18%, transparent);
   color: #fb923c;
-}
-
-.wp-io-field-label {
-  display: block;
-  font-size: 12px;
-  color: var(--wp-text2);
-  margin-bottom: 4px;
 }
 
 .wp-io-actions {
