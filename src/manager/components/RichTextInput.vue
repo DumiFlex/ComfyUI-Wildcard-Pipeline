@@ -8,9 +8,13 @@
  * mirrored `<div>` painted behind a transparent textarea — see the
  * focused/rest dual mode comments below for why this gymnastic is needed.
  *
+ * The `$` / `@` autocomplete popover is teleported to <body> and positioned
+ * with `position: fixed` so it escapes any ancestor `overflow: hidden`
+ * (e.g. the `.wp-rt` wrapper itself, scroll containers in editor tables).
+ *
  * Reference: docs/design-handoff/wildcardpipeline/project/rich-input.jsx.
  */
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { tokenizeRich, mirrorHtmlWithIdx } from "../utils/richTokenize";
 
 interface Props {
@@ -50,7 +54,14 @@ const acQuery = ref("");
 const acTrigger = ref<"$" | "@">("$");
 const acStart = ref(-1);
 const acActive = ref(0);
-const acFlipUp = ref(false);
+// Popup geometry — `position: fixed` viewport coordinates so the teleported
+// popover lands directly under the input regardless of ancestor overflow.
+const popupPos = ref<{ top: number; left: number; width: number; flipped: boolean }>({
+  top: 0,
+  left: 0,
+  width: 240,
+  flipped: false,
+});
 
 // --- Tokenize + mirror HTML (pre-escaped — see richTokenize.ts). ---
 const tokens = computed(() => tokenizeRich(props.modelValue || ""));
@@ -100,13 +111,26 @@ function probeAutocomplete(str: string, caret: number): {
   return { start: i, query: str.slice(i + 1, caret), trigger };
 }
 
-function maybeFlipUp(): void {
-  // Open downwards by default; flip if there isn't enough room below.
-  const wrap = inputEl.value?.parentElement;
-  if (!wrap) { acFlipUp.value = false; return; }
+// --- Popup placement ---
+// Anchor to the wrapper's bounding box. We use the input's parent (`.wp-rt`)
+// rect rather than caret pixel coordinates for robustness — caret-pixel
+// math against a textarea is error-prone and the prototype ships the same
+// "below-the-input" behaviour. Flips above when there's no room below.
+function positionPopup(): void {
+  const ta = inputEl.value;
+  if (!ta) return;
+  const wrap = ta.parentElement;
+  if (!wrap) return;
   const rect = wrap.getBoundingClientRect();
+  const POPUP_H = 240; // matches max-height in CSS (keep in sync)
   const spaceBelow = window.innerHeight - rect.bottom;
-  acFlipUp.value = spaceBelow < 200 && rect.top > 200;
+  const flipped = spaceBelow < POPUP_H && rect.top > POPUP_H;
+  popupPos.value = {
+    top: flipped ? rect.top - 4 : rect.bottom + 4,
+    left: rect.left,
+    width: Math.max(200, rect.width),
+    flipped,
+  };
 }
 
 // --- Handlers ---
@@ -122,7 +146,7 @@ function onInput(e: Event): void {
     acQuery.value = hit.query;
     acTrigger.value = hit.trigger;
     acActive.value = 0;
-    maybeFlipUp();
+    positionPopup();
   } else {
     acOpen.value = false;
   }
@@ -138,6 +162,7 @@ function refreshAutocompleteFromCaret(): void {
     acStart.value = hit.start;
     acQuery.value = hit.query;
     acTrigger.value = hit.trigger;
+    positionPopup();
   } else {
     acOpen.value = false;
   }
@@ -213,6 +238,42 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   e.preventDefault();
   applyAutocomplete(label);
 }
+
+// --- Global listeners: close popup on outside-click / scroll / resize.
+//     We attach lazily (only while open) so non-editing inputs cost nothing.
+function onDocumentMouseDown(e: MouseEvent): void {
+  const t = e.target as Node | null;
+  if (!t) return;
+  if (inputEl.value?.contains(t)) return;
+  if (popoverEl.value?.contains(t)) return;
+  acOpen.value = false;
+}
+function onWindowScroll(): void {
+  // Scrolls outside the textarea move the anchor → easier to just close.
+  acOpen.value = false;
+}
+function onWindowResize(): void {
+  if (acOpen.value) positionPopup();
+}
+
+watch(acOpen, (open) => {
+  if (open) {
+    void nextTick(positionPopup);
+    window.addEventListener("mousedown", onDocumentMouseDown, true);
+    window.addEventListener("scroll", onWindowScroll, true);
+    window.addEventListener("resize", onWindowResize);
+  } else {
+    window.removeEventListener("mousedown", onDocumentMouseDown, true);
+    window.removeEventListener("scroll", onWindowScroll, true);
+    window.removeEventListener("resize", onWindowResize);
+  }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("mousedown", onDocumentMouseDown, true);
+  window.removeEventListener("scroll", onWindowScroll, true);
+  window.removeEventListener("resize", onWindowResize);
+});
 </script>
 
 <template>
@@ -273,31 +334,41 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
       @blur="onBlur"
     >
 
-    <div
-      v-if="acOpen && acItems.length > 0"
-      ref="popoverEl"
-      class="wp-rt-suggestions"
-      :class="{ 'wp-rt-suggestions--up': acFlipUp }"
-      role="listbox"
-    >
-      <div class="wp-rt-suggestions__head">
-        <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
-        <span class="wp-rt-suggestions__hint">↑↓ Enter · Esc</span>
-      </div>
-      <button
-        v-for="(label, i) in acItems"
-        :key="label"
-        type="button"
-        class="wp-rt-suggestions__item"
-        :data-active="i === acActive ? '' : null"
-        role="option"
-        :aria-selected="i === acActive"
-        @mousedown="(e) => onSuggestionMouseDown(e, label)"
-        @mouseenter="acActive = i"
+    <!-- Teleport so the popover escapes ancestor overflow:hidden /
+         transformed scroll containers / table cells. -->
+    <Teleport to="body">
+      <div
+        v-if="acOpen && acItems.length > 0"
+        ref="popoverEl"
+        class="wp-rt-suggestions"
+        :class="{ 'wp-rt-suggestions--up': popupPos.flipped }"
+        :style="{
+          top: popupPos.top + 'px',
+          left: popupPos.left + 'px',
+          minWidth: popupPos.width + 'px',
+        }"
+        role="listbox"
       >
-        <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ label }}
-      </button>
-    </div>
+        <div class="wp-rt-suggestions__head">
+          <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
+          <span class="wp-rt-suggestions__hint">↑↓ Enter · Esc</span>
+        </div>
+        <button
+          v-for="(label, i) in acItems"
+          :key="label"
+          type="button"
+          class="wp-rt-suggestions__item"
+          :data-active="i === acActive ? '' : null"
+          role="option"
+          :aria-selected="i === acActive"
+          @mousedown="(e) => onSuggestionMouseDown(e, label)"
+          @mouseenter="acActive = i"
+        >
+          <i :class="acTrigger === '$' ? 'pi pi-dollar' : 'pi pi-at'" class="wp-rt-suggestions__icon" />
+          <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ label }}
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -395,28 +466,45 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
 /* Token span chrome (.wp-rt-var / .wp-rt-ref / .wp-rt-dp-* / quantifier
    colour + chip backgrounds + focus/rest padding) lives in the global
    styles/rich-text.css so RichTextInput and RichTextPreview stay in sync. */
+</style>
 
-/* Autocomplete popover -------------------------------------------------- */
+<style>
+/* Autocomplete popover -------------------------------------------------- *
+ * NOT scoped — the popover is teleported to <body>, so a scoped selector
+ * (which adds a `[data-v-…]` attribute) wouldn't match. The class names
+ * are component-specific (`wp-rt-suggestions*`) so global is fine.
+ * ------------------------------------------------------------------------ */
 .wp-rt-suggestions {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  top: calc(100% + 4px);
-  z-index: 30;
+  position: fixed;
+  z-index: 1000;
+  min-width: 200px;
+  max-width: 360px;
+  max-height: 240px;
+  overflow-y: auto;
   background: var(--wp-bg-1, #11111b);
   border: 1px solid var(--wp-border-strong, rgba(255, 255, 255, 0.14));
   border-radius: 8px;
   padding: 4px;
-  box-shadow: var(--wp-shadow, 0 4px 16px rgba(0, 0, 0, 0.35));
+  box-shadow: var(--wp-shadow-lg, var(--wp-shadow, 0 10px 30px rgba(0, 0, 0, 0.45)));
   display: flex;
   flex-direction: column;
   gap: 1px;
-  max-height: 240px;
-  overflow-y: auto;
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  animation: wp-rt-suggestions-in 0.12s ease-out;
 }
 .wp-rt-suggestions--up {
-  top: auto;
-  bottom: calc(100% + 4px);
+  /* `top` is set inline as the rect.top of the input; shift fully above. */
+  transform: translateY(-100%);
+  animation-name: wp-rt-suggestions-in-up;
+}
+@keyframes wp-rt-suggestions-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes wp-rt-suggestions-in-up {
+  from { opacity: 0; transform: translateY(calc(-100% + 4px)); }
+  to   { opacity: 1; transform: translateY(-100%); }
 }
 .wp-rt-suggestions__head {
   display: flex;
@@ -436,13 +524,15 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   opacity: 0.7;
 }
 .wp-rt-suggestions__item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   background: transparent;
   border: none;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 6px 8px;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 12px;
   color: var(--wp-text, #e7e7ee);
@@ -450,6 +540,11 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
 }
 .wp-rt-suggestions__item[data-active] {
   background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
+}
+.wp-rt-suggestions__icon {
+  font-size: 10px;
+  color: var(--wp-accent-text, #c4b5fd);
+  opacity: 0.85;
 }
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);

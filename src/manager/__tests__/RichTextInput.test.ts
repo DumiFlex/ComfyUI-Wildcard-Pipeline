@@ -84,6 +84,17 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  // The autocomplete popover is teleported to <body>, so we query the
+  // document directly rather than via the wrapper's subtree.
+  function popoverItems(): string[] {
+    return Array.from(document.querySelectorAll(".wp-rt-suggestions__item")).map(
+      (el) => (el as HTMLElement).textContent ?? "",
+    );
+  }
+  function popoverExists(): boolean {
+    return document.querySelector(".wp-rt-suggestions") !== null;
+  }
+
   it("opens autocomplete and filters by prefix when typing $", async () => {
     const wrap = mount(RichTextInput, {
       props: {
@@ -98,8 +109,7 @@ describe("RichTextInput.vue", () => {
     el.setSelectionRange(3, 3);
     await input.trigger("input");
     await tick();
-    const suggestions = wrap.findAll(".wp-rt-suggestions__item");
-    const labels = suggestions.map((b) => b.text());
+    const labels = popoverItems();
     expect(labels.length).toBeGreaterThan(0);
     expect(labels.some((l) => l.includes("person"))).toBe(true);
     expect(labels.some((l) => l.includes("people"))).toBe(true);
@@ -122,7 +132,7 @@ describe("RichTextInput.vue", () => {
     el.setSelectionRange(3, 3);
     await input.trigger("input");
     await tick();
-    const labels = wrap.findAll(".wp-rt-suggestions__item").map((b) => b.text());
+    const labels = popoverItems();
     expect(labels.some((l) => l.includes("beta"))).toBe(true);
     expect(labels.some((l) => l.includes("alpha"))).toBe(false);
     wrap.unmount();
@@ -162,10 +172,60 @@ describe("RichTextInput.vue", () => {
     el.setSelectionRange(2, 2);
     await input.trigger("input");
     await tick();
-    expect(wrap.find(".wp-rt-suggestions").exists()).toBe(true);
+    expect(popoverExists()).toBe(true);
     await input.trigger("keydown", { key: "Escape" });
     await tick();
-    expect(wrap.find(".wp-rt-suggestions").exists()).toBe(false);
+    expect(popoverExists()).toBe(false);
+    wrap.unmount();
+  });
+
+  it("ArrowDown advances suggestion selection", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        varSuggestions: ["person", "people"],
+      },
+      attachTo: document.body,
+    });
+    const input = wrap.find("input");
+    const el = input.element as HTMLInputElement;
+    el.value = "$p";
+    el.setSelectionRange(2, 2);
+    await input.trigger("input");
+    await tick();
+    const before = document.querySelector<HTMLElement>(
+      ".wp-rt-suggestions__item[data-active]",
+    );
+    expect(before?.textContent).toContain("person");
+    await input.trigger("keydown", { key: "ArrowDown" });
+    await tick();
+    const after = document.querySelector<HTMLElement>(
+      ".wp-rt-suggestions__item[data-active]",
+    );
+    expect(after?.textContent).toContain("people");
+    wrap.unmount();
+  });
+
+  it("typing $ followed by space without picking closes the popup", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        varSuggestions: ["person"],
+      },
+      attachTo: document.body,
+    });
+    const input = wrap.find("input");
+    const el = input.element as HTMLInputElement;
+    el.value = "$p";
+    el.setSelectionRange(2, 2);
+    await input.trigger("input");
+    await tick();
+    expect(popoverExists()).toBe(true);
+    el.value = "$p ";
+    el.setSelectionRange(3, 3);
+    await input.trigger("input");
+    await tick();
+    expect(popoverExists()).toBe(false);
     wrap.unmount();
   });
 
