@@ -41,24 +41,27 @@ export interface DerivationPayload {
   rules: DerivationRule[];
 }
 
-export type ConstraintMatrixCell =
-  | "allow"
-  | "exclude"
-  | "boost"
-  | "reduce"
-  | { mode: string; factor?: number };
+export type ConstraintMode = "allow" | "exclude" | "boost" | "reduce";
+
+export interface ConstraintCell {
+  mode: ConstraintMode;
+  factor: number;
+}
+
+/** Map shape: source_value → target_sub_category → cell. */
+export type ConstraintMatrix = Record<string, Record<string, ConstraintCell>>;
 
 export interface ConstraintException {
-  from: string;
-  to: string;
-  mode: string;
-  note?: string;
+  source: string;
+  target: string;
+  mode: ConstraintMode;
+  factor: number;
 }
 
 export interface ConstraintPayload {
   source_wildcard_id: string | null;
   target_wildcard_id: string | null;
-  matrix: ConstraintMatrixCell[][];
+  matrix: ConstraintMatrix;
   exceptions: ConstraintException[];
 }
 
