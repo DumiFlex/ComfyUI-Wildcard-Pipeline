@@ -6,6 +6,7 @@ import ToastService from "primevue/toastservice";
 import ConfirmationService from "primevue/confirmationservice";
 import "primeicons/primeicons.css";
 import "./styles/theme.css";
+import "./styles/community.css";
 import "./styles/tailwind.css";
 import App from "./App.vue";
 import router from "./router";
