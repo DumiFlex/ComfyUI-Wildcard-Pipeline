@@ -154,6 +154,23 @@ describe("WildcardForm.vue", () => {
     expect(call.payload.var_binding).toBe("outfit_style");
   });
 
+  it("renders RichTextInput for each option value", async () => {
+    apiMod.get.mockResolvedValue({
+      id: "wc_a", name: "alpha", description: "", category_id: null,
+      tags: [], type: "wildcard",
+      payload: { options: [{ id: "o1", value: "red", weight: 1 }] },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    const wrap = mount(WildcardForm, {
+      props: { id: "wc_a" },
+      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    });
+    await flushPromises();
+    const rti = wrap.findComponent({ name: "RichTextInput" });
+    expect(rti.exists()).toBe(true);
+    expect(rti.props("modelValue")).toBe("red");
+  });
+
   it("loads var_binding from existing payload", async () => {
     apiMod.get.mockResolvedValue({
       id: "wc_a", name: "Hair Color", description: "", category_id: null,
