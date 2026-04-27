@@ -11,6 +11,7 @@ import AutoComplete from "primevue/autocomplete";
 import { useToast } from "primevue/usetoast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { VALID_IDENTIFIER_RE } from "../utils/slug";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -28,6 +29,7 @@ const values = ref<NamedValue[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 
+// ----- Tag autocomplete (mirrors WildcardForm) -----
 const tagSuggestions = ref<string[]>([]);
 function searchTags(event: { query: string }) {
   const q = event.query.toLowerCase();
@@ -49,7 +51,14 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
-      values.value = (row.payload as { values?: NamedValue[] }).values ?? [];
+      const rows = (row.payload as { values?: NamedValue[] }).values ?? [];
+      // Strip any leading "$" that might have been persisted by older shapes —
+      // the variable name is rendered as `$name` via the InputGroupAddon.
+      values.value = rows.map((v) => ({
+        id: v.id,
+        name: (v.name ?? "").replace(/^\$+/, ""),
+        value: v.value ?? "",
+      }));
     } catch {
       toast.add({ severity: "error", summary: "Module not found", life: 3000 });
       router.replace("/fixed-values");
@@ -63,9 +72,55 @@ function addValue() {
 }
 function removeValue(idx: number) { values.value.splice(idx, 1); }
 
+/**
+ * Sanitise a var-name on input — drop everything outside the identifier
+ * charset so users can paste sloppy text and not end up with bindings the
+ * engine tokenizer rejects. Mirrors the prototype's
+ * `e.target.value.replace(/[^a-zA-Z0-9_]/g, "")`.
+ */
+function onVarInput(idx: number, raw: string | null | undefined) {
+  const cleaned = (raw ?? "").replace(/[^a-zA-Z0-9_]/g, "");
+  values.value[idx].name = cleaned;
+}
+
+/**
+ * Per-row validity used to drive the inline error chip and the save guard.
+ *  - empty       → "Required"
+ *  - bad ident   → "Invalid identifier"
+ *  - duplicate   → "Duplicate name"
+ *  - otherwise   → ""
+ */
+const rowErrors = computed<string[]>(() => {
+  const errs: string[] = [];
+  const counts = new Map<string, number>();
+  for (const v of values.value) {
+    const n = v.name.trim();
+    counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  for (const v of values.value) {
+    const n = v.name.trim();
+    if (!n) { errs.push("Required"); continue; }
+    if (!VALID_IDENTIFIER_RE.test(n)) { errs.push("Invalid identifier"); continue; }
+    if ((counts.get(n) ?? 0) > 1) { errs.push("Duplicate name"); continue; }
+    errs.push("");
+  }
+  return errs;
+});
+
+const hasRowErrors = computed(() => rowErrors.value.some((e) => e !== ""));
+
 async function save() {
   if (!name.value.trim()) {
     toast.add({ severity: "warn", summary: "Name required", life: 2000 });
+    return;
+  }
+  if (hasRowErrors.value) {
+    toast.add({
+      severity: "warn",
+      summary: "Fix invalid value rows",
+      detail: "Each row needs a unique, valid `$name` identifier.",
+      life: 3000,
+    });
     return;
   }
   saving.value = true;
@@ -140,36 +195,72 @@ async function save() {
 
       <section class="form-section">
         <div class="flex items-center justify-between mb-2">
-          <h2 class="form-section__label m-0">Values</h2>
-          <Button label="Add value" icon="pi pi-plus" size="small" severity="primary" @click="addValue" />
+          <h2 class="form-section__label m-0">Values ({{ values.length }})</h2>
         </div>
-        <table class="w-full text-sm border border-wp-border rounded">
-          <thead>
-            <tr class="bg-wp-bg2">
-              <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Variable</th>
-              <th class="px-3 py-2 text-left text-wp-text2 text-xs uppercase">Value</th>
-              <th class="w-16"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(v, idx) in values" :key="v.id" class="border-t border-wp-border">
-              <td class="px-3 py-2 w-48">
-                <InputGroup>
-                  <InputGroupAddon><i class="pi pi-dollar" /></InputGroupAddon>
-                  <InputText v-model="v.name" placeholder="varname" />
-                </InputGroup>
-              </td>
-              <td class="px-3 py-2"><InputText v-model="v.value" class="w-full" /></td>
-              <td class="px-3 py-2 text-right">
-                <Button icon="pi pi-trash" text rounded size="small" severity="danger"
-                  aria-label="Remove value" @click="removeValue(idx)" />
-              </td>
-            </tr>
-            <tr v-if="!values.length">
-              <td colspan="3" class="text-center text-wp-text2 py-4">No values yet.</td>
-            </tr>
-          </tbody>
-        </table>
+        <p class="text-xs text-wp-text2 mb-2">
+          Each row binds a literal string to <code>$name</code>. Names must match
+          <code>[a-zA-Z_][a-zA-Z0-9_]*</code> and be unique within this module.
+        </p>
+
+        <div v-if="values.length" class="fv-rows">
+          <div
+            v-for="(v, idx) in values"
+            :key="v.id"
+            class="fv-row"
+            :data-test="`fv-row-${idx}`"
+            :data-invalid="rowErrors[idx] ? 'true' : 'false'"
+          >
+            <div class="fv-row__var">
+              <InputGroup>
+                <InputGroupAddon><i class="pi pi-dollar" /></InputGroupAddon>
+                <InputText
+                  :model-value="v.name"
+                  :data-test="`fv-row-${idx}-name`"
+                  :class="{ 'p-invalid': !!rowErrors[idx] }"
+                  placeholder="varname"
+                  aria-label="Variable name"
+                  @update:model-value="(val) => onVarInput(idx, val)"
+                />
+              </InputGroup>
+              <p
+                v-if="rowErrors[idx]"
+                class="fv-row__err"
+                :data-test="`fv-row-${idx}-err`"
+              >
+                {{ rowErrors[idx] }}
+              </p>
+            </div>
+            <div class="fv-row__value">
+              <Textarea
+                v-model="v.value"
+                :rows="2"
+                auto-resize
+                class="w-full"
+                placeholder="value"
+                aria-label="Variable value"
+                :data-test="`fv-row-${idx}-value`"
+              />
+            </div>
+            <div class="fv-row__remove">
+              <Button
+                icon="pi pi-trash"
+                text rounded size="small" severity="danger"
+                aria-label="Remove value"
+                @click="removeValue(idx)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="fv-add"
+          data-test="fv-add"
+          @click="addValue"
+        >
+          <i class="pi pi-plus" />
+          <span>Add value</span>
+        </button>
       </section>
     </div>
 
@@ -196,5 +287,59 @@ async function save() {
   font-size: 11px; text-transform: uppercase;
   letter-spacing: 0.5px; color: var(--wp-text2);
   margin: 0 0 8px 0;
+}
+
+/* Per-row layout: $name | value textarea | trash. */
+.fv-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.fv-row {
+  display: grid;
+  grid-template-columns: 220px 1fr 36px;
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--wp-border);
+  border-radius: 6px;
+  background: var(--wp-bg2);
+}
+.fv-row[data-invalid="true"] {
+  border-color: var(--wp-danger, #dc2626);
+}
+.fv-row__var :deep(.p-inputtext) { width: 100%; }
+.fv-row__err {
+  font-size: 11px;
+  color: var(--wp-danger, #dc2626);
+  margin: 4px 0 0;
+}
+.fv-row__remove {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+/* Dashed "Add value" button matching prototype affordance. */
+.fv-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px dashed var(--wp-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wp-text2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.fv-add:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-text2);
+  color: var(--wp-text);
 }
 </style>
