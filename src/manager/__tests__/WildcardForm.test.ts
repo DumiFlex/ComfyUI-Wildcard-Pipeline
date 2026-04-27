@@ -102,4 +102,72 @@ describe("WildcardForm.vue", () => {
     await flushPromises();
     expect(apiMod.create).not.toHaveBeenCalled();
   });
+
+  it("auto-derives var_binding from name while untouched", async () => {
+    const wrap = mount(WildcardForm, {
+      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    });
+    await flushPromises();
+    const nameInput = wrap.find("#wc-name");
+    await nameInput.setValue("Hair Color");
+    await flushPromises();
+    const varInput = wrap.find('[data-test="wc-var-binding"]')
+      .element as HTMLInputElement;
+    expect(varInput.value).toBe("hair_color");
+  });
+
+  it("manual edit to var_binding sticks across name changes", async () => {
+    const wrap = mount(WildcardForm, {
+      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    });
+    await flushPromises();
+    const nameInput = wrap.find("#wc-name");
+    await nameInput.setValue("Hair Color");
+    await flushPromises();
+    const varInput = wrap.find('[data-test="wc-var-binding"]');
+    await varInput.setValue("custom_var");
+    await flushPromises();
+    await nameInput.setValue("Eye Color");
+    await flushPromises();
+    const el = varInput.element as HTMLInputElement;
+    expect(el.value).toBe("custom_var");
+  });
+
+  it("save includes var_binding in payload", async () => {
+    apiMod.create.mockResolvedValue({
+      id: "wc_a", type: "wildcard", name: "Outfit Style",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: { options: [], sub_categories: [], var_binding: "outfit_style" },
+      version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mount(WildcardForm, {
+      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    });
+    await flushPromises();
+    const nameInput = wrap.find("#wc-name");
+    await nameInput.setValue("Outfit Style");
+    await flushPromises();
+    const saveBtn = findByText(wrap, "Save");
+    await saveBtn?.trigger("click");
+    await flushPromises();
+    const call = apiMod.create.mock.calls[0]?.[0] as { payload: { var_binding?: string } };
+    expect(call.payload.var_binding).toBe("outfit_style");
+  });
+
+  it("loads var_binding from existing payload", async () => {
+    apiMod.get.mockResolvedValue({
+      id: "wc_a", name: "Hair Color", description: "", category_id: null,
+      tags: [], type: "wildcard",
+      payload: { options: [], sub_categories: [], var_binding: "my_hair" },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    const wrap = mount(WildcardForm, {
+      props: { id: "wc_a" },
+      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    });
+    await flushPromises();
+    const varInput = wrap.find('[data-test="wc-var-binding"]')
+      .element as HTMLInputElement;
+    expect(varInput.value).toBe("my_hair");
+  });
 });

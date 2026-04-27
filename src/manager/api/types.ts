@@ -8,22 +8,43 @@ export type ModuleType =
 
 // ----- Per-type payload shapes (cross-referenced from data.jsx prototype) -----
 
+export interface WildcardOption {
+  id: string;
+  value: string;
+  weight: number;
+  sub_category?: string | null;
+}
+
+export interface WildcardPayload {
+  options: WildcardOption[];
+  sub_categories: string[];
+  /**
+   * The `$varname` other modules use to read this wildcard's resolved value.
+   * Optional — defaults to `slug(name)` when missing/blank. User-editable so
+   * collisions or renames can be resolved without breaking downstream refs.
+   */
+  var_binding?: string;
+}
+
 export interface CombinePayload {
   template: string;
   output_var: string;
   input_vars: string[];
 }
 
+export type DerivationOp = "equals" | "not_equals" | "contains" | "matches";
+export type DerivationMode = "replace" | "append" | "prepend";
+
 export interface DerivationCondition {
-  kind: "always" | "contains" | "equals" | "absent" | string;
-  var?: string;
-  value?: string;
+  var: string;
+  op: DerivationOp;
+  value: string;
 }
 
 export interface DerivationAction {
-  kind: "append" | "prepend" | "replace" | "remove" | "set" | string;
-  target: string;
-  value?: string;
+  target_var: string;
+  mode: DerivationMode;
+  value: string;
 }
 
 export interface DerivationBranch {
@@ -31,10 +52,18 @@ export interface DerivationBranch {
   action: DerivationAction;
 }
 
+/**
+ * Else clause matches the backend validator shape: an object with an `action`.
+ * (See engine/modules/derivation_handler.py::_validate_action.)
+ */
+export interface DerivationElse {
+  action: DerivationAction;
+}
+
 export interface DerivationRule {
   id: string;
   branches: DerivationBranch[];
-  else?: DerivationAction;
+  else?: DerivationElse;
 }
 
 export interface DerivationPayload {
