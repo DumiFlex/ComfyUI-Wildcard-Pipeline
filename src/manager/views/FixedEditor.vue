@@ -193,7 +193,7 @@ function cancel() { router.push("/fixed-values"); }
 
     <Card :title="`Values (${values.length})`" :padding="false">
       <template #actions>
-        <Button size="sm" variant="primary" icon="pi pi-plus" data-test="fv-add" @click="addValue">
+        <Button size="sm" variant="primary" icon="pi-plus" data-test="fv-add" @click="addValue">
           Add value
         </Button>
       </template>
@@ -244,7 +244,7 @@ function cancel() { router.push("/fixed-values"); }
               <Button
                 size="sm"
                 variant="ghost"
-                icon="pi pi-trash"
+                icon="pi-trash"
                 class="wp-btn--danger"
                 aria-label="Remove value"
                 @click="removeValue(idx)"

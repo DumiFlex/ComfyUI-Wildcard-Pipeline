@@ -1002,8 +1002,8 @@ watch(
   color: var(--wp-warn);
 }
 .wp-io-badge--mod {
-  background: color-mix(in oklab, #fb923c 18%, transparent);
-  color: #fb923c;
+  background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
+  color: var(--wp-status-modified);
 }
 
 .wp-io-actions {

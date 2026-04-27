@@ -413,14 +413,14 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
 .wp-rt :deep(.wp-rt-dp-brace) { color: var(--wp-warn, #fcd34d); font-weight: 600; }
 .wp-rt :deep(.wp-rt-dp-pipe)  { color: var(--wp-warn, #fcd34d); opacity: 0.65; }
 .wp-rt :deep(.wp-rt-dp-multi) {
-  color: #34d399;
-  background: color-mix(in oklab, #10b981 12%, transparent);
+  color: var(--wp-rt-token-good);
+  background: var(--wp-rt-token-good-bg);
   border-radius: 3px;
   font-weight: 500;
 }
 .wp-rt :deep(.wp-rt-dp-weight) {
-  color: #fb923c;
-  background: color-mix(in oklab, #f97316 12%, transparent);
+  color: var(--wp-rt-token-mut);
+  background: var(--wp-rt-token-mut-bg);
   border-radius: 3px;
   font-weight: 500;
 }

@@ -77,7 +77,7 @@ function onRestore(entry: ModuleHistoryEntry) {
         <Button
           v-if="historyEntries && historyEntries.length"
           variant="ghost"
-          icon="pi pi-history"
+          icon="pi-history"
           data-test="history-btn"
           @click="historyOpen = true"
         >
@@ -88,7 +88,7 @@ function onRestore(entry: ModuleHistoryEntry) {
         <Button variant="secondary" data-test="cancel-btn" @click="onCancel">Cancel</Button>
         <Button
           variant="primary"
-          icon="pi pi-check"
+          icon="pi-check"
           :loading="saving"
           :disabled="saveDisabled"
           data-test="save-btn"

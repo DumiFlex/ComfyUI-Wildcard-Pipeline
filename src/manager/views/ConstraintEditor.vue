@@ -351,7 +351,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 
     <Card :title="`Exceptions (${exceptions.length})`" :padding="false">
       <template #actions>
-        <Button size="sm" variant="primary" icon="pi pi-plus" data-test="add-exception" @click="addException">
+        <Button size="sm" variant="primary" icon="pi-plus" data-test="add-exception" @click="addException">
           Add exception
         </Button>
       </template>
@@ -410,7 +410,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
               <Button
                 size="sm"
                 variant="ghost"
-                icon="pi pi-trash"
+                icon="pi-trash"
                 class="wp-btn--danger"
                 aria-label="Remove exception"
                 @click="removeException(idx)"

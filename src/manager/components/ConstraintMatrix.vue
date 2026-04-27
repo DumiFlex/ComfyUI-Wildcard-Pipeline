@@ -300,7 +300,7 @@ defineExpose({ cellAt, cycleCell });
 .wp-matrix__corner {
   padding: 0 8px;
   text-align: left;
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-dim);
   font-weight: 500;
   font-size: 10.5px;
   text-transform: uppercase;
@@ -309,32 +309,32 @@ defineExpose({ cellAt, cycleCell });
   position: sticky;
   left: 0;
   z-index: 2;
-  background: var(--wp-bg-2, var(--wp-bg2));
+  background: var(--wp-bg-2);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .wp-matrix__col-h {
   padding: 0 8px;
-  color: var(--wp-text-muted, var(--wp-text2));
+  color: var(--wp-text-muted);
   font-weight: 500;
   white-space: nowrap;
 }
 .wp-matrix__row-h {
   padding: 0 8px;
-  color: var(--wp-text-muted, var(--wp-text2));
+  color: var(--wp-text-muted);
   white-space: nowrap;
   text-align: left;
   height: 32px;
   position: sticky;
   left: 0;
   z-index: 1;
-  background: var(--wp-bg-2, var(--wp-bg2));
+  background: var(--wp-bg-2);
 }
 .wp-matrix__cell-td { height: 32px; }
 .wp-matrix__empty {
   text-align: center;
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-dim);
   padding: 24px 12px;
   font-size: 12px;
 }
@@ -354,8 +354,8 @@ defineExpose({ cellAt, cycleCell });
   cursor: pointer;
   border: 1px solid var(--wp-border);
   font-family: var(--wp-font-mono, monospace);
-  background: var(--wp-bg-3, var(--wp-bg3));
-  color: var(--wp-text-dim, var(--wp-text3));
+  background: var(--wp-bg-3);
+  color: var(--wp-text-dim);
   transition: background 0.12s, border-color 0.12s, transform 0.04s;
 }
 .wp-matrix-cell:hover { transform: translateY(-1px); }
@@ -402,7 +402,7 @@ defineExpose({ cellAt, cycleCell });
   place-items: center;
   background: var(--wp-bg-1, var(--wp-bg));
   border: 1px solid var(--wp-border-strong, var(--wp-border2));
-  color: var(--wp-text-muted, var(--wp-text2));
+  color: var(--wp-text-muted);
   cursor: pointer;
   padding: 0;
   font-size: 9px;
@@ -412,7 +412,7 @@ defineExpose({ cellAt, cycleCell });
 .wp-matrix-cell__tune:hover {
   color: var(--wp-accent-text, var(--wp-accent));
   border-color: var(--wp-accent-500, var(--wp-accent));
-  background: var(--wp-bg-2, var(--wp-bg2));
+  background: var(--wp-bg-2);
 }
 .wp-tune-pop {
   position: fixed;
@@ -448,8 +448,8 @@ defineExpose({ cellAt, cycleCell });
   padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid var(--wp-border);
-  background: var(--wp-bg-2, var(--wp-bg2));
-  color: var(--wp-text-muted, var(--wp-text2));
+  background: var(--wp-bg-2);
+  color: var(--wp-text-muted);
   font-size: 10.5px;
   font-family: var(--wp-font-mono, monospace);
   cursor: pointer;

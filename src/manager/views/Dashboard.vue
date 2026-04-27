@@ -246,7 +246,7 @@ onMounted(async () => {
           <span class="dashboard__row-name">{{ row.name }}</span>
           <span
             v-if="categoryFor(row)"
-            class="dashboard__row-chip"
+            class="wp-cat-chip"
             :style="{ background: categoryFor(row)!.color || 'var(--wp-bg-3)' }"
           >{{ categoryFor(row)!.name }}</span>
           <span class="wp-id">{{ row.id }}</span>
@@ -323,16 +323,6 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-}
-.dashboard__row-chip {
-  display: inline-block;
-  font-size: 10.5px;
-  padding: 2px 7px;
-  border-radius: 9px;
-  color: #fff;
-  font-weight: 500;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
-  flex-shrink: 0;
 }
 .dashboard__empty {
   font-size: 12.5px;

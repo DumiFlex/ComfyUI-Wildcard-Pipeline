@@ -266,7 +266,7 @@ defineExpose({ historyEntries, applyRestore });
           data-test="wc-sub-input"
           @keydown.enter.prevent="addSub"
         />
-        <Button icon="pi pi-plus" data-test="wc-sub-add" @click="addSub">Add</Button>
+        <Button icon="pi-plus" data-test="wc-sub-add" @click="addSub">Add</Button>
       </div>
       <div v-if="subCategories.length" class="sub-list">
         <Chip
@@ -282,7 +282,7 @@ defineExpose({ historyEntries, applyRestore });
 
     <Card :title="`Options (${options.length})`" :padding="false">
       <template #actions>
-        <Button size="sm" variant="primary" icon="pi pi-plus" data-test="wc-add-opt" @click="addOption">
+        <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" @click="addOption">
           Add option
         </Button>
       </template>
@@ -338,7 +338,7 @@ defineExpose({ historyEntries, applyRestore });
               <Button
                 size="sm"
                 variant="ghost"
-                icon="pi pi-trash"
+                icon="pi-trash"
                 class="wp-btn--danger"
                 aria-label="Remove option"
                 @click="removeOption(i)"
@@ -393,7 +393,7 @@ defineExpose({ historyEntries, applyRestore });
 }
 .opt-prob__fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--wp-accent-500), var(--wp-accent-400));
+  background: var(--wp-accent-gradient);
 }
 .opt-prob__value {
   width: 32px;

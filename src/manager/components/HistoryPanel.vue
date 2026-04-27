@@ -99,7 +99,7 @@ watch(
             </p>
           </div>
           <Button
-            icon="pi pi-times"
+            icon="pi-times"
             variant="ghost"
             aria-label="Close history"
             data-test="history-close"
@@ -135,7 +135,7 @@ watch(
                   </div>
                 </div>
                 <Button
-                  icon="pi pi-refresh"
+                  icon="pi-refresh"
                   variant="primary"
                   size="sm"
                   :data-test="`history-restore-${idx}`"
@@ -156,7 +156,7 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 1100;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--wp-overlay-bg);
   display: flex;
   justify-content: flex-end;
 }
@@ -176,7 +176,7 @@ watch(
   gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--wp-border);
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
 }
 .wp-history-panel__title {
   margin: 0;
@@ -187,7 +187,7 @@ watch(
 .wp-history-panel__sub {
   margin: 2px 0 0;
   font-size: 12px;
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
 }
 .wp-history-panel__body {
   flex: 1;
@@ -205,7 +205,7 @@ watch(
 .wp-history-item {
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   padding: 10px 12px;
 }
 .wp-history-item__head {
@@ -226,11 +226,11 @@ watch(
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
   margin-top: 2px;
 }
 .wp-history-item__sep {
-  color: var(--wp-text3, #6e6e7c);
+  color: var(--wp-text-dim, #6e6e7c);
 }
 .wp-history-item__json {
   margin: 0;
@@ -254,11 +254,11 @@ watch(
   justify-content: center;
   text-align: center;
   padding: 32px;
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
 }
 .wp-history-empty i {
   font-size: 28px;
-  color: var(--wp-text3, #6e6e7c);
+  color: var(--wp-text-dim, #6e6e7c);
   margin-bottom: 12px;
 }
 .wp-history-empty p {
@@ -268,6 +268,6 @@ watch(
 .wp-history-empty__hint {
   margin-top: 4px !important;
   font-size: 12px;
-  color: var(--wp-text3, #6e6e7c);
+  color: var(--wp-text-dim, #6e6e7c);
 }
 </style>

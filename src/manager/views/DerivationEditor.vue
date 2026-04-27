@@ -240,7 +240,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
 
     <Card :title="`Rules (${rules.length})`">
       <template #actions>
-        <Button size="sm" variant="primary" icon="pi pi-plus" data-test="add-rule" @click="addRule">
+        <Button size="sm" variant="primary" icon="pi-plus" data-test="add-rule" @click="addRule">
           Add rule
         </Button>
       </template>
