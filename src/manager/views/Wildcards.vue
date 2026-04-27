@@ -5,7 +5,6 @@ import { useToast } from "../composables/useToast";
 import ModuleListView from "../components/ModuleListView.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import Button from "../components/ui/Button.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
 import Select from "../components/ui/Select.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
@@ -188,18 +187,7 @@ function isValid(row: ModuleRow): boolean {
             @update:model-value="(v) => { filter.category = v as string | null; emitFetch(); }"
           />
         </div>
-        <div class="wp-field">
-          <label class="wp-field__label">
-            Favorites
-          </label>
-          <label class="wp-fav-toggle">
-            <Checkbox
-              :model-value="!!filter.favorites"
-              @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
-            />
-            <span>Favorites only</span>
-          </label>
-        </div>
+
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
             Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}

@@ -4,7 +4,6 @@ import { useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
 import Select from "../components/ui/Select.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
@@ -198,16 +197,7 @@ function pad2(n: number): string { return String(n + 1).padStart(2, "0"); }
             @update:model-value="(v) => { filter.category = v as string | null; emitFetch(); }"
           />
         </div>
-        <div class="wp-field">
-          <label class="wp-field__label">Favorites</label>
-          <label class="wp-fav-toggle">
-            <Checkbox
-              :model-value="!!filter.favorites"
-              @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
-            />
-            <span>Favorites only</span>
-          </label>
-        </div>
+
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
             Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}

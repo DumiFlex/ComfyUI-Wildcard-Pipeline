@@ -354,6 +354,19 @@ defineExpose({
     <Transition name="filter-collapse">
       <div v-if="filtersOpen" class="wp-filter-panel">
         <slot name="filter-panel" :filter="filter" :emit-fetch="emitFetch" />
+        <div v-if="showFavorite" class="wp-filter-panel__extra">
+          <span class="wp-filter-panel__extra-label">Quick filters</span>
+          <div class="wp-filter-panel__extra-chips">
+            <button
+              type="button"
+              class="wp-chip wp-chip--toggle"
+              :data-active="filter.favorites ? '' : null"
+              @click="filter.favorites = !filter.favorites; emitFetch()"
+            >
+              ★ Favorites only
+            </button>
+          </div>
+        </div>
         <div v-if="extraFilters?.length" class="wp-filter-panel__extra">
           <span class="wp-filter-panel__extra-label">Syntax</span>
           <div class="wp-filter-panel__extra-chips">
