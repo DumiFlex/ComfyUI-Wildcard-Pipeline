@@ -7,7 +7,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
+import Button from "../../components/ui/Button.vue";
 import { useCommunityStore } from "../../stores/communityStore";
 import CommunityCard from "../../community/CommunityCard.vue";
 import { findInCatalog } from "../../community/mockApi";
@@ -54,13 +54,11 @@ onMounted(() => {
 <template>
   <div class="wp-comm-page">
     <Button
-      label="Back to Community"
-      icon="pi pi-arrow-left"
-      severity="secondary"
-      text
+      variant="ghost"
+      icon="arrow-left"
       class="self-start"
       @click="back"
-    />
+    >Back to Community</Button>
 
     <div v-if="!store.currentUser" class="wp-comm-empty">
       <i class="pi pi-user wp-comm-empty__icon" aria-hidden="true" />
@@ -86,8 +84,8 @@ onMounted(() => {
           </div>
         </div>
         <div style="display: flex; gap: 8px;">
-          <Button label="Publish" icon="pi pi-upload" @click="router.push('/community/upload')" />
-          <Button label="Sign out" icon="pi pi-sign-out" severity="secondary" outlined @click="store.signOut()" />
+          <Button variant="primary" icon="upload" @click="router.push('/community/upload')">Publish</Button>
+          <Button variant="outline" icon="sign-out" @click="store.signOut()">Sign out</Button>
         </div>
       </section>
 
@@ -108,7 +106,7 @@ onMounted(() => {
           <div v-if="!uploadAtoms.length" class="wp-comm-empty">
             <i class="pi pi-upload wp-comm-empty__icon" aria-hidden="true" />
             <h3>You haven't published anything yet.</h3>
-            <Button class="mt-3" label="Publish a module" icon="pi pi-upload" @click="router.push('/community/upload')" />
+            <Button class="mt-3" variant="primary" icon="upload" @click="router.push('/community/upload')">Publish a module</Button>
           </div>
           <div v-else class="wp-comm-grid">
             <CommunityCard v-for="atom in uploadAtoms" :key="atom.id" :atom="atom" />
@@ -158,11 +156,9 @@ onMounted(() => {
                 <td style="color: var(--wp-text-muted);">{{ relativeTime(entry.at) }}</td>
                 <td style="text-align: right;">
                   <Button
-                    label="Open"
-                    severity="secondary"
-                    text
+                    variant="ghost"
                     @click="router.push({ name: 'community-detail', params: { id: entry.id } })"
-                  />
+                  >Open</Button>
                 </td>
               </tr>
             </tbody>

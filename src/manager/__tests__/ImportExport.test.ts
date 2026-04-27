@@ -1,9 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../api/client", () => ({
   api: {
     modules: {
@@ -60,7 +57,7 @@ afterEach(() => vi.clearAllMocks());
 
 function mountView() {
   return mount(ImportExport, {
-    global: { plugins: [PrimeVue, ToastService] },
+    global: { plugins: [] },
   });
 }
 

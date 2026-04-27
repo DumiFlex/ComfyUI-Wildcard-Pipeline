@@ -3,7 +3,7 @@
  * Community → 404 state.
  */
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
+import Button from "../../components/ui/Button.vue";
 
 const router = useRouter();
 
@@ -18,7 +18,7 @@ function back() {
       <div class="big">404</div>
       <h3>Module not found</h3>
       <p>It might have been unpublished, renamed, or moved.</p>
-      <Button label="Back to Discover" icon="pi pi-arrow-left" class="mt-3" @click="back" />
+      <Button icon="arrow-left" class="mt-3" @click="back">Back to Discover</Button>
     </div>
   </div>
 </template>

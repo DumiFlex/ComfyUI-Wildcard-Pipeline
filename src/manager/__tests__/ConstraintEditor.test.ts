@@ -2,9 +2,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../api/client", () => ({
   api: {
     modules: {
@@ -72,7 +69,7 @@ function makeRouter() {
 describe("ConstraintEditor.vue", () => {
   it("renders 'New constraint' heading when no id", async () => {
     const wrap = mount(ConstraintEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("New constraint");
@@ -99,7 +96,7 @@ describe("ConstraintEditor.vue", () => {
     });
     const wrap = mount(ConstraintEditor, {
       props: { id: "cn_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit constraint");
@@ -128,7 +125,7 @@ describe("ConstraintEditor.vue", () => {
       version: 1, created_at: "", updated_at: "",
     });
     const wrap = mount(ConstraintEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
@@ -157,7 +154,7 @@ describe("ConstraintEditor.vue", () => {
 
   it("save without source/target shows warn and does not call api", async () => {
     const wrap = mount(ConstraintEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');

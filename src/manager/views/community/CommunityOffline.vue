@@ -7,7 +7,7 @@
  */
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
+import Button from "../../components/ui/Button.vue";
 import { useCommunityStore } from "../../stores/communityStore";
 import { isForceOffline, setForceOffline } from "../../community/mockApi";
 
@@ -46,23 +46,19 @@ function forceOffline() {
         Community registry is offline. We'll keep retrying.
       </p>
       <div class="actions">
-        <Button label="Try again" icon="pi pi-refresh" @click="retry" />
+        <Button variant="primary" icon="refresh" @click="retry">Try again</Button>
         <Button
           v-if="forced"
-          label="Force online (demo)"
-          icon="pi pi-check"
-          severity="secondary"
-          outlined
+          variant="outline"
+          icon="check"
           @click="forceOnline"
-        />
+        >Force online (demo)</Button>
         <Button
           v-else
-          label="Force offline (demo)"
-          icon="pi pi-times-circle"
-          severity="secondary"
-          outlined
+          variant="outline"
+          icon="times-circle"
           @click="forceOffline"
-        />
+        >Force offline (demo)</Button>
       </div>
     </div>
   </div>

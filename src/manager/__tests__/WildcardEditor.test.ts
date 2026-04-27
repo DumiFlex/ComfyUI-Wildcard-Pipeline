@@ -2,9 +2,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../api/client", () => ({
   api: {
     modules: {
@@ -50,7 +47,7 @@ function findByText(wrap: ReturnType<typeof mount>, text: string) {
 describe("WildcardEditor.vue", () => {
   it("renders 'New wildcard' heading when no id", async () => {
     const wrap = mount(WildcardEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("New wildcard");
@@ -64,7 +61,7 @@ describe("WildcardEditor.vue", () => {
     });
     const wrap = mount(WildcardEditor, {
       props: { id: "wc_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit wildcard");
@@ -78,7 +75,7 @@ describe("WildcardEditor.vue", () => {
       payload: { options: [] }, version: 1, created_at: "", updated_at: "",
     });
     const wrap = mount(WildcardEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
@@ -94,7 +91,7 @@ describe("WildcardEditor.vue", () => {
 
   it("save without name shows warn toast and does not call api", async () => {
     const wrap = mount(WildcardEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const saveBtn = wrap.find('[data-test="save-btn"]');
@@ -105,7 +102,7 @@ describe("WildcardEditor.vue", () => {
 
   it("auto-derives var_binding from name while untouched", async () => {
     const wrap = mount(WildcardEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
@@ -124,7 +121,7 @@ describe("WildcardEditor.vue", () => {
       version: 1, created_at: "", updated_at: "",
     });
     const wrap = mount(WildcardEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
@@ -146,7 +143,7 @@ describe("WildcardEditor.vue", () => {
     });
     const wrap = mount(WildcardEditor, {
       props: { id: "wc_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const rti = wrap.findComponent({ name: "RichTextInput" });
@@ -163,7 +160,7 @@ describe("WildcardEditor.vue", () => {
     });
     const wrap = mount(WildcardEditor, {
       props: { id: "wc_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const varInput = wrap.find('[data-test="identity-var-binding"]')
@@ -195,7 +192,7 @@ describe("WildcardEditor.vue", () => {
 
     const wrap = mount(WildcardEditor, {
       props: { id: "wc_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
 
@@ -219,7 +216,7 @@ describe("WildcardEditor.vue", () => {
     }));
     const wrap = mount(WildcardEditor, {
       props: { id: "wc_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');

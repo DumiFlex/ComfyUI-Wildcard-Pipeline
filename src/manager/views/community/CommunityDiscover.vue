@@ -7,10 +7,10 @@
  */
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
-import InputText from "primevue/inputtext";
-import Select from "primevue/select";
-import Checkbox from "primevue/checkbox";
+import Button from "../../components/ui/Button.vue";
+import Input from "../../components/ui/Input.vue";
+import Select from "../../components/ui/Select.vue";
+import Checkbox from "../../components/ui/Checkbox.vue";
 import { useCommunityStore } from "../../stores/communityStore";
 import CommunityCard from "../../community/CommunityCard.vue";
 import { KIND_ICON, KIND_LABEL, fmtNumber } from "../../community/format";
@@ -102,17 +102,15 @@ onMounted(async () => {
       </div>
       <div class="wp-comm-page__actions">
         <Button
-          label="My profile"
-          icon="pi pi-user"
-          severity="secondary"
-          outlined
+          variant="outline"
+          icon="user"
           @click="router.push('/community/profile')"
-        />
+        >My profile</Button>
         <Button
-          label="Publish"
-          icon="pi pi-upload"
+          variant="primary"
+          icon="upload"
           @click="router.push('/community/upload')"
-        />
+        >Publish</Button>
       </div>
     </header>
 
@@ -152,41 +150,38 @@ onMounted(async () => {
 
     <!-- Filter bar -->
     <section class="wp-comm-filters">
-      <span class="wp-comm-filters__search p-input-icon-left">
-        <i class="pi pi-search" />
-        <InputText
+      <div class="wp-comm-filters__search">
+        <Input
           v-model="q"
+          icon="search"
           placeholder="Search modules, tags, authors..."
-          class="w-full"
           aria-label="Search community"
         />
-      </span>
-      <Select
-        v-model="kind"
-        :options="KIND_OPTIONS"
-        option-label="label"
-        option-value="value"
-        placeholder="Kind"
-        class="w-40"
-        aria-label="Filter by kind"
-      />
-      <Select
-        v-model="sort"
-        :options="SORT_OPTIONS"
-        option-label="label"
-        option-value="value"
-        placeholder="Sort"
-        class="w-44"
-        aria-label="Sort modules"
-      />
+      </div>
+      <div class="w-40">
+        <Select
+          v-model="kind"
+          :options="KIND_OPTIONS"
+          placeholder="Kind"
+          aria-label="Filter by kind"
+        />
+      </div>
+      <div class="w-44">
+        <Select
+          v-model="sort"
+          :options="SORT_OPTIONS"
+          placeholder="Sort"
+          aria-label="Sort modules"
+        />
+      </div>
       <label class="wp-comm-filters__toggle">
-        <Checkbox v-model="verifiedOnly" :binary="true" /> Verified only
+        <Checkbox v-model="verifiedOnly" /> Verified only
       </label>
       <label class="wp-comm-filters__toggle">
-        <Checkbox v-model="compatibleOnly" :binary="true" /> Compatible (engine {{ store.engineVersion }})
+        <Checkbox v-model="compatibleOnly" /> Compatible (engine {{ store.engineVersion }})
       </label>
       <label class="wp-comm-filters__toggle wp-comm-filters__toggle--nsfw">
-        <Checkbox v-model="includeNsfw" :binary="true" /> Show 18+
+        <Checkbox v-model="includeNsfw" /> Show 18+
       </label>
     </section>
 
@@ -223,12 +218,10 @@ onMounted(async () => {
       <p>Try clearing filters or broaden your search.</p>
       <Button
         class="mt-3"
-        label="Clear filters"
-        icon="pi pi-filter-slash"
-        severity="secondary"
-        outlined
+        variant="outline"
+        icon="filter-slash"
         @click="clearFilters"
-      />
+      >Clear filters</Button>
     </div>
     <div v-else class="wp-comm-grid">
       <CommunityCard v-for="atom in store.feed" :key="atom.id" :atom="atom" />

@@ -9,9 +9,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../community/mockApi", async () => {
   const actual = await vi.importActual<typeof import("../community/mockApi")>("../community/mockApi");
   return {
@@ -79,7 +76,7 @@ function makeRouter() {
 
 function mountView() {
   return mount(CommunityDiscover, {
-    global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    global: { plugins: [makeRouter()] },
   });
 }
 

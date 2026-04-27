@@ -1,6 +1,5 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import PrimeVue from "primevue/config";
 import HistoryPanel from "../components/HistoryPanel.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 
@@ -20,7 +19,7 @@ describe("HistoryPanel.vue", () => {
   it("does not render when closed", () => {
     const wrap = mount(HistoryPanel, {
       props: { open: false, entries: [] },
-      global: { plugins: [PrimeVue] },
+      global: { plugins: [] },
       attachTo: document.body,
     });
     // Teleport puts the contents on body when open=true; closed = nothing.
@@ -31,7 +30,7 @@ describe("HistoryPanel.vue", () => {
   it("renders empty state when no entries", async () => {
     const wrap = mount(HistoryPanel, {
       props: { open: true, entries: [] },
-      global: { plugins: [PrimeVue] },
+      global: { plugins: [] },
       attachTo: document.body,
     });
     const empty = document.body.querySelector('[data-test="history-empty"]');
@@ -47,7 +46,7 @@ describe("HistoryPanel.vue", () => {
     ];
     const wrap = mount(HistoryPanel, {
       props: { open: true, entries },
-      global: { plugins: [PrimeVue] },
+      global: { plugins: [] },
       attachTo: document.body,
     });
     const list = document.body.querySelector('[data-test="history-list"]');
@@ -72,7 +71,7 @@ describe("HistoryPanel.vue", () => {
   it("emits update:open=false when close button clicked", async () => {
     const wrap = mount(HistoryPanel, {
       props: { open: true, entries: [makeEntry()] },
-      global: { plugins: [PrimeVue] },
+      global: { plugins: [] },
       attachTo: document.body,
     });
     const closeBtn = document.body.querySelector(

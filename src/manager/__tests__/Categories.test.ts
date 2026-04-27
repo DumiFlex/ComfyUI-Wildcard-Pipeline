@@ -1,9 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../api/client", () => ({
   api: {
     categories: {
@@ -39,7 +36,7 @@ describe("Categories.vue", () => {
   it("renders the page header and 'New category' card", async () => {
     apiCat.list.mockResolvedValue({ items: [] });
     const wrap = mount(Categories, {
-      global: { plugins: [PrimeVue, ToastService] },
+      global: { plugins: [] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Categories");
@@ -56,7 +53,7 @@ describe("Categories.vue", () => {
       ],
     });
     const wrap = mount(Categories, {
-      global: { plugins: [PrimeVue, ToastService] },
+      global: { plugins: [] },
     });
     await flushPromises();
     expect(wrap.find('[data-test="cat-row-cat_a"]').exists()).toBe(true);
@@ -80,7 +77,7 @@ describe("Categories.vue", () => {
       total: 3,
     });
     const wrap = mount(Categories, {
-      global: { plugins: [PrimeVue, ToastService] },
+      global: { plugins: [] },
     });
     await flushPromises();
     expect(wrap.get('[data-test="cat-count-cat_a"]').text()).toBe("2");
@@ -92,7 +89,7 @@ describe("Categories.vue", () => {
       id: "cat_new", name: "Mood", color: "#fbbf24", icon: null, sort_order: 0,
     });
     const wrap = mount(Categories, {
-      global: { plugins: [PrimeVue, ToastService] },
+      global: { plugins: [] },
     });
     await flushPromises();
     await wrap.get('[data-test="new-cat-name"]').setValue("Mood");

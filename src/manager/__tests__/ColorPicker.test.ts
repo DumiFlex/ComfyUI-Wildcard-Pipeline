@@ -1,12 +1,11 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import PrimeVue from "primevue/config";
 import ColorPicker from "../components/ColorPicker.vue";
 
 function makeWrapper(modelValue = "#7c3aed") {
   return mount(ColorPicker, {
     props: { modelValue },
-    global: { plugins: [PrimeVue] },
+    global: { plugins: [] },
   });
 }
 
@@ -56,7 +55,7 @@ describe("ColorPicker.vue", () => {
   it("uses provided ariaLabel on the swatch button", () => {
     const wrap = mount(ColorPicker, {
       props: { modelValue: "#abcdef", ariaLabel: "Pick brand color" },
-      global: { plugins: [PrimeVue] },
+      global: { plugins: [] },
     });
     expect(wrap.get('[data-test="color-swatch"]').attributes("aria-label"))
       .toBe("Pick brand color");
@@ -65,7 +64,7 @@ describe("ColorPicker.vue", () => {
   it("supports custom presets prop", async () => {
     const wrap = mount(ColorPicker, {
       props: { modelValue: "#000000", presets: ["#111111", "#222222"] },
-      global: { plugins: [PrimeVue] },
+      global: { plugins: [] },
     });
     await openPopover(wrap);
     expect(wrap.findAll('[data-test="color-preset"]').length).toBe(2);

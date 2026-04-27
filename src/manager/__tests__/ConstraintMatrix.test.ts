@@ -1,6 +1,5 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import PrimeVue from "primevue/config";
 import ConstraintMatrix from "../components/ConstraintMatrix.vue";
 import type { ConstraintMatrix as Matrix } from "../api/types";
 
@@ -15,7 +14,7 @@ function lastEmitted(
 function mountGrid(modelValue: Matrix = {}, rows = ["red", "blue"], cols = ["warm", "cool"]) {
   return mount(ConstraintMatrix, {
     props: { rows, cols, modelValue },
-    global: { plugins: [PrimeVue] },
+    global: { plugins: [] },
   });
 }
 

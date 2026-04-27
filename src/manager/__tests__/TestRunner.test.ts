@@ -1,8 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
 import type { ModuleRow } from "../api/types";
 
 vi.mock("../api/client", () => {
@@ -105,7 +103,7 @@ afterEach(() => {
 });
 
 function mountRunner() {
-  return mount(TestRunner, { global: { plugins: [PrimeVue, ToastService] } });
+  return mount(TestRunner, { global: { plugins: [] } });
 }
 
 describe("TestRunner.vue", () => {
