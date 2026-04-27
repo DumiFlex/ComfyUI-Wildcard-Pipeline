@@ -110,7 +110,7 @@ function onTagKey(event: KeyboardEvent) {
     <Button
       variant="ghost"
       icon="arrow-left"
-      class="self-start"
+      class="wp-comm-back"
       @click="back"
     >Back</Button>
 
@@ -123,8 +123,8 @@ function onTagKey(event: KeyboardEvent) {
       </div>
     </header>
 
-    <div v-if="!store.currentUser" class="wp-comm-empty">
-      <i class="pi pi-github wp-comm-empty__icon" aria-hidden="true" />
+    <div v-if="!store.currentUser" class="wp-empty wp-empty--card">
+      <i class="pi pi-github wp-empty__icon" aria-hidden="true" />
       <h3>Sign in to publish</h3>
       <p>We use GitHub OAuth to verify uploaders. Use the button in the topbar.</p>
     </div>
@@ -288,7 +288,7 @@ function onTagKey(event: KeyboardEvent) {
           <div><span>NSFW</span><strong>{{ form.nsfw ? "Yes" : "No" }}</strong></div>
           <div class="review-grid__full"><span>Tags</span><strong>{{ form.tags.join(", ") }}</strong></div>
         </div>
-        <p style="color: var(--wp-text-muted); font-size: 12px;">
+        <p class="wp-comm-upload-summary">
           By publishing, you agree to the registry's content guidelines. You can edit metadata or unpublish at any time from your profile.
         </p>
         <div class="form-actions form-actions--split">
@@ -303,11 +303,11 @@ function onTagKey(event: KeyboardEvent) {
       </div>
 
       <!-- Step 4: Success -->
-      <div v-if="step === 4" class="wp-comm-empty">
-        <i class="pi pi-check-circle wp-comm-empty__icon" style="color: var(--wp-success);" aria-hidden="true" />
+      <div v-if="step === 4" class="wp-empty wp-empty--card">
+        <i class="pi pi-check-circle wp-empty__icon wp-icon--success" aria-hidden="true" />
         <h3>Published!</h3>
         <p>Your module is live with id <code>{{ newId }}</code>.</p>
-        <div class="form-actions" style="justify-content: center;">
+        <div class="form-actions wp-comm-upload-actions">
           <Button variant="primary" icon-right="arrow-right" @click="viewModule">View on Community</Button>
           <Button variant="outline" @click="back">Back to Discover</Button>
         </div>
@@ -319,7 +319,16 @@ function onTagKey(event: KeyboardEvent) {
 <style scoped>
 @import "../../community/community.css";
 
-.self-start { align-self: flex-start; }
+.wp-comm-back { align-self: flex-start; }
+
+/* Review-step disclaimer paragraph — small muted footer. */
+.wp-comm-upload-summary {
+  color: var(--wp-text-muted);
+  font-size: 12px;
+}
+
+/* Success-state action row — center the View / Back buttons. */
+.wp-comm-upload-actions { justify-content: center; }
 
 .wp-card-body {
   background: var(--wp-bg-1);

@@ -56,12 +56,12 @@ onMounted(() => {
     <Button
       variant="ghost"
       icon="arrow-left"
-      class="self-start"
+      class="wp-comm-back"
       @click="back"
     >Back to Community</Button>
 
-    <div v-if="!store.currentUser" class="wp-comm-empty">
-      <i class="pi pi-user wp-comm-empty__icon" aria-hidden="true" />
+    <div v-if="!store.currentUser" class="wp-empty wp-empty--card">
+      <i class="pi pi-user wp-empty__icon" aria-hidden="true" />
       <h3>Sign in to view your profile</h3>
       <p>Use the GitHub button in the topbar to sign in (mock).</p>
     </div>
@@ -73,9 +73,9 @@ onMounted(() => {
           :style="{ backgroundImage: `url(${store.currentUser.avatar_url})` }"
           aria-hidden="true"
         />
-        <div style="flex: 1;">
-          <h1 style="margin: 0;">{{ store.currentUser.name || store.currentUser.login }}</h1>
-          <div style="color: var(--wp-text-muted);">@{{ store.currentUser.login }} · joined just now</div>
+        <div class="wp-comm-profile-meta">
+          <h1 class="wp-comm-profile-name">{{ store.currentUser.name || store.currentUser.login }}</h1>
+          <div class="wp-comm-profile-handle">@{{ store.currentUser.login }} · joined just now</div>
           <div class="wp-comm-profile-stats">
             <div><strong>{{ uploadAtoms.length }}</strong><span>Uploads</span></div>
             <div><strong>{{ starredAtoms.length }}</strong><span>Stars</span></div>
@@ -83,7 +83,7 @@ onMounted(() => {
             <div><strong>{{ store.installHistory.length }}</strong><span>Install history</span></div>
           </div>
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div class="wp-comm-profile-actions">
           <Button variant="primary" icon="upload" @click="router.push('/community/upload')">Publish</Button>
           <Button variant="outline" icon="sign-out" @click="store.signOut()">Sign out</Button>
         </div>
@@ -103,10 +103,10 @@ onMounted(() => {
 
       <div class="wp-comm-tabbody">
         <div v-if="tab === 'uploads'">
-          <div v-if="!uploadAtoms.length" class="wp-comm-empty">
-            <i class="pi pi-upload wp-comm-empty__icon" aria-hidden="true" />
+          <div v-if="!uploadAtoms.length" class="wp-empty wp-empty--card">
+            <i class="pi pi-upload wp-empty__icon" aria-hidden="true" />
             <h3>You haven't published anything yet.</h3>
-            <Button class="mt-3" variant="primary" icon="upload" @click="router.push('/community/upload')">Publish a module</Button>
+            <Button class="wp-empty__cta" variant="primary" icon="upload" @click="router.push('/community/upload')">Publish a module</Button>
           </div>
           <div v-else class="wp-comm-grid">
             <CommunityCard v-for="atom in uploadAtoms" :key="atom.id" :atom="atom" />
@@ -114,8 +114,8 @@ onMounted(() => {
         </div>
 
         <div v-if="tab === 'starred'">
-          <div v-if="!starredAtoms.length" class="wp-comm-empty">
-            <i class="pi pi-star wp-comm-empty__icon" aria-hidden="true" />
+          <div v-if="!starredAtoms.length" class="wp-empty wp-empty--card">
+            <i class="pi pi-star wp-empty__icon" aria-hidden="true" />
             <h3>No starred modules yet.</h3>
             <p>Star modules to save them for later.</p>
           </div>
@@ -125,8 +125,8 @@ onMounted(() => {
         </div>
 
         <div v-if="tab === 'installed'">
-          <div v-if="!installedAtoms.length" class="wp-comm-empty">
-            <i class="pi pi-download wp-comm-empty__icon" aria-hidden="true" />
+          <div v-if="!installedAtoms.length" class="wp-empty wp-empty--card">
+            <i class="pi pi-download wp-empty__icon" aria-hidden="true" />
             <h3>No modules installed from the registry.</h3>
             <p>Browse Community to find some.</p>
           </div>
@@ -136,8 +136,8 @@ onMounted(() => {
         </div>
 
         <div v-if="tab === 'history'">
-          <div v-if="!store.installHistory.length" class="wp-comm-empty">
-            <i class="pi pi-clock wp-comm-empty__icon" aria-hidden="true" />
+          <div v-if="!store.installHistory.length" class="wp-empty wp-empty--card">
+            <i class="pi pi-clock wp-empty__icon" aria-hidden="true" />
             <h3>No install history yet.</h3>
           </div>
           <table v-else class="history-table">
@@ -153,8 +153,8 @@ onMounted(() => {
                     @click="router.push({ name: 'community-detail', params: { id: entry.id } })"
                   >{{ findInCatalog(entry.id)?.name || entry.id }}</button>
                 </td>
-                <td style="color: var(--wp-text-muted);">{{ relativeTime(entry.at) }}</td>
-                <td style="text-align: right;">
+                <td class="history-table__when">{{ relativeTime(entry.at) }}</td>
+                <td class="history-table__action">
                   <Button
                     variant="ghost"
                     @click="router.push({ name: 'community-detail', params: { id: entry.id } })"
@@ -172,8 +172,24 @@ onMounted(() => {
 <style scoped>
 @import "../../community/community.css";
 
-.self-start { align-self: flex-start; }
-.mt-3 { margin-top: 12px; }
+.wp-comm-back { align-self: flex-start; }
+
+/* Profile hero — extracted from prior inline `style="..."` clusters so the
+   layout is debuggable and tweakable without touching the template. Values
+   here mirror the previous inline styles exactly to keep the visual a
+   byte-for-byte no-op (h1 zeroed margin, handle muted, stats keep their
+   own margin-top). */
+.wp-comm-profile-meta { flex: 1; }
+.wp-comm-profile-name { margin: 0; }
+.wp-comm-profile-handle { color: var(--wp-text-muted); }
+.wp-comm-profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Empty-state CTA — replaces the `mt-3` utility leak. */
+.wp-empty__cta { margin-top: 12px; }
+
 .history-table {
   width: 100%;
   border-collapse: collapse;
@@ -189,6 +205,8 @@ onMounted(() => {
 }
 .history-table thead { background: var(--wp-bg-2); }
 .history-table tr + tr td { border-top: 1px solid var(--wp-border); }
+.history-table__when { color: var(--wp-text-muted); }
+.history-table__action { text-align: right; }
 .link-btn {
   background: none;
   border: none;

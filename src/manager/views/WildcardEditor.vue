@@ -257,7 +257,7 @@ defineExpose({ historyEntries, applyRestore });
 
     <Card title="Sub-Categories">
       <template #actions>
-        <span class="wp-dim wp-text-xs">Optional groupings inside this wildcard</span>
+        <span class="wp-card__hint">Optional groupings inside this wildcard</span>
       </template>
       <div class="sub-add-row">
         <Input
@@ -277,7 +277,7 @@ defineExpose({ historyEntries, applyRestore });
           @remove="removeSub(s)"
         >{{ s }}</Chip>
       </div>
-      <span v-else class="wp-dim wp-text-xs">No sub-categories yet.</span>
+      <span v-else class="wp-card__hint">No sub-categories yet.</span>
     </Card>
 
     <Card :title="`Options (${options.length})`" :padding="false">
@@ -355,7 +355,6 @@ defineExpose({ historyEntries, applyRestore });
 </template>
 
 <style scoped>
-.wp-text-xs { font-size: 11.5px; }
 .sub-add-row {
   display: flex;
   gap: 8px;

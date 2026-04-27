@@ -293,14 +293,12 @@ function isValid(row: ModuleRow): boolean {
       <td>
         <i
           v-if="isValid(row)"
-          class="pi pi-check-circle"
-          style="color: var(--wp-success, #86efac);"
+          class="pi pi-check-circle wp-icon--success"
           title="Valid"
         />
         <i
           v-else
-          class="pi pi-exclamation-triangle"
-          style="color: var(--wp-warn, #fcd34d);"
+          class="pi pi-exclamation-triangle wp-icon--warn"
           title="Empty option present"
         />
       </td>

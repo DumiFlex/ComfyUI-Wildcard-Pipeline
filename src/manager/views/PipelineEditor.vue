@@ -295,7 +295,7 @@ function cancel() { router.push("/pipelines"); }
 
     <Card :title="`Modules (${steps.length})`">
       <template #actions>
-        <span class="wp-dim pl-hint">Resolve top to bottom — each appends to context</span>
+        <span class="wp-card__hint">Resolve top to bottom — each appends to context</span>
       </template>
       <PipelineSteps
         :steps="steps"
@@ -308,7 +308,7 @@ function cancel() { router.push("/pipelines"); }
 
     <Card v-if="preview.length" title="Resolution preview">
       <template #actions>
-        <span class="wp-dim pl-hint">Synthetic example — picks first option per wildcard</span>
+        <span class="wp-card__hint">Synthetic example — picks first option per wildcard</span>
       </template>
       <div class="wp-pl-flow" data-test="pipeline-preview">
         <div
@@ -342,7 +342,6 @@ function cancel() { router.push("/pipelines"); }
 </template>
 
 <style scoped>
-.pl-hint { font-size: 11.5px; }
 .wp-pl-flow {
   display: flex;
   flex-direction: column;

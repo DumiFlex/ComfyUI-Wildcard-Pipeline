@@ -87,8 +87,8 @@ function move(idx: number, dir: -1 | 1) {
 
 <template>
   <div class="wp-pl-stack" data-test="pipeline-steps">
-    <div v-if="!steps.length" class="wp-pl-empty">
-      <i class="pi pi-list" style="font-size:22px;color:var(--wp-text-dim);" />
+    <div v-if="!steps.length" class="wp-empty-card">
+      <i class="pi pi-list wp-pl-empty__icon" />
       <div class="wp-pl-empty__title">No modules yet</div>
       <div class="wp-pl-empty__hint">Add modules from your library; they'll resolve in order.</div>
     </div>
@@ -210,15 +210,11 @@ function move(idx: number, dir: -1 | 1) {
   flex-direction: column;
   gap: 6px;
 }
-.wp-pl-empty {
-  padding: 28px 16px;
-  text-align: center;
-  border: 1px dashed var(--wp-border);
-  border-radius: var(--wp-radius);
-  background: var(--wp-bg);
-  color: var(--wp-text-muted);
-}
-.wp-pl-empty__title { font-size: 13px; font-weight: 500; margin-top: 6px; }
+/* `.wp-empty-card` (global) provides the dashed-card chrome. We keep the
+   icon + title + hint slots scoped here so the empty surface still reads as
+   "icon → label → caption" rather than a single muted line. */
+.wp-pl-empty__icon { font-size: 22px; color: var(--wp-text-dim); }
+.wp-pl-empty__title { font-size: 13px; font-weight: 500; margin-top: 6px; color: var(--wp-text-muted); }
 .wp-pl-empty__hint { font-size: 12px; color: var(--wp-text-dim); }
 
 .wp-pl-row {

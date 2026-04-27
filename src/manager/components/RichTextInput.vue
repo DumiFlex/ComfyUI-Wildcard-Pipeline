@@ -392,61 +392,9 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   color: var(--wp-text-dim, #6e6e7c);
 }
 
-/* Token spans ----------------------------------------------------------- */
-.wp-rt :deep(.wp-rt-text)     { color: var(--wp-text, #e7e7ee); }
-.wp-rt :deep(.wp-rt-comment)  { color: var(--wp-text-dim, #6e6e7c); font-style: italic; }
-.wp-rt :deep(.wp-rt-escape)   { color: var(--wp-text-muted, #a1a1ad); opacity: 0.7; }
-.wp-rt :deep(.wp-rt-tail)     { color: transparent; }
-
-.wp-rt :deep(.wp-rt-var) {
-  color: var(--wp-accent-text-strong, var(--wp-accent-text, #c4b5fd));
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 15%, transparent);
-  border-radius: 4px;
-  font-weight: 500;
-}
-.wp-rt :deep(.wp-rt-ref) {
-  color: var(--wp-kind-wildcard, #f0abfc);
-  background: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 12%, transparent);
-  border-radius: 4px;
-  font-weight: 500;
-}
-.wp-rt :deep(.wp-rt-dp-brace) { color: var(--wp-warn, #fcd34d); font-weight: 600; }
-.wp-rt :deep(.wp-rt-dp-pipe)  { color: var(--wp-warn, #fcd34d); opacity: 0.65; }
-.wp-rt :deep(.wp-rt-dp-multi) {
-  color: var(--wp-rt-token-good);
-  background: var(--wp-rt-token-good-bg);
-  border-radius: 3px;
-  font-weight: 500;
-}
-.wp-rt :deep(.wp-rt-dp-weight) {
-  color: var(--wp-rt-token-mut);
-  background: var(--wp-rt-token-mut-bg);
-  border-radius: 3px;
-  font-weight: 500;
-}
-.wp-rt :deep(.wp-rt-quantifier) {
-  color: var(--wp-info, #60a5fa);
-  background: color-mix(in oklab, var(--wp-info, #3b82f6) 14%, transparent);
-  border-radius: 3px;
-  font-weight: 500;
-}
-
-/* Focus / rest dual-mode chip chrome. */
-.wp-rt--focused :deep(.wp-rt-var),
-.wp-rt--focused :deep(.wp-rt-ref) {
-  padding: 0;
-  box-shadow: inset 0 0 0 1px var(--wp-accent-500, #8b5cf6);
-}
-.wp-rt--rest :deep(.wp-rt-var),
-.wp-rt--rest :deep(.wp-rt-ref) {
-  padding: 0 4px;
-  border-radius: 4px;
-}
-.wp-rt--rest :deep(.wp-rt-dp-multi),
-.wp-rt--rest :deep(.wp-rt-dp-weight),
-.wp-rt--rest :deep(.wp-rt-quantifier) {
-  padding: 0 3px;
-}
+/* Token span chrome (.wp-rt-var / .wp-rt-ref / .wp-rt-dp-* / quantifier
+   colour + chip backgrounds + focus/rest padding) lives in the global
+   styles/rich-text.css so RichTextInput and RichTextPreview stay in sync. */
 
 /* Autocomplete popover -------------------------------------------------- */
 .wp-rt-suggestions {
