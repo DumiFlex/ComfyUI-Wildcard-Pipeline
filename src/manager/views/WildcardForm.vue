@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
@@ -8,8 +8,11 @@ import InputNumber from "primevue/inputnumber";
 import Select from "primevue/select";
 import AutoComplete from "primevue/autocomplete";
 import { useToast } from "primevue/usetoast";
+import RichTextInput from "../components/RichTextInput.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
+import type { WildcardOption, WildcardPayload } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -17,15 +20,19 @@ const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
 
-interface Option { id: string; value: string; weight: number; sub_category?: string | null; }
-
 const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
-const options = ref<Option[]>([]);
+const options = ref<WildcardOption[]>([]);
 const subCategories = ref<string[]>([]);
 const newSubCategory = ref("");
+const varBinding = ref("");
+// Tracks whether the user has manually edited the var_binding field. While
+// false, the field auto-tracks the (slugified) name; once true we never
+// clobber the user's value.
+const varBindingTouched = ref(false);
+const varBindingError = ref("");
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 
@@ -33,6 +40,33 @@ const subCategoryOptions = computed(() => [
   { label: "(none)", value: null as string | null },
   ...subCategories.value.map((s) => ({ label: s, value: s })),
 ]);
+
+// Suggestions for option-value RichTextInput: every other wildcard's
+// var_binding (or slug fallback). Self is excluded so authors don't write
+// a recursive reference by accident.
+const otherWildcardBindings = computed<string[]>(() => {
+  const out: string[] = [];
+  for (const m of moduleStore.items) {
+    if (m.type !== "wildcard") continue;
+    if (props.id && m.id === props.id) continue;
+    const p = (m.payload ?? {}) as { var_binding?: string };
+    const binding = (p.var_binding && p.var_binding.trim()) || toIdentifier(m.name);
+    if (binding && !out.includes(binding)) out.push(binding);
+  }
+  return out;
+});
+
+watch(name, (next) => {
+  if (!varBindingTouched.value) {
+    varBinding.value = toIdentifier(next);
+  }
+});
+
+function onVarBindingInput(value: string | undefined): void {
+  varBindingTouched.value = true;
+  varBinding.value = value ?? "";
+  if (varBindingError.value) varBindingError.value = "";
+}
 
 function addSubCategory() {
   const v = newSubCategory.value.trim();
@@ -72,9 +106,15 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
-      const payload = row.payload as { options?: Option[]; sub_categories?: string[] };
+      const payload = row.payload as Partial<WildcardPayload>;
       options.value = payload.options ?? [];
       subCategories.value = payload.sub_categories ?? [];
+      if (payload.var_binding && payload.var_binding.trim()) {
+        varBinding.value = payload.var_binding;
+        varBindingTouched.value = true;
+      } else {
+        varBinding.value = toIdentifier(row.name);
+      }
     } catch {
       toast.add({ severity: "error", summary: "Wildcard not found", life: 3000 });
       router.replace("/wildcards");
@@ -93,22 +133,32 @@ async function save() {
     toast.add({ severity: "warn", summary: "Name required", life: 2000 });
     return;
   }
+  const finalBinding = (varBinding.value.trim()) || toIdentifier(name.value);
+  if (!VALID_IDENTIFIER_RE.test(finalBinding)) {
+    varBindingError.value = "Use letters, digits, underscores; must not start with a digit.";
+    toast.add({ severity: "warn", summary: "Invalid variable name", life: 2500 });
+    return;
+  }
+  varBindingError.value = "";
   saving.value = true;
   try {
-    const payload = {
+    const payload: WildcardPayload = {
       options: options.value,
       sub_categories: subCategories.value,
+      var_binding: finalBinding,
     };
     if (isEdit.value && props.id) {
       await moduleStore.update(props.id, {
         name: name.value, description: description.value,
-        category_id: categoryId.value, tags: tags.value, payload,
+        category_id: categoryId.value, tags: tags.value,
+        payload: payload as unknown as Record<string, unknown>,
       });
     } else {
       await moduleStore.create({
         type: "wildcard",
         name: name.value, description: description.value,
-        category_id: categoryId.value, tags: tags.value, payload,
+        category_id: categoryId.value, tags: tags.value,
+        payload: payload as unknown as Record<string, unknown>,
       });
     }
     toast.add({ severity: "success", summary: "Saved", detail: name.value, life: 2000 });
@@ -137,6 +187,23 @@ async function save() {
           <div>
             <label for="wc-name" class="block text-xs text-wp-text2 mb-1">Name</label>
             <InputText id="wc-name" v-model="name" class="w-full" />
+          </div>
+          <div>
+            <label for="wc-var" class="block text-xs text-wp-text2 mb-1">Variable name</label>
+            <InputText
+              id="wc-var"
+              :model-value="varBinding"
+              data-test="wc-var-binding"
+              class="w-full"
+              :class="{ 'p-invalid': !!varBindingError }"
+              @update:model-value="onVarBindingInput"
+            />
+            <p class="text-xs text-wp-text2 mt-1">
+              Other modules will reference this wildcard's resolved value as <span class="wc-var-mono">${{ varBinding || "name" }}</span>.
+            </p>
+            <p v-if="varBindingError" class="text-xs text-wp-danger mt-1" data-test="wc-var-error">
+              {{ varBindingError }}
+            </p>
           </div>
           <div>
             <label for="wc-cat" class="block text-xs text-wp-text2 mb-1">Category</label>
@@ -215,7 +282,13 @@ async function save() {
               <td class="px-3 py-2 w-24">
                 <InputNumber v-model="opt.weight" :min="0" :max="999" size="small" class="w-full" />
               </td>
-              <td class="px-3 py-2"><InputText v-model="opt.value" class="w-full" /></td>
+              <td class="px-3 py-2">
+                <RichTextInput
+                  v-model="opt.value"
+                  :ref-suggestions="otherWildcardBindings"
+                  aria-label="Option value"
+                />
+              </td>
               <td class="px-3 py-2 w-44">
                 <Select
                   v-model="opt.sub_category"
@@ -277,4 +350,8 @@ async function save() {
 }
 .sub-cat-chip i { opacity: 0.7; font-size: 10px; }
 .sub-cat-chip i:hover { opacity: 1; }
+.wc-var-mono {
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  color: var(--wp-accent-text, #c4b5fd);
+}
 </style>
