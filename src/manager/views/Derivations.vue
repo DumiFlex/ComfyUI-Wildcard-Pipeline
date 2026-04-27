@@ -100,20 +100,17 @@ function ruleCount(row: ModuleRow): number { return rules(row).length; }
 
 function formatCondition(c: DerivationCondition | undefined): string {
   if (!c) return "?";
-  if (c.kind === "always") return "always";
   const v = c.var ? `$${c.var.replace(/^\$/, "")}` : "$?";
-  if (c.kind === "absent") return `${v} absent`;
   const val = c.value ?? "";
-  return `${v} ${c.kind} "${val}"`;
+  return `${v} ${c.op} "${val}"`;
 }
 
 function formatAction(a: DerivationAction | undefined): string {
   if (!a) return "?";
   const verb = (
-    { append: "append to", prepend: "prepend to", replace: "replace in", remove: "remove from", set: "set" } as Record<string, string>
-  )[a.kind] ?? a.kind;
-  if (a.kind === "remove") return `${verb} ${a.target}`;
-  return `${verb} ${a.target} = "${a.value ?? ""}"`;
+    { append: "append to", prepend: "prepend to", replace: "replace in" } as Record<string, string>
+  )[a.mode] ?? a.mode;
+  return `${verb} ${a.target_var} = "${a.value ?? ""}"`;
 }
 
 function firstBranchPreview(rule: DerivationRule): string {
@@ -257,7 +254,7 @@ function extraBranches(rule: DerivationRule): number {
               +{{ extraBranches(rule) }} more {{ extraBranches(rule) === 1 ? "branch" : "branches" }}
             </span>
             <span v-if="rule.else" class="ml-2 text-xs text-wp-text3">
-              · ELSE {{ formatAction(rule.else) }}
+              · ELSE {{ formatAction(rule.else.action) }}
             </span>
           </li>
         </ol>
