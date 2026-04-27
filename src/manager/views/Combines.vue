@@ -214,21 +214,21 @@ function templateParts(row: ModuleRow): TemplatePart[] {
       <td>
         <span
           v-if="row.category_id && categoryById.get(row.category_id)"
-          class="category-chip"
+          class="wp-cat-chip"
           :style="{ background: categoryById.get(row.category_id)!.color || 'var(--wp-bg-3)' }"
         >
           {{ categoryById.get(row.category_id)!.name }}
         </span>
         <span v-else class="wp-dim">—</span>
       </td>
-      <td><span class="wp-mono wp-output-var">{{ outputVar(row) }}</span></td>
+      <td><span class="wp-mono wp-row-expand__name">{{ outputVar(row) }}</span></td>
       <td><span class="wp-mono">{{ inputCount(row) }}</span></td>
     </template>
 
     <template #actions="{ row }">
-      <Button variant="ghost" size="sm" icon="pi pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <Button variant="ghost" size="sm" icon="pi pi-clone" aria-label="Duplicate" @click="dup(row)" />
-      <Button variant="ghost" size="sm" icon="pi pi-trash" aria-label="Delete" @click="del(row)" />
+      <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
+      <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
+      <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
 
     <template #expansion="{ row }">
@@ -257,86 +257,14 @@ function templateParts(row: ModuleRow): TemplatePart[] {
 </template>
 
 <style scoped>
-.wp-filters-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.wp-field--full { grid-column: 1 / -1; }
-.wp-field__label {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--wp-text-muted);
-  font-weight: 600;
-  margin-bottom: 5px;
-}
-.wp-fav-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  cursor: pointer;
-  user-select: none;
-}
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .wp-tags-empty { font-size: 12px; }
-.wp-tag-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  background: var(--wp-bg-3);
-  color: var(--wp-text-muted);
-  border: 1px solid var(--wp-border);
-  cursor: pointer;
-}
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
   color: var(--wp-accent-text);
 }
 
-.wp-row-fav-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  color: var(--wp-text-dim);
-  display: inline-flex;
-  align-items: center;
-}
-.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
-.wp-row-fav-btn .pi { font-size: 13px; }
-
-.wp-row-name { display: flex; flex-direction: column; gap: 2px; }
-.wp-row-name__text { font-weight: 500; cursor: pointer; }
-.wp-id {
-  font-family: var(--wp-font-mono);
-  font-size: 10.5px;
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  user-select: all;
-}
-
-.category-chip {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 9px;
-  color: #fff;
-  font-weight: 500;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
-}
-
-.wp-output-var { color: var(--wp-accent-text, #c4b5fd); }
-
-.wp-row-expand__title {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--wp-text-dim);
-  margin-bottom: 8px;
-  font-weight: 600;
-}
 .wp-input-vars {
   display: flex;
   gap: 6px;

@@ -382,7 +382,7 @@ function cancel() { router.push("/pipelines"); }
   font-size: 10.5px;
   padding: 1px 5px;
   border-radius: 3px;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);
 }

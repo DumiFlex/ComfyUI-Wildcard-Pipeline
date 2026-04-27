@@ -160,7 +160,7 @@ const branchCount = computed(() => rule.value.branches.length);
       </span>
       <span class="spacer" />
       <Button
-        icon="pi pi-trash"
+        icon="pi-trash"
         variant="ghost"
         size="sm"
         :aria-label="`Remove rule ${ruleNumber}`"
@@ -184,7 +184,7 @@ const branchCount = computed(() => rule.value.branches.length);
           <span class="spacer" />
           <Button
             v-if="bi > 0"
-            icon="pi pi-times"
+            icon="pi-times"
             variant="ghost"
             size="sm"
             :aria-label="`Remove ELIF branch ${bi} from rule ${ruleNumber}`"
@@ -261,7 +261,7 @@ const branchCount = computed(() => rule.value.branches.length);
           <span class="branch-tag" data-kind="else">ELSE</span>
           <span class="spacer" />
           <Button
-            icon="pi pi-times"
+            icon="pi-times"
             variant="ghost"
             size="sm"
             :aria-label="`Remove ELSE branch from rule ${ruleNumber}`"
@@ -305,7 +305,7 @@ const branchCount = computed(() => rule.value.branches.length);
 
     <div class="addbar">
       <Button
-        icon="pi pi-plus"
+        icon="pi-plus"
         variant="ghost"
         size="sm"
         :aria-label="`Add ELIF branch to rule ${ruleNumber}`"
@@ -314,7 +314,7 @@ const branchCount = computed(() => rule.value.branches.length);
       >Add elif</Button>
       <Button
         v-if="!rule.else"
-        icon="pi pi-plus"
+        icon="pi-plus"
         variant="ghost"
         size="sm"
         :aria-label="`Add ELSE branch to rule ${ruleNumber}`"
@@ -327,7 +327,7 @@ const branchCount = computed(() => rule.value.branches.length);
 
 <style scoped>
 .derivation-rule-card {
-  border-left: 3px solid var(--wp-kind-derivation, #fbbf24);
+  border-left: var(--wp-kind-stripe-w) solid var(--wp-kind-derivation, #fbbf24);
   background: var(--wp-bg, #1e1e22);
 }
 
@@ -339,7 +339,7 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .rule-meta {
   font-size: 11.5px;
-  color: var(--wp-text2, #9ca3af);
+  color: var(--wp-text-muted, #9ca3af);
 }
 .spacer { flex: 1; }
 
@@ -352,7 +352,7 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 
 .branch {
-  background: var(--wp-bg2, #18181b);
+  background: var(--wp-bg-2, #18181b);
   border: 1px solid var(--wp-border, #2c2c34);
   border-radius: 8px;
   padding: 10px 12px;
@@ -400,7 +400,7 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .row-label {
   font-size: 11px;
-  color: var(--wp-text2, #9ca3af);
+  color: var(--wp-text-muted, #9ca3af);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 500;

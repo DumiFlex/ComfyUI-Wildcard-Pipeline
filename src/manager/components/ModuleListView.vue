@@ -382,7 +382,7 @@ defineExpose({
       </span>
       <span class="wp-spacer" />
       <Button variant="ghost" size="sm" @click="selected = new Set()">Clear</Button>
-      <Button variant="danger" size="sm" icon="pi pi-trash" @click="bulkDelete">Delete</Button>
+      <Button variant="danger" size="sm" icon="pi-trash" @click="bulkDelete">Delete</Button>
     </div>
 
     <!-- Active-filter chips row -->
@@ -471,17 +471,7 @@ defineExpose({
                 </button>
               </td>
               <td v-if="showFavorite">
-                <slot name="favorite" :row="row">
-                  <button
-                    type="button"
-                    class="wp-row-fav-btn"
-                    :data-on="row.is_favorite ? 'true' : 'false'"
-                    aria-label="Toggle favorite"
-                    @click.stop="$emit && $emit"
-                  >
-                    <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-                  </button>
-                </slot>
+                <slot name="favorite" :row="row" />
               </td>
               <td>
                 <slot name="name" :row="row">
@@ -738,7 +728,7 @@ defineExpose({
   font-size: 10px;
   padding: 1px 6px;
   background: var(--wp-bg-3);
-  color: var(--wp-text2, var(--wp-text-muted));
+  color: var(--wp-text-muted);
   border-radius: 3px;
 }
 .wp-row-tag-more {

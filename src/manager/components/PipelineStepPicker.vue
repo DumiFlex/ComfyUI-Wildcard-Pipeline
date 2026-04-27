@@ -185,7 +185,7 @@ onBeforeUnmount(() => {
             <span
               v-if="m.category_id && categoryById.get(m.category_id)"
               class="wp-pl-pickrow__cat"
-              :style="{ background: categoryById.get(m.category_id)!.color || 'var(--wp-bg3)' }"
+              :style="{ background: categoryById.get(m.category_id)!.color || 'var(--wp-bg-3)' }"
             >{{ categoryById.get(m.category_id)!.name }}</span>
             <span class="wp-pl-pickrow__add" aria-hidden="true">
               <i class="pi pi-plus" />
@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 1100;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--wp-overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -215,7 +215,7 @@ onBeforeUnmount(() => {
   width: 640px;
   max-width: 100%;
   max-height: 80vh;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg, 12px);
   overflow: hidden;
@@ -237,13 +237,13 @@ onBeforeUnmount(() => {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
   cursor: pointer;
   font-size: 12px;
   padding: 0;
 }
 .wp-pl-picker__close:hover {
-  background: var(--wp-bg3);
+  background: var(--wp-bg-3);
   color: var(--wp-text);
   border-color: var(--wp-border);
 }
@@ -268,11 +268,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-bottom: 2px solid transparent;
   border-radius: var(--wp-radius-sm, 6px);
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
 .wp-pl-tab[data-kind="constraint"][data-active]   { border-bottom-color: var(--wp-kind-constraint); color: var(--wp-kind-constraint); }
 .wp-pl-tab[data-kind="all"][data-active]          { border-bottom-color: var(--wp-accent-500); color: var(--wp-text); }
 .wp-pl-tab:hover {
-  background: var(--wp-bg3);
+  background: var(--wp-bg-3);
   color: var(--wp-text);
 }
 .wp-pl-tab__label {
@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
-  color: var(--wp-text3);
+  color: var(--wp-text-dim);
   min-width: 18px;
   text-align: center;
 }
@@ -322,7 +322,7 @@ onBeforeUnmount(() => {
 .wp-pl-picker__searchicon {
   display: flex; align-items: center; justify-content: center;
   padding: 0 12px;
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
   font-size: 14px;
 }
 .wp-pl-picker__searchinput {
@@ -361,7 +361,7 @@ onBeforeUnmount(() => {
   padding: 24px;
   text-align: center;
   font-size: 12px;
-  color: var(--wp-text3);
+  color: var(--wp-text-dim);
 }
 
 .wp-pl-pickrow {
@@ -369,7 +369,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border: none;
   border-bottom: 1px solid var(--wp-border);
   cursor: pointer;
@@ -380,14 +380,14 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .wp-pl-pickrow:last-child { border-bottom: none; }
-.wp-pl-pickrow:hover { background: var(--wp-bg3); }
+.wp-pl-pickrow:hover { background: var(--wp-bg-3); }
 .wp-pl-pickrow__icon {
   width: 28px; height: 28px;
   border-radius: var(--wp-radius-sm, 6px);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  background: var(--wp-bg3);
-  color: var(--wp-text2);
+  background: var(--wp-bg-3);
+  color: var(--wp-text-muted);
   font-size: 14px;
 }
 .wp-pl-pickrow[data-kind="wildcard"]     .wp-pl-pickrow__icon { background: var(--wp-kind-wildcard-bg); color: var(--wp-kind-wildcard); }
@@ -414,7 +414,7 @@ onBeforeUnmount(() => {
 .wp-pl-pickrow__id {
   font-size: 11px;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  color: var(--wp-text2);
+  color: var(--wp-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -431,13 +431,13 @@ onBeforeUnmount(() => {
   width: 22px; height: 22px;
   border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--wp-bg3);
-  color: var(--wp-text2);
+  background: var(--wp-bg-3);
+  color: var(--wp-text-muted);
   font-size: 11px;
   flex-shrink: 0;
 }
 .wp-pl-pickrow:hover .wp-pl-pickrow__add {
-  background: var(--wp-accent-500, var(--wp-bg3));
+  background: var(--wp-accent-500, var(--wp-bg-3));
   color: #fff;
 }
 </style>
