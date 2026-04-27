@@ -1,38 +1,47 @@
 import { definePreset } from "@primevue/themes";
 import Aura from "@primevue/themes/aura";
 
-/** Aura derivative driven by the `--wp-*` palette so PrimeVue components
- * (Button, DataTable, Tag, Toast) render with project colors out of the box. */
+/** Aura derivative driven by the SPA `--wp-*` token vocabulary so PrimeVue
+ * components (Button, DataTable, Tag, Toast) render with project colors
+ * out of the box.
+ *
+ * The `primary` palette mirrors the prototype's violet accent scale (see
+ * src/manager/styles/tokens.css). 950 is extrapolated as accent-900 mixed
+ * ~30% with #000 (no 950 stop is defined in the prototype).
+ *
+ * Surface colors point at `--wp-bg*` so flipping the theme tokens at runtime
+ * also flips the PrimeVue surface scope.
+ */
 export const WildcardPreset = definePreset(Aura, {
   semantic: {
     primary: {
-      50: "#eef0ff",
-      100: "#e0e2ff",
-      200: "#c7caff",
-      300: "#a5a9fc",
-      400: "#8589f5",
-      500: "#6366f1",
-      600: "#4f51d8",
-      700: "#4143b3",
-      800: "#383a8e",
-      900: "#323471",
-      950: "#1f1f47",
+      50:  "#f5f3ff",
+      100: "#ede9fe",
+      200: "#ddd6fe",
+      300: "#c4b5fd",
+      400: "#a78bfa",
+      500: "#8b5cf6",
+      600: "#7c3aed",
+      700: "#6d28d9",
+      800: "#5b21b6",
+      900: "#4c1d95",
+      950: "#3b1480",
     },
     colorScheme: {
       dark: {
         surface: {
-          0: "#ffffff",
-          50: "#f4f4f4",
-          100: "#dddddd",
-          200: "#aaaaaa",
-          300: "#888888",
-          400: "#666666",
-          500: "#4a4a4a",
-          600: "#3a3a3a",
-          700: "#2a2a2a",
-          800: "#232323",
-          900: "#1e1e1e",
-          950: "#161616",
+          0:   "var(--wp-text)",
+          50:  "var(--wp-bg-4)",
+          100: "var(--wp-bg-4)",
+          200: "var(--wp-text-dim)",
+          300: "var(--wp-text-muted)",
+          400: "var(--wp-text-muted)",
+          500: "var(--wp-text-muted)",
+          600: "var(--wp-border-strong)",
+          700: "var(--wp-bg-4)",
+          800: "var(--wp-bg-3)",
+          900: "var(--wp-bg-2)",
+          950: "var(--wp-bg-1)",
         },
       },
     },
