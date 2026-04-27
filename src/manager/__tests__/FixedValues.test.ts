@@ -2,10 +2,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-import ConfirmationService from "primevue/confirmationservice";
-
 vi.mock("../api/client", () => ({
   api: {
     modules: {
@@ -45,7 +41,7 @@ function makeRouter() {
 
 function mountView() {
   return mount(FixedValues, {
-    global: { plugins: [makeRouter(), PrimeVue, ToastService, ConfirmationService] },
+    global: { plugins: [makeRouter()] },
   });
 }
 

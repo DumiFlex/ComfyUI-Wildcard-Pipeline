@@ -1,7 +1,5 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import PrimeVue from "primevue/config";
-
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import type { DerivationRule } from "../api/types";
 
@@ -21,7 +19,7 @@ function makeRule(overrides: Partial<DerivationRule> = {}): DerivationRule {
 function mountCard(rule: DerivationRule, index = 0) {
   return mount(DerivationRuleCard, {
     props: { modelValue: rule, index },
-    global: { plugins: [PrimeVue] },
+    global: { plugins: [] },
   });
 }
 

@@ -2,9 +2,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../api/client", () => ({
   api: {
     modules: {
@@ -46,7 +43,7 @@ function makeRouter() {
 describe("FixedEditor.vue", () => {
   it("renders 'New fixed values' heading when no id", async () => {
     const wrap = mount(FixedEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("New fixed values");
@@ -61,7 +58,7 @@ describe("FixedEditor.vue", () => {
     });
     const wrap = mount(FixedEditor, {
       props: { id: "fv_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit fixed values");
@@ -72,7 +69,7 @@ describe("FixedEditor.vue", () => {
 
   it("save without name shows warn toast and does not call api", async () => {
     const wrap = mount(FixedEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const saveBtn = wrap.find('[data-test="save-btn"]');
@@ -83,7 +80,7 @@ describe("FixedEditor.vue", () => {
 
   it("flags invalid identifier rows with inline error", async () => {
     const wrap = mount(FixedEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
@@ -105,7 +102,7 @@ describe("FixedEditor.vue", () => {
       version: 1, created_at: "", updated_at: "",
     });
     const wrap = mount(FixedEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');

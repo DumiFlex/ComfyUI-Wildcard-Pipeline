@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { useToast } from "primevue/usetoast";
+import { useToast } from "../composables/useToast";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
@@ -54,7 +54,7 @@ async function fetch() {
   try {
     await store.fetchAll();
   } catch (e) {
-    toast.add({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
+    toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   }
 }
 
@@ -65,32 +65,32 @@ function edit(row: ModuleRow) {
 async function copyId(id: string) {
   try {
     await navigator.clipboard.writeText(id);
-    toast.add({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
+    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
   } catch {
-    toast.add({ severity: "error", summary: "Copy failed", life: 2000 });
+    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
   }
 }
 
 async function dup(row: ModuleRow) {
   try {
     await store.duplicate(row.id);
-    toast.add({ severity: "success", summary: "Duplicated", detail: row.name, life: 2000 });
+    toast.push({ severity: "success", summary: "Duplicated", detail: row.name, life: 2000 });
   } catch (e) {
-    toast.add({ severity: "error", summary: "Duplicate failed", detail: String(e), life: 4000 });
+    toast.push({ severity: "error", summary: "Duplicate failed", detail: String(e), life: 4000 });
   }
 }
 
 async function fav(row: ModuleRow) {
   try { await store.toggleFavorite(row.id); }
-  catch (e) { toast.add({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 }); }
+  catch (e) { toast.push({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 }); }
 }
 
 async function del(row: ModuleRow) {
   try {
     await store.remove(row.id);
-    toast.add({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
+    toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
   } catch (e) {
-    toast.add({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
+    toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
   }
 }
 

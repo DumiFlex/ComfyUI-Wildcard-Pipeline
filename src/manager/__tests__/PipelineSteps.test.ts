@@ -1,6 +1,5 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import PrimeVue from "primevue/config";
 import PipelineSteps from "../components/PipelineSteps.vue";
 import type { ModuleRow, ModuleType, PipelineStep } from "../api/types";
 
@@ -42,7 +41,7 @@ function mountSteps(steps: PipelineStep[], modules: ModuleRow[]) {
       modulesById,
       modulesByKind: buildKindGroups(modules),
     },
-    global: { plugins: [PrimeVue] },
+    global: { plugins: [] },
   });
 }
 

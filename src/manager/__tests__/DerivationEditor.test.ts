@@ -2,9 +2,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../api/client", () => ({
   api: {
     modules: {
@@ -47,7 +44,7 @@ function makeRouter() {
 describe("DerivationEditor.vue", () => {
   it("renders 'New derivation' heading when no id", async () => {
     const wrap = mount(DerivationEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("New derivation");
@@ -56,7 +53,7 @@ describe("DerivationEditor.vue", () => {
 
   it("starts with no rules and shows the empty-state card", async () => {
     const wrap = mount(DerivationEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.find('[data-test="rules-empty"]').exists()).toBe(true);
@@ -66,7 +63,7 @@ describe("DerivationEditor.vue", () => {
 
   it("Add rule increments the rules length", async () => {
     const wrap = mount(DerivationEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const vm = wrap.vm as unknown as { rules: DerivationRule[] };
@@ -85,7 +82,7 @@ describe("DerivationEditor.vue", () => {
       payload: { rules: [] }, version: 1, created_at: "", updated_at: "",
     });
     const wrap = mount(DerivationEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
@@ -133,7 +130,7 @@ describe("DerivationEditor.vue", () => {
     });
     const wrap = mount(DerivationEditor, {
       props: { id: "dv_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit derivation");

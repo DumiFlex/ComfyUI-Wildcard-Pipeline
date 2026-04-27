@@ -2,9 +2,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import PrimeVue from "primevue/config";
-import ToastService from "primevue/toastservice";
-
 vi.mock("../api/client", () => ({
   api: {
     modules: {
@@ -47,7 +44,7 @@ function makeRouter() {
 describe("CombineEditor.vue", () => {
   it("renders 'New combine' heading when no id", async () => {
     const wrap = mount(CombineEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("New combine");
@@ -66,7 +63,7 @@ describe("CombineEditor.vue", () => {
     });
     const wrap = mount(CombineEditor, {
       props: { id: "cb_a" },
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit combine");
@@ -77,7 +74,7 @@ describe("CombineEditor.vue", () => {
 
   it("save without name does not call api", async () => {
     const wrap = mount(CombineEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const saveBtn = wrap.find('[data-test="save-btn"]');
@@ -94,7 +91,7 @@ describe("CombineEditor.vue", () => {
       version: 1, created_at: "", updated_at: "",
     });
     const wrap = mount(CombineEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
@@ -116,7 +113,7 @@ describe("CombineEditor.vue", () => {
 
   it("detected inputs panel shows the $vars from the template", async () => {
     const wrap = mount(CombineEditor, {
-      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+      global: { plugins: [makeRouter()] },
     });
     await flushPromises();
     const ta = wrap.find('[data-test="cb-template"] textarea');

@@ -7,8 +7,8 @@
  */
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
-import { useToast } from "primevue/usetoast";
+import Button from "../../components/ui/Button.vue";
+import { useToast } from "../../composables/useToast";
 import { useCommunityStore } from "../../stores/communityStore";
 import { engineSatisfies } from "../../community/mockApi";
 import { renderMarkdown } from "../../community/markdown";
@@ -68,9 +68,9 @@ async function onInstall() {
   installing.value = true;
   try {
     await store.install(atom.value.id);
-    toast.add({ severity: "success", summary: "Installed", detail: atom.value.name, life: 2500 });
+    toast.push({ severity: "success", summary: "Installed", detail: atom.value.name, life: 2500 });
   } catch {
-    toast.add({ severity: "error", summary: "Install failed", detail: "Registry unreachable.", life: 3000 });
+    toast.push({ severity: "error", summary: "Install failed", detail: "Registry unreachable.", life: 3000 });
   } finally {
     installing.value = false;
   }
@@ -80,16 +80,16 @@ async function onUninstall() {
   if (!atom.value) return;
   try {
     await store.uninstall(atom.value.id);
-    toast.add({ severity: "info", summary: "Removed", detail: atom.value.name, life: 2500 });
+    toast.push({ severity: "info", summary: "Removed", detail: atom.value.name, life: 2500 });
   } catch {
-    toast.add({ severity: "error", summary: "Could not remove", life: 3000 });
+    toast.push({ severity: "error", summary: "Could not remove", life: 3000 });
   }
 }
 
 async function onStar() {
   if (!atom.value) return;
   if (!store.currentUser) {
-    toast.add({ severity: "info", summary: "Sign in to star modules.", life: 2500 });
+    toast.push({ severity: "info", summary: "Sign in to star modules.", life: 2500 });
     return;
   }
   await store.toggleStar(atom.value.id);
@@ -137,13 +137,11 @@ onMounted(() => load());
 <template>
   <div class="wp-comm-page">
     <Button
-      label="Back to Community"
-      icon="pi pi-arrow-left"
-      severity="secondary"
-      text
+      variant="ghost"
+      icon="arrow-left"
       class="self-start"
       @click="onBack"
-    />
+    >Back to Community</Button>
 
     <div v-if="loading" class="wp-comm-empty">Loading...</div>
 
@@ -180,29 +178,26 @@ onMounted(() => load());
           <div class="wp-comm-detail-hero__actions">
             <Button
               v-if="installed"
-              label="Installed — Remove"
-              icon="pi pi-check"
-              severity="secondary"
+              variant="secondary"
+              icon="check"
               @click="onUninstall"
-            />
+            >Installed — Remove</Button>
             <Button
               v-else
-              :label="atom.type === 'bundle' ? 'Install pack' : 'Install module'"
-              icon="pi pi-download"
+              variant="primary"
+              icon="download"
               :disabled="!compatible || installing"
               @click="onInstall"
-            />
+            >{{ atom.type === 'bundle' ? 'Install pack' : 'Install module' }}</Button>
             <Button
-              :label="starred ? 'Starred' : 'Star'"
-              :icon="starred ? 'pi pi-star-fill' : 'pi pi-star'"
-              severity="secondary"
+              variant="secondary"
+              :icon="starred ? 'star-fill' : 'star'"
               @click="onStar"
-            />
+            >{{ starred ? 'Starred' : 'Star' }}</Button>
             <Button
-              icon="pi pi-flag"
+              variant="ghost"
+              icon="flag"
               aria-label="Report module"
-              severity="secondary"
-              text
             />
           </div>
         </div>

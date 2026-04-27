@@ -7,12 +7,12 @@
  */
 import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "primevue/button";
-import InputText from "primevue/inputtext";
-import Textarea from "primevue/textarea";
-import Select from "primevue/select";
-import Checkbox from "primevue/checkbox";
-import { useToast } from "primevue/usetoast";
+import Button from "../../components/ui/Button.vue";
+import Input from "../../components/ui/Input.vue";
+import Textarea from "../../components/ui/Textarea.vue";
+import Select from "../../components/ui/Select.vue";
+import Checkbox from "../../components/ui/Checkbox.vue";
+import { useToast } from "../../composables/useToast";
 import { useCommunityStore } from "../../stores/communityStore";
 import { KIND_LABEL } from "../../community/format";
 import type { CommunityUploadPayload } from "../../community/types";
@@ -72,7 +72,7 @@ const detailsValid = computed(
 async function submit() {
   if (!detailsValid.value) return;
   if (!store.currentUser) {
-    toast.add({ severity: "warn", summary: "Sign in to publish.", life: 2500 });
+    toast.push({ severity: "warn", summary: "Sign in to publish.", life: 2500 });
     return;
   }
   submitting.value = true;
@@ -80,9 +80,9 @@ async function submit() {
     const result = await store.upload(form);
     newId.value = result.id;
     step.value = 4;
-    toast.add({ severity: "success", summary: "Published", detail: result.name, life: 2500 });
+    toast.push({ severity: "success", summary: "Published", detail: result.name, life: 2500 });
   } catch {
-    toast.add({ severity: "error", summary: "Publish failed", detail: "Registry unreachable.", life: 3000 });
+    toast.push({ severity: "error", summary: "Publish failed", detail: "Registry unreachable.", life: 3000 });
   } finally {
     submitting.value = false;
   }
@@ -108,13 +108,11 @@ function onTagKey(event: KeyboardEvent) {
 <template>
   <div class="wp-comm-page">
     <Button
-      label="Back"
-      icon="pi pi-arrow-left"
-      severity="secondary"
-      text
+      variant="ghost"
+      icon="arrow-left"
       class="self-start"
       @click="back"
-    />
+    >Back</Button>
 
     <header class="wp-comm-page__header">
       <div>
@@ -177,18 +175,17 @@ function onTagKey(event: KeyboardEvent) {
 
         <div v-if="form.atom === 'single'" class="form-row">
           <label class="form-label">Module kind</label>
-          <Select
-            v-model="form.type"
-            :options="KIND_OPTIONS"
-            option-label="label"
-            option-value="value"
-            class="select-narrow"
-            aria-label="Module kind"
-          />
+          <div class="select-narrow">
+            <Select
+              v-model="form.type"
+              :options="KIND_OPTIONS"
+              aria-label="Module kind"
+            />
+          </div>
         </div>
 
         <div class="form-actions">
-          <Button label="Next" icon="pi pi-arrow-right" icon-pos="right" @click="step = 2" />
+          <Button variant="primary" icon-right="arrow-right" @click="step = 2">Next</Button>
         </div>
       </div>
 
@@ -196,11 +193,11 @@ function onTagKey(event: KeyboardEvent) {
       <div v-if="step === 2" class="wp-card-body">
         <div class="form-row">
           <label class="form-label">Name *</label>
-          <InputText v-model="form.name" placeholder="Hair Color Pro" aria-label="Module name" />
+          <Input v-model="form.name" placeholder="Hair Color Pro" aria-label="Module name" />
         </div>
         <div class="form-row">
           <label class="form-label">Tagline *</label>
-          <InputText v-model="form.tagline" placeholder="One sentence about what this does." aria-label="Tagline" />
+          <Input v-model="form.tagline" placeholder="One sentence about what this does." aria-label="Tagline" />
         </div>
         <div class="form-grid">
           <div>
@@ -208,8 +205,6 @@ function onTagKey(event: KeyboardEvent) {
             <Select
               v-model="form.category"
               :options="CATEGORY_OPTIONS"
-              option-label="label"
-              option-value="value"
               aria-label="Category"
             />
           </div>
@@ -218,30 +213,28 @@ function onTagKey(event: KeyboardEvent) {
             <Select
               v-model="form.license"
               :options="LICENSE_OPTIONS"
-              option-label="label"
-              option-value="value"
               aria-label="License"
             />
           </div>
           <div>
             <label class="form-label">Min engine</label>
-            <InputText v-model="form.engine_min_version" aria-label="Minimum engine version" />
+            <Input v-model="form.engine_min_version" aria-label="Minimum engine version" />
           </div>
           <div>
             <label class="form-label">Version</label>
-            <InputText v-model="form.version" placeholder="1.0.0" aria-label="Version" />
+            <Input v-model="form.version" placeholder="1.0.0" aria-label="Version" />
           </div>
         </div>
         <div class="form-row">
           <label class="form-label">Tags *</label>
           <div class="tag-row">
-            <InputText
+            <Input
               v-model="tagInput"
               placeholder="portrait, fashion, vibrant..."
               aria-label="Tag input"
               @keydown="onTagKey"
             />
-            <Button label="Add" severity="secondary" outlined @click="addTag" />
+            <Button variant="outline" @click="addTag">Add</Button>
           </div>
           <div v-if="form.tags.length" class="tag-list">
             <span v-for="t in form.tags" :key="t" class="wp-comm-card__tag">
@@ -259,7 +252,7 @@ function onTagKey(event: KeyboardEvent) {
           <label class="form-label">README (Markdown)</label>
           <Textarea
             v-model="form.readme"
-            rows="8"
+            :rows="8"
             class="mono"
             placeholder="# What's inside&#10;&#10;Describe the module..."
             aria-label="README"
@@ -267,18 +260,17 @@ function onTagKey(event: KeyboardEvent) {
         </div>
         <div class="form-row">
           <label class="wp-comm-filters__toggle">
-            <Checkbox v-model="form.nsfw" :binary="true" /> Mark as 18+ (NSFW)
+            <Checkbox v-model="form.nsfw" /> Mark as 18+ (NSFW)
           </label>
         </div>
         <div class="form-actions form-actions--split">
-          <Button label="Back" icon="pi pi-arrow-left" severity="secondary" @click="step = 1" />
+          <Button variant="secondary" icon="arrow-left" @click="step = 1">Back</Button>
           <Button
-            label="Review"
-            icon="pi pi-arrow-right"
-            icon-pos="right"
+            variant="primary"
+            icon-right="arrow-right"
             :disabled="!detailsValid"
             @click="step = 3"
-          />
+          >Review</Button>
         </div>
       </div>
 
@@ -300,13 +292,13 @@ function onTagKey(event: KeyboardEvent) {
           By publishing, you agree to the registry's content guidelines. You can edit metadata or unpublish at any time from your profile.
         </p>
         <div class="form-actions form-actions--split">
-          <Button label="Back" icon="pi pi-arrow-left" severity="secondary" @click="step = 2" />
+          <Button variant="secondary" icon="arrow-left" @click="step = 2">Back</Button>
           <Button
-            label="Publish"
-            icon="pi pi-upload"
+            variant="primary"
+            icon="upload"
             :loading="submitting"
             @click="submit"
-          />
+          >Publish</Button>
         </div>
       </div>
 
@@ -316,8 +308,8 @@ function onTagKey(event: KeyboardEvent) {
         <h3>Published!</h3>
         <p>Your module is live with id <code>{{ newId }}</code>.</p>
         <div class="form-actions" style="justify-content: center;">
-          <Button label="View on Community" icon="pi pi-arrow-right" @click="viewModule" />
-          <Button label="Back to Discover" severity="secondary" outlined @click="back" />
+          <Button variant="primary" icon-right="arrow-right" @click="viewModule">View on Community</Button>
+          <Button variant="outline" @click="back">Back to Discover</Button>
         </div>
       </div>
     </template>
@@ -384,5 +376,5 @@ function onTagKey(event: KeyboardEvent) {
 .review-grid > div strong { color: var(--wp-text); font-size: 13px; }
 .review-grid__full { grid-column: 1 / -1; }
 .select-narrow { max-width: 240px; }
-.mono :deep(textarea) { font-family: var(--wp-font-mono); font-size: 12px; }
+.mono :deep(.wp-textarea) { font-family: var(--wp-font-mono); font-size: 12px; }
 </style>
