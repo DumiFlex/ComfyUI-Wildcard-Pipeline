@@ -15,7 +15,11 @@ const ui = useUiStore();
     <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
       <AppSidebar />
       <main class="wp-content">
-        <RouterView />
+        <RouterView v-slot="{ Component, route }">
+          <Transition name="route-fade" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
     <ToastHost />

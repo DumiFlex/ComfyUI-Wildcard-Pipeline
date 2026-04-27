@@ -7,6 +7,7 @@ import Button from "../components/ui/Button.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import Select from "../components/ui/Select.vue";
 import { useModuleStore } from "../stores/moduleStore";
+import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { ModuleRow, CategoryRow } from "../api/types";
 
@@ -190,7 +191,7 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
         <span
           v-if="row.category_id && categoryById.get(row.category_id)"
           class="wp-cat-chip"
-          :style="{ background: categoryById.get(row.category_id)!.color || 'var(--wp-bg-3)' }"
+          :style="catChipStyle(categoryById.get(row.category_id)!.color)"
         >
           {{ categoryById.get(row.category_id)!.name }}
         </span>

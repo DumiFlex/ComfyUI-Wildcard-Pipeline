@@ -107,18 +107,21 @@ function onRestore(entry: ModuleHistoryEntry) {
 </template>
 
 <style scoped>
+/* `.wp-page--fill` parent is height:100% with min-height:0; we make the
+   body the scroll region so the sticky footer never overlaps content. */
 .wp-editor {
-  /* The shared `.wp-page` token already provides padding + max-width. We
-     stack body content with a comfortable gap and leave room for the
-     sticky footer that lives at the bottom of `.wp-page--fill`. */
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding-bottom: 96px;
 }
 .wp-editor__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* Buffer so the last card clears the gradient + sticky footer top. */
+  padding-bottom: 24px;
 }
 </style>

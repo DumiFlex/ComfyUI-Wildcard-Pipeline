@@ -506,32 +506,6 @@ input, textarea, select { font: inherit; }
 }
 .wp-input-group .wp-input:focus { box-shadow: none; }
 
-/* ---------- Pill (status / count badge) ---------- */
-.wp-pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  background: var(--wp-bg-3);
-  color: var(--wp-text-muted);
-  border: 1px solid var(--wp-border);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-.wp-pill--accent  { color: var(--wp-accent-text-strong); background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent); border-color: color-mix(in oklab, var(--wp-accent-500) 35%, transparent); }
-.wp-pill--success { color: #86efac; background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.32); }
-.wp-pill--warn    { color: #fcd34d; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.32); }
-.wp-pill--danger  { color: #fca5a5; background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.32); }
-.wp-pill--info    { color: #93c5fd; background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.32); }
-.wp-pill__count {
-  font-family: var(--wp-font-mono);
-  font-size: 10px;
-  padding-left: 4px;
-  border-left: 1px solid currentColor;
-  opacity: 0.8;
-}
-
 /* ---------- Chips / tags ---------- */
 .wp-chip {
   display: inline-flex; align-items: center; gap: 5px;
@@ -678,14 +652,17 @@ input, textarea, select { font: inherit; }
   font-weight: 500;
 }
 
+/* Category chip — tinted pill matching prototype `<Chip color>` (ui.jsx:323).
+   Inherits .wp-chip pill geometry; the color triple comes from inline style
+   set at the call site (color = raw color, bg = color@14%, border = color@35%). */
 .wp-cat-chip {
-  display: inline-block;
-  font-size: 11px;
+  display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 8px;
-  border-radius: 9px;
-  color: #fff;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 500;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 /* ---------- Wildcard syntax indicators ---------- */
@@ -991,6 +968,13 @@ input, textarea, select { font: inherit; }
   display: flex; flex-direction: column; gap: 4px;
   position: relative;
   overflow: hidden;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.wp-stat:is(button, a):hover,
+.wp-stat[role="button"]:hover {
+  transform: translateY(-2px);
+  border-color: var(--wp-border-strong);
+  box-shadow: var(--wp-shadow);
 }
 .wp-stat__label {
   font-size: 10.5px;
@@ -2411,4 +2395,18 @@ html.wp-dark {
 
   /* Type alias */
   --wp-font-sans: var(--wp-font);
+}
+
+/* ---------- Route transition (RouterView fade) ---------- */
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.route-fade-enter-from { opacity: 0; transform: translateY(4px); }
+.route-fade-leave-to   { opacity: 0; transform: translateY(-4px); }
+
+/* ---------- Toast slide-in (already used by ToastHost) ---------- */
+@keyframes wp-toast-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
 }

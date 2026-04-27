@@ -8,6 +8,13 @@ interface Props {
   tone?: Tone;
   icon?: string;
   removable?: boolean;
+  /**
+   * Free-form color (hex or any CSS color). When set, overrides the tone
+   * styling and renders the chip as a tinted pill: text uses the raw color,
+   * background = `color @ 14%`, border = `color @ 35%`. Mirrors the
+   * prototype's `<Chip color>` pattern (ui.jsx:323-337).
+   */
+  color?: string;
 }
 const props = withDefaults(defineProps<Props>(), { tone: "default" });
 
@@ -17,8 +24,18 @@ const emit = defineEmits<{
 
 const classes = computed(() => [
   "wp-chip",
-  props.tone !== "default" && `wp-chip--${props.tone}`,
+  !props.color && props.tone !== "default" && `wp-chip--${props.tone}`,
 ]);
+
+const colorStyle = computed(() => {
+  if (!props.color) return undefined;
+  const c = props.color;
+  return {
+    color: c,
+    background: `color-mix(in oklab, ${c} 14%, transparent)`,
+    borderColor: `color-mix(in oklab, ${c} 35%, transparent)`,
+  };
+});
 
 function onRemove(e: MouseEvent) {
   e.stopPropagation();
@@ -27,7 +44,7 @@ function onRemove(e: MouseEvent) {
 </script>
 
 <template>
-  <span :class="classes">
+  <span :class="classes" :style="colorStyle">
     <Icon v-if="icon" :name="icon" :size="10" />
     <slot />
     <button

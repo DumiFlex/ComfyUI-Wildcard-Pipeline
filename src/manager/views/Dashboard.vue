@@ -7,6 +7,7 @@ import Icon from "../components/ui/Icon.vue";
 import RelativeDate from "../components/RelativeDate.vue";
 import { api } from "../api/client";
 import type { ModuleRow, ModuleType } from "../api/types";
+import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
 
 interface KindMeta {
@@ -247,7 +248,7 @@ onMounted(async () => {
           <span
             v-if="categoryFor(row)"
             class="wp-cat-chip"
-            :style="{ background: categoryFor(row)!.color || 'var(--wp-bg-3)' }"
+            :style="catChipStyle(categoryFor(row)!.color)"
           >{{ categoryFor(row)!.name }}</span>
           <span class="wp-id">{{ row.id }}</span>
           <RelativeDate :value="row.updated_at" />
