@@ -187,7 +187,22 @@ function isValid(row: ModuleRow): boolean {
             @update:model-value="(v) => { filter.category = v as string | null; emitFetch(); }"
           />
         </div>
-
+        <div class="wp-field">
+          <label class="wp-field__label">Favorites</label>
+          <button
+            type="button"
+            class="wp-input"
+            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
+            @click="filter.favorites = !filter.favorites; emitFetch()"
+          >
+            <span class="wp-check" :data-checked="filter.favorites ? 'true' : 'false'" aria-hidden="true">
+              <svg v-if="filter.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
+                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span>Favorites only</span>
+          </button>
+        </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
             Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
