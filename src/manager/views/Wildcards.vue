@@ -10,9 +10,15 @@ import MultiSelect from "primevue/multiselect";
 import Select from "primevue/select";
 import EntityListView from "../components/EntityListView.vue";
 import RelativeDate from "../components/RelativeDate.vue";
+import RichTextPreview from "../components/RichTextPreview.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { ModuleRow, CategoryRow } from "../api/types";
+import {
+  buildWildcardGraph,
+  getWildcardSyntax,
+  wildcardVarName,
+} from "../utils/wildcardSyntax";
 
 const router = useRouter();
 const store = useModuleStore();
@@ -30,6 +36,49 @@ const allTags = computed(() => {
   for (const m of store.items) for (const t of m.tags ?? []) set.add(t);
   return Array.from(set).sort();
 });
+
+// Reactive ref-graph computed off the store. Rebuilds on every change since
+// `getWildcardSyntax` is cheap (linear over tokens) and graphs are small.
+const wildcardGraph = computed(() => buildWildcardGraph(store.items));
+
+interface SyntaxView {
+  hasInline: boolean;
+  outgoing: string[];
+  incoming: string[];
+}
+
+function syntaxView(row: ModuleRow): SyntaxView {
+  const sx = getWildcardSyntax(row);
+  const name = wildcardVarName(row);
+  const out = wildcardGraph.value.outgoing.get(name);
+  const inc = wildcardGraph.value.incoming.get(name);
+  return {
+    hasInline: sx.hasInline,
+    outgoing: out ? [...out] : [],
+    incoming: inc ? [...inc] : [],
+  };
+}
+
+const extraFilters = computed(() => [
+  {
+    key: "has-refs",
+    label: "Has nested refs",
+    check: (m: ModuleRow) => getWildcardSyntax(m).hasRefs,
+  },
+  {
+    key: "has-inline",
+    label: "Has inline choices",
+    check: (m: ModuleRow) => getWildcardSyntax(m).hasInline,
+  },
+  {
+    key: "is-referenced",
+    label: "Is referenced",
+    check: (m: ModuleRow) => {
+      const inc = wildcardGraph.value.incoming.get(wildcardVarName(m));
+      return !!inc && inc.size > 0;
+    },
+  },
+]);
 
 onMounted(async () => {
   store.filter.type = "wildcard";
@@ -111,6 +160,7 @@ function validIcon(row: ModuleRow): string {
     :items="store.items"
     :loading="store.loading"
     :filter="store.filter"
+    :extra-filters="extraFilters"
     empty-message="No wildcards yet. Create your first to start building dynamic prompts."
     @fetch="fetch"
     @delete="del"
@@ -172,6 +222,39 @@ function validIcon(row: ModuleRow): string {
           </div>
         </template>
       </Column>
+      <Column header="Syntax" header-style="width:8rem">
+        <template #body="{ data }">
+          <template v-for="v in [syntaxView(data)]" :key="data.id">
+            <div
+              v-if="v.outgoing.length || v.incoming.length || v.hasInline"
+              class="wp-syntax-cell"
+            >
+              <span
+                v-if="v.outgoing.length"
+                class="wp-syntax-pill wp-syntax-pill--ref"
+                :title="`References ${v.outgoing.length} wildcard${v.outgoing.length === 1 ? '' : 's'}: ${v.outgoing.join(', ')}`"
+              >
+                <i class="pi pi-arrow-right-arrow-left" />
+                {{ v.outgoing.length }}
+              </span>
+              <span
+                v-if="v.hasInline"
+                class="wp-syntax-pill wp-syntax-pill--dp"
+                title="Contains inline {a|b|c} alternatives"
+              >{{ "{ }" }}</span>
+              <span
+                v-if="v.incoming.length"
+                class="wp-syntax-pill wp-syntax-pill--in"
+                :title="`Referenced by ${v.incoming.length} wildcard${v.incoming.length === 1 ? '' : 's'}: ${v.incoming.join(', ')}`"
+              >
+                <i class="pi pi-arrow-left" />
+                {{ v.incoming.length }}
+              </span>
+            </div>
+            <span v-else class="text-wp-text3 text-sm">—</span>
+          </template>
+        </template>
+      </Column>
       <Column field="category_id" header="Category" header-style="width:9rem" sortable>
         <template #body="{ data }">
           <span
@@ -230,7 +313,8 @@ function validIcon(row: ModuleRow): string {
         <div v-else class="flex flex-col gap-1">
           <div v-for="(opt, i) in topOptions(data)" :key="i" class="flex items-center gap-3 text-sm">
             <Badge :value="String(opt.weight)" severity="secondary" class="min-w-8" />
-            <span class="font-mono text-wp-text">{{ opt.value || "(empty)" }}</span>
+            <RichTextPreview v-if="opt.value" :value="opt.value" />
+            <span v-else class="font-mono text-wp-text3">(empty)</span>
           </div>
           <span v-if="optionCount(data) > 3" class="text-xs text-wp-text3 mt-1">
             … and {{ optionCount(data) - 3 }} more
@@ -257,5 +341,46 @@ function validIcon(row: ModuleRow): string {
   background: var(--wp-bg3);
   color: var(--wp-text2);
   border-radius: 3px;
+}
+
+/* Syntax indicator pills (mirrors design-handoff styles.css). */
+.wp-syntax-cell {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.wp-syntax-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1;
+}
+.wp-syntax-pill .pi { font-size: 9.5px; }
+.wp-syntax-pill--ref {
+  /* outgoing nested @refs — pink/magenta to match @ref token color */
+  color: var(--wp-kind-wildcard, #f0abfc);
+  background: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 28%, transparent);
+}
+.wp-syntax-pill--in {
+  /* incoming references — accent (purple) */
+  color: var(--wp-accent-text, #c4b5fd);
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 32%, transparent);
+}
+.wp-syntax-pill--dp {
+  /* inline {a|b|c} — amber/yellow to match dp-brace token color */
+  color: var(--wp-warn, #fcd34d);
+  background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #facc15) 30%, transparent);
 }
 </style>
