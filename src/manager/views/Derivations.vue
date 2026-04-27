@@ -36,7 +36,7 @@ const allTags = computed(() => {
 
 const categoryOptions = computed(() => [
   { value: null, label: "All categories" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name })),
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
 ]);
 
 onMounted(async () => {
@@ -280,9 +280,9 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 
 .wp-rules-snippet {
   max-width: 720px;
-  line-height: 1.7;
+  line-height: 1.5;
 }
-.wp-rule-block { margin-bottom: 8px; }
+.wp-rule-block { margin-bottom: 6px; }
 .wp-rule-block:last-child { margin-bottom: 0; }
 .wp-rule-block__head {
   font-size: 10.5px;

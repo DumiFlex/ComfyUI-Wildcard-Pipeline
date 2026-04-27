@@ -11,7 +11,6 @@ import Button from "../../components/ui/Button.vue";
 import Input from "../../components/ui/Input.vue";
 import Textarea from "../../components/ui/Textarea.vue";
 import Select from "../../components/ui/Select.vue";
-import Checkbox from "../../components/ui/Checkbox.vue";
 import { useToast } from "../../composables/useToast";
 import { useCommunityStore } from "../../stores/communityStore";
 import { KIND_LABEL } from "../../community/format";
@@ -259,9 +258,19 @@ function onTagKey(event: KeyboardEvent) {
           />
         </div>
         <div class="form-row">
-          <label class="wp-comm-filters__toggle">
-            <Checkbox v-model="form.nsfw" /> Mark as 18+ (NSFW)
-          </label>
+          <button
+            type="button"
+            class="wp-comm-filters__toggle"
+            :data-active="form.nsfw ? 'true' : 'false'"
+            @click="form.nsfw = !form.nsfw"
+          >
+            <span class="wp-check" :data-checked="form.nsfw ? 'true' : 'false'" aria-hidden="true">
+              <svg v-if="form.nsfw" viewBox="0 0 12 12" fill="none" style="display:block">
+                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            Mark as 18+ (NSFW)
+          </button>
         </div>
         <div class="form-actions form-actions--split">
           <Button variant="secondary" icon="arrow-left" @click="step = 1">Back</Button>

@@ -57,13 +57,15 @@ function onKey(event: KeyboardEvent) {
         <i :class="['pi', KIND_ICON[kindKey]]" aria-hidden="true" />
         {{ KIND_LABEL[kindKey] }}
       </span>
-      <span v-if="atom.nsfw" class="wp-comm-card__nsfw">18+</span>
-      <span
-        v-if="!compatible"
-        class="wp-comm-card__incompat"
-        :title="`Needs engine >= ${atom.engine_min_version}`"
-      >
-        engine ≥ {{ atom.engine_min_version }}
+      <span class="wp-comm-card__hero-right">
+        <span v-if="atom.nsfw" class="wp-comm-card__nsfw">18+</span>
+        <span
+          v-if="!compatible"
+          class="wp-comm-card__incompat"
+          :title="`Needs engine >= ${atom.engine_min_version}`"
+        >
+          engine ≥ {{ atom.engine_min_version }}
+        </span>
       </span>
     </div>
     <div class="wp-comm-card__body">

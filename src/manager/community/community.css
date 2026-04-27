@@ -48,6 +48,8 @@
   border-radius: 999px;
   background: var(--wp-bg-3);
   user-select: none;
+  cursor: pointer;
+  border: 1px solid transparent;
 }
 .wp-comm-filters__toggle--nsfw { color: var(--wp-warn); }
 
@@ -83,28 +85,27 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-lg);
-  padding: 14px;
 }
 .wp-comm-featured__head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
 }
 .wp-comm-featured__label {
-  display: inline-flex; gap: 8px; align-items: center;
-  margin: 0; font-size: 13px; font-weight: 600;
-  color: var(--wp-text);
+  display: inline-flex; gap: 6px; align-items: center;
+  margin: 0; font-size: 12px; font-weight: 700;
+  color: var(--wp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
+.wp-comm-featured__label .pi { color: var(--wp-accent-text); }
 .wp-comm-featured__hint {
   font-size: 11px;
-  color: var(--wp-text-muted);
+  color: var(--wp-text-dim);
 }
 .wp-comm-featured__row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
 }
 @media (max-width: 1024px) { .wp-comm-featured__row { grid-template-columns: 1fr 1fr; } }
@@ -113,7 +114,7 @@
 .wp-comm-feat {
   position: relative;
   border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
+  border-radius: var(--wp-radius-lg);
   overflow: hidden;
   text-align: left;
   cursor: pointer;
@@ -123,17 +124,37 @@
   color: #fff;
   font: inherit;
   padding: 0;
+  transition: transform .15s ease, box-shadow .15s ease;
 }
-.wp-comm-feat:hover { transform: translateY(-1px); }
+/* Gradient overlay — rendered as pseudo so the inner flex column sits above it. */
+.wp-comm-feat::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.65) 100%);
+  pointer-events: none;
+}
+.wp-comm-feat:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
 .wp-comm-feat__inner {
+  position: relative; z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.45) 100%);
+  gap: 10px;
   padding: 14px;
   width: 100%;
+  height: 100%;
+  justify-content: space-between;
 }
-.wp-comm-feat h3 { margin: 0; font-size: 16px; }
+/* Kind chip used inside featured strip — inline flex flow (NOT absolutely-positioned).
+   Separate from .wp-comm-card__kind which uses position:absolute for the card grid hero. */
+.wp-comm-feat__kind {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(0,0,0,0.40);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff; font-size: 10px; font-weight: 600;
+  align-self: flex-start;
+}
+.wp-comm-feat h3 { margin: 0; font-size: 16px; font-weight: 700; }
 .wp-comm-feat p {
   margin: 0;
   font-size: 12px;
@@ -142,12 +163,12 @@
 .wp-comm-feat__stats {
   margin-top: auto;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   font-size: 11px;
   color: rgba(255,255,255,0.92);
   align-items: center;
 }
-.wp-comm-feat__stats i { margin-right: 4px; }
+.wp-comm-feat__stats i { margin-right: 3px; }
 
 /* ---------- Card grid ---------- */
 .wp-comm-grid {
@@ -178,36 +199,41 @@
   outline-offset: 2px;
 }
 .wp-comm-card__hero {
-  height: 84px;
+  height: 100px;
   position: relative;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 8px;
 }
+/* Kind chip in the card grid hero — part of flex flow (left side). */
 .wp-comm-card__kind {
-  position: absolute; top: 8px; left: 8px;
-  display: inline-flex; gap: 4px; align-items: center;
-  font-size: 11px;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 999px;
   background: rgba(0,0,0,0.42);
-  color: #fff;
-  border-radius: 999px;
-  padding: 2px 8px;
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #fff; font-size: 10px; font-weight: 600;
+}
+/* Right-side wrapper groups nsfw + incompat badges. */
+.wp-comm-card__hero-right {
+  display: flex; gap: 4px; align-items: flex-start;
 }
 .wp-comm-card__nsfw {
-  position: absolute; top: 8px; right: 8px;
+  display: inline-flex;
+  padding: 3px 8px; border-radius: 999px;
   font-size: 10px; font-weight: 600;
-  background: var(--wp-warn);
-  color: #1c1c28;
-  border-radius: 999px;
-  padding: 1px 6px;
+  background: rgba(190, 18, 60, 0.85);
+  border: 1px solid rgba(255,255,255,0.20);
+  color: #fff;
 }
 .wp-comm-card__incompat {
-  position: absolute; bottom: 8px; right: 8px;
+  display: inline-flex;
+  padding: 3px 8px; border-radius: 999px;
   font-size: 10px; font-weight: 600;
-  background: rgba(239, 68, 68, 0.78);
+  background: rgba(245, 158, 11, 0.85);
+  border: 1px solid rgba(255,255,255,0.20);
   color: #fff;
-  border-radius: 999px;
-  padding: 1px 6px;
 }
 .wp-comm-card__body {
-  padding: 10px;
+  padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -259,22 +285,26 @@
 }
 .wp-comm-card__stats {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   font-size: 11px;
   color: var(--wp-text-muted);
-  margin-top: 2px;
+  align-items: center;
+  padding-top: 4px;
+  border-top: 1px solid var(--wp-border);
 }
-.wp-comm-card__stats i { margin-right: 4px; }
+.wp-comm-card__stats span { display: inline-flex; align-items: center; gap: 3px; }
+.wp-comm-card__stats i { margin-right: 3px; }
 .wp-comm-card__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
 }
 .wp-comm-card__tag {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border);
   color: var(--wp-text-muted);
 }
 .wp-comm-card__installed {
@@ -461,9 +491,12 @@
 .wp-comm-review__head {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; color: var(--wp-text-muted);
+  flex-wrap: wrap;
 }
 .wp-comm-review__head strong { color: var(--wp-text); font-size: 13px; }
-.wp-comm-review__text { margin: 6px 0 0; font-size: 13px; }
+.wp-comm-review__when { margin-left: auto; color: var(--wp-text-dim); font-size: 12px; }
+.wp-comm-review__placeholder { margin: 0; font-size: 12px; color: var(--wp-text-muted); font-style: italic; }
+.wp-comm-review__text { margin: 8px 0 0; font-size: 13px; line-height: 1.5; }
 
 /* ---------- Stepper ---------- */
 .wp-comm-stepper {

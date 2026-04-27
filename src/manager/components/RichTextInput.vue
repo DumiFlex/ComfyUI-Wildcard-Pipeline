@@ -364,8 +364,9 @@ onBeforeUnmount(() => {
           @mousedown="(e) => onSuggestionMouseDown(e, label)"
           @mouseenter="acActive = i"
         >
-          <i :class="acTrigger === '$' ? 'pi pi-dollar' : 'pi pi-at'" class="wp-rt-suggestions__icon" />
-          <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ label }}
+          <span class="wp-rt-suggestions__label">
+            <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ label }}
+          </span>
         </button>
       </div>
     </Teleport>
@@ -476,15 +477,15 @@ onBeforeUnmount(() => {
  * ------------------------------------------------------------------------ */
 .wp-rt-suggestions {
   position: fixed;
-  z-index: 1000;
+  z-index: 9999;
   min-width: 200px;
   max-width: 360px;
   max-height: 240px;
   overflow-y: auto;
-  background: var(--wp-bg-1, #11111b);
+  background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border-strong, rgba(255, 255, 255, 0.14));
   border-radius: 8px;
-  padding: 4px;
+  padding: 0 4px 4px;
   box-shadow: var(--wp-shadow-lg, var(--wp-shadow, 0 10px 30px rgba(0, 0, 0, 0.45)));
   display: flex;
   flex-direction: column;
@@ -494,7 +495,6 @@ onBeforeUnmount(() => {
   animation: wp-rt-suggestions-in 0.12s ease-out;
 }
 .wp-rt-suggestions--up {
-  /* `top` is set inline as the rect.top of the input; shift fully above. */
   transform: translateY(-100%);
   animation-name: wp-rt-suggestions-in-up;
 }
@@ -508,12 +508,15 @@ onBeforeUnmount(() => {
 }
 .wp-rt-suggestions__head {
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-size: 11px;
-  color: var(--wp-text-muted, #a1a1ad);
+  color: var(--wp-text-dim, #6e6e7c);
+  background: var(--wp-bg-3, #1e1e2a);
   border-bottom: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
-  margin-bottom: 2px;
+  margin: 0 -4px 4px;
+  border-radius: 7px 7px 0 0;
 }
 .wp-rt-suggestions__query {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -521,30 +524,32 @@ onBeforeUnmount(() => {
 }
 .wp-rt-suggestions__hint {
   margin-left: auto;
-  opacity: 0.7;
+  opacity: 0.6;
+  font-family: var(--wp-font, system-ui, sans-serif);
 }
 .wp-rt-suggestions__item {
   display: flex;
   align-items: center;
-  gap: 8px;
   width: 100%;
   text-align: left;
   background: transparent;
   border: none;
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 7px 10px;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--wp-text, #e7e7ee);
   cursor: pointer;
 }
 .wp-rt-suggestions__item[data-active] {
   background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
 }
-.wp-rt-suggestions__icon {
-  font-size: 10px;
-  color: var(--wp-accent-text, #c4b5fd);
-  opacity: 0.85;
+.wp-rt-suggestions__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);

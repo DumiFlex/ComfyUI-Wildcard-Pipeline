@@ -366,20 +366,29 @@ defineExpose({ cellAt, cycleCell });
 .wp-matrix-cell[data-mode="exclude"] {
   min-width: 36px;
   padding: 0 6px;
-  background: color-mix(in oklab, var(--wp-danger) 16%, transparent);
+  background: rgba(239, 68, 68, 0.18);
+  background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
   color: var(--wp-danger);
-  border-color: color-mix(in oklab, var(--wp-danger) 35%, transparent);
+  border-color: rgba(239, 68, 68, 0.40);
+  border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent);
 }
 .wp-matrix-cell[data-mode="boost"] {
-  background: color-mix(in oklab, var(--wp-success) 16%, transparent);
+  background: rgba(34, 197, 94, 0.18);
+  background: color-mix(in oklab, var(--wp-success) 18%, transparent);
   color: var(--wp-success);
-  border-color: color-mix(in oklab, var(--wp-success) 35%, transparent);
+  border-color: rgba(34, 197, 94, 0.40);
+  border-color: color-mix(in oklab, var(--wp-success) 40%, transparent);
 }
 .wp-matrix-cell[data-mode="reduce"] {
-  background: color-mix(in oklab, var(--wp-warn) 16%, transparent);
+  background: rgba(245, 158, 11, 0.18);
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
   color: var(--wp-warn);
-  border-color: color-mix(in oklab, var(--wp-warn) 35%, transparent);
+  border-color: rgba(245, 158, 11, 0.40);
+  border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent);
 }
+.wp-theme-light .wp-matrix-cell[data-mode="exclude"] { color: #991b1b; }
+.wp-theme-light .wp-matrix-cell[data-mode="boost"]   { color: #166534; }
+.wp-theme-light .wp-matrix-cell[data-mode="reduce"]  { color: #92400e; }
 .wp-matrix-cell__icon {
   font-size: 14px;
   font-weight: 600;

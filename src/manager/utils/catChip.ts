@@ -17,7 +17,7 @@ export function catChipStyle(color?: string | null): Record<string, string> {
   }
   return {
     color,
-    background: `color-mix(in oklab, ${color} 14%, transparent)`,
-    borderColor: `color-mix(in oklab, ${color} 35%, transparent)`,
+    background: `color-mix(in oklab, ${color} 18%, transparent)`,
+    borderColor: `color-mix(in oklab, ${color} 42%, transparent)`,
   };
 }

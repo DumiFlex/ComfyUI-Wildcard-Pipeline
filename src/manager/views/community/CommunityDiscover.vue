@@ -10,7 +10,6 @@ import { useRouter } from "vue-router";
 import Button from "../../components/ui/Button.vue";
 import Input from "../../components/ui/Input.vue";
 import Select from "../../components/ui/Select.vue";
-import Checkbox from "../../components/ui/Checkbox.vue";
 import { useCommunityStore } from "../../stores/communityStore";
 import CommunityCard from "../../community/CommunityCard.vue";
 import { KIND_ICON, KIND_LABEL, fmtNumber } from "../../community/format";
@@ -132,7 +131,7 @@ onMounted(async () => {
           @click="openDetail(atom.id)"
         >
           <div class="wp-comm-feat__inner">
-            <span class="wp-comm-card__kind">
+            <span class="wp-comm-feat__kind">
               <i :class="['pi', KIND_ICON[atom.type === 'bundle' ? 'bundle' : atom.type]]" aria-hidden="true" />
               {{ KIND_LABEL[atom.type === "bundle" ? "bundle" : atom.type] }}
             </span>
@@ -174,15 +173,45 @@ onMounted(async () => {
           aria-label="Sort modules"
         />
       </div>
-      <label class="wp-comm-filters__toggle">
-        <Checkbox v-model="verifiedOnly" /> Verified only
-      </label>
-      <label class="wp-comm-filters__toggle">
-        <Checkbox v-model="compatibleOnly" /> Compatible (engine {{ store.engineVersion }})
-      </label>
-      <label class="wp-comm-filters__toggle wp-comm-filters__toggle--nsfw">
-        <Checkbox v-model="includeNsfw" /> Show 18+
-      </label>
+      <button
+        type="button"
+        class="wp-comm-filters__toggle"
+        :data-active="verifiedOnly ? 'true' : 'false'"
+        @click="verifiedOnly = !verifiedOnly"
+      >
+        <span class="wp-check" :data-checked="verifiedOnly ? 'true' : 'false'" aria-hidden="true">
+          <svg v-if="verifiedOnly" viewBox="0 0 12 12" fill="none" style="display:block">
+            <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        Verified only
+      </button>
+      <button
+        type="button"
+        class="wp-comm-filters__toggle"
+        :data-active="compatibleOnly ? 'true' : 'false'"
+        @click="compatibleOnly = !compatibleOnly"
+      >
+        <span class="wp-check" :data-checked="compatibleOnly ? 'true' : 'false'" aria-hidden="true">
+          <svg v-if="compatibleOnly" viewBox="0 0 12 12" fill="none" style="display:block">
+            <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        Compatible (engine {{ store.engineVersion }})
+      </button>
+      <button
+        type="button"
+        class="wp-comm-filters__toggle wp-comm-filters__toggle--nsfw"
+        :data-active="includeNsfw ? 'true' : 'false'"
+        @click="includeNsfw = !includeNsfw"
+      >
+        <span class="wp-check" :data-checked="includeNsfw ? 'true' : 'false'" aria-hidden="true">
+          <svg v-if="includeNsfw" viewBox="0 0 12 12" fill="none" style="display:block">
+            <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        Show 18+
+      </button>
     </section>
 
     <!-- Tag rail -->
@@ -232,12 +261,26 @@ onMounted(async () => {
 <style scoped>
 @import "../../community/community.css";
 
-/* Filter-bar select widths — replaces ad-hoc `w-40` / `w-44` utility leaks
-   with semantic names tied to the filter being constrained. */
+/* Filter-bar select widths. */
 .wp-comm-filter-select--kind { width: 160px; }
 .wp-comm-filter-select--sort { width: 180px; }
 
-/* Empty-state CTA spacer — replaces the `mt-3` utility leak. */
+/* Toggle buttons — pill-shaped, cursor pointer, match prototype's wp-comm-toggle. */
+.wp-comm-filters__toggle {
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  border: 1px solid transparent;
+}
+.wp-comm-filters__toggle:hover {
+  background: var(--wp-bg-4);
+}
+.wp-comm-filters__toggle[data-active="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 32%, transparent);
+  color: var(--wp-accent-text);
+}
+
+/* Empty-state CTA spacer. */
 .wp-empty__cta { margin-top: 12px; }
 
 /* Loading skeleton fallback for the card hero gradient. */

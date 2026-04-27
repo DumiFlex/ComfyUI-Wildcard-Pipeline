@@ -43,7 +43,7 @@ const allTags = computed(() => {
 
 const categoryOptions = computed(() => [
   { value: null, label: "All categories" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name })),
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
 ]);
 
 onMounted(async () => {
