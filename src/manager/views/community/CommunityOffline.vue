@@ -39,8 +39,8 @@ function forceOffline() {
 
 <template>
   <div class="wp-comm-page">
-    <div class="wp-comm-empty">
-      <i class="pi pi-wifi wp-comm-empty__icon" style="color: var(--wp-danger);" aria-hidden="true" />
+    <div class="wp-empty wp-empty--card">
+      <i class="pi pi-wifi wp-empty__icon wp-icon--danger" aria-hidden="true" />
       <h3>Registry unreachable</h3>
       <p>
         Community registry is offline. We'll keep retrying.

@@ -244,11 +244,11 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
           Add rule
         </Button>
       </template>
-      <p class="dv-hint">
+      <p class="wp-card__hint">
         Each rule runs independently. Inside a rule, branches evaluate top-to-bottom — the first matching IF/ELIF wins; the optional ELSE only fires when no branch matched.
       </p>
 
-      <div v-if="rules.length === 0" class="dv-empty" data-test="rules-empty">
+      <div v-if="rules.length === 0" class="wp-empty-card" data-test="rules-empty">
         No rules yet. Click <strong>Add rule</strong> to start defining IF / ELIF / ELSE behaviour.
       </div>
 
@@ -269,19 +269,6 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
 </template>
 
 <style scoped>
-.dv-hint {
-  font-size: 11.5px;
-  color: var(--wp-text-dim);
-  margin: 0 0 10px;
-}
-.dv-empty {
-  font-size: 13px;
-  color: var(--wp-text-muted);
-  padding: 16px;
-  text-align: center;
-  border: 1px dashed var(--wp-border);
-  border-radius: var(--wp-radius);
-}
 .rules-stack {
   display: flex;
   flex-direction: column;

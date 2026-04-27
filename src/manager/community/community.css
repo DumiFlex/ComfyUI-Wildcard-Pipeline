@@ -555,18 +555,10 @@
   font-weight: 600;
 }
 
-/* ---------- Empty / 404 ---------- */
-.wp-comm-empty {
-  text-align: center;
-  padding: 48px 16px;
-  color: var(--wp-text-muted);
-  background: var(--wp-bg-1);
-  border: 1px dashed var(--wp-border);
-  border-radius: var(--wp-radius);
-}
-.wp-comm-empty h3 { margin: 8px 0 4px; color: var(--wp-text); font-size: 15px; }
-.wp-comm-empty p  { margin: 0; font-size: 12.5px; }
-.wp-comm-empty__icon { font-size: 32px; color: var(--wp-text-dim); }
+/* The community-flavoured empty placeholder was consolidated into the
+   canonical `.wp-empty` + `.wp-empty--card` modifier in styles/tokens.css.
+   Templates pass `class="wp-empty wp-empty--card"` and use `wp-empty__icon`
+   for the icon child. */
 
 /* ---------- Histogram ---------- */
 .wp-comm-histo-row {

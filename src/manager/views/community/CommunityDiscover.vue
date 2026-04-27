@@ -158,7 +158,7 @@ onMounted(async () => {
           aria-label="Search community"
         />
       </div>
-      <div class="w-40">
+      <div class="wp-comm-filter-select wp-comm-filter-select--kind">
         <Select
           v-model="kind"
           :options="KIND_OPTIONS"
@@ -166,7 +166,7 @@ onMounted(async () => {
           aria-label="Filter by kind"
         />
       </div>
-      <div class="w-44">
+      <div class="wp-comm-filter-select wp-comm-filter-select--sort">
         <Select
           v-model="sort"
           :options="SORT_OPTIONS"
@@ -206,18 +206,18 @@ onMounted(async () => {
     <!-- Body -->
     <div v-if="store.loading" class="wp-comm-grid" aria-busy="true">
       <article v-for="n in 6" :key="n" class="wp-comm-card">
-        <div class="wp-comm-card__hero" style="background: var(--wp-bg-2)" />
+        <div class="wp-comm-card__hero wp-comm-card__hero--skeleton" />
         <div class="wp-comm-card__body">
           <div class="wp-comm-card__title">Loading...</div>
         </div>
       </article>
     </div>
-    <div v-else-if="store.feed.length === 0" class="wp-comm-empty">
-      <i class="pi pi-search wp-comm-empty__icon" aria-hidden="true" />
+    <div v-else-if="store.feed.length === 0" class="wp-empty wp-empty--card">
+      <i class="pi pi-search wp-empty__icon" aria-hidden="true" />
       <h3>{{ q ? `No matches for "${q}"` : "Nothing to show" }}</h3>
       <p>Try clearing filters or broaden your search.</p>
       <Button
-        class="mt-3"
+        class="wp-empty__cta"
         variant="outline"
         icon="filter-slash"
         @click="clearFilters"
@@ -232,8 +232,14 @@ onMounted(async () => {
 <style scoped>
 @import "../../community/community.css";
 
-.w-full { width: 100%; }
-.w-40   { width: 160px; }
-.w-44   { width: 180px; }
-.mt-3   { margin-top: 12px; }
+/* Filter-bar select widths — replaces ad-hoc `w-40` / `w-44` utility leaks
+   with semantic names tied to the filter being constrained. */
+.wp-comm-filter-select--kind { width: 160px; }
+.wp-comm-filter-select--sort { width: 180px; }
+
+/* Empty-state CTA spacer — replaces the `mt-3` utility leak. */
+.wp-empty__cta { margin-top: 12px; }
+
+/* Loading skeleton fallback for the card hero gradient. */
+.wp-comm-card__hero--skeleton { background: var(--wp-bg-2); }
 </style>

@@ -14,11 +14,11 @@ function back() {
 
 <template>
   <div class="wp-comm-page">
-    <div class="wp-comm-empty">
+    <div class="wp-empty wp-empty--card">
       <div class="big">404</div>
       <h3>Module not found</h3>
       <p>It might have been unpublished, renamed, or moved.</p>
-      <Button icon="arrow-left" class="mt-3" @click="back">Back to Discover</Button>
+      <Button icon="arrow-left" class="wp-empty__cta" @click="back">Back to Discover</Button>
     </div>
   </div>
 </template>
@@ -32,5 +32,8 @@ function back() {
   color: var(--wp-accent-text);
   line-height: 1;
 }
-.mt-3 { margin-top: 16px; }
+
+/* CTA on the 404 empty card sits a notch lower than the default
+   wp-empty__cta gap because the giant "404" hero needs more breathing room. */
+.wp-empty__cta { margin-top: 16px; }
 </style>

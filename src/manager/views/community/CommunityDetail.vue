@@ -139,11 +139,11 @@ onMounted(() => load());
     <Button
       variant="ghost"
       icon="arrow-left"
-      class="self-start"
+      class="wp-comm-back"
       @click="onBack"
     >Back to Community</Button>
 
-    <div v-if="loading" class="wp-comm-empty">Loading...</div>
+    <div v-if="loading" class="wp-empty wp-empty--card">Loading...</div>
 
     <template v-else-if="atom">
       <!-- Hero -->
@@ -154,7 +154,7 @@ onMounted(() => load());
               <i :class="['pi', KIND_ICON[atom.type === 'bundle' ? 'bundle' : atom.type]]" aria-hidden="true" />
               {{ KIND_LABEL[atom.type === "bundle" ? "bundle" : atom.type] }}
             </span>
-            <span v-if="atom.nsfw" class="wp-comm-card__nsfw" style="position: static; margin-left: 8px;">18+</span>
+            <span v-if="atom.nsfw" class="wp-comm-card__nsfw wp-comm-card__nsfw--inline">18+</span>
             <h1 class="wp-comm-detail-hero__title">{{ atom.name }}</h1>
             <p class="wp-comm-detail-hero__tagline">{{ atom.tagline }}</p>
             <div class="wp-comm-detail-hero__meta">
@@ -238,13 +238,13 @@ onMounted(() => load());
             <h3>What's in this pack</h3>
             <div class="wp-comm-grid">
               <div v-for="kind in bundleSubKinds()" :key="kind" class="wp-comm-card">
-                <div class="wp-comm-card__body" style="display:flex; flex-direction:row; align-items:center; gap:8px;">
+                <div class="wp-comm-card__body wp-comm-card__body--inline">
                   <i :class="['pi', KIND_ICON[kind]]" aria-hidden="true" />
                   <span>{{ KIND_LABEL[kind] }}</span>
                 </div>
               </div>
             </div>
-            <h3 style="margin-top: 16px;">Sample resolutions</h3>
+            <h3 class="wp-comm-detail__subhead">Sample resolutions</h3>
             <div class="wp-comm-readme">
               <ul>
                 <li v-for="(s, i) in bundleSamples()" :key="i">{{ s }}</li>
@@ -289,15 +289,15 @@ onMounted(() => load());
           <div class="wp-comm-reviews__summary">
             <div>
               <div class="wp-comm-reviews__big-num">{{ atom.rating.toFixed(1) }}</div>
-              <div style="color: var(--wp-text-muted); font-size: 12px;">{{ atom.rating_count }} reviews</div>
+              <div class="wp-comm-reviews__count">{{ atom.rating_count }} reviews</div>
             </div>
             <div class="wp-comm-reviews__bars">
               <div v-for="(n, i) in atom.rating_dist" :key="i" class="wp-comm-reviews__bar">
-                <span style="width: 16px;">{{ 5 - i }}★</span>
+                <span class="wp-comm-reviews__star">{{ 5 - i }}★</span>
                 <div class="wp-comm-reviews__bar-track">
                   <div :style="{ width: ((n / Math.max(...atom.rating_dist, 1)) * 100) + '%' }" />
                 </div>
-                <span style="width: 36px; text-align: right; color: var(--wp-text-muted);">{{ n }}</span>
+                <span class="wp-comm-reviews__count-cell">{{ n }}</span>
               </div>
             </div>
           </div>
@@ -312,7 +312,7 @@ onMounted(() => load());
                 />
                 <strong>{{ cm.user.name || cm.user.login }}</strong>
                 <span>@{{ cm.user.login }}</span>
-                <span style="margin-left: auto;">{{ relativeTime(cm.at) }}</span>
+                <span class="wp-comm-review__when">{{ relativeTime(cm.at) }}</span>
               </div>
               <p class="wp-comm-review__text">{{ cm.body }}</p>
             </div>
@@ -320,7 +320,7 @@ onMounted(() => load());
           <p v-else class="text-muted">No reviews yet — be the first.</p>
 
           <div v-if="store.currentUser" class="wp-comm-review">
-            <p style="margin: 0; color: var(--wp-text-muted); font-size: 12px;">
+            <p class="wp-comm-review__placeholder">
               Reviewing as <strong>@{{ store.currentUser.login }}</strong> — full review form lands with backend hookup.
             </p>
           </div>
@@ -333,7 +333,40 @@ onMounted(() => load());
 <style scoped>
 @import "../../community/community.css";
 
-.self-start { align-self: flex-start; }
+.wp-comm-back { align-self: flex-start; }
 .grow { flex: 1; min-width: 240px; }
 .text-muted { color: var(--wp-text-muted); font-size: 12px; }
+
+/* Inline NSFW chip used inside the hero text run, not absolutely-positioned. */
+.wp-comm-card__nsfw--inline { position: static; margin-left: 8px; }
+
+/* Bundle-pack sub-kind card body switches to a single-row layout. */
+.wp-comm-card__body--inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Detail subhead spacer — replaces inline `style="margin-top: 16px"`. */
+.wp-comm-detail__subhead { margin-top: 16px; }
+
+/* Reviews summary chrome — small muted captions next to the big rating. */
+.wp-comm-reviews__count { color: var(--wp-text-muted); font-size: 12px; }
+.wp-comm-reviews__star { width: 16px; }
+.wp-comm-reviews__count-cell {
+  width: 36px;
+  text-align: right;
+  color: var(--wp-text-muted);
+}
+
+/* Comment row — date pinned to the right edge of the head. */
+.wp-comm-review__when { margin-left: auto; }
+
+/* Placeholder shown for signed-in users until the review form ships. */
+.wp-comm-review__placeholder {
+  margin: 0;
+  color: var(--wp-text-muted);
+  font-size: 12px;
+}
 </style>

@@ -575,10 +575,10 @@ function pickKind(k: ModuleType) {
       </div>
       <div v-else class="wp-dim">Constraint references a wildcard that no longer exists.</div>
       <div class="wp-tr-cn-legend">
-        <span><span class="wp-tr-dot" style="color: var(--wp-success)">●</span> boost</span>
+        <span><span class="wp-tr-dot wp-icon--success">●</span> boost</span>
         <span><span class="wp-tr-dot">●</span> allow</span>
-        <span><span class="wp-tr-dot" style="color: var(--wp-warn)">●</span> reduce</span>
-        <span><span class="wp-tr-dot" style="color: var(--wp-danger)">●</span> exclude</span>
+        <span><span class="wp-tr-dot wp-icon--warn">●</span> reduce</span>
+        <span><span class="wp-tr-dot wp-icon--danger">●</span> exclude</span>
       </div>
     </Card>
 

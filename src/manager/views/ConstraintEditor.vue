@@ -289,7 +289,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 
     <Card title="Wildcards">
       <template #actions>
-        <span class="wp-dim cn-hint">Pick the two wildcards whose sub-categories form the matrix</span>
+        <span class="wp-card__hint">Pick the two wildcards whose sub-categories form the matrix</span>
       </template>
       <div class="cn-pair">
         <Field label="Target wildcard" hint="Rows of the matrix">
@@ -320,18 +320,18 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 
     <Card title="Rule matrix">
       <template #actions>
-        <span class="wp-dim cn-hint">Click cycles · cog tunes factor</span>
+        <span class="wp-card__hint">Click cycles · cog tunes factor</span>
       </template>
       <div
         v-if="!sourceWildcardId || !targetWildcardId"
-        class="cn-empty"
+        class="wp-empty-card"
         data-test="matrix-empty"
       >
         Pick a source and target wildcard to populate the matrix.
       </div>
       <div
         v-else-if="sourceValues.length === 0 || targetSubCategories.length === 0"
-        class="cn-empty"
+        class="wp-empty-card"
         data-test="matrix-need-subs"
       >
         <i class="pi pi-info-circle" />
@@ -355,7 +355,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
           Add exception
         </Button>
       </template>
-      <div v-if="!exceptions.length" class="cn-empty">
+      <div v-if="!exceptions.length" class="wp-empty-card">
         <i class="pi pi-info-circle" />
         Per-pair overrides for specific option values that the matrix doesn't cover.
       </div>
@@ -424,7 +424,6 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 </template>
 
 <style scoped>
-.cn-hint { font-size: 11.5px; }
 .cn-pair {
   display: grid;
   grid-template-columns: 1fr 24px 1fr;
@@ -435,15 +434,6 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
   padding-bottom: 8px;
   color: var(--wp-text-dim);
   text-align: center;
-}
-.cn-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 24px 12px;
-  color: var(--wp-text-muted);
-  font-size: 13px;
 }
 .cn-col-mode { width: 130px; }
 .cn-col-factor { width: 120px; }
