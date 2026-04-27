@@ -9,9 +9,12 @@ import Textarea from "primevue/textarea";
 import Select from "primevue/select";
 import AutoComplete from "primevue/autocomplete";
 import { useToast } from "primevue/usetoast";
+import HistoryPanel from "../components/HistoryPanel.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { VALID_IDENTIFIER_RE } from "../utils/slug";
+import { appendSnapshot, readHistory } from "../utils/history";
+import type { ModuleHistoryEntry } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -28,6 +31,8 @@ const tags = ref<string[]>([]);
 const values = ref<NamedValue[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
+const historyEntries = ref<ModuleHistoryEntry[]>([]);
+const historyOpen = ref(false);
 
 // ----- Tag autocomplete (mirrors WildcardForm) -----
 const tagSuggestions = ref<string[]>([]);
@@ -59,6 +64,7 @@ onMounted(async () => {
         name: (v.name ?? "").replace(/^\$+/, ""),
         value: v.value ?? "",
       }));
+      historyEntries.value = readHistory(row.payload);
     } catch {
       toast.add({ severity: "error", summary: "Module not found", life: 3000 });
       router.replace("/fixed-values");
@@ -109,6 +115,26 @@ const rowErrors = computed<string[]>(() => {
 
 const hasRowErrors = computed(() => rowErrors.value.some((e) => e !== ""));
 
+function applyRestore(entry: ModuleHistoryEntry): void {
+  name.value = entry.name;
+  description.value = entry.description ?? "";
+  categoryId.value = entry.category_id ?? null;
+  tags.value = entry.tags ? [...entry.tags] : [];
+  const rows = ((entry.payload ?? {}) as { values?: NamedValue[] }).values ?? [];
+  values.value = rows.map((v) => ({
+    id: v.id,
+    name: (v.name ?? "").replace(/^\$+/, ""),
+    value: v.value ?? "",
+  }));
+  historyOpen.value = false;
+  toast.add({
+    severity: "info",
+    summary: "Version restored",
+    detail: `Restored from ${new Date(entry.saved_at).toLocaleString()}; click Save to commit.`,
+    life: 4000,
+  });
+}
+
 async function save() {
   if (!name.value.trim()) {
     toast.add({ severity: "warn", summary: "Name required", life: 2000 });
@@ -125,12 +151,25 @@ async function save() {
   }
   saving.value = true;
   try {
-    const payload = { values: values.value };
+    const payload = { values: values.value } as Record<string, unknown>;
     if (isEdit.value && props.id) {
+      const prev = await moduleStore.get(props.id);
+      const nextHistory = appendSnapshot(
+        {
+          name: prev.name,
+          description: prev.description,
+          category_id: prev.category_id,
+          tags: prev.tags,
+          payload: prev.payload as Record<string, unknown>,
+        },
+        prev.payload as Record<string, unknown>,
+      );
       await moduleStore.update(props.id, {
         name: name.value, description: description.value,
-        category_id: categoryId.value, tags: tags.value, payload,
+        category_id: categoryId.value, tags: tags.value,
+        payload: { ...payload, history: nextHistory },
       });
+      historyEntries.value = nextHistory;
     } else {
       await moduleStore.create({
         type: "fixed_values",
@@ -265,9 +304,25 @@ async function save() {
     </div>
 
     <div class="form-page__footer">
+      <Button
+        v-if="historyEntries.length"
+        :label="`History (${historyEntries.length})`"
+        icon="pi pi-history"
+        severity="secondary"
+        outlined
+        data-test="history-btn"
+        @click="historyOpen = true"
+      />
+      <div class="form-page__footer-spacer" />
       <Button label="Cancel" severity="secondary" outlined @click="router.push('/fixed-values')" />
       <Button label="Save" icon="pi pi-check" severity="primary" :loading="saving" data-test="save-btn" @click="save" />
     </div>
+    <HistoryPanel
+      :open="historyOpen"
+      :entries="historyEntries"
+      @update:open="(v) => (historyOpen = v)"
+      @restore="applyRestore"
+    />
   </div>
 </template>
 
@@ -280,8 +335,9 @@ async function save() {
   background: var(--wp-bg);
   border-top: 1px solid var(--wp-border);
   padding: 12px 24px;
-  display: flex; gap: 8px; justify-content: flex-end;
+  display: flex; gap: 8px; align-items: center;
 }
+.form-page__footer-spacer { flex: 1; }
 .form-section { margin-bottom: 24px; }
 .form-section__label {
   font-size: 11px; text-transform: uppercase;

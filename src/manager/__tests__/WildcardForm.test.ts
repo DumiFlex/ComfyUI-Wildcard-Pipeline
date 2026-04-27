@@ -187,4 +187,104 @@ describe("WildcardForm.vue", () => {
       .element as HTMLInputElement;
     expect(varInput.value).toBe("my_hair");
   });
+
+  it("shows History (N) when payload has history entries and restores on click", async () => {
+    apiMod.get.mockResolvedValue({
+      id: "wc_a", name: "alpha", description: "", category_id: null,
+      tags: [], type: "wildcard",
+      payload: {
+        options: [{ id: "o1", value: "blue", weight: 1 }],
+        sub_categories: [],
+        var_binding: "alpha",
+        history: [
+          {
+            saved_at: "2025-04-26T00:00:00Z",
+            name: "older-name",
+            description: "older",
+            category_id: null,
+            tags: [],
+            payload: {
+              options: [{ id: "o0", value: "red", weight: 1 }],
+              sub_categories: [],
+              var_binding: "older_name",
+            },
+          },
+          {
+            saved_at: "2025-04-26T12:00:00Z",
+            name: "previous-name",
+            description: "prev",
+            category_id: null,
+            tags: [],
+            payload: {
+              options: [{ id: "o0a", value: "green", weight: 1 }],
+              sub_categories: [],
+              var_binding: "previous_name",
+            },
+          },
+        ],
+      },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+
+    const wrap = mount(WildcardForm, {
+      props: { id: "wc_a" },
+      attachTo: document.body,
+      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    });
+    await flushPromises();
+
+    // Button shows count.
+    const historyBtn = wrap.find('[data-test="history-btn"]');
+    expect(historyBtn.exists()).toBe(true);
+    expect(historyBtn.text()).toContain("History (2)");
+
+    // Open panel.
+    await historyBtn.trigger("click");
+    await flushPromises();
+    expect(document.body.querySelector('[data-test="history-panel"]')).not.toBeNull();
+
+    // Newest entry is index 0.
+    const restoreBtn = document.body.querySelector(
+      '[data-test="history-restore-0"]',
+    ) as HTMLElement | null;
+    expect(restoreBtn).not.toBeNull();
+    restoreBtn?.click();
+    await flushPromises();
+
+    // Name input now reflects the restored snapshot's name.
+    const nameInput = wrap.find("#wc-name").element as HTMLInputElement;
+    expect(nameInput.value).toBe("previous-name");
+    wrap.unmount();
+  });
+
+  it("save on existing module appends to history sidecar", async () => {
+    apiMod.get.mockResolvedValue({
+      id: "wc_a", name: "alpha", description: "", category_id: null,
+      tags: [], type: "wildcard",
+      payload: { options: [], sub_categories: [], var_binding: "alpha" },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    apiMod.update.mockImplementation((_id: string, body: { payload: Record<string, unknown> }) => Promise.resolve({
+      id: "wc_a", type: "wildcard", name: "alpha2",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: body.payload, version: 2, created_at: "", updated_at: "",
+    }));
+    const wrap = mount(WildcardForm, {
+      props: { id: "wc_a" },
+      global: { plugins: [makeRouter(), PrimeVue, ToastService] },
+    });
+    await flushPromises();
+    const nameInput = wrap.find("#wc-name");
+    await nameInput.setValue("alpha2");
+    await flushPromises();
+    const saveBtn = findByText(wrap, "Save");
+    await saveBtn?.trigger("click");
+    await flushPromises();
+    // 1st call = initial get on mount; 2nd call = pre-save snapshot fetch.
+    expect(apiMod.get).toHaveBeenCalledTimes(2);
+    const upd = apiMod.update.mock.calls[0]?.[1] as { payload: { history?: unknown[] } };
+    expect(Array.isArray(upd.payload.history)).toBe(true);
+    expect(upd.payload.history?.length).toBe(1);
+    wrap.unmount();
+  });
 });
