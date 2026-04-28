@@ -43,7 +43,7 @@ const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 onMounted(async () => {
-  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchAll()]);
+  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
     try {
       const row = await moduleStore.get(props.id);

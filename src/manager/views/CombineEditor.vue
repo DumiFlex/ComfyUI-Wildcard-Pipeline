@@ -106,7 +106,7 @@ const detected = computed<string[]>(() => {
 });
 
 onMounted(async () => {
-  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchAll()]);
+  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
     try {
       const row = await moduleStore.get(props.id);

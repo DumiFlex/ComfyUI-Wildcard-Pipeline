@@ -33,7 +33,7 @@ const countsByCategory = computed(() => {
 });
 
 onMounted(async () => {
-  await Promise.all([store.fetchAll(), moduleStore.fetchAll()]);
+  await Promise.all([store.fetchAll(), moduleStore.fetchCatalog()]);
 });
 
 function moduleCount(row: CategoryRow): number {
