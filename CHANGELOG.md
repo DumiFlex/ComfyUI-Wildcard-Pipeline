@@ -1,3 +1,20 @@
+# [1.6.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.5.0...v1.6.0) (2026-04-28)
+
+
+### Bug Fixes
+
+* **api:** list /modules `total` reflects unpaginated row count ([d536484](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/d53648430d5ad7f5afcdd78e3ad7f3538d06ac3f))
+* **spa:** chip pills, derivation $var dropdown, constraint subcat axes ([bab0fe9](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/bab0fe99660f6f0032d3e115ce08e5182cd5b7a3))
+* **spa:** pipeline row — drop legacy refselect rules clipping shared select ([3e20ba5](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/3e20ba543c5c828cb9fb4aca544e5595a1ed535b))
+* **spa:** rich-text caret + wildcards-list syntax pills ([1298645](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/12986454eb74b947828c6ffc90fa0e09e724698b))
+* **spa:** wildcard ref-graph keys by 8-hex UUID, not full slug id ([5f12372](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/5f123722f058ebc44b377f3b735ae5ad289c5f54))
+* **ui:** select dropdown — menu scroll works, viewport-aware max-height ([3b9262a](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/3b9262ab2d24e80884b4153ef950555b46b17206))
+
+
+### Features
+
+* **spa:** uuid pills show var-names everywhere; clickable in test runner ([df046f5](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/df046f57935c42f1dceaa4196b1b99fbf49ac5b3))
+
 # [1.5.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.4.2...v1.5.0) (2026-04-28)
 
 
