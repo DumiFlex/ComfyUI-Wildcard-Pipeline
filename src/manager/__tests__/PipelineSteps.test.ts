@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import PipelineSteps from "../components/PipelineSteps.vue";
 import type { ModuleRow, PipelineStep } from "../api/types";
 
@@ -107,55 +107,77 @@ describe("PipelineSteps.vue", () => {
     expect(next[0].id).toBe("s2");
   });
 
-  // The reference design's signature affordance is an inline transparent
-  // <select> rendered as the bold module name. Picking from the dropdown
-  // emits update:steps with the new module_id. Pin both shape and event.
+  // The shared `Select.vue` component teleports its dropdown menu to
+  // `document.body`, so option queries use `document.querySelectorAll`
+  // rather than the test-utils wrapper. `attachTo: document.body` +
+  // `wrap.unmount()` keeps teleported nodes from leaking between tests.
   describe("inline ref-select", () => {
-    it("populates options from same-kind modules in allModules", () => {
+    function clearBody() {
+      while (document.body.firstChild) {
+        document.body.removeChild(document.body.firstChild);
+      }
+    }
+    afterEach(clearBody);
+
+    it("populates options from same-kind modules in allModules", async () => {
       const a = makeModule({ id: "m_a", name: "alpha", type: "wildcard" });
       const b = makeModule({ id: "m_b", name: "bravo", type: "wildcard" });
       const c = makeModule({ id: "m_c", name: "charlie", type: "wildcard" });
       // A non-wildcard module — must NOT appear in the wildcard step's dropdown.
       const fv = makeModule({ id: "m_fv", name: "fixed", type: "fixed_values" });
-      const wrap = mountSteps(
-        [makeStep({ id: "s1", module_id: "m_a" })],
-        [a, b, c, fv],
-      );
-      const select = wrap.find('[data-test="step-ref-0"]');
-      const optionLabels = select.findAll("option").map((o) => o.text());
+      const modulesById = new Map([a, b, c, fv].map((m) => [m.id, m] as const));
+      const wrap = mount(PipelineSteps, {
+        props: {
+          steps: [makeStep({ id: "s1", module_id: "m_a" })],
+          modulesById,
+          allModules: [a, b, c, fv],
+        },
+        attachTo: document.body,
+      });
+      // Open the dropdown by clicking the trigger inside the row's Select.
+      await wrap.find('[data-test="step-ref-0"] [data-test="select-trigger"]').trigger("click");
+      const optionLabels = Array.from(
+        document.querySelectorAll(".wp-select__option"),
+      ).map((el) => (el.textContent ?? "").trim());
       expect(optionLabels).toEqual(["alpha", "bravo", "charlie"]);
       expect(optionLabels).not.toContain("fixed");
+      wrap.unmount();
     });
 
     it("emits update:steps with the chosen module_id when select changes", async () => {
       const a = makeModule({ id: "m_a", name: "alpha", type: "wildcard" });
       const b = makeModule({ id: "m_b", name: "bravo", type: "wildcard" });
-      const wrap = mountSteps(
-        [makeStep({ id: "s1", module_id: "m_a" })],
-        [a, b],
-      );
-      const select = wrap.find('[data-test="step-ref-0"]');
-      await select.setValue("m_b");
+      const modulesById = new Map([a, b].map((m) => [m.id, m] as const));
+      const wrap = mount(PipelineSteps, {
+        props: {
+          steps: [makeStep({ id: "s1", module_id: "m_a" })],
+          modulesById,
+          allModules: [a, b],
+        },
+        attachTo: document.body,
+      });
+      const trigger = wrap.find('[data-test="step-ref-0"] [data-test="select-trigger"]');
+      await trigger.trigger("click");
+      // ArrowDown moves active from index 0 (alpha, current) to index 1 (bravo);
+      // Enter commits it.
+      await trigger.trigger("keydown", { key: "ArrowDown" });
+      await trigger.trigger("keydown", { key: "Enter" });
       const emitted = wrap.emitted("update:steps");
       expect(emitted).toBeTruthy();
       const next = (emitted ?? [])[0][0] as PipelineStep[];
       expect(next[0].module_id).toBe("m_b");
+      wrap.unmount();
     });
 
-    it("renders a `(missing reference)` option when the step's module_id is not in allModules", () => {
-      // step references "m_ghost" — not in allModules. Component must
-      // still render an option for the orphan id so the row doesn't
-      // silently switch to the first available wildcard on save.
+    it("renders a `(missing reference)` fallback when module_id is not in allModules", () => {
+      // step references "m_ghost" — not in allModules. modulesById can't
+      // resolve it → kind is null → component renders the missing-fallback
+      // span instead of a Select. User sees they have a broken ref.
       const a = makeModule({ id: "m_a", name: "alpha", type: "wildcard" });
       const wrap = mountSteps(
         [makeStep({ id: "s1", module_id: "m_ghost" })],
         [a],
       );
-      // No wildcard with id `m_ghost` exists, so the select shows the
-      // missing reference fallback. The step's module_id isn't a
-      // resolvable wildcard either — kind is null — so we render
-      // `<span class="wp-pl-row__missing">` instead of a select. Either
-      // path satisfies the contract: the user sees they have a broken ref.
       expect(wrap.text()).toContain("(missing reference)");
     });
   });

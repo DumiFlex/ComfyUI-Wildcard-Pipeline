@@ -22,6 +22,7 @@
  * to where the list came from.
  */
 import { computed } from "vue";
+import Select from "./ui/Select.vue";
 import type { ModuleRow, ModuleType, PipelineStep } from "../api/types";
 
 interface Props {
@@ -295,31 +296,24 @@ function onDragEnd() {
           </span>
         </div>
 
-        <!-- Inline transparent <select> — the reference's signature move.
-             Reads as bold text with a tiny chevron; clicking opens the
-             native dropdown of same-kind modules. The select stays in
-             the document flow so its width matches the row main column. -->
+        <!-- Module-switcher dropdown — uses the shared Select component
+             so it matches the styling of every other dropdown in the
+             editors (Combine, Constraint, Derivation, etc.) instead of
+             rolling its own transparent native select. The original
+             design reference used a styled native <select>, but for
+             cross-editor visual consistency we route through `Select`. -->
         <div class="wp-pl-row__name">
-          <select
+          <Select
             v-if="row.kind"
-            class="wp-pl-row__refselect"
-            :value="row.step.module_id"
+            size="sm"
+            :model-value="row.step.module_id"
+            :options="row.sameKindOptions"
+            :placeholder="`Pick a ${row.meta?.label.toLowerCase()}`"
             :aria-label="`Pick reference for step ${row.idx + 1}`"
+            class="wp-pl-row__refselect"
             :data-test="`step-ref-${row.idx}`"
-            @change="(e) => changeModule(row.idx, (e.target as HTMLSelectElement).value)"
-          >
-            <option
-              v-if="!row.sameKindOptions.find((o) => o.value === row.step.module_id)"
-              :value="row.step.module_id"
-            >
-              (missing reference)
-            </option>
-            <option
-              v-for="opt in row.sameKindOptions"
-              :key="opt.value"
-              :value="opt.value"
-            >{{ opt.label }}</option>
-          </select>
+            @update:model-value="(v) => changeModule(row.idx, v as string)"
+          />
           <span v-else class="wp-pl-row__missing">(missing reference)</span>
           <a
             v-if="row.mod && row.meta"
@@ -550,41 +544,12 @@ function onDragEnd() {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
 }
 
-/* inline ref-select — transparent, looks like bold text */
+/* Shared Select component sits inside .wp-pl-row__name; let it grow to
+   fill the main column with `flex: 1` so the picked option label has
+   horizontal room to read instead of being cropped. */
 .wp-pl-row__refselect {
   flex: 1;
   min-width: 0;
-  height: 26px;
-  padding: 0 22px 0 0;
-  border: none;
-  background-color: transparent;
-  color: var(--wp-text);
-  font-size: 13.5px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23888' d='M0 0h10L5 6z'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 4px center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow: hidden;
-  border-radius: 4px;
-  transition: background-color 120ms ease;
-}
-.wp-pl-row__refselect:hover {
-  background-color: var(--wp-bg-3);
-}
-.wp-pl-row__refselect:focus-visible {
-  outline: none;
-  background-color: var(--wp-bg);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
-}
-.wp-pl-row__refselect option {
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
 }
 
 /* row actions */
