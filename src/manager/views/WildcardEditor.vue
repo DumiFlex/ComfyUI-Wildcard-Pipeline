@@ -23,7 +23,7 @@ import RichTextInput from "../components/RichTextInput.vue";
 import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
+import { extractModuleUuid, toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   CombinePayload,
@@ -54,18 +54,27 @@ const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
-// Suggestions: every other wildcard's UUID (excluding self) for `@`-trigger
-// nested-reference autocomplete. The canonical stored form is `@{8hex}` per
-// the syntax spec — the popover surfaces the human display name (via
-// `uuidToName` below) but the inserted token is the UUID. Returning names
-// here was the bug that caused `@{module_name}` to appear in the textarea
-// instead of `@{a1b2c3d4}`.
+// Suggestions: every other wildcard's 8-hex UUID (excluding self) for the
+// `@`-trigger nested-reference autocomplete. The canonical stored form is
+// `@{8hex}` per the syntax spec — the popover surfaces the human display
+// name (via `nameByUuid` below) but the inserted token is the bare UUID.
+//
+// Module DB ids are `<prefix>_<slug>_<8hex>` (see `ModuleRepository._gen_id`).
+// We strip everything except the trailing 8 hex chars: that is what the
+// tokenizer regex `@\{[0-9a-f]{8}\}` accepts, and it matches the runtime
+// catalog key shape consumed by `engine.modules.get_module(uuid)`.
+//
+// Two earlier shapes were wrong:
+//   1. var_binding/name → produced `@{test2}` (caught by users)
+//   2. full DB id (e.g. `wc_test2_ea67b173`) → tokenizer rejected it and the
+//      textarea showed raw `@{wc_test2_ea67b173}` text with no ref chip
 const wcSuggestions = computed<string[]>(() => {
   const out: string[] = [];
   for (const m of moduleStore.items) {
     if (m.type !== "wildcard") continue;
     if (props.id && m.id === props.id) continue;
-    out.push(m.id);
+    const uuid = extractModuleUuid(m.id);
+    if (uuid) out.push(uuid);
   }
   // Sort by display name so the popover orders alphabetically by what the
   // user actually sees, not by UUID hex.
@@ -77,14 +86,18 @@ const wcSuggestions = computed<string[]>(() => {
 });
 
 // UUID → display-name map used by RichTextInput to render `@{uuid}` chips
-// and the `@`-trigger autocomplete popover with human labels.
+// and the `@`-trigger autocomplete popover with human labels. Keyed by the
+// same 8-hex UUID surfaced through `wcSuggestions` so the popover, the
+// inline chip, and the resolver all agree on identity.
 const nameByUuid = computed<Map<string, string>>(() => {
   const m = new Map<string, string>();
   for (const mod of moduleStore.items) {
     if (mod.type !== "wildcard") continue;
+    const uuid = extractModuleUuid(mod.id);
+    if (!uuid) continue;
     const p = (mod.payload ?? {}) as { var_binding?: string };
     const display = (p.var_binding && p.var_binding.trim()) || toIdentifier(mod.name);
-    if (display) m.set(mod.id, display);
+    if (display) m.set(uuid, display);
   }
   return m;
 });
