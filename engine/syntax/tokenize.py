@@ -9,7 +9,14 @@ var + ref, Task 5 adds dp_brace + dp_pipe + dp_multi.
 """
 from __future__ import annotations
 
+import re
+
 from engine.syntax.types import Token, TokenKind
+
+# `$name` — identifier starts with letter or underscore, then word chars
+_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+# `@{8hex}` — exactly 8 lowercase hex chars in braces
+_REF_RE = re.compile(r"@\{([0-9a-f]{8})\}")
 
 
 def tokenize_text(text: str) -> list[Token]:
@@ -63,6 +70,37 @@ def tokenize_text(text: str) -> list[Token]:
             ))
             i += 2
             continue
+
+        # Variable: $name (only when followed by a valid identifier start)
+        if ch == "$":
+            m = _VAR_RE.match(text, i)
+            if m:
+                _flush_text(i)
+                out.append(Token(
+                    kind=TokenKind.VAR,
+                    raw=m.group(0),
+                    start=i,
+                    end=m.end(),
+                    meta={"name": m.group(1)},
+                ))
+                i = m.end()
+                continue
+            # Lone $ followed by non-ident — fall through to text accumulation
+
+        # Ref: @{8hex} (only when exactly 8 lowercase hex chars in braces)
+        if ch == "@":
+            m = _REF_RE.match(text, i)
+            if m:
+                _flush_text(i)
+                out.append(Token(
+                    kind=TokenKind.REF,
+                    raw=m.group(0),
+                    start=i,
+                    end=m.end(),
+                    meta={"uuid": m.group(1)},
+                ))
+                i = m.end()
+                continue
 
         # Default: accumulate literal text
         if text_start is None:

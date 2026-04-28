@@ -31,6 +31,80 @@
         {"kind": "escape", "raw": "@@", "start": 4, "end": 6, "meta": {"literal": "@"}},
         {"kind": "text", "raw": "example", "start": 6, "end": 13, "meta": {}}
       ]
+    },
+    {
+      "name": "single_var",
+      "input": "$style",
+      "expected_tokens": [
+        {"kind": "var", "raw": "$style", "start": 0, "end": 6, "meta": {"name": "style"}}
+      ]
+    },
+    {
+      "name": "var_in_text",
+      "input": "a $color cat",
+      "expected_tokens": [
+        {"kind": "text", "raw": "a ", "start": 0, "end": 2, "meta": {}},
+        {"kind": "var", "raw": "$color", "start": 2, "end": 8, "meta": {"name": "color"}},
+        {"kind": "text", "raw": " cat", "start": 8, "end": 12, "meta": {}}
+      ]
+    },
+    {
+      "name": "var_with_underscore_and_digits",
+      "input": "$hair_color_2",
+      "expected_tokens": [
+        {"kind": "var", "raw": "$hair_color_2", "start": 0, "end": 13, "meta": {"name": "hair_color_2"}}
+      ]
+    },
+    {
+      "name": "lone_dollar_is_literal_text",
+      "input": "cost: $",
+      "expected_tokens": [
+        {"kind": "text", "raw": "cost: $", "start": 0, "end": 7, "meta": {}}
+      ]
+    },
+    {
+      "name": "dollar_followed_by_non_ident_is_literal_text",
+      "input": "$ space",
+      "expected_tokens": [
+        {"kind": "text", "raw": "$ space", "start": 0, "end": 7, "meta": {}}
+      ]
+    },
+    {
+      "name": "single_ref",
+      "input": "@{a4f7b2e1}",
+      "expected_tokens": [
+        {"kind": "ref", "raw": "@{a4f7b2e1}", "start": 0, "end": 11, "meta": {"uuid": "a4f7b2e1"}}
+      ]
+    },
+    {
+      "name": "ref_in_text",
+      "input": "x @{deadbeef} y",
+      "expected_tokens": [
+        {"kind": "text", "raw": "x ", "start": 0, "end": 2, "meta": {}},
+        {"kind": "ref", "raw": "@{deadbeef}", "start": 2, "end": 13, "meta": {"uuid": "deadbeef"}},
+        {"kind": "text", "raw": " y", "start": 13, "end": 15, "meta": {}}
+      ]
+    },
+    {
+      "name": "at_without_braces_is_literal",
+      "input": "email@host",
+      "expected_tokens": [
+        {"kind": "text", "raw": "email@host", "start": 0, "end": 10, "meta": {}}
+      ]
+    },
+    {
+      "name": "at_brace_non_hex_is_literal",
+      "input": "@{not_uuid}",
+      "expected_tokens": [
+        {"kind": "text", "raw": "@{not_uuid}", "start": 0, "end": 11, "meta": {}}
+      ]
+    },
+    {
+      "name": "at_brace_wrong_length_is_literal",
+      "input": "@{abc} short",
+      "expected_tokens": [
+        {"kind": "text", "raw": "@{abc} short", "start": 0, "end": 12, "meta": {}}
+      ]
     }
   ]
 }
