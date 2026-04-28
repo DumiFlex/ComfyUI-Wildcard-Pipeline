@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from wp_nodes.context_node import WPContext
 from wp_nodes.types import ContextPayload
 
@@ -88,9 +86,13 @@ class TestWPContextExecute:
         assert result.context == {}
         assert result.debug["trace"] == []
 
-    def test_malformed_modules_raises(self):
-        with pytest.raises(ValueError):
-            WPContext.execute(seed=0, modules="{not json", upstream=None)
+    def test_malformed_modules_runs_empty(self):
+        # deserialize_node_input is robust: malformed JSON returns ([], {}, [])
+        # so the pipeline runs with an empty module list rather than crashing.
+        out = WPContext.execute(seed=0, modules="{not json", upstream=None)
+        result = out.values[0]
+        assert result.context == {}
+        assert result.debug["trace"] == []
 
     def test_downstream_overwrite_flows(self):
         first = WPContext.execute(
