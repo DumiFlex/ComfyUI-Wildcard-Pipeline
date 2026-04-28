@@ -1,15 +1,29 @@
 """/wp/api/test — runs N samples of the resolver against an ad-hoc snapshot."""
 from __future__ import annotations
 
+import random
 from collections import Counter
 
 from aiohttp import web
 
 from engine.modules.dispatcher import UnknownModuleType, resolve_module
-from engine.modules.wildcard_handler import RecursionLimitExceeded
 from wp_api._helpers import json_error, json_ok
 
 _MAX_SAMPLES = 10000
+
+
+def _make_test_ctx() -> dict:
+    """Build a minimal pipeline ctx for the test-runner endpoint.
+
+    Uses a fresh random.Random (seeded from os entropy) so each /wp/api/test
+    request is independently sampled. The endpoint never needs a fixed seed —
+    it samples N times and returns the distribution.
+    """
+    return {
+        "__wp_rng__": random.Random(),
+        "__wp_warnings__": [],
+        "__wp_catalog__": {},
+    }
 
 
 async def run_test(request: web.Request) -> web.Response:
@@ -40,11 +54,9 @@ async def run_test(request: web.Request) -> web.Response:
     results: list[dict[str, str]] = []
     try:
         for _ in range(samples):
-            results.append(resolve_module(snap, ctx=None))
+            results.append(resolve_module(snap, ctx=_make_test_ctx()))
     except UnknownModuleType as e:
         return json_error(f"unknown module type: {e.args[0]!r}", status=400)
-    except RecursionLimitExceeded as e:
-        return json_error(f"circular @{{ref}} reference: {e}", status=400)
 
     histogram: Counter[str] = Counter()
     for r in results:
