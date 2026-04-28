@@ -13,7 +13,6 @@ import type { ModuleRow, CategoryRow } from "../api/types";
 import {
   buildWildcardGraph,
   getWildcardSyntax,
-  wildcardVarName,
 } from "../utils/wildcardSyntax";
 
 const router = useRouter();
@@ -49,10 +48,13 @@ interface SyntaxView {
 }
 
 function syntaxView(row: ModuleRow): SyntaxView {
+  // `buildWildcardGraph` keys the maps by `mod.id` (the 8-hex UUID — the same
+  // identifier captured by the tokenizer's `@{8hex}` ref token). Looking up
+  // by `wildcardVarName(row)` (a `$var` slug) always missed, which was why
+  // the Syntax column never lit up its ref/incoming pills. Use `row.id`.
   const sx = getWildcardSyntax(row);
-  const name = wildcardVarName(row);
-  const out = wildcardGraph.value.outgoing.get(name);
-  const inc = wildcardGraph.value.incoming.get(name);
+  const out = wildcardGraph.value.outgoing.get(row.id);
+  const inc = wildcardGraph.value.incoming.get(row.id);
   return {
     hasInline: sx.hasInline,
     outgoing: out ? [...out] : [],
@@ -75,7 +77,8 @@ const extraFilters = computed(() => [
     key: "is-referenced",
     label: "Referenced by others",
     check: (m: ModuleRow) => {
-      const inc = wildcardGraph.value.incoming.get(wildcardVarName(m));
+      // Graph is keyed by `mod.id` (UUID) — see `syntaxView` for context.
+      const inc = wildcardGraph.value.incoming.get(m.id);
       return !!inc && inc.size > 0;
     },
   },
@@ -323,7 +326,11 @@ function isValid(row: ModuleRow): boolean {
         <template v-for="(opt, i) in topOptions(row)" :key="i">
           <span class="wp-mono wp-dim">{{ opt.weight ?? 1 }}×</span>
           <span class="wp-mono wp-opts-grid__val">
-            <RichTextPreview v-if="opt.value" :value="opt.value" />
+            <RichTextPreview
+              v-if="opt.value"
+              :value="opt.value"
+              :uuid-to-name="wildcardGraph.uuidToName"
+            />
             <span v-else class="wp-dim">(empty)</span>
           </span>
           <div class="wp-opts-grid__bar">
