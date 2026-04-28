@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "schema_url": "tests/fixtures/syntax-corpus.schema.json",
+  "cases": [
+    {
+      "name": "empty_input",
+      "input": "",
+      "expected_tokens": []
+    },
+    {
+      "name": "plain_literal_text",
+      "input": "hello world",
+      "expected_tokens": [
+        {"kind": "text", "raw": "hello world", "start": 0, "end": 11, "meta": {}}
+      ]
+    },
+    {
+      "name": "escape_dollar",
+      "input": "price: $$5",
+      "expected_tokens": [
+        {"kind": "text", "raw": "price: ", "start": 0, "end": 7, "meta": {}},
+        {"kind": "escape", "raw": "$$", "start": 7, "end": 9, "meta": {"literal": "$"}},
+        {"kind": "text", "raw": "5", "start": 9, "end": 10, "meta": {}}
+      ]
+    },
+    {
+      "name": "escape_at",
+      "input": "user@@example",
+      "expected_tokens": [
+        {"kind": "text", "raw": "user", "start": 0, "end": 4, "meta": {}},
+        {"kind": "escape", "raw": "@@", "start": 4, "end": 6, "meta": {"literal": "@"}},
+        {"kind": "text", "raw": "example", "start": 6, "end": 13, "meta": {}}
+      ]
+    }
+  ]
+}
