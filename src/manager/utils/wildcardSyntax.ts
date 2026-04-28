@@ -2,30 +2,34 @@
  * Wildcard syntax helpers.
  *
  * Pure utilities that inspect a wildcard module's option values and surface
- * syntactic features used by the manager UI (nested `@ref` targets, inline
- * `{a|b|c}` choice blocks). Mirrors the React reference at
+ * syntactic features used by the manager UI (nested `@{uuid}` ref targets,
+ * inline `{a|b|c}` choice blocks). Mirrors the React reference at
  * `docs/design-handoff/wildcardpipeline/project/data.jsx` so list-screen
  * rendering matches the prototype exactly.
+ *
+ * Graph is keyed by module UUID (mod.id) — the stable identifier emitted by
+ * the tokenizer's `@{8hex}` ref syntax. `uuidToName` provides human-readable
+ * labels for display.
  */
 import type { ModuleRow, WildcardOption, WildcardPayload } from "../api/types";
 import { tokenizeRich } from "./richTokenize";
 import { toIdentifier } from "./slug";
 
 export interface SyntaxFlags {
-  /** Any option value contains an `@name` reference token. */
+  /** Any option value contains an `@{uuid}` reference token. */
   hasRefs: boolean;
   /** Any option value contains an inline `{a|b|c}` choice block. */
   hasInline: boolean;
-  /** Distinct `@name` targets across every option value (deduped, ordered). */
+  /** Distinct UUID targets across every option value (deduped, ordered). */
   refTargets: string[];
 }
 
-/** Pull `@name` ref-token names out of a single value string via `tokenizeRich`. */
+/** Pull `@{8hex}` ref-token UUIDs out of a single value string via `tokenizeRich`. */
 function refsInValue(value: string): string[] {
   if (!value) return [];
   const out: string[] = [];
   for (const tok of tokenizeRich(value)) {
-    if (tok.kind === "ref" && tok.meta?.name) out.push(tok.meta.name);
+    if (tok.kind === "ref" && tok.meta?.uuid) out.push(tok.meta.uuid);
   }
   return out;
 }
@@ -76,52 +80,58 @@ export function getWildcardSyntax(mod: ModuleRow): SyntaxFlags {
 }
 
 export interface WildcardGraph {
-  /** outgoing[wcName] = Set of var-names it references via `@ref`. */
+  /** outgoing[uuid] = Set of UUIDs it references via `@{uuid}` refs. */
   outgoing: Map<string, Set<string>>;
-  /** incoming[wcName] = Set of var-names that reference it. */
+  /** incoming[uuid] = Set of UUIDs that reference it. */
   incoming: Map<string, Set<string>>;
+  /** Maps each wildcard UUID to its human-readable var_binding (or slug). */
+  uuidToName: Map<string, string>;
 }
 
 /**
- * Build a bidirectional reference graph keyed by wildcard `var_binding`
- * (or slug-fallback). Edges are only added when the target var-name resolves
- * to an actual wildcard in the input list — dangling `@ref` tokens are
- * dropped so callers can rely on `incoming.get(name)` returning known peers.
+ * Build a bidirectional reference graph keyed by wildcard UUID (`mod.id`).
+ * Edges are only added when the target UUID resolves to an actual wildcard in
+ * the input list — dangling `@{uuid}` tokens are dropped so callers can rely
+ * on `incoming.get(uuid)` returning known peers.
+ *
+ * `uuidToName` is populated from each wildcard's `var_binding` (or slug
+ * fallback) and used for display purposes.
  */
 export function buildWildcardGraph(modules: ModuleRow[]): WildcardGraph {
   const outgoing = new Map<string, Set<string>>();
   const incoming = new Map<string, Set<string>>();
+  const uuidToName = new Map<string, string>();
 
   const wildcards = modules.filter((m) => m.type === "wildcard");
-  const known = new Set<string>();
-  const nameOf = new Map<string, string>();
+  const knownUuids = new Set<string>();
+
   for (const w of wildcards) {
-    const n = wildcardVarName(w);
-    known.add(n);
-    nameOf.set(w.id, n);
+    knownUuids.add(w.id);
+    uuidToName.set(w.id, wildcardVarName(w));
   }
 
   for (const w of wildcards) {
-    const src = nameOf.get(w.id)!;
+    const srcUuid = w.id;
     const out = new Set<string>();
-    outgoing.set(src, out);
-    for (const target of getWildcardSyntax(w).refTargets) {
-      if (!known.has(target)) continue;
-      out.add(target);
-      let inSet = incoming.get(target);
+    outgoing.set(srcUuid, out);
+
+    for (const targetUuid of getWildcardSyntax(w).refTargets) {
+      if (!knownUuids.has(targetUuid)) continue;
+      out.add(targetUuid);
+      let inSet = incoming.get(targetUuid);
       if (!inSet) {
         inSet = new Set<string>();
-        incoming.set(target, inSet);
+        incoming.set(targetUuid, inSet);
       }
-      inSet.add(src);
+      inSet.add(srcUuid);
     }
   }
 
   // Ensure every wildcard appears as a key in both maps for easy lookup.
-  for (const n of known) {
-    if (!outgoing.has(n)) outgoing.set(n, new Set());
-    if (!incoming.has(n)) incoming.set(n, new Set());
+  for (const uuid of knownUuids) {
+    if (!outgoing.has(uuid)) outgoing.set(uuid, new Set());
+    if (!incoming.has(uuid)) incoming.set(uuid, new Set());
   }
 
-  return { outgoing, incoming };
+  return { outgoing, incoming, uuidToName };
 }
