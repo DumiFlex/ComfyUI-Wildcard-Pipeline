@@ -1,3 +1,11 @@
+## [1.4.1](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.4.0...v1.4.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* **engine:** bump now_iso() to microsecond precision ([fa6c4a1](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/fa6c4a1612ec94d2397a6db92a716d1288c09d89))
+* post-merge CI + docs/ ignore ([90f5492](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/90f549259ded6726948738fdea2d4eefdf3c313e))
+
 # [1.4.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.3.0...v1.4.0) (2026-04-28)
 
 
