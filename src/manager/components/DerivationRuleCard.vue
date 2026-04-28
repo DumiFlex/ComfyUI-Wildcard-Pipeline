@@ -19,12 +19,16 @@ interface Props {
   modelValue: DerivationRule;
   index: number;
   varSuggestions?: string[];
+  /** UUID → display-name map forwarded to every nested RichTextInput so
+   *  stray `@{uuid}` chips read as `@name` instead of raw hex. */
+  uuidToName?: Map<string, string>;
   /** Default-collapsed when many rules exist (set by editor). */
   defaultCollapsed?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   varSuggestions: () => [],
+  uuidToName: () => new Map(),
   defaultCollapsed: false,
 });
 
@@ -232,6 +236,7 @@ const branchCount = computed(() => rule.value.branches.length);
               :model-value="branch.condition.value"
               surface="derivation"
               :var-suggestions="varSuggestions"
+              :uuid-to-name="uuidToName"
               placeholder="value"
               class="field-value"
               :aria-label="`Condition value for rule ${ruleNumber} branch ${bi + 1}`"

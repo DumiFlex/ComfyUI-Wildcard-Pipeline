@@ -22,6 +22,7 @@ import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
+import { buildUuidToName } from "../utils/wildcardSyntax";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   CombinePayload,
@@ -87,6 +88,10 @@ const varHints = computed<VarHint[]>(() => {
 });
 
 const varSuggestions = computed<string[]>(() => varHints.value.map((h) => h.label));
+// Surfaces `@{uuid}` chips with human var-names in template + preview.
+// Combine surface ignores `@` refs at resolve time, but stray UUIDs
+// pasted in still benefit from the labelled chip.
+const uuidToName = computed(() => buildUuidToName(moduleStore.items));
 const hintByLabel = computed<Map<string, VarHint>>(() => {
   const m = new Map<string, VarHint>();
   for (const h of varHints.value) m.set(h.label, h);
@@ -247,6 +252,7 @@ function cancel() { router.push("/combines"); }
           <RichTextInput
             v-model="template"
             :var-suggestions="varSuggestions"
+            :uuid-to-name="uuidToName"
             :multiline="true"
             :rows="3"
             :placeholder="PLACEHOLDER"
@@ -291,7 +297,11 @@ function cancel() { router.push("/combines"); }
       <div class="wp-snippet" data-test="cb-preview">
         <div><span class="wp-token-com">// Highlighted template syntax:</span></div>
         <div class="cb-preview__row">
-          <RichTextPreview v-if="template" :value="template" />
+          <RichTextPreview
+            v-if="template"
+            :value="template"
+            :uuid-to-name="uuidToName"
+          />
           <span v-else class="wp-dim">(empty template)</span>
         </div>
         <div>

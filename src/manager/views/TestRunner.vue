@@ -7,6 +7,7 @@
  * Uses ui/* primitives only — no PrimeVue.
  */
 import { computed, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
@@ -27,7 +28,8 @@ import {
   runStep,
   wildcardVar,
 } from "../utils/resolver";
-import { toIdentifier } from "../utils/slug";
+import { extractModuleUuid, toIdentifier } from "../utils/slug";
+import { buildUuidToName } from "../utils/wildcardSyntax";
 import type {
   CombinePayload,
   ConstraintPayload,
@@ -41,6 +43,7 @@ import type {
 } from "../api/types";
 
 const toast = useToast();
+const router = useRouter();
 
 /* -------------------------- kind metadata -------------------------- */
 
@@ -75,6 +78,37 @@ const moduleId = ref<string | null>(null);
 const samples = ref<number>(KIND_DEFAULT_SAMPLES.wildcard);
 const running = ref(false);
 const allModules = ref<ModuleRow[]>([]);
+
+// 8-hex UUID → human var-name. Drives `@{uuid}` chip labels in every
+// RichTextPreview below (histogram templates, combine renderings).
+const uuidToName = computed(() => buildUuidToName(allModules.value));
+
+// Reverse map: 8-hex UUID → full slugged module id, so a click on a ref
+// pill can route to /wildcards/<id>/edit. Built lazily off the same
+// `allModules` ref so it stays in sync as the catalog refreshes.
+const idByUuid = computed(() => {
+  const map = new Map<string, string>();
+  for (const m of allModules.value) {
+    if (m.type !== "wildcard") continue;
+    const uuid = extractModuleUuid(m.id);
+    if (uuid) map.set(uuid, m.id);
+  }
+  return map;
+});
+
+function onRefClick(uuid: string): void {
+  const id = idByUuid.value.get(uuid);
+  if (!id) {
+    toast.push({
+      severity: "warn",
+      summary: "Wildcard not found",
+      detail: `No wildcard with UUID ${uuid} in the catalog.`,
+      life: 2500,
+    });
+    return;
+  }
+  router.push({ name: "wildcards-edit", params: { id } });
+}
 
 interface WildcardEntry { template: string; count: number; pct: number; resolved: string[] }
 interface WildcardResult { type: "wildcard"; samples: number; entries: WildcardEntry[]; hasInline: boolean; hasRefs: boolean }
@@ -466,7 +500,12 @@ function pickKind(k: ModuleType) {
       <div class="wp-hist">
         <div v-for="entry in result.entries" :key="entry.template" class="wp-hist__row">
           <div class="wp-hist__template">
-            <RichTextPreview :value="entry.template" />
+            <RichTextPreview
+              :value="entry.template"
+              :uuid-to-name="uuidToName"
+              clickable-refs
+              @ref-click="onRefClick"
+            />
             <div v-if="entry.resolved.length" class="wp-hist__resolved wp-mono wp-dim">
               <div v-for="(s, j) in entry.resolved" :key="j" class="wp-hist__resolved-line">↳ {{ s }}</div>
             </div>
@@ -513,7 +552,12 @@ function pickKind(k: ModuleType) {
         </template>
         <div class="wp-tr-combine-list">
           <div v-for="(s, i) in result.rendered" :key="i" class="wp-tr-combine-row">
-            <RichTextPreview :value="s" />
+            <RichTextPreview
+              :value="s"
+              :uuid-to-name="uuidToName"
+              clickable-refs
+              @ref-click="onRefClick"
+            />
           </div>
         </div>
       </Card>

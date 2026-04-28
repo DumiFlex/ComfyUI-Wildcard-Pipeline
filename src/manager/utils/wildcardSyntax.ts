@@ -82,6 +82,25 @@ export function getWildcardSyntax(mod: ModuleRow): SyntaxFlags {
   };
 }
 
+/**
+ * Build the canonical 8-hex UUID → display-name map every consumer of
+ * `@{uuid}` ref tokens needs (RichTextInput, RichTextPreview, autocomplete).
+ *
+ * Standalone helper rather than only `buildWildcardGraph().uuidToName` so
+ * callers that just need labels (TestRunner histogram, Combine preview, …)
+ * don't pay the cost of walking option values to build edge sets.
+ */
+export function buildUuidToName(modules: ModuleRow[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of modules) {
+    if (m.type !== "wildcard") continue;
+    const uuid = extractModuleUuid(m.id);
+    if (!uuid) continue;
+    out.set(uuid, wildcardVarName(m));
+  }
+  return out;
+}
+
 export interface WildcardGraph {
   /** outgoing[uuid] = Set of UUIDs it references via `@{uuid}` refs. */
   outgoing: Map<string, Set<string>>;
