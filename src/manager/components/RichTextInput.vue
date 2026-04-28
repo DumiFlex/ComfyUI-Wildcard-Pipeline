@@ -116,15 +116,31 @@ const mirrorHtml = computed(() => {
 
 // --- Suggestion list filtering. ---
 // `@` autocomplete is only available in the "wildcard" surface.
+//
+// For the `@` trigger, `refSuggestions` contains UUIDs (canonical stored
+// form per syntax spec) and we filter on the human display name resolved
+// through `uuidToName` so the user types `@col` and matches a wildcard
+// named "color". The inserted token is still the UUID — see
+// `applyAutocomplete`. Falling back to the raw UUID keeps filtering useful
+// even before `uuidToName` is hydrated.
 const acItems = computed(() => {
   if (!acOpen.value) return [];
   if (acTrigger.value === "@" && props.surface !== "wildcard") return [];
   const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
   const q = acQuery.value.toLowerCase();
-  return pool
-    .filter((label) => label.toLowerCase().includes(q))
-    .slice(0, 8);
+  const labelOf = acTrigger.value === "@"
+    ? (uuid: string) => (props.uuidToName.get(uuid) ?? uuid).toLowerCase()
+    : (name: string) => name.toLowerCase();
+  return pool.filter((id) => labelOf(id).includes(q)).slice(0, 8);
 });
+
+// Display label for a popover row: name for `@` (UUID → name lookup),
+// raw token for `$`. Used by the template binding below so the popover
+// stays consistent with the textarea even when refSuggestions are UUIDs.
+function suggestionLabel(token: string): string {
+  if (acTrigger.value === "@") return props.uuidToName.get(token) ?? token;
+  return token;
+}
 
 watch(acItems, (items) => {
   if (acActive.value >= items.length) acActive.value = 0;
@@ -443,7 +459,7 @@ onBeforeUnmount(() => {
           @mouseenter="acActive = i"
         >
           <span class="wp-rt-suggestions__label">
-            <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ label }}
+            <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ suggestionLabel(label) }}
           </span>
         </button>
       </div>

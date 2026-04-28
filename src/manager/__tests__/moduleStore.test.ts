@@ -47,6 +47,27 @@ describe("moduleStore", () => {
     expect(apiMod.list).toHaveBeenCalledWith({ type: "wildcard", q: "color" });
   });
 
+  // Regression: editors call this when they need cross-references (e.g.
+  // ConstraintEditor needs all wildcards even when the user came from the
+  // Constraints list page that pinned `filter.type = "constraint"`). The
+  // fix must drop the persistent filter so cross-refs aren't silently empty.
+  it("fetchCatalog ignores persisted filters", async () => {
+    apiMod.list.mockResolvedValue({
+      items: [
+        { id: "wc_a", type: "wildcard" },
+        { id: "co_b", type: "combine" },
+      ],
+      total: 2,
+    });
+    const s = useModuleStore();
+    s.filter.type = "constraint";
+    s.filter.q = "anything";
+    s.filter.favorites = true;
+    await s.fetchCatalog();
+    expect(apiMod.list).toHaveBeenCalledWith({});
+    expect(s.items).toHaveLength(2);
+  });
+
   it("create unshifts to items", async () => {
     apiMod.create.mockResolvedValue({ id: "wc_y_2", name: "y", type: "wildcard" });
     const s = useModuleStore();
