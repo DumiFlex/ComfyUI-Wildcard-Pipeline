@@ -1,16 +1,17 @@
 /**
  * Wildcard Pipeline rich-text tokenizer.
  *
- * Translated faithfully from the React reference at
- * docs/design-handoff/wildcardpipeline/project/rich-input.jsx (function
- * `tokenizeRich`). Recognises the following syntactic surface:
+ * Recognises the following syntactic surface (locked grammar, Tasks 3–5):
  *
  *   $varname                     subject placeholder (var)
- *   @wildcard_name               nested wildcard reference (ref)
+ *   @{8hex}                      nested wildcard reference by UUID (ref)
  *   $$ / @@                      literal-escape sequences
  *   {a|b|c}                      inline-choice block (dp-brace + dp-pipe)
  *   {N$$sep$$a|b|c}              multi-select with optional separator
  *   {N::term}                    weighted option inside a brace block
+ *
+ * REMOVED (legacy syntax no longer supported):
+ *   @name short-form ref         — use @{8hex} UUID form instead
  *   N#$var / N#@ref / N#{...}    quantifier prefix
  *   # comment to end of line     greyed-out comment line
  *
@@ -29,14 +30,13 @@ export type TokenKind =
   | "dp-pipe"
   | "dp-multi"
   | "dp-weight"
-  | "quantifier"
-  | "comment"
   | "escape";
+// REMOVED: "comment", "quantifier" — dropped in locked grammar (Tasks 3–5)
 
 export interface TokenMeta {
-  name?: string;
+  name?: string;    // var tokens only ($varname)
+  uuid?: string;    // ref tokens only (@{8hex})
   weight?: number;
-  count?: number;
   range?: string;
   sep?: string | null;
 }
@@ -63,32 +63,6 @@ export function tokenizeRich(text: string): RichToken[] {
 
   while (i < N) {
     const ch = text[i];
-
-    // Comment: `#` at line start (or after whitespace) through end of line.
-    if (ch === "#" && (i === 0 || /\s/.test(text[i - 1]))) {
-      let j = i;
-      while (j < N && text[j] !== "\n") j++;
-      out.push({ kind: "comment", raw: text.slice(i, j), start: i, end: j });
-      i = j;
-      continue;
-    }
-
-    // Quantifier prefix `\d+#` followed by `$` or `{`.
-    if (ch >= "0" && ch <= "9") {
-      const m = text.slice(i).match(/^(\d+)#(?=[$@{])/);
-      if (m) {
-        out.push({
-          kind: "quantifier",
-          raw: m[0],
-          start: i,
-          end: i + m[0].length,
-          meta: { count: Number(m[1]) },
-        });
-        i += m[0].length;
-        continue;
-      }
-      // fall through — bare digits become plain text.
-    }
 
     // Dynamic prompt block `{ ... }`.
     if (ch === "{") {
@@ -191,19 +165,19 @@ export function tokenizeRich(text: string): RichToken[] {
         continue;
       }
     }
-    // `@varname` nested wildcard reference.
+    // Ref: `@{8hex}` UUID form ONLY. The short @name form is no longer supported.
     if (ch === "@") {
-      const m = text.slice(i + 1).match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
+      const REF_RE = /^@\{([0-9a-f]{8})\}/;
+      const m = text.slice(i).match(REF_RE);
       if (m) {
-        const raw = "@" + m[1];
         out.push({
           kind: "ref",
-          raw,
+          raw: m[0],
           start: i,
-          end: i + raw.length,
-          meta: { name: m[1] },
+          end: i + m[0].length,
+          meta: { uuid: m[1] },
         });
-        i += raw.length;
+        i += m[0].length;
         continue;
       }
     }
@@ -215,8 +189,6 @@ export function tokenizeRich(text: string): RichToken[] {
     while (j < N) {
       const c = text[j];
       if (c === "$" || c === "@" || c === "{") break;
-      if (c === "#" && (j === 0 || /\s/.test(text[j - 1]))) break;
-      if (c >= "0" && c <= "9" && /^\d+#[$@{]/.test(text.slice(j))) break;
       j++;
     }
     out.push({ kind: "text", raw: text.slice(i, j), start: i, end: j });

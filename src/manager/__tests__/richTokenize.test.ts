@@ -22,12 +22,31 @@ describe("tokenizeRich", () => {
     expect(v?.end).toBe(9);
   });
 
-  it("recognises @ref tokens", () => {
+  // TODO(syntax-task-19): re-enable after wildcardSyntax.ts UUID-graph rewrite
+  // The old @name short form is no longer recognised as ref; it falls through to text.
+  it.skip("recognises @ref tokens (legacy @name short form)", () => {
     const tokens = tokenizeRich("see @colors");
     const r = tokens.find((t) => t.kind === "ref");
     expect(r).toBeDefined();
     expect(r?.raw).toBe("@colors");
     expect(r?.meta?.name).toBe("colors");
+  });
+
+  it("recognises @{8hex} UUID ref tokens", () => {
+    const tokens = tokenizeRich("see @{1a2b3c4d}");
+    const r = tokens.find((t) => t.kind === "ref");
+    expect(r).toBeDefined();
+    expect(r?.raw).toBe("@{1a2b3c4d}");
+    expect(r?.meta?.uuid).toBe("1a2b3c4d");
+    expect(r?.start).toBe(4);
+    expect(r?.end).toBe(15);
+  });
+
+  it("does not recognise @name short form as ref (falls through to text)", () => {
+    const tokens = tokenizeRich("@colors");
+    // No ref token — the whole thing should be text (@ is not followed by {8hex})
+    expect(tokens.some((t) => t.kind === "ref")).toBe(false);
+    expect(tokens.some((t) => t.kind === "text")).toBe(true);
   });
 
   it("treats $$ as an escape, not a var", () => {
@@ -74,29 +93,43 @@ describe("tokenizeRich", () => {
     expect(m?.meta?.sep).toBe(", ");
   });
 
-  it("recognises a quantifier prefix N#$var", () => {
+  // TODO(syntax-task-19): re-enable after quantifier is re-evaluated for the new grammar
+  // The quantifier prefix N#$var is no longer recognised; it becomes plain text.
+  it.skip("recognises a quantifier prefix N#$var (legacy)", () => {
     const tokens = tokenizeRich("5#$person");
-    const q = tokens.find((t) => t.kind === "quantifier");
+    // Cast to string so TypeScript does not reject the removed kind literal.
+    const q = tokens.find((t) => (t.kind as string) === "quantifier");
     const v = tokens.find((t) => t.kind === "var");
     expect(q).toBeDefined();
     expect(q?.raw).toBe("5#");
-    expect(q?.meta?.count).toBe(5);
+    expect((q?.meta as Record<string, unknown>)?.count).toBe(5);
     expect(v?.raw).toBe("$person");
   });
 
-  it("recognises # comment lines", () => {
+  // TODO(syntax-task-19): re-enable after comment syntax is re-evaluated for the new grammar
+  // The # comment line syntax is no longer recognised.
+  it.skip("recognises # comment lines (legacy)", () => {
     const tokens = tokenizeRich("# this is a comment\nrest");
-    expect(tokens[0].kind).toBe("comment");
+    // Cast to string so TypeScript does not reject the removed kind literal.
+    expect(tokens[0].kind as string).toBe("comment");
     expect(tokens[0].raw).toBe("# this is a comment");
   });
 
   it("does not flag mid-token # as a comment", () => {
     const tokens = tokenizeRich("foo#bar");
-    expect(tokens.some((t) => t.kind === "comment")).toBe(false);
+    // Cast to string: "comment" is no longer in TokenKind; the comparison is always false.
+    expect(tokens.some((t) => (t.kind as string) === "comment")).toBe(false);
+  });
+
+  it("treats # at line start as plain text (no comment syntax)", () => {
+    const tokens = tokenizeRich("# noted");
+    // With comment syntax removed, the whole string is plain text.
+    expect(tokens.every((t) => t.kind === "text")).toBe(true);
   });
 
   it("emits contiguous tokens covering the full input", () => {
-    const text = "5#$person says @greet at $$5: {a|b}";
+    // Use @{uuid} form and no quantifier — tests the locked grammar.
+    const text = "$person says @{1a2b3c4d} at $$5: {a|b}";
     const tokens = tokenizeRich(text);
     expect(tokens[0].start).toBe(0);
     expect(tokens[tokens.length - 1].end).toBe(text.length);
