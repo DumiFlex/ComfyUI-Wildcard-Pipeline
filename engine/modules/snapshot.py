@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
@@ -142,16 +141,10 @@ class WalkResult:
     walk_overflow: list[WalkOverflow] = field(default_factory=list)
 
 
-_AT_UUID_RE = re.compile(r"@\{([^}]+)\}")
-
-
 def _extract_at_uuid_refs(payload: dict[str, Any]) -> set[str]:
-    """Collect all ``@{...}`` identifiers referenced inside a payload's
-    string-typed leaves.  Uses ``tokenize_text`` for canonical 8-hex-char
-    refs; falls back to a broader pattern for any ``@{...}`` token that the
-    strict tokenizer emits as plain TEXT (e.g. during tests or when IDs are
-    temporarily non-canonical).  The catalog look-up at call-site is the
-    authoritative filter — unknown refs become ``missing_target`` overflow.
+    """Collect all ``@{8hex}`` refs referenced inside a payload's
+    string-typed leaves.  Uses ``tokenize_text`` exclusively — only
+    canonical 8-hex-char refs (spec §2.4) are followed.
 
     Surface-agnostic: collects from any string in the dict/list tree;
     the caller decides which module types have their payloads walked
@@ -160,20 +153,11 @@ def _extract_at_uuid_refs(payload: dict[str, Any]) -> set[str]:
 
     def _scan(value: Any) -> None:
         if isinstance(value, str):
-            # First pass: canonical 8-hex refs via tokenizer.
-            tokenizer_refs: set[str] = set()
             for tok in tokenize_text(value):
                 if tok.kind == TokenKind.REF:
                     uid = (tok.meta or {}).get("uuid")
                     if isinstance(uid, str):
                         refs.add(uid)
-                        tokenizer_refs.add(uid)
-            # Second pass: broader @{...} scan for any refs the strict
-            # tokenizer did not recognise (non-canonical uuid formats).
-            for m in _AT_UUID_RE.finditer(value):
-                candidate = m.group(1)
-                if candidate not in tokenizer_refs:
-                    refs.add(candidate)
         elif isinstance(value, dict):
             for v in value.values():
                 _scan(v)
