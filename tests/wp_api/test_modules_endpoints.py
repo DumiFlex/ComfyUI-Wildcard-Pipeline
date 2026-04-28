@@ -114,3 +114,47 @@ async def test_hashes_endpoint_returns_uuid_hash_map_for_wildcards_only(
     assert wc["uuid"] in body["hashes"]
     assert cb["uuid"] not in body["hashes"]  # combines excluded
     assert body["hashes"][wc["uuid"]] == wc["payload_hash"]
+
+
+# ── ModuleRow shape extension (spec §4.2 — Task 11) ──────────────────────
+# Task 2 already wired `_row_to_module` to include `uuid` and `payload_hash`
+# on every returned row. These tests pin that contract at the API boundary
+# so a future refactor (e.g. swapping the row helper, adding a slim list
+# variant) can't accidentally drop either field. Pure regression coverage.
+
+
+async def test_list_modules_response_includes_uuid_and_payload_hash(
+    aiohttp_client, app_with_db,
+):
+    app, conn = app_with_db
+    repo = ModuleRepository(conn)
+    repo.create(
+        type="wildcard", name="x", description="",
+        category_id=None, tags=[], payload={"options": []},
+    )
+    client = await aiohttp_client(app)
+    resp = await client.get("/wp/api/modules")
+    assert resp.status == 200
+    items = (await resp.json())["items"]
+    assert len(items) == 1
+    assert "uuid" in items[0]
+    assert "payload_hash" in items[0]
+    assert len(items[0]["uuid"]) == 8
+    assert len(items[0]["payload_hash"]) == 64
+
+
+async def test_get_module_response_includes_uuid_and_payload_hash(
+    aiohttp_client, app_with_db,
+):
+    app, conn = app_with_db
+    repo = ModuleRepository(conn)
+    row = repo.create(
+        type="wildcard", name="x", description="",
+        category_id=None, tags=[], payload={"options": []},
+    )
+    client = await aiohttp_client(app)
+    resp = await client.get(f"/wp/api/modules/{row['id']}")
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["uuid"] == row["uuid"]
+    assert data["payload_hash"] == row["payload_hash"]
