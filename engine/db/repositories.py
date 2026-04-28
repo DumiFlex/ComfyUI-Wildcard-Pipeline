@@ -128,18 +128,28 @@ class ModuleRepository:
         return _row_to_module(row)
 
     def get_by_uuids(self, uuids: list[str]) -> list[dict[str, Any]]:
-        """Bulk indexed lookup. Dedups input. Silently skips missing uuids
-        (callers that need explicit miss-detection should compare returned
-        uuids against the input set)."""
+        """Bulk indexed lookup. Dedups input and returns rows in the same
+        order as the (deduped) input. Silently skips missing uuids —
+        callers that need explicit miss-detection should compare returned
+        uuids against the input set.
+
+        Note on input size: callers (Test Runner request walker, embed-
+        bundle endpoint) pass at most a few dozen uuids in practice, so
+        we do not chunk. SQLite's `SQLITE_LIMIT_VARIABLE_NUMBER` defaults
+        to 32766 on modern builds (3.32+) and 999 on older ones — well
+        above the expected upper bound."""
         if not uuids:
             return []
-        unique = list(dict.fromkeys(uuids))  # dedup, preserve order
+        unique = list(dict.fromkeys(uuids))  # dedup, preserve input order
         placeholders = ",".join("?" for _ in unique)
         cur = self._conn.execute(
             f"SELECT * FROM modules WHERE uuid IN ({placeholders});",
             unique,
         )
-        return [_row_to_module(r) for r in cur.fetchall()]
+        # SQLite makes no order guarantee for IN-predicate results, so we
+        # re-order against the input list to honor the docstring contract.
+        by_uuid = {r["uuid"]: r for r in cur.fetchall()}
+        return [_row_to_module(by_uuid[u]) for u in unique if u in by_uuid]
 
     def update(
         self,
