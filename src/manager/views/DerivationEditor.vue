@@ -18,6 +18,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
 import { toIdentifier } from "../utils/slug";
+import { buildUuidToName } from "../utils/wildcardSyntax";
 import type {
   CombinePayload,
   DerivationAction,
@@ -73,6 +74,12 @@ const varSuggestions = computed<string[]>(() => {
   }
   return out.sort();
 });
+
+// 8-hex UUID → wildcard var-name. Forwarded into every nested
+// DerivationRuleCard so stray `@{uuid}` tokens (pasted, copied from a
+// wildcard editor, etc.) render as `@name` chips even though `@` refs
+// don't resolve on the derivation surface.
+const uuidToName = computed(() => buildUuidToName(moduleStore.items));
 
 let ruleSeq = 0;
 function newRuleId(): string {
@@ -290,6 +297,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
           :model-value="rule"
           :index="idx"
           :var-suggestions="varSuggestions"
+          :uuid-to-name="uuidToName"
           :default-collapsed="rules.length > 1"
           :data-test="`rule-${idx}`"
           @update:model-value="(v) => updateRule(idx, v)"
