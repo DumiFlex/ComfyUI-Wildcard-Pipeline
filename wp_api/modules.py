@@ -4,7 +4,7 @@ from __future__ import annotations
 from aiohttp import web
 
 from engine.db.repositories import ModuleNotFound, ModuleRepository
-from engine.modules.snapshot import freeze_snapshot, payload_hash
+from engine.modules.snapshot import freeze_snapshot, payload_hash, walk_transitive_refs
 from wp_api._helpers import db_session, json_error, json_ok
 
 _UPDATABLE_FIELDS = (
@@ -162,10 +162,68 @@ async def toggle_favorite(request: web.Request) -> web.Response:
     return json_ok(updated)
 
 
+async def embed_bundle(request: web.Request) -> web.Response:
+    """Lazy walk for SPA library picker. Spec §4.2.
+
+    Body: {"uuids": [str, ...]}. Server fetches each picked uuid + walks
+    transitive @{} refs through wildcard payloads only. Returns split
+    response so the client doesn't have to filter:
+      - modules: list of picked-module payloads in input order (executor's view)
+      - snapshots: dict[uuid, SnapshotEntry] of wildcards reachable from picks
+      - pickOrder: list of uuid strings, original input order
+      - walkOverflow: [{uuid, reason}] for cycle/depth/missing
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return json_error("invalid JSON body", status=400)
+    if not isinstance(body, dict):
+        return json_error("body must be a JSON object", status=400)
+
+    uuids = body.get("uuids")
+    if not isinstance(uuids, list) or not all(isinstance(u, str) for u in uuids):
+        return json_error("uuids must be a list of strings", status=400)
+
+    with db_session(request) as conn:
+        repo = ModuleRepository(conn)
+
+        def _fetch(uuid: str) -> dict | None:
+            try:
+                return repo.get_by_uuid(uuid)
+            except Exception:
+                return None
+
+        walk = walk_transitive_refs(uuids, fetch_module=_fetch)
+        # Picks (executor's view): keep input order, drop any uuids that
+        # weren't found in DB.
+        picks: list[dict] = []
+        for uuid in uuids:
+            entry = walk.snapshots.get(uuid)
+            if entry is not None:
+                picks.append(entry["payload"])
+
+        # Catalog (resolver's view): only wildcards. Spec §2.7.
+        catalog = {
+            uuid: entry
+            for uuid, entry in walk.snapshots.items()
+            if entry["type"] == "wildcard"
+        }
+
+    return json_ok({
+        "data": {
+            "modules": picks,
+            "snapshots": catalog,
+            "pickOrder": uuids,
+            "walkOverflow": walk.walk_overflow,
+        },
+    })
+
+
 def register(router) -> None:
     router.add_get("/wp/api/modules", list_modules)
     router.add_post("/wp/api/modules", create_module)
     router.add_post("/wp/api/modules/match", match_module)
+    router.add_post("/wp/api/modules/embed-bundle", embed_bundle)
     router.add_get("/wp/api/modules/{id}", get_module)
     router.add_put("/wp/api/modules/{id}", update_module)
     router.add_delete("/wp/api/modules/{id}", delete_module)
