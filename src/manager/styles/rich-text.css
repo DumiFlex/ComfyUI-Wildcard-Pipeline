@@ -23,8 +23,6 @@
 .wp-rt .wp-rt-text,
 .wp-rt-preview .wp-rt-text { color: var(--wp-text, #e7e7ee); }
 
-.wp-rt .wp-rt-comment,
-.wp-rt-preview .wp-rt-comment { color: var(--wp-text-dim, #6e6e7c); font-style: italic; }
 
 .wp-rt .wp-rt-escape,
 .wp-rt-preview .wp-rt-escape { color: var(--wp-text-muted, #a1a1ad); opacity: 0.7; }
@@ -76,15 +74,6 @@
   font-weight: 500;
 }
 
-.wp-rt .wp-rt-quantifier,
-.wp-rt-preview .wp-rt-quantifier {
-  color: var(--wp-info, #60a5fa);
-  background: rgba(59, 130, 246, 0.16);
-  background: color-mix(in oklab, var(--wp-info, #3b82f6) 16%, transparent);
-  border-radius: 3px;
-  font-weight: 500;
-}
-
 /* Focus / rest dual-mode chip chrome (input only).
    While editing, chips are zero-width visual decorations so the
    mirror text width matches the textarea text width exactly and
@@ -101,8 +90,7 @@
   border-radius: 4px;
 }
 .wp-rt--rest .wp-rt-dp-multi,
-.wp-rt--rest .wp-rt-dp-weight,
-.wp-rt--rest .wp-rt-quantifier {
+.wp-rt--rest .wp-rt-dp-weight {
   padding: 0 3px;
   margin: 0 0.5px;
 }
@@ -115,8 +103,7 @@
   padding: 0 4px;
 }
 .wp-rt-preview .wp-rt-dp-multi,
-.wp-rt-preview .wp-rt-dp-weight,
-.wp-rt-preview .wp-rt-quantifier {
+.wp-rt-preview .wp-rt-dp-weight {
   padding: 0 3px;
 }
 
@@ -178,9 +165,4 @@
   color: #86198f;
   background: rgba(192, 38, 211, 0.13);
   box-shadow: inset 0 0 0 1px rgba(192, 38, 211, 0.36);
-}
-.wp-theme-light .wp-rt .wp-rt-quantifier,
-.wp-theme-light .wp-rt-preview .wp-rt-quantifier {
-  color: #1d4ed8;
-  background: rgba(59, 130, 246, 0.13);
 }
