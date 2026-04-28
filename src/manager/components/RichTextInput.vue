@@ -15,25 +15,33 @@
  * Reference: docs/design-handoff/wildcardpipeline/project/rich-input.jsx.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { tokenizeRich, mirrorHtmlWithIdx } from "../utils/richTokenize";
+import { tokenizeRich } from "../utils/richTokenize";
+import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 
 interface Props {
   modelValue: string;
+  surface?: SurfaceKind;
+  warnings?: ResolveWarning[];
   multiline?: boolean;
   rows?: number;
   placeholder?: string;
   varSuggestions?: string[];
   refSuggestions?: string[];
+  /** Map from UUID to display name; used to render `@{uuid}` refs as human labels. */
+  uuidToName?: Map<string, string>;
   ariaLabel?: string;
   disabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  surface: "wildcard",
+  warnings: () => [],
   multiline: false,
   rows: 4,
   placeholder: "",
   varSuggestions: () => [],
   refSuggestions: () => [],
+  uuidToName: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
 });
@@ -68,11 +76,49 @@ const tokens = computed(() => tokenizeRich(props.modelValue || ""));
 // SAFE: `mirrorHtmlWithIdx` HTML-escapes every `raw` payload before
 // concatenation. The resulting string only contains tags we generated, so
 // `v-html` cannot inject user-controlled markup.
-const mirrorHtml = computed(() => mirrorHtmlWithIdx(tokens.value));
+// When `surface !== "wildcard"`, ref tokens get an extra "ignored" class
+// so they render with muted styling.
+const mirrorHtml = computed(() => {
+  const toks = tokens.value;
+  const isWildcard = props.surface === "wildcard";
+  const map = props.uuidToName;
+  let html = "";
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    let cls = `wp-rt-${t.kind}`;
+    let display = t.raw;
+    if (t.kind === "ref") {
+      if (!isWildcard) cls += " wp-rt-ref--ignored";
+      // Replace `@{uuid}` with `@name` display form when name is known.
+      const uuid = t.meta?.uuid;
+      if (uuid && map.has(uuid)) {
+        const name = map.get(uuid)!;
+        // Escape the name portion (uuid chars are hex-safe but name may not be).
+        display = "@" + name.replace(/[&<>"']/g, (c) => (
+          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c
+        ));
+      } else {
+        // Fall back to escaped raw form.
+        display = t.raw.replace(/[&<>"']/g, (c) => (
+          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c
+        ));
+      }
+      html += `<span class="${cls}" data-idx="${i}">${display}</span>`;
+    } else {
+      html += `<span class="${cls}" data-idx="${i}">${t.raw.replace(/[&<>"']/g, (c) => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c
+      ))}</span>`;
+    }
+  }
+  html += '<span class="wp-rt-tail">&#x200B;</span>';
+  return html;
+});
 
 // --- Suggestion list filtering. ---
+// `@` autocomplete is only available in the "wildcard" surface.
 const acItems = computed(() => {
   if (!acOpen.value) return [];
+  if (acTrigger.value === "@" && props.surface !== "wildcard") return [];
   const pool = acTrigger.value === "@" ? props.refSuggestions : props.varSuggestions;
   const q = acQuery.value.toLowerCase();
   return pool
@@ -141,6 +187,11 @@ function onInput(e: Event): void {
   const caret = target.selectionStart ?? next.length;
   const hit = probeAutocomplete(next, caret);
   if (hit) {
+    // Gate `@` autocomplete — only available in the "wildcard" surface.
+    if (hit.trigger === "@" && props.surface !== "wildcard") {
+      acOpen.value = false;
+      return;
+    }
     acOpen.value = true;
     acStart.value = hit.start;
     acQuery.value = hit.query;
@@ -158,6 +209,11 @@ function refreshAutocompleteFromCaret(): void {
   const caret = el.selectionStart ?? 0;
   const hit = probeAutocomplete(props.modelValue || "", caret);
   if (hit) {
+    // Gate `@` autocomplete — only available in the "wildcard" surface.
+    if (hit.trigger === "@" && props.surface !== "wildcard") {
+      acOpen.value = false;
+      return;
+    }
     acOpen.value = true;
     acStart.value = hit.start;
     acQuery.value = hit.query;
@@ -207,7 +263,11 @@ function applyAutocomplete(label: string | undefined): void {
   const caret = el.selectionStart ?? value.length;
   const before = value.slice(0, acStart.value);
   const after = value.slice(caret);
-  const inserted = acTrigger.value + label;
+  // For `@` trigger in wildcard surface, `label` is a UUID; wrap it in `@{uuid}`.
+  // For `$` trigger, insert `$name` as before.
+  const inserted = acTrigger.value === "@"
+    ? `@{${label}}`
+    : acTrigger.value + label;
   const next = before + inserted + after;
   emit("update:modelValue", next);
   acOpen.value = false;
@@ -286,7 +346,7 @@ onBeforeUnmount(() => {
     :data-focused="focused ? '' : null"
   >
     <!-- The mirror is read-only chrome; pointer-events:none in CSS.
-         `v-html` is safe because mirrorHtmlWithIdx() escapes all token text. -->
+         `v-html` is safe because the computed mirrorHtml escapes all token text. -->
     <div
       ref="mirrorEl"
       class="wp-rt__mirror"
@@ -294,6 +354,24 @@ onBeforeUnmount(() => {
       aria-hidden="true"
       v-html="mirrorHtml"
     />
+
+    <!-- Warning markers overlay. Each marker is a zero-width inline element
+         anchored at the UTF-16 offset corresponding to the warning position.
+         `data-warning-position` records the original code-point index for tests. -->
+    <div
+      v-if="warnings.length > 0"
+      class="wp-rt__warnings"
+      aria-hidden="true"
+    >
+      <span
+        v-for="w in warnings"
+        :key="`${w.position}-${w.severity}`"
+        class="wp-rt-warn-marker"
+        :class="`wp-rt-warn-${w.severity}`"
+        :data-warning-position="w.position"
+        :title="w.message"
+      />
+    </div>
 
     <textarea
       v-if="multiline"
@@ -467,6 +545,15 @@ onBeforeUnmount(() => {
 /* Token span chrome (.wp-rt-var / .wp-rt-ref / .wp-rt-dp-* / quantifier
    colour + chip backgrounds + focus/rest padding) lives in the global
    styles/rich-text.css so RichTextInput and RichTextPreview stay in sync. */
+
+/* Warning markers overlay — sits atop the mirror, pointer-events: none so
+   it does not block textarea interaction. */
+.wp-rt__warnings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
 </style>
 
 <style>

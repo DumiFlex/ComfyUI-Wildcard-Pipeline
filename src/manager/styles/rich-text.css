@@ -120,6 +120,52 @@
   padding: 0 3px;
 }
 
+/* ── Warning marker spans ── *
+ * Emitted by RichTextInput + RichTextPreview when `warnings` prop is set.
+ * Markers are zero-width spans with a coloured bottom border and a small
+ * icon fragment so they are visible without disrupting text flow.
+ * Severity → class mapping:
+ *   info  → wp-rt-warn-info   (blue)
+ *   warn  → wp-rt-warn-warn   (amber)
+ *   error → wp-rt-warn-error  (red)
+ * -------------------------------------------------------------------- */
+.wp-rt-warn-marker {
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  vertical-align: middle;
+  border-left: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  position: relative;
+  pointer-events: auto;
+}
+.wp-rt-warn-info {
+  border-color: var(--wp-info, #60a5fa);
+  border-bottom-color: var(--wp-info, #60a5fa);
+}
+.wp-rt-warn-warn {
+  border-color: var(--wp-warn, #fcd34d);
+  border-bottom-color: var(--wp-warn, #fcd34d);
+}
+.wp-rt-warn-error {
+  border-color: var(--wp-error, #f87171);
+  border-bottom-color: var(--wp-error, #f87171);
+}
+
+/* ── Muted ref chip — used when surface !== "wildcard" ── *
+ * Inherits the same chip shape as .wp-rt-ref but tones down the colour
+ * to signal that `@{uuid}` tokens are ignored on this surface.
+ * -------------------------------------------------------------------- */
+.wp-rt .wp-rt-ref--ignored,
+.wp-rt-preview .wp-rt-ref--ignored {
+  color: var(--wp-text-dim, #6e6e7c);
+  background: rgba(107, 114, 128, 0.12);
+  background: color-mix(in oklab, var(--wp-text-muted, #6e6e7c) 12%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(107, 114, 128, 0.22);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-text-muted, #6e6e7c) 22%, transparent);
+  opacity: 0.75;
+}
+
 /* ── Light-mode overrides: rich-text token chrome ── */
 .wp-theme-light .wp-rt .wp-rt-var,
 .wp-theme-light .wp-rt-preview .wp-rt-var {

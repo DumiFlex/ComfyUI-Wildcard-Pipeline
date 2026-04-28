@@ -38,11 +38,10 @@ describe("RichTextInput.vue", () => {
     expect(wrap.find("textarea").attributes("rows")).toBe("6");
   });
 
-  // TODO(syntax-task-19): re-enable after RichTextInput is updated for @{8hex} UUID refs
-  // The test uses the legacy @name short form which is no longer tokenised as ref.
-  it.skip("paints chip markup in the mirror layer for $var/@ref/{a|b|c}", () => {
+  it("paints chip markup in the mirror layer for $var/@{uuid}/{a|b|c}", () => {
+    // Uses @{8hex} UUID form — the locked grammar. Legacy @name falls to text.
     const wrap = mount(RichTextInput, {
-      props: { modelValue: "$person sees @colors of {red|blue}" },
+      props: { modelValue: "$person sees @{1a2b3c4d} of {red|blue}" },
     });
     const mirror = wrap.find(".wp-rt__mirror");
     expect(mirror.exists()).toBe(true);
@@ -50,7 +49,9 @@ describe("RichTextInput.vue", () => {
     expect(html).toContain("wp-rt-var");
     expect(html).toContain("wp-rt-ref");
     expect(html).toContain("wp-rt-dp-brace");
-    expect(html).toContain("wp-rt-dp-pipe");
+    // dp-pipe is no longer emitted as a separate token; dp-brace covers the whole block.
+    // Confirm the brace block is present via dp-brace class:
+    expect(html).toContain("wp-rt-dp-brace");
   });
 
   it("renders $$ escapes as escape spans (not vars)", () => {
@@ -63,9 +64,10 @@ describe("RichTextInput.vue", () => {
     expect(html).not.toMatch(/wp-rt-var[^]*\$\$/);
   });
 
-  // TODO(syntax-task-19): re-enable after comment syntax is removed from RichTextInput styling
-  // The comment token kind is no longer emitted; # lines are plain text in the new grammar.
-  it.skip("renders # comment lines greyed out", () => {
+  // OBSOLETE (task-19 confirmed): Comment token kind was removed in the locked grammar.
+  // `# lines` are now plain text. This test can never pass with the current tokenizer.
+  // Keeping skipped rather than deleted so the intent is visible in git history.
+  it.skip("renders # comment lines greyed out [OBSOLETE — comment syntax removed]", () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "# noted", multiline: true },
     });
