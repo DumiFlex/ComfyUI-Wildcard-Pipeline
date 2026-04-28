@@ -14,29 +14,34 @@ from wp_api._helpers import db_session, extract_referenced_uuids, json_error, js
 _MAX_SAMPLES = 10000
 
 
-def _build_ctx_with_catalog(request: web.Request, body: dict) -> dict:
-    """Build the runtime ctx for one Test Runner invocation.
+def _build_request_catalog(request: web.Request, body: dict) -> dict[str, dict]:
+    """Lazy-walk the request body for `@{8hex}` refs and load just the
+    referenced wildcards (plus transitive deps) from the DB.
 
-    Walks the request payload + instance for `@{8hex}` refs, loads only
-    those modules (and their transitive deps) from the DB, and seeds the
-    catalog. Spec §2.10 — lazy walk, never the full library."""
+    Spec §2.10 — never the full library. Run ONCE per request; the catalog
+    is stable across all sample iterations within the same `run_test` call,
+    so callers should hoist this above their per-sample loop and reuse the
+    returned dict for every `__wp_catalog__` injection."""
     roots = extract_referenced_uuids(body.get("payload"))
     roots |= extract_referenced_uuids(body.get("instance"))
+    if not roots:
+        return {}
+    with db_session(request) as conn:
+        repo = ModuleRepository(conn)
 
-    catalog: dict[str, dict] = {}
-    if roots:
-        with db_session(request) as conn:
-            repo = ModuleRepository(conn)
+        def _fetch(uuid: str) -> dict | None:
+            try:
+                return repo.get_by_uuid(uuid)
+            except Exception:
+                return None
 
-            def _fetch(uuid: str) -> dict | None:
-                try:
-                    return repo.get_by_uuid(uuid)
-                except Exception:
-                    return None
+        return walk_transitive_refs(roots, fetch_module=_fetch).snapshots
 
-            walk = walk_transitive_refs(roots, fetch_module=_fetch)
-            catalog = walk.snapshots
 
+def _make_sample_ctx(catalog: dict[str, dict]) -> dict:
+    """Per-sample ctx — fresh `__wp_rng__` and `__wp_warnings__`, but the
+    `__wp_catalog__` reference is shared across all samples (the resolver
+    treats it as read-only)."""
     return {
         "__wp_rng__": random.Random(),
         "__wp_warnings__": [],
@@ -69,11 +74,15 @@ async def run_test(request: web.Request) -> web.Response:
         "payload": body["payload"],
         "instance": body["instance"],
     }
+    # Build the runtime catalog ONCE per request (§2.10 lazy walk). The
+    # walked dict is stable across all sample iterations — only the rng
+    # and warnings list need to be fresh per sample.
+    catalog = _build_request_catalog(request, body)
     results: list[dict[str, str]] = []
     all_warnings: list[dict] = []
     try:
         for _ in range(samples):
-            ctx = _build_ctx_with_catalog(request, body)
+            ctx = _make_sample_ctx(catalog)
             results.append(resolve_module(snap, ctx=ctx))
             all_warnings.extend(ctx["__wp_warnings__"])
     except UnknownModuleType as e:
