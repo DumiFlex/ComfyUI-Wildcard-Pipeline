@@ -1,0 +1,168 @@
+/* ============================================================
+ * Rich text token chrome — shared between RichTextInput and
+ * RichTextPreview.
+ *
+ * Both components emit the same span structure produced by
+ * `tokenizeRich` + `mirrorHtmlWithIdx`. Previously the chip /
+ * variable / decoration colour rules were duplicated in each
+ * component's scoped <style>. They now live here so the editor
+ * input, the read-only preview, and any future surface that
+ * renders tokenised wildcard syntax stay visually identical.
+ *
+ * Loaded globally from manager/main.ts after tokens.css.
+ *
+ * Tokens (all defined in tokens.css):
+ *   --wp-rt-token-good / --wp-rt-token-good-bg : multi-pick chip
+ *   --wp-rt-token-mut  / --wp-rt-token-mut-bg  : weighted-pick chip
+ * ============================================================ */
+
+/* Shared selector — both surfaces opt in by adding `.wp-rt` (input)
+   or `.wp-rt-preview` (read-only). Use a comma list so we don't
+   need to duplicate every block. */
+
+.wp-rt .wp-rt-text,
+.wp-rt-preview .wp-rt-text { color: var(--wp-text, #e7e7ee); }
+
+
+.wp-rt .wp-rt-escape,
+.wp-rt-preview .wp-rt-escape { color: var(--wp-text-muted, #a1a1ad); opacity: 0.7; }
+
+.wp-rt .wp-rt-tail,
+.wp-rt-preview .wp-rt-tail { color: transparent; }
+
+.wp-rt .wp-rt-var,
+.wp-rt-preview .wp-rt-var {
+  color: var(--wp-accent-text-strong, var(--wp-accent-text, #c4b5fd));
+  background: rgba(139, 92, 246, 0.16);
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 16%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.32);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 32%, transparent);
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.wp-rt .wp-rt-ref,
+.wp-rt-preview .wp-rt-ref {
+  color: var(--wp-kind-wildcard, #f0abfc);
+  background: rgba(192, 38, 211, 0.15);
+  background: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 15%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(192, 38, 211, 0.30);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 30%, transparent);
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.wp-rt .wp-rt-dp-brace,
+.wp-rt-preview .wp-rt-dp-brace { color: var(--wp-warn, #fcd34d); font-weight: 600; }
+
+.wp-rt .wp-rt-dp-pipe,
+.wp-rt-preview .wp-rt-dp-pipe  { color: var(--wp-warn, #fcd34d); opacity: 0.65; }
+
+.wp-rt .wp-rt-dp-multi,
+.wp-rt-preview .wp-rt-dp-multi {
+  color: var(--wp-rt-token-good);
+  background: var(--wp-rt-token-good-bg);
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.wp-rt .wp-rt-dp-weight,
+.wp-rt-preview .wp-rt-dp-weight {
+  color: var(--wp-rt-token-mut);
+  background: var(--wp-rt-token-mut-bg);
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+/* Focus / rest dual-mode chip chrome (input only).
+   While editing, chips are zero-width visual decorations so the
+   mirror text width matches the textarea text width exactly and
+   the native caret tracks correctly. When blurred, chips get a
+   hair of horizontal padding so they read as proper pills. */
+.wp-rt--focused .wp-rt-var,
+.wp-rt--focused .wp-rt-ref {
+  padding: 0;
+}
+.wp-rt--rest .wp-rt-var,
+.wp-rt--rest .wp-rt-ref {
+  padding: 0 4px;
+  margin: 0 0.5px;
+  border-radius: 4px;
+}
+.wp-rt--rest .wp-rt-dp-multi,
+.wp-rt--rest .wp-rt-dp-weight {
+  padding: 0 3px;
+  margin: 0 0.5px;
+}
+
+/* Read-only preview always renders chips at rest. Match the
+   `wp-rt--rest` padding so previews look identical to a blurred
+   input without depending on the parent class. */
+.wp-rt-preview .wp-rt-var,
+.wp-rt-preview .wp-rt-ref {
+  padding: 0 4px;
+}
+.wp-rt-preview .wp-rt-dp-multi,
+.wp-rt-preview .wp-rt-dp-weight {
+  padding: 0 3px;
+}
+
+/* ── Warning marker spans ── *
+ * Emitted by RichTextInput + RichTextPreview when `warnings` prop is set.
+ * Markers are zero-width spans with a coloured bottom border and a small
+ * icon fragment so they are visible without disrupting text flow.
+ * Severity → class mapping:
+ *   info  → wp-rt-warn-info   (blue)
+ *   warn  → wp-rt-warn-warn   (amber)
+ *   error → wp-rt-warn-error  (red)
+ * -------------------------------------------------------------------- */
+.wp-rt-warn-marker {
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  vertical-align: middle;
+  border-left: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  position: relative;
+  pointer-events: auto;
+}
+.wp-rt-warn-info {
+  border-color: var(--wp-info, #60a5fa);
+  border-bottom-color: var(--wp-info, #60a5fa);
+}
+.wp-rt-warn-warn {
+  border-color: var(--wp-warn, #fcd34d);
+  border-bottom-color: var(--wp-warn, #fcd34d);
+}
+.wp-rt-warn-error {
+  border-color: var(--wp-error, #f87171);
+  border-bottom-color: var(--wp-error, #f87171);
+}
+
+/* ── Muted ref chip — used when surface !== "wildcard" ── *
+ * Inherits the same chip shape as .wp-rt-ref but tones down the colour
+ * to signal that `@{uuid}` tokens are ignored on this surface.
+ * -------------------------------------------------------------------- */
+.wp-rt .wp-rt-ref--ignored,
+.wp-rt-preview .wp-rt-ref--ignored {
+  color: var(--wp-text-dim, #6e6e7c);
+  background: rgba(107, 114, 128, 0.12);
+  background: color-mix(in oklab, var(--wp-text-muted, #6e6e7c) 12%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(107, 114, 128, 0.22);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-text-muted, #6e6e7c) 22%, transparent);
+  opacity: 0.75;
+}
+
+/* ── Light-mode overrides: rich-text token chrome ── */
+.wp-theme-light .wp-rt .wp-rt-var,
+.wp-theme-light .wp-rt-preview .wp-rt-var {
+  /* color auto-adapts (--wp-accent-text-strong → accent-800 in light mode) */
+  background: rgba(139, 92, 246, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.36);
+}
+.wp-theme-light .wp-rt .wp-rt-ref,
+.wp-theme-light .wp-rt-preview .wp-rt-ref {
+  color: #86198f;
+  background: rgba(192, 38, 211, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(192, 38, 211, 0.36);
+}

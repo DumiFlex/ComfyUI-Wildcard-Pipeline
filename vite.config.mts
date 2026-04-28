@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 import { resolve } from "node:path";
+import { copyFileSync, existsSync, rmSync } from "node:fs";
 
 // Two build targets controlled by --mode flag:
 //   pnpm build:extension → js/main.js  (ComfyUI web extension, critical-path bundle)
@@ -69,16 +70,50 @@ export default defineConfig(({ mode }) => {
     };
   }
 
-  // Manager SPA — post-MVP, built as empty stub
+  // Manager SPA — Vue 3 + PrimeVue + Tailwind, served by aiohttp at /wp/
+  // The inline plugin renames the emitted HTML → web/index.html so aiohttp's
+  // SPA fallback (which serves web/index.html) picks it up correctly.
+  // Vite ≥5.4 emits the HTML directly to web/manager.html (basename only);
+  // older versions used web/src/manager.html (full relative path). Handle both.
+  // If Vite already emitted to web/index.html (future-proof), skip the copy.
+  const renameManagerHtml = {
+    name: "rename-manager-html",
+    closeBundle() {
+      const dest = resolve(__dirname, "web/index.html");
+      const candidates = [
+        resolve(__dirname, "web/manager.html"),
+        resolve(__dirname, "web/src/manager.html"),
+      ];
+      for (const src of candidates) {
+        if (existsSync(src)) {
+          copyFileSync(src, dest);
+          rmSync(resolve(__dirname, src.endsWith("src/manager.html") ? "web/src" : src), {
+            recursive: true,
+            force: true,
+          });
+          return;
+        }
+      }
+      // Vite already wrote web/index.html directly — nothing to do.
+    },
+  };
+
   return {
     ...common,
-    base: "/wildcard-pipeline/",
+    base: "/wp/",
+    plugins: [...(common.plugins as []), renameManagerHtml],
     build: {
-      outDir: "web_dist",
+      outDir: "web",
       emptyOutDir: true,
       rollupOptions: {
         input: resolve(__dirname, "src/manager.html"),
       },
+    },
+    test: {
+      environment: "jsdom",
+      globals: true,
+      include: ["src/**/*.test.ts", "src/manager/**/*.test.ts"],
+      setupFiles: ["./src/test-setup.ts"],
     },
   };
 });

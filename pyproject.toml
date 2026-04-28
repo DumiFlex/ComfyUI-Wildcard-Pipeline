@@ -20,6 +20,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-aiohttp>=1.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
 ]
@@ -59,12 +60,30 @@ reportUnusedParameter = "none"
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra -q"
+addopts = "-ra -q -m 'not fuzz and not perf'"
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+markers = [
+    "fuzz: long-running fuzz tests (opt-in via -m fuzz)",
+    "perf: performance regression tests (opt-in via -m perf)",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.coverage.run]
+source = ["engine", "wp_api"]
+omit = [
+    "engine/db/migrations_sql/*",
+    "engine/handlers.py",
+    "engine/template.py",
+    "engine/pipeline.py",
+    "engine/context.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

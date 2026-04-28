@@ -5,11 +5,14 @@ import { resolve } from "node:path";
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: {
-      "@": resolve(__dirname, "./src"),
-      vue: "vue/dist/vue.runtime.esm-bundler.js",
-    },
+    alias: [
+      { find: "@", replacement: resolve(__dirname, "./src") },
+      { find: "vue", replacement: "vue/dist/vue.runtime.esm-bundler.js" },
+      // Stub absolute public-asset paths that don't exist under jsdom tests.
+      { find: /^\/wp\/images\/.*\.svg$/, replacement: resolve(__dirname, "./src/manager/__tests__/stubs/asset.svg") },
+    ],
   },
+  assetsInclude: ["**/*.svg"],
   test: {
     environment: "jsdom",
     globals: true,
