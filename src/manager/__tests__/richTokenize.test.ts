@@ -65,32 +65,33 @@ describe("tokenizeRich", () => {
     expect(escapes[0].raw).toBe("@@");
   });
 
-  it("tokenises {a|b|c} inline-choice with brace + pipe markers", () => {
+  it("tokenises {a|b|c} inline-choice as a single dp-brace token with branches", () => {
     const tokens = tokenizeRich("{a|b|c}");
-    const kinds = tokens.map((t) => t.kind);
-    expect(kinds[0]).toBe("dp-brace");
-    expect(kinds[kinds.length - 1]).toBe("dp-brace");
-    expect(kinds.filter((k) => k === "dp-pipe")).toHaveLength(2);
-    // Open brace at 0, close brace at end-1.
+    // Single token for the entire block (Task 7 corpus contract)
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].kind).toBe("dp-brace");
+    expect(tokens[0].raw).toBe("{a|b|c}");
     expect(tokens[0].start).toBe(0);
-    expect(tokens[tokens.length - 1].end).toBe(7);
+    expect(tokens[0].end).toBe(7);
+    expect(tokens[0].meta?.branches).toEqual(["a", "b", "c"]);
   });
 
-  it("recognises a {N::weighted} option marker", () => {
-    const tokens = tokenizeRich("{2::red|blue}");
-    const w = tokens.find((t) => t.kind === "dp-weight");
-    expect(w).toBeDefined();
-    expect(w?.raw).toBe("2::");
-    expect(w?.meta?.weight).toBe(2);
+  it("falls through to text for a single-branch {no_pipe} block", () => {
+    const tokens = tokenizeRich("{no_pipe}");
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].kind).toBe("text");
+    expect(tokens[0].raw).toBe("{no_pipe}");
   });
 
-  it("recognises a {N$$sep$$...} multi-select header", () => {
+  it("recognises a {N$$sep$$...} multi-select as a single dp-multi token", () => {
     const tokens = tokenizeRich("{2$$, $$a|b}");
-    const m = tokens.find((t) => t.kind === "dp-multi");
-    expect(m).toBeDefined();
-    expect(m?.raw.startsWith("2$$")).toBe(true);
-    expect(m?.meta?.range).toBe("2");
-    expect(m?.meta?.sep).toBe(", ");
+    expect(tokens).toHaveLength(1);
+    const m = tokens[0];
+    expect(m.kind).toBe("dp-multi");
+    expect(m.raw).toBe("{2$$, $$a|b}");
+    expect(m.meta?.count).toBe(2);
+    expect(m.meta?.sep).toBe(", ");
+    expect(m.meta?.branches).toEqual(["a", "b"]);
   });
 
   // TODO(syntax-task-19): re-enable after quantifier is re-evaluated for the new grammar
