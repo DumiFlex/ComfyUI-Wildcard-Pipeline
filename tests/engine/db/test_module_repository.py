@@ -282,3 +282,23 @@ def test_get_by_uuids_bulk_lookup_dedups_and_skips_missing(wp_db):
 def test_get_by_uuids_empty_input_returns_empty_list(wp_db):
     repo = ModuleRepository(wp_db)
     assert repo.get_by_uuids([]) == []
+
+
+def test_get_by_uuids_returns_rows_in_input_order(wp_db):
+    """The docstring promises input-order preservation. SQLite's IN
+    predicate makes no order guarantee, so the implementation must
+    re-order results against the (deduped) input list. Pin that
+    contract explicitly so a future contributor doesn't drop the
+    re-order step thinking it's redundant."""
+    repo = ModuleRepository(wp_db)
+    rows = []
+    for n in ("alpha", "bravo", "charlie", "delta"):
+        rows.append(repo.create(
+            type="wildcard", name=n, description="",
+            category_id=None, tags=[], payload={"options": []},
+        ))
+    # Request in reverse insertion order; result must come back in the
+    # SAME reverse order (not the natural SELECT order).
+    requested = [rows[3]["uuid"], rows[1]["uuid"], rows[2]["uuid"], rows[0]["uuid"]]
+    fetched = repo.get_by_uuids(requested)
+    assert [r["uuid"] for r in fetched] == requested
