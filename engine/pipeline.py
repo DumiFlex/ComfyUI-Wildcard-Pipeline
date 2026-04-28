@@ -1,12 +1,20 @@
-"""PipelineEngine — dispatches modules through per-type handlers, records trace."""
+"""PipelineEngine — runs ordered modules through engine/modules/dispatcher.
 
+Manages per-run state (rng, warnings, trace) and delegates per-module
+resolution to dispatcher.resolve_module. Pre-Phase-5 the pipeline routed
+fixed_values directly; Phase 5 routes everything via dispatcher and threads
+ctx.rng for deterministic randomness.
+"""
+from __future__ import annotations
+
+import dataclasses
 import logging
 import random
-from typing import Any
 
-from .context import Context
-from .handlers import ModuleHandler, handle_fixed_values
-from .modules import Module
+from engine.context import Context
+from engine.modules import Module
+from engine.modules.dispatcher import UnknownModuleType, resolve_module
+from engine.modules.snapshot import coerce_legacy_module
 
 logger = logging.getLogger(__name__)
 
@@ -14,84 +22,134 @@ logger = logging.getLogger(__name__)
 class PipelineEngine:
     """Runs an ordered list of modules against a context dict."""
 
-    HANDLERS: dict[str, ModuleHandler] = {
-        "fixed_values": handle_fixed_values,
-    }
-
     def run(
         self,
         modules: list[Module],
         ctx: Context | None = None,
         seed: int = 0,
     ) -> Context:
-        """Execute ``modules`` top-to-bottom against ``ctx``.
-
-        Initializes internal keys (``__wp_node_seed__``, ``__wp_trace__``,
-        ``__wp_internal_flags__``) if absent. Skips modules with
-        ``enabled is False``. Unknown module types are logged and skipped.
-        Returns the mutated context.
-        """
+        """Execute modules top-to-bottom, mutating ctx, returning ctx."""
         ctx = {} if ctx is None else ctx
         ctx["__wp_node_seed__"] = seed
+        ctx["__wp_rng__"] = random.Random(seed)
+        ctx.setdefault("__wp_warnings__", [])
         ctx.setdefault("__wp_trace__", [])
         ctx.setdefault("__wp_internal_flags__", {})
 
-        rng = random.Random(seed)
-
         for index, module in enumerate(modules):
-            if getattr(module, "enabled", True) is False:
+            if not getattr(module, "enabled", True):
+                ctx["__wp_trace__"].append({
+                    "id": getattr(module, "id", ""),
+                    "type": getattr(module, "type", ""),
+                    "enabled": False,
+                    "status": "skipped_disabled",
+                    "writes": [],
+                    "error": None,
+                })
                 continue
 
-            module_type = getattr(module, "type", None)
-            handler = self.HANDLERS.get(module_type or "")
-            if handler is None:
+            module_type = getattr(module, "type", None) or ""
+            try:
+                # coerce_legacy_module expects a dict; convert dataclasses or
+                # duck-typed objects by reading known attrs via getattr.
+                if dataclasses.is_dataclass(module) and not isinstance(module, type):
+                    raw = dataclasses.asdict(module)  # type: ignore[arg-type]
+                elif isinstance(module, dict):
+                    raw = module
+                else:
+                    # Generic object: pull known snapshot keys via getattr so
+                    # class-level attributes (common in tests) are visible.
+                    raw = {
+                        k: getattr(module, k)
+                        for k in (
+                            "id", "type", "enabled", "payload", "entries",
+                            "meta", "library_id", "library_snapshot_at",
+                            "library_version_at_snapshot", "name", "category_id",
+                            "instance",
+                        )
+                        if hasattr(module, k)
+                    }
+                snapshot = coerce_legacy_module(raw)
+            except Exception as e:
+                logger.warning(
+                    "Failed to coerce module %r at index %s: %s", module, index, e
+                )
+                ctx["__wp_trace__"].append({
+                    "id": getattr(module, "id", ""),
+                    "type": module_type,
+                    "enabled": True,
+                    "status": "failed",
+                    "writes": [],
+                    "error": {"type": type(e).__name__, "message": str(e)},
+                })
+                continue
+
+            try:
+                bindings = resolve_module(snapshot, ctx)
+            except UnknownModuleType:
                 logger.warning(
                     "Unknown module type %r at index %s — skipped",
                     module_type,
                     index,
                 )
+                ctx["__wp_trace__"].append({
+                    "id": getattr(module, "id", ""),
+                    "type": module_type,
+                    "enabled": True,
+                    "status": "skipped_unknown_type",
+                    "writes": [],
+                    "error": None,
+                })
+                continue
+            except Exception as e:
+                logger.exception(
+                    "Handler %r failed at index %s", module_type, index
+                )
+                ctx["__wp_warnings__"].append({
+                    "type": "handler_error",
+                    "severity": "error",
+                    "module_id": getattr(module, "id", ""),
+                    "source_field": "payload",
+                    "position": 0,
+                    "token_index": None,
+                    "detail": {
+                        "exception_type": type(e).__name__,
+                        "exception_message": str(e),
+                        "traceback": None,
+                    },
+                    "message": (
+                        f"Module {module_type} failed: {type(e).__name__}: {e}"
+                    ),
+                })
+                ctx["__wp_trace__"].append({
+                    "id": getattr(module, "id", ""),
+                    "type": module_type,
+                    "enabled": True,
+                    "status": "failed",
+                    "writes": [],
+                    "error": {"type": type(e).__name__, "message": str(e)},
+                })
                 continue
 
-            before = dict(ctx)
-            ctx = handler(module, ctx, rng)
-            ctx["__wp_trace__"].append(self._trace_entry(module, before, ctx))
+            writes = []
+            for var, value in (bindings or {}).items():
+                key = var.lstrip("$")
+                before = ctx.get(key)
+                ctx[key] = value
+                writes.append({
+                    "variable": key,
+                    "value": value,
+                    "source": module_type,
+                    "overwrite": before is not None and before != value,
+                })
+
+            ctx["__wp_trace__"].append({
+                "id": getattr(module, "id", ""),
+                "type": module_type,
+                "enabled": True,
+                "status": "ok",
+                "writes": writes,
+                "error": None,
+            })
 
         return ctx
-
-    @staticmethod
-    def _trace_entry(
-        module: Module,
-        before: dict[str, Any],
-        after: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Build a trace record describing what ``module`` wrote."""
-        module_type = getattr(module, "type", "")
-        writes: list[dict[str, Any]] = []
-
-        for key in after.keys() - before.keys():
-            if key.startswith("__"):
-                continue
-            writes.append(
-                {"variable": key, "value": after[key], "source": module_type}
-            )
-
-        for key in after.keys() & before.keys():
-            if key.startswith("__"):
-                continue
-            if after[key] == before[key]:
-                continue
-            writes.append(
-                {
-                    "variable": key,
-                    "value": after[key],
-                    "source": module_type,
-                    "overwrite": True,
-                }
-            )
-
-        return {
-            "id": getattr(module, "id", ""),
-            "type": module_type,
-            "enabled": getattr(module, "enabled", True),
-            "writes": writes,
-        }

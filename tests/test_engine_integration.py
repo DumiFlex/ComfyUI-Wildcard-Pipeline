@@ -101,3 +101,58 @@ def test_chain_simulates_downstream_context_node():
             "overwrite": True,
         }
     ]
+
+
+def test_pipeline_mixed_syntax_e2e():
+    """Full pipeline with wildcard + combine, mixing $var, @{uuid}, {a|b|c}."""
+    catalog_uuid_a = "a4f7b2e1"
+
+    # Modules are passed as plain dicts so the pipeline's coerce_legacy_module
+    # path handles them correctly (no WildcardModule dataclass exists).
+    modules = [
+        {
+            "id": "m1",
+            "type": "wildcard",
+            "enabled": True,
+            "payload": {
+                "var_binding": "hair",
+                "options": [{"value": "red", "weight": 1}],
+            },
+        },
+        {
+            "id": "m2",
+            "type": "wildcard",
+            "enabled": True,
+            "payload": {
+                "var_binding": "eyes",
+                "options": [{"value": f"@{{{catalog_uuid_a}}} eyed", "weight": 1}],
+            },
+        },
+        {
+            "id": "m3",
+            "type": "combine",
+            "enabled": True,
+            "payload": {
+                "template": "$hair girl with $eyes",
+                "output_var": "prompt",
+            },
+        },
+    ]
+
+    # Catalog entry for catalog_uuid_a resolves to "red" via its options.
+    catalog = {
+        catalog_uuid_a: {
+            "type": "wildcard",
+            "var_binding": "hair",
+            "options": [{"value": "red", "weight": 1}],
+        },
+    }
+
+    ctx = {"__wp_catalog__": catalog}
+    eng = PipelineEngine()
+    result = eng.run(modules, ctx=ctx, seed=42)
+
+    assert result["hair"] == "red"
+    assert result["eyes"] == "red eyed"
+    assert result["prompt"] == "red girl with red eyed"
+    assert result["__wp_warnings__"] == []
