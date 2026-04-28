@@ -5,14 +5,28 @@
     {
       "name": "empty_input",
       "input": "",
-      "expected_tokens": []
+      "expected_tokens": [],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": ""
+      }
     },
     {
       "name": "plain_literal_text",
       "input": "hello world",
       "expected_tokens": [
         {"kind": "text", "raw": "hello world", "start": 0, "end": 11, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "hello world"
+      }
     },
     {
       "name": "escape_dollar",
@@ -21,7 +35,14 @@
         {"kind": "text", "raw": "price: ", "start": 0, "end": 7, "meta": {}},
         {"kind": "escape", "raw": "$$", "start": 7, "end": 9, "meta": {"literal": "$"}},
         {"kind": "text", "raw": "5", "start": 9, "end": 10, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "price: $5"
+      }
     },
     {
       "name": "escape_at",
@@ -30,14 +51,28 @@
         {"kind": "text", "raw": "user", "start": 0, "end": 4, "meta": {}},
         {"kind": "escape", "raw": "@@", "start": 4, "end": 6, "meta": {"literal": "@"}},
         {"kind": "text", "raw": "example", "start": 6, "end": 13, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "user@example"
+      }
     },
     {
       "name": "single_var",
       "input": "$style",
       "expected_tokens": [
         {"kind": "var", "raw": "$style", "start": 0, "end": 6, "meta": {"name": "style"}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {"style": "gothic"},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "gothic"
+      }
     },
     {
       "name": "var_in_text",
@@ -46,7 +81,14 @@
         {"kind": "text", "raw": "a ", "start": 0, "end": 2, "meta": {}},
         {"kind": "var", "raw": "$color", "start": 2, "end": 8, "meta": {"name": "color"}},
         {"kind": "text", "raw": " cat", "start": 8, "end": 12, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {"color": "red"},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "a red cat"
+      }
     },
     {
       "name": "var_with_underscore_and_digits",
@@ -60,14 +102,28 @@
       "input": "cost: $",
       "expected_tokens": [
         {"kind": "text", "raw": "cost: $", "start": 0, "end": 7, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "cost: $"
+      }
     },
     {
       "name": "dollar_followed_by_non_ident_is_literal_text",
       "input": "$ space",
       "expected_tokens": [
         {"kind": "text", "raw": "$ space", "start": 0, "end": 7, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "$ space"
+      }
     },
     {
       "name": "single_ref",
@@ -90,21 +146,42 @@
       "input": "email@host",
       "expected_tokens": [
         {"kind": "text", "raw": "email@host", "start": 0, "end": 10, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "email@host"
+      }
     },
     {
       "name": "at_brace_non_hex_is_literal",
       "input": "@{not_uuid}",
       "expected_tokens": [
         {"kind": "text", "raw": "@{not_uuid}", "start": 0, "end": 11, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "@{not_uuid}"
+      }
     },
     {
       "name": "at_brace_wrong_length_is_literal",
       "input": "@{abc} short",
       "expected_tokens": [
         {"kind": "text", "raw": "@{abc} short", "start": 0, "end": 12, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "@{abc} short"
+      }
     },
     {
       "name": "inline_pick_simple",
@@ -161,14 +238,28 @@
       "input": "{a|b incomplete",
       "expected_tokens": [
         {"kind": "text", "raw": "{a|b incomplete", "start": 0, "end": 15, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "{a|b incomplete"
+      }
     },
     {
       "name": "single_branch_no_pipe_is_literal",
       "input": "{just_one}",
       "expected_tokens": [
         {"kind": "text", "raw": "{just_one}", "start": 0, "end": 10, "meta": {}}
-      ]
+      ],
+      "expected_resolution": {
+        "seed": 42,
+        "ctx_vars": {},
+        "catalog": [],
+        "surface": "wildcard",
+        "output": "{just_one}"
+      }
     }
   ]
 }
