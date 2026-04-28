@@ -11,4 +11,4 @@ def now_iso() -> str:
     migration `applied_at`, and import-export `exported_at`. Single source
     of truth so the format never drifts between callers.
     """
-    return _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
