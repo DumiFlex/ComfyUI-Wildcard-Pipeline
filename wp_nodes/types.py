@@ -128,12 +128,25 @@ def deserialize_node_input(
     raw: "dict[str, Any] | str | None",
 ) -> "tuple[list[dict[str, Any]], dict[str, Any], list[str]]":
     """Parse a WP_Context node's ``modules`` widget value into the three
-    parallel concerns the engine needs: an executable module list, a catalog
-    snapshot dict, and the user's explicit pick order.
+    parallel concerns the engine needs: an executable module list, a
+    catalog snapshot dict, and the user's explicit pick order.
 
     Spec §4.4. Backwards-compat: old workflows have no ``snapshots`` /
     ``pickOrder`` fields — those default to empty (catalog stays {}, no
     @{} resolution, raw token leaks in output, current behavior).
+
+    Returns the modules portion as a ``list[dict]`` rather than the typed
+    ``list[Module]`` that ``deserialize_modules`` produces. Two reasons:
+    the legacy converter ``module_from_dict`` requires an ``id`` field
+    and only knows how to type ``fixed_values`` (Module is currently a
+    TypeAlias for FixedValueModule), so SPA-shaped wildcard / combine /
+    derivation entries would all be rejected. ``PipelineEngine.run``
+    already accepts dicts directly (engine/pipeline.py:57) — coercing
+    them through ``coerce_legacy_module`` at execute time — so the raw-
+    dict path is the safe one for the new SPA snapshot shape.
+
+    Robust to malformed input: any failure path returns ``([], {}, [])``
+    so graph runs never crash on a broken widget value.
     """
     if raw is None:
         return [], {}, []
