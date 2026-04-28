@@ -83,6 +83,29 @@ function wildcardById(id: string | null): ModuleRow | undefined {
 const sourceWildcard = computed(() => wildcardById(sourceWildcardId.value));
 const targetWildcard = computed(() => wildcardById(targetWildcardId.value));
 
+// Matrix axes are BOTH sub-categories — source's on the rows, target's
+// on the cols. Source-value-keyed cells (the prior shape) confused the
+// "rule" semantics: a constraint matrix expresses category-level
+// boost/exclude rules, not per-option overrides. Per-option overrides
+// belong in the Exceptions table beneath the matrix.
+const sourceSubCategories = computed<string[]>(() => {
+  const wc = sourceWildcard.value;
+  if (!wc) return [];
+  const payload = wc.payload as WildcardPayloadShape;
+  return payload.sub_categories ?? [];
+});
+
+const targetSubCategories = computed<string[]>(() => {
+  const wc = targetWildcard.value;
+  if (!wc) return [];
+  const payload = wc.payload as WildcardPayloadShape;
+  return payload.sub_categories ?? [];
+});
+
+// Per-option pickers used by the Exceptions editor below the matrix.
+// Exceptions DO operate at value granularity (override one specific
+// option-pair regardless of what the sub-category matrix says) so we
+// keep these computed for that table only.
 const sourceValues = computed<string[]>(() => {
   const wc = sourceWildcard.value;
   if (!wc) return [];
@@ -91,13 +114,6 @@ const sourceValues = computed<string[]>(() => {
     .map((o) => o.value)
     .filter((v): v is string => typeof v === "string" && v.length > 0);
   return Array.from(new Set(values));
-});
-
-const targetSubCategories = computed<string[]>(() => {
-  const wc = targetWildcard.value;
-  if (!wc) return [];
-  const payload = wc.payload as WildcardPayloadShape;
-  return payload.sub_categories ?? [];
 });
 
 const targetValues = computed<string[]>(() => {
@@ -330,18 +346,18 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         Pick a source and target wildcard to populate the matrix.
       </div>
       <div
-        v-else-if="sourceValues.length === 0 || targetSubCategories.length === 0"
+        v-else-if="sourceSubCategories.length === 0 || targetSubCategories.length === 0"
         class="wp-empty-card"
         data-test="matrix-need-subs"
       >
         <i class="pi pi-info-circle" />
-        <span v-if="sourceValues.length === 0">Source wildcard needs at least one option value. </span>
+        <span v-if="sourceSubCategories.length === 0">Source wildcard needs at least one sub-category. </span>
         <span v-if="targetSubCategories.length === 0">Target wildcard needs at least one sub-category. </span>
         Add them on the wildcard editor to define rules.
       </div>
       <ConstraintMatrixGrid
         v-else
-        :rows="sourceValues"
+        :rows="sourceSubCategories"
         :cols="targetSubCategories"
         :model-value="matrix"
         data-test="matrix-grid"
