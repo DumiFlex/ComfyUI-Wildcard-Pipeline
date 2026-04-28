@@ -74,9 +74,10 @@ describe("Wildcards.vue", () => {
     expect(wrap.text()).toContain("No wildcards yet");
   });
 
-  // TODO(syntax-task-19): re-enable after wildcardSyntax.ts + Wildcards.vue UUID-graph rewrite
-  // The test uses legacy @name short form refs (e.g. "@hat") which are no longer tokenised
-  // as ref tokens. The syntax-pill logic depends on ref detection via wildcardSyntax.ts.
+  // DEFERRED (task-19): The test uses legacy @name short form refs (e.g. "@hat") which are no
+  // longer tokenised as ref tokens. Additionally Wildcards.vue syntaxView() uses wildcardVarName
+  // (string slug) as the graph key, while buildWildcardGraph keys by UUID (mod.id). A follow-up
+  // task must align Wildcards.vue to the UUID graph and update the fixture data to use @{8hex}.
   it.skip("renders syntax indicator pills for refs / inline / referenced-by", async () => {
     // Two wildcards: `outfit` references `@hat` (outgoing) and contains an
     // inline `{a|b}` choice; `hat` is referenced by `outfit` (incoming).

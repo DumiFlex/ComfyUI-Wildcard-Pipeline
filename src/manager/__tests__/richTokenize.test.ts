@@ -22,15 +22,9 @@ describe("tokenizeRich", () => {
     expect(v?.end).toBe(9);
   });
 
-  // TODO(syntax-task-19): re-enable after wildcardSyntax.ts UUID-graph rewrite
-  // The old @name short form is no longer recognised as ref; it falls through to text.
-  it.skip("recognises @ref tokens (legacy @name short form)", () => {
-    const tokens = tokenizeRich("see @colors");
-    const r = tokens.find((t) => t.kind === "ref");
-    expect(r).toBeDefined();
-    expect(r?.raw).toBe("@colors");
-    expect(r?.meta?.name).toBe("colors");
-  });
+  // DELETED (task-19): "recognises @ref tokens (legacy @name short form)" — the @name
+  // short form was removed from the grammar in the locked tokenizer (Tasks 3-7). The
+  // test was already skipped with a TODO; deleting it here rather than leaving dead code.
 
   it("recognises @{8hex} UUID ref tokens", () => {
     const tokens = tokenizeRich("see @{1a2b3c4d}");
@@ -94,27 +88,13 @@ describe("tokenizeRich", () => {
     expect(m.meta?.branches).toEqual(["a", "b"]);
   });
 
-  // TODO(syntax-task-19): re-enable after quantifier is re-evaluated for the new grammar
-  // The quantifier prefix N#$var is no longer recognised; it becomes plain text.
-  it.skip("recognises a quantifier prefix N#$var (legacy)", () => {
-    const tokens = tokenizeRich("5#$person");
-    // Cast to string so TypeScript does not reject the removed kind literal.
-    const q = tokens.find((t) => (t.kind as string) === "quantifier");
-    const v = tokens.find((t) => t.kind === "var");
-    expect(q).toBeDefined();
-    expect(q?.raw).toBe("5#");
-    expect((q?.meta as Record<string, unknown>)?.count).toBe(5);
-    expect(v?.raw).toBe("$person");
-  });
+  // DELETED (task-19): "recognises a quantifier prefix N#$var (legacy)" — the quantifier
+  // N#$var syntax was removed in the locked grammar (Tasks 3-5). The kind "quantifier" no
+  // longer exists in TokenKind. Deleting rather than keeping dead skipped test.
 
-  // TODO(syntax-task-19): re-enable after comment syntax is re-evaluated for the new grammar
-  // The # comment line syntax is no longer recognised.
-  it.skip("recognises # comment lines (legacy)", () => {
-    const tokens = tokenizeRich("# this is a comment\nrest");
-    // Cast to string so TypeScript does not reject the removed kind literal.
-    expect(tokens[0].kind as string).toBe("comment");
-    expect(tokens[0].raw).toBe("# this is a comment");
-  });
+  // DELETED (task-19): "recognises # comment lines (legacy)" — the # comment line syntax
+  // was removed in the locked grammar. The kind "comment" no longer exists in TokenKind.
+  // Deleting rather than keeping dead skipped test.
 
   it("treats # at line start as plain text (no comment syntax)", () => {
     const tokens = tokenizeRich("# noted");
