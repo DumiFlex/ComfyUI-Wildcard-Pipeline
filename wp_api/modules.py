@@ -210,12 +210,10 @@ async def embed_bundle(request: web.Request) -> web.Response:
         }
 
     return json_ok({
-        "data": {
-            "modules": picks,
-            "snapshots": catalog,
-            "pickOrder": uuids,
-            "walkOverflow": walk.walk_overflow,
-        },
+        "modules": picks,
+        "snapshots": catalog,
+        "pickOrder": uuids,
+        "walkOverflow": walk.walk_overflow,
     })
 
 

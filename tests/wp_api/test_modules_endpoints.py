@@ -53,12 +53,11 @@ async def test_embed_bundle_returns_picks_and_transitive_wildcards(
     })
     assert resp.status == 200
     body = await resp.json()
-    data = body["data"]
-    assert data["pickOrder"] == [outfit["uuid"]]
-    assert len(data["modules"]) == 1
-    assert data["modules"][0] == outfit_payload
-    assert set(data["snapshots"].keys()) == {outfit["uuid"], color["uuid"]}
-    assert data["walkOverflow"] == []
+    assert body["pickOrder"] == [outfit["uuid"]]
+    assert len(body["modules"]) == 1
+    assert body["modules"][0] == outfit_payload
+    assert set(body["snapshots"].keys()) == {outfit["uuid"], color["uuid"]}
+    assert body["walkOverflow"] == []
 
 
 async def test_embed_bundle_records_missing_target_in_walk_overflow(
@@ -77,7 +76,7 @@ async def test_embed_bundle_records_missing_target_in_walk_overflow(
         "uuids": [a["uuid"]],
     })
     assert resp.status == 200
-    overflow = (await resp.json())["data"]["walkOverflow"]
+    overflow = (await resp.json())["walkOverflow"]
     assert any(o["uuid"] == "deadbeef" and o["reason"] == "missing_target"
                for o in overflow)
 
