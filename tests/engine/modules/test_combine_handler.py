@@ -1,7 +1,18 @@
-"""Tests for CombineHandler — template-fill from runtime context bindings."""
+"""Tests for CombineHandler — syntax-aware template fill from runtime context."""
+import random
+
 import pytest
 
 from engine.modules.combine_handler import CombineHandler
+
+
+def _ctx(**extra):
+    """Return a minimal valid runtime ctx dict with rng + warnings."""
+    return {
+        "__wp_rng__": random.Random(0),
+        "__wp_warnings__": [],
+        **extra,
+    }
 
 
 def test_handler_type_id_is_combine():
@@ -44,7 +55,8 @@ def test_validate_payload_rejects_non_list_input_vars():
 
 
 def test_resolve_substitutes_known_vars():
-    ctx: dict = {"name": "Alice", "age": "30"}
+    # resolve_text returns "" for unknown vars; resolve does not write back to ctx.
+    ctx = _ctx(name="Alice", age="30")
     out = CombineHandler.resolve(
         {
             "template": "$name, a $age-year-old",
@@ -54,32 +66,34 @@ def test_resolve_substitutes_known_vars():
         ctx=ctx,
     )
     assert out == {"subject": "Alice, a 30-year-old"}
-    assert ctx["subject"] == "Alice, a 30-year-old"
 
 
-def test_resolve_leaves_unknown_var_token_in_place():
-    ctx: dict = {"name": "Bob"}
+def test_resolve_leaves_unknown_var_empty():
+    # resolve_text emits "" for unbound $var tokens (surface="combine").
+    ctx = _ctx(name="Bob")
     out = CombineHandler.resolve(
         {"template": "$name and $missing", "output_var": "out"},
         instance={},
         ctx=ctx,
     )
-    assert out == {"out": "Bob and $missing"}
+    assert out == {"out": "Bob and "}
 
 
-def test_resolve_with_none_ctx_keeps_all_tokens():
+def test_resolve_inline_pick():
+    # {a|b|c} syntax works in combine surface.
+    ctx = _ctx()
     out = CombineHandler.resolve(
-        {"template": "$a $b", "output_var": "phrase"},
+        {"template": "{hello|hi}", "output_var": "greeting"},
         instance={},
-        ctx=None,
+        ctx=ctx,
     )
-    assert out == {"phrase": "$a $b"}
+    assert out["greeting"] in {"hello", "hi"}
 
 
 def test_resolve_rejects_malformed_payload():
     with pytest.raises(ValueError):
         CombineHandler.resolve(
-            {"template": 5, "output_var": "x"}, instance={}, ctx={},
+            {"template": 5, "output_var": "x"}, instance={}, ctx=_ctx(),
         )
 
 
@@ -90,5 +104,44 @@ def test_resolve_via_dispatcher_after_import():
         "payload": {"template": "hi $name", "output_var": "greeting"},
         "instance": {},
     }
-    out = resolve_module(snap, ctx={"name": "Carol"})
+    ctx = _ctx(name="Carol")
+    out = resolve_module(snap, ctx=ctx)
     assert out == {"greeting": "hi Carol"}
+
+
+def test_combine_handler_uses_resolve_text_with_combine_surface():
+    # $var + {a|b} both resolved; result bound to output_var.
+    ctx = {
+        "__wp_rng__": random.Random(42),
+        "__wp_warnings__": [],
+        "style": "anime",
+    }
+    out = CombineHandler.resolve(
+        {"template": "$style {a|b}", "output_var": "result"},
+        instance={},
+        ctx=ctx,
+    )
+    assert out["result"].startswith("anime ")
+    assert out["result"][-1] in ("a", "b")
+
+
+def test_combine_handler_ref_emits_empty_with_warning():
+    """@{uuid} in combine surface is lenient — emits empty string + warning."""
+    ctx = {
+        "__wp_rng__": random.Random(42),
+        "__wp_warnings__": [],
+        "__wp_catalog__": {
+            "a4f7b2e1": {
+                "type": "wildcard",
+                "var_binding": "color",
+                "options": [{"value": "red", "weight": 1}],
+            },
+        },
+    }
+    out = CombineHandler.resolve(
+        {"template": "x @{a4f7b2e1} y", "output_var": "result"},
+        instance={},
+        ctx=ctx,
+    )
+    assert out["result"] == "x  y"
+    assert any(w["type"] == "ref_out_of_surface" for w in ctx["__wp_warnings__"])

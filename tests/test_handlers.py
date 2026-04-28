@@ -119,3 +119,39 @@ def test_wildcard_handler_inline_pick_in_option():
     ctx = {"__wp_rng__": random.Random(42), "__wp_warnings__": []}
     out = WildcardHandler.resolve(payload, instance, ctx)
     assert out["color"] in {"red", "blue", "green"}
+
+
+def test_combine_handler_uses_resolve_text_with_combine_surface():
+    import random  # noqa: PLC0415
+
+    from engine.modules.combine_handler import CombineHandler  # noqa: PLC0415
+
+    payload = {"template": "$style {a|b}", "output_var": "result"}
+    ctx = {
+        "__wp_rng__": random.Random(42),
+        "__wp_warnings__": [],
+        "style": "anime",
+    }
+    out = CombineHandler.resolve(payload, {}, ctx)
+    assert out["result"].startswith("anime ")
+    assert out["result"][-1] in ("a", "b")
+
+
+def test_combine_handler_ref_emits_empty_with_warning():
+    """@{uuid} in combine surface is lenient → empty + warning."""
+    import random  # noqa: PLC0415
+
+    from engine.modules.combine_handler import CombineHandler  # noqa: PLC0415
+
+    payload = {"template": "x @{a4f7b2e1} y", "output_var": "result"}
+    ctx = {
+        "__wp_rng__": random.Random(42),
+        "__wp_warnings__": [],
+        "__wp_catalog__": {
+            "a4f7b2e1": {"type": "wildcard", "var_binding": "color",
+                         "options": [{"value": "red", "weight": 1}]},
+        },
+    }
+    out = CombineHandler.resolve(payload, {}, ctx)
+    assert out["result"] == "x  y"
+    assert any(w["type"] == "ref_out_of_surface" for w in ctx["__wp_warnings__"])
