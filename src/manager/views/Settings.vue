@@ -6,7 +6,9 @@
  */
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
+import Field from "../components/ui/Field.vue";
 import Icon from "../components/ui/Icon.vue";
+import Input from "../components/ui/Input.vue";
 import { useUiStore, type ThemeMode } from "../stores/uiStore";
 
 const uiStore = useUiStore();
@@ -100,6 +102,32 @@ function resetPreferences() {
         data-test="settings-reset"
         @click="resetPreferences"
       >Reset preferences</Button>
+    </Card>
+
+    <Card title="Wildcard">
+      <Field
+        label="Ref recursion limit"
+        hint="How deep nested @{uuid} references can resolve. Range: 1–32. Default: 8."
+        for="wildcard-max-ref-depth"
+      >
+        <Input
+          id="wildcard-max-ref-depth"
+          v-model.number="uiStore.maxRefDepth"
+          type="number"
+          data-test="settings-wildcard-max-ref-depth"
+          :aria-label="'Wildcard ref recursion limit'"
+          :min="1"
+          :max="32"
+          :step="1"
+          @blur="(e) => {
+            const target = e.target as HTMLInputElement;
+            const val = parseInt(target.value, 10);
+            if (!isNaN(val)) {
+              uiStore.setMaxRefDepth(val);
+            }
+          }"
+        />
+      </Field>
     </Card>
   </div>
 </template>

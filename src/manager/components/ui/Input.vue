@@ -12,6 +12,9 @@ interface Props {
   addon?: string;
   id?: string;
   ariaLabel?: string;
+  min?: number | string;
+  max?: number | string;
+  step?: number | string;
 }
 const props = withDefaults(defineProps<Props>(), {
   type: "text",
@@ -55,6 +58,9 @@ function onInput(e: Event) {
       :placeholder="placeholder"
       :disabled="disabled"
       :aria-label="ariaLabel"
+      :min="min"
+      :max="max"
+      :step="step"
       @input="onInput"
       @blur="(e) => emit('blur', e)"
       @focus="(e) => emit('focus', e)"
@@ -70,6 +76,9 @@ function onInput(e: Event) {
     :placeholder="placeholder"
     :disabled="disabled"
     :aria-label="ariaLabel"
+    :min="min"
+    :max="max"
+    :step="step"
     @input="onInput"
     @blur="(e) => emit('blur', e)"
     @focus="(e) => emit('focus', e)"
