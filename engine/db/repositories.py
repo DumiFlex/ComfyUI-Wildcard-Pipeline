@@ -117,6 +117,30 @@ class ModuleRepository:
             raise ModuleNotFound(module_id)
         return _row_to_module(row)
 
+    def get_by_uuid(self, uuid: str) -> dict[str, Any]:
+        """Lookup by indexed uuid. Raises ModuleNotFound on miss."""
+        cur = self._conn.execute(
+            "SELECT * FROM modules WHERE uuid = ?;", (uuid,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise ModuleNotFound(uuid)
+        return _row_to_module(row)
+
+    def get_by_uuids(self, uuids: list[str]) -> list[dict[str, Any]]:
+        """Bulk indexed lookup. Dedups input. Silently skips missing uuids
+        (callers that need explicit miss-detection should compare returned
+        uuids against the input set)."""
+        if not uuids:
+            return []
+        unique = list(dict.fromkeys(uuids))  # dedup, preserve order
+        placeholders = ",".join("?" for _ in unique)
+        cur = self._conn.execute(
+            f"SELECT * FROM modules WHERE uuid IN ({placeholders});",
+            unique,
+        )
+        return [_row_to_module(r) for r in cur.fetchall()]
+
     def update(
         self,
         module_id: str,

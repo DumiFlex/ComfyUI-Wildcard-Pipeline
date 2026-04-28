@@ -245,3 +245,40 @@ def test_row_to_module_includes_payload_hash(wp_db):
     # 64-char SHA-256 hex
     assert len(row["payload_hash"]) == 64
     assert all(c in "0123456789abcdef" for c in row["payload_hash"])
+
+
+def test_get_by_uuid_returns_row(wp_db):
+    repo = ModuleRepository(wp_db)
+    created = repo.create(
+        type="wildcard", name="color", description="",
+        category_id=None, tags=[], payload={"options": []},
+    )
+    fetched = repo.get_by_uuid(created["uuid"])
+    assert fetched["id"] == created["id"]
+
+
+def test_get_by_uuid_raises_when_missing(wp_db):
+    repo = ModuleRepository(wp_db)
+    with pytest.raises(ModuleNotFound):
+        repo.get_by_uuid("00000000")
+
+
+def test_get_by_uuids_bulk_lookup_dedups_and_skips_missing(wp_db):
+    """Bulk lookup feeds the embed-bundle endpoint and the test-runner
+    lazy catalog. Returns rows in the same order callers passed uuids in;
+    missing uuids are silently skipped (caller decides how to surface)."""
+    repo = ModuleRepository(wp_db)
+    a = repo.create(type="wildcard", name="a", description="",
+                   category_id=None, tags=[], payload={"options": []})
+    b = repo.create(type="wildcard", name="b", description="",
+                   category_id=None, tags=[], payload={"options": []})
+    rows = repo.get_by_uuids([a["uuid"], "deadbeef", b["uuid"], a["uuid"]])
+    # Dedups (returns each uuid at most once), skips missing
+    assert len(rows) == 2
+    found_uuids = {r["uuid"] for r in rows}
+    assert found_uuids == {a["uuid"], b["uuid"]}
+
+
+def test_get_by_uuids_empty_input_returns_empty_list(wp_db):
+    repo = ModuleRepository(wp_db)
+    assert repo.get_by_uuids([]) == []
