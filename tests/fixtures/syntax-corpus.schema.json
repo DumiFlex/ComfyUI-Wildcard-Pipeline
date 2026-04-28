@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Syntax corpus",
+  "type": "object",
+  "required": ["version", "cases"],
+  "properties": {
+    "version": {"type": "integer", "minimum": 1},
+    "schema_url": {"type": "string"},
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "input", "expected_tokens"],
+        "properties": {
+          "name": {"type": "string"},
+          "input": {"type": "string"},
+          "expected_tokens": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "raw", "start", "end", "meta"],
+              "properties": {
+                "kind": {"enum": ["text", "var", "ref", "dp_brace", "dp_pipe", "dp_multi", "escape"]},
+                "raw": {"type": "string"},
+                "start": {"type": "integer", "minimum": 0},
+                "end": {"type": "integer", "minimum": 0},
+                "meta": {"type": "object"}
+              }
+            }
+          },
+          "expected_resolution": {
+            "type": "object",
+            "properties": {
+              "seed": {"type": "integer"},
+              "ctx_vars": {"type": "object"},
+              "catalog": {"type": "array"},
+              "surface": {"enum": ["wildcard", "combine", "derivation", "assembler"]},
+              "strict": {"type": "boolean"},
+              "output": {"type": "string"},
+              "warnings": {"type": "array"}
+            }
+          }
+        }
+      }
+    }
+  }
+}
