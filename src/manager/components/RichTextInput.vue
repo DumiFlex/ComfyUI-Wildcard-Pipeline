@@ -73,42 +73,54 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
 
 // --- Tokenize + mirror HTML (pre-escaped — see richTokenize.ts). ---
 const tokens = computed(() => tokenizeRich(props.modelValue || ""));
-// SAFE: `mirrorHtmlWithIdx` HTML-escapes every `raw` payload before
-// concatenation. The resulting string only contains tags we generated, so
-// `v-html` cannot inject user-controlled markup.
-// When `surface !== "wildcard"`, ref tokens get an extra "ignored" class
-// so they render with muted styling.
+// SAFE: every `raw` payload is HTML-escaped before concatenation. The only
+// tags in the output are ones we emit ourselves, so `v-html` cannot inject
+// user-controlled markup.
+//
+// CARET ALIGNMENT — read this before changing the rendering logic.
+// The mirror is painted behind a transparent textarea. The native caret
+// only stays glued to the visible glyphs if the mirror's text width
+// matches the textarea's text width *exactly*. That means we MUST emit
+// the same characters the textarea sees — `@{abcd1234}` (12 chars), not
+// `@shirt` (6 chars). Substituting the UUID for a friendlier name while
+// the user is editing leaves the caret floating to the right of the chip
+// by the width-difference.
+//
+// So: while focused, render the raw `@{uuid}` form. When blurred
+// (`wp-rt--rest`), swap in the human name for readability — there's no
+// caret to misalign at rest, and the rest-mode pill padding already
+// shifts widths anyway.
+//
+// `surface !== "wildcard"` stamps refs with an "ignored" class so they
+// render muted on surfaces where `@`-refs aren't resolved.
+const ESC: Record<string, string> = {
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+};
+function escHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ESC[c] ?? c);
+}
 const mirrorHtml = computed(() => {
   const toks = tokens.value;
   const isWildcard = props.surface === "wildcard";
   const map = props.uuidToName;
+  const editing = focused.value;
   let html = "";
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i];
     let cls = `wp-rt-${t.kind}`;
-    let display = t.raw;
+    let display = escHtml(t.raw);
     if (t.kind === "ref") {
       if (!isWildcard) cls += " wp-rt-ref--ignored";
-      // Replace `@{uuid}` with `@name` display form when name is known.
       const uuid = t.meta?.uuid;
-      if (uuid && map.has(uuid)) {
-        const name = map.get(uuid)!;
-        // Escape the name portion (uuid chars are hex-safe but name may not be).
-        display = "@" + name.replace(/[&<>"']/g, (c) => (
-          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c
-        ));
-      } else {
-        // Fall back to escaped raw form.
-        display = t.raw.replace(/[&<>"']/g, (c) => (
-          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c
-        ));
+      if (!editing && uuid && map.has(uuid)) {
+        // Rest-mode: show `@name` for readability. Caret alignment doesn't
+        // matter when the textarea isn't focused.
+        display = "@" + escHtml(map.get(uuid)!);
       }
-      html += `<span class="${cls}" data-idx="${i}">${display}</span>`;
-    } else {
-      html += `<span class="${cls}" data-idx="${i}">${t.raw.replace(/[&<>"']/g, (c) => (
-        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c
-      ))}</span>`;
+      // Editing-mode falls through with the raw `@{uuid}` form so caret
+      // pixel-tracks the underlying textarea characters.
     }
+    html += `<span class="${cls}" data-idx="${i}">${display}</span>`;
   }
   html += '<span class="wp-rt-tail">&#x200B;</span>';
   return html;
