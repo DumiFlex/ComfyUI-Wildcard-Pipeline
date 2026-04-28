@@ -28,9 +28,12 @@ Thumbs.db
 # Claude / Superpowers workspace artifacts
 .superpowers/
 .claude/
-docs/superpowers/
 # Backups dropped by /caveman:compress next to compressed files
 *.original.md
+
+# Docs — ignore everything except per-node help pages
+/docs/*
+!/docs/help/
 
 # Semantic release
 .releaserc.local.js
