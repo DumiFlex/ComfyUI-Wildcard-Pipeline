@@ -5,6 +5,7 @@ import Button from "./ui/Button.vue";
 import Input from "./ui/Input.vue";
 import Select from "./ui/Select.vue";
 import Chip from "./ui/Chip.vue";
+import RichTextInput from "./RichTextInput.vue";
 import type {
   DerivationAction,
   DerivationBranch,
@@ -223,12 +224,18 @@ const branchCount = computed(() => rule.value.branches.length);
               :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
               @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
             />
-            <Input
+            <!-- RichTextInput so users get $-autocomplete on condition
+                 values (e.g. compare against `$mood` resolved upstream).
+                 surface=derivation gates @{} refs to muted styling — they
+                 don't resolve in derivation conditions per spec §2.7. -->
+            <RichTextInput
               :model-value="branch.condition.value"
+              surface="derivation"
+              :var-suggestions="varSuggestions"
               placeholder="value"
               class="field-value"
               :aria-label="`Condition value for rule ${ruleNumber} branch ${bi + 1}`"
-              @update:model-value="(v) => onConditionValue(bi, String(v ?? ''))"
+              @update:model-value="(v) => onConditionValue(bi, v)"
             />
           </div>
         </div>
@@ -255,12 +262,14 @@ const branchCount = computed(() => rule.value.branches.length);
         </div>
         <div class="row">
           <span class="row-label">Value</span>
-          <Input
+          <RichTextInput
             :model-value="branch.action.value"
+            surface="derivation"
+            :var-suggestions="varSuggestions"
             class="field-value-full"
             placeholder="The new / appended / prepended value"
             :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
-            @update:model-value="(v) => onActionValue(bi, String(v ?? ''))"
+            @update:model-value="(v) => onActionValue(bi, v)"
           />
         </div>
       </div>
@@ -300,12 +309,14 @@ const branchCount = computed(() => rule.value.branches.length);
         </div>
         <div class="row">
           <span class="row-label">Value</span>
-          <Input
+          <RichTextInput
             :model-value="rule.else.action.value"
+            surface="derivation"
+            :var-suggestions="varSuggestions"
             class="field-value-full"
             placeholder="The new / appended / prepended value"
             :aria-label="`ELSE action value for rule ${ruleNumber}`"
-            @update:model-value="(v) => onElseValue(String(v ?? ''))"
+            @update:model-value="(v) => onElseValue(v)"
           />
         </div>
       </div>

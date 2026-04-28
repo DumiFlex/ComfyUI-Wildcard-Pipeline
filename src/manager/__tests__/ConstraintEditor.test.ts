@@ -78,9 +78,12 @@ describe("ConstraintEditor.vue", () => {
   });
 
   it("loads existing constraint payload when id is given", async () => {
+    // Both axes are now sub_categories (matrix is subcat × subcat, not
+    // value × subcat) — give source its own sub_categories so the row
+    // matches the matrix payload key.
     apiMod.list.mockResolvedValue({
       items: [
-        makeWildcardRow("wc_src", "Outfit", { values: ["jeans", "tux"] }),
+        makeWildcardRow("wc_src", "Outfit", { subs: ["jeans", "tux"] }),
         makeWildcardRow("wc_tgt", "HairColor", { subs: ["warm", "cool"] }),
       ],
       total: 2,
@@ -110,7 +113,7 @@ describe("ConstraintEditor.vue", () => {
   it("save calls api.modules.create with type 'constraint'", async () => {
     apiMod.list.mockResolvedValue({
       items: [
-        makeWildcardRow("wc_src", "Outfit", { values: ["jeans"] }),
+        makeWildcardRow("wc_src", "Outfit", { subs: ["jeans"] }),
         makeWildcardRow("wc_tgt", "HairColor", { subs: ["warm"] }),
       ],
       total: 2,
