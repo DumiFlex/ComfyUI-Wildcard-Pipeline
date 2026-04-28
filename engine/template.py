@@ -1,43 +1,44 @@
-"""Template variable substitution: $var, $$ escape, __internal skip."""
+"""Template variable substitution shim. Wraps engine/syntax/resolve_text.
 
+Pre-Phase-5 this file held an ad-hoc `$var` regex. Phase 5 unified all
+template resolution into engine/syntax. This module preserves the public
+function name + signature so `wp_nodes/assembler_node.py` doesn't change.
+"""
 from __future__ import annotations
 
 import re
 from typing import Any
 
-_VAR_RE = re.compile(r"\$(\w+)")
-_SENTINEL = "\x00DOLLAR\x00"
-# Two-or-more whitespace runs left by removed variables. Single space stays.
+from engine.modules import build_resolve_ctx
+from engine.syntax import resolve_text
+
 _WS_RUN = re.compile(r"[ \t]{2,}")
-# Trailing/leading whitespace inside a comma-separated list left by drops.
 _COMMA_GAP = re.compile(r",\s*,")
 _TRIM_PUNCT = re.compile(r"\s+([,.;:!?])")
 
 
 def resolve_variables(template: str, ctx: dict[str, Any]) -> str:
-    """Replace ``$var`` with ``str(ctx[var])``.
+    """Resolve `$var` / `@{uuid}` / `{a|b|c}` / `{N$$sep$$...}` against ctx.
 
-    - ``$$`` escapes a literal ``$``.
-    - Keys beginning with ``__`` are engine internals — never substituted.
-    - Missing vars are dropped (replaced with empty string), and the
-      surrounding whitespace is normalized so the output reads cleanly:
-      doubled spaces collapse to one, ``", ,"`` collapses to ``","``,
-      whitespace before punctuation is trimmed.
+    Surface defaults to "assembler" (matches wp_nodes/assembler_node.py
+    usage). For a different surface, call resolve_text directly with a
+    custom ResolveContext.
     """
-    result = template.replace("$$", _SENTINEL)
-
-    def _replace(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if name.startswith("__"):
-            return match.group(0)
-        if name in ctx:
-            return str(ctx[name])
+    if not template:
         return ""
 
-    result = _VAR_RE.sub(_replace, result)
-    result = result.replace(_SENTINEL, "$")
-    # Cleanup gaps left by dropped variables.
-    result = _WS_RUN.sub(" ", result)
-    result = _COMMA_GAP.sub(",", result)
-    result = _TRIM_PUNCT.sub(r"\1", result)
-    return result.strip()
+    # Ensure required ctx keys exist (callers from the old API may not provide them)
+    if "__wp_rng__" not in ctx:
+        import random  # noqa: PLC0415
+        ctx["__wp_rng__"] = random.Random(int(ctx.get("__wp_node_seed__", 0)))
+    ctx.setdefault("__wp_warnings__", [])
+
+    rctx = build_resolve_ctx(ctx, surface="assembler")
+    out = resolve_text(template, rctx)
+
+    # Whitespace cleanup post-pass (preserves the original API's behavior
+    # for templates that drop missing variables)
+    out = _WS_RUN.sub(" ", out)
+    out = _COMMA_GAP.sub(",", out)
+    out = _TRIM_PUNCT.sub(r"\1", out)
+    return out.strip()
