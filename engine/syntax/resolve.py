@@ -49,8 +49,7 @@ def _resolve_tokens(
         elif tok.kind == TokenKind.REF:
             parts.append(_resolve_ref(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_BRACE:
-            # Implemented in Task 10
-            raise NotImplementedError("DP_BRACE resolution lands in Task 10")
+            parts.append(_resolve_inline_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_MULTI:
             # Implemented in Task 11
             raise NotImplementedError("DP_MULTI resolution lands in Task 11")
@@ -102,6 +101,24 @@ def _pick_weighted(options: list[dict], rng) -> dict | None:
         if r <= acc:
             return opt
     return options[-1]
+
+
+def _resolve_inline_pick(
+    tok: Token,
+    ctx: ResolveContext,
+    depth: int,
+    visited: tuple[str, ...],
+) -> str:
+    """Pick one branch uniformly at random; recursively resolve its content."""
+    branches: list[str] = tok.meta.get("branches", [])
+    if not branches:
+        return ""
+    chosen_idx = ctx.rng.randrange(len(branches))
+    chosen = branches[chosen_idx]
+    if not chosen:
+        return ""
+    nested_tokens = tokenize_text(chosen)
+    return _resolve_tokens(nested_tokens, ctx, depth=depth, visited=visited)
 
 
 def _resolve_ref(

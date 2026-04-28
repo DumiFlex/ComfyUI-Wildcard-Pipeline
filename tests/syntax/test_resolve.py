@@ -233,3 +233,51 @@ def test_resolve_ref_repeated_resolves_independently():
     assert parts[1] in {"A", "B", "C", "D"}
     # Pinned from first observed run with seed=42:
     assert out == "C-A"
+
+
+# ---------------------------------------------------------------------------
+# DP_BRACE resolution tests (Task 10)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_inline_pick_one_of_branches():
+    """Single-pick must return one of the branches verbatim (uniformly)."""
+    ctx = _ctx(rng=random.Random(0))
+    out = resolve_text("{a|b|c}", ctx)
+    assert out in {"a", "b", "c"}
+
+
+def test_resolve_inline_pick_deterministic_with_seed():
+    ctx1 = _ctx(rng=random.Random(42))
+    ctx2 = _ctx(rng=random.Random(42))
+    assert resolve_text("{x|y|z}", ctx1) == resolve_text("{x|y|z}", ctx2)
+
+
+def test_resolve_inline_pick_nested_inline():
+    ctx = _ctx(rng=random.Random(0))
+    out = resolve_text("{a|{b|c}|d}", ctx)
+    assert out in {"a", "b", "c", "d"}
+
+
+def test_resolve_inline_pick_with_var_in_branch():
+    ctx = _ctx(rng=random.Random(0), _vars={"color": "red"})
+    out = resolve_text("{$color|blue|green}", ctx)
+    # Pick depends on rng; result is one of the resolved branches.
+    assert out in {"red", "blue", "green"}
+
+
+def test_resolve_inline_pick_empty_branch_valid():
+    """An empty branch is a valid pick — emits empty string."""
+    # Force the empty branch by using a controlled rng. With seed=0 and
+    # 3 branches, observe which gets picked; if it's not the empty one,
+    # we still verify the resolver doesn't error.
+    ctx = _ctx(rng=random.Random(0))
+    out = resolve_text("{a||c}", ctx)
+    assert out in {"a", "", "c"}
+
+
+def test_resolve_inline_pick_single_branch_is_text_token():
+    """`{just_one}` is NOT a pick (no pipe) — tokenizer returns it as text,
+    so resolver passes through verbatim."""
+    ctx = _ctx()
+    assert resolve_text("{just_one}", ctx) == "{just_one}"
