@@ -1,3 +1,12 @@
+## [1.4.2](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.4.1...v1.4.2) (2026-04-28)
+
+
+### Bug Fixes
+
+* **spa:** @ autocomplete inserts UUID, editor cross-refs, derivation $ vars ([89c1662](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/89c16624db8c8859a9ba2c683afb5e549b6ecd5b))
+* **spa:** @ autocomplete UUIDs, editor cross-refs, derivation $ vars ([0a3e922](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/0a3e92234ff1a4dd24905942ceb407a1b8ee3ec7))
+* **spa:** extract 8hex UUID suffix from module DB id for `@{uuid}` refs ([3d18829](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/3d18829e54b52eaac64d7a854aabe40906a39da6))
+
 ## [1.4.1](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.4.0...v1.4.1) (2026-04-28)
 
 
