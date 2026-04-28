@@ -107,6 +107,7 @@ export interface PipelinePayload {
 
 export interface ModuleRow {
   id: string;
+  uuid: string;             // spec §4.2
   type: ModuleType;
   name: string;
   description: string;
@@ -114,6 +115,7 @@ export interface ModuleRow {
   tags: string[];
   is_favorite: boolean;
   payload: Record<string, unknown>;
+  payload_hash: string;     // spec §4.2
   version: number;
   created_at: string;
   updated_at: string;
@@ -223,4 +225,54 @@ export interface ImportResult {
   modules_imported: number;
   categories_imported: number;
   skipped: string[];
+}
+
+/**
+ * Spec §2.4 — canonical snapshot entry. Mirrors the Python
+ * `engine.modules.snapshot.SnapshotEntry` TypedDict. Stored:
+ *   - in `__wp_catalog__` at runtime (memory only)
+ *   - in WP_Context workflow JSON (persisted, decoupled from DB)
+ *
+ * `payload_hash` covers `payload` only (not `name` / `tags` / etc.) so a
+ * rename does not flip drift state.
+ */
+export interface SnapshotEntry {
+  snapshot_version: 1;
+  uuid: string;             // 8 hex chars
+  type: ModuleType;         // wildcards-only in catalog (spec §2.7)
+  name: string;
+  payload: Record<string, unknown>;
+  payload_hash: string;     // SHA-256 hex, 64 chars
+  source:
+    | { kind: "user" }
+    | { kind: "dep"; parent_uuids: string[] };
+}
+
+/**
+ * Walker-recorded anomaly. Spec §2.8 — extensible discriminator. New
+ * reasons can be added without breaking existing consumers; they
+ * default-handle unknown variants.
+ */
+export interface WalkOverflow {
+  uuid: string;
+  reason: "max_depth" | "cycle_detected" | "missing_target";
+}
+
+/**
+ * Server response shape from `POST /wp/api/modules/embed-bundle`.
+ * Pre-split so the SPA picker doesn't filter wildcards out of a mixed
+ * bundle. Spec §4.2.
+ *
+ * - `modules`: full payloads of explicit picks, in input order. The
+ *   pipeline executes these.
+ * - `snapshots`: wildcard catalog (picks of type wildcard + transitive
+ *   wildcards). Becomes `ctx['__wp_catalog__']` at run time.
+ * - `pickOrder`: uuid order for UI display.
+ * - `walkOverflow`: cycles / depth caps / missing targets the walker hit.
+ */
+export interface EmbedBundle {
+  modules: Record<string, unknown>[];
+  snapshots: Record<string, SnapshotEntry>;
+  pickOrder: string[];
+  walkOverflow: WalkOverflow[];
 }

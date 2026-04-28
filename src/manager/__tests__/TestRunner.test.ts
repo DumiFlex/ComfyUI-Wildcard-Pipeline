@@ -6,7 +6,7 @@ import type { ModuleRow } from "../api/types";
 vi.mock("../api/client", () => {
   const MOCK_MODULES: ModuleRow[] = [
     {
-      id: "wc_a", type: "wildcard", name: "Hair Color",
+      id: "wc_a", uuid: "aabbccdd", type: "wildcard", name: "Hair Color",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         options: [
@@ -16,10 +16,11 @@ vi.mock("../api/client", () => {
         sub_categories: ["warm", "cool"],
         var_binding: "hair_color",
       },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
     {
-      id: "wc_o", type: "wildcard", name: "Outfit",
+      id: "wc_o", uuid: "bbbbbbbb", type: "wildcard", name: "Outfit",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         options: [
@@ -27,26 +28,29 @@ vi.mock("../api/client", () => {
         ],
         sub_categories: [],
       },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
     {
-      id: "fv_a", type: "fixed_values", name: "Subject Profile",
+      id: "fv_a", uuid: "cccccccc", type: "fixed_values", name: "Subject Profile",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: { values: [{ var: "name", value: "Mira" }, { var: "age", value: "29" }] },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
     {
-      id: "cb_a", type: "combine", name: "Subject Phrase",
+      id: "cb_a", uuid: "dddddddd", type: "combine", name: "Subject Phrase",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         template: "$name with $hair_color hair",
         output_var: "subject_phrase",
         input_vars: ["name", "hair_color"],
       },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
     {
-      id: "dv_a", type: "derivation", name: "Always Append",
+      id: "dv_a", uuid: "eeeeeeee", type: "derivation", name: "Always Append",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         rules: [{
@@ -57,10 +61,11 @@ vi.mock("../api/client", () => {
           }],
         }],
       },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
     {
-      id: "cn_a", type: "constraint", name: "Hair × Outfit",
+      id: "cn_a", uuid: "ffffffff", type: "constraint", name: "Hair × Outfit",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         source_wildcard_id: "wc_a",
@@ -68,15 +73,17 @@ vi.mock("../api/client", () => {
         matrix: { warm: {} },
         exceptions: [],
       },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
     {
-      id: "pl_a", type: "pipeline", name: "Quick Portrait",
+      id: "pl_a", uuid: "11111111", type: "pipeline", name: "Quick Portrait",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: { steps: [
         { id: "s1", module_id: "fv_a", enabled: true },
         { id: "s2", module_id: "wc_a", enabled: true },
       ] },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
   ];
