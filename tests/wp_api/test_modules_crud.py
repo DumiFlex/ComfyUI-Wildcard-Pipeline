@@ -124,6 +124,22 @@ async def test_list_search_filter(wp_client):
     assert body["items"][0]["name"] == "ColorPalette"
 
 
+async def test_list_total_ignores_limit(wp_client):
+    """Regression: Dashboard count cards used to read 1 for every kind
+    because list_modules returned `total = len(items)` AFTER the LIMIT
+    was applied. `total` must reflect the unpaginated row count so the
+    SPA can poll cheaply with limit=1 yet still display the real total."""
+    for n in ("a", "b", "c"):
+        await wp_client.post("/wp/api/modules", json={
+            "type": "wildcard", "name": n, "description": "",
+            "category_id": None, "tags": [], "payload": {"options": []},
+        })
+    resp = await wp_client.get("/wp/api/modules?type=wildcard&limit=1")
+    body = await resp.json()
+    assert len(body["items"]) == 1   # paginated
+    assert body["total"] == 3        # but total reflects ALL rows
+
+
 async def test_list_invalid_limit_400(wp_client):
     resp = await wp_client.get("/wp/api/modules?limit=abc")
     assert resp.status == 400

@@ -199,16 +199,20 @@ class ModuleRepository:
         if cur.rowcount == 0:
             raise ModuleNotFound(module_id)
 
-    def list(
+    def _build_filter_clause(
         self,
         *,
-        type: str | None = None,
-        category_id: str | None = None,
-        query: str | None = None,
-        favorites_only: bool = False,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[dict[str, Any]]:
+        type: str | None,
+        category_id: str | None,
+        query: str | None,
+        favorites_only: bool,
+    ) -> tuple[str, list[Any]]:
+        """Build the WHERE-clause fragment + bound params shared by list/count.
+
+        Extracted so list() (paginated rows) and count() (total ignoring
+        pagination) apply the same filters bit-for-bit. Mismatched filters
+        between the two paths is the kind of bug that silently makes
+        Dashboard counts wrong — the helper closes that loop."""
         clauses: list[str] = []
         params: list[Any] = []
         if type is not None:
@@ -227,10 +231,24 @@ class ModuleRepository:
             params.append(f"%{escaped}%")
         if favorites_only:
             clauses.append("is_favorite = 1")
-        sql = "SELECT * FROM modules"
-        if clauses:
-            sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY updated_at DESC, id DESC"
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        return where, params
+
+    def list(
+        self,
+        *,
+        type: str | None = None,
+        category_id: str | None = None,
+        query: str | None = None,
+        favorites_only: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where, params = self._build_filter_clause(
+            type=type, category_id=category_id, query=query,
+            favorites_only=favorites_only,
+        )
+        sql = "SELECT * FROM modules" + where + " ORDER BY updated_at DESC, id DESC"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
@@ -240,6 +258,26 @@ class ModuleRepository:
             params.append(offset)
         rows = self._conn.execute(sql, params).fetchall()
         return [_row_to_module(r) for r in rows]
+
+    def count(
+        self,
+        *,
+        type: str | None = None,
+        category_id: str | None = None,
+        query: str | None = None,
+        favorites_only: bool = False,
+    ) -> int:
+        """Total rows matching the same filters as list(), ignoring limit
+        and offset. Used by the API to populate `ModuleListResponse.total`
+        accurately even when the client passed `limit=1` for cheap polling
+        (Dashboard count cards do exactly this)."""
+        where, params = self._build_filter_clause(
+            type=type, category_id=category_id, query=query,
+            favorites_only=favorites_only,
+        )
+        sql = "SELECT COUNT(*) AS n FROM modules" + where
+        row = self._conn.execute(sql, params).fetchone()
+        return int(row["n"]) if row is not None else 0
 
 
 class CategoryNotFound(LookupError):
