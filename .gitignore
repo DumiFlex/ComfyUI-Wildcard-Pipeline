@@ -14,8 +14,7 @@ pnpm-debug.log
 
 # Build outputs
 js/
-web/*
-!web/index.html
+web/
 coverage/
 .vitest-cache/
 
