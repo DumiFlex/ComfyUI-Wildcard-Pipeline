@@ -49,18 +49,22 @@ describe("getWildcardSyntax", () => {
     expect(sx.refTargets).toEqual([]);
   });
 
-  // TODO(syntax-task-19): re-enable after wildcardSyntax.ts UUID-graph rewrite
-  // The old @name short form is no longer recognised as ref by tokenizeRich.
-  // wildcardSyntax.ts needs updating to work with @{8hex} UUID refs instead.
-  it.skip("detects @ref tokens in option values", () => {
+  it("detects @{uuid} ref tokens in option values", () => {
+    // Use @{8hex} UUID form — the only form tokeniseRich recognises as ref.
+    const hatId = "aabbccdd";
+    const shoesId = "11223344";
     const m = wc({
       name: "outfit",
-      options: [opt("a @hat"), opt("a @shoes and a @hat"), opt("plain")],
+      options: [
+        opt(`a @{${hatId}}`),
+        opt(`a @{${shoesId}} and a @{${hatId}}`),
+        opt("plain"),
+      ],
     });
     const sx = getWildcardSyntax(m);
     expect(sx.hasRefs).toBe(true);
-    // dedupes targets across options
-    expect(sx.refTargets.sort()).toEqual(["hat", "shoes"]);
+    // dedupes UUID targets across options
+    expect(sx.refTargets.sort()).toEqual([hatId, shoesId].sort());
   });
 
   it("ignores @@ literal escapes", () => {
@@ -82,35 +86,38 @@ describe("getWildcardSyntax", () => {
 });
 
 describe("buildWildcardGraph", () => {
-  // TODO(syntax-task-19): re-enable after wildcardSyntax.ts UUID-graph rewrite
-  // The old @name short form is no longer recognised as ref; buildWildcardGraph
-  // needs updating to work with @{8hex} UUID refs instead.
-  it.skip("creates bidirectional edges between two wildcards that reference each other", () => {
-    const a = wc({ name: "alpha", var_binding: "alpha", options: [opt("see @beta")] });
-    const b = wc({ name: "beta", var_binding: "beta", options: [opt("see @alpha")] });
+  it("creates bidirectional UUID edges between two wildcards that reference each other", () => {
+    // IDs must be exactly 8 hex chars so tokenizeRich recognises @{uuid} refs.
+    const a = wc({ id: "aaaaaaaa", name: "alpha", var_binding: "alpha", options: [opt("see @{bbbbbbbb}")] });
+    const b = wc({ id: "bbbbbbbb", name: "beta",  var_binding: "beta",  options: [opt("see @{aaaaaaaa}")] });
     const g = buildWildcardGraph([a, b]);
-    expect(g.outgoing.get("alpha")).toEqual(new Set(["beta"]));
-    expect(g.outgoing.get("beta")).toEqual(new Set(["alpha"]));
-    expect(g.incoming.get("alpha")).toEqual(new Set(["beta"]));
-    expect(g.incoming.get("beta")).toEqual(new Set(["alpha"]));
+    expect(g.outgoing.get("aaaaaaaa")).toEqual(new Set(["bbbbbbbb"]));
+    expect(g.outgoing.get("bbbbbbbb")).toEqual(new Set(["aaaaaaaa"]));
+    expect(g.incoming.get("aaaaaaaa")).toEqual(new Set(["bbbbbbbb"]));
+    expect(g.incoming.get("bbbbbbbb")).toEqual(new Set(["aaaaaaaa"]));
+  });
+
+  it("populates uuidToName from var_binding", () => {
+    const a = wc({ id: "aaaaaaaa", name: "alpha", var_binding: "alpha", options: [] });
+    const g = buildWildcardGraph([a]);
+    expect(g.uuidToName.get("aaaaaaaa")).toBe("alpha");
   });
 
   it("yields empty edge sets for a wildcard with no references", () => {
     const a = wc({ name: "lonely", var_binding: "lonely", options: [opt("just text")] });
     const g = buildWildcardGraph([a]);
-    expect(g.outgoing.get("lonely")?.size ?? -1).toBe(0);
-    expect(g.incoming.get("lonely")?.size ?? -1).toBe(0);
+    // Graph is keyed by mod.id; wc() defaults id to `wc_${name}`
+    expect(g.outgoing.get("wc_lonely")?.size ?? -1).toBe(0);
+    expect(g.incoming.get("wc_lonely")?.size ?? -1).toBe(0);
   });
 
-  // TODO(syntax-task-19): re-enable after wildcardSyntax.ts UUID-graph rewrite
-  // The old @name short form is no longer recognised as ref; dangling-ref test
-  // needs updating to work with @{8hex} UUID refs instead.
-  it.skip("drops dangling @ref targets that don't resolve to a known wildcard", () => {
-    const a = wc({ name: "alpha", var_binding: "alpha", options: [opt("@ghost or @beta")] });
-    const b = wc({ name: "beta", var_binding: "beta", options: [opt("plain")] });
+  it("drops dangling @{uuid} refs that don't resolve to a known wildcard", () => {
+    // ghostuuid is not in the module list — should be dropped.
+    const a = wc({ id: "aaaaaaaa", name: "alpha", var_binding: "alpha", options: [opt("@{ghostuuu} or @{bbbbbbbb}")] });
+    const b = wc({ id: "bbbbbbbb", name: "beta",  var_binding: "beta",  options: [opt("plain")] });
     const g = buildWildcardGraph([a, b]);
-    expect(g.outgoing.get("alpha")).toEqual(new Set(["beta"]));
-    expect(g.incoming.get("ghost")).toBeUndefined();
+    expect(g.outgoing.get("aaaaaaaa")).toEqual(new Set(["bbbbbbbb"]));
+    expect(g.incoming.get("ghostuuu")).toBeUndefined();
   });
 
   it("falls back to slug(name) when var_binding is missing", () => {

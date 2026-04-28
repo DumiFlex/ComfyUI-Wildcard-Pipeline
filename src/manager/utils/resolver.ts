@@ -7,6 +7,12 @@
  * `docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx`
  * (`TR_ENGINE`) and `docs/design-handoff/wildcardpipeline/project/data.jsx`
  * (`expandInline`, `resolveWildcard`, `resolveByVar`).
+ *
+ * `expandInlineChoices` delegates to `resolveTokens` (surface="wildcard") so
+ * brace-block picking shares the same code path as the Python engine.
+ * `expandRefs` / `fillTemplate` / `resolveWildcard` retain their name-based
+ * resolution logic because legacy option values still use `@name` / `$name`
+ * syntax rather than UUID refs.
  */
 import type {
   CombinePayload,
@@ -20,6 +26,8 @@ import type {
   WildcardOption,
   WildcardPayload,
 } from "../api/types";
+import { resolveTokens } from "./resolveTokens";
+import type { ResolveContext } from "./resolveTokens";
 import { toIdentifier } from "./slug";
 
 /* -------------------------------------------------------------------------- */
@@ -47,22 +55,24 @@ export function pickWeightedOption(
 /**
  * Expand inline `{a|b|c}` choices in a value string. Each occurrence is
  * resolved to one of its `|`-separated branches at random. Nested braces are
- * supported recursively (innermost first).
+ * supported recursively via `resolveTokens` (surface="wildcard").
  */
 export function expandInlineChoices(text: string): string {
   if (!text) return text;
-  const re = /\{([^{}]*\|[^{}]*)\}/;
-  let out = String(text);
-  // Resolve innermost first so nesting collapses cleanly.
-  let guard = 0;
-  while (re.test(out) && guard < 32) {
-    out = out.replace(re, (_, body: string) => {
-      const parts = body.split("|");
-      return parts[Math.floor(Math.random() * parts.length)] ?? "";
-    });
-    guard += 1;
-  }
-  return out;
+  const ctx: ResolveContext = {
+    rng: {
+      random: () => Math.random(),
+      randrange: (n: number) => Math.floor(Math.random() * n),
+    },
+    maxRefDepth: 16,
+    strict: false,
+    surface: "wildcard",
+    developerMode: false,
+    warnings: [],
+    vars: {},
+    modules: {},
+  };
+  return resolveTokens(String(text), ctx);
 }
 
 /* -------------------------------------------------------------------------- */
