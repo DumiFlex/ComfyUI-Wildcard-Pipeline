@@ -78,3 +78,44 @@ class TestHandleFixedValues:
         module = FixedValueModule(id="a")
         ctx = handle_fixed_values(module, {"k": "v"}, self._rng())
         assert ctx == {"k": "v"}
+
+
+def test_wildcard_handler_uses_resolve_text_for_refs():
+    """The handler now delegates to resolve_text for option values."""
+    import random  # noqa: PLC0415
+
+    from engine.modules.wildcard_handler import WildcardHandler  # noqa: PLC0415
+
+    payload = {
+        "var_binding": "color",
+        "options": [{"value": "@{a0000001}", "weight": 1}],
+    }
+    instance = {"variable_binding": "color"}
+    ctx = {
+        "__wp_rng__": random.Random(42),
+        "__wp_warnings__": [],
+        "__wp_catalog__": {
+            "a0000001": {
+                "type": "wildcard", "var_binding": "x",
+                "options": [{"value": "red", "weight": 1}],
+            },
+        },
+    }
+    out = WildcardHandler.resolve(payload, instance, ctx)
+    assert out == {"color": "red"}
+
+
+def test_wildcard_handler_inline_pick_in_option():
+    """Option values can use {a|b|c} inline picks."""
+    import random  # noqa: PLC0415
+
+    from engine.modules.wildcard_handler import WildcardHandler  # noqa: PLC0415
+
+    payload = {
+        "var_binding": "color",
+        "options": [{"value": "{red|blue|green}", "weight": 1}],
+    }
+    instance = {"variable_binding": "color"}
+    ctx = {"__wp_rng__": random.Random(42), "__wp_warnings__": []}
+    out = WildcardHandler.resolve(payload, instance, ctx)
+    assert out["color"] in {"red", "blue", "green"}

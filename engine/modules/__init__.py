@@ -100,7 +100,8 @@ __all__ += [
     "resolve_module",
 ]
 
-from engine.modules.wildcard_handler import RecursionLimitExceeded, WildcardHandler  # noqa: E402
+from engine.modules.wildcard_handler import WildcardHandler  # noqa: E402
+from engine.syntax import RecursionLimitExceeded  # noqa: E402
 
 register_handler(WildcardHandler)
 
