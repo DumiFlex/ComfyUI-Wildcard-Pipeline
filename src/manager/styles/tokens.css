@@ -1969,41 +1969,15 @@ input, textarea, select { font: inherit; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* inline ref-select (transparent, looks like text) */
-.wp-pl-row__refselect {
-  flex: 1;
-  min-width: 0;
-  height: 26px;
-  padding: 0 22px 0 0;
-  border: none;
-  background: transparent;
-  color: var(--wp-text);
-  font-size: 13.5px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23888' d='M0 0h10L5 6z'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 4px center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow: hidden;
-  border-radius: 4px;
-  transition: background-color 120ms ease;
-}
-.wp-pl-row__refselect:hover { background-color: var(--wp-bg-hover);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23888' d='M0 0h10L5 6z'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 4px center;
-}
-.wp-pl-row__refselect:focus {
-  outline: none;
-  background-color: var(--wp-bg);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
-}
-.wp-pl-row__refselect option { background: var(--wp-bg2); color: var(--wp-text); }
+/* `.wp-pl-row__refselect` styles intentionally removed.
+   Earlier the pipeline ref-select was a native <select> styled here
+   to look like inline text. We now route through the shared `Select`
+   component (see `components/ui/Select.vue`), which already brings
+   its own height (28px via `--wp-input-h-sm`) + chevron + focus ring.
+   The leftover `height: 26px; overflow: hidden` rule was clipping the
+   new trigger by ~2px at the bottom, which read as a "cut" border on
+   the pipeline row. The scoped block in PipelineSteps.vue keeps the
+   only two rules still needed (`flex: 1; min-width: 0`). */
 
 /* row actions */
 .wp-pl-row__actions {
