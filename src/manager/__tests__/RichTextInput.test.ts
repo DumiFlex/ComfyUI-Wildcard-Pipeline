@@ -164,6 +164,46 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  // Regression: `@`-trigger autocomplete had a bug where callers passed
+  // wildcard NAMES as `refSuggestions`, and the popover then inserted
+  // `@{name}` instead of the canonical `@{8hex}` UUID form. The fix is a
+  // contract change: callers pass UUIDs in `refSuggestions`, plus a
+  // `uuidToName` map for display, and the popover filters/labels by name
+  // while inserting the UUID. This test pins the new contract.
+  it("`@` autocomplete filters by display name and inserts the UUID", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["a1b2c3d4", "deadbeef"],
+        uuidToName: new Map([
+          ["a1b2c3d4", "color"],
+          ["deadbeef", "outfit"],
+        ]),
+      },
+      attachTo: document.body,
+    });
+    const input = wrap.find("input");
+    const el = input.element as HTMLInputElement;
+    el.value = "@col";
+    el.setSelectionRange(4, 4);
+    await input.trigger("input");
+    await tick();
+
+    // Popover shows display names (rendered via uuidToName), not UUIDs.
+    const labels = Array.from(
+      document.querySelectorAll(".wp-rt-suggestions__label"),
+    ).map((n) => (n.textContent ?? "").trim());
+    expect(labels).toContain("@color");
+    expect(labels.some((l) => l.includes("a1b2c3d4"))).toBe(false);
+
+    // Pressing Enter on the highlighted row inserts the UUID, not the name.
+    await input.trigger("keydown", { key: "Enter" });
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]).toEqual(["@{a1b2c3d4}"]);
+    wrap.unmount();
+  });
+
   it("closes autocomplete on Escape", async () => {
     const wrap = mount(RichTextInput, {
       props: {

@@ -19,3 +19,23 @@ export function toIdentifier(input: string): string {
 }
 
 export const VALID_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Extract the canonical 8-hex wildcard UUID from a full module DB id.
+ *
+ * `ModuleRepository._gen_id` builds ids as `<prefix>_<slug>_<token_hex(4)>`,
+ * e.g. `wc_test2_ea67b173`. The syntax spec (§2.4 in 2026-04-28 design doc)
+ * locks the wildcard ref form to `@{8hex}` — the trailing 8 hex chars are
+ * the UUID. SPA editors that surface refs in autocomplete must extract this
+ * suffix instead of inserting the whole DB id verbatim, otherwise the
+ * tokenizer regex (matching `@\{[0-9a-f]{8}\}`) rejects the token and the
+ * user sees raw `@{wc_test2_ea67b173}` text in the textarea with no chip.
+ *
+ * Returns null when the id does not end in `_<8hex>` (legacy/fixture data,
+ * imported bundles with non-standard ids, etc.) so callers can decide
+ * whether to skip or fall back.
+ */
+export function extractModuleUuid(id: string): string | null {
+  const m = id.match(/_([0-9a-f]{8})$/);
+  return m ? m[1] : null;
+}

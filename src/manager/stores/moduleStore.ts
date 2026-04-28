@@ -34,6 +34,29 @@ export const useModuleStore = defineStore("modules", () => {
     }
   }
 
+  /**
+   * Fetch the full module catalog, ignoring the persistent `filter.*` state.
+   *
+   * `fetchAll()` honors `filter.type` so that list views (Wildcards, Combines,
+   * etc.) only load same-kind rows — but editors need ALL modules for cross-
+   * references (`$var` autocomplete sourced from upstream wildcards/combines,
+   * Constraint editor wildcard pickers, …). Calling `fetchAll()` from an editor
+   * after the user came from a typed list page would silently scope `items` to
+   * one type and break those cross-refs. Use this method from editors instead.
+   *
+   * Mutates the same `items` ref. The next list-view mount re-applies its
+   * filter via `fetchAll()`, so this does not pollute long-term state.
+   */
+  async function fetchCatalog() {
+    loading.value = true;
+    try {
+      const res = await api.modules.list({});
+      items.value = res.items;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function get(id: string) {
     return await api.modules.get(id);
   }
@@ -74,7 +97,7 @@ export const useModuleStore = defineStore("modules", () => {
 
   return {
     items, loading, filter,
-    fetchAll, get, create, update, remove, duplicate, toggleFavorite,
+    fetchAll, fetchCatalog, get, create, update, remove, duplicate, toggleFavorite,
     wildcards, fixedValues,
   };
 });
