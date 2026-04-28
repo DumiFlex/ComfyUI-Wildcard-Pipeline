@@ -19,6 +19,7 @@ import type { CategoryRow, ModuleRow } from "../api/types";
 function mkModule(over: Partial<ModuleRow>): ModuleRow {
   return {
     id: "wc_aaaa1111",
+    uuid: "aabbccdd",
     type: "wildcard",
     name: "Sample",
     description: "",
@@ -26,6 +27,7 @@ function mkModule(over: Partial<ModuleRow>): ModuleRow {
     tags: [],
     is_favorite: false,
     payload: {},
+    payload_hash: "0".repeat(64),
     version: 1,
     created_at: "2024-01-01T00:00:00Z",
     updated_at: "2024-01-01T00:00:00Z",

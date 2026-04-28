@@ -30,6 +30,7 @@ function makeWildcardRow(id: string, name: string, opts: {
 } = {}): ModuleRow {
   return {
     id,
+    uuid: "aabbccdd",
     name,
     type: "wildcard",
     description: "",
@@ -40,6 +41,7 @@ function makeWildcardRow(id: string, name: string, opts: {
       options: (opts.values ?? []).map((v, i) => ({ id: `o${i}`, value: v, weight: 1 })),
       sub_categories: opts.subs ?? [],
     },
+    payload_hash: "0".repeat(64),
     version: 1,
     created_at: "",
     updated_at: "",

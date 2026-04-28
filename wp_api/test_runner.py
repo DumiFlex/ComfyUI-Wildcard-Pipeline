@@ -6,23 +6,46 @@ from collections import Counter
 
 from aiohttp import web
 
+from engine.db.repositories import ModuleRepository
 from engine.modules.dispatcher import UnknownModuleType, resolve_module
-from wp_api._helpers import json_error, json_ok
+from engine.modules.snapshot import walk_transitive_refs
+from wp_api._helpers import db_session, extract_referenced_uuids, json_error, json_ok
 
 _MAX_SAMPLES = 10000
 
 
-def _make_test_ctx() -> dict:
-    """Build a minimal pipeline ctx for the test-runner endpoint.
+def _build_request_catalog(request: web.Request, body: dict) -> dict[str, dict]:
+    """Lazy-walk the request body for `@{8hex}` refs and load just the
+    referenced wildcards (plus transitive deps) from the DB.
 
-    Uses a fresh random.Random (seeded from os entropy) so each /wp/api/test
-    request is independently sampled. The endpoint never needs a fixed seed —
-    it samples N times and returns the distribution.
-    """
+    Spec §2.10 — never the full library. Run ONCE per request; the catalog
+    is stable across all sample iterations within the same `run_test` call,
+    so callers should hoist this above their per-sample loop and reuse the
+    returned dict for every `__wp_catalog__` injection."""
+    roots = extract_referenced_uuids(body.get("payload"))
+    roots |= extract_referenced_uuids(body.get("instance"))
+    if not roots:
+        return {}
+    with db_session(request) as conn:
+        repo = ModuleRepository(conn)
+
+        def _fetch(uuid: str) -> dict | None:
+            try:
+                return repo.get_by_uuid(uuid)
+            except Exception:
+                return None
+
+        return walk_transitive_refs(roots, fetch_module=_fetch).snapshots
+
+
+def _make_sample_ctx(catalog: dict[str, dict]) -> dict:
+    """Per-sample ctx — fresh `__wp_rng__` and `__wp_warnings__`, but the
+    `__wp_catalog__` reference is shared across all samples (the resolver
+    treats it as read-only)."""
     return {
         "__wp_rng__": random.Random(),
         "__wp_warnings__": [],
-        "__wp_catalog__": {},
+        "__wp_catalog__": catalog,
     }
 
 
@@ -51,10 +74,17 @@ async def run_test(request: web.Request) -> web.Response:
         "payload": body["payload"],
         "instance": body["instance"],
     }
+    # Build the runtime catalog ONCE per request (§2.10 lazy walk). The
+    # walked dict is stable across all sample iterations — only the rng
+    # and warnings list need to be fresh per sample.
+    catalog = _build_request_catalog(request, body)
     results: list[dict[str, str]] = []
+    all_warnings: list[dict] = []
     try:
         for _ in range(samples):
-            results.append(resolve_module(snap, ctx=_make_test_ctx()))
+            ctx = _make_sample_ctx(catalog)
+            results.append(resolve_module(snap, ctx=ctx))
+            all_warnings.extend(ctx["__wp_warnings__"])
     except UnknownModuleType as e:
         return json_error(f"unknown module type: {e.args[0]!r}", status=400)
 
@@ -63,7 +93,30 @@ async def run_test(request: web.Request) -> web.Response:
         for v in r.values():
             histogram[v] += 1
 
-    return json_ok({"results": results, "histogram": dict(histogram)})
+    # Deduplicate warnings by (type, message) to avoid N*samples noise.
+    seen: set[tuple] = set()
+    deduped_warnings: list[dict] = []
+    for w in all_warnings:
+        key = (w.get("type"), w.get("message"))
+        if key not in seen:
+            seen.add(key)
+            deduped_warnings.append(w)
+
+    # Extract flat sample values for the SPA Test Runner display. Each
+    # resolve_module call returns {binding: value}; we surface the values.
+    sample_values: list[str] = []
+    for r in results:
+        for v in r.values():
+            sample_values.append(v)
+        if not r:
+            sample_values.append("")
+
+    return json_ok({
+        "results": results,
+        "histogram": dict(histogram),
+        "samples": sample_values,        # NEW: additive top-level
+        "warnings": deduped_warnings,    # NEW: additive top-level
+    })
 
 
 def register(router) -> None:

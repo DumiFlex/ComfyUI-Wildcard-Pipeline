@@ -215,3 +215,90 @@ def test_create_rejects_unknown_type(wp_db):
             type="bogus", name="x", description="",
             category_id=None, tags=[], payload={},
         )
+
+
+def test_create_writes_uuid_column_matching_id_suffix(wp_db):
+    """create() must persist the uuid column. The value equals the trailing
+    8 hex chars of the generated id so existing rows (backfilled) and new
+    rows share one identity convention."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="color", description="",
+        category_id=None, tags=[], payload={"options": []},
+    )
+    assert "uuid" in row
+    assert len(row["uuid"]) == 8
+    assert all(c in "0123456789abcdef" for c in row["uuid"])
+    assert row["id"].endswith(f"_{row['uuid']}")
+
+
+def test_row_to_module_includes_payload_hash(wp_db):
+    """API responses (and drift detection) need payload_hash on every row.
+    Sourced from engine.modules.snapshot.payload_hash so drift comparison
+    is bit-identical to embedded snapshot hashes."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="x", description="",
+        category_id=None, tags=[], payload={"options": [{"value": "a"}]},
+    )
+    assert "payload_hash" in row
+    # 64-char SHA-256 hex
+    assert len(row["payload_hash"]) == 64
+    assert all(c in "0123456789abcdef" for c in row["payload_hash"])
+
+
+def test_get_by_uuid_returns_row(wp_db):
+    repo = ModuleRepository(wp_db)
+    created = repo.create(
+        type="wildcard", name="color", description="",
+        category_id=None, tags=[], payload={"options": []},
+    )
+    fetched = repo.get_by_uuid(created["uuid"])
+    assert fetched["id"] == created["id"]
+
+
+def test_get_by_uuid_raises_when_missing(wp_db):
+    repo = ModuleRepository(wp_db)
+    with pytest.raises(ModuleNotFound):
+        repo.get_by_uuid("00000000")
+
+
+def test_get_by_uuids_bulk_lookup_dedups_and_skips_missing(wp_db):
+    """Bulk lookup feeds the embed-bundle endpoint and the test-runner
+    lazy catalog. Returns rows in the same order callers passed uuids in;
+    missing uuids are silently skipped (caller decides how to surface)."""
+    repo = ModuleRepository(wp_db)
+    a = repo.create(type="wildcard", name="a", description="",
+                   category_id=None, tags=[], payload={"options": []})
+    b = repo.create(type="wildcard", name="b", description="",
+                   category_id=None, tags=[], payload={"options": []})
+    rows = repo.get_by_uuids([a["uuid"], "deadbeef", b["uuid"], a["uuid"]])
+    # Dedups (returns each uuid at most once), skips missing
+    assert len(rows) == 2
+    found_uuids = {r["uuid"] for r in rows}
+    assert found_uuids == {a["uuid"], b["uuid"]}
+
+
+def test_get_by_uuids_empty_input_returns_empty_list(wp_db):
+    repo = ModuleRepository(wp_db)
+    assert repo.get_by_uuids([]) == []
+
+
+def test_get_by_uuids_returns_rows_in_input_order(wp_db):
+    """The docstring promises input-order preservation. SQLite's IN
+    predicate makes no order guarantee, so the implementation must
+    re-order results against the (deduped) input list. Pin that
+    contract explicitly so a future contributor doesn't drop the
+    re-order step thinking it's redundant."""
+    repo = ModuleRepository(wp_db)
+    rows = []
+    for n in ("alpha", "bravo", "charlie", "delta"):
+        rows.append(repo.create(
+            type="wildcard", name=n, description="",
+            category_id=None, tags=[], payload={"options": []},
+        ))
+    # Request in reverse insertion order; result must come back in the
+    # SAME reverse order (not the natural SELECT order).
+    requested = [rows[3]["uuid"], rows[1]["uuid"], rows[2]["uuid"], rows[0]["uuid"]]
+    fetched = repo.get_by_uuids(requested)
+    assert [r["uuid"] for r in fetched] == requested

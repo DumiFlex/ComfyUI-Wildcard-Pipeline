@@ -30,6 +30,16 @@ class _RuntimeResolveContext:
         return None
 
     def get_module(self, uuid: str) -> dict[str, Any] | None:
+        """Catalog lookup. Pure O(1) dict get. Spec §2.5.
+
+        No DB fallback. No network. No side effects. If the catalog does
+        not contain `uuid`, returns None and lets the resolver decide
+        (lenient → warning, strict → UnknownRefError).
+
+        Engine isolation invariant — `engine/modules/__init__.py` MUST NOT
+        import from `engine.db`, `wp_api`, or `wp_nodes`. Pinned by
+        `tests/engine/modules/test_resolve_context_isolation.py`.
+        """
         return self._catalog.get(uuid)
 
 

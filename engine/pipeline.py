@@ -37,10 +37,20 @@ class PipelineEngine:
         ctx.setdefault("__wp_internal_flags__", {})
 
         for index, module in enumerate(modules):
-            if not getattr(module, "enabled", True):
+            # Normalise id/type/enabled reads to work for both dicts and objects.
+            if isinstance(module, dict):
+                _module_id = module.get("id", "")
+                _module_type_raw = module.get("type", None) or ""
+                _module_enabled = module.get("enabled", True)
+            else:
+                _module_id = getattr(module, "id", "")
+                _module_type_raw = getattr(module, "type", None) or ""
+                _module_enabled = getattr(module, "enabled", True)
+
+            if not _module_enabled:
                 ctx["__wp_trace__"].append({
-                    "id": getattr(module, "id", ""),
-                    "type": getattr(module, "type", ""),
+                    "id": _module_id,
+                    "type": _module_type_raw,
                     "enabled": False,
                     "status": "skipped_disabled",
                     "writes": [],
@@ -48,7 +58,7 @@ class PipelineEngine:
                 })
                 continue
 
-            module_type = getattr(module, "type", None) or ""
+            module_type = _module_type_raw
             try:
                 # coerce_legacy_module expects a dict; convert dataclasses or
                 # duck-typed objects by reading known attrs via getattr.
@@ -75,7 +85,7 @@ class PipelineEngine:
                     "Failed to coerce module %r at index %s: %s", module, index, e
                 )
                 ctx["__wp_trace__"].append({
-                    "id": getattr(module, "id", ""),
+                    "id": _module_id,
                     "type": module_type,
                     "enabled": True,
                     "status": "failed",
@@ -93,7 +103,7 @@ class PipelineEngine:
                     index,
                 )
                 ctx["__wp_trace__"].append({
-                    "id": getattr(module, "id", ""),
+                    "id": _module_id,
                     "type": module_type,
                     "enabled": True,
                     "status": "skipped_unknown_type",
@@ -108,7 +118,7 @@ class PipelineEngine:
                 ctx["__wp_warnings__"].append({
                     "type": "handler_error",
                     "severity": "error",
-                    "module_id": getattr(module, "id", ""),
+                    "module_id": _module_id,
                     "source_field": "payload",
                     "position": 0,
                     "token_index": None,
@@ -122,7 +132,7 @@ class PipelineEngine:
                     ),
                 })
                 ctx["__wp_trace__"].append({
-                    "id": getattr(module, "id", ""),
+                    "id": _module_id,
                     "type": module_type,
                     "enabled": True,
                     "status": "failed",
@@ -144,7 +154,7 @@ class PipelineEngine:
                 })
 
             ctx["__wp_trace__"].append({
-                "id": getattr(module, "id", ""),
+                "id": _module_id,
                 "type": module_type,
                 "enabled": True,
                 "status": "ok",

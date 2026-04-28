@@ -1,5 +1,6 @@
 import type {
   CategoryCreateInput, CategoryRow,
+  EmbedBundle,
   ImportBundle, ImportResult,
   MatchRequest, MatchResponse,
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
@@ -90,6 +91,16 @@ export const api = {
       return request<MatchResponse>("/wp/api/modules/match", {
         method: "POST", body: JSON.stringify(body),
       });
+    },
+    embedBundle(uuids: string[]) {
+      return request<EmbedBundle>("/wp/api/modules/embed-bundle", {
+        method: "POST", body: JSON.stringify({ uuids }),
+      });
+    },
+    hashes() {
+      return request<{ hashes: Record<string, string> }>(
+        "/wp/api/modules/hashes", { method: "GET" },
+      );
     },
   },
   categories: {
