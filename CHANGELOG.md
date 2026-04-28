@@ -1,3 +1,33 @@
+# [1.5.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.4.2...v1.5.0) (2026-04-28)
+
+
+### Bug Fixes
+
+* **api:** flatten embed-bundle response to match other endpoints ([d1d8d02](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/d1d8d025a99e928a7d5af196de4a0c48bc5a5ed2))
+* **test-runner:** revert response envelope to flat shape ([1479d57](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/1479d57817b3b4599a263a9edca6517d8a820acb))
+
+
+### Features
+
+* **api:** add /modules/hashes endpoint for drift detection ([27f3cc9](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/27f3cc989073f8b32535e1e31b714e103e6dca53))
+* **api:** add embed-bundle endpoint for lazy walk + transitive deps ([be0b817](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/be0b81768ebdf38a439afdf27d5a344a48190544))
+* **db:** add get_by_uuid + get_by_uuids indexed lookups ([a25c700](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/a25c700a9b7e4d6ecb8468d5008010e2d5a52817))
+* **db:** add indexed uuid column to modules with backfill ([c2f575d](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/c2f575d6f17fa2ed4303fbefb1cea578a65c621e))
+* **db:** repository writes uuid + returns payload_hash on every row ([b14b1c2](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/b14b1c297c88edf14c3beb4e22e0218a28506633))
+* **phase-5.5:** backend bridge — lazy catalog + walker + endpoints ([6ddb0e6](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/6ddb0e68925cc8fcf84edd2d8acd3ac775c52ba5))
+* **snapshot:** add canonical SnapshotEntry TypedDict (spec §2.4) ([4d9faa6](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/4d9faa607a70ba77ee91187cf5e0954d840b3ee3))
+* **snapshot:** walk_transitive_refs lazy walker (spec §2.10) ([0b43b78](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/0b43b781159bacced67b0c3d6792a7a4907bef6a))
+* **spa-types:** add SnapshotEntry + EmbedBundle + embedBundle/hashes client ([bfe98f4](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/bfe98f43b8fd1035edc2f8a297d1db369874349f))
+* **test-runner:** lazy catalog — resolve nested @{uuid} refs ([0f6fe72](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/0f6fe721829130bb8bfe12904e06fe510bccfde8))
+* **wp-api:** extract_referenced_uuids helper for lazy catalog roots ([339a3f3](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/339a3f38f283f6fddf84db3c25bd223a52cb03e7))
+* **wp-nodes:** deserialize_node_input — modules + snapshots + pickOrder ([c319eef](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/c319eef2763fdd793967226eb738256292ef0d18))
+* **wp-nodes:** inject __wp_catalog__ from embedded snapshots in WP_Context ([323dd55](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/323dd55e63b3116bb805c3809712dd0b10f09862))
+
+
+### Performance Improvements
+
+* **test-runner:** hoist catalog walk above per-sample loop ([8817e42](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/8817e423b52f99de669ab5d9a6559fe2c97b97f8))
+
 ## [1.4.2](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.4.1...v1.4.2) (2026-04-28)
 
 
