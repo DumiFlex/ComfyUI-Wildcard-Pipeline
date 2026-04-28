@@ -13,10 +13,9 @@ async def test_run_wildcard(wp_client):
     })
     assert resp.status == 200
     body = await resp.json()
-    data = body["data"]
-    assert len(data["results"]) == 5
-    assert all(r == {"$x": "alpha"} for r in data["results"])
-    assert data["histogram"] == {"alpha": 5}
+    assert len(body["results"]) == 5
+    assert all(r == {"$x": "alpha"} for r in body["results"])
+    assert body["histogram"] == {"alpha": 5}
 
 
 async def test_run_fixed_values(wp_client):
@@ -28,9 +27,8 @@ async def test_run_fixed_values(wp_client):
     })
     assert resp.status == 200
     body = await resp.json()
-    data = body["data"]
-    assert data["results"][0] == {"$lens": "85mm"}
-    assert data["histogram"] == {"85mm": 1}
+    assert body["results"][0] == {"$lens": "85mm"}
+    assert body["histogram"] == {"85mm": 1}
 
 
 async def test_run_unknown_type_400(wp_client):

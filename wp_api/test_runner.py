@@ -103,12 +103,10 @@ async def run_test(request: web.Request) -> web.Response:
             sample_values.append("")
 
     return json_ok({
-        "data": {
-            "samples": sample_values,
-            "warnings": deduped_warnings,
-            "histogram": dict(histogram),
-            "results": results,
-        },
+        "results": results,
+        "histogram": dict(histogram),
+        "samples": sample_values,        # NEW: additive top-level
+        "warnings": deduped_warnings,    # NEW: additive top-level
     })
 
 

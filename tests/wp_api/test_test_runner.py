@@ -62,7 +62,7 @@ async def test_nested_wildcard_ref_resolves_via_catalog(aiohttp_client, app_with
     })
     assert resp.status == 200
     body = await resp.json()
-    samples = body["data"]["samples"]
+    samples = body["samples"]
     assert len(samples) == 5
     for s in samples:
         assert s in ("red dress", "blue dress"), (
@@ -86,7 +86,7 @@ async def test_unknown_ref_emits_warning_does_not_crash(aiohttp_client, app_with
     })
     assert resp.status == 200
     body = await resp.json()
-    warnings = body["data"].get("warnings", [])
+    warnings = body.get("warnings", [])
     assert any("deadbeef" in str(w) for w in warnings), (
         f"expected 'Unknown wildcard ref' warning for deadbeef, got: {warnings}"
     )
