@@ -42,3 +42,140 @@ def test_engine_modules_snapshot_does_not_import_db_or_wp_api():
                 f"engine.modules.snapshot leaks {prefix} via attribute "
                 f"{name!r} (came from {attr_module})"
             )
+
+
+# ---------------------------------------------------------------------------
+# Walker tests (Task 5)
+# ---------------------------------------------------------------------------
+
+def _make_module(uuid: str, *, type: str = "wildcard", name: str | None = None,
+                 payload: dict | None = None) -> dict:
+    """Test helper — builds a row matching what repo.get_by_uuid returns."""
+    p = payload or {"options": [{"value": "x", "weight": 1}]}
+    return {
+        "id": f"wc_{name or uuid}_{uuid}",
+        "uuid": uuid,
+        "type": type,
+        "name": name or uuid,
+        "payload": p,
+        "payload_hash": "deadbeef" * 8,  # actual hash not tested here
+    }
+
+
+def test_walk_single_module_no_refs_returns_one_entry():
+    from engine.modules.snapshot import walk_transitive_refs
+    catalog = {"a1111111": _make_module("a1111111")}
+    result = walk_transitive_refs(
+        ["a1111111"], fetch_module=catalog.get,
+    )
+    assert set(result.snapshots.keys()) == {"a1111111"}
+    assert result.snapshots["a1111111"]["source"] == {"kind": "user"}
+    assert result.walk_overflow == []
+
+
+def test_walk_follows_at_uuid_refs_marks_deps():
+    from engine.modules.snapshot import walk_transitive_refs
+    # outfit references @{color_uuid}
+    catalog = {
+        "ou111111": _make_module("ou111111", name="outfit", payload={
+            "options": [{"value": "@{co222222} dress", "weight": 1}],
+        }),
+        "co222222": _make_module("co222222", name="color", payload={
+            "options": [{"value": "red", "weight": 1}],
+        }),
+    }
+    result = walk_transitive_refs(["ou111111"], fetch_module=catalog.get)
+    assert set(result.snapshots.keys()) == {"ou111111", "co222222"}
+    assert result.snapshots["ou111111"]["source"] == {"kind": "user"}
+    assert result.snapshots["co222222"]["source"] == {
+        "kind": "dep", "parent_uuids": ["ou111111"],
+    }
+
+
+def test_walk_records_missing_target_overflow():
+    from engine.modules.snapshot import walk_transitive_refs
+    catalog = {
+        "a1111111": _make_module("a1111111", payload={
+            "options": [{"value": "@{nonexist}", "weight": 1}],
+        }),
+    }
+    result = walk_transitive_refs(["a1111111"], fetch_module=catalog.get)
+    # Walker returns the picked module but records the missing dep
+    assert "a1111111" in result.snapshots
+    assert "nonexist" not in result.snapshots
+    assert {"uuid": "nonexist", "reason": "missing_target"} in result.walk_overflow
+
+
+def test_walk_records_max_depth_overflow():
+    """Spec §2.10 + §6 — walker honors max_ref_depth=8 cap."""
+    from engine.modules.snapshot import walk_transitive_refs
+    # Build a 10-deep linear chain: a → b → c → ... → j
+    chain_uuids = [f"a{i:07x}" for i in range(10)]
+    catalog = {}
+    for i, u in enumerate(chain_uuids):
+        next_ref = f"@{{{chain_uuids[i+1]}}}" if i + 1 < len(chain_uuids) else "leaf"
+        catalog[u] = _make_module(u, payload={
+            "options": [{"value": next_ref, "weight": 1}],
+        })
+    result = walk_transitive_refs(
+        [chain_uuids[0]], fetch_module=catalog.get, max_depth=8,
+    )
+    # First 9 (depth 0..8 inclusive) are walked, 10th is overflow
+    assert len(result.snapshots) == 9
+    assert any(o["reason"] == "max_depth" for o in result.walk_overflow)
+
+
+def test_walk_handles_cycle_records_overflow():
+    """A → B → A. Walker terminates, records cycle, includes both."""
+    from engine.modules.snapshot import walk_transitive_refs
+    catalog = {
+        "a1111111": _make_module("a1111111", payload={
+            "options": [{"value": "@{b2222222}", "weight": 1}],
+        }),
+        "b2222222": _make_module("b2222222", payload={
+            "options": [{"value": "@{a1111111}", "weight": 1}],
+        }),
+    }
+    result = walk_transitive_refs(["a1111111"], fetch_module=catalog.get)
+    assert set(result.snapshots.keys()) == {"a1111111", "b2222222"}
+    assert any(o["reason"] == "cycle_detected" for o in result.walk_overflow)
+
+
+def test_walk_multi_parent_dep_lists_both_parents():
+    """A and C both ref B. B's source.parent_uuids contains both."""
+    from engine.modules.snapshot import walk_transitive_refs
+    catalog = {
+        "a1111111": _make_module("a1111111", payload={
+            "options": [{"value": "@{b2222222}", "weight": 1}],
+        }),
+        "c3333333": _make_module("c3333333", payload={
+            "options": [{"value": "@{b2222222}", "weight": 1}],
+        }),
+        "b2222222": _make_module("b2222222"),
+    }
+    result = walk_transitive_refs(
+        ["a1111111", "c3333333"], fetch_module=catalog.get,
+    )
+    assert result.snapshots["b2222222"]["source"]["kind"] == "dep"
+    assert sorted(
+        result.snapshots["b2222222"]["source"]["parent_uuids"]
+    ) == ["a1111111", "c3333333"]
+
+
+def test_walk_skips_non_wildcard_picks_at_root():
+    """Spec §2.7 — catalog only ever contains wildcards. If a non-wildcard
+    is in the roots list (e.g. user picked a Combine), walker emits it but
+    does NOT walk its payload for refs (combines aren't @{}-targets)."""
+    from engine.modules.snapshot import walk_transitive_refs
+    catalog = {
+        "co111111": _make_module("co111111", type="combine", payload={
+            "template": "$alpha and @{wc333333}",  # ref ignored
+        }),
+        "wc333333": _make_module("wc333333"),
+    }
+    result = walk_transitive_refs(["co111111"], fetch_module=catalog.get)
+    # Combine present at root level (the picker still wants to embed it),
+    # but its @{} refs are NOT followed because non-wildcards do not
+    # participate in the catalog.
+    assert "co111111" in result.snapshots
+    assert "wc333333" not in result.snapshots
