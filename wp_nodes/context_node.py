@@ -7,7 +7,7 @@ from wp_nodes.types import (
     ContextModulesInput,
     PipelineContext,
     build_payload,
-    deserialize_modules,
+    deserialize_node_input,
 )
 
 
@@ -40,8 +40,17 @@ class WPContext(io.ComfyNode):
         upstream_ctx: dict = upstream.context if upstream is not None else {}
         upstream_debug: dict = upstream.debug if upstream is not None else {}
 
-        module_list = deserialize_modules(modules)
+        # Three orthogonal concerns from one widget value (spec §4.4):
+        #   - module_list:  what the pipeline executes (any kind, ordered)
+        #   - snapshots:    catalog for @{} ref resolution (wildcards only)
+        #   - pickOrder:    explicit user picks (UI-only, not used here)
+        module_list, snapshots, _pick_order = deserialize_node_input(modules)
+
         ctx: dict = dict(upstream_ctx)
+        # Inject catalog ONCE at the top of execute, before pipeline run.
+        # Spec §2.6 — never re-inject mid-run.
+        ctx["__wp_catalog__"] = snapshots
+
         ctx = PipelineEngine().run(module_list, ctx=ctx, seed=int(seed))
 
         payload = build_payload(ctx, upstream_debug=upstream_debug, seed=int(seed))

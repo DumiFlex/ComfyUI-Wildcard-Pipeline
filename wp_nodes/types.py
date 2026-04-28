@@ -124,6 +124,57 @@ def deserialize_modules(payload: str) -> list[Module]:
     return [module_from_dict(entry) for entry in raw_modules]
 
 
+def deserialize_node_input(
+    raw: "dict[str, Any] | str | None",
+) -> "tuple[list[dict[str, Any]], dict[str, Any], list[str]]":
+    """Parse a WP_Context node's ``modules`` widget value into the three
+    parallel concerns the engine needs: an executable module list, a
+    catalog snapshot dict, and the user's explicit pick order.
+
+    Spec §4.4. Backwards-compat: old workflows have no ``snapshots`` /
+    ``pickOrder`` fields — those default to empty (catalog stays {}, no
+    @{} resolution, raw token leaks in output, current behavior).
+
+    Returns the modules portion as a ``list[dict]`` rather than the typed
+    ``list[Module]`` that ``deserialize_modules`` produces. Two reasons:
+    the legacy converter ``module_from_dict`` requires an ``id`` field
+    and only knows how to type ``fixed_values`` (Module is currently a
+    TypeAlias for FixedValueModule), so SPA-shaped wildcard / combine /
+    derivation entries would all be rejected. ``PipelineEngine.run``
+    already accepts dicts directly (engine/pipeline.py:57) — coercing
+    them through ``coerce_legacy_module`` at execute time — so the raw-
+    dict path is the safe one for the new SPA snapshot shape.
+
+    Robust to malformed input: any failure path returns ``([], {}, [])``
+    so graph runs never crash on a broken widget value.
+    """
+    if raw is None:
+        return [], {}, []
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return [], {}, []
+    else:
+        data = raw
+    if not isinstance(data, dict):
+        return [], {}, []
+
+    raw_modules = data.get("modules")
+    modules: list[dict[str, Any]] = (
+        list(raw_modules) if isinstance(raw_modules, list) else []
+    )
+    snapshots_raw = data.get("snapshots")
+    snapshots: dict[str, Any] = (
+        snapshots_raw if isinstance(snapshots_raw, dict) else {}
+    )
+    pick_order_raw = data.get("pickOrder")
+    pick_order: list[str] = (
+        pick_order_raw if isinstance(pick_order_raw, list) else []
+    )
+    return modules, snapshots, pick_order
+
+
 def build_payload(
     ctx: dict[str, Any],
     upstream_debug: dict[str, Any],
