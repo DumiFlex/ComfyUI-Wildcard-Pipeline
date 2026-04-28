@@ -12,11 +12,21 @@ from engine.syntax.types import TokenKind
 
 
 @contextmanager
-def db_session(_request: web.Request):
-    """Yield a fresh SQLite connection that is auto-closed on exit.
+def db_session(request: web.Request):
+    """Yield a SQLite connection that is auto-closed on exit.
+
+    If the aiohttp app has a ``wp_db`` key (injected by tests or the
+    application startup), that connection is yielded directly and is NOT
+    closed on exit (lifetime owned by the injector). Otherwise, a fresh
+    file-based connection is opened via ``get_connection()`` and closed
+    when the context manager exits.
 
     SQLite WAL mode + per-request connections avoid cross-task locking.
     """
+    injected = request.app.get("wp_db") if hasattr(request, "app") else None
+    if injected is not None:
+        yield injected
+        return
     conn = get_connection()
     try:
         yield conn

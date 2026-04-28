@@ -297,8 +297,14 @@ def _resolve_ref(
         )
         return ""
 
-    # Pick weighted option
-    options = module.get("options", [])
+    # Pick weighted option.
+    # Support both SnapshotEntry shape (payload.options, spec §2.4) and the
+    # legacy flat shape used by existing unit tests (options at top level).
+    payload_dict = module.get("payload")
+    if isinstance(payload_dict, dict):
+        options = payload_dict.get("options", [])
+    else:
+        options = module.get("options", [])
     chosen = _pick_weighted(options, ctx.rng)
     if chosen is None:
         return ""

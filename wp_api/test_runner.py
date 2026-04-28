@@ -6,23 +6,41 @@ from collections import Counter
 
 from aiohttp import web
 
+from engine.db.repositories import ModuleRepository
 from engine.modules.dispatcher import UnknownModuleType, resolve_module
-from wp_api._helpers import json_error, json_ok
+from engine.modules.snapshot import walk_transitive_refs
+from wp_api._helpers import db_session, extract_referenced_uuids, json_error, json_ok
 
 _MAX_SAMPLES = 10000
 
 
-def _make_test_ctx() -> dict:
-    """Build a minimal pipeline ctx for the test-runner endpoint.
+def _build_ctx_with_catalog(request: web.Request, body: dict) -> dict:
+    """Build the runtime ctx for one Test Runner invocation.
 
-    Uses a fresh random.Random (seeded from os entropy) so each /wp/api/test
-    request is independently sampled. The endpoint never needs a fixed seed —
-    it samples N times and returns the distribution.
-    """
+    Walks the request payload + instance for `@{8hex}` refs, loads only
+    those modules (and their transitive deps) from the DB, and seeds the
+    catalog. Spec §2.10 — lazy walk, never the full library."""
+    roots = extract_referenced_uuids(body.get("payload"))
+    roots |= extract_referenced_uuids(body.get("instance"))
+
+    catalog: dict[str, dict] = {}
+    if roots:
+        with db_session(request) as conn:
+            repo = ModuleRepository(conn)
+
+            def _fetch(uuid: str) -> dict | None:
+                try:
+                    return repo.get_by_uuid(uuid)
+                except Exception:
+                    return None
+
+            walk = walk_transitive_refs(roots, fetch_module=_fetch)
+            catalog = walk.snapshots
+
     return {
         "__wp_rng__": random.Random(),
         "__wp_warnings__": [],
-        "__wp_catalog__": {},
+        "__wp_catalog__": catalog,
     }
 
 
@@ -52,9 +70,12 @@ async def run_test(request: web.Request) -> web.Response:
         "instance": body["instance"],
     }
     results: list[dict[str, str]] = []
+    all_warnings: list[dict] = []
     try:
         for _ in range(samples):
-            results.append(resolve_module(snap, ctx=_make_test_ctx()))
+            ctx = _build_ctx_with_catalog(request, body)
+            results.append(resolve_module(snap, ctx=ctx))
+            all_warnings.extend(ctx["__wp_warnings__"])
     except UnknownModuleType as e:
         return json_error(f"unknown module type: {e.args[0]!r}", status=400)
 
@@ -63,7 +84,32 @@ async def run_test(request: web.Request) -> web.Response:
         for v in r.values():
             histogram[v] += 1
 
-    return json_ok({"results": results, "histogram": dict(histogram)})
+    # Deduplicate warnings by (type, message) to avoid N*samples noise.
+    seen: set[tuple] = set()
+    deduped_warnings: list[dict] = []
+    for w in all_warnings:
+        key = (w.get("type"), w.get("message"))
+        if key not in seen:
+            seen.add(key)
+            deduped_warnings.append(w)
+
+    # Extract flat sample values for the SPA Test Runner display. Each
+    # resolve_module call returns {binding: value}; we surface the values.
+    sample_values: list[str] = []
+    for r in results:
+        for v in r.values():
+            sample_values.append(v)
+        if not r:
+            sample_values.append("")
+
+    return json_ok({
+        "data": {
+            "samples": sample_values,
+            "warnings": deduped_warnings,
+            "histogram": dict(histogram),
+            "results": results,
+        },
+    })
 
 
 def register(router) -> None:
