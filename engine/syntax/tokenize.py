@@ -17,6 +17,85 @@ from engine.syntax.types import Token, TokenKind
 _VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 # `@{8hex}` — exactly 8 lowercase hex chars in braces
 _REF_RE = re.compile(r"@\{([0-9a-f]{8})\}")
+# Multi-pick prefix: {N$$sep$$ where N is one or more digits and sep can be empty.
+_MULTI_PREFIX_RE = re.compile(r"^\{(\d+)\$\$(.*?)\$\$", flags=re.DOTALL)
+
+
+def _split_top_level_pipes(s: str) -> list[str]:
+    """Split `s` on `|` at brace-depth zero only. Nested `{a|b}` stays intact."""
+    parts: list[str] = []
+    depth = 0
+    last = 0
+    for idx, c in enumerate(s):
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        elif c == "|" and depth == 0:
+            parts.append(s[last:idx])
+            last = idx + 1
+    parts.append(s[last:])
+    return parts
+
+
+def _scan_brace_block(
+    text: str, start: int
+) -> tuple[int, list[str], int | None, str | None] | None:
+    """Try to scan a `{...}` block starting at `text[start] == '{'`.
+
+    Returns:
+        (end_index, branches, count_or_None, sep_or_None)
+
+    where end_index is the position AFTER the closing brace, branches is
+    the list of branch source strings (split at top-level `|`), count is
+    the parsed integer count for multi-pick or None for single-pick, and
+    sep is the separator string for multi-pick or None for single-pick.
+
+    Returns None if the block is malformed (unclosed, no pipes for single-pick).
+    The caller falls back to literal text.
+    """
+    n = len(text)
+    if start >= n or text[start] != "{":
+        return None
+
+    # Walk to the matching `}` while tracking brace depth so nested
+    # {a|{b|c}|d} works.
+    i = start + 1
+    depth = 1
+    while i < n and depth > 0:
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    if depth != 0:
+        return None  # unclosed
+
+    body_start = start + 1
+    body_end = i  # index of closing brace
+    end_index = i + 1
+    body = text[body_start:body_end]
+
+    # Detect multi-pick prefix: N$$sep$$
+    body_with_braces = "{" + body  # match against `{N$$sep$$...`
+    multi_match = _MULTI_PREFIX_RE.match(body_with_braces)
+    if multi_match:
+        count = int(multi_match.group(1))
+        sep = multi_match.group(2)
+        # Body remaining after the prefix is the branch list
+        prefix_len = multi_match.end() - 1  # subtract the leading `{` we added
+        rest = body[prefix_len:]
+        branches = _split_top_level_pipes(rest)
+        return (end_index, branches, count, sep)
+
+    # Single-pick: must contain at least one top-level `|`
+    branches = _split_top_level_pipes(body)
+    if len(branches) < 2:
+        return None  # not a pick — fall back to literal
+    return (end_index, branches, None, None)
 
 
 def tokenize_text(text: str) -> list[Token]:
@@ -101,6 +180,32 @@ def tokenize_text(text: str) -> list[Token]:
                 ))
                 i = m.end()
                 continue
+
+        # Brace block: {...} for inline pick or {N$$sep$$...} for multi-pick
+        if ch == "{":
+            scanned = _scan_brace_block(text, i)
+            if scanned is not None:
+                end_index, branches, count, sep = scanned
+                _flush_text(i)
+                if count is None:
+                    out.append(Token(
+                        kind=TokenKind.DP_BRACE,
+                        raw=text[i:end_index],
+                        start=i,
+                        end=end_index,
+                        meta={"branches": branches},
+                    ))
+                else:
+                    out.append(Token(
+                        kind=TokenKind.DP_MULTI,
+                        raw=text[i:end_index],
+                        start=i,
+                        end=end_index,
+                        meta={"count": count, "sep": sep, "branches": branches},
+                    ))
+                i = end_index
+                continue
+            # Malformed brace — fall through to literal text
 
         # Default: accumulate literal text
         if text_start is None:

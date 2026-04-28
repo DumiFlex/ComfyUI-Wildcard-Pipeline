@@ -65,3 +65,15 @@ def test_tokenize_lossless_for_var_ref():
         toks = tokenize_text(s)
         joined = "".join(t.raw for t in toks)
         assert joined == s, f"lossless invariant broken for {s!r}: got {joined!r}"
+
+
+def test_tokenize_nested_braces_lossless():
+    s = "{a|{b|c}|d} and {1$$, $$x|y}"
+    toks = tokenize_text(s)
+    assert "".join(t.raw for t in toks) == s
+
+
+def test_tokenize_unicode_preserved():
+    s = "🎨 $color {red|blue|绿}"
+    toks = tokenize_text(s)
+    assert "".join(t.raw for t in toks) == s

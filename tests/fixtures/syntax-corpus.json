@@ -105,6 +105,70 @@
       "expected_tokens": [
         {"kind": "text", "raw": "@{abc} short", "start": 0, "end": 12, "meta": {}}
       ]
+    },
+    {
+      "name": "inline_pick_simple",
+      "input": "{red|blue|green}",
+      "expected_tokens": [
+        {"kind": "dp_brace", "raw": "{red|blue|green}", "start": 0, "end": 16,
+         "meta": {"branches": ["red", "blue", "green"]}}
+      ]
+    },
+    {
+      "name": "inline_pick_in_text",
+      "input": "a {red|blue} cat",
+      "expected_tokens": [
+        {"kind": "text", "raw": "a ", "start": 0, "end": 2, "meta": {}},
+        {"kind": "dp_brace", "raw": "{red|blue}", "start": 2, "end": 12,
+         "meta": {"branches": ["red", "blue"]}},
+        {"kind": "text", "raw": " cat", "start": 12, "end": 16, "meta": {}}
+      ]
+    },
+    {
+      "name": "inline_pick_with_empty_branch",
+      "input": "{a||c}",
+      "expected_tokens": [
+        {"kind": "dp_brace", "raw": "{a||c}", "start": 0, "end": 6,
+         "meta": {"branches": ["a", "", "c"]}}
+      ]
+    },
+    {
+      "name": "inline_pick_nested",
+      "input": "{a|{b|c}|d}",
+      "expected_tokens": [
+        {"kind": "dp_brace", "raw": "{a|{b|c}|d}", "start": 0, "end": 11,
+         "meta": {"branches": ["a", "{b|c}", "d"]}}
+      ]
+    },
+    {
+      "name": "multi_pick_simple",
+      "input": "{2$$, $$red|blue|green}",
+      "expected_tokens": [
+        {"kind": "dp_multi", "raw": "{2$$, $$red|blue|green}", "start": 0, "end": 23,
+         "meta": {"count": 2, "sep": ", ", "branches": ["red", "blue", "green"]}}
+      ]
+    },
+    {
+      "name": "multi_pick_empty_sep",
+      "input": "{3$$$$a|b|c}",
+      "expected_tokens": [
+        {"kind": "dp_multi", "raw": "{3$$$$a|b|c}", "start": 0, "end": 12,
+         "meta": {"count": 3, "sep": "", "branches": ["a", "b", "c"]}}
+      ]
+    },
+    {
+      "name": "unclosed_brace_is_literal_text",
+      "input": "{a|b incomplete",
+      "expected_tokens": [
+        {"kind": "text", "raw": "{a|b incomplete", "start": 0, "end": 15, "meta": {}}
+      ]
+    },
+    {
+      "name": "single_branch_no_pipe_is_literal",
+      "input": "{just_one}",
+      "expected_tokens": [
+        {"kind": "text", "raw": "{just_one}", "start": 0, "end": 10, "meta": {}}
+      ]
     }
   ]
 }
