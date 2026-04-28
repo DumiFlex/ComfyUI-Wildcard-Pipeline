@@ -5,6 +5,8 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
+import pytest
+
 from engine.syntax import resolve_text
 from engine.syntax.types import SurfaceKind
 
@@ -66,3 +68,168 @@ def test_resolve_var_skips_internal_keys():
     # Tokenizer recognizes $__wp_node_seed__ as a var, but resolver checks
     # if name starts with __ and refuses.
     assert resolve_text("$__wp_node_seed__", ctx) == ""
+
+
+# ---------------------------------------------------------------------------
+# REF resolution tests (Task 9)
+# ---------------------------------------------------------------------------
+
+
+def _wc(uuid: str, var_binding: str, options=None) -> dict:
+    """Build a wildcard module dict matching ctx.get_module's return shape."""
+    if options is None:
+        options = [{"value": "default", "weight": 1}]
+    return {
+        "type": "wildcard",
+        "var_binding": var_binding,
+        "options": options,
+    }
+
+
+def test_resolve_ref_in_wildcard_surface_picks_option():
+    ctx = _ctx(
+        surface="wildcard",
+        _modules={"a4f7b2e1": _wc("a4f7b2e1", "color", [{"value": "red", "weight": 1}])},
+    )
+    assert resolve_text("@{a4f7b2e1}", ctx) == "red"
+
+
+def test_resolve_ref_unknown_uuid_lenient_emits_empty():
+    # Use a valid 8-hex-char UUID that isn't in the catalog.
+    ctx = _ctx(surface="wildcard", strict=False)
+    assert resolve_text("a @{00000000} b", ctx) == "a  b"
+    assert any(w["type"] == "unknown_ref" for w in ctx.warnings)
+
+
+def test_resolve_ref_unknown_uuid_strict_raises():
+    from engine.syntax import UnknownRefError
+    # Use a valid 8-hex-char UUID that isn't in the catalog.
+    ctx = _ctx(surface="wildcard", strict=True)
+    with pytest.raises(UnknownRefError) as exc:
+        resolve_text("@{00000000}", ctx)
+    assert exc.value.uuid == "00000000"
+
+
+@pytest.mark.parametrize("surface", ["combine", "derivation", "assembler"])
+def test_resolve_ref_out_of_surface_lenient_emits_empty(surface):
+    ctx = _ctx(
+        surface=surface,
+        strict=False,
+        _modules={"a4f7b2e1": _wc("a4f7b2e1", "x")},
+    )
+    assert resolve_text("a @{a4f7b2e1} thing", ctx) == "a  thing"
+    assert any(w["type"] == "ref_out_of_surface" for w in ctx.warnings)
+
+
+@pytest.mark.parametrize("surface", ["combine", "derivation", "assembler"])
+def test_resolve_ref_out_of_surface_strict_raises(surface):
+    from engine.syntax import RefOutOfSurfaceError
+    ctx = _ctx(
+        surface=surface,
+        strict=True,
+        _modules={"a4f7b2e1": _wc("a4f7b2e1", "x")},
+    )
+    with pytest.raises(RefOutOfSurfaceError) as exc:
+        resolve_text("@{a4f7b2e1}", ctx)
+    assert exc.value.surface == surface
+    assert exc.value.uuid == "a4f7b2e1"
+
+
+def test_resolve_ref_recursion_limit_lenient():
+    # Build a chain a → b → c → d → e (5 deep) with max_ref_depth=3.
+    # Depth-3 resolution returns "" + warning; rest of chain unwinds.
+    ctx = _ctx(
+        surface="wildcard",
+        max_ref_depth=3,
+        _modules={
+            "a0000001": _wc("a0000001", "a", [{"value": "@{b0000002}", "weight": 1}]),
+            "b0000002": _wc("b0000002", "b", [{"value": "@{c0000003}", "weight": 1}]),
+            "c0000003": _wc("c0000003", "c", [{"value": "@{d0000004}", "weight": 1}]),
+            "d0000004": _wc("d0000004", "d", [{"value": "leaf", "weight": 1}]),
+        },
+    )
+    out = resolve_text("@{a0000001}", ctx)
+    # depth 0: a -> resolves "@{b...}" at depth 1
+    # depth 1: b -> resolves "@{c...}" at depth 2
+    # depth 2: c -> resolves "@{d...}" at depth 3
+    # depth 3: REJECTED (>= max_ref_depth) -> ""
+    # So output is "" because the chain bottoms out empty.
+    assert out == ""
+    assert any(w["type"] == "recursion_limit" for w in ctx.warnings)
+
+
+def test_resolve_ref_cycle_lenient():
+    ctx = _ctx(
+        surface="wildcard",
+        _modules={
+            "a0000001": _wc("a0000001", "a", [{"value": "@{b0000002}", "weight": 1}]),
+            "b0000002": _wc("b0000002", "b", [{"value": "@{a0000001}", "weight": 1}]),
+        },
+    )
+    out = resolve_text("@{a0000001}", ctx)
+    assert out == ""
+    cycle_warnings = [w for w in ctx.warnings if w["type"] == "cycle_detected"]
+    assert len(cycle_warnings) == 1
+    assert cycle_warnings[0]["detail"]["chain"] == ["a0000001", "b0000002", "a0000001"]
+
+
+def test_resolve_ref_cycle_strict_raises():
+    from engine.syntax import CycleDetectedError
+    ctx = _ctx(
+        surface="wildcard",
+        strict=True,
+        _modules={
+            "a0000001": _wc("a0000001", "a", [{"value": "@{a0000001}", "weight": 1}]),
+        },
+    )
+    with pytest.raises(CycleDetectedError) as exc:
+        resolve_text("@{a0000001}", ctx)
+    assert exc.value.chain == ["a0000001", "a0000001"]
+
+
+def test_resolve_ref_weighted_pick_deterministic():
+    """Same seed → same pick. Weight skews distribution but still deterministic."""
+    ctx1 = _ctx(
+        rng=random.Random(42),
+        surface="wildcard",
+        _modules={"a4f7b2e1": _wc("a4f7b2e1", "x", [
+            {"value": "red", "weight": 1},
+            {"value": "blue", "weight": 100},
+            {"value": "green", "weight": 1},
+        ])},
+    )
+    ctx2 = _ctx(
+        rng=random.Random(42),
+        surface="wildcard",
+        _modules={"a4f7b2e1": _wc("a4f7b2e1", "x", [
+            {"value": "red", "weight": 1},
+            {"value": "blue", "weight": 100},
+            {"value": "green", "weight": 1},
+        ])},
+    )
+    assert resolve_text("@{a4f7b2e1}", ctx1) == resolve_text("@{a4f7b2e1}", ctx2)
+
+
+def test_resolve_ref_repeated_resolves_independently():
+    """Two @{uuid} occurrences sample independently, not cached."""
+    ctx = _ctx(
+        rng=random.Random(42),
+        surface="wildcard",
+        _modules={"a4f7b2e1": _wc("a4f7b2e1", "x", [
+            {"value": "A", "weight": 1},
+            {"value": "B", "weight": 1},
+            {"value": "C", "weight": 1},
+            {"value": "D", "weight": 1},
+        ])},
+    )
+    # With seed 42 and 4 equiprobable options, two consecutive picks
+    # should usually differ. After running once, observe the actual value
+    # and pin it for stability.
+    out = resolve_text("@{a4f7b2e1}-@{a4f7b2e1}", ctx)
+    assert "-" in out
+    parts = out.split("-")
+    assert len(parts) == 2
+    assert parts[0] in {"A", "B", "C", "D"}
+    assert parts[1] in {"A", "B", "C", "D"}
+    # Pinned from first observed run with seed=42:
+    assert out == "C-A"
