@@ -77,18 +77,18 @@ def test_walk_follows_at_uuid_refs_marks_deps():
     from engine.modules.snapshot import walk_transitive_refs
     # outfit references @{color_uuid}
     catalog = {
-        "ou111111": _make_module("ou111111", name="outfit", payload={
-            "options": [{"value": "@{co222222} dress", "weight": 1}],
+        "aa111111": _make_module("aa111111", name="outfit", payload={
+            "options": [{"value": "@{bb222222} dress", "weight": 1}],
         }),
-        "co222222": _make_module("co222222", name="color", payload={
+        "bb222222": _make_module("bb222222", name="color", payload={
             "options": [{"value": "red", "weight": 1}],
         }),
     }
-    result = walk_transitive_refs(["ou111111"], fetch_module=catalog.get)
-    assert set(result.snapshots.keys()) == {"ou111111", "co222222"}
-    assert result.snapshots["ou111111"]["source"] == {"kind": "user"}
-    assert result.snapshots["co222222"]["source"] == {
-        "kind": "dep", "parent_uuids": ["ou111111"],
+    result = walk_transitive_refs(["aa111111"], fetch_module=catalog.get)
+    assert set(result.snapshots.keys()) == {"aa111111", "bb222222"}
+    assert result.snapshots["aa111111"]["source"] == {"kind": "user"}
+    assert result.snapshots["bb222222"]["source"] == {
+        "kind": "dep", "parent_uuids": ["aa111111"],
     }
 
 
@@ -96,14 +96,14 @@ def test_walk_records_missing_target_overflow():
     from engine.modules.snapshot import walk_transitive_refs
     catalog = {
         "a1111111": _make_module("a1111111", payload={
-            "options": [{"value": "@{nonexist}", "weight": 1}],
+            "options": [{"value": "@{deadc0de}", "weight": 1}],
         }),
     }
     result = walk_transitive_refs(["a1111111"], fetch_module=catalog.get)
     # Walker returns the picked module but records the missing dep
     assert "a1111111" in result.snapshots
-    assert "nonexist" not in result.snapshots
-    assert {"uuid": "nonexist", "reason": "missing_target"} in result.walk_overflow
+    assert "deadc0de" not in result.snapshots
+    assert {"uuid": "deadc0de", "reason": "missing_target"} in result.walk_overflow
 
 
 def test_walk_records_max_depth_overflow():
@@ -168,14 +168,14 @@ def test_walk_skips_non_wildcard_picks_at_root():
     does NOT walk its payload for refs (combines aren't @{}-targets)."""
     from engine.modules.snapshot import walk_transitive_refs
     catalog = {
-        "co111111": _make_module("co111111", type="combine", payload={
-            "template": "$alpha and @{wc333333}",  # ref ignored
+        "dd111111": _make_module("dd111111", type="combine", payload={
+            "template": "$alpha and @{cc333333}",  # ref ignored
         }),
-        "wc333333": _make_module("wc333333"),
+        "cc333333": _make_module("cc333333"),
     }
-    result = walk_transitive_refs(["co111111"], fetch_module=catalog.get)
+    result = walk_transitive_refs(["dd111111"], fetch_module=catalog.get)
     # Combine present at root level (the picker still wants to embed it),
     # but its @{} refs are NOT followed because non-wildcards do not
     # participate in the catalog.
-    assert "co111111" in result.snapshots
-    assert "wc333333" not in result.snapshots
+    assert "dd111111" in result.snapshots
+    assert "cc333333" not in result.snapshots
