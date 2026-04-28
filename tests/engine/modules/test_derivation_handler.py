@@ -1,4 +1,6 @@
 """Tests for DerivationHandler — IF/ELIF/ELSE rules over runtime context."""
+import random
+
 import pytest
 
 from engine.modules.derivation_handler import DerivationHandler
@@ -9,6 +11,15 @@ def _rule(rid="r1", branches=None, else_clause=None):
     if else_clause is not None:
         out["else"] = else_clause
     return out
+
+
+def _ctx(**extra):
+    """Return a minimal valid runtime ctx dict with rng + warnings."""
+    return {
+        "__wp_rng__": random.Random(0),
+        "__wp_warnings__": [],
+        **extra,
+    }
 
 
 def test_handler_type_id_is_derivation():
@@ -53,7 +64,7 @@ def test_validate_payload_rejects_unknown_mode():
 
 
 def test_resolve_first_matching_branch_wins():
-    ctx: dict = {"mood": "happy"}
+    ctx = _ctx(mood="happy")
     payload = {"rules": [_rule(branches=[
         {
             "condition": {"var": "mood", "op": "equals", "value": "sad"},
@@ -70,7 +81,7 @@ def test_resolve_first_matching_branch_wins():
 
 
 def test_resolve_else_fires_when_nothing_matches():
-    ctx: dict = {"mood": "neutral"}
+    ctx = _ctx(mood="neutral")
     payload = {"rules": [_rule(
         branches=[{
             "condition": {"var": "mood", "op": "equals", "value": "happy"},
@@ -85,7 +96,7 @@ def test_resolve_else_fires_when_nothing_matches():
 
 
 def test_resolve_no_match_no_else_is_noop():
-    ctx: dict = {"mood": "neutral"}
+    ctx = _ctx(mood="neutral")
     payload = {"rules": [_rule(branches=[{
         "condition": {"var": "mood", "op": "equals", "value": "happy"},
         "action": {"target_var": "tone", "mode": "replace", "value": "bright"},
@@ -96,7 +107,7 @@ def test_resolve_no_match_no_else_is_noop():
 
 
 def test_resolve_append_mode_concatenates():
-    ctx: dict = {"x": "value", "buf": "start-"}
+    ctx = _ctx(x="value", buf="start-")
     payload = {"rules": [_rule(branches=[{
         "condition": {"var": "x", "op": "equals", "value": "value"},
         "action": {"target_var": "buf", "mode": "append", "value": "end"},
@@ -106,7 +117,7 @@ def test_resolve_append_mode_concatenates():
 
 
 def test_resolve_prepend_mode_concatenates():
-    ctx: dict = {"x": "yes", "buf": "world"}
+    ctx = _ctx(x="yes", buf="world")
     payload = {"rules": [_rule(branches=[{
         "condition": {"var": "x", "op": "equals", "value": "yes"},
         "action": {"target_var": "buf", "mode": "prepend", "value": "hello-"},
@@ -116,7 +127,7 @@ def test_resolve_prepend_mode_concatenates():
 
 
 def test_resolve_contains_op():
-    ctx: dict = {"text": "the quick brown fox"}
+    ctx = _ctx(text="the quick brown fox")
     payload = {"rules": [_rule(branches=[{
         "condition": {"var": "text", "op": "contains", "value": "brown"},
         "action": {"target_var": "found", "mode": "replace", "value": "yes"},
@@ -126,7 +137,7 @@ def test_resolve_contains_op():
 
 
 def test_resolve_matches_op_uses_regex():
-    ctx: dict = {"name": "user_42"}
+    ctx = _ctx(name="user_42")
     payload = {"rules": [_rule(branches=[{
         "condition": {"var": "name", "op": "matches", "value": r"^user_\d+$"},
         "action": {"target_var": "kind", "mode": "replace", "value": "user"},
@@ -136,13 +147,24 @@ def test_resolve_matches_op_uses_regex():
 
 
 def test_resolve_not_equals_op():
-    ctx: dict = {"role": "admin"}
+    ctx = _ctx(role="admin")
     payload = {"rules": [_rule(branches=[{
         "condition": {"var": "role", "op": "not_equals", "value": "guest"},
         "action": {"target_var": "level", "mode": "replace", "value": "high"},
     }])]}
     out = DerivationHandler.resolve(payload, instance={}, ctx=ctx)
     assert out == {"level": "high"}
+
+
+def test_resolve_action_value_supports_var_interpolation():
+    """Action value is resolved through resolve_text; $var tokens are substituted."""
+    ctx = _ctx(mood="warm", base_color="orange")
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "mood", "op": "equals", "value": "warm"},
+        "action": {"target_var": "tone", "mode": "replace", "value": "$base_color glow"},
+    }])]}
+    out = DerivationHandler.resolve(payload, instance={}, ctx=ctx)
+    assert out == {"tone": "orange glow"}
 
 
 def test_resolve_via_dispatcher_after_import():
@@ -155,5 +177,6 @@ def test_resolve_via_dispatcher_after_import():
         }])]},
         "instance": {},
     }
-    out = resolve_module(snap, ctx={"a": "1"})
+    ctx = _ctx(a="1")
+    out = resolve_module(snap, ctx=ctx)
     assert out == {"b": "2"}

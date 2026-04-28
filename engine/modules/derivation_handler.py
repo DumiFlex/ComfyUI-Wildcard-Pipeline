@@ -6,14 +6,18 @@ the first branch whose condition matches wins; if none match, the ``else``
 action (if any) fires; otherwise the rule is a no-op.
 
 Actions mutate the runtime context directly. Multiple rules can target the
-same variable; later rules see earlier mutations.
+same variable; later rules see earlier mutations. Action ``value`` strings
+are resolved through resolve_text with surface="derivation" so $var tokens
+and {a|b|c} picks work inside derivation action values.
 """
 from __future__ import annotations
 
 import re
 from typing import Any
 
+from engine.modules import build_resolve_ctx
 from engine.modules.dispatcher import ModuleHandler
+from engine.syntax import resolve_text
 
 _VALID_OPS = {"equals", "not_equals", "contains", "matches"}
 _VALID_MODES = {"replace", "append", "prepend"}
@@ -72,12 +76,17 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
     return False
 
 
-def _apply_action(action: dict[str, Any], ctx: Any) -> tuple[str, str] | None:
+def _apply_action(
+    action: dict[str, Any],
+    ctx: Any,
+    resolve_ctx: Any,
+) -> tuple[str, str] | None:
     target = action.get("target_var", "")
     if not target:
         return None
     mode = action.get("mode", "replace")
-    new_value = str(action.get("value", ""))
+    raw_value = str(action.get("value", ""))
+    new_value = resolve_text(raw_value, resolve_ctx)
     if mode == "replace":
         result = new_value
     elif mode == "append":
@@ -172,12 +181,13 @@ class DerivationHandler(ModuleHandler):
         ctx: Any,
     ) -> dict[str, str]:
         cls.validate_payload(payload)
+        resolve_ctx = build_resolve_ctx(ctx, surface="derivation")
         out: dict[str, str] = {}
         for rule in payload.get("rules", []):
             applied = False
             for branch in rule.get("branches", []):
                 if _match_condition(branch.get("condition", {}), ctx):
-                    pair = _apply_action(branch.get("action", {}), ctx)
+                    pair = _apply_action(branch.get("action", {}), ctx, resolve_ctx)
                     if pair is not None:
                         out[pair[0]] = pair[1]
                     applied = True
@@ -185,7 +195,9 @@ class DerivationHandler(ModuleHandler):
             if not applied:
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
-                    pair = _apply_action(else_clause.get("action", {}), ctx)
+                    pair = _apply_action(
+                        else_clause.get("action", {}), ctx, resolve_ctx
+                    )
                     if pair is not None:
                         out[pair[0]] = pair[1]
         return out
