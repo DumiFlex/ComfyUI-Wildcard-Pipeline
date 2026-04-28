@@ -12,9 +12,38 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from engine._utils import now_iso as _now_iso
+
+
+class _SourceUser(TypedDict):
+    kind: Literal["user"]
+
+
+class _SourceDep(TypedDict):
+    kind: Literal["dep"]
+    parent_uuids: list[str]
+
+
+SnapshotSource = _SourceUser | _SourceDep
+
+
+class SnapshotEntry(TypedDict):
+    """Canonical shape stored in `__wp_catalog__` and embedded in
+    WP_Context workflow JSON. Spec §2.4 — pinned, do not rename fields.
+
+    `payload_hash` covers `payload` only (not name/description/tags) so
+    a rename does not flip drift state. `source` records why the entry
+    is in the embed: explicit user pick vs. transitive dep of one or
+    more picks (multi-parent supported)."""
+    snapshot_version: Literal[1]
+    uuid: str            # 8 hex chars
+    type: str            # ModuleType — wildcards-only in catalog (spec §2.7)
+    name: str            # display label
+    payload: dict[str, Any]
+    payload_hash: str    # SHA-256 of payload
+    source: SnapshotSource
 
 
 def _fresh_instance() -> dict[str, Any]:
