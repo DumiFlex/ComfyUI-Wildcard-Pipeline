@@ -3,6 +3,7 @@
 See `docs/superpowers/specs/2026-04-28-engine-syntax-design.md` for the
 language contract and parity rules.
 """
+from engine.syntax.tokenize import tokenize_text
 from engine.syntax.types import (
     CycleDetectedError,
     MalformedSyntaxError,
@@ -27,4 +28,5 @@ __all__ = [
     "Token",
     "TokenKind",
     "UnknownRefError",
+    "tokenize_text",
 ]
