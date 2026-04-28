@@ -28,11 +28,18 @@ async def list_modules(request: web.Request) -> web.Response:
         return json_error("offset must be non-negative", status=400)
 
     with db_session(request) as conn:
-        items = ModuleRepository(conn).list(
+        repo = ModuleRepository(conn)
+        items = repo.list(
             type=type_, category_id=category_id, query=query,
             favorites_only=favorites, limit=limit, offset=offset,
         )
-    return json_ok({"items": items, "total": len(items)})
+        # `total` is the unpaginated count so the SPA Dashboard can show
+        # "Wildcards: 15" even when limit=1 was passed for cheap polling.
+        total = repo.count(
+            type=type_, category_id=category_id, query=query,
+            favorites_only=favorites,
+        )
+    return json_ok({"items": items, "total": total})
 
 
 async def create_module(request: web.Request) -> web.Response:
