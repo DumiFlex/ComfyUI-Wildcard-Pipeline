@@ -33,16 +33,15 @@ function refsInValue(value: string): string[] {
 /** Detect a `{a|b|c}` block — at least one `|` between the braces. */
 function hasInlineChoice(value: string): boolean {
   if (!value) return false;
-  let inline = false;
   for (const tok of tokenizeRich(value)) {
-    // `dp-pipe` is only emitted at brace-depth zero by the tokenizer, so its
-    // presence guarantees a real `{a|b|c}` alternation rather than a stray `|`.
-    if (tok.kind === "dp-pipe") {
-      inline = true;
-      break;
+    // `dp-brace` tokens are only emitted for genuine multi-branch `{a|b|c}`
+    // blocks (single-branch falls back to literal text), so their presence
+    // guarantees a real alternation rather than a stray `|`.
+    if (tok.kind === "dp-brace" || tok.kind === "dp-multi") {
+      return true;
     }
   }
-  return inline;
+  return false;
 }
 
 /** Pull the option list out of a wildcard module's payload, defensively. */
