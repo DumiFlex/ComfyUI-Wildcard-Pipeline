@@ -60,11 +60,15 @@ reportUnusedParameter = "none"
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra -q"
+addopts = "-ra -q -m 'not fuzz and not perf'"
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+markers = [
+    "fuzz: long-running fuzz tests (opt-in via -m fuzz)",
+    "perf: performance regression tests (opt-in via -m perf)",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
