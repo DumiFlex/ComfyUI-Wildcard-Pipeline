@@ -6,6 +6,7 @@ import type { ModuleRow, ModuleType, PipelineStep } from "../api/types";
 function makeModule(over: Partial<ModuleRow>): ModuleRow {
   return {
     id: "m_a",
+    uuid: "aabbccdd",
     type: "wildcard",
     name: "alpha",
     description: "",
@@ -13,6 +14,7 @@ function makeModule(over: Partial<ModuleRow>): ModuleRow {
     tags: [],
     is_favorite: false,
     payload: {},
+    payload_hash: "0".repeat(64),
     version: 1,
     created_at: "",
     updated_at: "",

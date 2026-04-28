@@ -23,6 +23,7 @@ function wc(
   }
   return {
     id: partial.id ?? `wc_${partial.name}`,
+    uuid: partial.uuid ?? "aabbccdd",
     type: "wildcard",
     name: partial.name,
     description: partial.description ?? "",
@@ -30,6 +31,7 @@ function wc(
     tags: partial.tags ?? [],
     is_favorite: partial.is_favorite ?? false,
     payload,
+    payload_hash: partial.payload_hash ?? "0".repeat(64),
     version: partial.version ?? 1,
     created_at: partial.created_at ?? "",
     updated_at: partial.updated_at ?? "",

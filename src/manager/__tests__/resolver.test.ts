@@ -24,6 +24,7 @@ function makeWildcard(
 ): ModuleRow {
   return {
     id: extras.id ?? `wc_${name.toLowerCase()}`,
+    uuid: "aabbccdd",
     type: "wildcard",
     name,
     description: "",
@@ -40,6 +41,7 @@ function makeWildcard(
       sub_categories: extras.sub_categories ?? [],
       var_binding: extras.var_binding,
     },
+    payload_hash: "0".repeat(64),
     version: 1,
     created_at: "",
     updated_at: "",
@@ -255,9 +257,10 @@ describe("runStep", () => {
 
   it("runs a fixed_values step writing every binding into ctx", () => {
     const f: ModuleRow = {
-      id: "fv1", type: "fixed_values", name: "Pack",
+      id: "fv1", uuid: "aabbccdd", type: "fixed_values", name: "Pack",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: { values: [{ var: "city", value: "Tokyo" }, { name: "$ward", value: "Shibuya" }] },
+      payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     };
     const step: PipelineStep = { id: "s1", module_id: f.id, enabled: true };
