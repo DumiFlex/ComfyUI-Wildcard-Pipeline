@@ -5,7 +5,11 @@ import { computed, ref, watch } from "vue";
 export type ThemeMode = "dark" | "light" | "auto";
 
 const STORAGE_KEY = "wp-theme-mode";
+const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const FLASH_SUPPRESS_MS = 120;
+const DEFAULT_MAX_REF_DEPTH = 8;
+const MIN_MAX_REF_DEPTH = 1;
+const MAX_MAX_REF_DEPTH = 32;
 
 function readStoredTheme(): ThemeMode {
   try {
@@ -17,6 +21,21 @@ function readStoredTheme(): ThemeMode {
   return "dark";
 }
 
+function readStoredMaxRefDepth(): number {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_MAX_REF_DEPTH);
+    if (v !== null) {
+      const n = parseInt(v, 10);
+      if (!isNaN(n) && n >= MIN_MAX_REF_DEPTH && n <= MAX_MAX_REF_DEPTH) {
+        return n;
+      }
+    }
+  } catch {
+    /* localStorage unavailable */
+  }
+  return DEFAULT_MAX_REF_DEPTH;
+}
+
 function systemPrefersDark(): boolean {
   return typeof window !== "undefined"
     && typeof window.matchMedia === "function"
@@ -26,6 +45,7 @@ function systemPrefersDark(): boolean {
 export const useUiStore = defineStore("ui", () => {
   const themeMode = ref<ThemeMode>(readStoredTheme());
   const sidebarCollapsed = ref(false);
+  const maxRefDepth = ref<number>(readStoredMaxRefDepth());
 
   /** Resolved theme — `"auto"` collapsed to dark/light via OS preference. */
   const resolvedTheme = computed<"dark" | "light">(() =>
@@ -46,6 +66,12 @@ export const useUiStore = defineStore("ui", () => {
   function setThemeMode(mode: ThemeMode) {
     themeMode.value = mode;
     try { localStorage.setItem(STORAGE_KEY, mode); } catch { /* ignore */ }
+  }
+
+  function setMaxRefDepth(depth: number) {
+    const clamped = Math.max(MIN_MAX_REF_DEPTH, Math.min(MAX_MAX_REF_DEPTH, Math.floor(depth)));
+    maxRefDepth.value = clamped;
+    try { localStorage.setItem(STORAGE_KEY_MAX_REF_DEPTH, String(clamped)); } catch { /* ignore */ }
   }
 
   /** Cycle dark → light → auto → dark. */
@@ -78,8 +104,10 @@ export const useUiStore = defineStore("ui", () => {
     themeMode,
     resolvedTheme,
     sidebarCollapsed,
+    maxRefDepth,
     cycleTheme,
     setThemeMode,
+    setMaxRefDepth,
     initializeTheme,
     toggleSidebar,
   };
