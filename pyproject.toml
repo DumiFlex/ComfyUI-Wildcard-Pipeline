@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-wildcard-pipeline"
-version = "1.4.1"
+version = "1.4.2"
 description = "Modular procedural prompt generation for ComfyUI — wildcards, constraints, derivations, and context pipelines."
 readme = "README.md"
 requires-python = ">=3.10"
