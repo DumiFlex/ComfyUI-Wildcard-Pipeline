@@ -88,10 +88,13 @@ describe("getWildcardSyntax", () => {
 });
 
 describe("buildWildcardGraph", () => {
+  // Module ids in the live system have the shape `<prefix>_<slug>_<8hex>` —
+  // `extractModuleUuid` peels off the 8-hex suffix to get the canonical
+  // identifier the `@{8hex}` ref token captures. These fixtures use the same
+  // shape so the graph behaves the way it does in production.
   it("creates bidirectional UUID edges between two wildcards that reference each other", () => {
-    // IDs must be exactly 8 hex chars so tokenizeRich recognises @{uuid} refs.
-    const a = wc({ id: "aaaaaaaa", name: "alpha", var_binding: "alpha", options: [opt("see @{bbbbbbbb}")] });
-    const b = wc({ id: "bbbbbbbb", name: "beta",  var_binding: "beta",  options: [opt("see @{aaaaaaaa}")] });
+    const a = wc({ id: "wc_alpha_aaaaaaaa", name: "alpha", var_binding: "alpha", options: [opt("see @{bbbbbbbb}")] });
+    const b = wc({ id: "wc_beta_bbbbbbbb",  name: "beta",  var_binding: "beta",  options: [opt("see @{aaaaaaaa}")] });
     const g = buildWildcardGraph([a, b]);
     expect(g.outgoing.get("aaaaaaaa")).toEqual(new Set(["bbbbbbbb"]));
     expect(g.outgoing.get("bbbbbbbb")).toEqual(new Set(["aaaaaaaa"]));
@@ -100,26 +103,34 @@ describe("buildWildcardGraph", () => {
   });
 
   it("populates uuidToName from var_binding", () => {
-    const a = wc({ id: "aaaaaaaa", name: "alpha", var_binding: "alpha", options: [] });
+    const a = wc({ id: "wc_alpha_aaaaaaaa", name: "alpha", var_binding: "alpha", options: [] });
     const g = buildWildcardGraph([a]);
     expect(g.uuidToName.get("aaaaaaaa")).toBe("alpha");
   });
 
   it("yields empty edge sets for a wildcard with no references", () => {
-    const a = wc({ name: "lonely", var_binding: "lonely", options: [opt("just text")] });
+    const a = wc({ id: "wc_lonely_cccccccc", name: "lonely", var_binding: "lonely", options: [opt("just text")] });
     const g = buildWildcardGraph([a]);
-    // Graph is keyed by mod.id; wc() defaults id to `wc_${name}`
-    expect(g.outgoing.get("wc_lonely")?.size ?? -1).toBe(0);
-    expect(g.incoming.get("wc_lonely")?.size ?? -1).toBe(0);
+    expect(g.outgoing.get("cccccccc")?.size ?? -1).toBe(0);
+    expect(g.incoming.get("cccccccc")?.size ?? -1).toBe(0);
   });
 
   it("drops dangling @{uuid} refs that don't resolve to a known wildcard", () => {
-    // ghostuuid is not in the module list — should be dropped.
-    const a = wc({ id: "aaaaaaaa", name: "alpha", var_binding: "alpha", options: [opt("@{ghostuuu} or @{bbbbbbbb}")] });
-    const b = wc({ id: "bbbbbbbb", name: "beta",  var_binding: "beta",  options: [opt("plain")] });
+    // `ddddddd1` is not in the module list — should be dropped.
+    const a = wc({ id: "wc_alpha_aaaaaaaa", name: "alpha", var_binding: "alpha", options: [opt("@{ddddddd1} or @{bbbbbbbb}")] });
+    const b = wc({ id: "wc_beta_bbbbbbbb",  name: "beta",  var_binding: "beta",  options: [opt("plain")] });
     const g = buildWildcardGraph([a, b]);
     expect(g.outgoing.get("aaaaaaaa")).toEqual(new Set(["bbbbbbbb"]));
-    expect(g.incoming.get("ghostuuu")).toBeUndefined();
+    expect(g.incoming.get("ddddddd1")).toBeUndefined();
+  });
+
+  it("skips modules whose id has no 8-hex UUID suffix", () => {
+    // Legacy/fixture modules without a hex suffix can't be referenced via
+    // `@{8hex}` — they're silently dropped from the graph.
+    const a = wc({ id: "wc_legacy", name: "legacy", var_binding: "legacy", options: [] });
+    const g = buildWildcardGraph([a]);
+    expect(g.outgoing.size).toBe(0);
+    expect(g.uuidToName.size).toBe(0);
   });
 
   it("falls back to slug(name) when var_binding is missing", () => {
