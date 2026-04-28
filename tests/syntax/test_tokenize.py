@@ -51,3 +51,17 @@ def test_tokenize_lossless_concatenation_invariant():
         toks = tokenize_text(s)
         joined = "".join(t.raw for t in toks)
         assert joined == s, f"lossless invariant broken for {s!r}: got {joined!r}"
+
+
+def test_tokenize_lossless_for_var_ref():
+    samples = [
+        "$x",
+        "$x $y",
+        "@{deadbeef} @{cafebabe}",
+        "mix $x @{12345678} text",
+        "lone $ and lone @ stay text",
+    ]
+    for s in samples:
+        toks = tokenize_text(s)
+        joined = "".join(t.raw for t in toks)
+        assert joined == s, f"lossless invariant broken for {s!r}: got {joined!r}"
