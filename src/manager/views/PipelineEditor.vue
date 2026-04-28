@@ -54,18 +54,6 @@ const modulesById = computed(() => {
   return m;
 });
 
-const modulesByKind = computed(() => {
-  const groups: Record<ModuleType, ModuleRow[]> = {
-    wildcard: [], fixed_values: [], combine: [],
-    derivation: [], constraint: [], pipeline: [],
-  };
-  for (const row of allModules.value) {
-    if (row.type === "pipeline") continue;
-    groups[row.type].push(row);
-  }
-  return groups;
-});
-
 async function loadAllModules() {
   try {
     const res = await api.modules.list({});
@@ -300,7 +288,7 @@ function cancel() { router.push("/pipelines"); }
       <PipelineSteps
         :steps="steps"
         :modules-by-id="modulesById"
-        :modules-by-kind="modulesByKind"
+        :all-modules="allModules"
         @update:steps="onStepsUpdate"
         @open-picker="pickerOpen = true"
       />

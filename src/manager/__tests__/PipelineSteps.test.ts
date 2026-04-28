@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import PipelineSteps from "../components/PipelineSteps.vue";
-import type { ModuleRow, ModuleType, PipelineStep } from "../api/types";
+import type { ModuleRow, PipelineStep } from "../api/types";
 
 function makeModule(over: Partial<ModuleRow>): ModuleRow {
   return {
@@ -26,22 +26,13 @@ function makeStep(over: Partial<PipelineStep>): PipelineStep {
   return { id: "step_aaa", module_id: "m_a", enabled: true, ...over };
 }
 
-function buildKindGroups(modules: ModuleRow[]): Record<ModuleType, ModuleRow[]> {
-  const groups: Record<ModuleType, ModuleRow[]> = {
-    wildcard: [], fixed_values: [], combine: [],
-    derivation: [], constraint: [], pipeline: [],
-  };
-  for (const m of modules) groups[m.type].push(m);
-  return groups;
-}
-
 function mountSteps(steps: PipelineStep[], modules: ModuleRow[]) {
   const modulesById = new Map(modules.map((m) => [m.id, m]));
   return mount(PipelineSteps, {
     props: {
       steps,
       modulesById,
-      modulesByKind: buildKindGroups(modules),
+      allModules: modules,
     },
     global: { plugins: [] },
   });
@@ -114,6 +105,59 @@ describe("PipelineSteps.vue", () => {
     const next = (emitted ?? [])[0][0] as PipelineStep[];
     expect(next.length).toBe(1);
     expect(next[0].id).toBe("s2");
+  });
+
+  // The reference design's signature affordance is an inline transparent
+  // <select> rendered as the bold module name. Picking from the dropdown
+  // emits update:steps with the new module_id. Pin both shape and event.
+  describe("inline ref-select", () => {
+    it("populates options from same-kind modules in allModules", () => {
+      const a = makeModule({ id: "m_a", name: "alpha", type: "wildcard" });
+      const b = makeModule({ id: "m_b", name: "bravo", type: "wildcard" });
+      const c = makeModule({ id: "m_c", name: "charlie", type: "wildcard" });
+      // A non-wildcard module — must NOT appear in the wildcard step's dropdown.
+      const fv = makeModule({ id: "m_fv", name: "fixed", type: "fixed_values" });
+      const wrap = mountSteps(
+        [makeStep({ id: "s1", module_id: "m_a" })],
+        [a, b, c, fv],
+      );
+      const select = wrap.find('[data-test="step-ref-0"]');
+      const optionLabels = select.findAll("option").map((o) => o.text());
+      expect(optionLabels).toEqual(["alpha", "bravo", "charlie"]);
+      expect(optionLabels).not.toContain("fixed");
+    });
+
+    it("emits update:steps with the chosen module_id when select changes", async () => {
+      const a = makeModule({ id: "m_a", name: "alpha", type: "wildcard" });
+      const b = makeModule({ id: "m_b", name: "bravo", type: "wildcard" });
+      const wrap = mountSteps(
+        [makeStep({ id: "s1", module_id: "m_a" })],
+        [a, b],
+      );
+      const select = wrap.find('[data-test="step-ref-0"]');
+      await select.setValue("m_b");
+      const emitted = wrap.emitted("update:steps");
+      expect(emitted).toBeTruthy();
+      const next = (emitted ?? [])[0][0] as PipelineStep[];
+      expect(next[0].module_id).toBe("m_b");
+    });
+
+    it("renders a `(missing reference)` option when the step's module_id is not in allModules", () => {
+      // step references "m_ghost" — not in allModules. Component must
+      // still render an option for the orphan id so the row doesn't
+      // silently switch to the first available wildcard on save.
+      const a = makeModule({ id: "m_a", name: "alpha", type: "wildcard" });
+      const wrap = mountSteps(
+        [makeStep({ id: "s1", module_id: "m_ghost" })],
+        [a],
+      );
+      // No wildcard with id `m_ghost` exists, so the select shows the
+      // missing reference fallback. The step's module_id isn't a
+      // resolvable wildcard either — kind is null — so we render
+      // `<span class="wp-pl-row__missing">` instead of a select. Either
+      // path satisfies the contract: the user sees they have a broken ref.
+      expect(wrap.text()).toContain("(missing reference)");
+    });
   });
 
   // Subtitle helper exposes the module's `$var` summary on the collapsed
