@@ -41,3 +41,53 @@ def test_deserialize_extracts_snapshots_and_pickorder_from_new_input():
     assert len(modules) == 1
     assert "ou111111" in snapshots
     assert pick_order == ["ou111111"]
+
+
+def _ctx_capture():
+    """Spy that captures the ctx dict passed to PipelineEngine.run()."""
+    captured: dict = {}
+
+    class _FakePipeline:
+        def run(self, modules, *, ctx, seed):
+            captured.clear()
+            captured.update(ctx)
+            return ctx
+    return _FakePipeline, captured
+
+
+def test_execute_injects_catalog_from_snapshots_field(monkeypatch):
+    """Snapshots from the input become ctx['__wp_catalog__'] exactly once
+    at the top of execute. Spec §2.6."""
+    from wp_nodes import context_node as cn
+
+    fake_cls, captured = _ctx_capture()
+    monkeypatch.setattr(cn, "PipelineEngine", fake_cls)
+
+    snapshots = {
+        "ou111111": {"snapshot_version": 1, "uuid": "ou111111",
+                     "type": "wildcard", "name": "outfit",
+                     "payload": {"options": []}, "payload_hash": "h" * 64,
+                     "source": {"kind": "user"}},
+    }
+    cn.WPContext.execute(
+        seed=42,
+        modules={"modules": [], "snapshots": snapshots, "pickOrder": ["ou111111"]},
+        upstream=None,
+    )
+    assert captured["__wp_catalog__"] == snapshots
+
+
+def test_execute_defaults_to_empty_catalog_for_old_workflow_json(monkeypatch):
+    """Old JSON without `snapshots` field — catalog stays {} so resolver
+    emits "Unknown ref" warning rather than crashing. Spec §4.5."""
+    from wp_nodes import context_node as cn
+
+    fake_cls, captured = _ctx_capture()
+    monkeypatch.setattr(cn, "PipelineEngine", fake_cls)
+
+    cn.WPContext.execute(
+        seed=0,
+        modules={"modules": []},  # no snapshots
+        upstream=None,
+    )
+    assert captured["__wp_catalog__"] == {}
