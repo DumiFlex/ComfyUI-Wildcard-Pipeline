@@ -116,6 +116,64 @@ describe("PipelineSteps.vue", () => {
     expect(next[0].id).toBe("s2");
   });
 
+  // Subtitle helper exposes the module's `$var` summary on the collapsed
+  // row so users can scan resolution order without expanding each step.
+  // Each kind has a different "exported binding" shape — pin them here so
+  // a future refactor on the helper doesn't silently drop a kind's preview.
+  describe("subtitle preview", () => {
+    it("shows $var_binding for wildcard kind", () => {
+      const mod = makeModule({
+        id: "m_a", type: "wildcard", name: "Hair Color",
+        payload: { var_binding: "hair_color" },
+      });
+      const wrap = mountSteps([makeStep({ module_id: "m_a" })], [mod]);
+      expect(wrap.text()).toContain("$hair_color");
+    });
+
+    it("shows truncated $name list with +N for fixed_values", () => {
+      const mod = makeModule({
+        id: "m_a", type: "fixed_values", name: "Subject Profile",
+        payload: { values: [
+          { name: "name", value: "Alice" },
+          { name: "age", value: "30" },
+          { name: "build", value: "tall" },
+          { name: "occupation", value: "engineer" },
+        ]},
+      });
+      const wrap = mountSteps([makeStep({ module_id: "m_a" })], [mod]);
+      expect(wrap.text()).toContain("$name, $age, $build, +1");
+    });
+
+    it("shows $output_var for combine kind", () => {
+      const mod = makeModule({
+        id: "m_a", type: "combine", name: "Phrase",
+        payload: { output_var: "subject_phrase" },
+      });
+      const wrap = mountSteps([makeStep({ module_id: "m_a" })], [mod]);
+      expect(wrap.text()).toContain("$subject_phrase");
+    });
+
+    it("shows step count for pipeline kind", () => {
+      const mod = makeModule({
+        id: "m_a", type: "pipeline", name: "Inner",
+        payload: { steps: [{}, {}, {}] },
+      });
+      const wrap = mountSteps([makeStep({ module_id: "m_a" })], [mod]);
+      expect(wrap.text()).toContain("3 steps");
+    });
+
+    it("shows source × target for constraint kind", () => {
+      const wc1 = makeModule({ id: "m_src", type: "wildcard", name: "mood" });
+      const wc2 = makeModule({ id: "m_tgt", type: "wildcard", name: "color" });
+      const mod = makeModule({
+        id: "m_c", type: "constraint", name: "mood_x_color",
+        payload: { source_wildcard_id: "m_src", target_wildcard_id: "m_tgt" },
+      });
+      const wrap = mountSteps([makeStep({ module_id: "m_c" })], [wc1, wc2, mod]);
+      expect(wrap.text()).toContain("mood × color");
+    });
+  });
+
   it("emits update:steps with duplicated row when duplicate clicked", async () => {
     const mod = makeModule({ id: "m_a", name: "alpha", type: "wildcard" });
     const steps = [makeStep({ id: "s1", module_id: "m_a" })];
