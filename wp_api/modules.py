@@ -162,6 +162,19 @@ async def toggle_favorite(request: web.Request) -> web.Response:
     return json_ok(updated)
 
 
+async def list_hashes(request: web.Request) -> web.Response:
+    """Lightweight bulk hash fetch for drift detection. Spec §4.2.
+
+    Returns wildcards-only because catalog never contains other kinds
+    (spec §2.7). Lightweight (no payload, no metadata) so the SPA can
+    poll on every workflow load without measurable cost."""
+    with db_session(request) as conn:
+        rows = ModuleRepository(conn).list(type="wildcard")
+    return json_ok({
+        "hashes": {row["uuid"]: row["payload_hash"] for row in rows},
+    })
+
+
 async def embed_bundle(request: web.Request) -> web.Response:
     """Lazy walk for SPA library picker. Spec §4.2.
 
@@ -220,6 +233,7 @@ async def embed_bundle(request: web.Request) -> web.Response:
 def register(router) -> None:
     router.add_get("/wp/api/modules", list_modules)
     router.add_post("/wp/api/modules", create_module)
+    router.add_get("/wp/api/modules/hashes", list_hashes)
     router.add_post("/wp/api/modules/match", match_module)
     router.add_post("/wp/api/modules/embed-bundle", embed_bundle)
     router.add_get("/wp/api/modules/{id}", get_module)

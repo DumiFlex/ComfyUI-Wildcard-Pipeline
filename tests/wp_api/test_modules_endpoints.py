@@ -88,3 +88,29 @@ async def test_embed_bundle_rejects_non_list_uuids(aiohttp_client, app_with_db):
         "uuids": "not-a-list",
     })
     assert resp.status == 400
+
+
+async def test_hashes_endpoint_returns_uuid_hash_map_for_wildcards_only(
+    aiohttp_client, app_with_db,
+):
+    """Drift-detection primitive. Returns {hashes: {uuid: hash}} keyed
+    by 8hex uuid. Wildcards-only because catalog only contains wildcards
+    (spec §2.7) — no point shipping hashes for kinds that never drift
+    embedded snapshots."""
+    app, conn = app_with_db
+    repo = ModuleRepository(conn)
+    wc = repo.create(
+        type="wildcard", name="x", description="",
+        category_id=None, tags=[], payload={"options": []},
+    )
+    cb = repo.create(
+        type="combine", name="y", description="",
+        category_id=None, tags=[], payload={"template": "$a"},
+    )
+    client = await aiohttp_client(app)
+    resp = await client.get("/wp/api/modules/hashes")
+    assert resp.status == 200
+    body = await resp.json()
+    assert wc["uuid"] in body["hashes"]
+    assert cb["uuid"] not in body["hashes"]  # combines excluded
+    assert body["hashes"][wc["uuid"]] == wc["payload_hash"]
