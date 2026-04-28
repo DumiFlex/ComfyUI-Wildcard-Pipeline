@@ -452,18 +452,24 @@ CONSTRAINTS = [
     {
         "name": "shirt_x_color_compat",
         "category": "Subjects",
-        "tags": ["constraint", "value-matrix"],
-        # Value-keyed matrix: exact option strings on both axes. Exercises
-        # the "exclude" mode (zero out a forbidden combo) on a single cell;
-        # everything else is implicit allow with factor 1.
+        "tags": ["constraint", "subcategory-matrix"],
+        # Sub-category × sub-category matrix: rows = source sub_cats,
+        # cols = target sub_cats. The "no formal-shirt-with-warm-colors"
+        # rule keeps the seeded library's combinations a bit more
+        # opinionated. Per-option overrides belong in `exceptions`.
         "source_wildcard": "shirt",
         "target_wildcard": "color",
         "matrix": {
-            "white linen shirt": {
-                "red": {"mode": "exclude", "factor": 0},
+            "formal": {
+                "warm": {"mode": "reduce", "factor": 0.4},
             },
         },
-        "exceptions": [],
+        "exceptions": [
+            # Carry the original "white linen × red is hard out" intent
+            # across as a per-option exception so the test fixture's
+            # narrative still matches.
+            {"source": "white linen shirt", "target": "red", "mode": "exclude", "factor": 0},
+        ],
     },
     # Sub-category-keyed matrix — matrix rows/cols are sub-category names
     # rather than full option strings. Constraint editor's "show by sub-
