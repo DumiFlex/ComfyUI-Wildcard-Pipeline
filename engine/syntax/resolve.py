@@ -51,8 +51,7 @@ def _resolve_tokens(
         elif tok.kind == TokenKind.DP_BRACE:
             parts.append(_resolve_inline_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_MULTI:
-            # Implemented in Task 11
-            raise NotImplementedError("DP_MULTI resolution lands in Task 11")
+            parts.append(_resolve_multi_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_PIPE:
             # DP_PIPE is never emitted as a top-level token by the current
             # tokenizer (pipes are absorbed into branch boundaries). If one
@@ -119,6 +118,98 @@ def _resolve_inline_pick(
         return ""
     nested_tokens = tokenize_text(chosen)
     return _resolve_tokens(nested_tokens, ctx, depth=depth, visited=visited)
+
+
+def _parse_branch_weight(branch: str) -> float:
+    """Parse `N::value` micro-syntax. Returns 1.0 if no prefix."""
+    if "::" not in branch:
+        return 1.0
+    prefix, _, _ = branch.partition("::")
+    try:
+        n = float(prefix)
+        if n <= 0:
+            return 0.0
+        return n
+    except ValueError:
+        return 1.0
+
+
+def _strip_branch_weight(branch: str) -> str:
+    """Return branch text without the `N::` weight prefix, if present."""
+    if "::" not in branch:
+        return branch
+    prefix, _, rest = branch.partition("::")
+    try:
+        float(prefix)
+        return rest
+    except ValueError:
+        return branch
+
+
+def _weighted_pick_index(weights: list[float], rng) -> int:
+    """Return an index into `weights` weighted by value. Total > 0 assumed."""
+    total = sum(max(0.0, w) for w in weights)
+    if total <= 0:
+        return 0
+    r = rng.random() * total
+    acc = 0.0
+    for idx, w in enumerate(weights):
+        acc += max(0.0, w)
+        if r <= acc:
+            return idx
+    return len(weights) - 1
+
+
+def _resolve_multi_pick(
+    tok: Token,
+    ctx: ResolveContext,
+    depth: int,
+    visited: tuple[str, ...],
+) -> str:
+    """Pick `count` branches without replacement, weighted, joined by `sep`.
+
+    Each chosen branch is recursively resolved.
+    """
+    count: int = tok.meta.get("count", 0)
+    sep: str = tok.meta.get("sep", "")
+    branches: list[str] = list(tok.meta.get("branches", []))
+
+    if count <= 0:
+        return ""
+
+    # Clamp count to available branches (without-replacement constraint)
+    n_picks = min(count, len(branches))
+    if n_picks == 0:
+        return ""
+
+    # Weighted without-replacement: branch weights default to 1; if a branch
+    # uses the `N::value` form (a feature of the inline-pick weight micro-syntax),
+    # the weight is parsed from the prefix. For simplicity, this implementation
+    # treats all branches as weight=1 unless they begin with `<int>::`.
+    weights = [_parse_branch_weight(b) for b in branches]
+    branch_values = [_strip_branch_weight(b) for b in branches]
+
+    chosen_indices: list[int] = []
+    available_indices = list(range(len(branches)))
+    available_weights = list(weights)
+
+    for _ in range(n_picks):
+        if not available_indices:
+            break
+        idx = _weighted_pick_index(available_weights, ctx.rng)
+        chosen_indices.append(available_indices.pop(idx))
+        available_weights.pop(idx)
+
+    resolved: list[str] = []
+    for idx in chosen_indices:
+        branch_text = branch_values[idx]
+        if not branch_text:
+            resolved.append("")
+            continue
+        nested = tokenize_text(branch_text)
+        resolved.append(_resolve_tokens(nested, ctx, depth=depth, visited=visited))
+
+    return sep.join(resolved)
 
 
 def _resolve_ref(

@@ -281,3 +281,61 @@ def test_resolve_inline_pick_single_branch_is_text_token():
     so resolver passes through verbatim."""
     ctx = _ctx()
     assert resolve_text("{just_one}", ctx) == "{just_one}"
+
+
+# ---------------------------------------------------------------------------
+# DP_MULTI resolution tests (Task 11)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_multi_pick_zero_count_empty():
+    ctx = _ctx(rng=random.Random(0))
+    assert resolve_text("{0$$, $$a|b|c}", ctx) == ""
+
+
+def test_resolve_multi_pick_returns_joined():
+    ctx = _ctx(rng=random.Random(42))
+    out = resolve_text("{2$$, $$a|b|c|d}", ctx)
+    parts = out.split(", ")
+    assert len(parts) == 2
+    assert all(p in {"a", "b", "c", "d"} for p in parts)
+
+
+def test_resolve_multi_pick_no_duplicates_without_replacement():
+    """Without replacement: same branch can't appear twice."""
+    ctx = _ctx(rng=random.Random(0))
+    out = resolve_text("{3$$, $$a|b|c|d|e}", ctx)
+    parts = out.split(", ")
+    assert len(parts) == 3
+    assert len(set(parts)) == 3, f"duplicates in without-replacement pick: {parts}"
+
+
+def test_resolve_multi_pick_clamps_when_n_exceeds_branches():
+    """N=5, branches=3 → only 3 picks emitted."""
+    ctx = _ctx(rng=random.Random(0))
+    out = resolve_text("{5$$, $$a|b|c}", ctx)
+    parts = out.split(", ")
+    assert len(parts) == 3
+    assert sorted(parts) == ["a", "b", "c"]
+
+
+def test_resolve_multi_pick_empty_sep_concatenates():
+    ctx = _ctx(rng=random.Random(0))
+    out = resolve_text("{2$$$$X|Y|Z}", ctx)
+    # No separator between two picks
+    assert len(out) == 2  # two single-char picks concatenated
+    assert all(c in "XYZ" for c in out)
+
+
+def test_resolve_multi_pick_branches_can_contain_refs():
+    ctx = _ctx(
+        rng=random.Random(0),
+        surface="wildcard",
+        _modules={
+            "a0000001": _wc("a0000001", "a", [{"value": "red", "weight": 1}]),
+            "b0000002": _wc("b0000002", "b", [{"value": "blue", "weight": 1}]),
+        },
+    )
+    out = resolve_text("{2$$, $$@{a0000001}|@{b0000002}|green}", ctx)
+    parts = out.split(", ")
+    assert len(parts) == 2
