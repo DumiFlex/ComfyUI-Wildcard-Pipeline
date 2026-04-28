@@ -58,7 +58,19 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", reposition);
 });
 
-function closeOnScroll() { open.value = false; }
+function closeOnScroll(e: Event) {
+  // Capture-phase listener catches every scroll in the page so the menu
+  // closes when the user scrolls the *outer* layout (their attention has
+  // clearly moved). The one event we MUST ignore is the menu's own
+  // overflow:auto scroll — without this guard, the first wheel/touch on
+  // a long option list closes the menu on the first scroll-pixel and
+  // the scrollbar appears non-functional.
+  const t = e.target as Element | null;
+  if (t && typeof t.closest === "function" && t.closest(".wp-select__menu")) {
+    return;
+  }
+  open.value = false;
+}
 function reposition() {
   if (!open.value || !btnRef.value) return;
   computeMenuStyle();
@@ -67,25 +79,44 @@ function reposition() {
 function computeMenuStyle() {
   if (!btnRef.value) return;
   const rect = btnRef.value.getBoundingClientRect();
-  const need = Math.min(244, props.options.length * 36 + 12);
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const spaceAbove = rect.top;
-  flip.value = spaceBelow < need + 16 && spaceAbove > spaceBelow;
+  // Ideal menu height = enough room for every option (~36px each + 12px
+  // padding), capped at 240px so a huge library doesn't blanket the
+  // viewport. The actual rendered height also gets capped by available
+  // screen space below — see `effectiveMaxHeight` — so the menu never
+  // bleeds past the viewport edge.
+  const idealHeight = Math.min(240, props.options.length * 36 + 12);
+  const gap = 4;       // spacing between trigger and menu
+  const margin = 8;    // breathing room from the viewport edge
+  const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+  const spaceAbove = rect.top - gap - margin;
+
+  // Flip above only when there isn't enough room below AND there's
+  // more room above than below — otherwise the menu still grows under
+  // the trigger and `effectiveMaxHeight` clamps it to whatever fits.
+  flip.value = spaceBelow < idealHeight && spaceAbove > spaceBelow;
+
+  const available = flip.value ? spaceAbove : spaceBelow;
+  // Floor at 80px so a tightly-cramped row (e.g. inside a modal near the
+  // viewport edge) still surfaces a usable scrolling list rather than
+  // collapsing to a 1-row sliver.
+  const effectiveMaxHeight = Math.max(80, Math.min(idealHeight, available));
 
   menuStyle.value = flip.value
     ? {
         position: "fixed",
-        bottom: (window.innerHeight - rect.top + 4) + "px",
+        bottom: (window.innerHeight - rect.top + gap) + "px",
         top: "auto",
         left: rect.left + "px",
         minWidth: rect.width + "px",
+        maxHeight: effectiveMaxHeight + "px",
       }
     : {
         position: "fixed",
-        top: (rect.bottom + 4) + "px",
+        top: (rect.bottom + gap) + "px",
         bottom: "auto",
         left: rect.left + "px",
         minWidth: rect.width + "px",
+        maxHeight: effectiveMaxHeight + "px",
       };
 }
 
