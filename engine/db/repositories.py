@@ -13,6 +13,7 @@ import sqlite3
 from typing import Any
 
 from engine._utils import now_iso as _now
+from engine.modules.snapshot import payload_hash
 
 _TYPE_PREFIX = {
     "wildcard": "wc",
@@ -49,15 +50,18 @@ def _slug(name: str) -> str:
 
 
 def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
+    payload = json.loads(row["payload"])
     return {
         "id": row["id"],
+        "uuid": row["uuid"],
         "type": row["type"],
         "name": row["name"],
         "description": row["description"],
         "category_id": row["category_id"],
         "tags": json.loads(row["tags"]),
         "is_favorite": bool(row["is_favorite"]),
-        "payload": json.loads(row["payload"]),
+        "payload": payload,
+        "payload_hash": payload_hash(payload),
         "version": row["version"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -68,9 +72,11 @@ class ModuleRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def _gen_id(self, type: str, name: str) -> str:
+    def _gen_id(self, type: str, name: str) -> tuple[str, str]:
+        """Generate `(id, uuid)` for a new row. id = `<prefix>_<slug>_<uuid>`."""
         prefix = _TYPE_PREFIX.get(type, "mod")
-        return f"{prefix}_{_slug(name)}_{secrets.token_hex(4)}"
+        uuid = secrets.token_hex(4)
+        return f"{prefix}_{_slug(name)}_{uuid}", uuid
 
     def create(
         self,
@@ -87,16 +93,16 @@ class ModuleRepository:
             raise ValueError(
                 f"unknown module type {type!r}; expected one of {sorted(_VALID_TYPES)}"
             )
-        mid = self._gen_id(type, name)
+        mid, uuid = self._gen_id(type, name)
         now = _now()
         with self._conn:
             self._conn.execute(
                 "INSERT INTO modules("
-                "id, type, name, description, category_id, tags, "
+                "id, uuid, type, name, description, category_id, tags, "
                 "is_favorite, payload, version, created_at, updated_at"
-                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
                 (
-                    mid, type, name, description, category_id,
+                    mid, uuid, type, name, description, category_id,
                     json.dumps(tags), int(is_favorite),
                     json.dumps(payload), now, now,
                 ),

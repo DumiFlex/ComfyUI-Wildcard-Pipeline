@@ -215,3 +215,33 @@ def test_create_rejects_unknown_type(wp_db):
             type="bogus", name="x", description="",
             category_id=None, tags=[], payload={},
         )
+
+
+def test_create_writes_uuid_column_matching_id_suffix(wp_db):
+    """create() must persist the uuid column. The value equals the trailing
+    8 hex chars of the generated id so existing rows (backfilled) and new
+    rows share one identity convention."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="color", description="",
+        category_id=None, tags=[], payload={"options": []},
+    )
+    assert "uuid" in row
+    assert len(row["uuid"]) == 8
+    assert all(c in "0123456789abcdef" for c in row["uuid"])
+    assert row["id"].endswith(f"_{row['uuid']}")
+
+
+def test_row_to_module_includes_payload_hash(wp_db):
+    """API responses (and drift detection) need payload_hash on every row.
+    Sourced from engine.modules.snapshot.payload_hash so drift comparison
+    is bit-identical to embedded snapshot hashes."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="x", description="",
+        category_id=None, tags=[], payload={"options": [{"value": "a"}]},
+    )
+    assert "payload_hash" in row
+    # 64-char SHA-256 hex
+    assert len(row["payload_hash"]) == 64
+    assert all(c in "0123456789abcdef" for c in row["payload_hash"])
