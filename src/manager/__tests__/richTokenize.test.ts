@@ -115,12 +115,6 @@ describe("tokenizeRich", () => {
     expect(tokens[0].raw).toBe("# this is a comment");
   });
 
-  it("does not flag mid-token # as a comment", () => {
-    const tokens = tokenizeRich("foo#bar");
-    // Cast to string: "comment" is no longer in TokenKind; the comparison is always false.
-    expect(tokens.some((t) => (t.kind as string) === "comment")).toBe(false);
-  });
-
   it("treats # at line start as plain text (no comment syntax)", () => {
     const tokens = tokenizeRich("# noted");
     // With comment syntax removed, the whole string is plain text.
