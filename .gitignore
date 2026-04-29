@@ -16,7 +16,15 @@ pnpm-debug.log
 js/
 web/
 coverage/
+.coverage
 .vitest-cache/
+
+# Archives never belong in the repo (caught a stray src.zip
+# hand-dropped into the tree on Apr 26)
+*.zip
+*.tar
+*.tar.gz
+*.tgz
 
 # Editor / OS
 .vscode/
