@@ -17,11 +17,57 @@ const props = defineProps<{
   nodeId: number;
   initialJson: string;
   upstreamVars: string[];
+  /**
+   * Pull the seed that the wildcard with the given module id
+   * ACTUALLY rolled with on the last run. For locked wildcards
+   * that's their `locked_seed`; for unlocked wildcards it's the
+   * chain seed at queue time. Captured by the seed widget's
+   * `beforeQueued` hook (see widgets/context.ts).
+   *
+   * Calling without a module id returns the chain-level snapshot.
+   *
+   * Used by the in-card lock toggle so re-locking after a run
+   * restores the seed THIS wildcard rolled with — not the chain
+   * seed (which it may have ignored if it was already locked) and
+   * not the previous lock value (which may be stale if the user
+   * unlocked + re-ran in between).
+   *
+   * Returns `null` when the user hasn't queued yet —
+   * `last_locked_seed` falls through next, then 0 as final default.
+   * Optional so headless mounts (tests) can skip wiring it.
+   */
+  lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
 }>();
 
 const dragOverId = ref<string | null>(null);
 const dragOverEnd = ref(false);
+
+/**
+ * Set of library uuids known to exist on this server. Refreshed
+ * periodically so a module that was deleted via the SPA flips to the
+ * "missing" indicator without a workflow reload. `null` = haven't
+ * fetched yet (don't render any missing dot until we know — avoids
+ * a flash of "everything's missing" while the first request is in
+ * flight).
+ */
+const libraryIds = ref<Set<string> | null>(null);
+const LIBRARY_POLL_MS = 5000;
+let libraryPollHandle: number | undefined;
+
+async function refreshLibraryIds() {
+  try {
+    const res = await fetch("/wp/api/modules/hashes");
+    if (!res.ok) return;
+    const body = (await res.json()) as { hashes?: Record<string, string> };
+    if (body && body.hashes && typeof body.hashes === "object") {
+      libraryIds.value = new Set(Object.keys(body.hashes));
+    }
+  } catch {
+    // Silent — leave whatever set we last had so transient errors
+    // don't flash "missing" everywhere.
+  }
+}
 
 const ctxMenu = ref<{ visible: boolean; x: number; y: number; items: ContextMenuItem[] }>({
   visible: false,
@@ -57,10 +103,17 @@ function clearDragHover() {
   dragOverEnd.value = false;
 }
 
-onMounted(() => window.addEventListener("dragend", clearDragHover));
+onMounted(() => {
+  window.addEventListener("dragend", clearDragHover);
+  // Kick + poll the library-id set so the missing-from-library dot
+  // reacts (within ~5s) when the user deletes/creates rows in the SPA.
+  refreshLibraryIds();
+  libraryPollHandle = window.setInterval(refreshLibraryIds, LIBRARY_POLL_MS);
+});
 onBeforeUnmount(() => {
   window.removeEventListener("dragend", clearDragHover);
   if (dragState.value?.sourceNodeId === props.nodeId) dragState.value = null;
+  if (libraryPollHandle !== undefined) window.clearInterval(libraryPollHandle);
 });
 
 watch(dragState, (v) => { if (v === null) clearDragHover(); });
@@ -167,32 +220,365 @@ function labelFor(type: string): string {
 }
 
 // Type-icon mapping per the brand sheet. Forward-compatible with P5+ types.
-// Color comes from the matching `.type-X` CSS class on .wp-type-icon.
+// Per-kind PrimeIcons mapping. Color comes from the matching
+// `.type-X` CSS class on `.wp-type-icon`.
 function iconFor(type: ModuleEntry["type"]): string {
-  if (type === "fixed_values") return "pi-tag";
-  return "pi-question";
+  switch (type) {
+    case "wildcard":     return "pi-th-large";
+    case "fixed_values": return "pi-tag";
+    case "combine":      return "pi-share-alt";
+    case "derivation":   return "pi-code";
+    case "constraint":   return "pi-sitemap";
+    case "pipeline":     return "pi-list";
+    default:             return "pi-question";
+  }
+}
+
+/**
+ * Card subtitle line. fixed_values surfaces the inline-edited
+ * `$var, $var, …` list (the legacy summary); other kinds inspect
+ * the snapshot payload to surface a one-glance signature
+ * (var-binding + option count for wildcards, output-var for
+ * combines, rule count for derivations, etc.).
+ */
+/**
+ * Per-instance override detection. A library-snapshot module is
+ * "modified" when any field on `m.instance` differs from the engine's
+ * `_fresh_instance()` defaults — option enable/disable, weight
+ * overrides, mode (pinned / subcategory), or category filter. Drives
+ * the small accent dot on the card header so users can spot which
+ * picked modules they've tweaked locally.
+ *
+ * Symmetric with the modal's `hasInstanceOverrides` (kept in sync
+ * manually — small enough surface that DRYing isn't worth a shared
+ * util yet).
+ */
+/**
+ * True when a module's id isn't in the live library set. Modules
+ * with no `payload_hash` are treated as LOCAL-ONLY by design (no
+ * library tie expected). This covers two cases at once:
+ *   - inline-created `fixed_values` entries (never had a library
+ *     row — payload_hash never set)
+ *   - duplicates of any kind (the duplicate path strips
+ *     payload_hash so the clone reads as local; see `duplicateModule`)
+ *
+ * Returns false until `libraryIds` first loads so we don't flash
+ * "missing" everywhere while the initial fetch is in flight.
+ */
+function isMissingFromLibrary(m: ModuleEntry): boolean {
+  if (!m.payload_hash) return false;
+  if (libraryIds.value === null) return false;
+  return !libraryIds.value.has(m.id);
+}
+
+/**
+ * Save a workflow-resident module snapshot back into the live
+ * library at the SAME uuid so the next workflow load won't flag it
+ * missing. POSTs to a small new endpoint that bypasses the regular
+ * uuid-generator and inserts at the supplied id. On success, refresh
+ * the library set so the indicator dot disappears immediately
+ * instead of waiting for the next poll.
+ */
+async function saveToLibrary(m: ModuleEntry) {
+  if (!m.payload) {
+    pushToast("This module has no payload to save.", { severity: "warning" });
+    return;
+  }
+  try {
+    const res = await fetch("/wp/api/modules/import-from-workflow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: m.id,
+        type: m.type,
+        name: m.meta.name || `(unnamed ${m.type})`,
+        description: m.meta.description ?? "",
+        tags: m.meta.tags ?? [],
+        payload: m.payload,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const detail = (body as { error?: string }).error ?? `${res.status}`;
+      pushToast(`Save failed: ${detail}`, { severity: "error" });
+      return;
+    }
+    pushToast(`Saved "${m.meta.name || m.type}" to library.`, {
+      severity: "success",
+    });
+    await refreshLibraryIds();
+  } catch (err) {
+    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
+function isModified(m: ModuleEntry): boolean {
+  // Lock + internal have their own dedicated header buttons, so
+  // double-counting them in the "modified" dot is just visual
+  // noise. The modified indicator is reserved for option-pool
+  // overrides (subset, weights, pinned, category filter) — anything
+  // that changes WHICH option a roll picks.
+  const inst = m.instance;
+  if (!inst) return false;
+  if (Array.isArray(inst.enabled_options)) return true;
+  if (inst.option_weights && Object.keys(inst.option_weights).length > 0) return true;
+  if (inst.mode && inst.mode !== "random") return true;
+  if (inst.pinned_option_id) return true;
+  if (Array.isArray(inst.category_filter) && inst.category_filter.length > 0) return true;
+  return false;
+}
+
+function isLocked(m: ModuleEntry): boolean {
+  return typeof m.instance?.locked_seed === "number";
+}
+function isInternal(m: ModuleEntry): boolean {
+  return !!m.instance?.internal;
+}
+
+/** In-card lock toggle. Off → null `locked_seed` but keep
+ *  `last_locked_seed` so the next toggle-on has a fallback.
+ *  On → fallback chain (per-module priority so re-locking captures
+ *  what THIS specific wildcard actually rolled with):
+ *    1. lastUsedSeedReader(m.id) — seed THIS wildcard used last
+ *       run (locked_seed if it was locked, else chain seed).
+ *       Refreshes after every queue. Handles the
+ *       lock→run→unlock→lock case correctly: the locked-and-then-
+ *       unlocked wildcard restores to ITS locked seed, not the
+ *       chain seed of that run.
+ *    2. `last_locked_seed` — cold-start fallback when no queue
+ *       has happened yet this session.
+ *    3. 0 (final default). */
+function toggleLockOnCard(m: ModuleEntry) {
+  const inst = m.instance ?? {};
+  let nextInst: NonNullable<ModuleEntry["instance"]>;
+  if (typeof inst.locked_seed === "number") {
+    nextInst = { ...inst, locked_seed: null };
+  } else {
+    let fallback: number;
+    const lastUsed = props.lastUsedSeedReader?.(m.id);
+    if (typeof lastUsed === "number") {
+      fallback = lastUsed;
+    } else if (typeof inst.last_locked_seed === "number") {
+      fallback = inst.last_locked_seed;
+    } else {
+      fallback = 0;
+    }
+    nextInst = { ...inst, locked_seed: fallback, last_locked_seed: fallback };
+  }
+  value.value = {
+    ...value.value,
+    modules: value.value.modules.map((x) => x.id === m.id ? { ...x, instance: nextInst } : x),
+  };
+}
+
+/** In-card internal toggle. Drops the field on toggle-off so the
+ *  persisted JSON stays minimal (matches the modal). */
+function toggleInternalOnCard(m: ModuleEntry) {
+  const inst = m.instance ?? {};
+  let nextInst: NonNullable<ModuleEntry["instance"]>;
+  if (inst.internal) {
+    const { internal: _drop, ...rest } = inst;
+    void _drop;
+    nextInst = rest;
+  } else {
+    nextInst = { ...inst, internal: true };
+  }
+  value.value = {
+    ...value.value,
+    modules: value.value.modules.map((x) => x.id === m.id ? { ...x, instance: nextInst } : x),
+  };
+}
+
+/** Whether to expose the inline lock toggle on the card. Lock only
+ *  affects wildcard kind — for fixed_values + others it's a no-op
+ *  in the engine, so we hide it to reduce header noise. */
+function showLockToggle(m: ModuleEntry): boolean {
+  return m.type === "wildcard";
+}
+
+/** Tooltip listing what's been overridden on the module — surfaced
+ *  on hover of the modified-indicator dot. Order matches the modal's
+ *  field layout for visual consistency. */
+function modifiedTooltip(m: ModuleEntry): string {
+  const inst = m.instance;
+  if (!inst) return "";
+  const bits: string[] = [];
+  if (inst.mode === "pinned") bits.push("pinned");
+  else if (inst.mode === "subcategory") bits.push("subset");
+  if (Array.isArray(inst.category_filter) && inst.category_filter.length > 0) {
+    bits.push(`cats: ${inst.category_filter.join(", ")}`);
+  }
+  if (Array.isArray(inst.enabled_options)) {
+    bits.push(`${inst.enabled_options.length} option(s) enabled`);
+  }
+  if (inst.option_weights && Object.keys(inst.option_weights).length > 0) {
+    bits.push(`${Object.keys(inst.option_weights).length} weight override(s)`);
+  }
+  return bits.length > 0 ? `Modified: ${bits.join(" · ")}` : "Modified";
 }
 
 function summaryFor(m: ModuleEntry): string {
-  const named = m.entries.filter((e) => e.variable_name.trim() !== "");
-  if (named.length === 0) return "(empty)";
-  const heads = named.slice(0, 2).map((e) => `$${e.variable_name}`);
-  const more = named.length - heads.length;
-  return more > 0 ? `${heads.join(", ")}, +${more} more` : heads.join(", ");
+  if (m.type === "fixed_values") {
+    const named = m.entries.filter((e) => e.variable_name.trim() !== "");
+    if (named.length === 0) return "(empty)";
+    const heads = named.slice(0, 2).map((e) => `$${e.variable_name}`);
+    const more = named.length - heads.length;
+    return more > 0 ? `${heads.join(", ")}, +${more} more` : heads.join(", ");
+  }
+  const p = (m.payload ?? {}) as Record<string, unknown>;
+  switch (m.type) {
+    case "wildcard": {
+      const binding = (p.var_binding as string)?.trim();
+      const opts = Array.isArray(p.options) ? p.options.length : 0;
+      const head = binding ? `$${binding}` : "wildcard";
+      return opts ? `${head} · ${opts} option${opts === 1 ? "" : "s"}` : head;
+    }
+    case "combine": {
+      const out = (p.output_var as string)?.trim();
+      return out ? `→ $${out}` : "template";
+    }
+    case "derivation": {
+      const rules = Array.isArray(p.rules) ? p.rules.length : 0;
+      return `${rules} rule${rules === 1 ? "" : "s"}`;
+    }
+    case "constraint":   return "constraint matrix";
+    case "pipeline":     return `${Array.isArray(p.steps) ? p.steps.length : 0} steps`;
+    default:             return m.type;
+  }
 }
 
-function addModule(type: "fixed_values") {
-  const m: ModuleEntry = {
-    id: newModuleId(),
-    type,
-    enabled: true,
-    meta: { name: "fixed values", description: "", tags: [] },
-    entries: [{ variable_name: "", value: "" }],
-  };
-  value.value = { ...value.value, modules: [...value.value.modules, m] };
-  showPicker.value = false;
-  // Open the editor immediately so the user lands in the entry editor.
-  editingId.value = m.id;
+/**
+ * Handle a picker `pick` event.
+ *
+ * The picker emits an array of library UUIDs. We POST them to the
+ * embed-bundle endpoint and append a `ModuleEntry` for each returned
+ * module to `value.modules` — uniformly with how inline-created
+ * fixed_values land in the same array. There is no separate
+ * snapshots / catalog list in the workflow JSON; the runtime side
+ * builds its `__wp_catalog__` by filtering `modules` for wildcards.
+ *
+ * Already-present uuids are skipped (no duplicate cards). Server
+ * walks transitive `@{}` deps and returns them in the same `modules`
+ * array — they each become their own card so the user sees what
+ * was auto-included.
+ */
+async function onLibraryPick(uuids: string[]) {
+  if (uuids.length === 0) {
+    showPicker.value = false;
+    return;
+  }
+  try {
+    const res = await fetch("/wp/api/modules/embed-bundle", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uuids }),
+    });
+    if (!res.ok) {
+      throw new Error(`Embed bundle failed (HTTP ${res.status}).`);
+    }
+    const bundle = (await res.json()) as {
+      modules?: Record<string, unknown>[];
+      snapshots?: Record<string, {
+        uuid: string;
+        type: string;
+        name: string;
+        payload: Record<string, unknown>;
+        payload_hash: string;
+      }>;
+      pickOrder?: string[];
+      walkOverflow?: { uuid: string; reason: string }[];
+    };
+
+    // The server returns:
+    //   - `modules`: full payloads of explicit picks (executor view)
+    //   - `snapshots`: catalog map keyed by uuid (picks + transitive
+    //                  wildcards walked via `@{}` refs)
+    //
+    // For the unified-list UI we want one card per snapshot — picks
+    // AND transitive deps both render as full cards so the user sees
+    // exactly what got embedded. Walk `snapshots` for the union.
+    const snaps = bundle.snapshots ?? {};
+    const incomingOrder = bundle.pickOrder ?? Object.keys(snaps);
+
+    const existingIds = new Set(value.value.modules.map((m) => m.id));
+    const newEntries: ModuleEntry[] = [];
+
+    // Append picks first (in input order) so user-picked rows land
+    // before any transitive deps in the resulting card list.
+    const seenInBundle = new Set<string>();
+    for (const uuid of incomingOrder) {
+      if (existingIds.has(uuid) || seenInBundle.has(uuid)) continue;
+      const entry = snaps[uuid];
+      if (!entry) continue;
+      seenInBundle.add(uuid);
+      newEntries.push({
+        id: uuid,
+        type: entry.type as ModuleEntry["type"],
+        enabled: true,
+        meta: { name: entry.name },
+        entries: [],
+        payload: entry.payload,
+        payload_hash: entry.payload_hash,
+      });
+    }
+    // Then any transitive deps the walker pulled in but that weren't
+    // in the explicit pickOrder.
+    for (const [uuid, entry] of Object.entries(snaps)) {
+      if (existingIds.has(uuid) || seenInBundle.has(uuid)) continue;
+      seenInBundle.add(uuid);
+      newEntries.push({
+        id: uuid,
+        type: entry.type as ModuleEntry["type"],
+        enabled: true,
+        meta: { name: entry.name },
+        entries: [],
+        payload: entry.payload,
+        payload_hash: entry.payload_hash,
+      });
+    }
+
+    if (newEntries.length === 0) {
+      pushToast(
+        "Already embedded — nothing new added.",
+        { severity: "info", lifeMs: 2500 },
+      );
+      showPicker.value = false;
+      return;
+    }
+
+    value.value = {
+      ...value.value,
+      modules: [...value.value.modules, ...newEntries],
+    };
+
+    const overflow = bundle.walkOverflow ?? [];
+    if (overflow.length > 0) {
+      const cycles = overflow.filter((o) => o.reason === "cycle_detected").length;
+      const missing = overflow.filter((o) => o.reason === "missing_target").length;
+      const depth = overflow.filter((o) => o.reason === "max_depth").length;
+      const parts: string[] = [];
+      if (cycles) parts.push(`${cycles} cycle${cycles === 1 ? "" : "s"}`);
+      if (missing) parts.push(`${missing} missing`);
+      if (depth) parts.push(`${depth} depth-cap`);
+      pushToast(
+        `Embedded ${newEntries.length} module${newEntries.length === 1 ? "" : "s"} (walker noted: ${parts.join(", ")}).`,
+        { severity: "warning", lifeMs: 5000 },
+      );
+    } else {
+      pushToast(
+        `Embedded ${newEntries.length} module${newEntries.length === 1 ? "" : "s"} into the workflow.`,
+        { severity: "success", lifeMs: 3000 },
+      );
+    }
+  } catch (e) {
+    pushToast(
+      e instanceof Error ? e.message : "Embed failed.",
+      { severity: "error", lifeMs: 5000 },
+    );
+  } finally {
+    showPicker.value = false;
+  }
 }
 
 function removeModule(id: string) {
@@ -226,6 +612,13 @@ function duplicateModule(id: string) {
   const copy: ModuleEntry = JSON.parse(JSON.stringify(list[i]));
   copy.id = newModuleId();
   copy.meta = { ...copy.meta, name: `${copy.meta.name} (copy)` };
+  // Strip `payload_hash` so the duplicate is treated as a local-only
+  // module (no library tie). Otherwise the missing-from-library
+  // indicator would light up immediately even though the duplicate
+  // was never expected to exist in the library — it's a fresh local
+  // clone, semantically equivalent to inline-creating a new module.
+  // The original library row stays linked through the ORIGINAL entry.
+  delete copy.payload_hash;
   list.splice(i + 1, 0, copy);
   value.value = { ...value.value, modules: list };
   pushToast(`Duplicated “${list[i].meta.name?.trim() || "module"}”`, {
@@ -260,6 +653,37 @@ function toggleCollapsed(id: string) {
   value.value = { ...value.value, modules: list };
 }
 
+/** Bulk collapse/expand. Used by the section-header chevron — one
+ *  click flips every card to the same state. Idempotent if all
+ *  cards already match the target state (the deep watcher will
+ *  diff-eq and skip the onChange emit). */
+function setAllCollapsed(collapsed: boolean) {
+  value.value = {
+    ...value.value,
+    modules: value.value.modules.map((m) => ({ ...m, collapsed })),
+  };
+}
+
+/** True when EVERY module is collapsed. Drives the section-header
+ *  toggle's icon + tooltip — chevron flips between "expand all" and
+ *  "collapse all" semantics based on current majority state. Mixed
+ *  state (some collapsed, some not) reads as "not all collapsed"
+ *  → next click collapses all. */
+const allCollapsed = computed<boolean>(() =>
+  value.value.modules.length > 0 && value.value.modules.every((m) => m.collapsed === true),
+);
+
+/**
+ * Edit opens `ModuleEditModal` for every kind. The modal renders a
+ * kind-aware body:
+ *   - `fixed_values` → inline name/value entry editor (legacy flow).
+ *   - everything else → snapshot-instance preview with name +
+ *     description editing + a deep-link to the full SPA editor.
+ *
+ * Snapshot edits stay local to this workflow — the underlying
+ * library row is not touched. Major payload edits (option weights,
+ * ref bindings, derivation rules, …) live in the SPA editor.
+ */
 function openEditModal(id: string) {
   editingId.value = id;
 }
@@ -325,30 +749,6 @@ function moveModule(id: string, dir: -1 | 1) {
   });
 }
 
-function onContextRootContextMenu(ev: MouseEvent) {
-  // Right-click on the wp-context background (NOT on a module card) opens a
-  // shortcut menu with "+ Add module". Prevents ComfyUI's native canvas
-  // context menu from interfering since this widget already owns the area.
-  // If the click landed on a child module card, that card's @contextmenu has
-  // already fired and stopped propagation via @contextmenu.prevent — this
-  // only fires for the bare-area case.
-  const target = ev.target as HTMLElement;
-  if (target.closest(".wp-module")) return;
-  ev.preventDefault();
-  const estW = 180;
-  const estH = 60;
-  const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
-  const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
-  ctxMenu.value = {
-    visible: true,
-    x: Math.max(8, x),
-    y: Math.max(8, y),
-    items: [
-      { label: "Add module", icon: "pi-plus", onSelect: () => { showPicker.value = true; } },
-    ],
-  };
-}
-
 function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
   const list = value.value.modules;
   const i = list.findIndex((x) => x.id === m.id);
@@ -356,20 +756,31 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
   const estH = 220;
   const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
   const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
-  ctxMenu.value = {
-    visible: true,
-    x: Math.max(8, x),
-    y: Math.max(8, y),
-    items: [
-      { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(m.id) },
-      { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(m.id) },
-      { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-chevron-down" : "pi-chevron-right", onSelect: () => toggleCollapsed(m.id) },
-      { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(m.id), divider: true },
-      { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(m.id, "top") },
-      { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(m.id, "bottom") },
-      { label: "Delete", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(m.id) },
-    ],
-  };
+  // Build the items list dynamically — "Save to library" only shows
+  // when the module is missing from the live library AND has a
+  // payload to save (inline-created fixed_values without a payload
+  // are intentionally excluded; they're already authoritative on the
+  // workflow side).
+  const items: ContextMenuItem[] = [
+    { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(m.id) },
+  ];
+  if (isMissingFromLibrary(m) && !!m.payload) {
+    items.push({
+      label: "Save to library",
+      icon: "pi-cloud-upload",
+      onSelect: () => saveToLibrary(m),
+      divider: true,
+    });
+  }
+  items.push(
+    { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(m.id) },
+    { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-chevron-down" : "pi-chevron-right", onSelect: () => toggleCollapsed(m.id) },
+    { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(m.id), divider: true },
+    { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(m.id, "top") },
+    { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(m.id, "bottom") },
+    { label: "Delete", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(m.id) },
+  );
+  ctxMenu.value = { visible: true, x: Math.max(8, x), y: Math.max(8, y), items };
 }
 
 // ── Drag-and-drop ───────────────────────────────────────────────────────
@@ -441,7 +852,24 @@ function onDrop(ev: DragEvent, targetId: string | null) {
     return;
   }
 
-  const inserted: ModuleEntry = { ...ds.module, id: newModuleId() };
+  // Cross-node drop. Keep the source module's id — for library-picked
+  // entries that id IS the canonical 8-hex uuid the catalog keys by,
+  // and re-id'ing it would silently break `@{uuid}` ref resolution
+  // for nested wildcards. If the target widget already has that id
+  // (same module embedded twice), dedupe by skipping; the picker
+  // applies the same rule.
+  if (value.value.modules.some((m) => m.id === ds.module.id)) {
+    sameNodeDropHandled = true;
+    return;
+  }
+  // Inline-created fixed_values modules don't carry a library uuid,
+  // so a fresh random id keeps the value.modules invariant
+  // (each entry's id unique within a widget) when copying them.
+  const isLibraryBacked = ds.module.type !== "fixed_values"
+    || (ds.module.payload !== undefined && Object.keys(ds.module.payload ?? {}).length > 0);
+  const inserted: ModuleEntry = isLibraryBacked
+    ? { ...ds.module }
+    : { ...ds.module, id: newModuleId() };
   const list = [...value.value.modules];
   const insertIdx = targetId === null ? list.length : list.findIndex((m) => m.id === targetId);
   list.splice(insertIdx < 0 ? list.length : insertIdx, 0, inserted);
@@ -451,7 +879,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 </script>
 
 <template>
-  <div class="wp-context" @dragleave="onContainerLeave" @contextmenu="onContextRootContextMenu">
+  <div class="wp-context" @dragleave="onContainerLeave">
     <!-- Corrupt-workflow recovery panel (5.6). Surfaces when JSON parse fails
          or returns a non-object. View raw exposes the bad payload so users
          can copy it out before resetting. -->
@@ -498,6 +926,24 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             v-if="value.modules.length > 0"
             class="wp-section-label__count"
           >{{ value.modules.length }}</span>
+
+          <!-- Bulk-collapse toggle. Chevron direction follows the
+               action that the click WILL take: ▾ when nothing is
+               collapsed (click → collapse all), ▸ when everything is
+               (click → expand all). Mixed state reads as "not all
+               collapsed" so it nudges toward collapse first. Pushed
+               to the right of the row via flex auto-margin. -->
+          <button
+            v-if="value.modules.length > 1"
+            type="button"
+            class="wp-section-label__bulk"
+            :title="allCollapsed ? 'Expand all modules' : 'Collapse all modules'"
+            data-testid="bulk-collapse-toggle"
+            @click="setAllCollapsed(!allCollapsed)"
+          >
+            <i :class="['pi', allCollapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i>
+            <span>{{ allCollapsed ? "expand all" : "collapse all" }}</span>
+          </button>
         </div>
 
         <TransitionGroup name="wp-list" tag="div" class="wp-modules">
@@ -556,13 +1002,53 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             {{ m.meta.name || "(unnamed)" }}
           </span>
 
-          <span
-            v-if="severityFor(m.id)"
-            class="wp-conflict-dot"
-            :class="`wp-conflict-dot--${severityFor(m.id)}`"
-            :title="conflictTooltip(m.id)"
-            aria-hidden="true"
-          ></span>
+          <!-- Status-dots cluster — read-only indicators grouped so
+               the eye reads them as a single "module health" glance.
+               Order modified → missing → conflict (severity rises
+               left → right). Buttons sit AFTER this cluster so dots
+               never split the interactive controls. -->
+          <span class="wp-mod-dots">
+            <span
+              v-if="isModified(m)"
+              class="wp-mod-dot wp-mod-dot--modified"
+              :title="modifiedTooltip(m)"
+              aria-hidden="true"
+            ></span>
+            <span
+              v-if="isMissingFromLibrary(m)"
+              class="wp-mod-dot wp-mod-dot--missing"
+              title="Not in library — right-click → Save to library to add it"
+              aria-hidden="true"
+            ></span>
+            <span
+              v-if="severityFor(m.id)"
+              class="wp-conflict-dot"
+              :class="`wp-conflict-dot--${severityFor(m.id)}`"
+              :title="conflictTooltip(m.id)"
+              aria-hidden="true"
+            ></span>
+          </span>
+
+          <!-- Toggle-buttons cluster — lock + internal both rendered
+               (when applicable) so on/off is one click away without
+               opening the modal. Modal EXECUTION row stays as the
+               deeper editor (seed input, reroll, …). Lock only on
+               wildcard kind — engine ignores it elsewhere. -->
+          <button
+            v-if="showLockToggle(m)"
+            type="button"
+            class="wp-card-toggle"
+            :class="{ 'wp-card-toggle--on': isLocked(m) }"
+            :title="isLocked(m) ? `Locked seed: ${m.instance?.locked_seed}. Click to unlock.` : 'Lock seed — freeze the pick across runs (open modal to set seed).'"
+            @click.stop="toggleLockOnCard(m)"
+          ><i :class="['pi', isLocked(m) ? 'pi-lock' : 'pi-lock-open']" aria-hidden="true"></i></button>
+          <button
+            type="button"
+            class="wp-card-toggle"
+            :class="{ 'wp-card-toggle--on': isInternal(m) }"
+            :title="isInternal(m) ? 'Internal — bindings hidden from public payload. Click to publish.' : 'Mark internal — hide bindings from public payload (downstream modules can still read them).'"
+            @click.stop="toggleInternalOnCard(m)"
+          ><i :class="['pi', isInternal(m) ? 'pi-eye-slash' : 'pi-eye']" aria-hidden="true"></i></button>
 
           <button
             type="button"
@@ -632,7 +1118,8 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
     <ModulePickerModal
       :visible="showPicker"
-      @select="addModule"
+      :already-added="value.modules.map((m) => m.id)"
+      @pick="onLibraryPick"
       @close="showPicker = false"
     />
 
@@ -641,6 +1128,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
       :module="editingModule"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingNodeVars"
+      :last-used-seed-reader="lastUsedSeedReader"
       @save="saveEditedModule"
       @close="editingId = null"
     />
@@ -787,7 +1275,6 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   color: var(--wp-violet);
 }
 .wp-section-label__count {
-  margin-left: auto;
   font-size: 9px;
   padding: 1px 6px;
   border-radius: 8px;
@@ -795,6 +1282,34 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   color: var(--wp-violet);
   letter-spacing: 0;
 }
+
+/* Bulk collapse/expand toggle — pushed to the right of the row via
+ * auto-margin. Compact text-button shape so it doesn't clash with
+ * per-card chevrons + matches the section-label's mono/uppercase
+ * vibe. */
+.wp-section-label__bulk {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text3);
+  cursor: pointer;
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.wp-section-label__bulk:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-border);
+  background: var(--wp-bg2);
+}
+.wp-section-label__bulk .pi { font-size: 9px; }
 
 /* ── Empty-state hero (2.3) + first-run hint (4.5) ──────────────────────
  * Restrained to match the picker modal — plain title, body, gradient
@@ -997,7 +1512,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   text-align: center;
   flex-shrink: 0;
 }
-.wp-type-icon.type-fixed_values { color: var(--wp-rose); }
+.wp-type-icon.type-fixed_values { color: var(--wp-kind-fixed, var(--wp-rose)); }
+.wp-type-icon.type-wildcard     { color: var(--wp-kind-wildcard, #a78bfa); }
+.wp-type-icon.type-combine      { color: var(--wp-kind-combine,  #34d399); }
+.wp-type-icon.type-derivation   { color: var(--wp-kind-derivation, #fbbf24); }
+.wp-type-icon.type-constraint   { color: var(--wp-kind-constraint, #f472b6); }
+.wp-type-icon.type-pipeline     { color: var(--wp-kind-pipeline, #fb7185); }
 
 .wp-module-name {
   flex: 1;
@@ -1019,6 +1539,80 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-conflict-dot--info { background: var(--wp-accent); }
 .wp-conflict-dot--warning { background: var(--wp-amber); }
 .wp-conflict-dot--error { background: var(--wp-red); }
+
+/* Cluster wrapper — keeps every status dot (modified, missing,
+ * conflict) on one inline run so they never get separated by
+ * interactive controls. Empty cluster collapses (no children → no
+ * gap), so cards without indicators look unchanged. */
+.wp-mod-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wp-mod-dots:empty { display: none; }
+
+/* Per-instance / library-state dots — distinct from conflict dots
+ * (which signal STRUCTURAL graph issues). Modified = user touched
+ * instance overrides; Missing = uuid not in the live library. Both
+ * can stack on the same card with the conflict dot. */
+.wp-mod-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: help;
+  border: 1px solid transparent;
+}
+/* Hollow-ring "modified" — accent stroke + subtle glow. Hollow vs
+ * filled keeps it readable next to the conflict dot. */
+.wp-mod-dot--modified {
+  background: transparent;
+  border-color: var(--wp-accent);
+  box-shadow: 0 0 4px var(--wp-accent-glow, rgba(80, 168, 255, 0.4));
+}
+/* Filled amber dashed "missing" — the dashed border telegraphs
+ * "incomplete state" without leaning on red (which we reserve for
+ * actual errors). */
+.wp-mod-dot--missing {
+  background: var(--wp-amber-bg);
+  border: 1px dashed var(--wp-amber);
+}
+
+/* In-card lock + internal toggle buttons. Always rendered so the
+ * on/off state is one click away. Off = ghost (transparent bg,
+ * muted text); on = accent fill. Sit next to the conflict/missing
+ * dots in the header so the eye groups "per-instance state" all in
+ * the same region. */
+.wp-card-toggle {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--wp-text3);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 10px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.wp-card-toggle:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-border2);
+}
+.wp-card-toggle--on {
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  border-color: var(--wp-accent);
+  color: var(--wp-accent);
+}
+.wp-card-toggle--on:hover {
+  background: color-mix(in srgb, var(--wp-accent) 28%, transparent);
+  color: var(--wp-accent2, var(--wp-accent));
+}
+.wp-card-toggle .pi { font-size: 10px; }
 
 .wp-icon-btn {
   background: none;
@@ -1119,4 +1713,5 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   40%  { transform: scale(1.4); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+
 </style>

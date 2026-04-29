@@ -45,7 +45,7 @@ async def test_nested_wildcard_ref_resolves_via_catalog(aiohttp_client, app_with
     )
     outfit_payload = {
         "options": [
-            {"value": f"@{{{color['uuid']}}} dress", "weight": 1},
+            {"value": f"@{{{color['id']}}} dress", "weight": 1},
         ],
     }
     repo.create(
@@ -66,7 +66,7 @@ async def test_nested_wildcard_ref_resolves_via_catalog(aiohttp_client, app_with
     assert len(samples) == 5
     for s in samples:
         assert s in ("red dress", "blue dress"), (
-            f"@{{{color['uuid']}}} did not resolve — got raw text {s!r}"
+            f"@{{{color['id']}}} did not resolve — got raw text {s!r}"
         )
 
 

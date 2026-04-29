@@ -7,16 +7,13 @@
  * `docs/design-handoff/wildcardpipeline/project/data.jsx` so list-screen
  * rendering matches the prototype exactly.
  *
- * Graph is keyed by the 8-hex short UUID — the SUFFIX of `mod.id` (e.g.
- * `wc_outfit_ea67b173` → `ea67b173`). This is the same identifier the
- * tokenizer's `@{8hex}` ref token captures into `meta.uuid`, and the same
- * key WildcardEditor uses for `nameByUuid`. Keying by the full `mod.id`
- * would miss every ref edge because targetUuid never matches the slugged
- * source id.
+ * Graph is keyed by `mod.id` — post DB migration 004 the id IS the
+ * canonical 8-hex uuid, identical to what the tokenizer's `@{8hex}` ref
+ * token captures into `meta.uuid`. No suffix extraction needed.
  */
 import type { ModuleRow, WildcardOption, WildcardPayload } from "../api/types";
 import { tokenizeRich } from "./richTokenize";
-import { extractModuleUuid, toIdentifier } from "./slug";
+import { toIdentifier } from "./slug";
 
 export interface SyntaxFlags {
   /** Any option value contains an `@{uuid}` reference token. */
@@ -94,9 +91,7 @@ export function buildUuidToName(modules: ModuleRow[]): Map<string, string> {
   const out = new Map<string, string>();
   for (const m of modules) {
     if (m.type !== "wildcard") continue;
-    const uuid = extractModuleUuid(m.id);
-    if (!uuid) continue;
-    out.set(uuid, wildcardVarName(m));
+    out.set(m.id, wildcardVarName(m));
   }
   return out;
 }
@@ -125,25 +120,19 @@ export function buildWildcardGraph(modules: ModuleRow[]): WildcardGraph {
   const uuidToName = new Map<string, string>();
 
   const wildcards = modules.filter((m) => m.type === "wildcard");
-  // Pair each wildcard with its 8-hex short UUID (extracted from the slug).
-  // Modules with non-standard ids (legacy imports, fixtures) are skipped —
-  // they can't be referenced via `@{8hex}` anyway.
-  const pairs: Array<{ mod: ModuleRow; uuid: string }> = [];
   const knownUuids = new Set<string>();
 
   for (const w of wildcards) {
-    const uuid = extractModuleUuid(w.id);
-    if (!uuid) continue;
-    pairs.push({ mod: w, uuid });
-    knownUuids.add(uuid);
-    uuidToName.set(uuid, wildcardVarName(w));
+    knownUuids.add(w.id);
+    uuidToName.set(w.id, wildcardVarName(w));
   }
 
-  for (const { mod, uuid: srcUuid } of pairs) {
+  for (const w of wildcards) {
+    const srcUuid = w.id;
     const out = new Set<string>();
     outgoing.set(srcUuid, out);
 
-    for (const targetUuid of getWildcardSyntax(mod).refTargets) {
+    for (const targetUuid of getWildcardSyntax(w).refTargets) {
       if (!knownUuids.has(targetUuid)) continue;
       out.add(targetUuid);
       let inSet = incoming.get(targetUuid);

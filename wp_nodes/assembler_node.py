@@ -20,7 +20,13 @@ class WPPromptAssembler(io.ComfyNode):
                 io.String.Input(
                     "template",
                     multiline=True,
-                    default="A $style portrait of $subject",
+                    default="",
+                    # Placeholder example shown only while the textarea
+                    # is empty — the workflow JSON stores no template
+                    # by default, so re-creating the node leaves it
+                    # blank instead of pre-populating prose users
+                    # immediately have to delete.
+                    placeholder="A $style portrait of $subject",
                 ),
             ],
             outputs=[io.String.Output("prompt")],

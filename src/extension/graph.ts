@@ -1,4 +1,5 @@
 import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
+import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
 // ComfyUI subgraphs are nested LGraph instances attached to a parent node
@@ -72,18 +73,6 @@ function widgetValue(node: LiteNodeLike, name: string): string {
   return typeof w?.value === "string" ? w.value : "";
 }
 
-function moduleWrites(node: LiteNodeLike): string[] {
-  const v = parseWidgetJson<ContextWidgetValue>(widgetValue(node, "modules"), { version: 1, modules: [] });
-  const out: string[] = [];
-  for (const m of v.modules) {
-    if (!m.enabled) continue;
-    for (const e of m.entries) {
-      const name = e.variable_name.replace(/^\$/, "").trim();
-      if (name) out.push(name);
-    }
-  }
-  return out;
-}
 
 function isSubgraphNode(n: LiteNodeLike): boolean {
   if (typeof n.isSubgraphNode === "function") {
@@ -237,40 +226,31 @@ function pipelineUpstreamOf(
 }
 
 /**
- * Walk upstream from `node` collecting variable names written by every
- * upstream WP_Context. Does NOT include the starting node's own writes — the
- * caller (a Context widget rendering its own conflict UI) wants to know what
- * is coming IN from upstream so it can compare against its own writes.
+ * Walk upstream from `node` and return the unified `(name → value)`
+ * map of every variable an upstream WP_Context would produce at run
+ * time, with values resolved deterministically (always picks option
+ * `[0]` for wildcards, applies `$var` / `@{uuid}` substitution
+ * against the evolving ctx). The assembler preview consumes this
+ * directly — there are no longer two parallel "names list" /
+ * "values map" tracks.
  *
- * Crosses subgraph boundaries transparently: if the upstream Context lives
- * outside a subgraph the starting node is in, we step OUT through the
- * SubgraphInputNode proxy; if the upstream chain crosses INTO a subgraph,
- * we step IN through the SubgraphOutputNode proxy.
+ * Determinism note: this is "preview-grade" resolution. Real graph
+ * runs use a random-seeded RNG; the preview does not (so users can
+ * type into the assembler template and see stable output as they
+ * work). Constraints, derivations and pipelines are not simulated;
+ * see `resolveChainStatic` for the per-kind handling.
  *
- * `rootGraph` should be `app.graph` (top-level). The starting node may live
- * anywhere in the nested graph tree.
+ * Crosses subgraph boundaries transparently: if the upstream
+ * Context lives outside a subgraph the starting node is in, we step
+ * OUT through the SubgraphInputNode proxy; if the upstream chain
+ * crosses INTO a subgraph, we step IN through the SubgraphOutputNode
+ * proxy. `rootGraph` should be `app.graph` (top-level). The starting
+ * node may live anywhere in the nested graph tree.
  */
-export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNodeLike): string[] {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const vars = new Set<string>();
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    if (cur.node.type === "WP_Context") moduleWrites(cur.node).forEach((v) => vars.add(v));
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
-  return Array.from(vars);
-}
-
-/**
- * Walk upstream collecting (variable → value) pairs. Last-write-wins matches
- * runtime semantics: chain order is upstream-first → downstream-last; we
- * reverse the walk so downstream values override upstream ones in the map.
- *
- * Crosses subgraph boundaries identically to `collectUpstreamVariables`.
- */
-export function collectUpstreamValues(rootGraph: LiteGraphLike, node: LiteNodeLike): Record<string, string> {
+export function collectUpstreamResolved(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): Record<string, string> {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
   const chain: LiteNodeLike[] = [];
@@ -280,20 +260,252 @@ export function collectUpstreamValues(rootGraph: LiteGraphLike, node: LiteNodeLi
     chain.push(cur.node);
     cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
   }
-  const out: Record<string, string> = {};
-  for (let i = chain.length - 1; i >= 0; i--) {
-    const n = chain[i];
+  return resolveChainStatic(chain);
+}
+
+/**
+ * Variable names known upstream of `node`. Thin alias over
+ * {@link collectUpstreamResolved} for call sites (subgraph badge,
+ * autocompletes) that only need the keys.
+ */
+export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNodeLike): string[] {
+  return Object.keys(collectUpstreamResolved(rootGraph, node));
+}
+
+/**
+ * Walk upstream from `node` and return the module list of every chain
+ * `WP_Context`, ordered upstream-first → downstream-last. Used by the
+ * assembler preview to POST the chain to `/wp/api/preview/resolve` —
+ * the engine then runs each step's PipelineEngine with a stable seed
+ * so the preview matches what the user gets at queue time.
+ *
+ * Skips non-Context nodes (boundary proxies and the assembler itself).
+ * The returned arrays are the raw module dicts straight from each
+ * Context's `modules` widget JSON; callers are responsible for any
+ * shape normalisation.
+ */
+export function collectUpstreamChain(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): unknown[][] {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  // chain[] is downstream-first (first hop = closest upstream).
+  // Reverse so step 0 is the FURTHEST upstream — engine runs each
+  // step's pipeline with previous ctx as input, so order matters.
+  const upstreamFirst = [...chain].reverse();
+  const out: unknown[][] = [];
+  for (const n of upstreamFirst) {
     if (n.type !== "WP_Context") continue;
-    const v = parseWidgetJson<ContextWidgetValue>(widgetValue(n, "modules"), { version: 1, modules: [] });
+    const v = parseWidgetJson<ContextWidgetValue>(
+      widgetValue(n, "modules"),
+      { version: 1, modules: [] },
+    );
+    out.push(v.modules);
+  }
+  return out;
+}
+
+/** @deprecated — use {@link collectUpstreamResolved}. */
+export const collectUpstreamValues = collectUpstreamResolved;
+
+/* -------------------------------------------------------------------- *
+ * Static chain resolution — builds the unified upstream-vars map
+ * consumed by `collectUpstreamResolved`. Per-kind handling:
+ *
+ *   - `fixed_values` → literal `entries[].value` /
+ *                      `payload.values[].value`.
+ *   - `wildcard`     → first option of `payload.options` with
+ *                      `$var` / `@{uuid}` substitution against the
+ *                      evolving ctx + a wildcard catalog built from
+ *                      every chain wildcard payload. Deterministic so
+ *                      the preview is stable as users type; runtime
+ *                      reseeds randomly each generation.
+ *   - `combine`      → `payload.template` filled against ctx so far,
+ *                      bound to `payload.output_var`.
+ *   - `derivation` / `constraint` / `pipeline` → not simulated.
+ *     Derivations depend on per-sample state we can't reproduce in a
+ *     static preview; constraints adjust weights, not bindings;
+ *     pipeline modules nest other kinds whose own bindings surface
+ *     above.
+ *
+ * Cycle / depth protection: `expandValue` caps recursion at 8 levels,
+ * matching the runtime walker's `max_ref_depth`.
+ * -------------------------------------------------------------------- */
+
+const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const WC_REF_RE = /@\{([0-9a-f]{8})\}/g;
+const MAX_REF_DEPTH = 8;
+
+interface MinimalWildcard {
+  options?: Array<{ value?: string; weight?: number }>;
+  var_binding?: string;
+}
+
+function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
+  // First pass: collect every wildcard payload across the whole chain
+  // into one `id → payload` catalog so `@{}` refs inside option values
+  // can resolve to picked-but-not-yet-walked siblings as well as
+  // upstream cousins.
+  const catalog = new Map<string, MinimalWildcard>();
+  for (const n of chain) {
+    if (n.type !== "WP_Context") continue;
+    const v = parseWidgetJson<ContextWidgetValue>(
+      widgetValue(n, "modules"),
+      { version: 1, modules: [] },
+    );
     for (const m of v.modules) {
-      if (!m.enabled) continue;
-      for (const e of m.entries) {
-        const name = e.variable_name.replace(/^\$/, "").trim();
-        if (!name) continue;
-        out[name] = e.value;
+      if (m.type !== "wildcard" || !m.payload) continue;
+      catalog.set(m.id, m.payload as MinimalWildcard);
+    }
+  }
+
+  // Track keys produced by internal-flagged modules so we can strip
+  // them before returning. Mirrors `engine.context.strip_internals`
+  // — internal bindings are written into the working ctx (so
+  // downstream combines/derivations can READ them) but never surface
+  // on the public-facing map the assembler preview consumes.
+  // Without this, a collapse/expand causes a brief client-side
+  // fallback render that exposes those values until the API
+  // round-trips, producing the flicker users reported.
+  const internalKeys = new Set<string>();
+
+  // Discover `@{uuid}` refs inside chain wildcard options that aren't in
+  // the chain catalog — these are nested references that the backend's
+  // `embed-bundle` deliberately doesn't transitively walk. Kick off a
+  // lazy fetch through preview-resolver so the *next* poll cycle can
+  // expand them; this cycle falls back to the resolver's cache + name.
+  const externalRefs = new Set<string>();
+  for (const wc of catalog.values()) {
+    for (const opt of wc.options ?? []) {
+      const v = opt.value;
+      if (typeof v !== "string") continue;
+      for (const match of v.matchAll(/@\{([0-9a-f]{8})\}/g)) {
+        if (!catalog.has(match[1])) externalRefs.add(match[1]);
       }
     }
   }
+  if (externalRefs.size) ensurePreviewLookup(externalRefs);
+
+  // Second pass: walk chain upstream-first → downstream-last so later
+  // writes override earlier ones (matches runtime last-write-wins).
+  const ctx: Record<string, string> = {};
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const n = chain[i];
+    if (n.type !== "WP_Context") continue;
+    const v = parseWidgetJson<ContextWidgetValue>(
+      widgetValue(n, "modules"),
+      { version: 1, modules: [] },
+    );
+    for (const m of v.modules) {
+      if (!m.enabled) continue;
+      const beforeKeys = new Set(Object.keys(ctx));
+      writeBindings(ctx, m, catalog);
+      if (m.instance?.internal) {
+        for (const k of Object.keys(ctx)) {
+          if (!beforeKeys.has(k)) internalKeys.add(k);
+        }
+      }
+    }
+  }
+  // Drop internal-flagged keys on the way out — they were written
+  // into ctx so downstream combines could expand `$var` references,
+  // but the assembler preview should mirror the public socket view.
+  for (const k of internalKeys) delete ctx[k];
+  return ctx;
+}
+
+function writeBindings(
+  ctx: Record<string, string>,
+  m: ContextWidgetValue["modules"][number],
+  catalog: Map<string, MinimalWildcard>,
+): void {
+  if (m.type === "fixed_values") {
+    for (const e of m.entries) {
+      const name = e.variable_name.replace(/^\$/, "").trim();
+      if (name) ctx[name] = String(e.value ?? "");
+    }
+    const values = (m.payload as { values?: Array<{ name?: string; value?: string }> } | undefined)?.values ?? [];
+    for (const val of values) {
+      const name = (val.name ?? "").replace(/^\$/, "").trim();
+      if (name) ctx[name] = String(val.value ?? "");
+    }
+    return;
+  }
+  const p = (m.payload ?? {}) as Record<string, unknown>;
+  if (m.type === "wildcard") {
+    const binding = (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
+    const options = (p.options as Array<{ value?: string }> | undefined) ?? [];
+    if (binding && options.length > 0) {
+      ctx[binding] = expandValue(String(options[0].value ?? ""), ctx, catalog, 0);
+    }
+    return;
+  }
+  if (m.type === "combine") {
+    const out = (p.output_var as string | undefined)?.replace(/^\$/, "").trim();
+    const tmpl = String(p.template ?? "");
+    if (out) ctx[out] = expandValue(tmpl, ctx, catalog, 0);
+    return;
+  }
+  // derivation / constraint / pipeline: no static binding for preview.
+}
+
+function expandValue(
+  raw: string,
+  ctx: Record<string, string>,
+  catalog: Map<string, MinimalWildcard>,
+  depth: number,
+): string {
+  if (!raw) return raw;
+  if (depth > MAX_REF_DEPTH) return raw;
+  // 1. Substitute `$var` with ctx values, leave unknowns as `$name`.
+  let out = raw.replace(VAR_REF_RE, (_, name) =>
+    Object.prototype.hasOwnProperty.call(ctx, name) ? ctx[name] : `$${name}`,
+  );
+  // 2. Substitute `@{8hex}` with the referenced wildcard's first option,
+  //    recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")
+  //    flatten. Resolution ladder:
+  //      a. chain catalog (sibling/cousin wildcards in any chain Context)
+  //      b. lazy preview-resolver cache (background-fetched from DB)
+  //      c. preview-resolver name fallback → render `[name]` so users
+  //         see something meaningful even before the fetch resolves
+  //         a `firstOption`, or for non-wildcard kinds that have no
+  //         option to expand
+  //      d. raw `@{uuid}` placeholder (last resort — will resolve to
+  //         the real value at runtime via the live DB walker)
+  //
+  // Deep-nesting note: when (b) recurses into a cached firstOption that
+  // ITSELF contains `@{}` refs not yet cached, the inner replace lands
+  // back here on the next pass. Cache-miss + fire `ensure()` for that
+  // nested uuid so the next 400ms poll has it ready. Chain length N
+  // therefore takes ~N polling ticks to fully expand; each tick
+  // surfaces one more level instead of stalling at the first miss.
+  out = out.replace(WC_REF_RE, (full, uuid) => {
+    const target = catalog.get(uuid);
+    const opts = target?.options ?? [];
+    if (opts.length) {
+      return expandValue(String(opts[0].value ?? ""), ctx, catalog, depth + 1);
+    }
+    const lk = previewLookup(uuid);
+    if (lk?.firstOption !== undefined) {
+      return expandValue(lk.firstOption, ctx, catalog, depth + 1);
+    }
+    if (lk === undefined) {
+      // First time we see this uuid in any expansion path — queue it.
+      // `ensure` is idempotent + fire-and-forget; subsequent ticks read
+      // from cache via the branch above.
+      ensurePreviewLookup([uuid]);
+    }
+    if (lk?.name) return `[${lk.name}]`;
+    return full;
+  });
   return out;
 }
 

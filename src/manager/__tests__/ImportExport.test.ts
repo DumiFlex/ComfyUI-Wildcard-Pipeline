@@ -28,8 +28,7 @@ const apiAny = api as unknown as {
 
 function mkModule(over: Partial<ModuleRow>): ModuleRow {
   return {
-    id: "wc_aaaa1111",
-    uuid: "aabbccdd",
+    id: "aabbccdd",
     type: "wildcard",
     name: "Sample",
     description: "",

@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
+  collectUpstreamResolved,
   collectUpstreamVariables,
   findDownstreamAssemblers,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
+import { _resetForTests, _setForTests } from "./preview-resolver";
 
 function fakeContextNode(id: number, vars: string[], upstreamLink?: number): LiteNodeLike {
   return {
@@ -171,5 +173,117 @@ describe("collectUpstreamVariables across subgraph boundaries", () => {
     asm.graph = root;
 
     expect(collectUpstreamVariables(root, asm)).toEqual(["style"]);
+  });
+});
+
+// ── Nested @{uuid} fallback through preview-resolver cache ─────────────
+// Backend's `embed-bundle` deliberately doesn't transitively walk nested
+// wildcard refs. The frontend preview lazily fetches them via
+// preview-resolver and falls back to cache+name when the chain catalog
+// lacks them. These tests pre-seed the cache to skip the network path.
+
+function fakeWildcardContextNode(
+  id: number,
+  modules: Array<{ id: string; binding: string; options: Array<{ value: string }> }>,
+  upstreamLink?: number,
+): LiteNodeLike {
+  return {
+    id,
+    type: "WP_Context",
+    inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+    outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+    widgets: [{
+      name: "modules",
+      value: JSON.stringify({
+        version: 1,
+        modules: modules.map((m) => ({
+          id: m.id,
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "" },
+          entries: [],
+          payload: { var_binding: m.binding, options: m.options },
+        })),
+      }),
+    }],
+  };
+}
+
+describe("collectUpstreamResolved nested @{uuid} fallback", () => {
+  beforeEach(() => _resetForTests());
+
+  it("expands chain-catalog miss using preview-resolver cache firstOption", () => {
+    _setForTests("fc9af551", { name: "outfit_color", firstOption: "denim" });
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "aaaaaaaa", binding: "$outfit", options: [{ value: "@{fc9af551} jeans" }] },
+    ]);
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ outfit: "denim jeans" });
+  });
+
+  it("falls back to `[name]` when cache has only the name (e.g. non-wildcard kind)", () => {
+    _setForTests("fc9af551", { name: "outfit_color" });
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "aaaaaaaa", binding: "$outfit", options: [{ value: "@{fc9af551} jeans" }] },
+    ]);
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ outfit: "[outfit_color] jeans" });
+  });
+
+  it("recurses through chained external refs (level-1 firstOption contains @{level-2})", () => {
+    // Cache pre-seeded with both levels — simulates the state after two
+    // polling ticks have settled. Level-1 firstOption references level-2;
+    // expandValue must recurse through both.
+    _setForTests("aaaaaaaa", { name: "outer", firstOption: "@{bbbbbbbb} suit" });
+    _setForTests("bbbbbbbb", { name: "inner", firstOption: "navy" });
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "00000001", binding: "$outfit", options: [{ value: "@{aaaaaaaa}" }] },
+    ]);
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ outfit: "navy suit" });
+  });
+
+  it("leaves the raw @{uuid} placeholder when cache is empty (fetch hasn't settled)", () => {
+    const ctx = fakeWildcardContextNode(1, [
+      { id: "aaaaaaaa", binding: "$outfit", options: [{ value: "@{fc9af551} jeans" }] },
+    ]);
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ outfit: "@{fc9af551} jeans" });
   });
 });

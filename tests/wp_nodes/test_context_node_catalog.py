@@ -19,28 +19,31 @@ def test_deserialize_returns_modules_with_empty_snapshots_for_legacy_input():
     assert pick_order == []
 
 
-def test_deserialize_extracts_snapshots_and_pickorder_from_new_input():
+def test_deserialize_synthesises_catalog_from_wildcard_modules():
+    """Unified-list model: there is no separate `snapshots` field on
+    the wire any more. The deserializer scans `modules`, picks every
+    entry with `type == "wildcard"`, and synthesises a SnapshotEntry
+    for it keyed by `id`. Pick-order is always empty under this model
+    (the modules list itself preserves order)."""
     new_shape = {
         "modules": [
-            {"type": "wildcard", "name": "outfit",
-             "payload": {"options": [{"value": "x"}]}},
-        ],
-        "snapshots": {
-            "ou111111": {
-                "snapshot_version": 1, "uuid": "ou111111", "type": "wildcard",
-                "name": "outfit",
+            {
+                "id": "ou111111",
+                "type": "wildcard",
+                "enabled": True,
+                "meta": {"name": "outfit"},
+                "entries": [],
                 "payload": {"options": [{"value": "x"}]},
                 "payload_hash": "h" * 64,
-                "source": {"kind": "user"},
             },
-        },
-        "pickOrder": ["ou111111"],
-        "snapshotVersion": 1,
+        ],
     }
-    modules, snapshots, pick_order = deserialize_node_input(new_shape)
+    modules, catalog, pick_order = deserialize_node_input(new_shape)
     assert len(modules) == 1
-    assert "ou111111" in snapshots
-    assert pick_order == ["ou111111"]
+    assert "ou111111" in catalog
+    assert catalog["ou111111"]["payload"] == {"options": [{"value": "x"}]}
+    assert catalog["ou111111"]["name"] == "outfit"
+    assert pick_order == []
 
 
 def _ctx_capture():
@@ -55,26 +58,37 @@ def _ctx_capture():
     return _FakePipeline, captured
 
 
-def test_execute_injects_catalog_from_snapshots_field(monkeypatch):
-    """Snapshots from the input become ctx['__wp_catalog__'] exactly once
-    at the top of execute. Spec §2.6."""
+def test_execute_injects_catalog_synthesised_from_modules(monkeypatch):
+    """Wildcard entries in `modules` become `ctx['__wp_catalog__']`
+    keyed by id, exactly once at the top of execute. Spec §2.6 plus
+    the unified-list change — no separate `snapshots` field on the
+    wire any more."""
     from wp_nodes import context_node as cn
 
     fake_cls, captured = _ctx_capture()
     monkeypatch.setattr(cn, "PipelineEngine", fake_cls)
 
-    snapshots = {
-        "ou111111": {"snapshot_version": 1, "uuid": "ou111111",
-                     "type": "wildcard", "name": "outfit",
-                     "payload": {"options": []}, "payload_hash": "h" * 64,
-                     "source": {"kind": "user"}},
-    }
     cn.WPContext.execute(
         seed=42,
-        modules={"modules": [], "snapshots": snapshots, "pickOrder": ["ou111111"]},
+        modules={
+            "modules": [
+                {
+                    "id": "ou111111",
+                    "type": "wildcard",
+                    "enabled": True,
+                    "meta": {"name": "outfit"},
+                    "entries": [],
+                    "payload": {"options": [{"value": "x"}]},
+                    "payload_hash": "h" * 64,
+                },
+            ],
+        },
         upstream=None,
     )
-    assert captured["__wp_catalog__"] == snapshots
+    catalog = captured["__wp_catalog__"]
+    assert "ou111111" in catalog
+    assert catalog["ou111111"]["payload"] == {"options": [{"value": "x"}]}
+    assert catalog["ou111111"]["name"] == "outfit"
 
 
 def test_execute_defaults_to_empty_catalog_for_old_workflow_json(monkeypatch):
@@ -91,3 +105,41 @@ def test_execute_defaults_to_empty_catalog_for_old_workflow_json(monkeypatch):
         upstream=None,
     )
     assert captured["__wp_catalog__"] == {}
+
+
+def test_pipeline_trace_records_effective_seed_per_module():
+    """The pipeline trace's `seed` field captures the seed each module
+    actually rolled with — `instance.locked_seed` when locked, else
+    the chain seed. Frontend reads this via the `module_seeds` UI
+    payload to populate lock-toggle defaults authoritatively (works
+    even when the seed input is link-driven)."""
+    from engine.pipeline import PipelineEngine
+    modules = [
+        {
+            "id": "m1",
+            "type": "wildcard",
+            "enabled": True,
+            "meta": {"name": "color"},
+            "entries": [],
+            "payload": {
+                "var_binding": "color",
+                "options": [{"id": "o1", "value": "red", "weight": 1}],
+            },
+            "instance": {"locked_seed": 99},
+        },
+        {
+            "id": "m2",
+            "type": "wildcard",
+            "enabled": True,
+            "meta": {"name": "shape"},
+            "entries": [],
+            "payload": {
+                "var_binding": "shape",
+                "options": [{"id": "o1", "value": "round", "weight": 1}],
+            },
+        },
+    ]
+    ctx = PipelineEngine().run(modules, seed=12345)
+    trace = ctx["__wp_trace__"]
+    assert trace[0]["seed"] == 99      # locked
+    assert trace[1]["seed"] == 12345   # chain

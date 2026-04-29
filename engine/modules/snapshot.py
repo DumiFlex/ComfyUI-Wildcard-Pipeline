@@ -57,6 +57,25 @@ def _fresh_instance() -> dict[str, Any]:
         "variable_binding": "",
         "enabled_options": None,
         "category_filter": None,
+        "option_weights": None,
+        # Pick mode — `None`/missing → `random` (legacy behavior:
+        # weighted RNG over enabled options). `pinned` short-circuits
+        # the RNG and always picks `pinned_option_id`. `subcategory`
+        # is currently identical to `random` engine-side; the modal
+        # uses it as a UX framing for "manual subset via enabled_options".
+        "mode": None,
+        "pinned_option_id": None,
+        # Lock — when set, derives a stable per-instance RNG seed
+        # independent of the chain's `__wp_node_seed__`. Means the
+        # wildcard's pick stays the same value across runs even when
+        # the user cycles the Context node's seed. `None` = roll with
+        # the chain seed (default).
+        "locked_seed": None,
+        # Internal — when True, every binding this module produces is
+        # marked engine-only by `PipelineEngine.run` (via
+        # `__wp_internal_flags__`). Downstream modules still see the
+        # value; the public socket payload doesn't.
+        "internal": False,
     }
 
 
@@ -86,28 +105,54 @@ def coerce_legacy_module(raw: dict[str, Any]) -> dict[str, Any]:
     """Upgrade a legacy module dict to canonical snapshot shape.
 
     Idempotent: returns ``raw`` unchanged if it already has both
-    ``library_id`` and ``instance`` keys.
+    ``library_id`` and ``instance`` keys (the legacy "frozen" shape).
+
+    SPA-picked modules don't carry ``library_id`` (the picked uuid IS
+    the library id, stored as ``id``), but they may carry an
+    ``instance`` dict with user overrides (option enable/disable,
+    weight overrides). Merge those onto the fresh-instance defaults
+    instead of stomping them with ``_fresh_instance()`` below.
     """
     if "instance" in raw and "library_id" in raw:
         return raw
 
+    # Capture caller-supplied instance early so we can merge it with
+    # defaults once the rest of the snapshot is built. Missing → empty.
+    raw_instance = raw.get("instance")
+    user_instance = raw_instance if isinstance(raw_instance, dict) else {}
+
     payload: dict[str, Any]
-    if raw.get("type") == "fixed_values" and "entries" in raw:
-        legacy_entries = raw.get("entries", [])
-        payload = {
-            "values": [
-                {
-                    "id": f"val_{i:04x}",
-                    "name": e.get("variable_name", ""),
-                    "value": e.get("value", ""),
-                }
-                for i, e in enumerate(legacy_entries)
-            ],
-        }
+    if raw.get("type") == "fixed_values":
+        # Two shapes can land here:
+        #
+        #   1. Inline-created (legacy): `entries: [{variable_name, value}]`
+        #      with no `payload.values`. Translate entries → values.
+        #   2. Library-picked (post-5.5.4): `payload: {values: [...]}` with
+        #      an empty `entries: []` (the field is always present so the
+        #      ContextWidget conflict-scanner doesn't have to null-check).
+        #      Use `payload` directly — translating its empty entries
+        #      would zero out a perfectly good values list.
+        raw_payload = raw.get("payload") or {}
+        legacy_entries = raw.get("entries") or []
+        if legacy_entries and not raw_payload.get("values"):
+            payload = {
+                "values": [
+                    {
+                        "id": f"val_{i:04x}",
+                        "name": e.get("variable_name", ""),
+                        "value": e.get("value", ""),
+                    }
+                    for i, e in enumerate(legacy_entries)
+                ],
+            }
+        else:
+            payload = raw_payload
     else:
         payload = raw.get("payload", {})
 
     meta = raw.get("meta") or {}
+    instance = _fresh_instance()
+    instance.update(user_instance)
     return {
         "library_id": raw.get("library_id"),
         "library_snapshot_at": raw.get("library_snapshot_at"),
@@ -116,7 +161,7 @@ def coerce_legacy_module(raw: dict[str, Any]) -> dict[str, Any]:
         "name": raw.get("name") or meta.get("name", ""),
         "category_id": raw.get("category_id"),
         "payload": payload,
-        "instance": _fresh_instance(),
+        "instance": instance,
     }
 
 
@@ -172,10 +217,16 @@ def _extract_at_uuid_refs(payload: dict[str, Any]) -> set[str]:
 def _row_to_snapshot_entry(
     row: dict[str, Any], source: SnapshotSource,
 ) -> SnapshotEntry:
-    """Convert a repository row dict to a canonical SnapshotEntry."""
+    """Convert a repository row dict to a canonical SnapshotEntry.
+
+    Post migration 004 the row's `id` IS the canonical 8-hex uuid;
+    there is no separate `uuid` field. The snapshot schema still
+    names the field `uuid` because that's the published wire format
+    embedded in workflow JSON — we just source it from `row["id"]`.
+    """
     return {
         "snapshot_version": 1,
-        "uuid": row["uuid"],
+        "uuid": row["id"],
         "type": row["type"],
         "name": row["name"],
         "payload": row["payload"],

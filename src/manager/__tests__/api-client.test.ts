@@ -39,10 +39,10 @@ describe("api.modules", () => {
 
   it("create posts JSON body", async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse({ id: "wc_x_1234abcd", type: "wildcard", name: "x" }, 201),
+      jsonResponse({ id: "1234abcd", type: "wildcard", name: "x" }, 201),
     );
     const row = await api.modules.create({ type: "wildcard", name: "x", payload: {} });
-    expect(row.id).toBe("wc_x_1234abcd");
+    expect(row.id).toBe("1234abcd");
     const init = fetchMock.mock.calls[0]![1] as RequestInit;
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ type: "wildcard", name: "x", payload: {} });

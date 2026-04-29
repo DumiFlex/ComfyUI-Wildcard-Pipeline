@@ -2,11 +2,34 @@
 import { computed, ref } from "vue";
 
 const props = defineProps<{
-  upstreamVars: string[];
-  upstreamValues: Record<string, string>;
+  /**
+   * Unified `(name → value)` map of every variable an upstream
+   * `WP_Context` would bind at graph-run time. The resolver
+   * (`extension/graph.ts:collectUpstreamResolved`) populates it
+   * deterministically — wildcards always pick option `[0]` so the
+   * preview is stable as the user edits the template. Real graph
+   * runs reseed randomly each time; the assembled prompt at edit
+   * time is therefore a sample, not a guarantee.
+   */
+  upstreamResolved: Record<string, string>;
   template: string;
   onInsert: (token: string) => void;
+  /** Strip every occurrence of `$varname` from the template. Wired
+   *  to the UNRESOLVED chips so users can one-click drop a name
+   *  they accidentally typed (or that an upstream module no longer
+   *  binds). Optional — host widgets can skip wiring it if they
+   *  don't want the click affordance. */
+  onRemoveVar?: (varname: string) => void;
+  /** Seed used by the server-side preview resolver. Surfaced in the
+   *  PREVIEW header so users see "PREVIEW · 42" — the same seed a
+   *  WP_Context node would use at run time when set to that value.
+   *  Optional; defaults to 42 for stable preview rolls. */
+  previewSeed?: number;
 }>();
+
+/** Variable names known upstream — thin keys-of helper for the
+ *  chip strip + the missing-vs-known check below. */
+const upstreamNames = computed(() => Object.keys(props.upstreamResolved));
 
 // Sentinel survives both regex passes — � is the Unicode replacement
 // character; doubled, it can't appear in real prompts.
@@ -45,8 +68,12 @@ const templateVars = computed(() => {
   return [...new Set(matches.map((m) => m.slice(1)).filter((v) => !v.startsWith("__")))];
 });
 
+// "Missing" now means: template references `$foo` and NO upstream
+// module binds `foo`. There is no longer a "name known but value
+// unknown" middle state — the resolver always produces a value (a
+// runtime-random wildcard's preview pick is just option [0]).
 const missingVars = computed(() =>
-  templateVars.value.filter((v) => !Object.prototype.hasOwnProperty.call(props.upstreamValues, v)),
+  templateVars.value.filter((v) => !Object.prototype.hasOwnProperty.call(props.upstreamResolved, v)),
 );
 
 function isUsed(v: string): boolean {
@@ -62,11 +89,8 @@ const previewHtml = computed(() => {
     if (name.startsWith("__")) return full;
     const hue = hueFor(name);
     const colorStyle = `style="color: hsl(${hue}, 65%, 70%); background: hsla(${hue}, 65%, 55%, 0.15);"`;
-    if (Object.prototype.hasOwnProperty.call(props.upstreamValues, name)) {
-      return `<span class="wp-tok-resolved" ${colorStyle}>${escapeHtml(props.upstreamValues[name])}</span>`;
-    }
-    if (props.upstreamVars.includes(name)) {
-      return `<span class="wp-tok-ok" ${colorStyle}>$${name}</span>`;
+    if (Object.prototype.hasOwnProperty.call(props.upstreamResolved, name)) {
+      return `<span class="wp-tok-resolved" ${colorStyle}>${escapeHtml(props.upstreamResolved[name])}</span>`;
     }
     return `<span class="wp-tok-miss">$${name}</span>`;
   });
@@ -103,17 +127,17 @@ function rippleStyle(v: string): Record<string, string> {
 
 <template>
   <div class="wp-asm">
-    <div v-if="upstreamVars.length" class="wp-asm__section">
+    <div v-if="upstreamNames.length" class="wp-asm__section">
       <label class="wp-asm__label">VARIABLES</label>
       <div class="wp-asm__chips">
         <button
-          v-for="v in upstreamVars" :key="v"
+          v-for="v in upstreamNames" :key="v"
           type="button"
           class="wp-asm__chip"
           :class="[isUsed(v) ? 'used' : 'available', { 'wp-asm__chip--ripple': ripples.has(v) }]"
           :style="{ ...rippleStyle(v), color: chipColor(v), background: chipBg(v) }"
           data-testid="chip"
-          :title="upstreamValues[v] ?? ''"
+          :title="upstreamResolved[v] ?? ''"
           @click="(ev) => onChipClick(ev, v)"
         >${{ v }}</button>
       </div>
@@ -124,7 +148,7 @@ function rippleStyle(v: string): Record<string, string> {
     </div>
 
     <div class="wp-asm__section">
-      <label class="wp-asm__label">PREVIEW</label>
+      <label class="wp-asm__label">PREVIEW <span class="wp-asm__label-sep">·</span> <span class="wp-asm__label-seed">{{ previewSeed ?? 42 }}</span></label>
       <div v-if="!template" class="wp-asm__skeleton">
         <span class="wp-asm__skel-line"></span>
         <span class="wp-asm__skel-line wp-asm__skel-line--short"></span>
@@ -133,11 +157,29 @@ function rippleStyle(v: string): Record<string, string> {
     </div>
 
     <div v-if="missingVars.length" class="wp-asm__section">
-      <label class="wp-asm__label wp-asm__label--warn">UNRESOLVED · dropped from prompt</label>
+      <label class="wp-asm__label wp-asm__label--warn">
+        UNRESOLVED <span class="wp-asm__label-sep">·</span> <span v-if="onRemoveVar">click to remove from template</span><span v-else>dropped from prompt</span>
+      </label>
       <div class="wp-asm__chips">
+        <!-- When `onRemoveVar` is wired, render as a button that
+             strips `$varname` from the host widget's template on
+             click. Without the callback we keep the static-span
+             rendering so headless mounts (without widget glue) still
+             show the chips. -->
+        <button
+          v-for="v in missingVars"
+          v-if="onRemoveVar"
+          :key="v"
+          type="button"
+          class="wp-asm__chip missing wp-asm__chip--clickable"
+          data-testid="missing-chip"
+          :title="`Remove $${v} from template`"
+          @click="onRemoveVar(v)"
+        >${{ v }}<i class="pi pi-times wp-asm__chip-x" aria-hidden="true"></i></button>
         <span
           v-for="v in missingVars"
-          :key="v"
+          v-else
+          :key="`s-${v}`"
           class="wp-asm__chip missing"
           data-testid="missing-chip"
         >${{ v }}</span>
@@ -222,6 +264,23 @@ function rippleStyle(v: string): Record<string, string> {
   background: var(--wp-amber-bg) !important;
   color: var(--wp-amber) !important;
   cursor: default;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wp-asm__chip--clickable { cursor: pointer; }
+.wp-asm__chip--clickable:hover {
+  /* On hover, suggest "delete" — the small × glyph next to the name
+   * already telegraphs intent; tint the bg to reinforce. */
+  background: color-mix(in srgb, var(--wp-amber) 30%, transparent) !important;
+}
+.wp-asm__chip-x { font-size: 8px; opacity: 0.7; }
+.wp-asm__chip--clickable:hover .wp-asm__chip-x { opacity: 1; }
+.wp-asm__label-sep { color: var(--wp-text3); margin: 0 2px; }
+.wp-asm__label-seed {
+  color: var(--wp-text2);
+  font-family: var(--wp-font-mono, monospace);
+  font-weight: 700;
 }
 
 /* Ripple — radial expanding overlay anchored to click coords */

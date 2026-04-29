@@ -23,8 +23,7 @@ function makeWildcard(
   extras: Partial<{ var_binding: string; sub_categories: string[]; id: string }> = {},
 ): ModuleRow {
   return {
-    id: extras.id ?? `wc_${name.toLowerCase()}`,
-    uuid: "aabbccdd",
+    id: extras.id ?? "aabbccdd",
     type: "wildcard",
     name,
     description: "",
@@ -257,7 +256,7 @@ describe("runStep", () => {
 
   it("runs a fixed_values step writing every binding into ctx", () => {
     const f: ModuleRow = {
-      id: "fv1", uuid: "aabbccdd", type: "fixed_values", name: "Pack",
+      id: "aabbccdd", type: "fixed_values", name: "Pack",
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: { values: [{ var: "city", value: "Tokyo" }, { name: "$ward", value: "Shibuya" }] },
       payload_hash: "0".repeat(64),

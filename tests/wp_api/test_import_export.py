@@ -29,7 +29,7 @@ async def test_import_creates_modules_and_categories(wp_client):
             "icon": None, "sort_order": 0,
         }],
         "modules": [{
-            "id": "wc_x_aaaa1234", "type": "wildcard", "name": "x",
+            "id": "aaaa1234", "type": "wildcard", "name": "x",
             "description": "", "category_id": "style", "tags": [],
             "is_favorite": False, "payload": {"options": []},
             "version": 1, "created_at": "2026-04-26T00:00:00Z",
@@ -49,7 +49,7 @@ async def test_import_skips_duplicate_module_id(wp_client):
     bundle = {
         "version": 1, "categories": [],
         "modules": [{
-            "id": "wc_x_aaaa1234", "type": "wildcard", "name": "x",
+            "id": "aaaa1234", "type": "wildcard", "name": "x",
             "description": "", "category_id": None, "tags": [],
             "is_favorite": False, "payload": {"options": []},
             "version": 1, "created_at": "2026-04-26T00:00:00Z",
@@ -60,7 +60,7 @@ async def test_import_skips_duplicate_module_id(wp_client):
     resp = await wp_client.post("/wp/api/import", json=bundle)
     body = await resp.json()
     assert body["modules_imported"] == 0
-    assert "wc_x_aaaa1234" in body["skipped"]
+    assert "aaaa1234" in body["skipped"]
 
 
 async def test_import_dedup_category_by_name_case_insensitive(wp_client):
@@ -119,13 +119,13 @@ async def test_import_skips_module_missing_required_field(wp_client):
     bundle = {
         "version": 1, "categories": [],
         "modules": [
-            {"id": "wc_a_aaaa1234", "type": "wildcard", "name": "good",
+            {"id": "aaaa1234", "type": "wildcard", "name": "good",
              "payload": {"options": []}},
-            {"id": "wc_b_bbbb1234"},  # missing type, name, payload
+            {"id": "bbbb1234"},  # missing type, name, payload
         ],
     }
     resp = await wp_client.post("/wp/api/import", json=bundle)
     assert resp.status == 200
     body = await resp.json()
     assert body["modules_imported"] == 1
-    assert "wc_b_bbbb1234" in body["skipped"]
+    assert "bbbb1234" in body["skipped"]

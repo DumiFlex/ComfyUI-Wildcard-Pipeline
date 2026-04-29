@@ -54,6 +54,11 @@ def test_freeze_snapshot_includes_required_fields():
         "variable_binding": "",
         "enabled_options": None,
         "category_filter": None,
+        "option_weights": None,
+        "mode": None,
+        "pinned_option_id": None,
+        "locked_seed": None,
+        "internal": False,
     }
 
 
@@ -152,3 +157,28 @@ def test_coerce_legacy_module_non_fixed_values_uses_payload():
     coerced = coerce_legacy_module(raw)
     assert coerced["type"] == "wildcard"
     assert coerced["payload"] == {"options": [{"id": "o1", "value": "red", "weight": 1}]}
+
+
+def test_coerce_legacy_module_preserves_user_instance_overrides():
+    """SPA-picked modules carry an `instance` dict but no `library_id`.
+
+    Previously the short-circuit guard required both keys, so user
+    overrides (option enable/disable, weight overrides) got stomped by
+    `_fresh_instance()`. This test pins the merge behavior.
+    """
+    raw = {
+        "id": "ab12cd34",
+        "type": "wildcard",
+        "name": "outfit",
+        "payload": {"options": [{"id": "o1", "value": "red", "weight": 1}]},
+        "instance": {
+            "enabled_options": ["o1"],
+            "option_weights": {"o1": 5.0},
+        },
+    }
+    coerced = coerce_legacy_module(raw)
+    assert coerced["instance"]["enabled_options"] == ["o1"]
+    assert coerced["instance"]["option_weights"] == {"o1": 5.0}
+    # Defaults still present for keys the user didn't override.
+    assert coerced["instance"]["variable_binding"] == ""
+    assert coerced["instance"]["category_filter"] is None

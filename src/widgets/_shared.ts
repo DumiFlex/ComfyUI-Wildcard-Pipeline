@@ -162,17 +162,137 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
 
 export interface ContextWidgetValue {
   version: 1;
+  /**
+   * Every picked / inline-created module renders as one entry here —
+   * regardless of kind. The picker appends entries from the
+   * `/api/modules/embed-bundle` response; the inline "New fixed
+   * values" path appends a fresh `fixed_values` entry the same way.
+   * The widget renders these uniformly as cards in a single list,
+   * the WP_Context node executes them in order at run time, and the
+   * subset typed `wildcard` doubles as the `__wp_catalog__` for
+   * `@{uuid}` ref resolution.
+   */
   modules: ModuleEntry[];
 }
 
+/** Module kind discriminator. Same six kinds the SPA library carries. */
+export type ModuleEntryKind =
+  | "wildcard"
+  | "fixed_values"
+  | "combine"
+  | "derivation"
+  | "constraint"
+  | "pipeline";
+
 export interface ModuleEntry {
+  /**
+   * For library-picked modules: the canonical 8-hex uuid (matches the
+   * source library row's `id`). For inline-created `fixed_values`
+   * entries: a fresh local id from `newModuleId()` — they don't have
+   * a library row to point at yet.
+   */
   id: string;
-  type: "fixed_values";
+  type: ModuleEntryKind;
   enabled: boolean;
   /** UI-only: persists collapsed state so cards stay collapsed across reload. */
   collapsed?: boolean;
+  /** Display metadata. `name` doubles as the card title. */
   meta: { name: string; description?: string; tags?: string[] };
+  /**
+   * Inline-edited `fixed_values` entries. Always present (default
+   * `[]` for non-fixed_values kinds) so existing scan logic
+   * (`scanConflicts`, upstream-vars walkers, conflict store) doesn't
+   * have to null-check it. Library-picked non-fixed kinds keep this
+   * empty and round-trip their data through `payload` instead.
+   */
   entries: { variable_name: string; value: string }[];
+  /**
+   * Full library payload (for picked, non-fixed_values kinds). Holds
+   * the snapshot the WP_Context node executes at run time + the
+   * resolver consults via `__wp_catalog__`. Inline `fixed_values`
+   * entries don't set this; they round-trip through the `entries`
+   * field so the existing inline editor keeps working.
+   */
+  payload?: Record<string, unknown>;
+  /**
+   * Drift-detection hash for picked entries. Matches the
+   * `payload_hash` the server returned at pick time — diffs against
+   * a live re-fetch surface as the drift badge in 5.5.5.
+   */
+  payload_hash?: string;
+  /**
+   * Per-instance overrides applied on top of the library snapshot at
+   * run time. Engine merges these onto the canonical `_fresh_instance`
+   * defaults (engine/modules/snapshot.py). Currently used for
+   * `wildcard` kind — option enable/disable + per-option weight
+   * replacement. Other kinds may grow their own override fields.
+   *
+   * Optional + nullable members so the modal only persists the
+   * fields the user actually touched.
+   */
+  instance?: {
+    /**
+     * Subset of `payload.options[].id` allowed to be picked. `null` /
+     * absent = all options enabled (engine default). Empty list = all
+     * options disabled (engine returns empty binding).
+     */
+    enabled_options?: string[] | null;
+    /**
+     * Per-option-id weight overrides. Replaces (not multiplies) the
+     * library weight for matching ids. Missing ids fall through to
+     * the library weight.
+     */
+    option_weights?: Record<string, number> | null;
+    /**
+     * Sub-category names allowed in the option pool. `null` / empty =
+     * no filter (every sub-category eligible). When set, only options
+     * whose `sub_category` field is in the list survive — options
+     * without a sub_category get excluded by an explicit filter.
+     * Combines with `enabled_options` (intersection).
+     */
+    category_filter?: string[] | null;
+    /**
+     * Pick mode for this instance:
+     *   - `random` / unset — weighted RNG (library default).
+     *   - `subcategory`    — same as random engine-side; surfaces
+     *     `enabled_options` as the user-facing "pick subset" UI.
+     *   - `pinned`         — short-circuits the RNG and always
+     *     returns the option whose id matches `pinned_option_id`.
+     *     Falls through to random if the pinned id is missing.
+     */
+    mode?: "random" | "subcategory" | "pinned" | null;
+    /**
+     * Target option id for `mode === "pinned"`. Ignored otherwise.
+     */
+    pinned_option_id?: string | null;
+    /**
+     * Lock — derives a stable per-instance RNG seed from
+     * `(locked_seed, var_binding)` so the wildcard's pick stays the
+     * same across runs even when the Context node's seed rotates.
+     * `null` / missing = roll with the chain seed (default).
+     * Reproduces the "lock this slot" affordance from the original
+     * project, adapted to our `_fresh_instance` shape.
+     */
+    locked_seed?: number | null;
+    /**
+     * Last-used locked seed. Persists across lock toggles so users
+     * who briefly unlock to test something can re-lock to the SAME
+     * seed they had before, instead of getting a fresh random value.
+     * Set whenever `locked_seed` is set (toggle on, manual edit,
+     * reroll). Read on toggle-on as the default value.
+     *
+     * Engine ignores this field — only the modal/card glue read it.
+     */
+    last_locked_seed?: number;
+    /**
+     * Internal — when true, every binding this module produces is
+     * marked engine-only. Downstream modules in the same chain can
+     * still read the value; the public PIPELINE_CONTEXT socket
+     * payload omits it. Useful for "scratch" vars that drive a
+     * derivation/combine but shouldn't surface in prompts.
+     */
+    internal?: boolean;
+  };
 }
 
 export function parseWidgetJson<T>(raw: string, fallback: T): T {

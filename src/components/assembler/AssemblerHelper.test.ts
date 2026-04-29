@@ -3,8 +3,7 @@ import { mount } from "@vue/test-utils";
 import AssemblerHelper from "./AssemblerHelper.vue";
 
 const baseProps = {
-  upstreamVars: [] as string[],
-  upstreamValues: {} as Record<string, string>,
+  upstreamResolved: {} as Record<string, string>,
   template: "",
   onInsert: () => {},
 };
@@ -12,7 +11,7 @@ const baseProps = {
 describe("AssemblerHelper.vue", () => {
   it("renders a chip for each upstream variable", () => {
     const wrapper = mount(AssemblerHelper, {
-      props: { ...baseProps, upstreamVars: ["style", "subject"] },
+      props: { ...baseProps, upstreamResolved: { style: "noir", subject: "fox" } },
     });
     expect(wrapper.findAll('[data-testid="chip"]')).toHaveLength(2);
   });
@@ -20,7 +19,11 @@ describe("AssemblerHelper.vue", () => {
   it("calls onInsert with $var when chip is clicked", async () => {
     let inserted = "";
     const wrapper = mount(AssemblerHelper, {
-      props: { ...baseProps, upstreamVars: ["style"], onInsert: (s: string) => { inserted = s; } },
+      props: {
+        ...baseProps,
+        upstreamResolved: { style: "noir" },
+        onInsert: (s: string) => { inserted = s; },
+      },
     });
     await wrapper.find('[data-testid="chip"]').trigger("click");
     expect(inserted).toBe("$style");
@@ -35,8 +38,7 @@ describe("AssemblerHelper.vue", () => {
     const wrapper = mount(AssemblerHelper, {
       props: {
         ...baseProps,
-        upstreamVars: ["style", "subject"],
-        upstreamValues: { style: "cinematic", subject: "fox" },
+        upstreamResolved: { style: "cinematic", subject: "fox" },
         template: "A $style portrait of $subject",
       },
     });
@@ -47,26 +49,54 @@ describe("AssemblerHelper.vue", () => {
   });
 
   it("flags unresolved $name with missing token + UNRESOLVED chip", () => {
+    // Genuinely unbound: `$missing` is not present in upstreamResolved.
+    // The unification means there's no longer a "name known but value
+    // unknown" middle state — every var the resolver finds carries a
+    // value (option [0] for runtime-random kinds), so missing == truly
+    // missing.
     const wrapper = mount(AssemblerHelper, {
       props: {
         ...baseProps,
-        upstreamValues: { style: "noir" },
-        upstreamVars: ["style"],
+        upstreamResolved: { style: "noir" },
         template: "$style and $missing",
       },
     });
     const rendered = wrapper.find(".wp-asm__rendered").html();
     expect(rendered).toContain("wp-tok-resolved");
     expect(rendered).toContain("wp-tok-miss");
-    expect(wrapper.find('[data-testid="missing-chip"]').text()).toBe("$missing");
+    // Chip text starts with `$missing` — when an `onRemoveVar` callback
+    // is wired the chip becomes a button with a trailing × glyph, so
+    // we assert via startsWith rather than equality.
+    expect(wrapper.find('[data-testid="missing-chip"]').text()).toContain("$missing");
   });
 
-  it("marks chips of in-template upstream vars as `used` (green) and others as `available` (blue)", () => {
+  it("clicking a missing-chip calls onRemoveVar with the bare varname", async () => {
+    let removed = "";
     const wrapper = mount(AssemblerHelper, {
       props: {
         ...baseProps,
-        upstreamVars: ["style", "subject"],
-        upstreamValues: { style: "noir", subject: "knight" },
+        upstreamResolved: {},
+        template: "$missing portrait",
+        onRemoveVar: (v: string) => { removed = v; },
+      },
+    });
+    await wrapper.find('[data-testid="missing-chip"]').trigger("click");
+    expect(removed).toBe("missing");
+  });
+
+  it("renders the preview seed in the header label", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: { ...baseProps, template: "x", previewSeed: 42 },
+    });
+    const labelText = wrapper.find(".wp-asm__label-seed").text();
+    expect(labelText).toBe("42");
+  });
+
+  it("marks chips of in-template vars as `used`, others as `available`", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        ...baseProps,
+        upstreamResolved: { style: "noir", subject: "knight" },
         template: "$style only",
       },
     });
@@ -87,8 +117,7 @@ describe("AssemblerHelper.vue", () => {
     const wrapper = mount(AssemblerHelper, {
       props: {
         ...baseProps,
-        upstreamVars: ["x"],
-        upstreamValues: { x: "<script>alert(1)</script>" },
+        upstreamResolved: { x: "<script>alert(1)</script>" },
         template: "$x",
       },
     });

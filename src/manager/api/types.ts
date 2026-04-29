@@ -106,8 +106,13 @@ export interface PipelinePayload {
 }
 
 export interface ModuleRow {
+  /**
+   * 8-hex short uuid. Post migration 004 the slug-prefixed form
+   * (`wc_outfit_a1b2c3d4`) is gone — `id` IS the canonical uuid the
+   * tokenizer's `@{8hex}` ref captures and the engine catalog keys
+   * by. There is no separate `uuid` field anymore.
+   */
   id: string;
-  uuid: string;             // spec §4.2
   type: ModuleType;
   name: string;
   description: string;

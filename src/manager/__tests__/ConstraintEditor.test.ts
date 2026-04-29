@@ -30,7 +30,6 @@ function makeWildcardRow(id: string, name: string, opts: {
 } = {}): ModuleRow {
   return {
     id,
-    uuid: "aabbccdd",
     name,
     type: "wildcard",
     description: "",

@@ -82,6 +82,7 @@ class _Slot:
     min: Any = None
     max: Any = None
     control_after_generate: bool = False
+    placeholder: str | None = None
 
 
 class _IOType:

@@ -56,10 +56,9 @@ describe("API types", () => {
     expect(bundle.pickOrder).toEqual(["aabbccdd"]);
   });
 
-  it("ModuleRow includes uuid and payload_hash", () => {
+  it("ModuleRow id is the canonical 8-hex uuid (post migration 004)", () => {
     const row: ModuleRow = {
-      id: "wc_x_aabbccdd",
-      uuid: "aabbccdd",
+      id: "aabbccdd",
       type: "wildcard",
       name: "x",
       description: "",
@@ -72,7 +71,7 @@ describe("API types", () => {
       created_at: "2026-04-28T00:00:00.000000Z",
       updated_at: "2026-04-28T00:00:00.000000Z",
     };
-    expect(row.uuid).toBe("aabbccdd");
+    expect(row.id).toBe("aabbccdd");
     expect(row.payload_hash).toBeDefined();
   });
 
