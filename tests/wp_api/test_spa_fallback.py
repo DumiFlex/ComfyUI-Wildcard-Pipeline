@@ -4,7 +4,30 @@ import pytest
 pytestmark = pytest.mark.asyncio
 
 
-async def test_root_serves_index_html(wp_client):
+@pytest.fixture
+def stub_web_dir(tmp_path, monkeypatch):
+    """Provide a temporary `web/` directory with a minimal index.html.
+
+    The real WEB_DIR points at the build output (`web/index.html` + js
+    bundle) which lives next to `wp_api/`. CI runs without a frontend
+    build, so the directory doesn't exist — every static-serve test
+    would hit a FileNotFoundError. Monkeypatch `WEB_DIR` to a tmp path
+    that we populate with a stub index so the SPA-fallback handler has
+    something to serve.
+    """
+    from wp_api import spa as spa_mod
+    web_dir = tmp_path / "web"
+    web_dir.mkdir()
+    (web_dir / "index.html").write_text(
+        "<!doctype html><html><head><title>Wildcard Pipeline</title></head>"
+        "<body><div id=\"app\"></div></body></html>",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(spa_mod, "WEB_DIR", web_dir)
+    return web_dir
+
+
+async def test_root_serves_index_html(wp_client, stub_web_dir):
     resp = await wp_client.get("/wp")
     assert resp.status == 200
     body = await resp.text()
@@ -12,24 +35,20 @@ async def test_root_serves_index_html(wp_client):
     assert "wildcard pipeline" in body.lower()
 
 
-async def test_unknown_path_falls_back_to_index_html(wp_client):
+async def test_unknown_path_falls_back_to_index_html(wp_client, stub_web_dir):
     resp = await wp_client.get("/wp/modules/some-future-route")
     assert resp.status == 200
     body = await resp.text()
     assert "<title>" in body.lower()
 
 
-async def test_static_asset_served_when_present(wp_client, tmp_path):
+async def test_static_asset_served_when_present(wp_client, stub_web_dir):
     """Static files in WEB_DIR are served as-is, not as the SPA shell."""
-    from wp_api import spa as spa_mod
-    asset = spa_mod.WEB_DIR / "favicon.txt"
+    asset = stub_web_dir / "favicon.txt"
     asset.write_text("hello", encoding="utf-8")
-    try:
-        resp = await wp_client.get("/wp/favicon.txt")
-        assert resp.status == 200
-        assert (await resp.text()) == "hello"
-    finally:
-        asset.unlink()
+    resp = await wp_client.get("/wp/favicon.txt")
+    assert resp.status == 200
+    assert (await resp.text()) == "hello"
 
 
 async def test_path_traversal_blocked(wp_client):

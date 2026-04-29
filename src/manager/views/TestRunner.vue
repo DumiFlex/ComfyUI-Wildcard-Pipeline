@@ -28,7 +28,7 @@ import {
   runStep,
   wildcardVar,
 } from "../utils/resolver";
-import { extractModuleUuid, toIdentifier } from "../utils/slug";
+import { toIdentifier } from "../utils/slug";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import type {
   CombinePayload,
@@ -83,22 +83,19 @@ const allModules = ref<ModuleRow[]>([]);
 // RichTextPreview below (histogram templates, combine renderings).
 const uuidToName = computed(() => buildUuidToName(allModules.value));
 
-// Reverse map: 8-hex UUID → full slugged module id, so a click on a ref
-// pill can route to /wildcards/<id>/edit. Built lazily off the same
-// `allModules` ref so it stays in sync as the catalog refreshes.
-const idByUuid = computed(() => {
-  const map = new Map<string, string>();
+// Set of known wildcard ids — used to gate ref-pill clicks. Post DB
+// migration 004 `mod.id` IS the 8-hex uuid the tokenizer's `@{8hex}`
+// ref captures, so no reverse mapping is needed anymore.
+const knownWildcardIds = computed(() => {
+  const set = new Set<string>();
   for (const m of allModules.value) {
-    if (m.type !== "wildcard") continue;
-    const uuid = extractModuleUuid(m.id);
-    if (uuid) map.set(uuid, m.id);
+    if (m.type === "wildcard") set.add(m.id);
   }
-  return map;
+  return set;
 });
 
 function onRefClick(uuid: string): void {
-  const id = idByUuid.value.get(uuid);
-  if (!id) {
+  if (!knownWildcardIds.value.has(uuid)) {
     toast.push({
       severity: "warn",
       summary: "Wildcard not found",
@@ -107,7 +104,7 @@ function onRefClick(uuid: string): void {
     });
     return;
   }
-  router.push({ name: "wildcards-edit", params: { id } });
+  router.push({ name: "wildcards-edit", params: { id: uuid } });
 }
 
 interface WildcardEntry { template: string; count: number; pct: number; resolved: string[] }

@@ -103,6 +103,57 @@ class TestPipelineRun:
             "Unknown module type" in rec.message for rec in caplog.records
         )
 
+    def test_internal_instance_flag_marks_bindings_in_flags_map(self):
+        """A module with `instance.internal == True` records every key
+        it writes into `__wp_internal_flags__` so `strip_internals`
+        can omit them from the public socket payload."""
+        module = {
+            "id": "m1",
+            "type": "fixed_values",
+            "enabled": True,
+            "payload": {
+                "values": [
+                    {"id": "v0", "name": "scratch", "value": "internal-only"},
+                ],
+            },
+            "instance": {"internal": True},
+        }
+        ctx = PipelineEngine().run([module], seed=0)
+        # Value reaches ctx (downstream modules can read it).
+        assert ctx["scratch"] == "internal-only"
+        # And gets flagged so strip_internals can drop it on the way out.
+        assert ctx["__wp_internal_flags__"]["scratch"] is True
+
+    def test_internal_flag_default_false_keeps_binding_public(self):
+        """Default `instance.internal == False` (or missing) leaves
+        the binding public — no flags entry."""
+        module = {
+            "id": "m1",
+            "type": "fixed_values",
+            "enabled": True,
+            "payload": {
+                "values": [{"id": "v0", "name": "style", "value": "noir"}],
+            },
+        }
+        ctx = PipelineEngine().run([module], seed=0)
+        assert "style" not in ctx["__wp_internal_flags__"]
+
+    def test_strip_internals_omits_internal_flagged_keys(self):
+        from engine.context import strip_internals
+        module_internal = {
+            "id": "m1", "type": "fixed_values", "enabled": True,
+            "payload": {"values": [{"id": "v0", "name": "secret", "value": "hidden"}]},
+            "instance": {"internal": True},
+        }
+        module_public = {
+            "id": "m2", "type": "fixed_values", "enabled": True,
+            "payload": {"values": [{"id": "v0", "name": "style", "value": "noir"}]},
+        }
+        ctx = PipelineEngine().run([module_internal, module_public], seed=0)
+        public_view = strip_internals(ctx)
+        assert "secret" not in public_view
+        assert public_view["style"] == "noir"
+
     # TODO(syntax-task-15): HANDLERS dict removed; pipeline now delegates to
     # dispatcher.resolve_module. Stub-handler injection via HANDLERS no longer works.
     @pytest.mark.skip(reason="awaits handler migration in tasks 15-17: HANDLERS dict removed")

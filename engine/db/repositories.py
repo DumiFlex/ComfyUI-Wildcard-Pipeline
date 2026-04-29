@@ -15,16 +15,24 @@ from typing import Any
 from engine._utils import now_iso as _now
 from engine.modules.snapshot import payload_hash
 
-_TYPE_PREFIX = {
-    "wildcard": "wc",
-    "fixed_values": "fv",
-    "combine": "cb",
-    "derivation": "dr",
-    "constraint": "ct",
-    "pipeline": "pl",
-}
-_VALID_TYPES: frozenset[str] = frozenset(_TYPE_PREFIX.keys())
-_SLUG_RE = re.compile(r"[^a-z0-9]+")
+_VALID_TYPES: frozenset[str] = frozenset({
+    "wildcard", "fixed_values", "combine", "derivation", "constraint", "pipeline",
+})
+# Module ids are 8-hex short uuids — same shape the tokenizer's
+# `@{8hex}` ref token captures and the engine catalog keys by. Slug
+# prefixes (e.g. `wc_outfit_a1b2c3d4`) were removed in migration 004
+# to collapse the two-identifier model down to one canonical form.
+_ID_HEX_LEN = 8
+
+# Categories keep slug-based ids (`subjects`, `style`, …) — human
+# readable and never need to be embedded in a tokenizer regex, so
+# the unification doesn't apply to them.
+_CATEGORY_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _category_slug(name: str) -> str:
+    s = _CATEGORY_SLUG_RE.sub("_", name.lower()).strip("_")
+    return s[:24] or "module"
 
 
 class _Unset:
@@ -44,16 +52,10 @@ class ModuleNotFound(LookupError):
     """Raised when a requested module id does not exist."""
 
 
-def _slug(name: str) -> str:
-    s = _SLUG_RE.sub("_", name.lower()).strip("_")
-    return s[:24] or "module"
-
-
 def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
     payload = json.loads(row["payload"])
     return {
         "id": row["id"],
-        "uuid": row["uuid"],
         "type": row["type"],
         "name": row["name"],
         "description": row["description"],
@@ -72,11 +74,17 @@ class ModuleRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def _gen_id(self, type: str, name: str) -> tuple[str, str]:
-        """Generate `(id, uuid)` for a new row. id = `<prefix>_<slug>_<uuid>`."""
-        prefix = _TYPE_PREFIX.get(type, "mod")
-        uuid = secrets.token_hex(4)
-        return f"{prefix}_{_slug(name)}_{uuid}", uuid
+    def _gen_id(self) -> str:
+        """Generate a fresh 8-hex module id.
+
+        Post migration 004 the id IS the only identifier — we no
+        longer carry a separate slugged form. Collisions are rejected
+        by the PRIMARY KEY constraint on `modules.id`; `secrets.token_hex(4)`
+        gives 4 bytes (~4.3B values), so the birthday-paradox 50% mark
+        sits around 65k modules — well past the expected single-user
+        library size.
+        """
+        return secrets.token_hex(_ID_HEX_LEN // 2)
 
     def create(
         self,
@@ -88,21 +96,40 @@ class ModuleRepository:
         tags: list[str],
         payload: dict[str, Any],
         is_favorite: bool = False,
+        id: str | None = None,
     ) -> dict[str, Any]:
+        """Insert a new module row.
+
+        ``id`` is normally generated; pass an explicit id to import
+        a workflow-resident snapshot back into the library at the
+        SAME uuid (so a freshly-saved row immediately matches the
+        workflow's existing references — no broken `@{uuid}` refs).
+        Validates the supplied id is 8-hex to prevent the workflow
+        from injecting arbitrary primary-key shapes.
+        """
         if type not in _VALID_TYPES:
             raise ValueError(
                 f"unknown module type {type!r}; expected one of {sorted(_VALID_TYPES)}"
             )
-        mid, uuid = self._gen_id(type, name)
+        if id is None:
+            mid = self._gen_id()
+        else:
+            if not isinstance(id, str) or len(id) != _ID_HEX_LEN or not all(
+                c in "0123456789abcdef" for c in id
+            ):
+                raise ValueError(
+                    f"id must be a {_ID_HEX_LEN}-char lowercase-hex string"
+                )
+            mid = id
         now = _now()
         with self._conn:
             self._conn.execute(
                 "INSERT INTO modules("
-                "id, uuid, type, name, description, category_id, tags, "
+                "id, type, name, description, category_id, tags, "
                 "is_favorite, payload, version, created_at, updated_at"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
                 (
-                    mid, uuid, type, name, description, category_id,
+                    mid, type, name, description, category_id,
                     json.dumps(tags), int(is_favorite),
                     json.dumps(payload), now, now,
                 ),
@@ -117,39 +144,40 @@ class ModuleRepository:
             raise ModuleNotFound(module_id)
         return _row_to_module(row)
 
+    # Back-compat aliases — `id == uuid` after migration 004, so the
+    # uuid-named lookups are now thin wrappers around `get` / a bulk
+    # `get` variant. Kept so external callers (test runner, embed-
+    # bundle endpoint, future drift-hash endpoint) don't need code
+    # changes; new code should prefer `get` / the new `get_many`.
     def get_by_uuid(self, uuid: str) -> dict[str, Any]:
-        """Lookup by indexed uuid. Raises ModuleNotFound on miss."""
-        cur = self._conn.execute(
-            "SELECT * FROM modules WHERE uuid = ?;", (uuid,),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise ModuleNotFound(uuid)
-        return _row_to_module(row)
+        return self.get(uuid)
 
-    def get_by_uuids(self, uuids: list[str]) -> list[dict[str, Any]]:
-        """Bulk indexed lookup. Dedups input and returns rows in the same
-        order as the (deduped) input. Silently skips missing uuids —
-        callers that need explicit miss-detection should compare returned
-        uuids against the input set.
+    def get_many(self, ids: list[str]) -> list[dict[str, Any]]:
+        """Bulk lookup. Dedups input and returns rows in the same order
+        as the (deduped) input. Silently skips ids that aren't present —
+        callers needing explicit miss-detection should compare returned
+        ids against the input set.
 
-        Note on input size: callers (Test Runner request walker, embed-
-        bundle endpoint) pass at most a few dozen uuids in practice, so
-        we do not chunk. SQLite's `SQLITE_LIMIT_VARIABLE_NUMBER` defaults
-        to 32766 on modern builds (3.32+) and 999 on older ones — well
-        above the expected upper bound."""
-        if not uuids:
+        Note on input size: callers (test-runner walker, embed-bundle)
+        pass at most a few dozen ids in practice, so we don't chunk.
+        SQLite's `SQLITE_LIMIT_VARIABLE_NUMBER` defaults to 32766 on
+        modern builds (3.32+) and 999 on older ones — well above any
+        expected upper bound."""
+        if not ids:
             return []
-        unique = list(dict.fromkeys(uuids))  # dedup, preserve input order
+        unique = list(dict.fromkeys(ids))  # dedup, preserve input order
         placeholders = ",".join("?" for _ in unique)
         cur = self._conn.execute(
-            f"SELECT * FROM modules WHERE uuid IN ({placeholders});",
+            f"SELECT * FROM modules WHERE id IN ({placeholders});",
             unique,
         )
-        # SQLite makes no order guarantee for IN-predicate results, so we
-        # re-order against the input list to honor the docstring contract.
-        by_uuid = {r["uuid"]: r for r in cur.fetchall()}
-        return [_row_to_module(by_uuid[u]) for u in unique if u in by_uuid]
+        # SQLite makes no order guarantee for IN-predicate results, so
+        # re-order against the input list to honor the docstring.
+        by_id = {r["id"]: r for r in cur.fetchall()}
+        return [_row_to_module(by_id[u]) for u in unique if u in by_id]
+
+    def get_by_uuids(self, uuids: list[str]) -> list[dict[str, Any]]:
+        return self.get_many(uuids)
 
     def update(
         self,
@@ -306,7 +334,7 @@ class CategoryRepository:
         icon: str | None,
         sort_order: int = 0,
     ) -> dict[str, Any]:
-        cid = _slug(name)
+        cid = _category_slug(name)
         if cid == "module":
             # _slug returned its fallback because `name` had no alphanumeric chars.
             raise ValueError(

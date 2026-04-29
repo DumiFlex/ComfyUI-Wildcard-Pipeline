@@ -54,4 +54,51 @@
    * stays readable if the woff2 files fail to load. */
   --wp-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --wp-font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+
+  /* ── Phase 5.5.4 — SPA-token aliases for graph-side widgets ─────────────
+   * The SPA Manager's `tokens.css` uses hyphenated names
+   * (`--wp-bg-2`, `--wp-text-muted`, …) plus a richer accent + kind
+   * palette. The graph-side extension can't import the SPA stylesheet
+   * (different bundle target, different theming context). Until 5.5.7
+   * does the full design-system port, alias the SPA names onto the
+   * graph-side equivalents so components that are shared in shape
+   * (ModulePickerModal, ContextWidget snapshot list) render with the
+   * intended colors here too. */
+  --wp-bg-1: var(--wp-bg);
+  --wp-bg-2: var(--wp-bg2);
+  --wp-bg-3: var(--wp-bg3);
+  --wp-bg-4: var(--wp-bg4);
+
+  --wp-border-strong: var(--wp-border2);
+  --wp-text-muted: var(--wp-text2);
+  --wp-text-dim:   var(--wp-text3);
+
+  /* SPA accent ramp (purple/indigo). Graph-side previously had only two
+   * shades — fill in the missing rungs so chips/buttons gradients work. */
+  --wp-accent-300: #c4b5fd;
+  --wp-accent-400: #a78bfa;
+  --wp-accent-500: #8b5cf6;
+  --wp-accent-600: #7c3aed;
+  --wp-accent-text:        var(--wp-accent-300);
+  --wp-accent-text-strong: #ddd6fe;
+
+  /* Kind colors — keyed by module type. Same hex values the SPA tokens.css
+   * defines so `data-kind="..."` styling stays visually consistent across
+   * the graph widgets and the SPA list views. */
+  --wp-kind-wildcard:    #a78bfa;
+  --wp-kind-combine:     #34d399;
+  --wp-kind-derivation:  #fbbf24;
+  --wp-kind-constraint:  #f472b6;
+  --wp-kind-pipeline:    #fb7185;
+  --wp-kind-fixed:       #22d3ee;
+
+  --wp-radius-lg: 12px;
+  --wp-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --wp-overlay-bg: rgba(0, 0, 0, 0.55);
+
+  --wp-danger: #ef4444;
+
+  /* Alias `--wp-font` → `--wp-font-sans` so SPA-derived components that
+   * reference the shorter name resolve to the same Inter stack. */
+  --wp-font: var(--wp-font-sans);
 }

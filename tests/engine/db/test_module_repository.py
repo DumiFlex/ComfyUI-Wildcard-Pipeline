@@ -9,12 +9,15 @@ def _new_payload() -> dict:
 
 
 def test_create_assigns_id_and_timestamps(wp_db):
+    """Post migration 004 every module's `id` is an 8-hex short uuid —
+    the slug-prefixed form (`wc_colors_<8hex>`) is gone."""
     repo = ModuleRepository(wp_db)
     row = repo.create(
         type="wildcard", name="colors", description="",
         category_id=None, tags=["a", "b"], payload=_new_payload(),
     )
-    assert row["id"].startswith("wc_colors_")
+    assert len(row["id"]) == 8
+    assert all(c in "0123456789abcdef" for c in row["id"])
     assert row["version"] == 1
     assert row["created_at"]
     assert row["updated_at"] == row["created_at"]
@@ -148,13 +151,18 @@ def test_update_keeps_unchanged_fields(wp_db):
     assert updated["payload"] == _new_payload()
 
 
-def test_create_id_uses_fv_prefix_for_fixed_values(wp_db):
+def test_create_fixed_values_id_is_eight_hex(wp_db):
+    """Fixed-values modules used to carry an `fv_<slug>_` prefix; post
+    migration 004 they share the same plain 8-hex shape as every other
+    kind. Type discrimination lives in the `type` column."""
     repo = ModuleRepository(wp_db)
     row = repo.create(
         type="fixed_values", name="lens", description="",
         category_id=None, tags=[], payload={"values": []},
     )
-    assert row["id"].startswith("fv_lens_")
+    assert row["type"] == "fixed_values"
+    assert len(row["id"]) == 8
+    assert all(c in "0123456789abcdef" for c in row["id"])
 
 
 def test_list_search_treats_percent_literally(wp_db):
@@ -190,22 +198,20 @@ def test_list_offset_without_limit(wp_db):
 
 
 @pytest.mark.parametrize(
-    "type_,prefix",
-    [
-        ("combine", "cb_"),
-        ("derivation", "dr_"),
-        ("constraint", "ct_"),
-        ("pipeline", "pl_"),
-    ],
+    "type_",
+    ["combine", "derivation", "constraint", "pipeline"],
 )
-def test_create_accepts_new_module_types(wp_db, type_, prefix):
+def test_create_accepts_new_module_types(wp_db, type_):
+    """All module kinds get the same 8-hex `id` shape — the type
+    discriminator lives in the `type` column, not the id prefix."""
     repo = ModuleRepository(wp_db)
     row = repo.create(
         type=type_, name="thing", description="",
         category_id=None, tags=[], payload={},
     )
     assert row["type"] == type_
-    assert row["id"].startswith(prefix)
+    assert len(row["id"]) == 8
+    assert all(c in "0123456789abcdef" for c in row["id"])
 
 
 def test_create_rejects_unknown_type(wp_db):
@@ -217,19 +223,19 @@ def test_create_rejects_unknown_type(wp_db):
         )
 
 
-def test_create_writes_uuid_column_matching_id_suffix(wp_db):
-    """create() must persist the uuid column. The value equals the trailing
-    8 hex chars of the generated id so existing rows (backfilled) and new
-    rows share one identity convention."""
+def test_create_id_is_eight_hex(wp_db):
+    """create() generates ids that are exactly 8 hex chars — the
+    canonical short uuid the tokenizer's `@{8hex}` ref captures.
+    Migration 004 dropped the slug-prefixed form."""
     repo = ModuleRepository(wp_db)
     row = repo.create(
         type="wildcard", name="color", description="",
         category_id=None, tags=[], payload={"options": []},
     )
-    assert "uuid" in row
-    assert len(row["uuid"]) == 8
-    assert all(c in "0123456789abcdef" for c in row["uuid"])
-    assert row["id"].endswith(f"_{row['uuid']}")
+    assert len(row["id"]) == 8
+    assert all(c in "0123456789abcdef" for c in row["id"])
+    # No separate uuid field — id IS the uuid.
+    assert "uuid" not in row
 
 
 def test_row_to_module_includes_payload_hash(wp_db):
@@ -247,44 +253,46 @@ def test_row_to_module_includes_payload_hash(wp_db):
     assert all(c in "0123456789abcdef" for c in row["payload_hash"])
 
 
-def test_get_by_uuid_returns_row(wp_db):
+def test_get_by_uuid_alias_returns_row(wp_db):
+    """`get_by_uuid` is a back-compat alias for `get` — `id IS uuid`
+    after migration 004."""
     repo = ModuleRepository(wp_db)
     created = repo.create(
         type="wildcard", name="color", description="",
         category_id=None, tags=[], payload={"options": []},
     )
-    fetched = repo.get_by_uuid(created["uuid"])
+    fetched = repo.get_by_uuid(created["id"])
     assert fetched["id"] == created["id"]
 
 
-def test_get_by_uuid_raises_when_missing(wp_db):
+def test_get_by_uuid_alias_raises_when_missing(wp_db):
     repo = ModuleRepository(wp_db)
     with pytest.raises(ModuleNotFound):
         repo.get_by_uuid("00000000")
 
 
-def test_get_by_uuids_bulk_lookup_dedups_and_skips_missing(wp_db):
+def test_get_many_dedups_and_skips_missing(wp_db):
     """Bulk lookup feeds the embed-bundle endpoint and the test-runner
-    lazy catalog. Returns rows in the same order callers passed uuids in;
-    missing uuids are silently skipped (caller decides how to surface)."""
+    lazy catalog. Returns rows in the same order callers passed ids in;
+    missing ids are silently skipped (caller decides how to surface)."""
     repo = ModuleRepository(wp_db)
     a = repo.create(type="wildcard", name="a", description="",
                    category_id=None, tags=[], payload={"options": []})
     b = repo.create(type="wildcard", name="b", description="",
                    category_id=None, tags=[], payload={"options": []})
-    rows = repo.get_by_uuids([a["uuid"], "deadbeef", b["uuid"], a["uuid"]])
-    # Dedups (returns each uuid at most once), skips missing
+    rows = repo.get_many([a["id"], "deadbeef", b["id"], a["id"]])
+    # Dedups (returns each id at most once), skips missing
     assert len(rows) == 2
-    found_uuids = {r["uuid"] for r in rows}
-    assert found_uuids == {a["uuid"], b["uuid"]}
+    found = {r["id"] for r in rows}
+    assert found == {a["id"], b["id"]}
 
 
-def test_get_by_uuids_empty_input_returns_empty_list(wp_db):
+def test_get_many_empty_input_returns_empty_list(wp_db):
     repo = ModuleRepository(wp_db)
-    assert repo.get_by_uuids([]) == []
+    assert repo.get_many([]) == []
 
 
-def test_get_by_uuids_returns_rows_in_input_order(wp_db):
+def test_get_many_returns_rows_in_input_order(wp_db):
     """The docstring promises input-order preservation. SQLite's IN
     predicate makes no order guarantee, so the implementation must
     re-order results against the (deduped) input list. Pin that
@@ -297,8 +305,6 @@ def test_get_by_uuids_returns_rows_in_input_order(wp_db):
             type="wildcard", name=n, description="",
             category_id=None, tags=[], payload={"options": []},
         ))
-    # Request in reverse insertion order; result must come back in the
-    # SAME reverse order (not the natural SELECT order).
-    requested = [rows[3]["uuid"], rows[1]["uuid"], rows[2]["uuid"], rows[0]["uuid"]]
-    fetched = repo.get_by_uuids(requested)
-    assert [r["uuid"] for r in fetched] == requested
+    requested = [rows[3]["id"], rows[1]["id"], rows[2]["id"], rows[0]["id"]]
+    fetched = repo.get_many(requested)
+    assert [r["id"] for r in fetched] == requested

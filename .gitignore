@@ -36,3 +36,6 @@ Thumbs.db
 
 # Semantic release
 .releaserc.local.js
+
+# Throwaway design / scratch artifacts (mockups, screenshots, demos)
+/_temp/

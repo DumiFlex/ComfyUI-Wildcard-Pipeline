@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractModuleUuid, toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
+import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 
 describe("toIdentifier", () => {
   it("lowercases and slug-joins runs of non-identifier chars", () => {
@@ -35,24 +35,3 @@ describe("toIdentifier", () => {
   });
 });
 
-describe("extractModuleUuid", () => {
-  it("returns the trailing 8-hex suffix from a normal DB id", () => {
-    expect(extractModuleUuid("wc_test2_ea67b173")).toBe("ea67b173");
-    expect(extractModuleUuid("co_subject_aabbccdd")).toBe("aabbccdd");
-    expect(extractModuleUuid("fv_my_consts_00112233")).toBe("00112233");
-  });
-
-  it("accepts ids whose slug section contains digits and underscores", () => {
-    expect(extractModuleUuid("wc_test_2_ea67b173")).toBe("ea67b173");
-    expect(extractModuleUuid("wc_a_b_c_d_e_deadbeef")).toBe("deadbeef");
-  });
-
-  it("returns null when the id does not end in `_<8 lowercase hex>`", () => {
-    expect(extractModuleUuid("wc_test2")).toBeNull();
-    expect(extractModuleUuid("wc_test2_EA67B173")).toBeNull(); // uppercase rejected
-    expect(extractModuleUuid("wc_test2_eaa67b173")).toBeNull(); // 9 chars
-    expect(extractModuleUuid("wc_test2_ea67b17")).toBeNull(); // 7 chars
-    expect(extractModuleUuid("ea67b173")).toBeNull(); // missing underscore prefix
-    expect(extractModuleUuid("")).toBeNull();
-  });
-});

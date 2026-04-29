@@ -127,26 +127,32 @@ def deserialize_modules(payload: str) -> list[Module]:
 def deserialize_node_input(
     raw: "dict[str, Any] | str | None",
 ) -> "tuple[list[dict[str, Any]], dict[str, Any], list[str]]":
-    """Parse a WP_Context node's ``modules`` widget value into the three
-    parallel concerns the engine needs: an executable module list, a
-    catalog snapshot dict, and the user's explicit pick order.
+    """Parse a WP_Context node's ``modules`` widget value.
 
-    Spec §4.4. Backwards-compat: old workflows have no ``snapshots`` /
-    ``pickOrder`` fields — those default to empty (catalog stays {}, no
-    @{} resolution, raw token leaks in output, current behavior).
+    Returns ``(modules, catalog, pick_order)``:
 
-    Returns the modules portion as a ``list[dict]`` rather than the typed
-    ``list[Module]`` that ``deserialize_modules`` produces. Two reasons:
-    the legacy converter ``module_from_dict`` requires an ``id`` field
-    and only knows how to type ``fixed_values`` (Module is currently a
-    TypeAlias for FixedValueModule), so SPA-shaped wildcard / combine /
-    derivation entries would all be rejected. ``PipelineEngine.run``
-    already accepts dicts directly (engine/pipeline.py:57) — coercing
-    them through ``coerce_legacy_module`` at execute time — so the raw-
-    dict path is the safe one for the new SPA snapshot shape.
+      - ``modules``: ordered list of every entry the user has in
+        the widget — wildcards, combines, derivations, constraints,
+        pipelines, fixed_values, all in one list. Same shape SPA
+        editors emit + ``PipelineEngine.run`` accepts.
+      - ``catalog``: the wildcard subset of ``modules``, keyed by
+        ``id`` (= 8-hex uuid), each value mapped back to the
+        canonical ``SnapshotEntry`` shape the engine resolver
+        consumes via ``ctx["__wp_catalog__"]``.
+      - ``pick_order``: kept in the return signature for back-compat
+        with existing callers; always empty under the unified model
+        (the modules list itself preserves order).
 
-    Robust to malformed input: any failure path returns ``([], {}, [])``
-    so graph runs never crash on a broken widget value.
+    Returns the modules portion as a ``list[dict]`` rather than the
+    typed ``list[Module]`` produced by ``deserialize_modules``. The
+    legacy ``module_from_dict`` requires fields the SPA shape doesn't
+    carry (and only knows how to type ``fixed_values``), so the raw-
+    dict path is the safe one for the unified shape — the engine
+    already coerces dicts at execute time.
+
+    Robust to malformed input: any failure path returns
+    ``([], {}, [])`` so graph runs never crash on a broken widget
+    value.
     """
     if raw is None:
         return [], {}, []
@@ -164,15 +170,35 @@ def deserialize_node_input(
     modules: list[dict[str, Any]] = (
         list(raw_modules) if isinstance(raw_modules, list) else []
     )
-    snapshots_raw = data.get("snapshots")
-    snapshots: dict[str, Any] = (
-        snapshots_raw if isinstance(snapshots_raw, dict) else {}
-    )
-    pick_order_raw = data.get("pickOrder")
-    pick_order: list[str] = (
-        pick_order_raw if isinstance(pick_order_raw, list) else []
-    )
-    return modules, snapshots, pick_order
+
+    # Build the wildcard catalog from the modules list directly.
+    # Filter by `type == "wildcard"` and synthesise a SnapshotEntry
+    # per row keyed by `id`. Resolver looks up `ctx["__wp_catalog__"][uuid]`
+    # and reads `entry["payload"]["options"]` — that's the only
+    # contract this map needs to satisfy.
+    catalog: dict[str, dict[str, Any]] = {}
+    for m in modules:
+        if not isinstance(m, dict):
+            continue
+        if m.get("type") != "wildcard":
+            continue
+        mid = m.get("id")
+        if not isinstance(mid, str):
+            continue
+        payload = m.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        catalog[mid] = {
+            "snapshot_version": 1,
+            "uuid": mid,
+            "type": "wildcard",
+            "name": m.get("meta", {}).get("name") if isinstance(m.get("meta"), dict) else "",
+            "payload": payload,
+            "payload_hash": m.get("payload_hash") or "",
+            "source": {"kind": "user"},
+        }
+
+    return modules, catalog, []
 
 
 def build_payload(

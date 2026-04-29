@@ -637,7 +637,7 @@ def _ensure_wildcard(
             payload=payload,
             is_favorite=bool(spec.get("is_favorite", False)),
         )
-        print(f"  ~ wildcard '{spec['name']}' updated (uuid={updated['uuid']})")
+        print(f"  ~ wildcard '{spec['name']}' updated (uuid={updated['id']})")
         return updated
     row = mod_repo.create(
         type="wildcard",
@@ -648,7 +648,7 @@ def _ensure_wildcard(
         payload=payload,
         is_favorite=bool(spec.get("is_favorite", False)),
     )
-    print(f"  + wildcard '{row['name']}' (uuid={row['uuid']})")
+    print(f"  + wildcard '{row['name']}' (uuid={row['id']})")
     return row
 
 
@@ -657,7 +657,7 @@ def _rewrite_refs(
 ) -> None:
     """Second pass — replace placeholder ``@{<NAME_UUID>}`` tokens in every
     wildcard option value with the real ``@{8hex}`` from `wildcards`."""
-    name_to_uuid = {wc["name"]: wc["uuid"] for wc in wildcards.values()}
+    name_to_uuid = {wc["name"]: wc["id"] for wc in wildcards.values()}
     print("  · rewriting @{<NAME>_UUID} placeholders → real uuids …")
     for wc in wildcards.values():
         payload = dict(wc["payload"])
@@ -678,7 +678,7 @@ def _rewrite_refs(
         if changed:
             payload["options"] = new_options
             updated = mod_repo.update(wc["id"], payload=payload)
-            print(f"    · {wc['name']} (uuid={updated['uuid']}): rewrote refs")
+            print(f"    · {wc['name']} (uuid={updated['id']}): rewrote refs")
 
 
 def _ensure_fixed(
@@ -695,7 +695,7 @@ def _ensure_fixed(
             payload=payload,
             is_favorite=bool(spec.get("is_favorite", False)),
         )
-        print(f"  ~ fixed_values '{spec['name']}' updated (uuid={updated['uuid']})")
+        print(f"  ~ fixed_values '{spec['name']}' updated (uuid={updated['id']})")
         return updated
     row = mod_repo.create(
         type="fixed_values",
@@ -706,7 +706,7 @@ def _ensure_fixed(
         payload=payload,
         is_favorite=bool(spec.get("is_favorite", False)),
     )
-    print(f"  + fixed_values '{row['name']}' (uuid={row['uuid']})")
+    print(f"  + fixed_values '{row['name']}' (uuid={row['id']})")
     return row
 
 
@@ -728,7 +728,7 @@ def _ensure_combine(
             payload=payload,
             is_favorite=bool(spec.get("is_favorite", False)),
         )
-        print(f"  ~ combine '{spec['name']}' updated (uuid={updated['uuid']})")
+        print(f"  ~ combine '{spec['name']}' updated (uuid={updated['id']})")
         return updated
     row = mod_repo.create(
         type="combine",
@@ -739,7 +739,7 @@ def _ensure_combine(
         payload=payload,
         is_favorite=bool(spec.get("is_favorite", False)),
     )
-    print(f"  + combine '{row['name']}' (uuid={row['uuid']})")
+    print(f"  + combine '{row['name']}' (uuid={row['id']})")
     return row
 
 
@@ -757,7 +757,7 @@ def _ensure_derivation(
             payload=payload,
             is_favorite=bool(spec.get("is_favorite", False)),
         )
-        print(f"  ~ derivation '{spec['name']}' updated (uuid={updated['uuid']})")
+        print(f"  ~ derivation '{spec['name']}' updated (uuid={updated['id']})")
         return updated
     row = mod_repo.create(
         type="derivation",
@@ -768,7 +768,7 @@ def _ensure_derivation(
         payload=payload,
         is_favorite=bool(spec.get("is_favorite", False)),
     )
-    print(f"  + derivation '{row['name']}' (uuid={row['uuid']})")
+    print(f"  + derivation '{row['name']}' (uuid={row['id']})")
     return row
 
 
@@ -794,7 +794,7 @@ def _ensure_constraint(
             payload=payload,
             is_favorite=bool(spec.get("is_favorite", False)),
         )
-        print(f"  ~ constraint '{spec['name']}' updated (uuid={updated['uuid']})")
+        print(f"  ~ constraint '{spec['name']}' updated (uuid={updated['id']})")
         return updated
     row = mod_repo.create(
         type="constraint",
@@ -805,7 +805,7 @@ def _ensure_constraint(
         payload=payload,
         is_favorite=bool(spec.get("is_favorite", False)),
     )
-    print(f"  + constraint '{row['name']}' (uuid={row['uuid']})")
+    print(f"  + constraint '{row['name']}' (uuid={row['id']})")
     return row
 
 
@@ -836,7 +836,7 @@ def _ensure_pipeline(
             is_favorite=bool(spec.get("is_favorite", False)),
         )
         print(f"  ~ pipeline '{spec['name']}' updated "
-              f"(uuid={updated['uuid']}, steps={len(steps)})")
+              f"(uuid={updated['id']}, steps={len(steps)})")
         return updated
     row = mod_repo.create(
         type="pipeline",
@@ -847,7 +847,7 @@ def _ensure_pipeline(
         payload=payload,
         is_favorite=bool(spec.get("is_favorite", False)),
     )
-    print(f"  + pipeline '{row['name']}' (uuid={row['uuid']}, steps={len(steps)})")
+    print(f"  + pipeline '{row['name']}' (uuid={row['id']}, steps={len(steps)})")
     return row
 
 
@@ -874,7 +874,7 @@ def main() -> int:
     _rewrite_refs(mod_repo, wildcards)
     # Refresh cache so downstream sees the updated payloads
     for name in list(wildcards.keys()):
-        wildcards[name] = mod_repo.get_by_uuid(wildcards[name]["uuid"])
+        wildcards[name] = mod_repo.get(wildcards[name]["id"])
 
     print("\n[Fixed values]")
     fixed: dict[str, dict] = {}
@@ -905,7 +905,7 @@ def main() -> int:
 
     print("\nDone. Seeded uuids worth poking at:")
     for name, row in wildcards.items():
-        print(f"  wildcard '{name}': @{{{row['uuid']}}}")
+        print(f"  wildcard '{name}': @{{{row['id']}}}")
 
     print("\nQuick sanity checks you can run from the SPA:")
     print("  · Test Runner on 'outfit' → samples should resolve nested refs")

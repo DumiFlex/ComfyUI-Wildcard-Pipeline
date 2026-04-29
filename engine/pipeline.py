@@ -142,10 +142,22 @@ class PipelineEngine:
                 continue
 
             writes = []
+            # `instance.internal == True` marks every binding the
+            # module produces as engine-only — they stay in ctx so
+            # downstream modules can read them, but `strip_internals`
+            # drops them on the way out so they don't surface on the
+            # public PIPELINE_CONTEXT socket. Useful for "scratch"
+            # vars that drive a derivation/combine but shouldn't
+            # become prompt-text noise.
+            inst = snapshot.get("instance", {}) if isinstance(snapshot, dict) else {}
+            mark_internal = bool(inst.get("internal", False)) if isinstance(inst, dict) else False
             for var, value in (bindings or {}).items():
                 key = var.lstrip("$")
                 before = ctx.get(key)
                 ctx[key] = value
+                if mark_internal:
+                    flags = ctx.setdefault("__wp_internal_flags__", {})
+                    flags[key] = True
                 writes.append({
                     "variable": key,
                     "value": value,
@@ -153,6 +165,17 @@ class PipelineEngine:
                     "overwrite": before is not None and before != value,
                 })
 
+            # `seed` on the trace entry: the effective seed THIS
+            # module rolled with — `instance.locked_seed` if locked,
+            # else the chain seed. Surfaces to the frontend via the
+            # WP_Context node's UI payload so the lock-toggle defaults
+            # can grab the AUTHORITATIVE value (not the local widget,
+            # which lies when the seed input is link-driven).
+            locked = inst.get("locked_seed") if isinstance(inst, dict) else None
+            if isinstance(locked, (int, float)):
+                effective_seed = int(locked)
+            else:
+                effective_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
             ctx["__wp_trace__"].append({
                 "id": _module_id,
                 "type": module_type,
@@ -160,6 +183,7 @@ class PipelineEngine:
                 "status": "ok",
                 "writes": writes,
                 "error": None,
+                "seed": effective_seed,
             })
 
         return ctx

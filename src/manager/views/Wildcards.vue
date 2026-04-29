@@ -14,7 +14,6 @@ import {
   buildWildcardGraph,
   getWildcardSyntax,
 } from "../utils/wildcardSyntax";
-import { extractModuleUuid } from "../utils/slug";
 
 const router = useRouter();
 const store = useModuleStore();
@@ -49,14 +48,12 @@ interface SyntaxView {
 }
 
 function syntaxView(row: ModuleRow): SyntaxView {
-  // `buildWildcardGraph` keys outgoing/incoming by the 8-hex SHORT UUID
-  // (the suffix of `mod.id` — same identifier the tokenizer captures from
-  // `@{8hex}` refs). Looking up by `row.id` (full slug `wc_foo_ea67b173`)
-  // misses every entry. Use the extracted 8-hex form.
+  // `buildWildcardGraph` keys outgoing/incoming by `mod.id`, which IS
+  // the canonical 8-hex uuid post DB migration 004 — no extraction
+  // step needed.
   const sx = getWildcardSyntax(row);
-  const uuid = extractModuleUuid(row.id);
-  const out = uuid ? wildcardGraph.value.outgoing.get(uuid) : undefined;
-  const inc = uuid ? wildcardGraph.value.incoming.get(uuid) : undefined;
+  const out = wildcardGraph.value.outgoing.get(row.id);
+  const inc = wildcardGraph.value.incoming.get(row.id);
   return {
     hasInline: sx.hasInline,
     outgoing: out ? [...out] : [],
@@ -79,9 +76,8 @@ const extraFilters = computed(() => [
     key: "is-referenced",
     label: "Referenced by others",
     check: (m: ModuleRow) => {
-      // Graph is keyed by 8-hex short UUID — see `syntaxView` for context.
-      const uuid = extractModuleUuid(m.id);
-      const inc = uuid ? wildcardGraph.value.incoming.get(uuid) : undefined;
+      // Graph keyed by `mod.id` (= 8-hex uuid). See syntaxView.
+      const inc = wildcardGraph.value.incoming.get(m.id);
       return !!inc && inc.size > 0;
     },
   },

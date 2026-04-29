@@ -18,7 +18,9 @@ async def test_create_returns_201_and_id(wp_client):
     })
     assert resp.status == 201
     body = await resp.json()
-    assert body["id"].startswith("wc_colors_")
+    # Post migration 004 every module's id is an 8-hex short uuid.
+    assert len(body["id"]) == 8
+    assert all(c in "0123456789abcdef" for c in body["id"])
     assert body["version"] == 1
     assert body["payload"] == {"options": []}
 
@@ -26,6 +28,63 @@ async def test_create_returns_201_and_id(wp_client):
 async def test_create_missing_type_returns_400(wp_client):
     resp = await wp_client.post("/wp/api/modules", json={
         "name": "x", "payload": {"values": []},
+    })
+    assert resp.status == 400
+
+
+async def test_import_from_workflow_creates_at_supplied_id(wp_client):
+    """ContextWidget's `Save to library` action posts here with the
+    workflow's existing 8-hex uuid so existing `@{uuid}` refs stay
+    valid. The row must land at THAT id, not a freshly generated one."""
+    resp = await wp_client.post("/wp/api/modules/import-from-workflow", json={
+        "id": "deadbeef",
+        "type": "wildcard",
+        "name": "imported",
+        "payload": {"options": []},
+    })
+    assert resp.status == 201
+    body = await resp.json()
+    assert body["id"] == "deadbeef"
+
+    # Subsequent GET returns the saved row.
+    g = await wp_client.get("/wp/api/modules/deadbeef")
+    assert g.status == 200
+
+
+async def test_import_from_workflow_rejects_existing_id(wp_client):
+    """Rare race: row already exists. Endpoint returns 409."""
+    await wp_client.post("/wp/api/modules/import-from-workflow", json={
+        "id": "ababab12",
+        "type": "wildcard",
+        "name": "first",
+        "payload": {"options": []},
+    })
+    resp = await wp_client.post("/wp/api/modules/import-from-workflow", json={
+        "id": "ababab12",
+        "type": "wildcard",
+        "name": "second",
+        "payload": {"options": []},
+    })
+    assert resp.status == 409
+
+
+async def test_import_from_workflow_rejects_malformed_id(wp_client):
+    """Caller-supplied id must be 8-char lowercase hex — the same
+    shape `_gen_id()` produces. Anything else (uppercase, wrong
+    length, non-hex chars) → 400."""
+    for bad_id in ("DEADBEEF", "deadbee", "deadbeefff", "wc_color"):
+        resp = await wp_client.post("/wp/api/modules/import-from-workflow", json={
+            "id": bad_id,
+            "type": "wildcard",
+            "name": "x",
+            "payload": {"options": []},
+        })
+        assert resp.status == 400, f"id={bad_id} should be rejected"
+
+
+async def test_import_from_workflow_missing_id_returns_400(wp_client):
+    resp = await wp_client.post("/wp/api/modules/import-from-workflow", json={
+        "type": "wildcard", "name": "x", "payload": {"options": []},
     })
     assert resp.status == 400
 

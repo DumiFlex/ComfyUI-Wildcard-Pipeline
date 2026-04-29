@@ -23,14 +23,16 @@ def app_with_db(tmp_path):
     return app, conn
 
 
-async def test_embed_bundle_returns_picks_and_transitive_wildcards(
+async def test_embed_bundle_returns_picks_only_no_transitive_walk(
     aiohttp_client, app_with_db,
 ):
-    """Picking outfit (which @{}-refs color) returns:
-      - modules: [outfit_payload]                            (only the picks)
-      - snapshots: {outfit_uuid: ..., color_uuid: ...}       (picks + transitive wildcards)
-      - pickOrder: [outfit_uuid]
-      - walkOverflow: []"""
+    """Picking outfit (which `@{}`-refs color) returns ONLY outfit's
+    snapshot — no transitive walk. The user explicitly asked the
+    picker to embed only what they picked; nested wildcards are
+    looked up live at graph-run time inside `WP_Context.execute`.
+    Workflow JSON stops being self-contained, but the picker stops
+    pulling in surprise modules.
+    """
     app, conn = app_with_db
     repo = ModuleRepository(conn)
     color = repo.create(
@@ -40,7 +42,7 @@ async def test_embed_bundle_returns_picks_and_transitive_wildcards(
         },
     )
     outfit_payload = {
-        "options": [{"value": f"@{{{color['uuid']}}} dress", "weight": 1}],
+        "options": [{"value": f"@{{{color['id']}}} dress", "weight": 1}],
     }
     outfit = repo.create(
         type="wildcard", name="outfit", description="",
@@ -49,20 +51,27 @@ async def test_embed_bundle_returns_picks_and_transitive_wildcards(
 
     client = await aiohttp_client(app)
     resp = await client.post("/wp/api/modules/embed-bundle", json={
-        "uuids": [outfit["uuid"]],
+        "uuids": [outfit["id"]],
     })
     assert resp.status == 200
     body = await resp.json()
-    assert body["pickOrder"] == [outfit["uuid"]]
+    assert body["pickOrder"] == [outfit["id"]]
     assert len(body["modules"]) == 1
     assert body["modules"][0] == outfit_payload
-    assert set(body["snapshots"].keys()) == {outfit["uuid"], color["uuid"]}
+    # color is referenced by outfit but NOT embedded — runtime resolves
+    # it live from the library.
+    assert set(body["snapshots"].keys()) == {outfit["id"]}
+    assert color["id"] not in body["snapshots"]
     assert body["walkOverflow"] == []
 
 
-async def test_embed_bundle_records_missing_target_in_walk_overflow(
+async def test_embed_bundle_walk_overflow_always_empty(
     aiohttp_client, app_with_db,
 ):
+    """Missing-target overflow used to surface here when the walker
+    couldn't resolve a `@{deadbeef}` ref. With the walker gone the
+    field is always `[]` — graph-side runtime is now responsible for
+    surfacing unresolved refs as resolver warnings."""
     app, conn = app_with_db
     repo = ModuleRepository(conn)
     a = repo.create(
@@ -73,12 +82,13 @@ async def test_embed_bundle_records_missing_target_in_walk_overflow(
     )
     client = await aiohttp_client(app)
     resp = await client.post("/wp/api/modules/embed-bundle", json={
-        "uuids": [a["uuid"]],
+        "uuids": [a["id"]],
     })
     assert resp.status == 200
-    overflow = (await resp.json())["walkOverflow"]
-    assert any(o["uuid"] == "deadbeef" and o["reason"] == "missing_target"
-               for o in overflow)
+    body = await resp.json()
+    assert body["walkOverflow"] == []
+    # The pick itself is still returned.
+    assert a["id"] in body["snapshots"]
 
 
 async def test_embed_bundle_rejects_non_list_uuids(aiohttp_client, app_with_db):
@@ -90,13 +100,13 @@ async def test_embed_bundle_rejects_non_list_uuids(aiohttp_client, app_with_db):
     assert resp.status == 400
 
 
-async def test_hashes_endpoint_returns_uuid_hash_map_for_wildcards_only(
+async def test_hashes_endpoint_returns_id_hash_map_for_wildcards_only(
     aiohttp_client, app_with_db,
 ):
-    """Drift-detection primitive. Returns {hashes: {uuid: hash}} keyed
-    by 8hex uuid. Wildcards-only because catalog only contains wildcards
-    (spec §2.7) — no point shipping hashes for kinds that never drift
-    embedded snapshots."""
+    """Drift-detection primitive. Returns `{hashes: {id: hash}}` keyed
+    by the 8-hex module id. Wildcards-only because the catalog only
+    contains wildcards (spec §2.7) — no point shipping hashes for
+    kinds that never drift embedded snapshots."""
     app, conn = app_with_db
     repo = ModuleRepository(conn)
     wc = repo.create(
@@ -111,19 +121,17 @@ async def test_hashes_endpoint_returns_uuid_hash_map_for_wildcards_only(
     resp = await client.get("/wp/api/modules/hashes")
     assert resp.status == 200
     body = await resp.json()
-    assert wc["uuid"] in body["hashes"]
-    assert cb["uuid"] not in body["hashes"]  # combines excluded
-    assert body["hashes"][wc["uuid"]] == wc["payload_hash"]
+    assert wc["id"] in body["hashes"]
+    assert cb["id"] not in body["hashes"]  # combines excluded
+    assert body["hashes"][wc["id"]] == wc["payload_hash"]
 
 
-# ── ModuleRow shape extension (spec §4.2 — Task 11) ──────────────────────
-# Task 2 already wired `_row_to_module` to include `uuid` and `payload_hash`
-# on every returned row. These tests pin that contract at the API boundary
-# so a future refactor (e.g. swapping the row helper, adding a slim list
-# variant) can't accidentally drop either field. Pure regression coverage.
+# ── ModuleRow shape (spec §4.2) ──────────────────────────────────────
+# Post-004 the API row no longer carries a separate `uuid` field — the
+# `id` IS the canonical 8-hex uuid. `payload_hash` stays.
 
 
-async def test_list_modules_response_includes_uuid_and_payload_hash(
+async def test_list_modules_response_includes_id_and_payload_hash(
     aiohttp_client, app_with_db,
 ):
     app, conn = app_with_db
@@ -137,13 +145,14 @@ async def test_list_modules_response_includes_uuid_and_payload_hash(
     assert resp.status == 200
     items = (await resp.json())["items"]
     assert len(items) == 1
-    assert "uuid" in items[0]
+    assert "id" in items[0]
+    assert "uuid" not in items[0]
     assert "payload_hash" in items[0]
-    assert len(items[0]["uuid"]) == 8
+    assert len(items[0]["id"]) == 8
     assert len(items[0]["payload_hash"]) == 64
 
 
-async def test_get_module_response_includes_uuid_and_payload_hash(
+async def test_get_module_response_includes_id_and_payload_hash(
     aiohttp_client, app_with_db,
 ):
     app, conn = app_with_db
@@ -156,5 +165,6 @@ async def test_get_module_response_includes_uuid_and_payload_hash(
     resp = await client.get(f"/wp/api/modules/{row['id']}")
     assert resp.status == 200
     data = await resp.json()
-    assert data["uuid"] == row["uuid"]
+    assert data["id"] == row["id"]
+    assert "uuid" not in data
     assert data["payload_hash"] == row["payload_hash"]

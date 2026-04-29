@@ -1,10 +1,23 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import ContextWidget from "./ContextWidget.vue";
 
+beforeEach(() => {
+  // Phase 5.5.4 — the picker now fetches the library on mount. Stub
+  // global `fetch` so component tests don't hit a real server. Default
+  // returns an empty list; per-test overrides as needed.
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (typeof url === "string" && url.includes("/wp/api/modules/list")) {
+      return new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 });
+    }
+    return new Response("{}", { status: 200 });
+  }));
+});
+
 afterEach(() => {
   // Modals teleport to body — strip leftover overlays between tests.
-  document.body.innerHTML = "";
+  while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
+  vi.unstubAllGlobals();
 });
 
 const moduleJson = (vars: Array<{ name: string; value: string }>): string =>
@@ -31,18 +44,19 @@ describe("ContextWidget.vue", () => {
     expect(wrapper.text()).toContain("Add your first module");
   });
 
-  it("opens picker, picks fixed_values, emits new JSON via onChange", async () => {
-    let last = "";
+  it("opens the library picker and surfaces it in the DOM", async () => {
     const wrapper = mount(ContextWidget, {
       attachTo: document.body,
-      props: { nodeId: 2, initialJson: '{"version":1,"modules":[]}', upstreamVars: [], onChange: (v: string) => { last = v; } },
+      props: { nodeId: 2, initialJson: '{"version":1,"modules":[]}', upstreamVars: [], onChange: () => {} },
     });
     await wrapper.find('[data-testid="open-picker"]').trigger("click");
-    const pick = document.querySelector<HTMLButtonElement>('[data-testid="pick-fixed_values"]');
-    expect(pick).not.toBeNull();
-    pick!.click();
     await wrapper.vm.$nextTick();
-    expect(last).toMatch(/"type":"fixed_values"/);
+    // Phase 5.5.4 — picker is now a library browser, not a "kind chooser".
+    // It teleports its modal to <body> and renders a search input + tab strip.
+    const search = document.querySelector('[data-testid="picker-search"]');
+    expect(search).not.toBeNull();
+    const allTab = document.querySelector('[data-testid="picker-tab-all"]');
+    expect(allTab).not.toBeNull();
   });
 
   it("renders a summary line per module — first 2 vars + '+N more' for the rest", () => {
