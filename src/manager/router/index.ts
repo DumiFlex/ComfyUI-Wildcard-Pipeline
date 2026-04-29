@@ -30,13 +30,12 @@ const routes: RouteRecordRaw[] = [
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
       { path: "settings", name: "settings", component: () => import("../views/Settings.vue") },
-      { path: "community", name: "community", redirect: "/community/discover" },
-      { path: "community/discover", name: "community-discover", component: () => import("../views/community/CommunityDiscover.vue") },
-      { path: "community/upload",   name: "community-upload",   component: () => import("../views/community/CommunityUpload.vue") },
-      { path: "community/profile",  name: "community-profile",  component: () => import("../views/community/CommunityProfile.vue") },
-      { path: "community/offline",  name: "community-offline",  component: () => import("../views/community/CommunityOffline.vue") },
-      { path: "community/404",      name: "community-404",      component: () => import("../views/community/Community404.vue") },
-      { path: "community/m/:id",    name: "community-detail",   component: () => import("../views/community/CommunityDetail.vue"), props: true },
+      // Community hub is on `feat/community-tab` while it bakes; main ships
+      // a WIP placeholder so the sidebar entry has somewhere to land. The
+      // catch-all `community/:rest(.*)?` swallows any deep-links saved from
+      // the old routes (/community/discover, /community/m/:id, etc.).
+      { path: "community", name: "community", component: () => import("../views/CommunityWip.vue") },
+      { path: "community/:rest(.*)*", redirect: "/community" },
     ],
   },
   { path: "/:pathMatch(.*)*", redirect: "/wildcards" },

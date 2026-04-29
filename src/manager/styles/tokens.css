@@ -1102,28 +1102,10 @@ input, textarea, select { font: inherit; }
   font-size: 22px;
 }
 
-/* Community-flavoured empty: dashed-border card with bg + h3/p layout.
-   Used for full-width empty states inside `.wp-comm-page` (Discover no-match,
-   Profile tab placeholders, Upload sign-in prompt, Offline + 404 states). */
-.wp-empty--card {
-  display: block;
-  padding: 48px 16px;
-  background: var(--wp-bg-1);
-  border: 1px dashed var(--wp-border);
-  border-radius: var(--wp-radius);
-}
-.wp-empty--card .wp-empty__icon {
-  /* Community variant uses a bare `<i>` element, no rounded square wrapper. */
-  width: auto; height: auto;
-  border-radius: 0;
-  background: transparent;
-  border: 0;
-  display: inline-block;
-  font-size: 32px;
-  color: var(--wp-text-dim);
-}
-.wp-empty--card h3 { margin: 8px 0 4px; color: var(--wp-text); font-size: 15px; }
-.wp-empty--card p  { margin: 0; font-size: 12.5px; }
+/* `.wp-empty--card` (full-width dashed empty state) lived alongside the
+   community sub-screens. It moved to the feat/community-tab branch with
+   them; main has no remaining consumer. Re-introduce here when another
+   surface needs it. */
 
 /* Compact dashed-card empty placeholder used inside editor cards
    (DerivationEditor rules list, ConstraintEditor matrix/exceptions,
