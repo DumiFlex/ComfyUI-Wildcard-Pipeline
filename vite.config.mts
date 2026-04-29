@@ -22,6 +22,13 @@ export default defineConfig(({ mode }) => {
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
     },
+    // PostCSS config moved to `config/postcss.config.js` — Vite no
+    // longer auto-discovers it from the project root, so point at it
+    // explicitly. Tailwind's own config path is referenced from
+    // inside that file.
+    css: {
+      postcss: resolve(__dirname, "config/postcss.config.js"),
+    },
   };
 
   if (isExtension) {
