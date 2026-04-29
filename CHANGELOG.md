@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.6.0...v1.7.0) (2026-04-29)
+
+
+### Features
+
+* **context:** module picker + lock/internal + card indicators ([#8](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/issues/8)) ([b1fbd13](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/b1fbd13af32415c087288f7f849b8b505f53da1d))
+
 # [1.6.0](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/compare/v1.5.0...v1.6.0) (2026-04-28)
 
 
