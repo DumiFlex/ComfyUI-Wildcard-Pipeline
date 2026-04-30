@@ -318,6 +318,14 @@ defineExpose({
       </div>
       <div class="wp-page__actions">
         <slot name="header-actions" />
+        <Button
+          variant="ghost"
+          icon="pi pi-refresh"
+          aria-label="Refresh list"
+          :disabled="loading"
+          :class="{ 'wp-refresh-btn--spin': loading }"
+          @click="emitFetch"
+        >Refresh</Button>
         <Button variant="primary" :icon="newIcon" @click="onNew">{{ newLabel }}</Button>
       </div>
     </div>
@@ -804,4 +812,5 @@ defineExpose({
 .wp-row-favorite > td:first-child {
   border-left: 2px solid var(--wp-warn, #f7b955);
 }
+
 </style>

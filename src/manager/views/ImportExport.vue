@@ -41,7 +41,10 @@ const mode = ref<Mode>("export");
 const localModules = ref<ModuleRow[]>([]);
 const localCategories = ref<CategoryRow[]>([]);
 
+const refreshing = ref(false);
+
 async function loadLibrary() {
+  refreshing.value = true;
   try {
     const [mods, cats] = await Promise.all([
       api.modules.list({ limit: 1000 }),
@@ -55,6 +58,8 @@ async function loadLibrary() {
       summary: "Failed to load library",
       detail: String(e), life: 4000,
     });
+  } finally {
+    refreshing.value = false;
   }
 }
 
@@ -492,6 +497,16 @@ watch(
         <p class="wp-page__subtitle">
           Pick exactly what to ship in or out — full library, by kind, or individual modules. Workflow files are NOT handled here.
         </p>
+      </div>
+      <div class="wp-page__actions">
+        <Button
+          variant="ghost"
+          icon="pi pi-refresh"
+          aria-label="Refresh library"
+          :disabled="refreshing"
+          :class="{ 'wp-refresh-btn--spin': refreshing }"
+          @click="loadLibrary"
+        >Refresh</Button>
       </div>
     </div>
 

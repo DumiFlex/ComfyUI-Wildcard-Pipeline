@@ -151,16 +151,23 @@ watch(moduleId, () => {
   traceIndex.value = 0;
 });
 
-onMounted(async () => {
+const refreshing = ref(false);
+async function refresh() {
+  refreshing.value = true;
   try {
     const res = await api.modules.list({});
     allModules.value = res.items;
-    const first = allModules.value.find((m) => m.type === kind.value);
-    if (first) moduleId.value = first.id;
+    if (!moduleId.value || !allModules.value.some((m) => m.id === moduleId.value)) {
+      const first = allModules.value.find((m) => m.type === kind.value);
+      moduleId.value = first?.id ?? null;
+    }
   } catch (e) {
     toast.push({ severity: "error", summary: "Failed to load modules", detail: String(e), life: 3000 });
+  } finally {
+    refreshing.value = false;
   }
-});
+}
+onMounted(refresh);
 
 /* --------------------------- run logic ----------------------------- */
 
@@ -413,6 +420,16 @@ function pickKind(k: ModuleType) {
         <p class="wp-page__subtitle">
           Resolve any module against the engine and inspect the output. Pipelines run end-to-end with a per-step trace.
         </p>
+      </div>
+      <div class="wp-page__actions">
+        <Button
+          variant="ghost"
+          icon="pi pi-refresh"
+          aria-label="Refresh module list"
+          :disabled="refreshing"
+          :class="{ 'wp-refresh-btn--spin': refreshing }"
+          @click="refresh"
+        >Refresh</Button>
       </div>
     </div>
 

@@ -1140,6 +1140,18 @@ input, textarea, select { font: inherit; }
 .wp-icon--danger  { color: var(--wp-danger); }
 .wp-icon--info    { color: var(--wp-info); }
 
+/* Refresh-button affordance — spins the `pi-refresh` icon on the
+ * button it's attached to while a fetch is in flight. Defined in
+ * tokens.css (global) rather than per-component scoped styles so
+ * every list page that imports Button.vue can wear the modifier
+ * class without crossing :deep() boundaries. */
+.wp-refresh-btn--spin .pi-refresh {
+  animation: wp-refresh-spin 0.9s linear infinite;
+}
+@keyframes wp-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ---------- Sticky footer for editors ---------- */
 .wp-footer-bar {
   position: sticky; bottom: 0;

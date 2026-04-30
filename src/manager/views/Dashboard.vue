@@ -134,14 +134,21 @@ async function loadFavorites() {
   }
 }
 
-onMounted(async () => {
-  await Promise.all([
-    loadCounts(),
-    loadRecent(),
-    loadFavorites(),
-    categoryStore.fetchAll().catch(() => undefined),
-  ]);
-});
+const refreshing = ref(false);
+async function refresh() {
+  refreshing.value = true;
+  try {
+    await Promise.all([
+      loadCounts(),
+      loadRecent(),
+      loadFavorites(),
+      categoryStore.fetchAll().catch(() => undefined),
+    ]);
+  } finally {
+    refreshing.value = false;
+  }
+}
+onMounted(refresh);
 </script>
 
 <template>
@@ -156,6 +163,14 @@ onMounted(async () => {
         </p>
       </div>
       <div class="wp-hsplit dashboard__hero-actions">
+        <Button
+          variant="ghost"
+          icon="pi pi-refresh"
+          aria-label="Refresh dashboard"
+          :disabled="refreshing"
+          :class="{ 'wp-refresh-btn--spin': refreshing }"
+          @click="refresh"
+        >Refresh</Button>
         <Button variant="outline" icon="pi-book" @click="openDocs">Docs</Button>
         <Button variant="primary" icon="pi-plus" @click="newWildcard">New module</Button>
       </div>

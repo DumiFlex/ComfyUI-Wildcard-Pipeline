@@ -32,9 +32,15 @@ const countsByCategory = computed(() => {
   return map;
 });
 
-onMounted(async () => {
-  await Promise.all([store.fetchAll(), moduleStore.fetchCatalog()]);
-});
+async function refresh() {
+  try {
+    await Promise.all([store.fetchAll(), moduleStore.fetchCatalog()]);
+  } catch (e) {
+    reportError(e, "Refresh failed");
+  }
+}
+
+onMounted(refresh);
 
 function moduleCount(row: CategoryRow): number {
   return countsByCategory.value.get(row.id) ?? 0;
@@ -102,6 +108,16 @@ async function saveEdit() {
         <p class="wp-page__subtitle">
           Tag groups for filtering modules. Color appears on category chips.
         </p>
+      </div>
+      <div class="wp-page__actions">
+        <Button
+          variant="ghost"
+          icon="pi pi-refresh"
+          aria-label="Refresh categories"
+          :disabled="store.loading"
+          :class="{ 'wp-refresh-btn--spin': store.loading }"
+          @click="refresh"
+        >Refresh</Button>
       </div>
     </div>
 
