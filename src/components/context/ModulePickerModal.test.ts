@@ -150,3 +150,71 @@ describe("ModulePickerModal — filters", () => {
     expect(wrapper.findAll(".wp-picker__row")).toHaveLength(1);
   });
 });
+
+describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
+  /**
+   * Lock the post-5.5.6 contract: every kind with a payload is
+   * pickable. Pre-5.5.6 the picker hard-gated to wildcard-only and
+   * disabled the row for everything else; the engine has handlers for
+   * all six kinds so the gate was purely UX-side.
+   */
+  it("does not disable non-wildcard rows when payload is present", async () => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal(
+      "fetch",
+      stubFetch({
+        "/wp/api/modules": {
+          items: [
+            { id: "aaaaaaaa", type: "wildcard",     name: "wc",   payload: { options: [] }, tags: [], is_favorite: false, category_id: null },
+            { id: "bbbbbbbb", type: "combine",      name: "cmb",  payload: { template: "$x" }, tags: [], is_favorite: false, category_id: null },
+            { id: "cccccccc", type: "derivation",   name: "der",  payload: { rules: [] }, tags: [], is_favorite: false, category_id: null },
+            { id: "dddddddd", type: "constraint",   name: "con",  payload: { matrix: {} }, tags: [], is_favorite: false, category_id: null },
+            { id: "eeeeeeee", type: "fixed_values", name: "fv",   payload: { values: [] }, tags: [], is_favorite: false, category_id: null },
+            { id: "ffffffff", type: "pipeline",     name: "pipe", payload: { steps: [] }, tags: [], is_favorite: false, category_id: null },
+          ],
+        },
+        "/wp/api/categories": { items: [] },
+      }),
+    );
+    const wrapper = mount(ModulePickerModal, {
+      ...mountOpts,
+      props: { visible: true, alreadyAdded: [] },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    await nextTick();
+
+    const rows = wrapper.findAll(".wp-picker__row");
+    expect(rows.length).toBe(6);
+    // Every row should be enabled — no `data-disabled` attribute set.
+    for (const row of rows) {
+      expect(row.attributes("data-disabled")).toBeUndefined();
+    }
+  });
+
+  it("disables a row whose payload is missing", async () => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal(
+      "fetch",
+      stubFetch({
+        "/wp/api/modules": {
+          items: [
+            { id: "aaaaaaaa", type: "combine", name: "broken", payload: undefined, tags: [], is_favorite: false, category_id: null },
+          ],
+        },
+        "/wp/api/categories": { items: [] },
+      }),
+    );
+    const wrapper = mount(ModulePickerModal, {
+      ...mountOpts,
+      props: { visible: true, alreadyAdded: [] },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    await nextTick();
+
+    const row = wrapper.find(".wp-picker__row");
+    expect(row.exists()).toBe(true);
+    expect(row.attributes("data-disabled")).toBe("true");
+  });
+});

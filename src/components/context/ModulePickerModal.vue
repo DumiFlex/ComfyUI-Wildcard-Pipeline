@@ -229,7 +229,7 @@
               :data-disabled="!isPickable(row) || null"
               :data-testid="`picker-row-${row.id}`"
               :disabled="!isPickable(row)"
-              :title="isPickable(row) ? '' : 'Only wildcards can be embedded in this phase. Other kinds arrive in 5.5.6.'"
+              :title="isPickable(row) ? '' : 'Module has no payload — cannot embed.'"
               @click="onRowClick(row)"
             >
               <span v-if="multiMode" class="wp-picker__check">
@@ -334,10 +334,13 @@
  * The picker DOES NOT call embed-bundle itself — that's the parent's
  * job, so the picker stays state-light and easy to test in isolation.
  *
- * Surfacing for non-wildcard kinds: this phase ships the wildcard
- * catalog wiring only (per spec §2.7 + §5.5.4 sub-phase boundary).
- * Non-wildcard rows render disabled with an explanatory tooltip — the
- * full kind-parity flow lands in 5.5.6.
+ * Surfacing for non-wildcard kinds: post-5.5.6 every kind is
+ * pickable. The runtime engine has handlers for all six kinds
+ * (wildcard / fixed_values / combine / derivation / constraint /
+ * pipeline) registered in `engine/modules/__init__.py`, so a
+ * WP_Context graph node can run any mix. Rows still render disabled
+ * when a row has no payload (broken library entry) — that's the only
+ * remaining gate.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -682,13 +685,15 @@ function subtitleFor(m: PickerModule): string {
 
 // ── Pickability gate ───────────────────────────────────────────────
 //
-// Phase 5.5.4 ships only the wildcard catalog flow (snapshots). Other
-// kinds become pickable in 5.5.6 once kind-parity rendering lands in
-// ContextWidget. The picker still SHOWS them (so users see the full
-// library and understand the scope) but disables the click handler
-// with an explanatory tooltip.
+// Post-5.5.6 every kind in the library is embeddable. The engine
+// (engine/modules/__init__.py) registers handlers for all six kinds
+// — wildcard / fixed_values / combine / derivation / constraint /
+// pipeline — so a graph WP_Context can run any mix. The picker
+// disables a row only when it has no payload to embed; that case
+// should not normally happen for library-sourced rows but the guard
+// keeps an obviously-broken row from being added.
 function isPickable(m: PickerModule): boolean {
-  return m.type === "wildcard";
+  return !!m.payload;
 }
 
 // ── Click handlers ─────────────────────────────────────────────────
