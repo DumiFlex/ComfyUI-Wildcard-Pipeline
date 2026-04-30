@@ -252,6 +252,21 @@ function isMissingFromLibrary(m: ModuleEntry): boolean {
 }
 
 /**
+ * Drift = library still has this uuid, but the live `payload_hash`
+ * differs from what was embedded into the workflow at pick time.
+ * Independent of `isModified` (user overrides) and `isMissingFromLibrary`
+ * (uuid gone). Reads `false` until the store's first fetch lands so we
+ * don't flash drift before we know the truth.
+ */
+function isDrifted(m: ModuleEntry): boolean {
+  if (!m.payload_hash) return false;
+  if (libraryHashes.value === null) return false;
+  const live = libraryHashes.value[m.id];
+  if (live === undefined) return false;       // covered by isMissingFromLibrary
+  return live !== m.payload_hash;
+}
+
+/**
  * Save a workflow-resident module snapshot back into the live
  * library at the SAME uuid so the next workflow load won't flag it
  * missing. POSTs to a small new endpoint that bypasses the regular
@@ -995,6 +1010,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               aria-hidden="true"
             ></span>
             <span
+              v-if="isDrifted(m)"
+              class="wp-mod-dot wp-mod-dot--drift"
+              title="Drifted — library has a newer version. Right-click → Refresh from library."
+              aria-hidden="true"
+            ></span>
+            <span
               v-if="isMissingFromLibrary(m)"
               class="wp-mod-dot wp-mod-dot--missing"
               title="Not in library — right-click → Save to library to add it"
@@ -1549,6 +1570,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   background: transparent;
   border-color: var(--wp-accent);
   box-shadow: 0 0 4px var(--wp-accent-glow, rgba(80, 168, 255, 0.4));
+}
+/* Filled orange "drift" — solid fill differentiates it from the
+ * modified ring (hollow blue) and missing dot (dashed amber). The
+ * shape language carries colour-blind users; treatment matters
+ * more than the hex. */
+.wp-mod-dot--drift {
+  background: var(--wp-status-drift);
+  border-color: var(--wp-status-drift);
 }
 /* Filled amber dashed "missing" — the dashed border telegraphs
  * "incomplete state" without leaning on red (which we reserve for
