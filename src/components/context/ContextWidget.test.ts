@@ -295,7 +295,7 @@ describe("ContextWidget bulk refresh", () => {
     wrapper.unmount();
   });
 
-  it("renders a Refresh menu item that is disabled for synced entries", async () => {
+  it("hides the Refresh menu item entirely for synced entries", async () => {
     resetDriftStore();
     vi.stubGlobal(
       "fetch",
@@ -330,13 +330,51 @@ describe("ContextWidget bulk refresh", () => {
     await wrapper.find('[data-module-id="aaaaaaaa"]').trigger("contextmenu");
     await flushPromises();
 
-    // ContextMenu teleports to <body>, so query the real DOM rather
-    // than the wrapper subtree.
+    // ContextMenu teleports to <body>, so query the real DOM. Refresh
+    // entry is conditionally pushed (matching Save's pattern) and must
+    // be absent for synced modules.
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    expect(items.length).toBeGreaterThan(0);
+    const refresh = items.find((el) => el.textContent?.includes("Refresh from library"));
+    expect(refresh, "Refresh from library should be hidden for synced entries").toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("shows the Refresh menu item for drifted entries", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "embedded-A" },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 121, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    await vi.waitFor(() => {
+      expect(wrapper.find(".wp-mod-dot--drift").exists()).toBe(true);
+    });
+
+    await wrapper.find('[data-module-id="aaaaaaaa"]').trigger("contextmenu");
+    await flushPromises();
+
     const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
     const refresh = items.find((el) => el.textContent?.includes("Refresh from library"));
-    expect(refresh, "Refresh from library item should always be in the menu").toBeTruthy();
-    expect(refresh!.classList.contains("wp-ctxmenu__item--disabled")).toBe(true);
-    expect(refresh!.getAttribute("aria-disabled")).toBe("true");
+    expect(refresh, "Refresh from library should appear for drifted entries").toBeTruthy();
+    expect(refresh!.classList.contains("wp-ctxmenu__item--disabled")).toBe(false);
     wrapper.unmount();
   });
 });

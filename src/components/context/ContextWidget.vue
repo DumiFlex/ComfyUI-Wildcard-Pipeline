@@ -810,13 +810,19 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
   // workflow side).
   const items: ContextMenuItem[] = [
     { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(m.id) },
-    {
+  ];
+  // Refresh + Save are mutually exclusive in normal use (a module is
+  // either drifted OR missing OR clean), so hiding the inactive entry
+  // beats greying it — matches Save's existing conditional-push pattern
+  // and keeps the menu shorter.
+  if (isDrifted(m)) {
+    items.push({
       label: "Refresh from library",
       icon: "pi-refresh",
-      disabled: !isDrifted(m),
       onSelect: () => { void refreshOne(m); },
-    },
-  ];
+      divider: true,
+    });
+  }
   if (isMissingFromLibrary(m) && !!m.payload) {
     items.push({
       label: "Save to library",
@@ -831,7 +837,7 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
     { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(m.id), divider: true },
     { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(m.id, "top") },
     { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(m.id, "bottom") },
-    { label: "Delete", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(m.id) },
+    { label: "Remove", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(m.id) },
   );
   ctxMenu.value = { visible: true, x: Math.max(8, x), y: Math.max(8, y), items };
 }
