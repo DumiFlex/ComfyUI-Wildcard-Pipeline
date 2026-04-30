@@ -35,3 +35,29 @@ describe("drift-store: subscribe/unsubscribe", () => {
     unsubscribe();
   });
 });
+
+describe("drift-store: refCount lifecycle", () => {
+  it("stops polling when the last subscriber unsubs", async () => {
+    subscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    const fetchSpy = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    const callsAfterFirst = fetchSpy.mock.calls.length;
+
+    unsubscribe();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(fetchSpy.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it("keeps polling when only one of two subscribers leaves", async () => {
+    subscribe();
+    subscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    const fetchSpy = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    const before = fetchSpy.mock.calls.length;
+
+    unsubscribe();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fetchSpy.mock.calls.length).toBeGreaterThan(before);
+    unsubscribe();
+  });
+});
