@@ -15,6 +15,8 @@ import { pushToast } from "../shared/toast-store";
 import {
   forceRefresh as forceRefreshHashes,
   hashes as libraryHashes,
+  refreshMany,
+  refreshModule,
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
@@ -306,6 +308,54 @@ async function saveToLibrary(m: ModuleEntry) {
     pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
   }
 }
+
+/** Per-card refresh — replace one drifted entry with the live snapshot.
+ *  Errors surface as toasts; a 404 (deleted between poll and refresh)
+ *  is treated as missing-from-library because the next poll tick will
+ *  flip the dot from drift → missing. */
+async function refreshOne(m: ModuleEntry): Promise<void> {
+  try {
+    const merged = await refreshModule(m);
+    const i = value.value.modules.findIndex((x) => x.id === m.id);
+    if (i < 0) return;
+    value.value.modules[i] = merged;
+    pushToast(`Refreshed "${merged.meta.name || merged.type}".`, { severity: "success" });
+    await forceRefreshHashes();
+  } catch (err) {
+    const msg = (err as Error).message ?? "unknown";
+    if (msg === "not in library") {
+      pushToast(`"${m.meta.name || m.type}" no longer in library — try Save to library.`, { severity: "warning" });
+    } else {
+      pushToast(`Refresh failed: ${msg}`, { severity: "error" });
+    }
+  }
+}
+
+/** Bulk — refresh every drifted entry in one batched fetch. */
+async function refreshAllDrifted(): Promise<void> {
+  const drifted = value.value.modules.filter(isDrifted);
+  if (drifted.length === 0) return;
+  const result = await refreshMany(drifted);
+
+  if (result.refreshed.length > 0) {
+    // Apply all merges in one mutation so Vue's deep watcher fires once.
+    const byId = new Map(result.refreshed.map((r) => [r.id, r]));
+    value.value.modules = value.value.modules.map((m) => byId.get(m.id) ?? m);
+    await forceRefreshHashes();
+  }
+
+  if (result.failed.length === 0) {
+    pushToast(`Refreshed ${result.refreshed.length} module(s).`, { severity: "success" });
+  } else {
+    pushToast(
+      `Refreshed ${result.refreshed.length} of ${drifted.length}; ${result.failed.length} stayed drifted.`,
+      { severity: "warning" },
+    );
+  }
+}
+
+/** Surfaced as a computed for the bulk-button visibility + label. */
+const driftedCount = computed(() => value.value.modules.filter(isDrifted).length);
 
 function isModified(m: ModuleEntry): boolean {
   // Lock + internal have their own dedicated header buttons, so
@@ -758,6 +808,12 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
   // workflow side).
   const items: ContextMenuItem[] = [
     { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(m.id) },
+    {
+      label: "Refresh from library",
+      icon: "pi-refresh",
+      disabled: !isDrifted(m),
+      onSelect: () => { void refreshOne(m); },
+    },
   ];
   if (isMissingFromLibrary(m) && !!m.payload) {
     items.push({
@@ -921,6 +977,21 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             v-if="value.modules.length > 0"
             class="wp-section-label__count"
           >{{ value.modules.length }}</span>
+
+          <!-- Bulk-refresh drifted. Visible only when at least one module
+               drifted from its library version; orange accent matches the
+               per-card drift dot. -->
+          <button
+            v-if="driftedCount > 0"
+            type="button"
+            class="wp-section-label__bulk wp-section-label__bulk--drift"
+            :title="`Refresh ${driftedCount} drifted module(s) from the library.`"
+            data-testid="bulk-refresh-drifted"
+            @click="refreshAllDrifted"
+          >
+            <i class="pi pi-refresh" aria-hidden="true"></i>
+            <span>refresh {{ driftedCount }} drifted</span>
+          </button>
 
           <!-- Bulk-collapse toggle. Chevron direction follows the
                action that the click WILL take: ▾ when nothing is
@@ -1311,6 +1382,13 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   background: var(--wp-bg2);
 }
 .wp-section-label__bulk .pi { font-size: 9px; }
+.wp-section-label__bulk--drift {
+  border-color: var(--wp-status-drift);
+  color: var(--wp-status-drift);
+}
+.wp-section-label__bulk--drift:hover {
+  background: color-mix(in oklab, var(--wp-status-drift) 14%, transparent);
+}
 
 /* ── Empty-state hero (2.3) + first-run hint (4.5) ──────────────────────
  * Restrained to match the picker modal — plain title, body, gradient
