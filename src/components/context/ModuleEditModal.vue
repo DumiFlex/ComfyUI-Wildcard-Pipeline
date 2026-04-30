@@ -486,12 +486,12 @@ function onValueEnter(idx: number, ev: KeyboardEvent) {
   if (isLast) {
     addEntry();
     nextTick(() => {
-      const inputs = document.querySelectorAll<HTMLInputElement>(".wp-medit__entry-var");
+      const inputs = document.querySelectorAll<HTMLInputElement>(".wp-medit__entry-name");
       inputs[inputs.length - 1]?.focus();
     });
   } else {
     nextTick(() => {
-      const inputs = document.querySelectorAll<HTMLInputElement>(".wp-medit__entry-var");
+      const inputs = document.querySelectorAll<HTMLInputElement>(".wp-medit__entry-name");
       inputs[idx + 1]?.focus();
     });
   }
@@ -724,35 +724,58 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
           />
         </section>
 
-        <!-- fixed_values: inline name/value entry editor (legacy flow). -->
+        <!-- fixed_values: inline name/value entry editor. Layout +
+             chrome match the wildcard option-row container so all
+             editable kinds share one visual vocabulary. -->
         <section v-if="draft.type === 'fixed_values'" class="wp-medit__section">
-          <label class="wp-medit__section-label">ENTRIES</label>
+          <div class="wp-medit__opt-head">
+            <label class="wp-medit__section-label">
+              ENTRIES · {{ draft.entries.length }}
+            </label>
+            <div class="wp-medit__opt-bulk">
+              <button
+                type="button"
+                class="wp-medit__bulk-btn"
+                title="Add a new entry. Tip — paste multi-line `name=value` text into a name field to bulk-add."
+                @click="addEntry"
+              >
+                <i class="pi pi-plus" aria-hidden="true"></i>
+                add
+              </button>
+            </div>
+          </div>
           <p class="wp-medit__hint-line">
-            Tip — paste multi-line <code>name=value</code> text into a name field to bulk-add.
+            Paste multi-line <code>name=value</code> text into a name field to bulk-add.
           </p>
           <div v-if="draft.entries.length === 0" class="wp-medit__empty">
             No entries yet.
           </div>
-          <TransitionGroup v-else tag="div" name="wp-medit-list" class="wp-medit__entries">
+          <TransitionGroup
+            v-else
+            tag="div"
+            name="wp-medit-list"
+            class="wp-medit__entries"
+          >
             <datalist :id="datalistId" key="datalist">
               <option v-for="v in autocompleteOptions" :key="v" :value="v"></option>
             </datalist>
-            <div v-for="(e, i) in draft.entries" :key="`row-${i}`" class="wp-medit__entry">
+            <div
+              v-for="(e, i) in draft.entries"
+              :key="`row-${i}`"
+              class="wp-medit__entry"
+              :class="`wp-medit__entry--${entryStatuses[i]}`"
+            >
               <span
-                class="wp-medit__status"
-                :class="`wp-medit__status--${entryStatuses[i]}`"
+                class="wp-medit__entry-dot"
+                :class="`wp-medit__entry-dot--${entryStatuses[i]}`"
                 :title="statusTooltip(entryStatuses[i])"
                 aria-hidden="true"
-              >
-                <i v-if="entryStatuses[i] === 'ok'" class="pi pi-check"></i>
-                <i v-else-if="entryStatuses[i] === 'dup'" class="pi pi-exclamation-circle"></i>
-                <i v-else-if="entryStatuses[i] === 'shadow'" class="pi pi-info-circle"></i>
-              </span>
-              <div class="wp-medit__entry-var-wrap">
+              ></span>
+              <label class="wp-medit__entry-chip">
                 <span class="wp-medit__entry-prefix" aria-hidden="true">$</span>
                 <input
                   :ref="(el) => { if (i === 0) firstNameInput = el as HTMLInputElement }"
-                  class="wp-medit__entry-input wp-medit__entry-var"
+                  class="wp-medit__entry-name"
                   :value="e.variable_name"
                   placeholder="name"
                   spellcheck="false"
@@ -760,10 +783,10 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
                   @input="(ev) => updateVarName(i, (ev.target as HTMLInputElement).value)"
                   @paste="(ev) => onNamePaste(i, ev)"
                 />
-              </div>
+              </label>
               <input
                 v-model="e.value"
-                class="wp-medit__entry-input wp-medit__entry-value"
+                class="wp-medit__entry-value"
                 placeholder="value"
                 @keydown.enter="(ev) => onValueEnter(i, ev)"
               />
@@ -776,9 +799,6 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
               ><i class="pi pi-times" aria-hidden="true"></i></button>
             </div>
           </TransitionGroup>
-          <button type="button" class="wp-medit__add-entry" @click="addEntry">
-            <i class="pi pi-plus" aria-hidden="true"></i> add entry
-          </button>
         </section>
 
         <!-- Wildcard kind: mode picker + per-option editor. Saves
@@ -1239,93 +1259,141 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
   padding: 6px 0;
 }
 
+/* Fixed-values entry editor. Card container mirrors `.wp-medit__opts`
+ * so the editable kinds share visual chrome with the wildcard option
+ * editor — same border, same bg, same scroll affordance. */
 .wp-medit__entries {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-.wp-medit__entry {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-}
-.wp-medit__entry > .wp-medit__entry-var-wrap,
-.wp-medit__entry > .wp-medit__entry-value {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* Per-entry validity glyph */
-.wp-medit__status {
-  width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  flex-shrink: 0;
-  cursor: help;
-}
-.wp-medit__status--empty,
-.wp-medit__status--empty i { display: none; }
-.wp-medit__status--ok i { color: var(--wp-green); }
-.wp-medit__status--shadow i { color: var(--wp-accent); }
-.wp-medit__status--dup i { color: var(--wp-red); }
-
-.wp-medit__entry-var-wrap {
-  position: relative;
-  min-width: 0;
-}
-.wp-medit__entry-prefix {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--wp-accent);
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 12px;
-  font-weight: 600;
-  pointer-events: none;
-}
-.wp-medit__entry-var { padding-left: 16px !important; }
-.wp-medit__entry-input {
-  background: var(--wp-bg);
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-sm);
+  background: var(--wp-bg);
+  padding: 4px;
+}
+/* Each row: status dot · $-name chip · value input · remove. Grid
+ * keeps the columns aligned across rows even when the chip / value
+ * widths shift. */
+.wp-medit__entry {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) minmax(0, 1.4fr) 18px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  transition: background 0.1s;
+}
+.wp-medit__entry:hover { background: var(--wp-bg2); }
+
+/* Status — small color-coded dot. Empty + ok render no fill so a
+ * clean entry doesn't add visual noise. Tooltip on hover gives the
+ * "duplicate / shadows upstream" detail. */
+.wp-medit__entry-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  cursor: help;
+}
+.wp-medit__entry-dot--shadow { background: var(--wp-accent); }
+.wp-medit__entry-dot--dup    { background: var(--wp-red); }
+/* Tinted left-border on the row matches the dot colour so the cue
+ * is visible even when the dot is small / out of focus. */
+.wp-medit__entry--shadow { box-shadow: inset 2px 0 0 var(--wp-accent); }
+.wp-medit__entry--dup    { box-shadow: inset 2px 0 0 var(--wp-red); }
+
+/* `$name` chip — pill-shaped wrapper with the $ prefix baked in,
+ * matching the read-only `.wp-medit__chip` visual used in the
+ * combine / constraint preview blocks. The input inside is
+ * borderless so the pill is the visible affordance. */
+.wp-medit__entry-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px 2px 8px;
+  border-radius: 999px;
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border);
   color: var(--wp-text);
   font-family: var(--wp-font-mono, monospace);
-  font-size: 12px;
-  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  min-width: 0;
+  transition: border-color 0.12s, background 0.12s;
+}
+.wp-medit__entry-chip:focus-within {
+  border-color: var(--wp-accent);
+  background: var(--wp-bg);
+}
+.wp-medit__entry-prefix {
+  color: var(--wp-accent);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.wp-medit__entry-name {
+  flex: 1 1 0;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--wp-text);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+}
+.wp-medit__entry-name::placeholder { color: var(--wp-text3); font-weight: 400; }
+
+/* Value field — borderless underline-style input that shows up only
+ * on hover/focus, matching the wildcard option-value cell ethos
+ * (content first, chrome second). */
+.wp-medit__entry-value {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text2);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 11px;
+  padding: 3px 6px;
   width: 100%;
   min-width: 0;
+  transition: border-color 0.12s, background 0.12s;
 }
-.wp-medit__entry-input:focus { outline: none; border-color: var(--wp-accent); }
+.wp-medit__entry-value::placeholder { color: var(--wp-text3); font-style: italic; }
+.wp-medit__entry-value:hover:not(:focus) {
+  background: var(--wp-bg2);
+}
+.wp-medit__entry-value:focus {
+  outline: none;
+  border-color: var(--wp-accent);
+  background: var(--wp-bg);
+  color: var(--wp-text);
+}
+
 .wp-medit__entry-remove {
   background: none;
   border: none;
   color: var(--wp-text3);
   cursor: pointer;
-  font-size: 12px;
-  padding: 0 4px;
-}
-.wp-medit__entry-remove:hover { color: var(--wp-red); }
-
-.wp-medit__add-entry {
-  background: none;
-  border: 1px dashed var(--wp-border2);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text2);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 5px;
-  align-self: flex-start;
+  font-size: 10px;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.12s, background 0.12s;
 }
-.wp-medit__add-entry:hover { color: var(--wp-accent); border-color: var(--wp-accent); }
+.wp-medit__entry:hover .wp-medit__entry-remove,
+.wp-medit__entry:focus-within .wp-medit__entry-remove { opacity: 1; }
+.wp-medit__entry-remove:hover { color: var(--wp-red); background: var(--wp-bg); }
 
 .wp-medit__foot {
   display: flex;
