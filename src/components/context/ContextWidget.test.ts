@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import ContextWidget from "./ContextWidget.vue";
+import { _resetForTests as resetDriftStore } from "./drift-store";
 
 beforeEach(() => {
   // Phase 5.5.4 — the picker now fetches the library on mount. Stub
@@ -100,5 +101,53 @@ describe("ContextWidget.vue", () => {
     // Read-only div, not a button — edit access is via right-click → Edit
     // or Enter on the focused card.
     expect(summary.element.tagName).toBe("DIV");
+  });
+});
+
+describe("ContextWidget drift dot", () => {
+  it("renders wp-mod-dot--drift when embedded hash differs from live hash", async () => {
+    // Reset the shared drift-store singleton so refCount + hashes don't leak
+    // from earlier tests in this file (those mounts never call wrapper.unmount).
+    resetDriftStore();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Live hash differs from embedded → drift.
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-LIVE" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "aaaaaaaa",
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "wc", description: "", tags: [] },
+          entries: [],
+          payload: { options: [] },
+          payload_hash: "h-EMBEDDED",
+        },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 99, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    // Wait for the store's first poll to land.
+    await vi.waitFor(() => {
+      expect(wrapper.find(".wp-mod-dot--drift").exists()).toBe(true);
+    });
+
+    // Sanity: missing dot must NOT also render — uuid is in library.
+    expect(wrapper.find(".wp-mod-dot--missing").exists()).toBe(false);
+    wrapper.unmount();
   });
 });
