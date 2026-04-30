@@ -31,6 +31,28 @@ describe("scanConflicts", () => {
     const value: ContextWidgetValue = { version: 1, modules: [mod("m1", ["sty"])] };
     expect(scanConflicts(value, ["style"])).toEqual([]);
   });
+
+  it("does not flag duplicate when fixed_values entries + payload.values overlap (same module)", () => {
+    // Library-picked / saved fixed_values carries the SAME names in both
+    // `entries` (UI) and `payload.values` (engine). Naive concat would
+    // surface every name twice → false `duplicate_variable`. Regression
+    // for the bug where freshly-picked fixed_values cards lit up red.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{
+        id: "m1",
+        type: "fixed_values",
+        enabled: true,
+        meta: { name: "" },
+        entries: [{ variable_name: "style", value: "x" }, { variable_name: "tone", value: "y" }],
+        payload: { values: [
+          { id: "val_0000", name: "style", value: "x" },
+          { id: "val_0001", name: "tone", value: "y" },
+        ] },
+      }],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
 });
 
 const combine = (

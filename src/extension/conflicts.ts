@@ -5,15 +5,22 @@ import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
 function writesOf(m: ModuleEntry): string[] {
   const out: string[] = [];
   if (m.type === "fixed_values") {
+    // Dedup within a single fixed_values module: `entries` (UI source)
+    // and `payload.values` (engine source) carry the same names after
+    // ModuleEditModal sync, so naive concat would falsely flag every
+    // entry as `duplicate_variable` against itself. Multi-module dup
+    // detection still works — outer `written` set tracks across modules.
+    const seen = new Set<string>();
     for (const e of m.entries) {
       const name = e.variable_name.replace(/^\$/, "").trim();
-      if (name) out.push(name);
+      if (name) seen.add(name);
     }
     const values = (m.payload as { values?: Array<{ name?: string }> } | undefined)?.values ?? [];
     for (const v of values) {
       const name = (v.name ?? "").replace(/^\$/, "").trim();
-      if (name) out.push(name);
+      if (name) seen.add(name);
     }
+    out.push(...seen);
     return out;
   }
   const p = (m.payload ?? {}) as Record<string, unknown>;
