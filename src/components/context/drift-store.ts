@@ -22,7 +22,13 @@ export interface RefreshResult {
 
 /** Live-library hashes keyed by uuid. `null` while the first fetch is in
  *  flight — predicates downstream use this to avoid flashing "missing" /
- *  "drift" before we know the truth. */
+ *  "drift" before we know the truth.
+ *
+ *  Invariant: values are always non-empty strings once the map is non-null.
+ *  Consumers may assume `live === undefined` is equivalent to `!(uuid in
+ *  hashes.value)` — the API never emits explicit-undefined entries. If this
+ *  ever changes, both `isMissingFromLibrary` and `isDrifted` in
+ *  `ContextWidget.vue` need to be tightened together. */
 export const hashes: Ref<Record<string, string> | null> = ref(null);
 
 let refCount = 0;

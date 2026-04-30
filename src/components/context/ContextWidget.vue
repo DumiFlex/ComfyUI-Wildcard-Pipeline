@@ -999,9 +999,9 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
           <!-- Status-dots cluster — read-only indicators grouped so
                the eye reads them as a single "module health" glance.
-               Order modified → missing → conflict (severity rises
-               left → right). Buttons sit AFTER this cluster so dots
-               never split the interactive controls. -->
+               Order modified → drift → missing → conflict (severity
+               rises left → right). Buttons sit AFTER this cluster so
+               dots never split the interactive controls. -->
           <span class="wp-mod-dots">
             <span
               v-if="isModified(m)"
