@@ -292,7 +292,8 @@ function rippleStyle(v: string): Record<string, string> {
   width: 0;
   height: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
+  /* Theme-aware ripple — white-tint in dark, ink-tint in light. */
+  background: var(--wp-border-strong);
   transform: translate(-50%, -50%);
   animation: wp-asm-ripple 0.4s ease-out;
   pointer-events: none;
@@ -374,14 +375,14 @@ function rippleStyle(v: string): Record<string, string> {
   border-radius: 3px;
 }
 .wp-tok-miss {
-  color: var(--wp-amber, #d4a843);
+  color: var(--wp-amber);
   background: var(--wp-amber-bg, rgba(212, 168, 67, 0.1));
   padding: 1px 3px;
   border-radius: 3px;
   text-decoration: underline wavy;
 }
 .wp-asm-empty-inline {
-  color: var(--wp-text3, #5a5a72);
+  color: var(--wp-text-dim);
   font-style: italic;
 }
 </style>

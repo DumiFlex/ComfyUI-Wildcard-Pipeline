@@ -1319,7 +1319,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border-color: var(--wp-red);
 }
 .wp-recovery__btn--danger:hover {
-  background: rgba(248, 113, 113, 0.12);
+  background: var(--wp-red-bg);
   color: var(--wp-red);
 }
 .wp-recovery__raw {
@@ -1606,11 +1606,11 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   flex-shrink: 0;
 }
 .wp-type-icon.type-fixed_values { color: var(--wp-kind-fixed, var(--wp-rose)); }
-.wp-type-icon.type-wildcard     { color: var(--wp-kind-wildcard, #a78bfa); }
-.wp-type-icon.type-combine      { color: var(--wp-kind-combine,  #34d399); }
-.wp-type-icon.type-derivation   { color: var(--wp-kind-derivation, #fbbf24); }
-.wp-type-icon.type-constraint   { color: var(--wp-kind-constraint, #f472b6); }
-.wp-type-icon.type-pipeline     { color: var(--wp-kind-pipeline, #fb7185); }
+.wp-type-icon.type-wildcard     { color: var(--wp-kind-wildcard); }
+.wp-type-icon.type-combine      { color: var(--wp-kind-combine); }
+.wp-type-icon.type-derivation   { color: var(--wp-kind-derivation); }
+.wp-type-icon.type-constraint   { color: var(--wp-kind-constraint); }
+.wp-type-icon.type-pipeline     { color: var(--wp-kind-pipeline); }
 
 .wp-module-name {
   flex: 1;
@@ -1661,7 +1661,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-mod-dot--modified {
   background: transparent;
   border-color: var(--wp-accent);
-  box-shadow: 0 0 4px var(--wp-accent-glow, rgba(80, 168, 255, 0.4));
+  box-shadow: 0 0 4px var(--wp-accent-glow);
 }
 /* Filled orange "drift" — solid fill differentiates it from the
  * modified ring (hollow blue) and missing dot (dashed amber). The
