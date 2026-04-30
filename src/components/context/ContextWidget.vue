@@ -579,6 +579,25 @@ async function onLibraryPick(uuids: string[]) {
     const existingIds = new Set(value.value.modules.map((m) => m.id));
     const newEntries: ModuleEntry[] = [];
 
+    // Hoist `payload.values` → `entries` for fixed_values so the
+    // widget UI (collapsed summary, modal entries editor) finds the
+    // bindings. Engine reads from `payload.values` directly so this
+    // is purely a UI-side mirror; the modal's save() step keeps the
+    // two in sync after edits.
+    function entriesFromSnapshot(
+      entry: { type: string; payload: Record<string, unknown> },
+    ): { variable_name: string; value: string }[] {
+      if (entry.type !== "fixed_values") return [];
+      const values = (entry.payload as { values?: unknown }).values;
+      if (!Array.isArray(values)) return [];
+      return values
+        .filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null)
+        .map((v) => ({
+          variable_name: String(v.name ?? v.var ?? ""),
+          value: String(v.value ?? ""),
+        }));
+    }
+
     // Append picks first (in input order) so user-picked rows land
     // before any transitive deps in the resulting card list.
     const seenInBundle = new Set<string>();
@@ -592,7 +611,7 @@ async function onLibraryPick(uuids: string[]) {
         type: entry.type as ModuleEntry["type"],
         enabled: true,
         meta: { name: entry.name },
-        entries: [],
+        entries: entriesFromSnapshot(entry),
         payload: entry.payload,
         payload_hash: entry.payload_hash,
       });
@@ -607,7 +626,7 @@ async function onLibraryPick(uuids: string[]) {
         type: entry.type as ModuleEntry["type"],
         enabled: true,
         meta: { name: entry.name },
-        entries: [],
+        entries: entriesFromSnapshot(entry),
         payload: entry.payload,
         payload_hash: entry.payload_hash,
       });

@@ -451,3 +451,75 @@ describe("ContextWidget summaryFor — constraint", () => {
     wrapper.unmount();
   });
 });
+
+describe("ContextWidget — fixed_values picked from library", () => {
+  /**
+   * Regression: post-5.5.6 the picker can embed any kind. For
+   * fixed_values the engine reads `payload.values` but the widget
+   * UI reads `m.entries` for the collapsed-card summary + the inline
+   * editor. Without hoisting on pick, the card rendered with an
+   * empty body. Pin the hoist so the summary surfaces the bindings.
+   */
+  it("hoists payload.values into entries on library pick (mocked)", async () => {
+    resetDriftStore();
+    // Stub embed-bundle so the pick flow returns a fixed_values
+    // snapshot whose payload.values carries 3 named bindings.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/embed-bundle")) {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uuids: string[] };
+          expect(body.uuids).toEqual(["12345abc"]);
+          return new Response(
+            JSON.stringify({
+              modules: [],
+              snapshots: {
+                "12345abc": {
+                  uuid: "12345abc",
+                  type: "fixed_values",
+                  name: "presets",
+                  payload: {
+                    values: [
+                      { id: "val_0001", name: "style",   value: "noir" },
+                      { id: "val_0002", name: "subject", value: "fox" },
+                      { id: "val_0003", name: "mood",    value: "calm" },
+                    ],
+                  },
+                  payload_hash: "h-fv",
+                },
+              },
+              pickOrder: ["12345abc"],
+              walkOverflow: [],
+            }),
+            { status: 200 },
+          );
+        }
+        // Default for /list, /hashes, /categories etc.
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 300, initialJson: '{"version":1,"modules":[]}', upstreamVars: [], onChange },
+    });
+
+    // Drive a library pick by directly invoking the picker emit
+    // — the picker UI is exercised by its own tests; here we want
+    // the widget's onLibraryPick branch to run with our stub.
+    const picker = wrapper.findComponent({ name: "ModulePickerModal" });
+    expect(picker.exists()).toBe(true);
+    picker.vm.$emit("pick", ["12345abc"]);
+
+    await flushPromises();
+
+    const card = wrapper.find('[data-module-id="12345abc"]');
+    expect(card.exists()).toBe(true);
+    // summaryFor for fixed_values renders "$style, $subject, +1 more".
+    expect(card.text()).toContain("$style");
+    expect(card.text()).toContain("$subject");
+    expect(card.text()).toContain("+1 more");
+    wrapper.unmount();
+  });
+});

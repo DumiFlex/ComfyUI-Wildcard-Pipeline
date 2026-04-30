@@ -525,7 +525,21 @@ function onNamePaste(idx: number, ev: ClipboardEvent) {
 
 function save() {
   if (!draft.value) return;
-  emit("save", JSON.parse(JSON.stringify(draft.value)));
+  const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
+  // fixed_values: the engine resolves from `payload.values`, not the
+  // widget-side `entries` array. Mirror the user-edited entries into
+  // payload before emitting so runtime sees the latest names + values.
+  // Keeps both inline-created (no payload at pick time) and
+  // library-picked (payload pre-populated) flows in sync.
+  if (next.type === "fixed_values") {
+    const values = next.entries.map((e, i) => ({
+      id: `val_${i.toString(16).padStart(4, "0")}`,
+      name: e.variable_name,
+      value: e.value,
+    }));
+    next.payload = { ...(next.payload ?? {}), values };
+  }
+  emit("save", next);
 }
 
 function cancel() {
