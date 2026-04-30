@@ -584,17 +584,30 @@ const spaEditorHref = computed<string>(() => {
   return `${window.location.origin}/wp/${segment}/${m.id}/edit`;
 });
 
-// Resolve a sibling module's uuid back to its bound variable name (or
-// fall back to the meta name when no var_binding is set). Returns null
-// if the uuid doesn't match any sibling.
+// Resolve a sibling module's uuid back to its bound variable name.
+// Lookup ladder:
+//   1. siblings in this WP_Context (var_binding → meta.name)
+//   2. preview-resolver cache (lazy DB-backed lookup for cross-node
+//      refs — e.g. constraint source/target wildcard not picked into
+//      this node)
+// Returns null only when both miss; caller decides the placeholder.
 function lookupSiblingName(uuid: string | null | undefined): string | null {
   if (!uuid) return null;
+  // Subscribe to the cache version so async-landed entries trigger
+  // re-eval of any computed reading this function.
+  void previewCacheVersion.value;
   const sib = (props.siblingModules ?? []).find((s) => s.id === uuid);
-  if (!sib) return null;
-  const binding = (sib.payload as { var_binding?: string } | undefined)?.var_binding;
-  if (typeof binding === "string" && binding.trim()) return binding.trim();
-  const name = sib.meta?.name?.trim();
-  return name ? name : null;
+  if (sib) {
+    const binding = (sib.payload as { var_binding?: string } | undefined)?.var_binding;
+    if (typeof binding === "string" && binding.trim()) return binding.trim();
+    const name = sib.meta?.name?.trim();
+    if (name) return name;
+  }
+  ensurePreviewLookup([uuid]);
+  const lk = previewLookup(uuid);
+  if (lk?.varBinding) return lk.varBinding;
+  if (lk?.name) return lk.name;
+  return null;
 }
 
 // ── Combine preview ──────────────────────────────────────────────────
@@ -645,13 +658,16 @@ const constraintSourceLabel = computed<string>(() => {
   if (!draft.value || draft.value.type !== "constraint") return "?";
   const p = draft.value.payload as { source_wildcard_id?: string | null } | undefined;
   if (!p?.source_wildcard_id) return "(unset)";
-  return lookupSiblingName(p.source_wildcard_id) ?? p.source_wildcard_id;
+  // Show "?" rather than the raw uuid when the lookup misses — the
+  // 8-hex string is meaningless to the user. The async cache will
+  // re-render with a real name when the fetch lands.
+  return lookupSiblingName(p.source_wildcard_id) ?? "?";
 });
 const constraintTargetLabel = computed<string>(() => {
   if (!draft.value || draft.value.type !== "constraint") return "?";
   const p = draft.value.payload as { target_wildcard_id?: string | null } | undefined;
   if (!p?.target_wildcard_id) return "(unset)";
-  return lookupSiblingName(p.target_wildcard_id) ?? p.target_wildcard_id;
+  return lookupSiblingName(p.target_wildcard_id) ?? "?";
 });
 const constraintRowCount = computed<number>(() => {
   if (!draft.value || draft.value.type !== "constraint") return 0;

@@ -26,6 +26,11 @@ export interface PreviewLookup {
   name?: string;
   /** First option's value for `wildcard` modules — used to recurse. */
   firstOption?: string;
+  /** `payload.var_binding` for `wildcard` modules — the canonical $-var
+   *  name. Lets dangling constraint source/target refs render as
+   *  `$style` instead of `$ae07018b` even when the referenced wildcard
+   *  isn't embedded in the same WP_Context node. */
+  varBinding?: string;
 }
 
 const cache = new Map<string, PreviewLookup>();
@@ -79,7 +84,10 @@ export function _setForTests(uuid: string, entry: PreviewLookup): void {
 interface BundleSnapshot {
   name?: string;
   type?: string;
-  payload?: { options?: Array<{ value?: string }> };
+  payload?: {
+    options?: Array<{ value?: string }>;
+    var_binding?: string;
+  };
 }
 
 async function fetchBundle(uuids: string[]): Promise<void> {
@@ -112,6 +120,8 @@ async function fetchBundle(uuids: string[]): Promise<void> {
       if (snap.type === "wildcard") {
         const v = snap.payload?.options?.[0]?.value;
         if (typeof v === "string") entry.firstOption = v;
+        const vb = snap.payload?.var_binding;
+        if (typeof vb === "string" && vb.trim()) entry.varBinding = vb.trim();
       }
       cache.set(u, entry);
     }

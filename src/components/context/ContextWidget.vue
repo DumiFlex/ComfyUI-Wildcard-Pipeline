@@ -6,6 +6,11 @@ import {
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
 import { scanConflicts, type Conflict } from "../../extension/conflicts";
+import {
+  ensure as ensurePreviewLookup,
+  lookup as previewLookup,
+  cacheVersion as previewCacheVersion,
+} from "../../extension/preview-resolver";
 import ModulePickerModal from "./ModulePickerModal.vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
@@ -468,17 +473,35 @@ function modifiedTooltip(m: ModuleEntry): string {
  * Look up a sibling module's display name by uuid. Used by the
  * constraint summary + (Task 2) the modal preview. Returns the
  * payload's `var_binding` first (canonical $-var name for wildcards),
- * falls back to `meta.name`, then `null` if no sibling matches the id
- * — caller decides what to render in the dangling-ref case.
+ * falls back to `meta.name`, then to the lazy preview-resolver cache
+ * for cross-node refs (e.g. constraint source/target wildcards that
+ * weren't picked into this WP_Context). Returns `null` only when
+ * neither siblings nor the cache know the uuid — caller decides what
+ * to render in that dangling-ref case.
  */
 function lookupSiblingName(uuid: string | null | undefined): string | null {
   if (!uuid) return null;
+  // Touch cacheVersion so the computed re-evaluates when an async
+  // fetch lands. Without this read the lookup stays stale until some
+  // other dependency invalidates the computed.
+  void previewCacheVersion.value;
   const sib = value.value.modules.find((m) => m.id === uuid);
-  if (!sib) return null;
-  const binding = (sib.payload as { var_binding?: string } | undefined)?.var_binding;
-  if (typeof binding === "string" && binding.trim()) return binding.trim();
-  const name = sib.meta?.name?.trim();
-  return name ? name : null;
+  if (sib) {
+    const binding = (sib.payload as { var_binding?: string } | undefined)?.var_binding;
+    if (typeof binding === "string" && binding.trim()) return binding.trim();
+    const name = sib.meta?.name?.trim();
+    if (name) return name;
+  }
+  // Fallback: dangling ref (e.g. constraint references a wildcard
+  // not embedded in this node). Pull the canonical name from the
+  // preview-resolver cache — that's already populated for any uuid
+  // mentioned anywhere in the chain. Fire ensure() lazily so the
+  // first reference triggers a fetch; subsequent reads hit the cache.
+  ensurePreviewLookup([uuid]);
+  const lk = previewLookup(uuid);
+  if (lk?.varBinding) return lk.varBinding;
+  if (lk?.name) return lk.name;
+  return null;
 }
 
 function summaryFor(m: ModuleEntry): string {
