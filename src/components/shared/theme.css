@@ -97,6 +97,14 @@
   --wp-overlay-bg: rgba(0, 0, 0, 0.55);
 
   --wp-danger: #ef4444;
+  /* Warn = SPA `--wp-warn` (amber). ContextWidget drift-dot + bulk-refresh
+   * button reuse this to mirror the SPA `.wp-io-badge--exists` semantic
+   * ("library has a newer version, you can overwrite the embedded one"). */
+  --wp-warn: #f59e0b;
+  /* Status — `modified` mirrors SPA `--wp-status-modified` (orange).
+   * Used by the ContextWidget modified-dot so it visually pairs 1:1 with
+   * SPA `.wp-io-badge--mod` ("user diff from upstream"). */
+  --wp-status-modified: #fb923c;
 
   /* Alias `--wp-font` → `--wp-font-sans` so SPA-derived components that
    * reference the shorter name resolve to the same Inter stack. */
