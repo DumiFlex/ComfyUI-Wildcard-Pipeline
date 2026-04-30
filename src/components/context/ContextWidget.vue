@@ -12,6 +12,12 @@ import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import Logo from "../shared/Logo.vue";
 import { dragState } from "./drag-store";
 import { pushToast } from "../shared/toast-store";
+import {
+  forceRefresh as forceRefreshHashes,
+  hashes as libraryHashes,
+  subscribe as subscribeDrift,
+  unsubscribe as unsubscribeDrift,
+} from "./drift-store";
 
 const props = defineProps<{
   nodeId: number;
@@ -42,32 +48,6 @@ const props = defineProps<{
 
 const dragOverId = ref<string | null>(null);
 const dragOverEnd = ref(false);
-
-/**
- * Set of library uuids known to exist on this server. Refreshed
- * periodically so a module that was deleted via the SPA flips to the
- * "missing" indicator without a workflow reload. `null` = haven't
- * fetched yet (don't render any missing dot until we know — avoids
- * a flash of "everything's missing" while the first request is in
- * flight).
- */
-const libraryIds = ref<Set<string> | null>(null);
-const LIBRARY_POLL_MS = 5000;
-let libraryPollHandle: number | undefined;
-
-async function refreshLibraryIds() {
-  try {
-    const res = await fetch("/wp/api/modules/hashes");
-    if (!res.ok) return;
-    const body = (await res.json()) as { hashes?: Record<string, string> };
-    if (body && body.hashes && typeof body.hashes === "object") {
-      libraryIds.value = new Set(Object.keys(body.hashes));
-    }
-  } catch {
-    // Silent — leave whatever set we last had so transient errors
-    // don't flash "missing" everywhere.
-  }
-}
 
 const ctxMenu = ref<{ visible: boolean; x: number; y: number; items: ContextMenuItem[] }>({
   visible: false,
@@ -105,15 +85,15 @@ function clearDragHover() {
 
 onMounted(() => {
   window.addEventListener("dragend", clearDragHover);
-  // Kick + poll the library-id set so the missing-from-library dot
-  // reacts (within ~5s) when the user deletes/creates rows in the SPA.
-  refreshLibraryIds();
-  libraryPollHandle = window.setInterval(refreshLibraryIds, LIBRARY_POLL_MS);
+  // Subscribe to the shared drift-store — it manages the 5s poll of the
+  // /wp/api/modules/hashes endpoint and exposes the live-hash map that
+  // drives both the missing-dot (this task) and the drift-dot (Task 3).
+  subscribeDrift();
 });
 onBeforeUnmount(() => {
   window.removeEventListener("dragend", clearDragHover);
   if (dragState.value?.sourceNodeId === props.nodeId) dragState.value = null;
-  if (libraryPollHandle !== undefined) window.clearInterval(libraryPollHandle);
+  unsubscribeDrift();
 });
 
 watch(dragState, (v) => { if (v === null) clearDragHover(); });
@@ -262,13 +242,13 @@ function iconFor(type: ModuleEntry["type"]): string {
  *   - duplicates of any kind (the duplicate path strips
  *     payload_hash so the clone reads as local; see `duplicateModule`)
  *
- * Returns false until `libraryIds` first loads so we don't flash
+ * Returns false until `libraryHashes` first loads so we don't flash
  * "missing" everywhere while the initial fetch is in flight.
  */
 function isMissingFromLibrary(m: ModuleEntry): boolean {
   if (!m.payload_hash) return false;
-  if (libraryIds.value === null) return false;
-  return !libraryIds.value.has(m.id);
+  if (libraryHashes.value === null) return false;
+  return !(m.id in libraryHashes.value);
 }
 
 /**
@@ -306,7 +286,7 @@ async function saveToLibrary(m: ModuleEntry) {
     pushToast(`Saved "${m.meta.name || m.type}" to library.`, {
       severity: "success",
     });
-    await refreshLibraryIds();
+    await forceRefreshHashes();
   } catch (err) {
     pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
   }
