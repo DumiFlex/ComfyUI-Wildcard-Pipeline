@@ -1391,17 +1391,17 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 }
 .wp-section-label__bulk .pi { font-size: 9px; }
 .wp-section-label__bulk--drift {
-  border-color: var(--wp-status-drift);
-  color: var(--wp-status-drift);
+  border-color: var(--wp-warn);
+  color: var(--wp-warn);
 }
 .wp-section-label__bulk--drift:hover {
   /* Re-assert drift colour because base `:hover` flips both `color` +
    * `border-color` to the neutral text/border tokens; equal-specificity
-   * selectors lose the cascade race otherwise and the orange accent
+   * selectors lose the cascade race otherwise and the amber accent
    * vanishes on hover. */
-  color: var(--wp-status-drift);
-  border-color: var(--wp-status-drift);
-  background: color-mix(in oklab, var(--wp-status-drift) 14%, transparent);
+  color: var(--wp-warn);
+  border-color: var(--wp-warn);
+  background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
 }
 
 /* ── Empty-state hero (2.3) + first-run hint (4.5) ──────────────────────
@@ -1646,8 +1646,23 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
 /* Per-instance / library-state dots — distinct from conflict dots
  * (which signal STRUCTURAL graph issues). Modified = user touched
- * instance overrides; Missing = uuid not in the live library. Both
- * can stack on the same card with the conflict dot. */
+ * instance overrides; Drift = library has newer payload; Missing =
+ * uuid gone from library entirely. All three can stack on the same
+ * card with the conflict dot.
+ *
+ * Treatment is uniform across the three (translucent bg + solid
+ * 1px border at the same hue) so they read as a family. ComfyUI's
+ * canvas zooms the widget down hard, so shape-based differentiation
+ * (rings, dashed borders) disappears at typical view distances —
+ * colour does all the work. Palette aligns 1:1 with the SPA
+ * `.wp-io-badge--*` semantics so the same hue means the same thing
+ * in both places.
+ *
+ * Token map — kept in sync with `src/manager/views/ImportExport.vue`:
+ *   modified → --wp-status-modified  (SPA "mod"      — user diff)
+ *   drift    → --wp-warn             (SPA "exists"   — overwriteable)
+ *   missing  → --wp-danger           (no SPA twin    — gone from lib)
+ */
 .wp-mod-dot {
   width: 7px;
   height: 7px;
@@ -1656,27 +1671,17 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   cursor: help;
   border: 1px solid transparent;
 }
-/* Hollow-ring "modified" — accent stroke + subtle glow. Hollow vs
- * filled keeps it readable next to the conflict dot. */
 .wp-mod-dot--modified {
-  background: transparent;
-  border-color: var(--wp-accent);
-  box-shadow: 0 0 4px var(--wp-accent-glow);
+  background: color-mix(in oklab, var(--wp-status-modified) 28%, transparent);
+  border-color: var(--wp-status-modified);
 }
-/* Filled orange "drift" — solid fill differentiates it from the
- * modified ring (hollow blue) and missing dot (dashed amber). The
- * shape language carries colour-blind users; treatment matters
- * more than the hex. */
 .wp-mod-dot--drift {
-  background: var(--wp-status-drift);
-  border-color: var(--wp-status-drift);
+  background: color-mix(in oklab, var(--wp-warn) 28%, transparent);
+  border-color: var(--wp-warn);
 }
-/* Filled amber dashed "missing" — the dashed border telegraphs
- * "incomplete state" without leaning on red (which we reserve for
- * actual errors). */
 .wp-mod-dot--missing {
-  background: var(--wp-amber-bg);
-  border: 1px dashed var(--wp-amber);
+  background: color-mix(in oklab, var(--wp-danger) 28%, transparent);
+  border-color: var(--wp-danger);
 }
 
 /* In-card lock + internal toggle buttons. Always rendered so the

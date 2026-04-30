@@ -87,9 +87,12 @@
   --wp-rt-token-mut:     #fb923c;
   --wp-rt-token-mut-bg:  color-mix(in oklab, #f97316 12%, transparent);
 
-  /* Status colors */
+  /* Status colors — `modified` retained for the SPA ImportExport "mod"
+   * badge + the in-graph ContextWidget modified-dot, both of which
+   * mean "user diff from upstream". Drift state in ContextWidget reuses
+   * `--wp-warn` for SPA-IO `--exists` parity (see ContextWidget.vue
+   * `.wp-mod-dot--drift`). */
   --wp-status-modified: #fb923c;
-  --wp-status-drift:    #fb923c;
 
   /* Accent gradient (used by progress bars, hero strokes, etc.) */
   --wp-accent-gradient: linear-gradient(90deg, var(--wp-accent-500), var(--wp-accent-400));
