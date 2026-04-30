@@ -464,6 +464,23 @@ function modifiedTooltip(m: ModuleEntry): string {
   return bits.length > 0 ? `Modified: ${bits.join(" · ")}` : "Modified";
 }
 
+/**
+ * Look up a sibling module's display name by uuid. Used by the
+ * constraint summary + (Task 2) the modal preview. Returns the
+ * payload's `var_binding` first (canonical $-var name for wildcards),
+ * falls back to `meta.name`, then `null` if no sibling matches the id
+ * — caller decides what to render in the dangling-ref case.
+ */
+function lookupSiblingName(uuid: string | null | undefined): string | null {
+  if (!uuid) return null;
+  const sib = value.value.modules.find((m) => m.id === uuid);
+  if (!sib) return null;
+  const binding = (sib.payload as { var_binding?: string } | undefined)?.var_binding;
+  if (typeof binding === "string" && binding.trim()) return binding.trim();
+  const name = sib.meta?.name?.trim();
+  return name ? name : null;
+}
+
 function summaryFor(m: ModuleEntry): string {
   if (m.type === "fixed_values") {
     const named = m.entries.filter((e) => e.variable_name.trim() !== "");
@@ -488,7 +505,18 @@ function summaryFor(m: ModuleEntry): string {
       const rules = Array.isArray(p.rules) ? p.rules.length : 0;
       return `${rules} rule${rules === 1 ? "" : "s"}`;
     }
-    case "constraint":   return "constraint matrix";
+    case "constraint": {
+      const cp = p as Partial<{
+        source_wildcard_id: string | null;
+        target_wildcard_id: string | null;
+        matrix: Record<string, Record<string, unknown>>;
+      }>;
+      const src = lookupSiblingName(cp.source_wildcard_id) ?? "?";
+      const tgt = lookupSiblingName(cp.target_wildcard_id) ?? "?";
+      const rowKeys = Object.keys(cp.matrix ?? {});
+      const colKeys = Object.keys(Object.values(cp.matrix ?? {})[0] ?? {});
+      return `$${src} → $${tgt} · ${rowKeys.length}×${colKeys.length}`;
+    }
     case "pipeline":     return `${Array.isArray(p.steps) ? p.steps.length : 0} steps`;
     default:             return m.type;
   }
@@ -1211,6 +1239,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
       :module="editingModule"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingNodeVars"
+      :sibling-modules="value.modules"
       :last-used-seed-reader="lastUsedSeedReader"
       @save="saveEditedModule"
       @close="editingId = null"

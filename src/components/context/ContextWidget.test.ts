@@ -378,3 +378,76 @@ describe("ContextWidget bulk refresh", () => {
     wrapper.unmount();
   });
 });
+
+describe("ContextWidget summaryFor — constraint", () => {
+  it("renders $src → $tgt · NxM with sibling lookup", async () => {
+    resetDriftStore();
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "aaaaaaaa", type: "wildcard", enabled: true,
+          meta: { name: "Hair Color" }, entries: [],
+          payload: { options: [], var_binding: "hair_color" },
+        },
+        {
+          id: "bbbbbbbb", type: "wildcard", enabled: true,
+          meta: { name: "Outfit" }, entries: [],
+          payload: { options: [], var_binding: "outfit" },
+        },
+        {
+          id: "cccccccc", type: "constraint", enabled: true,
+          meta: { name: "Hair × Outfit" }, entries: [],
+          payload: {
+            source_wildcard_id: "aaaaaaaa",
+            target_wildcard_id: "bbbbbbbb",
+            matrix: {
+              "blonde": { "casual": { mode: "allow", factor: 1 }, "formal": { mode: "allow", factor: 1 } },
+              "raven":  { "casual": { mode: "allow", factor: 1 }, "formal": { mode: "allow", factor: 1 } },
+            },
+            exceptions: [],
+          },
+          payload_hash: "h",
+        },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 200, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    const card = wrapper.find('[data-module-id="cccccccc"]');
+    expect(card.exists()).toBe(true);
+    expect(card.text()).toContain("$hair_color → $outfit · 2×2");
+    wrapper.unmount();
+  });
+
+  it("falls back to ? when source/target uuid is missing from siblings", async () => {
+    resetDriftStore();
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "cccccccc", type: "constraint", enabled: true,
+          meta: { name: "Dangling" }, entries: [],
+          payload: {
+            source_wildcard_id: "deadbeef",
+            target_wildcard_id: null,
+            matrix: {},
+            exceptions: [],
+          },
+          payload_hash: "h",
+        },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 201, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+    const card = wrapper.find('[data-module-id="cccccccc"]');
+    expect(card.text()).toContain("$? → $? · 0×0");
+    wrapper.unmount();
+  });
+});
