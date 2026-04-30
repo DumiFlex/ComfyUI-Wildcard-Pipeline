@@ -26,8 +26,6 @@ import type {
   WildcardOption,
   WildcardPayload,
 } from "../api/types";
-import { resolveTokens } from "./resolveTokens";
-import type { ResolveContext } from "./resolveTokens";
 import { toIdentifier } from "./slug";
 
 /* -------------------------------------------------------------------------- */
@@ -55,24 +53,36 @@ export function pickWeightedOption(
 /**
  * Expand inline `{a|b|c}` choices in a value string. Each occurrence is
  * resolved to one of its `|`-separated branches at random. Nested braces are
- * supported recursively via `resolveTokens` (surface="wildcard").
+ * resolved innermost-first via a fixpoint loop.
+ *
+ * Important — this function MUST NOT touch `@{...}` refs. The previous
+ * implementation delegated to `resolveTokens` which tokenized `@{8hex}`
+ * patterns as REF tokens; with the empty modules map passed here those
+ * refs got "Unknown ref" warnings and silently collapsed to "" before
+ * the downstream `expandRefs` pass had a chance to look them up against
+ * the populated catalog. Regex-only inline-choice resolution sidesteps
+ * the issue cleanly. The trailing `expandRefs` call in `resolveWildcard`
+ * is responsible for ref resolution.
  */
 export function expandInlineChoices(text: string): string {
   if (!text) return text;
-  const ctx: ResolveContext = {
-    rng: {
-      random: () => Math.random(),
-      randrange: (n: number) => Math.floor(Math.random() * n),
-    },
-    maxRefDepth: 16,
-    strict: false,
-    surface: "wildcard",
-    developerMode: false,
-    warnings: [],
-    vars: {},
-    modules: {},
-  };
-  return resolveTokens(String(text), ctx);
+  let out = String(text);
+  // Repeatedly resolve innermost `{a|b|c}` braces — `[^{}]` rules out
+  // nested braces, the `\|` in the alternation rules out single-branch
+  // `{abc}` (which has no `|` to split on, intentionally preserved).
+  // Loop until no replacement happens to handle nested choices.
+  for (let iter = 0; iter < 16; iter++) {
+    const next = out.replace(
+      /\{([^{}]*\|[^{}]*)\}/g,
+      (_, content: string) => {
+        const branches = content.split("|");
+        return branches[Math.floor(Math.random() * branches.length)];
+      },
+    );
+    if (next === out) break;
+    out = next;
+  }
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -88,10 +98,21 @@ function wildcardVar(mod: ModuleRow): string {
 }
 
 /**
- * Resolve `@var` and `@{var}` references in `text`. Looks up the value in
- * `ctx` first; if absent, walks the wildcard catalog by `var_binding` and
- * recursively resolves a sample. Unknown refs collapse to empty string
- * (matching the prototype's `resolveByVar`).
+ * Resolve `@var` / `@{var_binding}` / `@{8hex_uuid}` references in `text`.
+ *
+ * Lookup order:
+ *   1. ctx[name]                — caller-provided variable bindings win
+ *   2. byVar[name]              — wildcard matched by `var_binding` (legacy)
+ *   3. byId[name]               — wildcard matched by uuid (canonical
+ *                                 `@{8hex}` form, spec §2.4); the load-bearing
+ *                                 path that previously failed silently when
+ *                                 the in-graph WP_Context started embedding
+ *                                 uuid-based refs in option values.
+ *
+ * Regex first-char widened from `[a-zA-Z_]` to `[a-zA-Z0-9_]` so digit-leading
+ * uuids (e.g. `@{12345678}`) match. Hex uuids that start with a-f always
+ * matched the old regex; the widening only adds the digit-leading slice that
+ * was previously dropped silently.
  */
 export function expandRefs(
   text: string,
@@ -100,18 +121,21 @@ export function expandRefs(
 ): string {
   if (!text) return text;
   const byVar = new Map<string, ModuleRow>();
+  const byId = new Map<string, ModuleRow>();
   for (const w of allWildcards) {
-    if (w.type === "wildcard") byVar.set(wildcardVar(w), w);
+    if (w.type !== "wildcard") continue;
+    byVar.set(wildcardVar(w), w);
+    byId.set(w.id, w);
   }
   const lookup = (name: string): string => {
     if (ctx[name] !== undefined) return ctx[name];
-    const w = byVar.get(name);
+    const w = byVar.get(name) ?? byId.get(name);
     if (!w) return "";
     return resolveWildcard(w, ctx, allWildcards);
   };
   return String(text)
     .replace(
-      /@\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g,
+      /@\{([a-zA-Z0-9_][a-zA-Z0-9_]*)\}/g,
       (_, n: string) => lookup(n),
     )
     .replace(
@@ -143,8 +167,11 @@ export function resolveWildcard(
 /* Combine templates                                                           */
 /* -------------------------------------------------------------------------- */
 
-/** Fill `$var` and `@{var}` placeholders inside a combine template against
- *  the provided context, falling back to the wildcard catalog. */
+/** Fill `$var` and `@{var_binding}` / `@{8hex_uuid}` placeholders inside a
+ *  combine template against the provided context, falling back to the
+ *  wildcard catalog. Mirrors `expandRefs`'s dual byVar/byId lookup so
+ *  uuid-based refs work alongside legacy var-binding refs. Missing
+ *  references stay literal so the user sees what didn't resolve. */
 export function fillTemplate(
   template: string,
   ctx: Record<string, string>,
@@ -152,18 +179,21 @@ export function fillTemplate(
 ): string {
   if (!template) return "";
   const byVar = new Map<string, ModuleRow>();
+  const byId = new Map<string, ModuleRow>();
   for (const w of allWildcards) {
-    if (w.type === "wildcard") byVar.set(wildcardVar(w), w);
+    if (w.type !== "wildcard") continue;
+    byVar.set(wildcardVar(w), w);
+    byId.set(w.id, w);
   }
   const lookup = (name: string, missing: string): string => {
     if (ctx[name] !== undefined) return ctx[name];
-    const w = byVar.get(name);
+    const w = byVar.get(name) ?? byId.get(name);
     if (w) return resolveWildcard(w, ctx, allWildcards);
     return missing;
   };
   return String(template)
     .replace(
-      /@\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g,
+      /@\{([a-zA-Z0-9_][a-zA-Z0-9_]*)\}/g,
       (_, n: string) => lookup(n, `@{${n}}`),
     )
     .replace(

@@ -123,6 +123,36 @@ describe("expandRefs", () => {
   it("returns empty string when ref cannot be resolved", () => {
     expect(expandRefs("@unknown text", {}, wcs)).toBe(" text");
   });
+
+  it("resolves @{8hex_uuid} via byId catalog (canonical form, spec §2.4)", () => {
+    // Wildcard's id IS the 8-hex uuid post migration 004 (CLAUDE.md
+    // "Module IDs"). The previous lookup walked only `byVar` (var_binding
+    // map), so digit-leading uuids didn't even match the regex and a-f
+    // uuids matched but resolved to "" silently.
+    const colors = makeWildcard(
+      "Colors",
+      [{ value: "violet", weight: 1 }],
+      { id: "12345678", var_binding: "color_palette" },
+    );
+    expect(expandRefs("ribbon: @{12345678}", {}, [colors])).toBe("ribbon: violet");
+  });
+
+  it("resolves nested @{uuid} refs across two hops", () => {
+    // Outfit -> Color -> "violet" with both refs in canonical uuid form.
+    // Reproduces the bug user reported: nested ref chain silently broke at
+    // the SPA test runner because byVar lookup never tried the uuid path.
+    const color = makeWildcard(
+      "Color",
+      [{ value: "violet", weight: 1 }],
+      { id: "aaaaaaaa", var_binding: "color" },
+    );
+    const outfit = makeWildcard(
+      "Outfit",
+      [{ value: "dress @{aaaaaaaa}", weight: 1 }],
+      { id: "bbbbbbbb", var_binding: "outfit" },
+    );
+    expect(expandRefs("@{bbbbbbbb}", {}, [color, outfit])).toBe("dress violet");
+  });
 });
 
 describe("resolveWildcard", () => {
