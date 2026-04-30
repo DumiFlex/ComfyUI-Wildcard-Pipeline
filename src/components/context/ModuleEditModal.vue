@@ -713,16 +713,12 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
       </header>
 
       <div class="wp-medit__body">
-        <!-- DESCRIPTION shown only for fixed_values. Library-snapshot
-             kinds delegate description ownership to the library row. -->
-        <section v-if="draft.type === 'fixed_values'" class="wp-medit__section">
-          <label class="wp-medit__section-label">DESCRIPTION</label>
-          <input
-            v-model="draft.meta.description"
-            class="wp-medit__meta-input"
-            placeholder="optional — what this module is for"
-          />
-        </section>
+        <!-- DESCRIPTION intentionally omitted. Library-snapshot kinds
+             defer to the SPA library row; fixed_values has no UI
+             surface that renders the description, so the input was
+             dead chrome. The field still rides on `meta.description`
+             so promote-to-library (`import-from-workflow`) can carry
+             over a value seeded elsewhere. -->
 
         <!-- fixed_values: inline name/value entry editor. Layout +
              chrome match the wildcard option-row container so all
@@ -1240,18 +1236,6 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
   padding: 0 4px;
   border-radius: 2px;
 }
-
-.wp-medit__meta-input {
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 12px;
-  padding: 5px 8px;
-  width: 100%;
-}
-.wp-medit__meta-input:focus { outline: none; border-color: var(--wp-accent); }
 
 .wp-medit__empty {
   color: var(--wp-text3);
