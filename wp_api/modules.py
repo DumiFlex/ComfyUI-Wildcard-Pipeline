@@ -215,13 +215,21 @@ async def toggle_favorite(request: web.Request) -> web.Response:
 
 
 async def list_hashes(request: web.Request) -> web.Response:
-    """Lightweight bulk hash fetch for drift detection. Spec §4.2.
+    """Lightweight bulk hash fetch for drift detection.
 
-    Returns wildcards-only because catalog never contains other kinds
-    (spec §2.7). Lightweight (no payload, no metadata) so the SPA can
-    poll on every workflow load without measurable cost."""
+    Returns hashes for every module kind in the library. Used by the
+    SPA Manager AND by the in-graph WP_Context widget to drive the
+    drift / missing dots — both surfaces need the full set since
+    post-5.5.6 a WP_Context can embed any kind (wildcard, fixed_values,
+    combine, derivation, constraint, pipeline). The pre-5.5.6 endpoint
+    filtered to wildcards-only because that was the only embeddable
+    kind; lifting the filter fixes the false-positive missing dot on
+    every non-wildcard card.
+
+    Lightweight (no payload, no metadata) so the SPA can poll on every
+    workflow load without measurable cost."""
     with db_session(request) as conn:
-        rows = ModuleRepository(conn).list(type="wildcard")
+        rows = ModuleRepository(conn).list()
     # Post-migration-004 the row's `id` IS the 8-hex uuid that the
     # tokenizer's `@{8hex}` ref captures; the published `hashes` map
     # keys remain `uuid`-named on the wire so existing SPA consumers

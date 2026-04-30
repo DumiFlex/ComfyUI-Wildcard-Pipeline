@@ -153,12 +153,13 @@ describe("ModulePickerModal — filters", () => {
 
 describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
   /**
-   * Lock the post-5.5.6 contract: every kind with a payload is
-   * pickable. Pre-5.5.6 the picker hard-gated to wildcard-only and
-   * disabled the row for everything else; the engine has handlers for
-   * all six kinds so the gate was purely UX-side.
+   * Lock the post-5.5.6 contract: every embeddable kind with a payload
+   * is pickable. Pre-5.5.6 the picker hard-gated to wildcard-only.
+   * Pipeline is intentionally excluded from the picker until the modal
+   * grows a pipeline preview (deferred sub-task) — assert it's filtered
+   * out of the visible list rather than rendered as a disabled row.
    */
-  it("does not disable non-wildcard rows when payload is present", async () => {
+  it("renders every embeddable kind enabled and hides pipelines", async () => {
     vi.unstubAllGlobals();
     vi.stubGlobal(
       "fetch",
@@ -185,11 +186,16 @@ describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
     await nextTick();
 
     const rows = wrapper.findAll(".wp-picker__row");
-    expect(rows.length).toBe(6);
-    // Every row should be enabled — no `data-disabled` attribute set.
+    // 5 visible — wildcard, combine, derivation, constraint, fixed_values.
+    // Pipeline filtered out of the visible list entirely.
+    expect(rows.length).toBe(5);
+    expect(wrapper.text()).not.toContain("pipe");
+    // Every visible row should be enabled — no `data-disabled` attribute.
     for (const row of rows) {
       expect(row.attributes("data-disabled")).toBeUndefined();
     }
+    // No "Pipelines" tab in the strip.
+    expect(wrapper.text()).not.toContain("Pipelines");
   });
 
   it("disables a row whose payload is missing", async () => {

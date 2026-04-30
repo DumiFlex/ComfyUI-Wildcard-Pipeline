@@ -100,13 +100,15 @@ async def test_embed_bundle_rejects_non_list_uuids(aiohttp_client, app_with_db):
     assert resp.status == 400
 
 
-async def test_hashes_endpoint_returns_id_hash_map_for_wildcards_only(
+async def test_hashes_endpoint_returns_id_hash_map_for_every_kind(
     aiohttp_client, app_with_db,
 ):
     """Drift-detection primitive. Returns `{hashes: {id: hash}}` keyed
-    by the 8-hex module id. Wildcards-only because the catalog only
-    contains wildcards (spec §2.7) — no point shipping hashes for
-    kinds that never drift embedded snapshots."""
+    by the 8-hex module id for EVERY kind in the library. Pre-5.5.6
+    the endpoint hard-coded `type="wildcard"`, but the in-graph
+    WP_Context now embeds non-wildcard kinds too — without their
+    hashes the missing-dot predicate flagged every freshly-picked
+    combine / derivation / constraint / fixed_values as missing."""
     app, conn = app_with_db
     repo = ModuleRepository(conn)
     wc = repo.create(
@@ -122,8 +124,9 @@ async def test_hashes_endpoint_returns_id_hash_map_for_wildcards_only(
     assert resp.status == 200
     body = await resp.json()
     assert wc["id"] in body["hashes"]
-    assert cb["id"] not in body["hashes"]  # combines excluded
+    assert cb["id"] in body["hashes"]  # every kind included
     assert body["hashes"][wc["id"]] == wc["payload_hash"]
+    assert body["hashes"][cb["id"]] == cb["payload_hash"]
 
 
 # ── ModuleRow shape (spec §4.2) ──────────────────────────────────────

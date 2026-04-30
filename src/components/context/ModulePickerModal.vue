@@ -555,19 +555,39 @@ interface KindTab {
   icon: string | null;
 }
 
+// Pipeline kind is intentionally absent from the picker — the modal
+// has no read-only preview for pipelines yet (deferred from 5.5.6
+// pending cross-kind step lookup design), so embedding one would
+// give the user no way to inspect it from the graph. Re-add the
+// `pipeline` tab here when pipeline preview ships.
 const tabs: KindTab[] = [
   { value: null,            label: "All",         icon: null },
   { value: "wildcard",      label: "Wildcards",   icon: "pi-th-large" },
   { value: "combine",       label: "Combines",    icon: "pi-share-alt" },
   { value: "derivation",    label: "Derivations", icon: "pi-code" },
   { value: "constraint",    label: "Constraints", icon: "pi-sitemap" },
-  { value: "pipeline",      label: "Pipelines",   icon: "pi-list" },
   { value: "fixed_values",  label: "Fixed",       icon: "pi-tag" },
 ];
 
+/** Pipelines are hidden from the picker until preview support ships
+ *  (see `tabs` comment). Rows from this set never reach the visible
+ *  list, so neither the tab list nor the "All" filter shows them.
+ *  Also gates `isPickable` defensively for any path that bypasses the
+ *  filter (e.g. future programmatic pick). */
+const HIDDEN_KINDS = new Set<string>(["pipeline"]);
+
+/** Modules visible to the picker. Excludes hidden kinds (pipeline at
+ *  the moment) so they're absent from every tab — including "All" —
+ *  AND from the kind-count badges. Library row is still in the DB
+ *  and reachable via the SPA Manager; the picker just doesn't surface
+ *  it for graph-side embed. */
+const visibleModules = computed<PickerModule[]>(() =>
+  modules.value.filter((m) => !HIDDEN_KINDS.has(m.type)),
+);
+
 function countFor(kind: string | null): number {
-  if (kind === null) return modules.value.length;
-  return modules.value.filter((m) => m.type === kind).length;
+  if (kind === null) return visibleModules.value.length;
+  return visibleModules.value.filter((m) => m.type === kind).length;
 }
 
 const alreadyAddedSet = computed<Set<string>>(() =>
@@ -577,7 +597,7 @@ const alreadyAddedSet = computed<Set<string>>(() =>
 const filteredModules = computed(() => {
   const q = searchTerm.value.trim().toLowerCase();
   const tagFilter = selectedTags.value;
-  return modules.value.filter((m) => {
+  return visibleModules.value.filter((m) => {
     // Kind tab.
     if (activeTab.value !== null && m.type !== activeTab.value) return false;
     // Favorites toggle.
@@ -685,15 +705,16 @@ function subtitleFor(m: PickerModule): string {
 
 // ── Pickability gate ───────────────────────────────────────────────
 //
-// Post-5.5.6 every kind in the library is embeddable. The engine
-// (engine/modules/__init__.py) registers handlers for all six kinds
-// — wildcard / fixed_values / combine / derivation / constraint /
-// pipeline — so a graph WP_Context can run any mix. The picker
-// disables a row only when it has no payload to embed; that case
-// should not normally happen for library-sourced rows but the guard
-// keeps an obviously-broken row from being added.
+// Defensive guard against bad rows. The visible list is already
+// pre-filtered to exclude `HIDDEN_KINDS` (pipeline) at the
+// `visibleModules` step, so non-pipeline rows reaching this function
+// only fail the gate when their `payload` is falsy (broken library
+// entry). Pipeline kept here too as belt-and-braces in case any
+// future code path bypasses `visibleModules`.
 function isPickable(m: PickerModule): boolean {
-  return !!m.payload;
+  if (!m.payload) return false;
+  if (HIDDEN_KINDS.has(m.type)) return false;
+  return true;
 }
 
 // ── Click handlers ─────────────────────────────────────────────────
