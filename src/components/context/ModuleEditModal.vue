@@ -17,6 +17,10 @@ const props = defineProps<{
   upstreamVars?: string[];
   /** Variable names defined by OTHER modules in the same node. */
   siblingVars?: string[];
+  /** Other modules in the same WP_Context node — used by the constraint
+   *  preview to resolve source/target uuids back to var-binding names.
+   *  May include the module being edited; lookups by uuid skip self. */
+  siblingModules?: ModuleEntry[];
   /**
    * Pull the seed THIS module actually rolled with on the last
    * queue. Returns `locked_seed` for wildcards locked at run time;
@@ -565,6 +569,92 @@ const spaEditorHref = computed<string>(() => {
   if (!segment) return "#";
   return `${window.location.origin}/wp/${segment}/${m.id}/edit`;
 });
+
+// Resolve a sibling module's uuid back to its bound variable name (or
+// fall back to the meta name when no var_binding is set). Returns null
+// if the uuid doesn't match any sibling.
+function lookupSiblingName(uuid: string | null | undefined): string | null {
+  if (!uuid) return null;
+  const sib = (props.siblingModules ?? []).find((s) => s.id === uuid);
+  if (!sib) return null;
+  const binding = (sib.payload as { var_binding?: string } | undefined)?.var_binding;
+  if (typeof binding === "string" && binding.trim()) return binding.trim();
+  const name = sib.meta?.name?.trim();
+  return name ? name : null;
+}
+
+// ── Combine preview ──────────────────────────────────────────────────
+const combineTemplate = computed<string>(() => {
+  if (!draft.value || draft.value.type !== "combine") return "";
+  const p = draft.value.payload as { template?: string } | undefined;
+  return (p?.template ?? "").toString();
+});
+const combineOutputVar = computed<string>(() => {
+  if (!draft.value || draft.value.type !== "combine") return "";
+  const p = draft.value.payload as { output_var?: string } | undefined;
+  return (p?.output_var ?? "").toString().replace(/^\$/, "");
+});
+
+// ── Derivation preview ───────────────────────────────────────────────
+interface DerivBranchView {
+  condition: { var: string; op: string; value: string };
+  action: { target_var: string; mode: string; value: string };
+}
+interface DerivRuleView {
+  id?: string;
+  branches: DerivBranchView[];
+  else?: { action: { target_var: string; mode: string; value: string } };
+}
+const derivationRules = computed<DerivRuleView[]>(() => {
+  if (!draft.value || draft.value.type !== "derivation") return [];
+  const p = draft.value.payload as { rules?: DerivRuleView[] } | undefined;
+  return Array.isArray(p?.rules) ? p.rules : [];
+});
+
+function formatOp(op: string): string {
+  if (op === "equals") return "==";
+  if (op === "not_equals") return "!=";
+  if (op === "contains") return "contains";
+  if (op === "matches") return "~";
+  return op;
+}
+function formatMode(mode: string): string {
+  if (mode === "replace") return "=";
+  if (mode === "append")  return "+= ,";
+  if (mode === "prepend") return "prepend";
+  return mode;
+}
+
+// ── Constraint preview ───────────────────────────────────────────────
+interface ConstraintExceptionView { source: string; target: string; mode: string; factor: number }
+const constraintSourceLabel = computed<string>(() => {
+  if (!draft.value || draft.value.type !== "constraint") return "?";
+  const p = draft.value.payload as { source_wildcard_id?: string | null } | undefined;
+  if (!p?.source_wildcard_id) return "(unset)";
+  return lookupSiblingName(p.source_wildcard_id) ?? p.source_wildcard_id;
+});
+const constraintTargetLabel = computed<string>(() => {
+  if (!draft.value || draft.value.type !== "constraint") return "?";
+  const p = draft.value.payload as { target_wildcard_id?: string | null } | undefined;
+  if (!p?.target_wildcard_id) return "(unset)";
+  return lookupSiblingName(p.target_wildcard_id) ?? p.target_wildcard_id;
+});
+const constraintRowCount = computed<number>(() => {
+  if (!draft.value || draft.value.type !== "constraint") return 0;
+  const p = draft.value.payload as { matrix?: Record<string, Record<string, unknown>> } | undefined;
+  return Object.keys(p?.matrix ?? {}).length;
+});
+const constraintColCount = computed<number>(() => {
+  if (!draft.value || draft.value.type !== "constraint") return 0;
+  const p = draft.value.payload as { matrix?: Record<string, Record<string, unknown>> } | undefined;
+  const firstRow = Object.values(p?.matrix ?? {})[0];
+  return Object.keys(firstRow ?? {}).length;
+});
+const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
+  if (!draft.value || draft.value.type !== "constraint") return [];
+  const p = draft.value.payload as { exceptions?: ConstraintExceptionView[] } | undefined;
+  return Array.isArray(p?.exceptions) ? p.exceptions : [];
+});
 </script>
 
 <template>
@@ -858,10 +948,115 @@ const spaEditorHref = computed<string>(() => {
           </a>
         </section>
 
-        <!-- Other library-snapshot kinds (combine, derivation,
-             constraint, pipeline) — no per-instance overrides yet.
-             Read-only summary + SPA deep-link until those kinds grow
-             their own override schema. -->
+        <!-- Combine kind preview -->
+        <section v-else-if="draft.type === 'combine'" class="wp-medit__section">
+          <label class="wp-medit__section-label">TEMPLATE</label>
+          <pre
+            v-if="combineTemplate"
+            class="wp-medit__readonly-mono wp-medit__preview-block"
+            data-testid="combine-preview-template"
+          >{{ combineTemplate }}</pre>
+          <p v-else class="wp-medit__hint-line">(empty template)</p>
+
+          <label class="wp-medit__section-label" style="margin-top: 12px;">OUTPUT</label>
+          <p class="wp-medit__hint-line">
+            <span class="wp-medit__chip" data-testid="combine-preview-output">→ ${{ combineOutputVar || "?" }}</span>
+          </p>
+
+          <a
+            class="wp-medit__spa-link"
+            :href="spaEditorHref"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="pi pi-external-link" aria-hidden="true"></i>
+            Open in SPA editor
+          </a>
+        </section>
+
+        <!-- Derivation kind preview -->
+        <section v-else-if="draft.type === 'derivation'" class="wp-medit__section">
+          <label class="wp-medit__section-label">RULES ({{ derivationRules.length }})</label>
+          <p v-if="derivationRules.length === 0" class="wp-medit__hint-line">(no rules)</p>
+          <div
+            v-else
+            class="wp-medit__preview-block wp-medit__derivation-rules"
+            data-testid="derivation-preview-rules"
+          >
+            <div
+              v-for="(rule, idx) in derivationRules"
+              :key="rule.id ?? idx"
+              class="wp-medit__derivation-rule"
+            >
+              <div
+                v-for="(branch, bi) in rule.branches"
+                :key="`b-${bi}`"
+                class="wp-medit__derivation-row"
+              >
+                <span class="wp-medit__readonly-mono">if ${{ branch.condition.var }} {{ formatOp(branch.condition.op) }} "{{ branch.condition.value }}"</span>
+                <span class="wp-medit__derivation-arrow"> → </span>
+                <span class="wp-medit__readonly-mono">${{ branch.action.target_var }} {{ formatMode(branch.action.mode) }} "{{ branch.action.value }}"</span>
+              </div>
+              <div v-if="rule.else" class="wp-medit__derivation-row wp-medit__derivation-row--else">
+                <span class="wp-medit__readonly-mono">else</span>
+                <span class="wp-medit__derivation-arrow"> → </span>
+                <span class="wp-medit__readonly-mono">${{ rule.else.action.target_var }} {{ formatMode(rule.else.action.mode) }} "{{ rule.else.action.value }}"</span>
+              </div>
+            </div>
+          </div>
+
+          <a
+            class="wp-medit__spa-link"
+            :href="spaEditorHref"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="pi pi-external-link" aria-hidden="true"></i>
+            Open in SPA editor
+          </a>
+        </section>
+
+        <!-- Constraint kind preview -->
+        <section v-else-if="draft.type === 'constraint'" class="wp-medit__section">
+          <label class="wp-medit__section-label">SOURCE → TARGET</label>
+          <p class="wp-medit__hint-line" data-testid="constraint-preview-bindings">
+            <span class="wp-medit__chip">${{ constraintSourceLabel }}</span>
+            <span class="wp-medit__derivation-arrow"> → </span>
+            <span class="wp-medit__chip">${{ constraintTargetLabel }}</span>
+          </p>
+
+          <label class="wp-medit__section-label" style="margin-top: 12px;">MATRIX</label>
+          <p class="wp-medit__hint-line" data-testid="constraint-preview-dims">
+            {{ constraintRowCount }} sub-cat{{ constraintRowCount === 1 ? "" : "s" }}
+            × {{ constraintColCount }} sub-cat{{ constraintColCount === 1 ? "" : "s" }}
+          </p>
+
+          <label v-if="constraintExceptions.length > 0" class="wp-medit__section-label" style="margin-top: 12px;">
+            EXCEPTIONS ({{ constraintExceptions.length }})
+          </label>
+          <ul
+            v-if="constraintExceptions.length > 0"
+            class="wp-medit__preview-block wp-medit__exception-list"
+            data-testid="constraint-preview-exceptions"
+          >
+            <li v-for="(ex, i) in constraintExceptions" :key="`ex-${i}`">
+              <span class="wp-medit__readonly-mono">"{{ ex.source }}" → "{{ ex.target }}"</span>
+              <span class="wp-medit__chip wp-medit__chip--small">{{ ex.mode }} ×{{ ex.factor }}</span>
+            </li>
+          </ul>
+
+          <a
+            class="wp-medit__spa-link"
+            :href="spaEditorHref"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="pi pi-external-link" aria-hidden="true"></i>
+            Open in SPA editor
+          </a>
+        </section>
+
+        <!-- Pipeline + any other future kind — keep the existing thin placeholder -->
         <section v-else-if="draft.type !== 'fixed_values'" class="wp-medit__section">
           <label class="wp-medit__section-label">SNAPSHOT</label>
           <p class="wp-medit__hint-line">
@@ -1183,6 +1378,61 @@ const spaEditorHref = computed<string>(() => {
   color: var(--wp-text2);
   font-size: 11px;
 }
+
+/* Kind-preview blocks (combine / derivation / constraint). Read-only,
+ * scrollable surfaces sized to keep the modal compact even when the
+ * snapshot payload is large. */
+.wp-medit__preview-block {
+  background: var(--wp-bg);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wp-medit__derivation-rules { display: flex; flex-direction: column; gap: 8px; }
+.wp-medit__derivation-rule {
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.wp-medit__derivation-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.wp-medit__derivation-row--else { color: var(--wp-text2); }
+.wp-medit__derivation-arrow { color: var(--wp-text3); padding: 0 4px; }
+.wp-medit__exception-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.wp-medit__exception-list li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+/* Inline pill used for source/target labels + exception mode markers in
+ * the kind-preview blocks. Base class kept here so future call-sites can
+ * reuse it; --small modifier shrinks it for the dense exception list. */
+.wp-medit__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--wp-bg);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text2);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.wp-medit__chip--small { font-size: 10.5px; padding: 1px 6px; }
+
 .wp-medit__spa-link {
   display: inline-flex;
   align-items: center;
