@@ -1645,18 +1645,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-mod-dots:empty { display: none; }
 
 /* Per-instance / library-state dots — distinct from conflict dots
- * (which signal STRUCTURAL graph issues). Modified = user touched
- * instance overrides; Drift = library has newer payload; Missing =
- * uuid gone from library entirely. All three can stack on the same
- * card with the conflict dot.
- *
- * Treatment is uniform across the three (translucent bg + solid
- * 1px border at the same hue) so they read as a family. ComfyUI's
- * canvas zooms the widget down hard, so shape-based differentiation
- * (rings, dashed borders) disappears at typical view distances —
- * colour does all the work. Palette aligns 1:1 with the SPA
- * `.wp-io-badge--*` semantics so the same hue means the same thing
- * in both places.
+ * (which signal STRUCTURAL graph issues). All three share the SPA
+ * `.wp-chip--*` color triple (bg = token@14%, border = token@36%) so
+ * dots, IO badges, and chips all encode "this hue means X" the same
+ * way. ComfyUI's canvas zooms widgets down hard, so shape-based
+ * differentiation (rings, dashed borders) disappears at typical view
+ * distances — colour does all the work.
  *
  * Token map — kept in sync with `src/manager/views/ImportExport.vue`:
  *   modified → --wp-status-modified  (SPA "mod"      — user diff)
@@ -1672,16 +1666,16 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border: 1px solid transparent;
 }
 .wp-mod-dot--modified {
-  background: color-mix(in oklab, var(--wp-status-modified) 28%, transparent);
-  border-color: var(--wp-status-modified);
+  background:   color-mix(in oklab, var(--wp-status-modified) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-status-modified) 36%, transparent);
 }
 .wp-mod-dot--drift {
-  background: color-mix(in oklab, var(--wp-warn) 28%, transparent);
-  border-color: var(--wp-warn);
+  background:   color-mix(in oklab, var(--wp-warn) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 36%, transparent);
 }
 .wp-mod-dot--missing {
-  background: color-mix(in oklab, var(--wp-danger) 28%, transparent);
-  border-color: var(--wp-danger);
+  background:   color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger) 36%, transparent);
 }
 
 /* In-card lock + internal toggle buttons. Always rendered so the

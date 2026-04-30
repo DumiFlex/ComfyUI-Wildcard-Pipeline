@@ -975,26 +975,34 @@ watch(
   gap: 6px;
 }
 
+/* Pill chrome shared by the three import-conflict badges. Border + bg
+ * triple matches the SPA `.wp-chip--*` family (token@14% bg + token@36%
+ * border) so badges, chips, and ContextWidget mod-dots all encode hue
+ * meaning the same way across the app. */
 .wp-io-badge {
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
   border-radius: 999px;
+  border: 1px solid transparent;
   font-size: 11px;
   font-weight: 500;
   text-transform: lowercase;
 }
 .wp-io-badge--new {
-  background: color-mix(in oklab, var(--wp-success) 18%, transparent);
-  color: var(--wp-success);
+  background:   color-mix(in oklab, var(--wp-success) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-success) 36%, transparent);
+  color:        var(--wp-success);
 }
 .wp-io-badge--exists {
-  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
-  color: var(--wp-warn);
+  background:   color-mix(in oklab, var(--wp-warn) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 36%, transparent);
+  color:        var(--wp-warn);
 }
 .wp-io-badge--mod {
-  background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
-  color: var(--wp-status-modified);
+  background:   color-mix(in oklab, var(--wp-status-modified) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-status-modified) 36%, transparent);
+  color:        var(--wp-status-modified);
 }
 
 .wp-io-actions {
