@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import ContextWidget from "./ContextWidget.vue";
+import { _resetForTests as resetDriftStore } from "./drift-store";
 
 beforeEach(() => {
   // Phase 5.5.4 — the picker now fetches the library on mount. Stub
@@ -100,5 +101,242 @@ describe("ContextWidget.vue", () => {
     // Read-only div, not a button — edit access is via right-click → Edit
     // or Enter on the focused card.
     expect(summary.element.tagName).toBe("DIV");
+  });
+});
+
+describe("ContextWidget drift dot", () => {
+  it("renders wp-mod-dot--drift when embedded hash differs from live hash", async () => {
+    // Reset the shared drift-store singleton so refCount + hashes don't leak
+    // from earlier tests in this file (those mounts never call wrapper.unmount).
+    resetDriftStore();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Live hash differs from embedded → drift.
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-LIVE" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "aaaaaaaa",
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "wc", description: "", tags: [] },
+          entries: [],
+          payload: { options: [] },
+          payload_hash: "h-EMBEDDED",
+        },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 99, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    // Wait for the store's first poll to land.
+    await vi.waitFor(() => {
+      expect(wrapper.find(".wp-mod-dot--drift").exists()).toBe(true);
+    });
+
+    // Sanity: missing dot must NOT also render — uuid is in library.
+    expect(wrapper.find(".wp-mod-dot--missing").exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe("ContextWidget bulk refresh", () => {
+  it("hides the bulk button when no module is drifted", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-A", bbbbbbbb: "h-B" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "h-A" },
+        { id: "bbbbbbbb", type: "wildcard", enabled: true, meta: { name: "b" }, entries: [], payload: {}, payload_hash: "h-B" },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 100, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    // Wait for the store's first poll. With both synced, no drift dots
+    // and the bulk button stays hidden.
+    await vi.waitFor(() => {
+      const dots = wrapper.findAll(".wp-mod-dot--drift");
+      expect(dots.length).toBe(0);
+    });
+    expect(wrapper.find('[data-testid="bulk-refresh-drifted"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("shows the bulk button with the drifted count when at least one drifts", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Both embedded hashes differ from live → both drifted.
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A", bbbbbbbb: "live-B" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "h-A" },
+        { id: "bbbbbbbb", type: "wildcard", enabled: true, meta: { name: "b" }, entries: [], payload: {}, payload_hash: "h-B" },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 101, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    await vi.waitFor(() => {
+      const btn = wrapper.find('[data-testid="bulk-refresh-drifted"]');
+      expect(btn.exists()).toBe(true);
+      // Tight match — guards against off-by-one + label-format regressions.
+      expect(btn.text()).toContain("refresh 2 drifted");
+    });
+    wrapper.unmount();
+  });
+
+  it("clears the drift dot + propagates onChange after bulk refresh", async () => {
+    resetDriftStore();
+
+    // Stub flow:
+    //   hashes poll  → returns { aaaaaaaa: "live-A" } so the embedded
+    //                  hash "embedded-A" lights up the drift dot.
+    //   embed-bundle → returns the live snapshot whose payload_hash
+    //                  matches the live hash, so after merge + the
+    //                  forceRefresh follow-up the dot clears.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A" } }), { status: 200 });
+        }
+        if (typeof url === "string" && url.endsWith("/embed-bundle")) {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { uuids: string[] };
+          expect(body.uuids).toEqual(["aaaaaaaa"]);
+          return new Response(
+            JSON.stringify({
+              snapshots: {
+                aaaaaaaa: {
+                  snapshot_version: 1,
+                  uuid: "aaaaaaaa",
+                  type: "wildcard",
+                  name: "a",
+                  payload: { options: ["fresh"] },
+                  payload_hash: "live-A",
+                  source: { kind: "user" },
+                },
+              },
+              pickOrder: ["aaaaaaaa"],
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: { options: ["old"] }, payload_hash: "embedded-A" },
+      ],
+    });
+
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 110, initialJson, upstreamVars: [], onChange },
+    });
+
+    // Drift dot lights up on the first poll.
+    await vi.waitFor(() => {
+      expect(wrapper.find(".wp-mod-dot--drift").exists()).toBe(true);
+    });
+    onChange.mockClear();           // ignore initial-mount onChange noise
+
+    // Click the bulk-refresh button. It calls refreshAllDrifted, which
+    // exercises the same merge code path refreshOne uses (single-uuid
+    // batched fetch + map-replace mutation + forceRefresh).
+    await wrapper.find('[data-testid="bulk-refresh-drifted"]').trigger("click");
+
+    await vi.waitFor(() => {
+      expect(wrapper.find(".wp-mod-dot--drift").exists()).toBe(false);
+    });
+    // Deep watcher caught the array reassignment + propagated to onChange.
+    expect(onChange).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("renders a Refresh menu item that is disabled for synced entries", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Synced — embedded hash matches live, no drift.
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-A" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "h-A" },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 120, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    // Wait for the store's first poll so isDrifted has a definitive answer.
+    await vi.waitFor(() => {
+      const dots = wrapper.findAll(".wp-mod-dot--drift");
+      expect(dots.length).toBe(0);
+    });
+
+    // Right-click the card to open the context menu.
+    await wrapper.find('[data-module-id="aaaaaaaa"]').trigger("contextmenu");
+    await flushPromises();
+
+    // ContextMenu teleports to <body>, so query the real DOM rather
+    // than the wrapper subtree.
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const refresh = items.find((el) => el.textContent?.includes("Refresh from library"));
+    expect(refresh, "Refresh from library item should always be in the menu").toBeTruthy();
+    expect(refresh!.classList.contains("wp-ctxmenu__item--disabled")).toBe(true);
+    expect(refresh!.getAttribute("aria-disabled")).toBe("true");
+    wrapper.unmount();
   });
 });

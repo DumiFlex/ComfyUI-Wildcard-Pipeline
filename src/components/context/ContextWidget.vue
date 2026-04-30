@@ -12,6 +12,14 @@ import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import Logo from "../shared/Logo.vue";
 import { dragState } from "./drag-store";
 import { pushToast } from "../shared/toast-store";
+import {
+  forceRefresh as forceRefreshHashes,
+  hashes as libraryHashes,
+  refreshMany,
+  refreshModule,
+  subscribe as subscribeDrift,
+  unsubscribe as unsubscribeDrift,
+} from "./drift-store";
 
 const props = defineProps<{
   nodeId: number;
@@ -42,32 +50,6 @@ const props = defineProps<{
 
 const dragOverId = ref<string | null>(null);
 const dragOverEnd = ref(false);
-
-/**
- * Set of library uuids known to exist on this server. Refreshed
- * periodically so a module that was deleted via the SPA flips to the
- * "missing" indicator without a workflow reload. `null` = haven't
- * fetched yet (don't render any missing dot until we know — avoids
- * a flash of "everything's missing" while the first request is in
- * flight).
- */
-const libraryIds = ref<Set<string> | null>(null);
-const LIBRARY_POLL_MS = 5000;
-let libraryPollHandle: number | undefined;
-
-async function refreshLibraryIds() {
-  try {
-    const res = await fetch("/wp/api/modules/hashes");
-    if (!res.ok) return;
-    const body = (await res.json()) as { hashes?: Record<string, string> };
-    if (body && body.hashes && typeof body.hashes === "object") {
-      libraryIds.value = new Set(Object.keys(body.hashes));
-    }
-  } catch {
-    // Silent — leave whatever set we last had so transient errors
-    // don't flash "missing" everywhere.
-  }
-}
 
 const ctxMenu = ref<{ visible: boolean; x: number; y: number; items: ContextMenuItem[] }>({
   visible: false,
@@ -105,15 +87,15 @@ function clearDragHover() {
 
 onMounted(() => {
   window.addEventListener("dragend", clearDragHover);
-  // Kick + poll the library-id set so the missing-from-library dot
-  // reacts (within ~5s) when the user deletes/creates rows in the SPA.
-  refreshLibraryIds();
-  libraryPollHandle = window.setInterval(refreshLibraryIds, LIBRARY_POLL_MS);
+  // Subscribe to the shared drift-store — it manages the 5s poll of the
+  // /wp/api/modules/hashes endpoint and exposes the live-hash map that
+  // drives both the missing-dot (this task) and the drift-dot (Task 3).
+  subscribeDrift();
 });
 onBeforeUnmount(() => {
   window.removeEventListener("dragend", clearDragHover);
   if (dragState.value?.sourceNodeId === props.nodeId) dragState.value = null;
-  if (libraryPollHandle !== undefined) window.clearInterval(libraryPollHandle);
+  unsubscribeDrift();
 });
 
 watch(dragState, (v) => { if (v === null) clearDragHover(); });
@@ -262,13 +244,28 @@ function iconFor(type: ModuleEntry["type"]): string {
  *   - duplicates of any kind (the duplicate path strips
  *     payload_hash so the clone reads as local; see `duplicateModule`)
  *
- * Returns false until `libraryIds` first loads so we don't flash
+ * Returns false until `libraryHashes` first loads so we don't flash
  * "missing" everywhere while the initial fetch is in flight.
  */
 function isMissingFromLibrary(m: ModuleEntry): boolean {
   if (!m.payload_hash) return false;
-  if (libraryIds.value === null) return false;
-  return !libraryIds.value.has(m.id);
+  if (libraryHashes.value === null) return false;
+  return !(m.id in libraryHashes.value);
+}
+
+/**
+ * Drift = library still has this uuid, but the live `payload_hash`
+ * differs from what was embedded into the workflow at pick time.
+ * Independent of `isModified` (user overrides) and `isMissingFromLibrary`
+ * (uuid gone). Reads `false` until the store's first fetch lands so we
+ * don't flash drift before we know the truth.
+ */
+function isDrifted(m: ModuleEntry): boolean {
+  if (!m.payload_hash) return false;
+  if (libraryHashes.value === null) return false;
+  const live = libraryHashes.value[m.id];
+  if (live === undefined) return false;       // covered by isMissingFromLibrary
+  return live !== m.payload_hash;
 }
 
 /**
@@ -306,11 +303,61 @@ async function saveToLibrary(m: ModuleEntry) {
     pushToast(`Saved "${m.meta.name || m.type}" to library.`, {
       severity: "success",
     });
-    await refreshLibraryIds();
+    await forceRefreshHashes();
   } catch (err) {
     pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
   }
 }
+
+/** Per-card refresh — replace one drifted entry with the live snapshot.
+ *  Errors surface as toasts; a 404 (deleted between poll and refresh)
+ *  is treated as missing-from-library because the next poll tick will
+ *  flip the dot from drift → missing. */
+async function refreshOne(m: ModuleEntry): Promise<void> {
+  try {
+    const merged = await refreshModule(m);
+    // Use map-replace (immutable) to match the rest of the file's mutation
+    // idiom + guarantee the deep watcher fires regardless of how Vue's
+    // reactive proxy treats indexed array assignment.
+    if (!value.value.modules.some((x) => x.id === merged.id)) return;
+    value.value.modules = value.value.modules.map((x) => x.id === merged.id ? merged : x);
+    pushToast(`Refreshed "${merged.meta.name || merged.type}".`, { severity: "success" });
+    await forceRefreshHashes();
+  } catch (err) {
+    const msg = (err as Error).message ?? "unknown";
+    if (msg === "not in library") {
+      pushToast(`"${m.meta.name || m.type}" no longer in library — try Save to library.`, { severity: "warning" });
+    } else {
+      pushToast(`Refresh failed: ${msg}`, { severity: "error" });
+    }
+  }
+}
+
+/** Bulk — refresh every drifted entry in one batched fetch. */
+async function refreshAllDrifted(): Promise<void> {
+  const drifted = value.value.modules.filter(isDrifted);
+  if (drifted.length === 0) return;
+  const result = await refreshMany(drifted);
+
+  if (result.refreshed.length > 0) {
+    // Apply all merges in one mutation so Vue's deep watcher fires once.
+    const byId = new Map(result.refreshed.map((r) => [r.id, r]));
+    value.value.modules = value.value.modules.map((m) => byId.get(m.id) ?? m);
+    await forceRefreshHashes();
+  }
+
+  if (result.failed.length === 0) {
+    pushToast(`Refreshed all ${result.refreshed.length}.`, { severity: "success" });
+  } else {
+    pushToast(
+      `Refreshed ${result.refreshed.length} of ${drifted.length}; ${result.failed.length} stayed drifted.`,
+      { severity: "warning" },
+    );
+  }
+}
+
+/** Surfaced as a computed for the bulk-button visibility + label. */
+const driftedCount = computed(() => value.value.modules.filter(isDrifted).length);
 
 function isModified(m: ModuleEntry): boolean {
   // Lock + internal have their own dedicated header buttons, so
@@ -763,6 +810,12 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
   // workflow side).
   const items: ContextMenuItem[] = [
     { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(m.id) },
+    {
+      label: "Refresh from library",
+      icon: "pi-refresh",
+      disabled: !isDrifted(m),
+      onSelect: () => { void refreshOne(m); },
+    },
   ];
   if (isMissingFromLibrary(m) && !!m.payload) {
     items.push({
@@ -927,6 +980,21 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             class="wp-section-label__count"
           >{{ value.modules.length }}</span>
 
+          <!-- Bulk-refresh drifted. Visible only when at least one module
+               drifted from its library version; orange accent matches the
+               per-card drift dot. -->
+          <button
+            v-if="driftedCount > 0"
+            type="button"
+            class="wp-section-label__bulk wp-section-label__bulk--drift"
+            :title="`Refresh ${driftedCount} drifted module(s) from the library.`"
+            data-testid="bulk-refresh-drifted"
+            @click="refreshAllDrifted"
+          >
+            <i class="pi pi-refresh" aria-hidden="true"></i>
+            <span>refresh {{ driftedCount }} drifted</span>
+          </button>
+
           <!-- Bulk-collapse toggle. Chevron direction follows the
                action that the click WILL take: ▾ when nothing is
                collapsed (click → collapse all), ▸ when everything is
@@ -1004,14 +1072,20 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
           <!-- Status-dots cluster — read-only indicators grouped so
                the eye reads them as a single "module health" glance.
-               Order modified → missing → conflict (severity rises
-               left → right). Buttons sit AFTER this cluster so dots
-               never split the interactive controls. -->
+               Order modified → drift → missing → conflict (severity
+               rises left → right). Buttons sit AFTER this cluster so
+               dots never split the interactive controls. -->
           <span class="wp-mod-dots">
             <span
               v-if="isModified(m)"
               class="wp-mod-dot wp-mod-dot--modified"
               :title="modifiedTooltip(m)"
+              aria-hidden="true"
+            ></span>
+            <span
+              v-if="isDrifted(m)"
+              class="wp-mod-dot wp-mod-dot--drift"
+              title="Drifted — library has a newer version. Right-click → Refresh from library."
               aria-hidden="true"
             ></span>
             <span
@@ -1310,6 +1384,19 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   background: var(--wp-bg2);
 }
 .wp-section-label__bulk .pi { font-size: 9px; }
+.wp-section-label__bulk--drift {
+  border-color: var(--wp-status-drift);
+  color: var(--wp-status-drift);
+}
+.wp-section-label__bulk--drift:hover {
+  /* Re-assert drift colour because base `:hover` flips both `color` +
+   * `border-color` to the neutral text/border tokens; equal-specificity
+   * selectors lose the cascade race otherwise and the orange accent
+   * vanishes on hover. */
+  color: var(--wp-status-drift);
+  border-color: var(--wp-status-drift);
+  background: color-mix(in oklab, var(--wp-status-drift) 14%, transparent);
+}
 
 /* ── Empty-state hero (2.3) + first-run hint (4.5) ──────────────────────
  * Restrained to match the picker modal — plain title, body, gradient
@@ -1569,6 +1656,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   background: transparent;
   border-color: var(--wp-accent);
   box-shadow: 0 0 4px var(--wp-accent-glow, rgba(80, 168, 255, 0.4));
+}
+/* Filled orange "drift" — solid fill differentiates it from the
+ * modified ring (hollow blue) and missing dot (dashed amber). The
+ * shape language carries colour-blind users; treatment matters
+ * more than the hex. */
+.wp-mod-dot--drift {
+  background: var(--wp-status-drift);
+  border-color: var(--wp-status-drift);
 }
 /* Filled amber dashed "missing" — the dashed border telegraphs
  * "incomplete state" without leaning on red (which we reserve for
