@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import type { ModuleEntry } from "../../widgets/_shared";
@@ -562,5 +562,114 @@ describe("ModuleEditModal — wildcard option editor", () => {
     expect(wrapper.find(".wp-medit__meta-input").exists()).toBe(false);
     // Read-only name span IS rendered.
     expect(wrapper.find(".wp-medit__name-readonly").exists()).toBe(true);
+  });
+});
+
+describe("ModuleEditModal — combine preview", () => {
+  it("renders the template + output var", async () => {
+    const mod: ModuleEntry = {
+      id: "11111111", type: "combine", enabled: true,
+      meta: { name: "Greeting" }, entries: [],
+      payload: { template: "Hello $name from $place", output_var: "greeting", input_vars: ["name", "place"] },
+      payload_hash: "h",
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: mod },
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="combine-preview-template"]').text())
+      .toBe("Hello $name from $place");
+    expect(wrapper.find('[data-testid="combine-preview-output"]').text())
+      .toContain("$greeting");
+    wrapper.unmount();
+  });
+});
+
+describe("ModuleEditModal — derivation preview", () => {
+  it("renders rule list with branches and else", async () => {
+    const mod: ModuleEntry = {
+      id: "22222222", type: "derivation", enabled: true,
+      meta: { name: "Mood" }, entries: [],
+      payload: {
+        rules: [
+          {
+            id: "r1",
+            branches: [
+              {
+                condition: { var: "hair", op: "equals", value: "blonde" },
+                action: { target_var: "mood", mode: "replace", value: "cheerful" },
+              },
+            ],
+            else: { action: { target_var: "mood", mode: "replace", value: "neutral" } },
+          },
+        ],
+      },
+      payload_hash: "h",
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: mod },
+    });
+    await flushPromises();
+    const rules = wrapper.find('[data-testid="derivation-preview-rules"]');
+    expect(rules.text()).toContain("if $hair == \"blonde\"");
+    expect(rules.text()).toContain("$mood = \"cheerful\"");
+    expect(rules.text()).toContain("else");
+    expect(rules.text()).toContain("$mood = \"neutral\"");
+    wrapper.unmount();
+  });
+});
+
+describe("ModuleEditModal — constraint preview", () => {
+  it("resolves source/target via siblingModules + reports matrix dims + exceptions count", async () => {
+    const siblings: ModuleEntry[] = [
+      {
+        id: "aaaaaaaa", type: "wildcard", enabled: true,
+        meta: { name: "Hair" }, entries: [],
+        payload: { options: [], var_binding: "hair_color" },
+        payload_hash: "h",
+      },
+      {
+        id: "bbbbbbbb", type: "wildcard", enabled: true,
+        meta: { name: "Outfit" }, entries: [],
+        payload: { options: [], var_binding: "outfit" },
+        payload_hash: "h",
+      },
+    ];
+    const mod: ModuleEntry = {
+      id: "cccccccc", type: "constraint", enabled: true,
+      meta: { name: "Hair × Outfit" }, entries: [],
+      payload: {
+        source_wildcard_id: "aaaaaaaa",
+        target_wildcard_id: "bbbbbbbb",
+        matrix: {
+          "blonde": { "casual": { mode: "allow", factor: 1 } },
+          "raven":  { "casual": { mode: "allow", factor: 1 } },
+        },
+        exceptions: [
+          { source: "blonde", target: "leather", mode: "reduce", factor: 0.25 },
+        ],
+      },
+      payload_hash: "h",
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: mod, siblingModules: [...siblings, mod] },
+    });
+    await flushPromises();
+    const bindings = wrapper.find('[data-testid="constraint-preview-bindings"]');
+    expect(bindings.text()).toContain("$hair_color");
+    expect(bindings.text()).toContain("$outfit");
+    expect(wrapper.find('[data-testid="constraint-preview-dims"]').text())
+      .toContain("2 sub-cats × 1 sub-cat");
+    expect(wrapper.find('[data-testid="constraint-preview-exceptions"]').text())
+      .toContain("\"blonde\" → \"leather\"");
+    expect(wrapper.find('[data-testid="constraint-preview-exceptions"]').text())
+      .toContain("reduce ×0.25");
+    wrapper.unmount();
   });
 });
