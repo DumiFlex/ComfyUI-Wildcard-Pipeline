@@ -32,3 +32,65 @@ describe("scanConflicts", () => {
     expect(scanConflicts(value, ["style"])).toEqual([]);
   });
 });
+
+const combine = (
+  id: string,
+  template: string,
+  outputVar = "out",
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "combine", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: { template, output_var: outputVar, input_vars: [] },
+});
+
+describe("scanConflicts — combine template var checks", () => {
+  it("flags missing_template_variable (warning) when a combine references a $var nothing upstream provides", () => {
+    const value: ContextWidgetValue = { version: 1, modules: [combine("c1", "$a and $b were near $c")] };
+    // Only $a + $b exist upstream; $c missing.
+    const out = scanConflicts(value, ["a", "b"]);
+    expect(out).toEqual([
+      { moduleId: "c1", variable: "c", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("does not flag $vars satisfied by an earlier sibling module's writes", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        mod("m1", ["a"]),                          // writes $a
+        combine("c1", "say $a now"),               // refs $a — satisfied
+      ],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+
+  it("does not flag a $var written LATER (template scan respects order)", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        combine("c1", "say $a now"),               // refs $a — not yet bound
+        mod("m1", ["a"]),                          // writes $a after combine
+      ],
+    };
+    const out = scanConflicts(value, []);
+    expect(out).toEqual([
+      { moduleId: "c1", variable: "a", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("dedups repeated missing names within the same template", () => {
+    const value: ContextWidgetValue = { version: 1, modules: [combine("c1", "$x and $x and $x")] };
+    const out = scanConflicts(value, []);
+    expect(out).toEqual([
+      { moduleId: "c1", variable: "x", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("disabled combines do not generate template warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ ...combine("c1", "$missing"), enabled: false }],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+});

@@ -56,12 +56,60 @@ export interface Conflict {
   severity: Severity;
 }
 
+/** Token regex matching `$ident` references but NOT `$$` literal escapes.
+ *  Hoisted to the top of the module so both scanners see it without
+ *  forward-reference TDZ concerns. */
+const TEMPLATE_VAR = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
+
+/** Pull every `$ident` reference out of a string. Skips `$$` escapes. */
+function templateVarsIn(template: string): string[] {
+  const out: string[] = [];
+  for (const m of template.matchAll(TEMPLATE_VAR)) out.push(m[1]);
+  return out;
+}
+
+/** Extract the templates a module's runtime resolver will consume against
+ *  the ctx (`$var` lookups). Currently only `combine.template` qualifies —
+ *  wildcard option values resolve nested refs but treat `$var` as text;
+ *  derivations + constraints surface their var-deps via condition/action
+ *  fields, not free-form templates. Extend the union here if a future
+ *  kind grows a template-style payload field. */
+function templatesOf(m: ModuleEntry): string[] {
+  if (m.type === "combine") {
+    const tpl = (m.payload as { template?: string } | undefined)?.template;
+    return typeof tpl === "string" ? [tpl] : [];
+  }
+  return [];
+}
+
 export function scanConflicts(value: ContextWidgetValue, upstreamVars: string[]): Conflict[] {
   const upstream = new Set(upstreamVars);
   const written = new Set<string>();
   const out: Conflict[] = [];
   for (const m of value.modules) {
     if (!m.enabled) continue;
+
+    // 1. Template-var references: every `$var` mentioned must already
+    //    exist either upstream or in a prior enabled module's writes.
+    //    Order matters — a combine that references `$a` written by
+    //    an earlier combine in the same node is fine. Per spec the
+    //    combine handler does NOT auto-bind input_vars, so we need
+    //    static visibility here to give the user a card-level signal
+    //    when a referenced var isn't reachable. Dedup per-module so
+    //    the same missing name doesn't surface twice when a template
+    //    repeats it.
+    const seenMissing = new Set<string>();
+    for (const tpl of templatesOf(m)) {
+      for (const v of templateVarsIn(tpl)) {
+        if (upstream.has(v) || written.has(v)) continue;
+        if (seenMissing.has(v)) continue;
+        seenMissing.add(v);
+        out.push({ moduleId: m.id, variable: v, type: "missing_template_variable", severity: "warning" });
+      }
+    }
+
+    // 2. Writes from this module — order-dependent, so happens AFTER
+    //    template scan so a combine can't satisfy its own `$var` refs.
     for (const name of writesOf(m)) {
       if (upstream.has(name)) {
         // Intended override — surface it but don't scream.
@@ -75,8 +123,6 @@ export function scanConflicts(value: ContextWidgetValue, upstreamVars: string[])
   }
   return out;
 }
-
-const TEMPLATE_VAR = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
 
 export function scanTemplateConflicts(template: string, knownVars: string[]): Conflict[] {
   const known = new Set(knownVars);
