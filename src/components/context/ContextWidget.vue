@@ -1032,6 +1032,9 @@ function onDrop(ev: DragEvent, targetId: string | null) {
           'wp-conflict-error': severityFor(m.id) === 'error',
           'wp-conflict-warning': severityFor(m.id) === 'warning',
           'wp-conflict-info': severityFor(m.id) === 'info',
+          'wp-state-modified': isModified(m),
+          'wp-state-drift': isDrifted(m),
+          'wp-state-missing': isMissingFromLibrary(m),
           'wp-drop-target': dragOverId === m.id,
         }"
         @dragenter="(ev) => onDragEnter(ev, m.id)"
@@ -1522,9 +1525,23 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 }
 .wp-module.wp-disabled .wp-module-name { color: var(--wp-text3); }
 
-.wp-module.wp-conflict-info { border-color: var(--wp-accent); }
-.wp-module.wp-conflict-warning { border-color: var(--wp-amber); }
-.wp-module.wp-conflict-error { border-color: var(--wp-red); }
+/* Card-border tint by state. Rules are ordered low-to-high precedence
+ * — equal-specificity selectors lose the cascade race to whichever
+ * appears LAST, so the order below reflects severity:
+ *   info (conflict)  → indigo  — lowest
+ *   modified         → orange  — user override
+ *   warning (conflict) → amber  — duplicate / shadow
+ *   drift            → amber   — library has newer payload
+ *   missing          → red     — uuid gone from library
+ *   error (conflict) → red     — broken graph — highest
+ * Adding a new tier means slotting it into the right place in this
+ * cascade chain, NOT just appending. */
+.wp-module.wp-conflict-info     { border-color: var(--wp-accent); }
+.wp-module.wp-state-modified    { border-color: var(--wp-status-modified); }
+.wp-module.wp-conflict-warning  { border-color: var(--wp-amber); }
+.wp-module.wp-state-drift       { border-color: var(--wp-warn); }
+.wp-module.wp-state-missing     { border-color: var(--wp-danger); }
+.wp-module.wp-conflict-error    { border-color: var(--wp-red); }
 .wp-module.wp-drop-target {
   border-color: var(--wp-accent);
   box-shadow: inset 0 2px 0 var(--wp-accent);
