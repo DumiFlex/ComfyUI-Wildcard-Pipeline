@@ -1622,16 +1622,31 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   min-width: 0;
 }
 
+/* Conflict dots — structural graph issues (missing template var,
+ * duplicate variable, shadowed upstream). Same chip-style triple as
+ * `.wp-mod-dot` so the cluster reads as one design family — only the
+ * hue distinguishes the kind of issue. Sized 7px to match the mod-dots
+ * exactly; the previous 8px outlier made the cluster feel uneven. */
 .wp-conflict-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
   cursor: help;
+  border: 1px solid transparent;
 }
-.wp-conflict-dot--info { background: var(--wp-accent); }
-.wp-conflict-dot--warning { background: var(--wp-amber); }
-.wp-conflict-dot--error { background: var(--wp-red); }
+.wp-conflict-dot--info {
+  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent) 36%, transparent);
+}
+.wp-conflict-dot--warning {
+  background:   color-mix(in oklab, var(--wp-amber) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-amber) 36%, transparent);
+}
+.wp-conflict-dot--error {
+  background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-red) 36%, transparent);
+}
 
 /* Cluster wrapper — keeps every status dot (modified, missing,
  * conflict) on one inline run so they never get separated by
