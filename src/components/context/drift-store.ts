@@ -72,7 +72,13 @@ export async function forceRefresh(): Promise<void> {
 export async function refreshModule(m: ModuleEntry): Promise<ModuleEntry> {
   const result = await refreshMany([m]);
   if (result.failed.length > 0) throw new Error(result.failed[0].reason);
-  return result.refreshed[0];
+  // Defensive guard: refreshMany should always populate either refreshed or
+  // failed for a single-uuid input, but if it ever introduces a "skip
+  // silently" path the return type would still claim ModuleEntry while
+  // handing back undefined. Throw before the consumer crashes on access.
+  const merged = result.refreshed[0];
+  if (!merged) throw new Error("refresh returned no entry");
+  return merged;
 }
 
 export async function refreshMany(modules: ModuleEntry[]): Promise<RefreshResult> {
