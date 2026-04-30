@@ -68,8 +68,11 @@ def test_resolve_substitutes_known_vars():
     assert out == {"subject": "Alice, a 30-year-old"}
 
 
-def test_resolve_leaves_unknown_var_empty():
-    # resolve_text emits "" for unbound $var tokens (surface="combine").
+def test_resolve_leaves_unknown_var_empty_and_warns():
+    # resolve_text emits "" for unbound $var tokens. Engine also emits
+    # a `unknown_var` warning so the user gets a light signal that the
+    # combine template references a var nothing upstream has bound —
+    # the missing var collapses silently into empty string otherwise.
     ctx = _ctx(name="Bob")
     out = CombineHandler.resolve(
         {"template": "$name and $missing", "output_var": "out"},
@@ -77,6 +80,22 @@ def test_resolve_leaves_unknown_var_empty():
         ctx=ctx,
     )
     assert out == {"out": "Bob and "}
+    warnings = [w for w in ctx["__wp_warnings__"] if w["type"] == "unknown_var"]
+    assert len(warnings) == 1
+    assert warnings[0]["severity"] == "warn"
+    assert warnings[0]["detail"]["name"] == "missing"
+    assert warnings[0]["detail"]["surface"] == "combine"
+
+
+def test_resolve_does_not_warn_on_bound_var():
+    # Sanity check the new warning doesn't fire for vars that ARE present.
+    ctx = _ctx(name="Bob")
+    CombineHandler.resolve(
+        {"template": "hi $name", "output_var": "out"},
+        instance={},
+        ctx=ctx,
+    )
+    assert all(w["type"] != "unknown_var" for w in ctx["__wp_warnings__"])
 
 
 def test_resolve_inline_pick():

@@ -63,16 +63,29 @@ def _resolve_tokens(
 
 
 def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
-    """Look up a variable in ctx. Returns empty string for missing or internal-key vars."""
+    """Look up a variable in ctx. Returns empty string for missing or
+    internal-key vars. Missing vars also emit a `unknown_var` warning so
+    the user gets a signal when a Combine / Derivation / Constraint
+    template references a variable not bound by any upstream module.
+
+    Internal-`__`-prefixed keys are never substituted and never warn —
+    they're engine bookkeeping (`__wp_rng__`, `__wp_catalog__`, etc.)."""
     name = tok.meta.get("name", "")
     if name.startswith("__"):
-        # Engine-internal keys are never substituted.
         return ""
     value = ctx.get_var(name)
     if value is None:
-        # TODO(task-9-onward): push warning when unknown var? Spec doesn't
-        # explicitly call out unknown vars as warnings; they emit "" silently.
-        # Revisit if user feedback shows confusion.
+        _push_warning(
+            ctx,
+            type="unknown_var",
+            severity="warn",
+            module_id="",
+            source_field="",
+            position=tok.start,
+            token_index=None,
+            detail={"name": name, "surface": ctx.surface},
+            message=f"Unknown variable ${name}",
+        )
         return ""
     return str(value)
 
