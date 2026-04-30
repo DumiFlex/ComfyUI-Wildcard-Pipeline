@@ -1637,15 +1637,15 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 }
 .wp-conflict-dot--info {
   background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent) 36%, transparent);
+  border-color: var(--wp-accent);
 }
 .wp-conflict-dot--warning {
   background:   color-mix(in oklab, var(--wp-amber) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-amber) 36%, transparent);
+  border-color: var(--wp-amber);
 }
 .wp-conflict-dot--error {
   background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-red) 36%, transparent);
+  border-color: var(--wp-red);
 }
 
 /* Cluster wrapper — keeps every status dot (modified, missing,
@@ -1680,17 +1680,21 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   cursor: help;
   border: 1px solid transparent;
 }
+/* Bg stays chip-style translucent (14%), but border uses the full
+ * token hue: at 7×7 + canvas zoom-out, a 36% border like the SPA
+ * chips fades into the card surface. Pills at 11px+ get to be
+ * subtle; dots at canvas scale need the saturation. */
 .wp-mod-dot--modified {
   background:   color-mix(in oklab, var(--wp-status-modified) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-status-modified) 36%, transparent);
+  border-color: var(--wp-status-modified);
 }
 .wp-mod-dot--drift {
   background:   color-mix(in oklab, var(--wp-warn) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn) 36%, transparent);
+  border-color: var(--wp-warn);
 }
 .wp-mod-dot--missing {
   background:   color-mix(in oklab, var(--wp-danger) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-danger) 36%, transparent);
+  border-color: var(--wp-danger);
 }
 
 /* In-card lock + internal toggle buttons. Always rendered so the
