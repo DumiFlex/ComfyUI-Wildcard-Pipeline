@@ -318,14 +318,6 @@ defineExpose({
       </div>
       <div class="wp-page__actions">
         <slot name="header-actions" />
-        <Button
-          variant="ghost"
-          icon="pi pi-refresh"
-          aria-label="Refresh list"
-          :disabled="loading"
-          :class="{ 'wp-refresh-btn--spin': loading }"
-          @click="emitFetch"
-        >Refresh</Button>
         <Button variant="primary" :icon="newIcon" @click="onNew">{{ newLabel }}</Button>
       </div>
     </div>
@@ -355,6 +347,14 @@ defineExpose({
       <div class="wp-page-toolbar__sort">
         <Select v-model="sortBy" :options="SORT_OPTIONS" aria-label="Sort" />
       </div>
+      <Button
+        variant="ghost"
+        icon="pi pi-refresh"
+        aria-label="Refresh list"
+        :disabled="loading"
+        :class="{ 'wp-refresh-btn--spin': loading }"
+        @click="emitFetch"
+      >Refresh</Button>
       <span class="wp-toolbar__count">{{ filteredItems.length }} / {{ items.length }} items</span>
     </div>
 
