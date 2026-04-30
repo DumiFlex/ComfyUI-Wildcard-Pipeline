@@ -89,6 +89,7 @@
 
   /* Status colors */
   --wp-status-modified: #fb923c;
+  --wp-status-drift:    #fb923c;
 
   /* Accent gradient (used by progress bars, hero strokes, etc.) */
   --wp-accent-gradient: linear-gradient(90deg, var(--wp-accent-500), var(--wp-accent-400));
