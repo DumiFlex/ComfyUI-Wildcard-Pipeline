@@ -151,3 +151,74 @@ describe("ContextWidget drift dot", () => {
     wrapper.unmount();
   });
 });
+
+describe("ContextWidget bulk refresh", () => {
+  it("hides the bulk button when no module is drifted", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-A", bbbbbbbb: "h-B" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "h-A" },
+        { id: "bbbbbbbb", type: "wildcard", enabled: true, meta: { name: "b" }, entries: [], payload: {}, payload_hash: "h-B" },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 100, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    // Wait for the store's first poll. With both synced, no drift dots
+    // and the bulk button stays hidden.
+    await vi.waitFor(() => {
+      const dots = wrapper.findAll(".wp-mod-dot--drift");
+      expect(dots.length).toBe(0);
+    });
+    expect(wrapper.find('[data-testid="bulk-refresh-drifted"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("shows the bulk button with the drifted count when at least one drifts", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Both embedded hashes differ from live → both drifted.
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A", bbbbbbbb: "live-B" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "h-A" },
+        { id: "bbbbbbbb", type: "wildcard", enabled: true, meta: { name: "b" }, entries: [], payload: {}, payload_hash: "h-B" },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 101, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+
+    await vi.waitFor(() => {
+      const btn = wrapper.find('[data-testid="bulk-refresh-drifted"]');
+      expect(btn.exists()).toBe(true);
+      expect(btn.text()).toContain("2");
+    });
+    wrapper.unmount();
+  });
+});
