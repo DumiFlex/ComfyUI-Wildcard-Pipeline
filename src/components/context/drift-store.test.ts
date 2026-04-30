@@ -61,3 +61,17 @@ describe("drift-store: refCount lifecycle", () => {
     unsubscribe();
   });
 });
+
+describe("drift-store: forceRefresh", () => {
+  it("fires an immediate fetch independent of the 5s tick", async () => {
+    subscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    const fetchSpy = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    const before = fetchSpy.mock.calls.length;
+
+    const { forceRefresh } = await import("./drift-store");
+    await forceRefresh();
+    expect(fetchSpy.mock.calls.length).toBe(before + 1);
+    unsubscribe();
+  });
+});
