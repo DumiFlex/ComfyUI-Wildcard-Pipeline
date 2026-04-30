@@ -149,3 +149,64 @@ describe("drift-store: refreshMany happy path", () => {
     expect(result.refreshed[0].collapsed).toBe(true);
   });
 });
+
+describe("drift-store: refreshMany partial failure", () => {
+  it("flags uuids missing from the response as failed-with-reason", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.endsWith("/embed-bundle")) {
+          return new Response(
+            JSON.stringify({
+              snapshots: {
+                aaaaaaaa: {
+                  snapshot_version: 1,
+                  uuid: "aaaaaaaa",
+                  type: "wildcard",
+                  name: "ok",
+                  payload: {},
+                  payload_hash: "h",
+                  source: { kind: "user" },
+                },
+              },
+              pickOrder: ["aaaaaaaa", "bbbbbbbb"],
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const a = mkEntry({ id: "aaaaaaaa" });
+    const b = mkEntry({ id: "bbbbbbbb" });
+    const result = await refreshMany([a, b]);
+
+    expect(result.refreshed.map((r) => r.id)).toEqual(["aaaaaaaa"]);
+    expect(result.failed).toEqual([{ id: "bbbbbbbb", reason: "not in library" }]);
+  });
+
+  it("returns all failed when the network call itself errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("net down");
+      }),
+    );
+    const a = mkEntry({ id: "aaaaaaaa" });
+    const result = await refreshMany([a]);
+    expect(result.refreshed).toEqual([]);
+    expect(result.failed).toEqual([{ id: "aaaaaaaa", reason: "net down" }]);
+  });
+
+  it("returns all failed on non-2xx", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+    const a = mkEntry({ id: "aaaaaaaa" });
+    const result = await refreshMany([a]);
+    expect(result.refreshed).toEqual([]);
+    expect(result.failed[0].reason).toContain("500");
+  });
+});
