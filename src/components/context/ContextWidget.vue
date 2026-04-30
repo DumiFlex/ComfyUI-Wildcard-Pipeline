@@ -316,9 +316,11 @@ async function saveToLibrary(m: ModuleEntry) {
 async function refreshOne(m: ModuleEntry): Promise<void> {
   try {
     const merged = await refreshModule(m);
-    const i = value.value.modules.findIndex((x) => x.id === m.id);
-    if (i < 0) return;
-    value.value.modules[i] = merged;
+    // Use map-replace (immutable) to match the rest of the file's mutation
+    // idiom + guarantee the deep watcher fires regardless of how Vue's
+    // reactive proxy treats indexed array assignment.
+    if (!value.value.modules.some((x) => x.id === merged.id)) return;
+    value.value.modules = value.value.modules.map((x) => x.id === merged.id ? merged : x);
     pushToast(`Refreshed "${merged.meta.name || merged.type}".`, { severity: "success" });
     await forceRefreshHashes();
   } catch (err) {
@@ -345,7 +347,7 @@ async function refreshAllDrifted(): Promise<void> {
   }
 
   if (result.failed.length === 0) {
-    pushToast(`Refreshed ${result.refreshed.length} module(s).`, { severity: "success" });
+    pushToast(`Refreshed all ${result.refreshed.length}.`, { severity: "success" });
   } else {
     pushToast(
       `Refreshed ${result.refreshed.length} of ${drifted.length}; ${result.failed.length} stayed drifted.`,
@@ -1387,6 +1389,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   color: var(--wp-status-drift);
 }
 .wp-section-label__bulk--drift:hover {
+  /* Re-assert drift colour because base `:hover` flips both `color` +
+   * `border-color` to the neutral text/border tokens; equal-specificity
+   * selectors lose the cascade race otherwise and the orange accent
+   * vanishes on hover. */
+  color: var(--wp-status-drift);
+  border-color: var(--wp-status-drift);
   background: color-mix(in oklab, var(--wp-status-drift) 14%, transparent);
 }
 
