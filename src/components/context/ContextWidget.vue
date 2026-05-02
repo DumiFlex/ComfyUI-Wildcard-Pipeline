@@ -979,8 +979,15 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   // and re-id'ing it would silently break `@{uuid}` ref resolution
   // for nested wildcards. If the target widget already has that id
   // (same module embedded twice), dedupe by skipping; the picker
-  // applies the same rule.
+  // applies the same rule. Toast so the user gets feedback —
+  // pre-fix the drop appeared to silently fail because the visual
+  // reorder cue cleared but the module never appeared.
   if (value.value.modules.some((m) => m.id === ds.module.id)) {
+    const dupName = ds.module.meta?.name?.trim() || ds.module.type;
+    pushToast(
+      `"${dupName}" is already in this node — modules can't be duplicated within a single WP_Context.`,
+      { severity: "warning" },
+    );
     sameNodeDropHandled = true;
     return;
   }

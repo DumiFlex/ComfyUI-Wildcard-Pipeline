@@ -3,6 +3,7 @@ import {
   collectUpstreamResolved,
   collectUpstreamVariables,
   findDownstreamAssemblers,
+  findRootGraph,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
@@ -63,6 +64,81 @@ describe("collectUpstreamVariables", () => {
       getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
     };
     expect(collectUpstreamVariables(graph, asm).sort()).toEqual(["style", "subject"]);
+  });
+});
+
+describe("collectUpstreamVariables — mute/bypass mode", () => {
+  function makeChain(modeOnA?: number) {
+    // a (writes "style") → b. If `modeOnA` is 2 (mute) or 4 (bypass),
+    // a's contributions should be skipped from b's upstream view.
+    const a: LiteNodeLike = {
+      ...fakeContextNode(1, ["style"]),
+      mode: modeOnA,
+    };
+    const b = fakeContextNode(2, ["mood"], 100);
+    const graph: LiteGraphLike = {
+      _nodes: [a, b],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: a, 2: b } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    return { a, b, graph };
+  }
+
+  it("includes upstream writes when source node is in default mode (0)", () => {
+    const { b, graph } = makeChain(0);
+    expect(collectUpstreamVariables(graph, b)).toEqual(["style"]);
+  });
+
+  it("excludes upstream writes when source node is muted (mode 2)", () => {
+    // Muted nodes don't run; their bindings don't surface downstream.
+    const { b, graph } = makeChain(2);
+    expect(collectUpstreamVariables(graph, b)).toEqual([]);
+  });
+
+  it("excludes upstream writes when source node is bypassed (mode 4)", () => {
+    // Bypass routes input → output topologically — node itself doesn't
+    // contribute. Walker still traverses through it (link is intact)
+    // but skips its module bindings.
+    const { b, graph } = makeChain(4);
+    expect(collectUpstreamVariables(graph, b)).toEqual([]);
+  });
+
+  it("includes upstream writes when mode is undefined (legacy nodes)", () => {
+    const { b, graph } = makeChain(undefined);
+    expect(collectUpstreamVariables(graph, b)).toEqual(["style"]);
+  });
+});
+
+describe("findRootGraph", () => {
+  it("returns the graph itself when it has no id (already root)", () => {
+    const root: LiteGraphLike = { _nodes: [], links: {}, getNodeById: () => null };
+    expect(findRootGraph(root)).toBe(root);
+  });
+
+  it("climbs `_subgraph_node.graph` until it lands on the rootless graph", () => {
+    // Layout: root → sub1 → sub2. Each child references its wrapping
+    // SubgraphNode via `_subgraph_node`, the wrapping node's `.graph`
+    // points at the parent. From sub2 we should hop sub1 → root.
+    const root: LiteGraphLike = { _nodes: [], links: {}, getNodeById: () => null };
+    const wrapper1: LiteNodeLike = { id: 100, type: "subnode", graph: root };
+    const sub1: LiteGraphLike & { _subgraph_node?: LiteNodeLike } = {
+      id: "sub1", _nodes: [], links: {}, getNodeById: () => null, _subgraph_node: wrapper1,
+    };
+    const wrapper2: LiteNodeLike = { id: 200, type: "subnode", graph: sub1 };
+    const sub2: LiteGraphLike & { _subgraph_node?: LiteNodeLike } = {
+      id: "sub2", _nodes: [], links: {}, getNodeById: () => null, _subgraph_node: wrapper2,
+    };
+    expect(findRootGraph(sub2)).toBe(root);
+    expect(findRootGraph(sub1)).toBe(root);
+  });
+
+  it("falls back to the input when a subgraph's parent chain is broken", () => {
+    // Orphan subgraph (id set, but no `_subgraph_node` to climb through)
+    // should be returned unchanged — a hard cap, not an infinite walk.
+    const orphan: LiteGraphLike = {
+      id: "orphan", _nodes: [], links: {}, getNodeById: () => null,
+    };
+    expect(findRootGraph(orphan)).toBe(orphan);
   });
 });
 

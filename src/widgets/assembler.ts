@@ -4,6 +4,7 @@ import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import {
   collectUpstreamChain,
   collectUpstreamResolved,
+  findRootGraph,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
@@ -154,7 +155,13 @@ export function mountHelper(node: AssemblerNode) {
       const snapshot = reactiveFromGraph<UpstreamSnapshot>(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
         () => {
-          const g = app.graph as unknown as LiteGraphLike;
+          // See `widgets/context.ts` for the rationale — `app.graph`
+          // becomes a subgraph reference when the user is viewing one,
+          // breaking root-level walks. Climb from `node.graph` instead.
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const g = findRootGraph(startGraph);
           const chain = collectUpstreamChain(g, node);
           return {
             chainKey: hashChain(chain),

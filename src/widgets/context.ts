@@ -4,7 +4,7 @@ import {
   createDomWidgetHost, parseWidgetJson, serializeWidgetJson, emptyContextValue,
   type ContextWidgetValue, type MountTargetNode,
 } from "./_shared";
-import { collectUpstreamVariables, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
+import { collectUpstreamVariables, findRootGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 
 const ContextWidget = defineAsyncComponent(() => import("../components/context/ContextWidget.vue"));
@@ -22,7 +22,40 @@ export function create(node: ContextNode, inputName: string) {
     setup() {
       const upstreamVars = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
-        () => collectUpstreamVariables(app.graph as unknown as LiteGraphLike, node),
+        () => {
+          // `app.graph` is the *currently visible* graph in ComfyUI —
+          // when the user double-clicks into a subgraph it shifts to
+          // that subgraph, leaving cross-graph upstream walks broken
+          // for any WP_Context still mounted in the (no-longer-active)
+          // root. Climb from `node.graph` (the LGraph this node
+          // actually belongs to) up to the topmost graph so the
+          // walker's `getNodeById(upstream_id)` always hits the right
+          // node space, regardless of canvas focus state.
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          const result = collectUpstreamVariables(rootGraph, node);
+          // Diagnostic: when `window.__wp_walker_log__` is set, log every
+          // walker output for this node. Use to debug "cross-node
+          // missing-var false positive": pin the dot to a Context node
+          // visibly upstream-wired, set the flag, and read the console
+          // to see what root-graph identity the walker got + what it
+          // returned. Production is silent unless the flag is on.
+          const dbg = (window as unknown as { __wp_walker_log__?: boolean }).__wp_walker_log__;
+          if (dbg) {
+            // eslint-disable-next-line no-console
+            console.log("[wp-walker]", {
+              nodeId: node.id,
+              nodeGraphId: startGraph?.id ?? "root",
+              appGraphId: (app.graph as unknown as { id?: string })?.id ?? "root",
+              rootGraphId: rootGraph?.id ?? "root",
+              firstInputLink: node.inputs?.[0]?.link ?? null,
+              upstreamVars: result,
+            });
+          }
+          return result;
+        },
         stringArrayEqual,
       );
       // Per-module seed reader. For each module we snapshot the

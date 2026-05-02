@@ -51,6 +51,20 @@ export interface LiteNodeLike {
   isSubgraphNode?(): boolean;
   /** Containing LGraph — set by litegraph on every node that's been added. */
   graph?: LiteGraphLike;
+  /** Litegraph execution mode. 0 = ALWAYS (default), 1 = ON_EVENT,
+   *  2 = NEVER (mute), 3 = ON_TRIGGER, 4 = BYPASS. Modes 2/3/4 skip
+   *  the node at runtime; the walker mirrors that by ignoring their
+   *  module contributions when building the upstream-vars set. */
+  mode?: number;
+}
+
+/** Modes that mean "this node does not contribute its module bindings
+ *  at runtime" — `NEVER` (mute) and `BYPASS`. ON_TRIGGER (3) is
+ *  technically also non-default but unused for WP_Context in practice;
+ *  skip-list is intentionally narrow. */
+const SKIP_MODES = new Set<number>([2, 4]);
+function isSkippedMode(node: LiteNodeLike): boolean {
+  return typeof node.mode === "number" && SKIP_MODES.has(node.mode);
 }
 
 /**
@@ -84,6 +98,43 @@ function isSubgraphNode(n: LiteNodeLike): boolean {
 /** Containing LGraph — falls back to passed graph when litegraph hasn't set it. */
 function graphOf(node: LiteNodeLike, fallback: LiteGraphLike): LiteGraphLike {
   return node.graph ?? fallback;
+}
+
+/**
+ * Derive the root LGraph from any starting graph, climbing the subgraph
+ * parent chain until we hit a graph with no `id` (litegraph marks the
+ * root LGraph with `id === undefined` and assigns UUIDs to every nested
+ * subgraph). Falls back to the input graph if the chain can't be
+ * resolved — in practice this means a graph that is NOT root but also
+ * has no parent reachable via the litegraph hooks; downstream walkers
+ * still operate on it but `buildSubgraphParents` won't see siblings
+ * outside the starting view.
+ *
+ * Why this exists: `app.graph` in ComfyUI is the *currently visible*
+ * graph, which can become a subgraph when the user double-clicks into
+ * one. A WP_Context inside the root will then be walked against a
+ * subgraph reference, `getNodeById(upstreamId)` returns null because
+ * upstream lives in the actual root, and the walker reports an empty
+ * upstream-vars list — the symptom QA reported as the cross-node
+ * missing-var false positive. Climbing from the node's containing
+ * graph dodges that misalignment.
+ */
+export function findRootGraph(start: LiteGraphLike): LiteGraphLike {
+  let cur: LiteGraphLike | null = start;
+  // Litegraph SubgraphLGraph instances expose `_subgraph_node` pointing
+  // at the wrapping SubgraphNode in the parent graph. Climbing through
+  // it gives us the parent LGraph; loop until we land on a graph with
+  // no id (= root). Hard cap at BOUNDARY_RECURSION_LIMIT to fail safe
+  // if the chain is somehow circular.
+  for (let i = 0; cur && i < BOUNDARY_RECURSION_LIMIT; i++) {
+    if (cur.id === undefined) return cur;
+    const wrapped = cur as unknown as { _subgraph_node?: LiteNodeLike };
+    const parentNode: LiteNodeLike | undefined = wrapped._subgraph_node;
+    const parentGraph: LiteGraphLike | undefined = parentNode?.graph;
+    if (!parentGraph) return cur;
+    cur = parentGraph;
+  }
+  return start;
 }
 
 type SubgraphParent = { node: LiteNodeLike; graph: LiteGraphLike };
@@ -300,10 +351,14 @@ export function collectUpstreamChain(
   // chain[] is downstream-first (first hop = closest upstream).
   // Reverse so step 0 is the FURTHEST upstream — engine runs each
   // step's pipeline with previous ctx as input, so order matters.
+  // Mute/bypass nodes are dropped from the chain so the engine
+  // preview doesn't run their modules — matching the canvas runtime,
+  // which skips muted/bypassed nodes entirely.
   const upstreamFirst = [...chain].reverse();
   const out: unknown[][] = [];
   for (const n of upstreamFirst) {
     if (n.type !== "WP_Context") continue;
+    if (isSkippedMode(n)) continue;
     const v = parseWidgetJson<ContextWidgetValue>(
       widgetValue(n, "modules"),
       { version: 1, modules: [] },
@@ -396,10 +451,19 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
 
   // Second pass: walk chain upstream-first → downstream-last so later
   // writes override earlier ones (matches runtime last-write-wins).
+  // Skip nodes whose litegraph mode is mute/bypass — at runtime
+  // ComfyUI doesn't execute them, so their module bindings don't
+  // appear in the chain's ctx. Static analysis must mirror that or
+  // the upstream-vars set lights up references that would actually
+  // be unbound at run time (and conversely, hides shadows that would
+  // never fire). Bypass routes input → output topologically; the
+  // walker already gets that for free because the link still points
+  // at the bypassed node — we just skip its OWN contributions.
   const ctx: Record<string, string> = {};
   for (let i = chain.length - 1; i >= 0; i--) {
     const n = chain[i];
     if (n.type !== "WP_Context") continue;
+    if (isSkippedMode(n)) continue;
     const v = parseWidgetJson<ContextWidgetValue>(
       widgetValue(n, "modules"),
       { version: 1, modules: [] },
