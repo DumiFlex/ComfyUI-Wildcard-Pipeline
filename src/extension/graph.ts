@@ -640,6 +640,64 @@ function locator(graph: LiteGraphLike, node: LiteNodeLike): string {
 }
 
 /**
+ * BFS downstream from `node` along PIPELINE_CONTEXT edges, collecting every
+ * wildcard module's uuid in any reachable WP_Context. Mirror of
+ * {@link collectUpstreamWildcardUuids} for the conflict scanner's
+ * constraint check — source-in-downstream is bad (source runs after
+ * constraint = pick not yet recorded), target-in-downstream is good
+ * (target runs after constraint = matrix gets a chance to apply).
+ *
+ * Skips modules in muted/bypassed nodes (mode 2 / 4) so a constraint
+ * referencing a deliberately-disabled future wildcard doesn't get
+ * misleading "this is fine" silence.
+ *
+ * Crosses subgraph boundaries the same way `findDownstreamAssemblers`
+ * does (resumes from parent SubgraphNode through SubgraphOutputNode).
+ */
+export function collectDownstreamWildcardUuids(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): string[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const out = new Set<string>();
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const queue: { graph: LiteGraphLike; node: LiteNodeLike }[] = [
+    { graph: graphOf(node, rootGraph), node },
+  ];
+
+  while (queue.length) {
+    const cur = queue.shift();
+    if (!cur) break;
+    for (const o of cur.node.outputs ?? []) {
+      if (o.type !== "PIPELINE_CONTEXT") continue;
+      for (const linkId of o.links ?? []) {
+        const link = cur.graph.links[linkId];
+        if (!link) continue;
+        const stepped = downstreamStep(cur.graph, link, parents);
+        if (!stepped) continue;
+        const key = locator(stepped.graph, stepped.node);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        // Harvest wildcard uuids when the downstream node is a
+        // WP_Context and not muted/bypassed.
+        if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
+          const v = parseWidgetJson<ContextWidgetValue>(
+            widgetValue(stepped.node, "modules"),
+            { version: 1, modules: [] },
+          );
+          for (const m of v.modules) {
+            if (!m.enabled) continue;
+            if (m.type === "wildcard") out.add(m.id);
+          }
+        }
+        queue.push({ graph: stepped.graph, node: stepped.node });
+      }
+    }
+  }
+  return [...out];
+}
+
+/**
  * BFS downstream from `node` along PIPELINE_CONTEXT edges, returning every
  * WP_PromptAssembler in reach. Walks through subgraph boundaries: a
  * SubgraphNode in the chain is unwrapped by following its inputNode slot

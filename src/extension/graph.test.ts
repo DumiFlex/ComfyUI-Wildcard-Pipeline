@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  collectDownstreamWildcardUuids,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
@@ -117,6 +118,84 @@ describe("collectUpstreamWildcardUuids", () => {
     const a = fakeWildcardContext(1, ["aaaa1111"]);
     const graph: LiteGraphLike = { _nodes: [a], links: {}, getNodeById: () => null };
     expect(collectUpstreamWildcardUuids(graph, a)).toEqual([]);
+  });
+});
+
+describe("collectDownstreamWildcardUuids", () => {
+  // Mirror of upstream walker — needed so the constraint scanner can
+  // mark target-in-downstream as the GOOD case and detect
+  // source-in-downstream as the BAD direction.
+  function fakeWildcardContextWithOutgoing(
+    id: number,
+    wildcardUuids: string[],
+    upstreamLink?: number,
+    outgoingLinkIds: number[] = [],
+  ): LiteNodeLike {
+    return {
+      id,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: upstreamLink ?? null }],
+      outputs: [{ name: "context", links: outgoingLinkIds, type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: wildcardUuids.map((u) => ({
+            id: u, type: "wildcard", enabled: true, meta: { name: "" },
+            entries: [],
+            payload: { var_binding: "x", options: [{ id: "o1", value: "x", weight: 1 }] },
+          })),
+        }),
+      }],
+    };
+  }
+
+  it("collects wildcard uuids from each downstream Context", () => {
+    // a → b. Walking from a, we should see b's wildcards.
+    const a = fakeWildcardContextWithOutgoing(1, [], undefined, [100]);
+    const b = fakeWildcardContextWithOutgoing(2, ["bbbb1111", "bbbb2222"], 100);
+    const graph: LiteGraphLike = {
+      _nodes: [a, b],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: a, 2: b } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectDownstreamWildcardUuids(graph, a).sort()).toEqual(["bbbb1111", "bbbb2222"]);
+  });
+
+  it("traverses multi-hop downstream chains", () => {
+    // a → b → c. From a, both b's and c's wildcards should surface.
+    const a = fakeWildcardContextWithOutgoing(1, [], undefined, [100]);
+    const b = fakeWildcardContextWithOutgoing(2, ["bbbb1111"], 100, [200]);
+    const c = fakeWildcardContextWithOutgoing(3, ["cccc1111"], 200);
+    const graph: LiteGraphLike = {
+      _nodes: [a, b, c],
+      links: {
+        100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 },
+        200: { id: 200, origin_id: 2, origin_slot: 0, target_id: 3, target_slot: 0 },
+      },
+      getNodeById: (id) => ({ 1: a, 2: b, 3: c } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectDownstreamWildcardUuids(graph, a).sort()).toEqual(["bbbb1111", "cccc1111"]);
+  });
+
+  it("excludes wildcards from muted/bypassed downstream Contexts", () => {
+    const a = fakeWildcardContextWithOutgoing(1, [], undefined, [100]);
+    const b: LiteNodeLike = {
+      ...fakeWildcardContextWithOutgoing(2, ["bbbb1111"], 100),
+      mode: 4,  // bypass
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [a, b],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: a, 2: b } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(collectDownstreamWildcardUuids(graph, a)).toEqual([]);
+  });
+
+  it("returns empty when no downstream link exists", () => {
+    const a = fakeWildcardContextWithOutgoing(1, [], undefined, []);
+    const graph: LiteGraphLike = { _nodes: [a], links: {}, getNodeById: () => null };
+    expect(collectDownstreamWildcardUuids(graph, a)).toEqual([]);
   });
 });
 

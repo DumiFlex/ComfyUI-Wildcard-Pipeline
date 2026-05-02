@@ -361,25 +361,64 @@ describe("scanConflicts — constraint ordering", () => {
     });
   });
 
-  it("flags constraint_target_missing when uuid is unfindable", () => {
-    // Target neither in this node nor upstream. Could legitimately
-    // be in a downstream Context, but QA prefers a soft warning over
-    // silence — false-positive noise is cheaper than missed typos /
-    // deleted modules. The label "target missing" is intentionally
-    // soft so the user can interpret the situation.
+  it("flags constraint_target_missing only when uuid is unfindable upstream AND downstream", () => {
+    // Target genuinely missing — not in this node, upstream, OR
+    // downstream. Real typo / deleted module. With the new downstream
+    // visibility the scanner stops false-flagging legitimate
+    // downstream targets.
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
         constraint("c1", "aaaa1111", "bbbbeeee"),
       ],
     };
-    const out = scanConflicts(value, [], ["aaaa1111"]);
+    const out = scanConflicts(value, [], ["aaaa1111"], []);
     expect(out).toContainEqual({
       moduleId: "c1",
       variable: "bbbbeeee",
       type: "constraint_target_missing",
       severity: "warning",
     });
+  });
+
+  it("does NOT flag target when uuid lives in the downstream chain (the GOOD case)", () => {
+    // Target downstream = picks AFTER this constraint's Context runs,
+    // so the matrix applies as designed. Pre-downstream-walker this
+    // scenario flagged as "missing" because the scanner couldn't see
+    // past its own node.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "ddddeeee"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee"]);
+    expect(out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_"))).toBeUndefined();
+  });
+
+  it("flags constraint_source_in_downstream when source lives downstream (BAD direction)", () => {
+    // Source downstream = picks AFTER this constraint runs, so its
+    // entry won't be in `__wp_picks__` when the target reads
+    // constraints. More specific signal than "missing" — the user
+    // wired the source to the wrong direction, and the tooltip can
+    // tell them so.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "ddddssss", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], [], ["ddddssss"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "ddddssss",
+      type: "constraint_source_in_downstream",
+      severity: "warning",
+    });
+    // Should NOT also fire "source missing" — the in_downstream variant
+    // supersedes it.
+    expect(out.find((c) => c.moduleId === "c1" && c.type === "constraint_source_missing")).toBeUndefined();
   });
 
   it("disabled constraints do not generate ordering warnings", () => {

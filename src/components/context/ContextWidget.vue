@@ -37,6 +37,12 @@ const props = withDefaults(defineProps<{
    *  bug (target ran before constraint loaded). Optional for
    *  headless / test mounts that don't simulate a graph. */
   upstreamWildcardUuids?: string[];
+  /** Wildcard module uuids reachable downstream of this node. Mirror
+   *  of `upstreamWildcardUuids` — lets the scanner mark
+   *  target-in-downstream as the GOOD case (target picks after this
+   *  constraint runs) and fire `constraint_source_in_downstream`
+   *  when the source is in the wrong direction. */
+  downstreamWildcardUuids?: string[];
   /** Litegraph node mode: 0 ALWAYS, 2 NEVER (mute), 4 BYPASS.
    *  Used to dim the body when the host node is muted/bypassed so
    *  the runtime-skipped state is visually obvious. Other modes are
@@ -63,7 +69,11 @@ const props = withDefaults(defineProps<{
    */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
-}>(), { nodeMode: 0, upstreamWildcardUuids: () => [] });
+}>(), {
+  nodeMode: 0,
+  upstreamWildcardUuids: () => [],
+  downstreamWildcardUuids: () => [],
+});
 
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
@@ -192,7 +202,12 @@ const conflicts = computed<Conflict[]>(() => {
     ...value.value,
     modules: value.value.modules.filter((m) => m.enabled),
   };
-  return scanConflicts(enabledOnly, props.upstreamVars, props.upstreamWildcardUuids);
+  return scanConflicts(
+    enabledOnly,
+    props.upstreamVars,
+    props.upstreamWildcardUuids,
+    props.downstreamWildcardUuids,
+  );
 });
 const conflictsByModule = computed(() => {
   const out: Record<string, Conflict[]> = {};

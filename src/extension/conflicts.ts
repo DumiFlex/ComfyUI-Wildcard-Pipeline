@@ -89,18 +89,22 @@ function writesOf(m: ModuleEntry): string[] {
 //   Context that already ran. Same problem as before_self: target
 //   picked before constraint registered. The reference might also
 //   be a typo of source vs target.
-// `constraint_target_missing` — warning: target uuid not in this node and
-//   not in any upstream Context. Could legitimately be a downstream
-//   Context the static scanner can't see, but the false-positive
-//   noise was worth less to QA than the false-negative silence on
-//   real typos / deleted targets — surfacing the dot is more useful
-//   than staying quiet.
+// `constraint_target_missing` — warning: target uuid not findable in this
+//   node, the upstream chain, OR the downstream chain. Real typo /
+//   deleted module / constraint pointing at a uuid that doesn't exist.
+// `constraint_source_in_downstream` — warning: source wildcard lives in
+//   a downstream Context that runs AFTER this constraint's Context.
+//   Source's pick won't be in `__wp_picks__` when the wildcard handler
+//   reads constraints. Same runtime no-op as source_after_self, but
+//   surfacing the cross-node placement gives the user a more
+//   actionable signal than the catch-all "missing".
 export type ConflictType =
   | "shadows_upstream"
   | "duplicate_variable"
   | "missing_template_variable"
   | "constraint_source_after_self"
   | "constraint_source_missing"
+  | "constraint_source_in_downstream"
   | "constraint_target_before_self"
   | "constraint_target_in_upstream"
   | "constraint_target_missing";
@@ -126,6 +130,7 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_target_before_self") return "target before constraint";
   if (type === "constraint_target_in_upstream") return "target already picked upstream";
   if (type === "constraint_target_missing") return "target missing";
+  if (type === "constraint_source_in_downstream") return "source in downstream";
   return type;
 }
 
@@ -203,9 +208,11 @@ export function scanConflicts(
   value: ContextWidgetValue,
   upstreamVars: string[],
   upstreamWildcardUuids: string[] = [],
+  downstreamWildcardUuids: string[] = [],
 ): Conflict[] {
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
+  const downstreamUuids = new Set(downstreamWildcardUuids);
   // Same-node wildcard index lookup. Used by the constraint ordering
   // checks: a constraint references its source/target by uuid, and we
   // need to know whether each uuid lives in this node (and at what
@@ -281,9 +288,14 @@ export function scanConflicts(
       const srcId = cp.source_wildcard_id;
       const tgtId = cp.target_wildcard_id;
       if (typeof srcId === "string" && srcId) {
+        // Source needs to have picked BEFORE this constraint runs.
+        // Good locations: same node at index < i, OR upstream Context.
+        // Bad locations: same node at index >= i (after_self),
+        // downstream Context (in_downstream), or unfindable (missing).
         const localIdx = localWildcardIndex.get(srcId);
         const inLocal = localIdx !== undefined;
         const inUpstream = upstreamUuids.has(srcId);
+        const inDownstream = downstreamUuids.has(srcId);
         if (inLocal && (localIdx as number) >= i) {
           out.push({
             moduleId: m.id,
@@ -291,7 +303,17 @@ export function scanConflicts(
             type: "constraint_source_after_self",
             severity: "warning",
           });
-        } else if (!inLocal && !inUpstream) {
+        } else if (!inLocal && !inUpstream && inDownstream) {
+          // Source IS visible — just in the wrong direction. Surface
+          // a more specific signal than the catch-all "missing" so
+          // the user knows where to look.
+          out.push({
+            moduleId: m.id,
+            variable: srcId,
+            type: "constraint_source_in_downstream",
+            severity: "warning",
+          });
+        } else if (!inLocal && !inUpstream && !inDownstream) {
           out.push({
             moduleId: m.id,
             variable: srcId,
@@ -301,9 +323,15 @@ export function scanConflicts(
         }
       }
       if (typeof tgtId === "string" && tgtId) {
+        // Target needs to pick AFTER this constraint runs. Good
+        // locations: same node at index > i, OR downstream Context.
+        // Bad locations: same node at index <= i (before_self),
+        // upstream Context (in_upstream — already picked), or
+        // unfindable (missing).
         const localIdx = localWildcardIndex.get(tgtId);
         const inLocal = localIdx !== undefined;
         const inUpstream = upstreamUuids.has(tgtId);
+        const inDownstream = downstreamUuids.has(tgtId);
         if (inLocal && (localIdx as number) <= i) {
           out.push({
             moduleId: m.id,
@@ -318,12 +346,11 @@ export function scanConflicts(
             type: "constraint_target_in_upstream",
             severity: "warning",
           });
-        } else if (!inLocal) {
-          // Target not in this node AND not in upstream. Could legitimately
-          // be a downstream Context (which the static scanner can't see),
-          // but QA prefers the false-positive noise to silence on real
-          // typos / deleted targets. The tooltip wording stays soft —
-          // "target missing" — so the user can interpret it.
+        } else if (!inLocal && !inDownstream) {
+          // Not findable anywhere reachable. Pre-fix the scanner
+          // flagged this even when target was downstream; the
+          // downstream walker now lets us distinguish — only flag
+          // when truly unfindable.
           out.push({
             moduleId: m.id,
             variable: tgtId,
@@ -331,6 +358,7 @@ export function scanConflicts(
             severity: "warning",
           });
         }
+        // Target in downstream → no warning (good case).
       }
     }
   }

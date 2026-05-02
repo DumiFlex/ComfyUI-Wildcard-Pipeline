@@ -5,6 +5,7 @@ import {
   type ContextWidgetValue, type MountTargetNode,
 } from "./_shared";
 import {
+  collectDownstreamWildcardUuids,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
   findRootGraph,
@@ -92,6 +93,23 @@ export function create(node: ContextNode, inputName: string) {
         stringArrayEqual,
       );
 
+      // Same idea, downstream — lets the scanner distinguish
+      // target-in-downstream (good) from target-missing (bad), and
+      // emit `constraint_source_in_downstream` instead of the
+      // catch-all "source missing" when the user wired the source
+      // wildcard into a future Context node.
+      const downstreamUuids = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectDownstreamWildcardUuids(rootGraph, node);
+        },
+        stringArrayEqual,
+      );
+
       // Litegraph mode poll — when the user mutes (mode 2) or bypasses
       // (mode 4) a Context node, the body of the DOM widget should
       // visually dim so the muted state is obvious. Litegraph dims the
@@ -121,6 +139,7 @@ export function create(node: ContextNode, inputName: string) {
         initialJson: currentJson.value,
         upstreamVars: upstreamVars.value,
         upstreamWildcardUuids: upstreamUuids.value,
+        downstreamWildcardUuids: downstreamUuids.value,
         nodeMode: nodeMode.value,
         lastUsedSeedReader,
         onChange: (json: string) => host.setValue(json),
