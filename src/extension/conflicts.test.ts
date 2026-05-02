@@ -116,3 +116,129 @@ describe("scanConflicts — combine template var checks", () => {
     expect(scanConflicts(value, [])).toEqual([]);
   });
 });
+
+const derivation = (
+  id: string,
+  rules: Array<{
+    branches: Array<{
+      condition: { var: string; op?: string; value?: string };
+      action: { target_var: string; mode?: string; value?: string };
+    }>;
+    else?: { action: { target_var: string; mode?: string; value?: string } };
+  }>,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "derivation", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: { rules: rules.map((r, i) => ({ id: `r${i}`, ...r })) },
+});
+
+describe("scanConflicts — derivation var/template scanning", () => {
+  it("flags missing_template_variable when condition.var isn't upstream/sibling", () => {
+    // `if $age == "30" → $mood = "calm"` references $age (read) and writes
+    // $mood. Without upstream $age the read can never match — surface.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "age", op: "equals", value: "30" },
+            action: { target_var: "mood", mode: "replace", value: "calm" },
+          }],
+        }]),
+      ],
+    };
+    const out = scanConflicts(value, []);
+    expect(out).toEqual([
+      { moduleId: "d1", variable: "age", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("flags missing_template_variable when action.value template references unknown $var", () => {
+    // action.value passes through resolve_text under derivation surface, so
+    // `$style` inside MUST resolve at runtime — same gap as combine.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "age", op: "equals", value: "30" },
+            action: { target_var: "mood", mode: "replace", value: "feeling $style" },
+          }],
+        }]),
+      ],
+    };
+    // age provided upstream; $style is the gap.
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toEqual([
+      { moduleId: "d1", variable: "style", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("scans else.action.value templates too", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "age", op: "equals", value: "30" },
+            action: { target_var: "mood", mode: "replace", value: "calm" },
+          }],
+          else: { action: { target_var: "mood", mode: "replace", value: "fallback $tone" } },
+        }]),
+      ],
+    };
+    const out = scanConflicts(value, ["age"]);
+    expect(out).toEqual([
+      { moduleId: "d1", variable: "tone", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("dedups repeated missing names across condition.var + action.value within a module", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "x", op: "equals", value: "y" },
+            action: { target_var: "out", mode: "replace", value: "$x and $x" },
+          }],
+        }]),
+      ],
+    };
+    // Both the condition and the template reference $x. Surface once.
+    expect(scanConflicts(value, [])).toEqual([
+      { moduleId: "d1", variable: "x", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
+  it("does not flag derivation reads satisfied by earlier sibling writes", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        mod("m1", ["age"]),
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "age", op: "equals", value: "30" },
+            action: { target_var: "mood", mode: "replace", value: "calm" },
+          }],
+        }]),
+      ],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+
+  it("disabled derivations do not generate read/template warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        { ...derivation("d1", [{
+          branches: [{
+            condition: { var: "missing", op: "equals", value: "x" },
+            action: { target_var: "out", mode: "replace", value: "$alsoMissing" },
+          }],
+        }]), enabled: false },
+      ],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+});
