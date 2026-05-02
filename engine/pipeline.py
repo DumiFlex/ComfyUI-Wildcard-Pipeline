@@ -94,6 +94,13 @@ class PipelineEngine:
                 })
                 continue
 
+            # Stash the active module's id in ctx so handlers that
+            # need to identify themselves (constraint-aware wildcards
+            # looking up `__wp_constraints__[*].target_wildcard_id`)
+            # can read it without reaching into snapshot internals.
+            # Cleared in the finally below so a stale id doesn't leak
+            # into the next iteration's resolve call.
+            ctx["__wp_current_module_id__"] = _module_id
             try:
                 bindings = resolve_module(snapshot, ctx)
             except UnknownModuleType:
@@ -186,4 +193,9 @@ class PipelineEngine:
                 "seed": effective_seed,
             })
 
+        # Drop the active-module marker so it doesn't leak into the
+        # public socket payload (it's an `__`-prefixed key, so
+        # `strip_internals` would already filter it, but clearing it
+        # is cheap and keeps post-run ctx introspection tidy).
+        ctx.pop("__wp_current_module_id__", None)
         return ctx

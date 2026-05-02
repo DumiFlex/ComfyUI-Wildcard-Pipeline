@@ -3,6 +3,17 @@
 Each option's `value` may contain $var, @{uuid}, {a|b|c}, {N$$sep$$...}, and
 escapes. After picking the option, resolve_text expands the syntax against
 the runtime context.
+
+Constraint integration: when the chain has registered constraints in
+``ctx["__wp_constraints__"]`` whose ``target_wildcard_id`` matches the
+current module's id, this handler applies the constraint matrix +
+exception list to the option pool's weights before picking. The source
+wildcard MUST have already been resolved earlier in the chain — picks
+are recorded in ``ctx["__wp_picks__"][module_id]`` so a downstream
+constraint-aware target can look them up. If a constraint fires
+against a source that hasn't been picked yet (graph ordering bug), the
+constraint is skipped and an ``unknown_constraint_source`` warning is
+emitted.
 """
 from __future__ import annotations
 
@@ -51,6 +62,120 @@ def _pick_weighted(options: list[dict[str, Any]], rng) -> dict[str, Any] | None:
     return options[-1]
 
 
+def _apply_constraint_to_options(
+    options: list[dict[str, Any]],
+    constraint: dict[str, Any],
+    source_pick: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Adjust option weights according to a single constraint, given the
+    already-picked source option.
+
+    Two layers, in order:
+      1. Matrix lookup keyed by `(source.sub_category, target.sub_category)`.
+         Bulk rule expressing "long hair allows positive moods" etc.
+      2. Exception lookup keyed by the literal `(source.value, target.value)`
+         pair. Overrides the matrix cell when present — narrower rule wins.
+
+    Modes:
+      - ``allow``   → no change to weight (factor honoured but typically 1).
+      - ``exclude`` → weight set to 0 (option drops out of the pool).
+      - ``boost``   → multiply weight by factor (expect factor > 1).
+      - ``reduce``  → multiply weight by factor (expect factor < 1).
+
+    Options not covered by either matrix or exception keep their
+    original weight. Returns shallow-copied list — the input options
+    array is never mutated, so the underlying snapshot stays clean
+    across runs.
+    """
+    matrix = constraint.get("matrix") or {}
+    exceptions = constraint.get("exceptions") or []
+    src_value = str(source_pick.get("value", ""))
+    src_sub = source_pick.get("sub_category")
+
+    # Index exceptions by (source_value, target_value) for O(1) lookup.
+    exc_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
+    for exc in exceptions:
+        if not isinstance(exc, dict):
+            continue
+        s = exc.get("source")
+        t = exc.get("target")
+        if isinstance(s, str) and isinstance(t, str):
+            exc_by_pair[(s, t)] = exc
+
+    matrix_row = matrix.get(src_sub) if src_sub else None
+
+    adjusted: list[dict[str, Any]] = []
+    for opt in options:
+        opt_value = str(opt.get("value", ""))
+        opt_sub = opt.get("sub_category")
+        weight = float(opt.get("weight", 1))
+
+        # Exception layer (specific value pair) wins over matrix layer.
+        rule = exc_by_pair.get((src_value, opt_value))
+        if rule is None and isinstance(matrix_row, dict) and opt_sub is not None:
+            rule = matrix_row.get(opt_sub)
+
+        if isinstance(rule, dict):
+            mode = rule.get("mode")
+            try:
+                factor = float(rule.get("factor", 1.0))
+            except (TypeError, ValueError):
+                factor = 1.0
+            if mode == "exclude":
+                weight = 0.0
+            elif mode == "boost" or mode == "reduce":
+                weight = max(0.0, weight * factor)
+            # mode "allow" or unknown → leave weight untouched.
+
+        adjusted.append({**opt, "weight": weight})
+    return adjusted
+
+
+def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
+    """Stash the picked option dict in `ctx["__wp_picks__"][module_id]` so a
+    downstream constraint-aware wildcard can look up its source's value +
+    sub_category. Keyed by the active module id (set by pipeline.py).
+    """
+    module_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
+    if not module_id:
+        return
+    bucket = ctx.setdefault("__wp_picks__", {})
+    if isinstance(bucket, dict):
+        bucket[module_id] = {
+            "value": chosen.get("value"),
+            "sub_category": chosen.get("sub_category"),
+            "id": chosen.get("id"),
+        }
+
+
+def _push_constraint_warning(ctx: Any, type_: str, detail: dict[str, Any]) -> None:
+    """Emit an `unknown_constraint_source` / similar warning into ctx.warnings.
+
+    Shape mirrors `engine/syntax/resolve.py:_push_warning` so the debug
+    viewer can format it uniformly. Surface the constraint id + the
+    missing source uuid in `detail` for actionable errors.
+    """
+    if ctx is None:
+        return
+    warnings = ctx.get("__wp_warnings__")
+    if not isinstance(warnings, list):
+        return
+    warnings.append({
+        "type": type_,
+        "severity": "warn",
+        "module_id": ctx.get("__wp_current_module_id__", ""),
+        "source_field": "",
+        "position": 0,
+        "token_index": None,
+        "detail": detail,
+        "message": (
+            f"constraint source not yet picked: {detail.get('source_wildcard_id')!r}"
+            if type_ == "unknown_constraint_source"
+            else f"constraint warning: {detail!r}"
+        ),
+    })
+
+
 class WildcardHandler(ModuleHandler):
     type_id = "wildcard"
 
@@ -78,6 +203,10 @@ class WildcardHandler(ModuleHandler):
             pinned_id = instance.get("pinned_option_id")
             pinned = next((o for o in options if o.get("id") == pinned_id), None)
             if pinned is not None:
+                # Track the pinned pick the same way as a random pick —
+                # downstream constraint-aware wildcards need source
+                # info regardless of how the source resolved its option.
+                _record_pick(ctx, pinned)
                 value = str(pinned.get("value", ""))
                 if not value:
                     return {binding: ""}
@@ -126,6 +255,41 @@ class WildcardHandler(ModuleHandler):
                 adjusted.append(o)
             options = adjusted
 
+        # Constraint application — each constraint targeting THIS module
+        # adjusts the option pool's weights based on what its source
+        # wildcard already picked. Constraints registered earlier in
+        # the chain pile up in `ctx["__wp_constraints__"]`; we filter
+        # to those naming the current module as target. Source pick
+        # must be available in `ctx["__wp_picks__"][source_wildcard_id]`
+        # — pipeline order matters, the source must run first.
+        # Constraints applied in registration order so multiple
+        # constraints on the same target compose multiplicatively.
+        my_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
+        constraints = ctx.get("__wp_constraints__") if ctx is not None else None
+        if my_id and isinstance(constraints, list):
+            picks = ctx.get("__wp_picks__") if ctx is not None else None
+            if not isinstance(picks, dict):
+                picks = {}
+            for c in constraints:
+                if not isinstance(c, dict):
+                    continue
+                if c.get("target_wildcard_id") != my_id:
+                    continue
+                src_id = c.get("source_wildcard_id")
+                src_pick = picks.get(src_id) if isinstance(src_id, str) else None
+                if not isinstance(src_pick, dict):
+                    _push_constraint_warning(
+                        ctx,
+                        "unknown_constraint_source",
+                        {
+                            "source_wildcard_id": src_id,
+                            "target_wildcard_id": my_id,
+                            "hint": "source must be picked before target — check chain order",
+                        },
+                    )
+                    continue
+                options = _apply_constraint_to_options(options, c, src_pick)
+
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance
         #   - chain seed (`__wp_node_seed__`) otherwise
@@ -149,6 +313,12 @@ class WildcardHandler(ModuleHandler):
         chosen = _pick_weighted(options, rng)
         if chosen is None:
             return {binding: ""}
+
+        # Record this wildcard's pick so a downstream constraint-aware
+        # wildcard can read it. Done BEFORE resolve_text so even an
+        # empty-string-value pick is registered (matters if a
+        # constraint exception keys on the literal empty pick value).
+        _record_pick(ctx, chosen)
 
         value = str(chosen.get("value", ""))
         if not value:
