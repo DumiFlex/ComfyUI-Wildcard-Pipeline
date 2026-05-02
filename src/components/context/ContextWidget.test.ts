@@ -423,6 +423,45 @@ describe("ContextWidget summaryFor — constraint", () => {
     wrapper.unmount();
   });
 
+  it("combine referencing $a does NOT flag missing when upstreamVars contains 'a'", async () => {
+    // Regression: post-5.5.6 QA reported that a combine in Context B
+    // referencing $a written by upstream Context A still showed the
+    // missing-var dot. Pin the contract — when ContextWidget receives
+    // upstreamVars=['a'] (the walker's job), no missing-var conflict
+    // surfaces for the combine that references $a. If THIS test ever
+    // fails, the bug is in ContextWidget / scanConflicts. If THIS
+    // test passes but the canvas still shows the dot, the bug is
+    // upstream of the prop — in `widgets/context.ts` /
+    // `extension/graph.ts` walker / `extension/reactive.ts` polling.
+    resetDriftStore();
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "c0000001", type: "combine", enabled: true,
+          meta: { name: "join" }, entries: [],
+          payload: { template: "$a and $b", output_var: "out", input_vars: [] },
+        },
+      ],
+    });
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 250, initialJson, upstreamVars: ["a"], onChange: () => {} },
+    });
+    await flushPromises();
+    const card = wrapper.find('[data-module-id="c0000001"]');
+    expect(card.exists()).toBe(true);
+    // $b is still missing — yellow warning dot expected.
+    const dot = card.find(".wp-conflict-dot");
+    expect(dot.exists()).toBe(true);
+    // Tooltip mentions $b but NOT $a. $a is satisfied by upstreamVars.
+    const title = card.find(".wp-conflict-dot").attributes("title") ?? "";
+    expect(title).toContain("$b");
+    expect(title).not.toContain("$a");
+    wrapper.unmount();
+  });
+
   it("falls back to ? when source/target uuid is missing from siblings", async () => {
     resetDriftStore();
     const initialJson = JSON.stringify({
