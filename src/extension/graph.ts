@@ -492,6 +492,19 @@ function writeBindings(
   catalog: Map<string, MinimalWildcard>,
 ): void {
   if (m.type === "fixed_values") {
+    // Mirror `engine/modules/fixed_values_handler.py` two-tier read:
+    // overrides win when present, else library payload, else the
+    // widget-side `entries` mirror (covers inline-created modules
+    // whose payload lives only in entries until first save).
+    const inst = (m.instance ?? {}) as { values_overrides?: Array<{ name?: string; value?: string }> };
+    const overrides = Array.isArray(inst.values_overrides) ? inst.values_overrides : null;
+    if (overrides && overrides.length > 0) {
+      for (const val of overrides) {
+        const name = (val.name ?? "").replace(/^\$/, "").trim();
+        if (name) ctx[name] = String(val.value ?? "");
+      }
+      return;
+    }
     for (const e of m.entries) {
       const name = e.variable_name.replace(/^\$/, "").trim();
       if (name) ctx[name] = String(e.value ?? "");

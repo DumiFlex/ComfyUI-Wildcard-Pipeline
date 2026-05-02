@@ -523,21 +523,81 @@ function onNamePaste(idx: number, ev: ClipboardEvent) {
   }
 }
 
+// True when this draft is a library-tracked fixed_values that already
+// has user edits stored as `instance.values_overrides`. Drives the
+// "reset" button visibility — we only show it when there's something
+// to reset to. Inline-created modules and fresh-from-library picks
+// have no overrides, so the affordance stays out of the way.
+const hasFixedValuesOverrides = computed<boolean>(() => {
+  if (!draft.value || draft.value.type !== "fixed_values") return false;
+  if (!draft.value.payload_hash) return false;
+  const overrides = (draft.value.instance as { values_overrides?: unknown } | undefined)?.values_overrides;
+  return Array.isArray(overrides) && overrides.length > 0;
+});
+
+// Drop the override + repopulate entries from the library snapshot's
+// `payload.values`. The user still has to click Save to commit; this
+// keeps the cancel-discards contract intact (closing without saving
+// preserves the previously-stored override).
+function resetFixedValuesToLibrary(): void {
+  if (!draft.value || draft.value.type !== "fixed_values") return;
+  const libValues = ((draft.value.payload as { values?: unknown } | undefined)?.values ?? []) as Array<{ name?: string; value?: string }>;
+  draft.value.entries = libValues.map((v) => ({
+    variable_name: String(v.name ?? ""),
+    value: String(v.value ?? ""),
+  }));
+  const inst = { ...(draft.value.instance ?? {}) };
+  delete (inst as { values_overrides?: unknown }).values_overrides;
+  draft.value.instance = inst;
+}
+
 function save() {
   if (!draft.value) return;
   const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
-  // fixed_values: the engine resolves from `payload.values`, not the
-  // widget-side `entries` array. Mirror the user-edited entries into
-  // payload before emitting so runtime sees the latest names + values.
-  // Keeps both inline-created (no payload at pick time) and
-  // library-picked (payload pre-populated) flows in sync.
   if (next.type === "fixed_values") {
+    // Two-tier model:
+    //   - Inline-created (no `payload_hash`, no library link): the
+    //     module is local-only, so user edits write straight into
+    //     `payload.values` — that array IS the source of truth.
+    //   - Library-tracked (`payload_hash` set by the picker): the
+    //     library snapshot's `payload.values` stays immutable; user
+    //     edits land in `instance.values_overrides`, mirroring the
+    //     wildcard pattern. The engine's resolver picks overrides
+    //     when present, library payload otherwise. Modified-state +
+    //     "reset to library" both pivot on the override field.
     const values = next.entries.map((e, i) => ({
       id: `val_${i.toString(16).padStart(4, "0")}`,
       name: e.variable_name,
       value: e.value,
     }));
-    next.payload = { ...(next.payload ?? {}), values };
+    if (next.payload_hash) {
+      // Library-tracked path. Compare against library `payload.values`
+      // first — when the user reverts every entry to its library state
+      // we drop the override entirely so the modified dot clears
+      // automatically (a "soft reset"). Engine's empty-override
+      // fallback covers the wire shape either way.
+      const libraryValues = (next.payload as { values?: unknown } | undefined)?.values;
+      const sameAsLibrary =
+        Array.isArray(libraryValues)
+        && libraryValues.length === values.length
+        && libraryValues.every((lib, i) => {
+          const l = lib as { name?: unknown; value?: unknown };
+          const cur = values[i];
+          return l.name === cur.name && l.value === cur.value;
+        });
+      const inst = { ...(next.instance ?? {}) };
+      if (sameAsLibrary) {
+        delete (inst as { values_overrides?: unknown }).values_overrides;
+      } else {
+        (inst as { values_overrides: typeof values }).values_overrides = values;
+      }
+      next.instance = inst;
+      // Library payload stays untouched.
+    } else {
+      // Inline-created path — original behaviour. payload.values is
+      // the only store; entries flow into it.
+      next.payload = { ...(next.payload ?? {}), values };
+    }
   }
   emit("save", next);
 }
@@ -729,6 +789,16 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
               ENTRIES · {{ draft.entries.length }}
             </label>
             <div class="wp-medit__opt-bulk">
+              <button
+                v-if="hasFixedValuesOverrides"
+                type="button"
+                class="wp-medit__bulk-btn"
+                title="Discard local edits and reload entries from the library snapshot."
+                @click="resetFixedValuesToLibrary"
+              >
+                <i class="pi pi-refresh" aria-hidden="true"></i>
+                reset
+              </button>
               <button
                 type="button"
                 class="wp-medit__bulk-btn"

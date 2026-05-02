@@ -292,6 +292,19 @@ export interface ModuleEntry {
      * derivation/combine but shouldn't surface in prompts.
      */
     internal?: boolean;
+    /**
+     * Fixed-values per-instance overrides. Library-tracked
+     * fixed_values keep `payload.values` immutable as the library
+     * snapshot; user edits land here as a full-replacement list.
+     * Engine reads overrides when the array is non-empty, falls back
+     * to `payload.values` otherwise. Modified-state + the modal's
+     * "reset to library" button both pivot on this field.
+     *
+     * Inline-created fixed_values (no `payload_hash`) never write to
+     * this field — their edits go straight into `payload.values`
+     * because there's no library state to preserve.
+     */
+    values_overrides?: Array<{ id: string; name: string; value: string }> | null;
   };
 }
 

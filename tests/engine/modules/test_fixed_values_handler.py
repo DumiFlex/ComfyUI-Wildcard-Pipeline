@@ -68,3 +68,74 @@ def test_resolve_via_dispatcher_after_import():
     }
     out = resolve_module(snap, ctx=None)
     assert out == {"$lens": "85mm"}
+
+
+# ── Two-tier override path (mirrors wildcard's instance overrides) ──
+
+def test_resolve_uses_instance_values_overrides_when_present():
+    """Library-tracked fixed_values: edits go to `instance.values_overrides`,
+    payload.values stays as the immutable library snapshot. Engine reads
+    overrides when present; only falls through to library values otherwise."""
+    payload = _payload([
+        {"id": "v1", "name": "$lens", "value": "85mm"},   # library default
+        {"id": "v2", "name": "$angle", "value": "wide"},  # library default
+    ])
+    overrides = [
+        {"id": "v1", "name": "$lens", "value": "50mm"},   # user edited
+        {"id": "v2", "name": "$angle", "value": "wide"},  # unchanged but copied
+    ]
+    out = FixedValuesHandler.resolve(
+        payload, instance={"values_overrides": overrides}, ctx=None,
+    )
+    assert out == {"$lens": "50mm", "$angle": "wide"}
+
+
+def test_resolve_falls_back_to_payload_when_overrides_empty():
+    """Empty overrides list = no effective override → use payload.values.
+    Edge case for the modal's "reset to library" path which clears
+    overrides; engine must NOT treat the empty list as "hide all values"."""
+    payload = _payload([{"id": "v1", "name": "$x", "value": "1"}])
+    out = FixedValuesHandler.resolve(
+        payload, instance={"values_overrides": []}, ctx=None,
+    )
+    assert out == {"$x": "1"}
+
+
+def test_resolve_overrides_can_add_entries_not_in_library_payload():
+    """Full-replacement semantics — overrides aren't a delta map. The
+    user can add new entries via the modal that don't exist in the
+    library row, and they must surface."""
+    payload = _payload([{"id": "v1", "name": "$a", "value": "1"}])
+    overrides = [
+        {"id": "v1", "name": "$a", "value": "1"},
+        {"id": "v_new", "name": "$b", "value": "2"},  # new — not in library
+    ]
+    out = FixedValuesHandler.resolve(
+        payload, instance={"values_overrides": overrides}, ctx=None,
+    )
+    assert out == {"$a": "1", "$b": "2"}
+
+
+def test_resolve_overrides_can_drop_library_entries():
+    """If user removes an entry in the modal, override list excludes it.
+    Engine must not surface the dropped name from library payload."""
+    payload = _payload([
+        {"id": "v1", "name": "$a", "value": "1"},
+        {"id": "v2", "name": "$b", "value": "2"},
+    ])
+    overrides = [{"id": "v1", "name": "$a", "value": "1"}]  # $b removed
+    out = FixedValuesHandler.resolve(
+        payload, instance={"values_overrides": overrides}, ctx=None,
+    )
+    assert out == {"$a": "1"}
+
+
+def test_resolve_ignores_non_list_overrides():
+    """Defensive — malformed `values_overrides` (string, dict) is ignored,
+    library payload still resolves. Cheap insurance against legacy
+    workflow JSON or future shape drift."""
+    payload = _payload([{"id": "v1", "name": "$x", "value": "1"}])
+    out = FixedValuesHandler.resolve(
+        payload, instance={"values_overrides": "not a list"}, ctx=None,
+    )
+    assert out == {"$x": "1"}

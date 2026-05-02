@@ -368,11 +368,21 @@ const driftedCount = computed(() => value.value.modules.filter(isDrifted).length
 function isModified(m: ModuleEntry): boolean {
   // Lock + internal have their own dedicated header buttons, so
   // double-counting them in the "modified" dot is just visual
-  // noise. The modified indicator is reserved for option-pool
-  // overrides (subset, weights, pinned, category filter) — anything
-  // that changes WHICH option a roll picks.
+  // noise. The modified indicator is reserved for state that
+  // diverges from the library snapshot:
+  //   - wildcard: option-pool overrides (subset / weights / pinned /
+  //     category filter) — anything that changes WHICH option a roll
+  //     picks.
+  //   - fixed_values (library-tracked): `values_overrides` non-empty
+  //     means the user edited the entries; library `payload.values`
+  //     is still the immutable anchor. Inline-created fixed_values
+  //     never light up — they have no library state to diverge from.
   const inst = m.instance;
   if (!inst) return false;
+  if (m.type === "fixed_values") {
+    const overrides = (inst as { values_overrides?: unknown }).values_overrides;
+    return Array.isArray(overrides) && overrides.length > 0;
+  }
   if (Array.isArray(inst.enabled_options)) return true;
   if (inst.option_weights && Object.keys(inst.option_weights).length > 0) return true;
   if (inst.mode && inst.mode !== "random") return true;

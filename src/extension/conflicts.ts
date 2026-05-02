@@ -5,12 +5,24 @@ import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
 function writesOf(m: ModuleEntry): string[] {
   const out: string[] = [];
   if (m.type === "fixed_values") {
-    // Dedup within a single fixed_values module: `entries` (UI source)
-    // and `payload.values` (engine source) carry the same names after
-    // ModuleEditModal sync, so naive concat would falsely flag every
-    // entry as `duplicate_variable` against itself. Multi-module dup
-    // detection still works — outer `written` set tracks across modules.
+    // Two-tier read mirroring `engine/modules/fixed_values_handler.py`:
+    // overrides (`instance.values_overrides`) win when present; else
+    // the union of `entries` (UI source) + `payload.values` (engine
+    // source). Dedup via Set so a single module's UI/engine mirrors
+    // don't trip the `duplicate_variable` rule against themselves —
+    // multi-module dup detection still works via the outer `written`
+    // set.
     const seen = new Set<string>();
+    const inst = (m.instance ?? {}) as { values_overrides?: Array<{ name?: string }> };
+    const overrides = Array.isArray(inst.values_overrides) ? inst.values_overrides : null;
+    if (overrides && overrides.length > 0) {
+      for (const v of overrides) {
+        const name = (v.name ?? "").replace(/^\$/, "").trim();
+        if (name) seen.add(name);
+      }
+      out.push(...seen);
+      return out;
+    }
     for (const e of m.entries) {
       const name = e.variable_name.replace(/^\$/, "").trim();
       if (name) seen.add(name);

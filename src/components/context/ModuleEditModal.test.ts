@@ -565,6 +565,169 @@ describe("ModuleEditModal — wildcard option editor", () => {
   });
 });
 
+describe("ModuleEditModal — fixed_values two-tier saves", () => {
+  // Library-tracked: `payload_hash` is set by the picker. Edits land
+  // in `instance.values_overrides`; the library snapshot in
+  // `payload.values` stays untouched so "reset to library" can fall
+  // back to it. Inline-created (no `payload_hash`): edits write
+  // straight into `payload.values` — the original behaviour, since
+  // there's no library anchor to preserve.
+
+  function makeLibraryFV(): ModuleEntry {
+    return {
+      id: "fv012345",
+      type: "fixed_values",
+      enabled: true,
+      meta: { name: "presets" },
+      entries: [
+        { variable_name: "lens", value: "85mm" },
+        { variable_name: "angle", value: "wide" },
+      ],
+      payload: {
+        values: [
+          { id: "v1", name: "lens", value: "85mm" },
+          { id: "v2", name: "angle", value: "wide" },
+        ],
+      },
+      payload_hash: "h_lib",
+    };
+  }
+
+  it("library-tracked save with edited entries writes instance.values_overrides", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: makeLibraryFV() },
+    });
+    await flushPromises();
+    // Edit the first value cell: 85mm → 50mm.
+    const valueInputs = wrapper.findAll<HTMLInputElement>(".wp-medit__entry-value");
+    expect(valueInputs.length).toBeGreaterThan(0);
+    await valueInputs[0].setValue("50mm");
+    // Trigger Save via Ctrl+Enter (matches the modal's footer hint).
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    // Library payload preserved.
+    expect((saved.payload as { values: Array<{ value: string }> }).values[0].value).toBe("85mm");
+    // Override carries the edit.
+    const ov = (saved.instance as { values_overrides?: Array<{ value: string; name: string }> } | undefined)?.values_overrides;
+    expect(Array.isArray(ov)).toBe(true);
+    expect(ov!.length).toBe(2);
+    expect(ov![0]).toMatchObject({ name: "lens", value: "50mm" });
+    expect(ov![1]).toMatchObject({ name: "angle", value: "wide" });
+    wrapper.unmount();
+  });
+
+  it("library-tracked save with NO edits leaves no override (clean state)", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: makeLibraryFV() },
+    });
+    await flushPromises();
+    // Click save without changing anything.
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const ov = (saved.instance as { values_overrides?: unknown } | undefined)?.values_overrides;
+    expect(ov).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("inline-created save (no payload_hash) writes payload.values directly, no override", async () => {
+    const inline: ModuleEntry = {
+      id: "inline01",
+      type: "fixed_values",
+      enabled: true,
+      meta: { name: "scratch" },
+      entries: [{ variable_name: "tag", value: "noir" }],
+      // No payload, no payload_hash → inline-created.
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: inline },
+    });
+    await flushPromises();
+    const valueInputs = wrapper.findAll<HTMLInputElement>(".wp-medit__entry-value");
+    await valueInputs[0].setValue("noir-edited");
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    // Override path skipped — payload.values is the only store.
+    const ov = (saved.instance as { values_overrides?: unknown } | undefined)?.values_overrides;
+    expect(ov).toBeUndefined();
+    expect((saved.payload as { values: Array<{ value: string }> }).values[0].value).toBe("noir-edited");
+    wrapper.unmount();
+  });
+
+  it("reset button clears overrides and reloads entries from library payload", async () => {
+    // Module already carries an override from a prior session.
+    const withOverride: ModuleEntry = {
+      ...makeLibraryFV(),
+      entries: [
+        { variable_name: "lens", value: "50mm" },
+        { variable_name: "angle", value: "wide" },
+      ],
+      instance: {
+        values_overrides: [
+          { id: "v1", name: "lens", value: "50mm" },
+          { id: "v2", name: "angle", value: "wide" },
+        ],
+      },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: withOverride },
+    });
+    await flushPromises();
+    // Reset button is rendered specifically for library-tracked + override case.
+    const resetBtn = wrapper.findAll(".wp-medit__bulk-btn").find((b) => b.text().includes("reset"));
+    expect(resetBtn).toBeDefined();
+    await resetBtn!.trigger("click");
+    await nextTick();
+    // Entries snap back to library values.
+    const valueInputs = wrapper.findAll<HTMLInputElement>(".wp-medit__entry-value");
+    expect(valueInputs[0].element.value).toBe("85mm");
+    // Save commits cleared override.
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const ov = (saved.instance as { values_overrides?: unknown } | undefined)?.values_overrides;
+    expect(ov).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("reset button absent on library-tracked fixed_values with no overrides", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: makeLibraryFV() },
+    });
+    await flushPromises();
+    const resetBtn = wrapper.findAll(".wp-medit__bulk-btn").find((b) => b.text().includes("reset"));
+    expect(resetBtn).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("reset button absent on inline-created fixed_values (no library to reset to)", async () => {
+    const inline: ModuleEntry = {
+      id: "inline02",
+      type: "fixed_values",
+      enabled: true,
+      meta: { name: "scratch" },
+      entries: [{ variable_name: "x", value: "1" }],
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      attachTo: document.body,
+      props: { visible: true, module: inline },
+    });
+    await flushPromises();
+    const resetBtn = wrapper.findAll(".wp-medit__bulk-btn").find((b) => b.text().includes("reset"));
+    expect(resetBtn).toBeUndefined();
+    wrapper.unmount();
+  });
+});
+
 describe("ModuleEditModal — combine preview", () => {
   it("renders the template + output var", async () => {
     const mod: ModuleEntry = {
