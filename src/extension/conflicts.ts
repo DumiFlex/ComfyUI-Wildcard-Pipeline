@@ -89,6 +89,12 @@ function writesOf(m: ModuleEntry): string[] {
 //   Context that already ran. Same problem as before_self: target
 //   picked before constraint registered. The reference might also
 //   be a typo of source vs target.
+// `constraint_target_missing` — warning: target uuid not in this node and
+//   not in any upstream Context. Could legitimately be a downstream
+//   Context the static scanner can't see, but the false-positive
+//   noise was worth less to QA than the false-negative silence on
+//   real typos / deleted targets — surfacing the dot is more useful
+//   than staying quiet.
 export type ConflictType =
   | "shadows_upstream"
   | "duplicate_variable"
@@ -96,7 +102,8 @@ export type ConflictType =
   | "constraint_source_after_self"
   | "constraint_source_missing"
   | "constraint_target_before_self"
-  | "constraint_target_in_upstream";
+  | "constraint_target_in_upstream"
+  | "constraint_target_missing";
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
   moduleId: string;
@@ -118,6 +125,7 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_source_missing") return "source missing";
   if (type === "constraint_target_before_self") return "target before constraint";
   if (type === "constraint_target_in_upstream") return "target already picked upstream";
+  if (type === "constraint_target_missing") return "target missing";
   return type;
 }
 
@@ -274,14 +282,14 @@ export function scanConflicts(
         if (inLocal && (localIdx as number) >= i) {
           out.push({
             moduleId: m.id,
-            variable: srcId.slice(0, 8),
+            variable: srcId,
             type: "constraint_source_after_self",
             severity: "warning",
           });
         } else if (!inLocal && !inUpstream) {
           out.push({
             moduleId: m.id,
-            variable: srcId.slice(0, 8),
+            variable: srcId,
             type: "constraint_source_missing",
             severity: "warning",
           });
@@ -294,22 +302,30 @@ export function scanConflicts(
         if (inLocal && (localIdx as number) <= i) {
           out.push({
             moduleId: m.id,
-            variable: tgtId.slice(0, 8),
+            variable: tgtId,
             type: "constraint_target_before_self",
             severity: "warning",
           });
         } else if (inUpstream) {
           out.push({
             moduleId: m.id,
-            variable: tgtId.slice(0, 8),
+            variable: tgtId,
             type: "constraint_target_in_upstream",
             severity: "warning",
           });
+        } else if (!inLocal) {
+          // Target not in this node AND not in upstream. Could legitimately
+          // be a downstream Context (which the static scanner can't see),
+          // but QA prefers the false-positive noise to silence on real
+          // typos / deleted targets. The tooltip wording stays soft —
+          // "target missing" — so the user can interpret it.
+          out.push({
+            moduleId: m.id,
+            variable: tgtId,
+            type: "constraint_target_missing",
+            severity: "warning",
+          });
         }
-        // Note: target NOT in same node and NOT in upstream is
-        // ambiguous — could be downstream (good) or genuinely missing
-        // (bad). Without a downstream walker we can't differentiate;
-        // leave it for runtime to surface.
       }
     }
   }

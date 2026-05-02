@@ -361,18 +361,25 @@ describe("scanConflicts — constraint ordering", () => {
     });
   });
 
-  it("does NOT flag target when uuid is unfindable (could be downstream)", () => {
-    // Target neither in this node nor upstream — could be in a
-    // downstream Context (good) or genuinely missing (bad). Static
-    // scanner can't tell, so leave it for runtime to catch.
+  it("flags constraint_target_missing when uuid is unfindable", () => {
+    // Target neither in this node nor upstream. Could legitimately
+    // be in a downstream Context, but QA prefers a soft warning over
+    // silence — false-positive noise is cheaper than missed typos /
+    // deleted modules. The label "target missing" is intentionally
+    // soft so the user can interpret the situation.
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
-        constraint("c1", "aaaa1111", "bbbb_unknown"),
+        constraint("c1", "aaaa1111", "bbbbeeee"),
       ],
     };
     const out = scanConflicts(value, [], ["aaaa1111"]);
-    expect(out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_"))).toBeUndefined();
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "bbbbeeee",
+      type: "constraint_target_missing",
+      severity: "warning",
+    });
   });
 
   it("disabled constraints do not generate ordering warnings", () => {

@@ -211,7 +211,20 @@ function severityFor(id: string): "error" | "warning" | "info" | null {
 function conflictTooltip(id: string): string {
   const list = conflictsByModule.value[id];
   if (!list?.length) return "";
-  return list.map((c) => `${conflictLabelFor(c.type)}: $${c.variable}`).join("\n");
+  return list.map((c) => {
+    // Constraint conflict types carry a wildcard uuid in `variable`,
+    // not a $-var name. Resolve via the same sibling/preview-resolver
+    // lookup constraint card labels use, so the tooltip shows
+    // `$hair_color` instead of the unreadable 8-hex slug. Falls back
+    // to the bare uuid only when the resolver can't find a name —
+    // matches the card label's contract.
+    if (c.type.startsWith("constraint_")) {
+      const name = lookupSiblingName(c.variable);
+      const display = name ?? c.variable;
+      return `${conflictLabelFor(c.type)}: $${display}`;
+    }
+    return `${conflictLabelFor(c.type)}: $${c.variable}`;
+  }).join("\n");
 }
 
 // Type-icon mapping per the brand sheet. Forward-compatible with P5+ types.
