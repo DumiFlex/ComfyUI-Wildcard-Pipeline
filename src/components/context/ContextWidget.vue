@@ -30,6 +30,13 @@ const props = withDefaults(defineProps<{
   nodeId: number;
   initialJson: string;
   upstreamVars: string[];
+  /** Wildcard module uuids reachable upstream of this node. Used by
+   *  the constraint-ordering scanner to validate constraint
+   *  source/target references — sources in the upstream chain are
+   *  fine (already picked), but a target in the upstream chain is a
+   *  bug (target ran before constraint loaded). Optional for
+   *  headless / test mounts that don't simulate a graph. */
+  upstreamWildcardUuids?: string[];
   /** Litegraph node mode: 0 ALWAYS, 2 NEVER (mute), 4 BYPASS.
    *  Used to dim the body when the host node is muted/bypassed so
    *  the runtime-skipped state is visually obvious. Other modes are
@@ -56,7 +63,7 @@ const props = withDefaults(defineProps<{
    */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
-}>(), { nodeMode: 0 });
+}>(), { nodeMode: 0, upstreamWildcardUuids: () => [] });
 
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
@@ -185,7 +192,7 @@ const conflicts = computed<Conflict[]>(() => {
     ...value.value,
     modules: value.value.modules.filter((m) => m.enabled),
   };
-  return scanConflicts(enabledOnly, props.upstreamVars);
+  return scanConflicts(enabledOnly, props.upstreamVars, props.upstreamWildcardUuids);
 });
 const conflictsByModule = computed(() => {
   const out: Record<string, Conflict[]> = {};

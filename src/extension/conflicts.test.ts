@@ -242,3 +242,163 @@ describe("scanConflicts — derivation var/template scanning", () => {
     expect(scanConflicts(value, [])).toEqual([]);
   });
 });
+
+const wildcard = (
+  id: string,
+  varBinding: string,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "wildcard", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    var_binding: varBinding,
+    options: [{ id: "o1", value: "x", weight: 1 }],
+  },
+});
+
+const constraint = (
+  id: string,
+  source_wildcard_id: string,
+  target_wildcard_id: string,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "constraint", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    source_wildcard_id,
+    target_wildcard_id,
+    matrix: {},
+    exceptions: [],
+  },
+});
+
+describe("scanConflicts — constraint ordering", () => {
+  it("clean chain: source in upstream + target in same node AFTER constraint = no warning", () => {
+    // Source `aaaa1111` lives upstream (in another Context), target
+    // `bbbb2222` is the wildcard that comes RIGHT AFTER this constraint
+    // in the local module list — the canonical happy path.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    expect(scanConflicts(value, [], ["aaaa1111"])).toEqual([]);
+  });
+
+  it("flags constraint_source_after_self when source wildcard is later in the same node", () => {
+    // Source comes AFTER the constraint — its pick won't be in
+    // `__wp_picks__` when the wildcard handler reads constraints.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),  // index 0
+        wildcard("aaaa1111", "hair"),              // index 1 — too late
+        wildcard("bbbb2222", "outfit"),            // index 2
+      ],
+    };
+    const out = scanConflicts(value, []);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "aaaa1111",
+      type: "constraint_source_after_self",
+      severity: "warning",
+    });
+  });
+
+  it("flags constraint_source_missing when source uuid is nowhere reachable", () => {
+    // No source wildcard in this node, no upstream entry either.
+    // Could be a typo / deleted module / source-in-downstream
+    // (which still wouldn't pick before this constraint runs).
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa9999", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], []);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "aaaa9999",
+      type: "constraint_source_missing",
+      severity: "warning",
+    });
+  });
+
+  it("flags constraint_target_before_self when target wildcard is earlier in the same node", () => {
+    // Target picks BEFORE the constraint loads — matrix never reaches it.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wildcard("bbbb2222", "outfit"),            // index 0 — too early
+        constraint("c1", "aaaa1111", "bbbb2222"),  // index 1
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "bbbb2222",
+      type: "constraint_target_before_self",
+      severity: "warning",
+    });
+  });
+
+  it("flags constraint_target_in_upstream when target lives in an upstream Context", () => {
+    // Target in upstream chain → already picked when this constraint
+    // runs. The constraint can't influence a pick that already happened.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111", "bbbb2222"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "bbbb2222",
+      type: "constraint_target_in_upstream",
+      severity: "warning",
+    });
+  });
+
+  it("does NOT flag target when uuid is unfindable (could be downstream)", () => {
+    // Target neither in this node nor upstream — could be in a
+    // downstream Context (good) or genuinely missing (bad). Static
+    // scanner can't tell, so leave it for runtime to catch.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb_unknown"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_"))).toBeUndefined();
+  });
+
+  it("disabled constraints do not generate ordering warnings", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        { ...constraint("c1", "aaaa9999", "bbbb_missing"), enabled: false },
+      ],
+    };
+    expect(scanConflicts(value, [])).toEqual([]);
+  });
+
+  it("source AND target both wrong → both warnings emit on the same constraint", () => {
+    // Stress: source missing, target before the constraint. The card
+    // tooltip should show both — a constraint can carry multiple
+    // simultaneous problems, and surfacing only one would mask the rest.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wildcard("bbbb2222", "outfit"),                   // target too early
+        constraint("c1", "aaaa9999", "bbbb2222"),
+      ],
+    };
+    const out = scanConflicts(value, [], []);
+    const types = out.filter((c) => c.moduleId === "c1").map((c) => c.type);
+    expect(types).toContain("constraint_source_missing");
+    expect(types).toContain("constraint_target_before_self");
+  });
+});

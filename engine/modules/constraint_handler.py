@@ -67,8 +67,14 @@ def _validate_cell(cell: Any, where: str) -> None:
     factor = cell.get("factor")
     if not isinstance(factor, (int, float)) or isinstance(factor, bool):
         raise ValueError(f"constraint {where}.factor must be a number")
-    if float(factor) <= 0:
-        raise ValueError(f"constraint {where}.factor must be a positive number")
+    # factor >= 0 — factor=0 is meaningful (effectively excludes the
+    # option, same as `mode: exclude`). Strict `> 0` rejected legitimate
+    # SPA-saved payloads where the editor surfaced an explicit zero
+    # weight, breaking the entire constraint at runtime. Negative
+    # factors stay rejected since they have no defined semantics in the
+    # weighted-pick model.
+    if float(factor) < 0:
+        raise ValueError(f"constraint {where}.factor must not be negative")
 
 
 class ConstraintHandler(ModuleHandler):
@@ -126,9 +132,13 @@ class ConstraintHandler(ModuleHandler):
                 raise ValueError(
                     f"constraint payload.exceptions[{i}].factor must be a number"
                 )
-            if float(factor) <= 0:
+            # factor >= 0 — factor=0 is the canonical exception form for
+            # "always exclude this pair". Same logic as the matrix-cell
+            # check above; SPA payloads surface zero factors and the
+            # strict > 0 rejected them, killing the whole constraint.
+            if float(factor) < 0:
                 raise ValueError(
-                    f"constraint payload.exceptions[{i}].factor must be positive"
+                    f"constraint payload.exceptions[{i}].factor must not be negative"
                 )
 
     @classmethod

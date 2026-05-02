@@ -37,11 +37,16 @@ def test_validate_payload_rejects_unknown_mode():
         ConstraintHandler.validate_payload(payload)
 
 
-def test_validate_payload_rejects_zero_factor():
+def test_validate_payload_accepts_zero_factor():
+    """factor=0 is canonical for "exclude this pair" — both `mode: exclude`
+    and a zero factor encode the same intent. Strict > 0 was rejecting
+    legitimate SPA-saved payloads where the editor surfaced an explicit
+    zero weight (a real QA-reported regression). Negative factors stay
+    rejected — they have no defined semantics in the weighted-pick
+    model."""
     payload = _payload()
     payload["matrix"]["kimono"]["casual"]["factor"] = 0.0
-    with pytest.raises(ValueError, match="factor"):
-        ConstraintHandler.validate_payload(payload)
+    ConstraintHandler.validate_payload(payload)  # must not raise
 
 
 def test_validate_payload_rejects_negative_factor():

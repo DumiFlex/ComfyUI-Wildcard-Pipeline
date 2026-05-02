@@ -4,7 +4,13 @@ import {
   createDomWidgetHost, parseWidgetJson, serializeWidgetJson, emptyContextValue,
   type ContextWidgetValue, type MountTargetNode,
 } from "./_shared";
-import { collectUpstreamVariables, findRootGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
+import {
+  collectUpstreamVariables,
+  collectUpstreamWildcardUuids,
+  findRootGraph,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "../extension/graph";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 
 const ContextWidget = defineAsyncComponent(() => import("../components/context/ContextWidget.vue"));
@@ -70,6 +76,22 @@ export function create(node: ContextNode, inputName: string) {
       // matters when one wildcard was locked while others rolled
       // with the chain seed in the same run. Falls through to a
       // chain-level snapshot for callers without a module context.
+      // Mirror the upstream-vars walker for wildcard uuids — needed so
+      // the conflict scanner can validate constraint source/target
+      // references against modules in the upstream chain. Same
+      // reactivity story (poll + onConnectionsChange + graph-loaded).
+      const upstreamUuids = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectUpstreamWildcardUuids(rootGraph, node);
+        },
+        stringArrayEqual,
+      );
+
       // Litegraph mode poll — when the user mutes (mode 2) or bypasses
       // (mode 4) a Context node, the body of the DOM widget should
       // visually dim so the muted state is obvious. Litegraph dims the
@@ -98,6 +120,7 @@ export function create(node: ContextNode, inputName: string) {
         nodeId: node.id,
         initialJson: currentJson.value,
         upstreamVars: upstreamVars.value,
+        upstreamWildcardUuids: upstreamUuids.value,
         nodeMode: nodeMode.value,
         lastUsedSeedReader,
         onChange: (json: string) => host.setValue(json),

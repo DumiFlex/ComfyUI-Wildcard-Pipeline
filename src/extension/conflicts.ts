@@ -75,7 +75,28 @@ function writesOf(m: ModuleEntry): string[] {
 //   write the same name. Almost always a bug in this node's local config.
 // `missing_template_variable` — warning: assembler template references a
 //   variable nothing upstream provides; it'll render literally as `$name`.
-export type ConflictType = "shadows_upstream" | "duplicate_variable" | "missing_template_variable";
+// `constraint_source_after_self` — warning: constraint's source wildcard
+//   sits AT or AFTER the constraint in the same node. Source must pick
+//   first so the constraint has a value to key on; out-of-order = no-op.
+// `constraint_source_missing` — warning: constraint's source uuid isn't
+//   in the same node, the upstream chain, or any reachable Context.
+//   Either a typo / deleted source, or the source lives downstream
+//   (which still wouldn't run before this constraint). Both = no-op.
+// `constraint_target_before_self` — warning: target wildcard sits AT
+//   or BEFORE the constraint. Target picks before the constraint is
+//   loaded into ctx, so the matrix never applies. Reorder needed.
+// `constraint_target_in_upstream` — warning: target lives in an upstream
+//   Context that already ran. Same problem as before_self: target
+//   picked before constraint registered. The reference might also
+//   be a typo of source vs target.
+export type ConflictType =
+  | "shadows_upstream"
+  | "duplicate_variable"
+  | "missing_template_variable"
+  | "constraint_source_after_self"
+  | "constraint_source_missing"
+  | "constraint_target_before_self"
+  | "constraint_target_in_upstream";
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
   moduleId: string;
@@ -93,6 +114,10 @@ export function labelFor(type: ConflictType): string {
   if (type === "shadows_upstream") return "overrides upstream";
   if (type === "duplicate_variable") return "duplicate";
   if (type === "missing_template_variable") return "missing";
+  if (type === "constraint_source_after_self") return "source after constraint";
+  if (type === "constraint_source_missing") return "source missing";
+  if (type === "constraint_target_before_self") return "target before constraint";
+  if (type === "constraint_target_in_upstream") return "target already picked upstream";
   return type;
 }
 
@@ -166,11 +191,25 @@ function varReadsOf(m: ModuleEntry): string[] {
   return out;
 }
 
-export function scanConflicts(value: ContextWidgetValue, upstreamVars: string[]): Conflict[] {
+export function scanConflicts(
+  value: ContextWidgetValue,
+  upstreamVars: string[],
+  upstreamWildcardUuids: string[] = [],
+): Conflict[] {
   const upstream = new Set(upstreamVars);
+  const upstreamUuids = new Set(upstreamWildcardUuids);
+  // Same-node wildcard index lookup. Used by the constraint ordering
+  // checks: a constraint references its source/target by uuid, and we
+  // need to know whether each uuid lives in this node (and at what
+  // position) versus upstream / unfindable. Built once per scan.
+  const localWildcardIndex = new Map<string, number>();
+  value.modules.forEach((m, i) => {
+    if (m.enabled && m.type === "wildcard") localWildcardIndex.set(m.id, i);
+  });
   const written = new Set<string>();
   const out: Conflict[] = [];
-  for (const m of value.modules) {
+  for (let i = 0; i < value.modules.length; i++) {
+    const m = value.modules[i];
     if (!m.enabled) continue;
 
     // 1. Var references — bare reads (`derivation.condition.var`) and
@@ -206,6 +245,71 @@ export function scanConflicts(value: ContextWidgetValue, upstreamVars: string[])
         out.push({ moduleId: m.id, variable: name, type: "duplicate_variable", severity: "warning" });
       } else {
         written.add(name);
+      }
+    }
+
+    // 3. Constraint ordering & reference resolution. The runtime contract
+    //    is `source picks → constraint loads → target picks` against the
+    //    ctx. Ordering rules:
+    //      - source MUST run before this constraint (same-node-earlier
+    //        OR upstream chain). Otherwise the source's pick isn't yet
+    //        in `__wp_picks__` when the wildcard handler reads it.
+    //      - target MUST run after this constraint (same-node-later OR
+    //        downstream chain). Otherwise the target's pick already
+    //        happened and the matrix never reaches it.
+    //    Out-of-order references make the constraint a silent no-op at
+    //    runtime; the only signal would be the post-run
+    //    `unknown_constraint_source` warning. Static checks here flip
+    //    that into a card-level dot before the user even queues. The
+    //    `variable` field carries a short uuid prefix so the tooltip
+    //    points at the offending reference.
+    if (m.type === "constraint") {
+      const cp = (m.payload ?? {}) as { source_wildcard_id?: string; target_wildcard_id?: string };
+      const srcId = cp.source_wildcard_id;
+      const tgtId = cp.target_wildcard_id;
+      if (typeof srcId === "string" && srcId) {
+        const localIdx = localWildcardIndex.get(srcId);
+        const inLocal = localIdx !== undefined;
+        const inUpstream = upstreamUuids.has(srcId);
+        if (inLocal && (localIdx as number) >= i) {
+          out.push({
+            moduleId: m.id,
+            variable: srcId.slice(0, 8),
+            type: "constraint_source_after_self",
+            severity: "warning",
+          });
+        } else if (!inLocal && !inUpstream) {
+          out.push({
+            moduleId: m.id,
+            variable: srcId.slice(0, 8),
+            type: "constraint_source_missing",
+            severity: "warning",
+          });
+        }
+      }
+      if (typeof tgtId === "string" && tgtId) {
+        const localIdx = localWildcardIndex.get(tgtId);
+        const inLocal = localIdx !== undefined;
+        const inUpstream = upstreamUuids.has(tgtId);
+        if (inLocal && (localIdx as number) <= i) {
+          out.push({
+            moduleId: m.id,
+            variable: tgtId.slice(0, 8),
+            type: "constraint_target_before_self",
+            severity: "warning",
+          });
+        } else if (inUpstream) {
+          out.push({
+            moduleId: m.id,
+            variable: tgtId.slice(0, 8),
+            type: "constraint_target_in_upstream",
+            severity: "warning",
+          });
+        }
+        // Note: target NOT in same node and NOT in upstream is
+        // ambiguous — could be downstream (good) or genuinely missing
+        // (bad). Without a downstream walker we can't differentiate;
+        // leave it for runtime to surface.
       }
     }
   }

@@ -324,6 +324,50 @@ export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNod
 }
 
 /**
+ * Walk upstream from `node` and return the set of every wildcard
+ * module's uuid (8-hex `id`) reachable in the chain. Used by the
+ * conflict scanner to validate constraint references — a constraint
+ * targeting a wildcard whose uuid lives upstream would be applied
+ * AFTER the wildcard already picked, defeating its purpose. The
+ * same set + a same-node check lets the scanner emit "source
+ * missing" / "target in upstream" warnings before runtime.
+ *
+ * Skips modules in muted/bypassed nodes (mode 2 / 4) — they don't
+ * contribute at runtime, so a constraint referencing them is bound
+ * to fail anyway, but the warning would mislead users who muted
+ * the source intentionally during debugging. Mirroring runtime
+ * keeps "fix the warning" actionable.
+ */
+export function collectUpstreamWildcardUuids(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): string[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  const uuids = new Set<string>();
+  for (const n of chain) {
+    if (n.type !== "WP_Context") continue;
+    if (isSkippedMode(n)) continue;
+    const v = parseWidgetJson<ContextWidgetValue>(
+      widgetValue(n, "modules"),
+      { version: 1, modules: [] },
+    );
+    for (const m of v.modules) {
+      if (!m.enabled) continue;
+      if (m.type === "wildcard") uuids.add(m.id);
+    }
+  }
+  return [...uuids];
+}
+
+/**
  * Walk upstream from `node` and return the module list of every chain
  * `WP_Context`, ordered upstream-first → downstream-last. Used by the
  * assembler preview to POST the chain to `/wp/api/preview/resolve` —
