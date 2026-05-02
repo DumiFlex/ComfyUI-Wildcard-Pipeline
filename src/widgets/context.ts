@@ -70,6 +70,19 @@ export function create(node: ContextNode, inputName: string) {
       // matters when one wildcard was locked while others rolled
       // with the chain seed in the same run. Falls through to a
       // chain-level snapshot for callers without a module context.
+      // Litegraph mode poll — when the user mutes (mode 2) or bypasses
+      // (mode 4) a Context node, the body of the DOM widget should
+      // visually dim so the muted state is obvious. Litegraph dims the
+      // title/border natively but leaves DOM-rendered widget content at
+      // full opacity. Cheap to track here via the same polling fallback
+      // that already drives upstreamVars — modes only change on user
+      // action, but litegraph doesn't fire an event we can hook.
+      const nodeMode = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => (node as unknown as { mode?: number }).mode ?? 0,
+        Object.is,
+      );
+
       function lastUsedSeedReader(moduleId?: string): number | null {
         const perModule = (node as unknown as {
           __wp_last_used_per_module__?: Record<string, number>;
@@ -85,6 +98,7 @@ export function create(node: ContextNode, inputName: string) {
         nodeId: node.id,
         initialJson: currentJson.value,
         upstreamVars: upstreamVars.value,
+        nodeMode: nodeMode.value,
         lastUsedSeedReader,
         onChange: (json: string) => host.setValue(json),
       });

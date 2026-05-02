@@ -26,10 +26,15 @@ import {
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   nodeId: number;
   initialJson: string;
   upstreamVars: string[];
+  /** Litegraph node mode: 0 ALWAYS, 2 NEVER (mute), 4 BYPASS.
+   *  Used to dim the body when the host node is muted/bypassed so
+   *  the runtime-skipped state is visually obvious. Other modes are
+   *  unused for WP_Context but accepted as default-active (run). */
+  nodeMode?: number;
   /**
    * Pull the seed that the wildcard with the given module id
    * ACTUALLY rolled with on the last run. For locked wildcards
@@ -51,7 +56,10 @@ const props = defineProps<{
    */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
-}>();
+}>(), { nodeMode: 0 });
+
+const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
+const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
 const dragOverId = ref<string | null>(null);
 const dragOverEnd = ref(false);
@@ -1008,7 +1016,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 </script>
 
 <template>
-  <div class="wp-context" @dragleave="onContainerLeave">
+  <div
+    class="wp-context"
+    :class="{ 'wp-context--muted': isMuted }"
+    :data-mode-label="isMuted ? muteLabel : undefined"
+    @dragleave="onContainerLeave"
+  >
     <!-- Corrupt-workflow recovery panel (5.6). Surfaces when JSON parse fails
          or returns a non-object. View raw exposes the bad payload so users
          can copy it out before resetting. -->
@@ -1303,6 +1316,39 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
 <style scoped>
 .wp-context, .wp-context * { box-sizing: border-box; }
+
+/* Mute / bypass dim. Litegraph dims the title bar + node frame natively
+ * for modes 2/4 but leaves DOM-rendered widget content at full opacity.
+ * Match the native dim so the runtime-skipped state reads consistently
+ * — one less "is this thing actually doing anything?" question for the
+ * user. Module rows stay editable (no pointer-events block); the dim is
+ * a perceptual cue, not a functional gate. The corner pill names which
+ * mode is active so muted vs. bypassed are distinguishable at a glance. */
+.wp-context--muted {
+  position: relative;
+  opacity: 0.45;
+  filter: saturate(0.6);
+  transition: opacity 0.15s, filter 0.15s;
+}
+.wp-context--muted::before {
+  content: attr(data-mode-label);
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 4;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--wp-bg);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text2);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 1;
+}
 .wp-context {
   display: flex;
   flex-direction: column;
