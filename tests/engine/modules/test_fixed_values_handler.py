@@ -139,3 +139,32 @@ def test_resolve_ignores_non_list_overrides():
         payload, instance={"values_overrides": "not a list"}, ctx=None,
     )
     assert out == {"$x": "1"}
+
+
+def test_resolve_emits_warning_when_overrides_malformed():
+    """Pre-fix: a malformed `values_overrides` (string/dict from an old
+    SPA save or hand-edited JSON) silently fell back to library payload.
+    User's edits dropped without explanation. Now the engine emits a
+    `fixed_values_overrides_malformed` warning so the fallback is
+    visible in WP_Debug."""
+    payload = _payload([{"id": "v1", "name": "$x", "value": "1"}])
+    ctx = {"__wp_warnings__": []}
+    FixedValuesHandler.resolve(
+        payload, instance={"values_overrides": {"id": "v1"}}, ctx=ctx,
+    )
+    warnings = [
+        w for w in ctx["__wp_warnings__"]
+        if w["type"] == "fixed_values_overrides_malformed"
+    ]
+    assert len(warnings) == 1
+    assert warnings[0]["detail"]["got_type"] == "dict"
+
+
+def test_resolve_no_warning_when_overrides_absent():
+    """Sanity: the malformed-warning path must NOT fire when overrides
+    are simply absent (the common case). Pre-fix this test would have
+    flagged my over-eager check that fires on `None`."""
+    payload = _payload([{"id": "v1", "name": "$x", "value": "1"}])
+    ctx = {"__wp_warnings__": []}
+    FixedValuesHandler.resolve(payload, instance={}, ctx=ctx)
+    assert ctx["__wp_warnings__"] == []

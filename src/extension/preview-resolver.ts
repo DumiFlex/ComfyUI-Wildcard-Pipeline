@@ -35,7 +35,22 @@ export interface PreviewLookup {
 
 const cache = new Map<string, PreviewLookup>();
 const inflight = new Set<string>();
-const failed = new Set<string>();
+/** Failure ledger keyed by uuid. `at` is the wall-clock timestamp the
+ *  failure was recorded; `permanent` flags 404 responses (server
+ *  confirms the uuid doesn't exist — no retry helps) versus transient
+ *  network/parse errors (worth retrying after the TTL).
+ *
+ *  Pre-fix this was a plain `Set<string>` which made every failure
+ *  permanent for the session — a single page-load 5xx flake left a
+ *  uuid stuck rendering as `$ae07018b` until full reload. The TTL
+ *  recovers from transient failures without hammering the endpoint. */
+interface FailureRecord { at: number; permanent: boolean; }
+const failed = new Map<string, FailureRecord>();
+/** Retry transient failures after this many ms. 30s is short enough
+ *  that a user noticing a missing label can edit-something / wait /
+ *  see it resolve, but long enough that a flapping endpoint doesn't
+ *  generate one fetch per 400ms reactive tick. */
+const RETRY_TTL_MS = 30_000;
 
 /**
  * Bumped whenever a fetch settles (success or failure). Vue computeds
@@ -57,9 +72,19 @@ export function lookup(uuid: string): PreviewLookup | undefined {
  * compute.
  */
 export function ensure(uuids: Iterable<string>): void {
+  const now = Date.now();
   const missing: string[] = [];
   for (const u of uuids) {
-    if (cache.has(u) || inflight.has(u) || failed.has(u)) continue;
+    if (cache.has(u) || inflight.has(u)) continue;
+    const fail = failed.get(u);
+    if (fail) {
+      // 404 stays permanent — server confirmed the uuid doesn't
+      // exist, retrying won't help. Transient failures retry once
+      // the TTL elapses, recovering from page-load flakes.
+      if (fail.permanent) continue;
+      if (now - fail.at < RETRY_TTL_MS) continue;
+      failed.delete(u);
+    }
     missing.push(u);
   }
   if (!missing.length) return;
@@ -98,22 +123,25 @@ async function fetchBundle(uuids: string[]): Promise<void> {
       body: JSON.stringify({ uuids }),
     });
     if (!res.ok) {
-      // Server-side failure (404, 500, …) — memoise so we don't retry on
-      // every 400ms poll. The cost is the user has to reload to recover
-      // if the lookup was a flake; that's an acceptable trade for not
-      // hammering the endpoint.
-      for (const u of uuids) failed.add(u);
+      // 404 = server confirms the uuid doesn't exist → permanent.
+      // Other 5xx/4xx may be transient (rate limit, CORS hiccup,
+      // server restart) → retryable after the TTL elapses.
+      const permanent = res.status === 404;
+      const at = Date.now();
+      for (const u of uuids) failed.set(u, { at, permanent });
       return;
     }
     const data = (await res.json()) as {
       snapshots?: Record<string, BundleSnapshot>;
     };
     const got = data.snapshots ?? {};
+    const at = Date.now();
     for (const u of uuids) {
       const snap = got[u];
       if (!snap) {
-        // Server didn't return this uuid — module deleted or never existed.
-        failed.add(u);
+        // Server returned a successful response but didn't include
+        // this uuid — module deleted or never existed. Permanent.
+        failed.set(u, { at, permanent: true });
         continue;
       }
       const entry: PreviewLookup = { name: snap.name };
@@ -125,10 +153,16 @@ async function fetchBundle(uuids: string[]): Promise<void> {
       }
       cache.set(u, entry);
     }
-  } catch {
-    // Network error / JSON parse error — fail open on retries to avoid
-    // hammering, but don't crash the preview.
-    for (const u of uuids) failed.add(u);
+  } catch (err) {
+    // Network error / JSON parse error — transient by definition. Log
+    // once for diagnostics (gated by the same window flag the walker
+    // uses) and mark retryable.
+    if ((window as unknown as { __wp_walker_log__?: boolean }).__wp_walker_log__) {
+      // eslint-disable-next-line no-console
+      console.warn("[wp-preview-resolver] fetch failed", { uuids, err });
+    }
+    const at = Date.now();
+    for (const u of uuids) failed.set(u, { at, permanent: false });
   } finally {
     // Notify Vue subscribers regardless of outcome — even a tombstone
     // change is a state transition consumers may want to render

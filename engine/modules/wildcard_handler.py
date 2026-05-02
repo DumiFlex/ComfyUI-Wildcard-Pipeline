@@ -66,6 +66,7 @@ def _apply_constraint_to_options(
     options: list[dict[str, Any]],
     constraint: dict[str, Any],
     source_pick: dict[str, Any],
+    adjustment_warnings: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Adjust option weights according to a single constraint, given the
     already-picked source option.
@@ -125,7 +126,33 @@ def _apply_constraint_to_options(
                 weight = 0.0
             elif mode == "boost" or mode == "reduce":
                 weight = max(0.0, weight * factor)
-            # mode "allow" or unknown → leave weight untouched.
+            elif mode == "allow":
+                # `allow` is a no-op weight-wise; surface a warning when
+                # the SPA stored a non-1 factor on it because that's
+                # almost certainly a user expecting weight*factor and
+                # silently getting full weight.
+                if factor != 1.0:
+                    out_warns = adjustment_warnings if adjustment_warnings is not None else None
+                    if out_warns is not None:
+                        out_warns.append({
+                            "type": "constraint_factor_ignored_on_allow",
+                            "factor": factor,
+                            "src_value": src_value,
+                            "opt_value": opt_value,
+                        })
+            else:
+                # Unknown mode — typo like "exlcude" / "alllow". Silent
+                # no-op was the worst-of-both: weight unchanged + zero
+                # signal that the rule was malformed. Bubble it up so
+                # the caller can emit a `unknown_constraint_mode` warning.
+                out_warns = adjustment_warnings if adjustment_warnings is not None else None
+                if out_warns is not None:
+                    out_warns.append({
+                        "type": "unknown_constraint_mode",
+                        "mode": mode,
+                        "src_value": src_value,
+                        "opt_value": opt_value,
+                    })
 
         adjusted.append({**opt, "weight": weight})
     return adjusted
@@ -266,6 +293,7 @@ class WildcardHandler(ModuleHandler):
         # constraints on the same target compose multiplicatively.
         my_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
         constraints = ctx.get("__wp_constraints__") if ctx is not None else None
+        any_constraint_applied = False
         if my_id and isinstance(constraints, list):
             picks = ctx.get("__wp_picks__") if ctx is not None else None
             if not isinstance(picks, dict):
@@ -288,7 +316,44 @@ class WildcardHandler(ModuleHandler):
                         },
                     )
                     continue
-                options = _apply_constraint_to_options(options, c, src_pick)
+                # Accumulate per-rule mode/factor anomalies into a
+                # local list, then surface each as a warning so the
+                # user gets a clear signal about typo'd modes (silent
+                # no-op pre-fix) and ignored factors on `allow` cells.
+                adjustment_warnings: list[dict[str, Any]] = []
+                options = _apply_constraint_to_options(
+                    options, c, src_pick, adjustment_warnings,
+                )
+                any_constraint_applied = True
+                for w in adjustment_warnings:
+                    _push_constraint_warning(
+                        ctx,
+                        w.get("type", "unknown_constraint_mode"),
+                        {
+                            **{k: v for k, v in w.items() if k != "type"},
+                            "source_wildcard_id": src_id,
+                            "target_wildcard_id": my_id,
+                        },
+                    )
+
+        # Excludes-all detection: when constraints have been applied
+        # AND the post-application total weight is zero, every option
+        # was excluded. `_pick_weighted` falls back to options[0]
+        # silently — the user gets the same "first option" forever
+        # with no signal that the constraint over-narrowed. Surface a
+        # warning so the user knows to broaden their matrix /
+        # exceptions.
+        if any_constraint_applied and options:
+            total = sum(max(0.0, float(o.get("weight", 1))) for o in options)
+            if total <= 0:
+                _push_constraint_warning(
+                    ctx,
+                    "constraint_excludes_all_options",
+                    {
+                        "target_wildcard_id": my_id,
+                        "hint": "every option was excluded; falling back to options[0]",
+                    },
+                )
 
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance

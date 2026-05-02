@@ -25,7 +25,14 @@ _VALID_MODES = {"allow", "exclude", "boost", "reduce"}
 
 
 def _ctx_set_constraint(ctx: Any, meta: dict[str, Any]) -> None:
-    """Append ``meta`` to ``ctx['_constraints']`` (best-effort)."""
+    """Append ``meta`` to ``ctx['__wp_constraints__']`` (best-effort).
+
+    On total failure (both setter API and dict-like access raise), emit a
+    `constraint_register_failed` warning so the user gets a debug-viewer
+    signal — pre-fix the constraint silently never registered and the
+    wildcard handler ran unconstrained with zero indication that the
+    user's constraint was even loaded.
+    """
     if ctx is None:
         return
     # Try setter-based access first (engine Context API).
@@ -52,8 +59,37 @@ def _ctx_set_constraint(ctx: Any, meta: dict[str, Any]) -> None:
     bucket.append(meta)
     try:
         ctx["__wp_constraints__"] = bucket  # type: ignore[index]
-    except Exception:
         return
+    except Exception as e:
+        # Both setter + dict paths failed. Emit a warning so the
+        # constraint failure surfaces in WP_Debug instead of being a
+        # silent no-op (pre-fix users had no signal that their
+        # constraint never made it into ctx — the wildcard handler
+        # then ran unconstrained with zero indication).
+        warnings = None
+        try:
+            warnings = ctx.get("__wp_warnings__") if hasattr(ctx, "get") else None
+        except Exception:
+            warnings = None
+        if isinstance(warnings, list):
+            warnings.append({
+                "type": "constraint_register_failed",
+                "severity": "error",
+                "module_id": "",
+                "source_field": "",
+                "position": 0,
+                "token_index": None,
+                "detail": {
+                    "exception_type": type(e).__name__,
+                    "exception_message": str(e),
+                    "source_wildcard_id": meta.get("source_wildcard_id"),
+                    "target_wildcard_id": meta.get("target_wildcard_id"),
+                },
+                "message": (
+                    "constraint failed to register in ctx — "
+                    f"{type(e).__name__}: {e}"
+                ),
+            })
 
 
 def _validate_cell(cell: Any, where: str) -> None:

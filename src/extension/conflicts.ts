@@ -210,9 +210,14 @@ export function scanConflicts(
   // checks: a constraint references its source/target by uuid, and we
   // need to know whether each uuid lives in this node (and at what
   // position) versus upstream / unfindable. Built once per scan.
+  // Includes DISABLED wildcards too — otherwise a constraint pointing
+  // at a disabled local wildcard would falsely flag as "missing"
+  // (it lives in this node, the user just toggled it off). The
+  // resulting warning would push the user to fix a typo that isn't
+  // there. Disabled vs enabled is a separate concern.
   const localWildcardIndex = new Map<string, number>();
   value.modules.forEach((m, i) => {
-    if (m.enabled && m.type === "wildcard") localWildcardIndex.set(m.id, i);
+    if (m.type === "wildcard") localWildcardIndex.set(m.id, i);
   });
   const written = new Set<string>();
   const out: Conflict[] = [];

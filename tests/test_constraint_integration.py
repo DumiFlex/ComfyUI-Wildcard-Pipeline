@@ -187,6 +187,51 @@ def test_constraint_with_unpicked_source_emits_warning():
 
 # ── No constraints at all — default path unchanged ───────────────────
 
+def test_factor_ignored_on_allow_emits_warning():
+    """`mode: allow` with a non-1 factor is a SPA-editor footgun —
+    user expects weight × factor, engine semantics ignore the factor
+    entirely. Surface a warning so the discrepancy is visible."""
+    src = _wildcard("aaaa1111", "hair", [
+        {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+    ])
+    target = _wildcard("bbbb2222", "outfit", [
+        {"id": "o1", "value": "kimono", "weight": 1, "sub_category": "formal"},
+    ])
+    constraint = _constraint(
+        "aaaa1111", "bbbb2222",
+        matrix={"long": {"formal": {"mode": "allow", "factor": 0.5}}},
+    )
+    ctx = _run([src, constraint, target], seed=0)
+    warnings = [
+        w for w in ctx["__wp_warnings__"]
+        if w["type"] == "constraint_factor_ignored_on_allow"
+    ]
+    assert len(warnings) == 1
+    assert warnings[0]["detail"]["factor"] == 0.5
+
+
+def test_constraint_excludes_all_options_emits_warning():
+    """When matrix excludes every option in the target's pool, total
+    weight collapses to 0 and `_pick_weighted` falls back to options[0]
+    silently. Surface `constraint_excludes_all_options` so the user
+    sees the over-narrowed pool instead of debugging "why does this
+    always pick the first option" blind."""
+    src = _wildcard("aaaa1111", "hair", [
+        {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+    ])
+    target = _wildcard("bbbb2222", "outfit", [
+        {"id": "o1", "value": "a", "weight": 1, "sub_category": "formal"},
+        {"id": "o2", "value": "b", "weight": 1, "sub_category": "formal"},
+    ])
+    constraint = _constraint(
+        "aaaa1111", "bbbb2222",
+        matrix={"long": {"formal": {"mode": "exclude", "factor": 1}}},
+    )
+    ctx = _run([src, constraint, target], seed=0)
+    warnings = [w for w in ctx["__wp_warnings__"] if w["type"] == "constraint_excludes_all_options"]
+    assert len(warnings) == 1
+
+
 def test_wildcard_runs_unchanged_when_no_constraints_present():
     """Sanity check: a chain without any constraints behaves exactly
     like pre-integration. Pin so future refactors of the constraint
