@@ -2,9 +2,14 @@
 
 A constraint module declares a re-weighting matrix from one wildcard module's
 options to another's. The actual mutation is intentionally **not** done here:
-WildcardHandler will eventually inspect ``ctx["_constraints"]`` and apply the
+WildcardHandler will eventually inspect ``ctx["__wp_constraints__"]`` and apply the
 matrix when picking options. This handler only validates the payload and
 records metadata in the context for the wildcard handler to consume.
+
+The bucket key uses the canonical ``__wp_*__`` engine-internal prefix so
+``strip_internals`` drops it from the public socket payload — without the
+``__`` prefix the constraint metadata leaked to the assembler as a
+user-facing ``_constraints`` variable, polluting autocomplete + templates.
 
 TODO: When WildcardHandler grows constraint awareness, switch from recording
 metadata to applying it here, or keep it as a pure metadata channel and let
@@ -28,25 +33,25 @@ def _ctx_set_constraint(ctx: Any, meta: dict[str, Any]) -> None:
     getter = getattr(ctx, "get", None)
     if callable(setter) and callable(getter):
         try:
-            existing = getter("_constraints", None)
+            existing = getter("__wp_constraints__", None)
         except TypeError:
             existing = None
         bucket = list(existing) if isinstance(existing, list) else []
         bucket.append(meta)
         try:
-            setter("_constraints", bucket)
+            setter("__wp_constraints__", bucket)
             return
         except Exception:
             pass
     # Fall back to dict-like __getitem__/__setitem__.
     try:
-        existing = ctx["_constraints"] if "_constraints" in ctx else []  # type: ignore[operator,index]
+        existing = ctx["__wp_constraints__"] if "__wp_constraints__" in ctx else []  # type: ignore[operator,index]
     except Exception:
         existing = []
     bucket = list(existing) if isinstance(existing, list) else []
     bucket.append(meta)
     try:
-        ctx["_constraints"] = bucket  # type: ignore[index]
+        ctx["__wp_constraints__"] = bucket  # type: ignore[index]
     except Exception:
         return
 
@@ -142,5 +147,5 @@ class ConstraintHandler(ModuleHandler):
         }
         _ctx_set_constraint(ctx, meta)
         # Pass-through stub: return no bindings — WildcardHandler is expected
-        # to consume ctx["_constraints"] when it grows constraint awareness.
+        # to consume ctx["__wp_constraints__"] when it grows constraint awareness.
         return {}

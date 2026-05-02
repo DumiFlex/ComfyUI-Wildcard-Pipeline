@@ -1413,11 +1413,21 @@ const constraintExceptions = computed<ConstraintExceptionView[]>(() => {
 }
 .wp-medit__btn--primary:hover { background: var(--wp-accent2); border-color: var(--wp-accent2); }
 
-/* Entry-row enter + reorder animations. Leave is instant — fade-out felt
- * laggy when chained with a FLIP move to fill the gap. */
+/* Entry-row enter + reorder + leave animations. Leave fade was originally
+ * dropped to keep FLIP-move snappy, but the new design uses a card-style
+ * row container where a vanish-without-feedback feels broken. The short
+ * 120ms fade is below the threshold where it visually delays the FLIP of
+ * the rows below — they start moving in parallel via `wp-medit-list-move`. */
 .wp-medit-list-move { transition: transform 0.2s ease-out; }
 .wp-medit-list-enter-active { transition: opacity 0.18s, transform 0.18s; }
 .wp-medit-list-enter-from { opacity: 0; transform: translateY(-6px); }
+.wp-medit-list-leave-active {
+  transition: opacity 0.12s, transform 0.12s;
+  position: absolute;
+  /* Take the leaving row out of layout flow so the FLIP-move on
+   * surviving siblings isn't blocked waiting for the fade. */
+}
+.wp-medit-list-leave-to { opacity: 0; transform: translateX(8px); }
 
 /* Library-picked-snapshot panel (non-fixed_values kinds). Read-only
  * payload preview + SPA deep-link. Stays minimal on purpose — major

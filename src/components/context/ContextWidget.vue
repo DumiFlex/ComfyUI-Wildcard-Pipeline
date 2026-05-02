@@ -5,7 +5,7 @@ import {
   emptyContextValue, newModuleId,
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
-import { scanConflicts, type Conflict } from "../../extension/conflicts";
+import { scanConflicts, labelFor as conflictLabelFor, type Conflict } from "../../extension/conflicts";
 import {
   ensure as ensurePreviewLookup,
   lookup as previewLookup,
@@ -196,14 +196,7 @@ function severityFor(id: string): "error" | "warning" | "info" | null {
 function conflictTooltip(id: string): string {
   const list = conflictsByModule.value[id];
   if (!list?.length) return "";
-  return list.map((c) => `${labelFor(c.type)}: $${c.variable}`).join("\n");
-}
-
-function labelFor(type: string): string {
-  if (type === "shadows_upstream") return "overrides upstream";
-  if (type === "duplicate_variable") return "duplicate";
-  if (type === "missing_template_variable") return "missing variable";
-  return type;
+  return list.map((c) => `${conflictLabelFor(c.type)}: $${c.variable}`).join("\n");
 }
 
 // Type-icon mapping per the brand sheet. Forward-compatible with P5+ types.

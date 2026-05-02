@@ -1,5 +1,5 @@
 import { walkAllNodes, collectUpstreamVariables, type LiteGraphLike, type LiteNodeLike } from "./graph";
-import { scanConflicts, scanTemplateConflicts, type Conflict, type Severity } from "./conflicts";
+import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
 
@@ -84,10 +84,10 @@ function formatBadgeText(worst: Conflict, sameSeverityCount: number): string {
     return `${sameSeverityCount} overrides`;
   }
   // Single issue — name the variable so the user knows exactly what to fix.
-  if (worst.type === "missing_template_variable") return `missing $${worst.variable}`;
-  if (worst.type === "duplicate_variable") return `duplicate $${worst.variable}`;
-  if (worst.type === "shadows_upstream") return `shadows $${worst.variable}`;
-  return worst.severity;
+  // Use the canonical label from `conflicts.ts` so card tooltip + badge
+  // text agree (e.g. both say "overrides upstream", neither says
+  // "shadows" — the wording was drifting per UX QA).
+  return `${labelFor(worst.type)} $${worst.variable}`;
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { info: 1, warning: 2, error: 3 };

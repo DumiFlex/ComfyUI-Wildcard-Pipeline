@@ -88,9 +88,9 @@ def test_resolve_records_metadata_into_ctx_constraints_list():
     out = ConstraintHandler.resolve(_payload(), instance={}, ctx=ctx)
     # Pass-through stub returns no bindings; mutates ctx instead.
     assert out == {}
-    assert isinstance(ctx["_constraints"], list)
-    assert len(ctx["_constraints"]) == 1
-    meta = ctx["_constraints"][0]
+    assert isinstance(ctx["__wp_constraints__"], list)
+    assert len(ctx["__wp_constraints__"]) == 1
+    meta = ctx["__wp_constraints__"][0]
     assert meta["source_wildcard_id"] == "wc_outfit"
     assert meta["target_wildcard_id"] == "wc_pose"
     assert meta["matrix"] == {"kimono": {"casual": {"mode": "exclude", "factor": 1.0}}}
@@ -98,11 +98,11 @@ def test_resolve_records_metadata_into_ctx_constraints_list():
 
 
 def test_resolve_appends_to_existing_constraints():
-    ctx: dict = {"_constraints": [{"source_wildcard_id": "earlier"}]}
+    ctx: dict = {"__wp_constraints__": [{"source_wildcard_id": "earlier"}]}
     ConstraintHandler.resolve(_payload(), instance={}, ctx=ctx)
-    assert len(ctx["_constraints"]) == 2
-    assert ctx["_constraints"][0]["source_wildcard_id"] == "earlier"
-    assert ctx["_constraints"][1]["source_wildcard_id"] == "wc_outfit"
+    assert len(ctx["__wp_constraints__"]) == 2
+    assert ctx["__wp_constraints__"][0]["source_wildcard_id"] == "earlier"
+    assert ctx["__wp_constraints__"][1]["source_wildcard_id"] == "wc_outfit"
 
 
 def test_resolve_rejects_malformed_payload():
@@ -120,4 +120,24 @@ def test_resolve_via_dispatcher_after_import():
     snap = {"type": "constraint", "payload": _payload(), "instance": {}}
     out = resolve_module(snap, ctx=ctx)
     assert out == {}
-    assert len(ctx["_constraints"]) == 1
+    assert len(ctx["__wp_constraints__"]) == 1
+
+
+def test_constraint_bucket_does_not_leak_to_public_socket():
+    """`strip_internals` must drop the `__wp_constraints__` bucket so the
+    assembler / downstream user-facing payload never sees it as a
+    spurious `_constraints` variable. Regression: pre-rename the bucket
+    used a single-underscore key that bypassed the strip filter, so
+    autocomplete in the assembler showed `$_constraints` as a pickable
+    var even though no module had bound it."""
+    from engine.context import strip_internals
+
+    ctx: dict = {}
+    ConstraintHandler.resolve(_payload(), instance={}, ctx=ctx)
+    # Internal bucket lives in ctx during the run.
+    assert "__wp_constraints__" in ctx
+    # Public socket strip drops it — no `_constraints`, no
+    # `__wp_constraints__`, nothing constraint-flavoured surfaces.
+    public = strip_internals(ctx)
+    assert "_constraints" not in public
+    assert "__wp_constraints__" not in public

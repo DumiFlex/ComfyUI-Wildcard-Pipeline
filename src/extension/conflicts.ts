@@ -72,6 +72,18 @@ export interface Conflict {
   severity: Severity;
 }
 
+/** Canonical label per ConflictType. Use this everywhere conflict text
+ *  surfaces (card tooltip, subgraph badge, future log viewers) so the
+ *  wording stays in sync across surfaces — drift between
+ *  "overrides upstream" / "shadows" / "shadow" is a real reported UX
+ *  bug. Always paired with `$${variable}` by the caller. */
+export function labelFor(type: ConflictType): string {
+  if (type === "shadows_upstream") return "overrides upstream";
+  if (type === "duplicate_variable") return "duplicate";
+  if (type === "missing_template_variable") return "missing";
+  return type;
+}
+
 /** Token regex matching `$ident` references but NOT `$$` literal escapes.
  *  Hoisted to the top of the module so both scanners see it without
  *  forward-reference TDZ concerns. */
