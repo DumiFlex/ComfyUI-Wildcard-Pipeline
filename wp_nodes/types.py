@@ -20,10 +20,21 @@ class ContextPayload:
 
     ``context`` holds user-facing variables (internals stripped). ``debug``
     carries run metadata (upstream snapshot, seed, trace) for the debug node.
+
+    ``internals`` is a deliberate carve-out for engine-internal state that
+    MUST survive cross-node boundaries — currently `__wp_picks__` (so a
+    downstream constraint-aware wildcard can read its source's pick from
+    a wildcard that lived in an upstream Context) and `__wp_constraints__`
+    (so a constraint registered upstream still applies to a downstream
+    target wildcard). The standard `strip_internals` filter would drop
+    these alongside trace/rng/etc; this field lets them travel without
+    leaking into the user-facing `context` payload that the assembler
+    consumes.
     """
 
     context: dict[str, Any] = field(default_factory=dict)
     debug: dict[str, Any] = field(default_factory=dict)
+    internals: dict[str, Any] = field(default_factory=dict)
 
 
 @comfytype(io_type="PIPELINE_CONTEXT")
@@ -201,12 +212,32 @@ def deserialize_node_input(
     return modules, catalog, []
 
 
+#: Internal ctx keys whose lifetime spans the full graph chain rather
+#: than a single Context node. Pre-fix every `__`-prefixed key got
+#: dropped at each socket boundary, so `__wp_picks__` (set when a
+#: wildcard rolls) and `__wp_constraints__` (set when a constraint
+#: module registers) didn't survive between nodes — a constraint in
+#: Context B targeting a wildcard in Context C couldn't see the
+#: source's pick recorded in Context A. Listed here explicitly so
+#: future cross-node internals are an opt-in addition rather than a
+#: default-leak.
+_CROSS_NODE_INTERNAL_KEYS = ("__wp_picks__", "__wp_constraints__")
+
+
 def build_payload(
     ctx: dict[str, Any],
     upstream_debug: dict[str, Any],
     seed: int,
 ) -> ContextPayload:
-    """Construct the socket-boundary payload. Strips internals from context."""
+    """Construct the socket-boundary payload. Strips internals from
+    `context`, but carries the cross-node-internal subset on the
+    dedicated `internals` field so the next node's execute can merge
+    them back into its ctx before running its own pipeline."""
+    internals = {
+        key: ctx[key]
+        for key in _CROSS_NODE_INTERNAL_KEYS
+        if key in ctx
+    }
     return ContextPayload(
         context=strip_internals(ctx),
         debug={
@@ -214,4 +245,5 @@ def build_payload(
             "node_seed": seed,
             "trace": ctx.get("__wp_trace__", []),
         },
+        internals=internals,
     )

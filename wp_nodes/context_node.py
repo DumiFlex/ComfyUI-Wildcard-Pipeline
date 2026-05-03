@@ -98,6 +98,9 @@ class WPContext(io.ComfyNode):
     def execute(cls, seed, modules, upstream=None):
         upstream_ctx: dict = upstream.context if upstream is not None else {}
         upstream_debug: dict = upstream.debug if upstream is not None else {}
+        upstream_internals: dict = (
+            upstream.internals if upstream is not None else {}
+        )
 
         # Unified-list model: one `modules` array holds every kind.
         # The catalog for `@{}` ref resolution is the wildcard subset,
@@ -111,6 +114,20 @@ class WPContext(io.ComfyNode):
         # Inject catalog ONCE at the top of execute, before pipeline
         # run. Spec §2.6 — never re-inject mid-run.
         ctx["__wp_catalog__"] = catalog
+        # Merge cross-node internals from the upstream payload —
+        # `__wp_picks__` so a downstream constraint can read source
+        # picks recorded in an earlier Context, `__wp_constraints__`
+        # so a constraint registered upstream still applies to a
+        # downstream target. Copy in defensively so this node's
+        # mutations don't corrupt the upstream payload (frozen
+        # dataclass implies the dict references are still shared).
+        for key, value in upstream_internals.items():
+            if isinstance(value, list):
+                ctx[key] = list(value)
+            elif isinstance(value, dict):
+                ctx[key] = dict(value)
+            else:
+                ctx[key] = value
 
         ctx = PipelineEngine().run(module_list, ctx=ctx, seed=int(seed))
 
