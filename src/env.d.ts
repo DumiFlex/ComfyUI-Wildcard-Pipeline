@@ -11,3 +11,10 @@ declare module "*.vue" {
 
 // Side-effect CSS imports (cssInjectedByJsPlugin handles runtime injection).
 declare module "*.css";
+
+// Runtime-served ComfyUI core modules — not on disk in node_modules,
+// the live process serves them at these absolute paths. Declared here
+// so dynamic `import()` calls type-check; the actual shape is asserted
+// by the caller (see extension/topbar.ts).
+declare module "/scripts/ui/components/button.js";
+declare module "/scripts/ui/components/buttonGroup.js";

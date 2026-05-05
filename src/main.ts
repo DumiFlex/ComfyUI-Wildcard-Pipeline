@@ -18,6 +18,7 @@ const [
   badgeMod,
   settingsMod,
   aboutMod,
+  topbarMod,
 ] = await Promise.all([
   import("./widgets/context"),
   import("./widgets/debug"),
@@ -29,6 +30,7 @@ const [
   import("./extension/subgraph-badge"),
   import("./extension/settings"),
   import("./extension/about-badges"),
+  import("./extension/topbar"),
   // Webfonts (Inter 400/600 + JetBrains Mono 400) — side-effect import,
   // the module just owns the @font-face CSS chunk.
   import("./extension/fonts"),
@@ -65,6 +67,13 @@ const settings = settingsMod.buildSettings(app);
 settingsMod.applyA11yClasses(app);
 settingsMod.watchA11ySystemPrefs();
 
+// Detect ComfyUI frontend version BEFORE registerExtension so we can
+// pick the right topbar render path. ≥ 1.33.9 → declarative
+// `actionBarButtons` extension property (LoRA Manager's modern path).
+// Older builds → manual attach in `setup()`. The version probe is
+// cheap (window var or one fetch to /system_stats) and runs once.
+const useActionBar = await topbarMod.supportsActionBar();
+
 app.registerExtension({
   name: "wildcard-pipeline",
 
@@ -72,9 +81,36 @@ app.registerExtension({
   // the repo, issue tracker, and docs. Uses PrimeIcons shipped by ComfyUI.
   aboutPageBadges: aboutMod.ABOUT_BADGES,
 
+  // Topbar dropdown entry — opens the SPA at /wp/dashboard. The direct
+  // toolbar button (mounted via actionBarButtons / setup() below) is
+  // the primary surface; this command is the dropdown twin so the SPA
+  // is reachable on builds where neither toolbar path works.
+  commands: topbarMod.TOPBAR_COMMANDS,
+  menuCommands: topbarMod.TOPBAR_MENU_COMMANDS,
+
+  // Modern actionbar entry — only included on ComfyUI ≥ 1.33.9.
+  // Including it on older builds would either be silently ignored or
+  // throw, depending on the frontend's strictness; conditional include
+  // is the safe path.
+  ...(useActionBar ? { actionBarButtons: topbarMod.ACTION_BAR_BUTTONS } : {}),
+
   // ComfyUI Settings panel entries — accessibility tri-state combos. Their
   // onChange handlers re-run applyA11yClasses to flip the body markers.
   settings,
+
+  // Mount the brand button. Two paths:
+  //   - actionBar: Vue actionbar already rendered our entry from
+  //     `actionBarButtons` above; we just need the rAF loop that
+  //     swaps in the brand SVG + LoRA-matching inline styles once
+  //     Vue's mount cycle settles.
+  //   - legacy: manually build a ComfyButton + group and attach
+  //     before app.menu.settingsGroup, then run the same swap loop.
+  async setup() {
+    if (!useActionBar) {
+      await topbarMod.attachLegacyTopbarButton(app);
+    }
+    topbarMod.startIconReplaceLoop();
+  },
 
   getCustomWidgets() {
     return {

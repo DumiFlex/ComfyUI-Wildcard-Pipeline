@@ -13,6 +13,12 @@ declare module "#comfyui/app" {
     extensionManager?: {
       setting?: { get(id: string): unknown };
     };
+    /** Top toolbar/menu surface — exposes `settingsGroup` (the cog
+     *  button group) which we anchor our SPA-launcher button to. Older
+     *  ComfyUI builds may not expose this; access defensively. */
+    menu?: {
+      settingsGroup?: { element: HTMLElement };
+    };
     registerExtension(ext: {
       name: string;
       getCustomWidgets?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
@@ -37,6 +43,30 @@ declare module "#comfyui/app" {
         category?: string[];
         onChange?: (newVal: unknown, oldVal: unknown) => void;
       }>;
+      /** Topbar dropdown commands — `menuCommands` references these by id. */
+      commands?: Array<{
+        id: string;
+        label: string;
+        function: (...args: unknown[]) => unknown;
+      }>;
+      /** Maps command ids into the topbar dropdown menu hierarchy. */
+      menuCommands?: Array<{
+        path: string[];
+        commands: string[];
+      }>;
+      /** Modern actionbar buttons (ComfyUI frontend ≥ 1.33.9). Each
+       *  entry renders as a button inside the rounded actionbar
+       *  container next to other extensions' buttons. `icon` is an
+       *  Iconify class string ComfyUI's Vue button component renders
+       *  as `<i class="...">`. */
+      actionBarButtons?: Array<{
+        icon: string;
+        tooltip: string;
+        onClick: (event?: MouseEvent | KeyboardEvent) => void;
+      }>;
+      /** Lifecycle hook fired after ComfyUI core has initialised — safe
+       *  point to mount DOM that depends on `app.menu`. */
+      setup?: () => Promise<void> | void;
     }): void;
   }
   export const app: ComfyApp;
