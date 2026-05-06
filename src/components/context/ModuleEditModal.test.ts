@@ -139,13 +139,14 @@ describe("ModuleEditModal — shell header", () => {
 describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
   beforeEach(() => _resetForTests());
 
-  it("wildcard → shows WildcardEditorBody placeholder", async () => {
+  it("wildcard → shows WildcardEditorBody (options table rendered)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeWildcard() },
     });
     await nextTick();
-    expect(wrapper.text()).toContain("TODO Task 15");
+    // Scaffold placeholder is gone; the real body renders an options table.
+    expect(wrapper.find("[data-test='wc-options-table']").exists()).toBe(true);
   });
 
   it("fixed_values → shows FixedValuesEditorBody placeholder", async () => {
@@ -260,10 +261,108 @@ describe("ModuleEditModal — footer / save / cancel", () => {
   });
 });
 
-// ── Per-kind body field tests (deferred to Tasks 15-19) ─────────────────────
+// ── Per-kind body field tests (Task 15 — WildcardEditorBody) ────────────────
 
 describe("ModuleEditModal — wildcard option editor (body)", () => {
-  it.todo("renders one row per option with library values + weights — see Task 15");
+  beforeEach(() => _resetForTests());
+
+  it("renders one row per option from payload.options", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    // makeWildcard has 3 options: red, blue, green
+    const rows = wrapper.findAll("[data-test='wc-options-table'] tbody tr");
+    // 3 data rows (not the empty-row fallback)
+    expect(rows.length).toBe(3);
+  });
+
+  it("name input renders module.meta.name and emits update with patched meta", async () => {
+    const mod = makeWildcard();
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    const input = wrapper.find("[data-test='wc-name']");
+    expect(input.exists()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe("outfit");
+    // VTU doesn't allow target in trigger; set value directly then dispatch event.
+    (input.element as HTMLInputElement).value = "newname";
+    await input.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.meta.name).toBe("newname");
+  });
+
+  it("$varBinding strips leading $ and special chars on input", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    const input = wrapper.find("[data-test='wc-var-binding']");
+    expect(input.exists()).toBe(true);
+    // VTU doesn't allow target in trigger; set value directly then dispatch event.
+    (input.element as HTMLInputElement).value = "$hair-style!";
+    await input.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const binding = (saved.payload as { var_binding?: string } | undefined)?.var_binding;
+    // Leading $ stripped, hyphens and ! stripped → "hairstyle"
+    expect(binding).toBe("hairstyle");
+  });
+
+  it("Add option appends a new row to payload.options on save", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    await wrapper.find("[data-test='wc-add-option']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const opts = (saved.payload as { options?: unknown[] } | undefined)?.options ?? [];
+    // Started with 3, added 1 → 4
+    expect(opts.length).toBe(4);
+  });
+
+  it("Add sub-category appends to payload.sub_categories on save", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    const subInput = wrapper.find("[data-test='wc-sub-input']");
+    await subInput.setValue("warm tones");
+    await subInput.trigger("keydown", { key: "Enter" });
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const subs = (saved.payload as { sub_categories?: string[] } | undefined)?.sub_categories ?? [];
+    expect(subs).toContain("warm tones");
+  });
+
+  it("probability bar reflects weight ratio (weight 2 out of total 4 → 50%)", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    // options: red=1, blue=2, green=1 → total=4, blue=50%
+    const pcts = wrapper.findAll(".wp-prob-pct");
+    expect(pcts.length).toBe(3);
+    // blue is row index 1 → 50%
+    expect(pcts[1].text()).toBe("50%");
+    // red and green are each 25%
+    expect(pcts[0].text()).toBe("25%");
+    expect(pcts[2].text()).toBe("25%");
+  });
+
   it.todo("disables an option → emits save with enabled_options excluding that id — see Task 15");
   it.todo("dropping all overrides → enabled_options falls back to null — see Task 15");
   it.todo("changing a weight → emits save with option_weights[id] set — see Task 15");
