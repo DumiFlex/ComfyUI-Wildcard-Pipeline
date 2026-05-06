@@ -45,6 +45,24 @@ const detectedInputs = computed<string[]>(() => {
   return out;
 });
 
+// Preview tokens for the template — splits on $var so each var ref can be
+// painted with its own var-color hash. Mirrors AssemblerHelper's tokeniser.
+interface PreviewToken { kind: "literal" | "var"; text: string; varName?: string }
+const previewTokens = computed<PreviewToken[]>(() => {
+  const tpl = template.value ?? "";
+  if (!tpl) return [];
+  const tokens: PreviewToken[] = [];
+  let last = 0;
+  for (const m of tpl.matchAll(TEMPLATE_VAR_RE)) {
+    const idx = m.index ?? 0;
+    if (idx > last) tokens.push({ kind: "literal", text: tpl.slice(last, idx) });
+    tokens.push({ kind: "var", text: `$${m[1]}`, varName: m[1] });
+    last = idx + m[0].length;
+  }
+  if (last < tpl.length) tokens.push({ kind: "literal", text: tpl.slice(last) });
+  return tokens;
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function patch(p: Record<string, unknown>): void {
@@ -207,8 +225,20 @@ function removeTag(t: string): void {
     <section class="wp-edit-section">
       <div class="wp-edit-section-title">Preview</div>
       <div class="wp-cb-preview" data-test="cb-preview">
-        <span style="color: var(--wp-text-dim);">→ stored as </span>
-        <span :class="['wp-input--mono', varColorClass(outputVar)]" style="font-weight: 600;">${{ outputVar || "output" }}</span>
+        <div v-if="previewTokens.length" class="wp-cb-preview-template">
+          <template v-for="(tok, i) in previewTokens" :key="i">
+            <span v-if="tok.kind === 'literal'" class="wp-cb-preview-lit">{{ tok.text }}</span>
+            <span
+              v-else
+              :class="['wp-cb-preview-var', varColorClass(tok.varName ?? '')]"
+            >{{ tok.text }}</span>
+          </template>
+        </div>
+        <div v-else class="wp-cb-preview-empty">(template empty)</div>
+        <div class="wp-cb-preview-output">
+          <span style="color: var(--wp-text-dim);">→ stored as </span>
+          <span :class="['wp-input--mono', varColorClass(outputVar)]" style="font-weight: 600;">${{ outputVar || "output" }}</span>
+        </div>
       </div>
     </section>
   </div>
@@ -418,5 +448,22 @@ function removeTag(t: string): void {
   padding: 8px 10px;
   font: 12px/1.55 var(--wp-font-mono);
   color: var(--wp-text-muted, var(--wp-text3));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wp-cb-preview-template {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wp-cb-preview-lit { color: var(--wp-text); }
+.wp-cb-preview-var {
+  font-weight: 600;
+}
+.wp-cb-preview-empty { color: var(--wp-text-dim); font-style: italic; }
+.wp-cb-preview-output {
+  border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
+  padding-top: 6px;
+  font-size: 11px;
 }
 </style>

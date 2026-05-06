@@ -440,15 +440,18 @@ function setException(
 /* ── Constraint-specific ─────────────────────────────────────────────────── */
 .wp-cn-pair {
   display: grid;
-  grid-template-columns: 1fr 32px 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr 24px 1fr;
+  gap: 12px;
   align-items: end;
 }
 .wp-cn-cross {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
+  /* Mirrors SPA `.cn-cross` (manager/views/ConstraintEditor.vue) — let the
+   * label-aware grid stretch naturally and pin the icon to the input row
+   * baseline via padding-bottom. Beats the previous fixed-height + flex
+   * center, which mis-aligned by ~6px because the input has 6px bottom
+   * padding the cross box didn't account for. */
+  padding-bottom: 8px;
+  text-align: center;
   color: var(--wp-text-dim, var(--wp-text3));
 }
 

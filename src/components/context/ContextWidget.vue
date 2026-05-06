@@ -17,6 +17,7 @@ import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
+import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
   forceRefresh as forceRefreshHashes,
   hashes as libraryHashes,
@@ -1325,7 +1326,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
         class="wp-empty-hero"
         data-test="context-empty"
       >
-        <div class="wp-empty-hero-glyph" aria-hidden="true" />
+        <!-- eslint-disable-next-line vue/no-v-html — wpLogoSvg is a static
+             import from src/components/shared/wp-logo.svg via Vite ?raw,
+             not user input. Same pattern as extension/topbar.ts. -->
+        <div
+          class="wp-empty-hero-glyph"
+          aria-hidden="true"
+          v-html="wpLogoSvg"
+        />
         <div class="wp-empty-hero-title">No modules yet</div>
         <div class="wp-empty-hero-sub">
           Add a wildcard, fixed values pack, combine, derivation or constraint to start
@@ -1611,18 +1619,16 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   text-align: center;
 }
 .wp-empty-hero-glyph {
-  width: 38px; height: 38px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, var(--wp-kind-wildcard), var(--wp-accent) 60%, transparent 75%);
-  opacity: 0.5;
-  filter: blur(0.5px);
-  position: relative;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
 }
-.wp-empty-hero-glyph::after {
-  content: "✦";
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 18px; opacity: 0.85;
+.wp-empty-hero-glyph :deep(svg) {
+  width: 100%;
+  height: 100%;
 }
 .wp-empty-hero-title { font: 500 13px/1.3 var(--wp-font-sans); color: var(--wp-text); }
 .wp-empty-hero-sub   { font: 11px/1.5 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text2)); max-width: 280px; }

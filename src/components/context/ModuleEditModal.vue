@@ -233,7 +233,14 @@ function cancel() {
   color: var(--wp-text2);
   flex-shrink: 0;
 }
-.wp-medit__head-icon.type-fixed_values { color: var(--wp-rose); }
+/* Kind-specific colors mirror the kind-borders on ContextWidget rows so
+ * the modal header reads the same kind-identity at a glance. */
+.wp-medit__head-icon.type-wildcard    { color: var(--wp-kind-wildcard); }
+.wp-medit__head-icon.type-fixed_values { color: var(--wp-kind-fixed, var(--wp-rose)); }
+.wp-medit__head-icon.type-combine     { color: var(--wp-kind-combine); }
+.wp-medit__head-icon.type-derivation  { color: var(--wp-kind-derivation); }
+.wp-medit__head-icon.type-constraint  { color: var(--wp-kind-constraint); }
+.wp-medit__head-icon.type-pipeline    { color: var(--wp-kind-pipeline); }
 .wp-medit__name-input {
   flex: 1;
   background: rgba(0, 0, 0, 0.25);
