@@ -1,23 +1,29 @@
 // Wildcard Pipeline topbar/toolbar button — opens the manager SPA at
 // `/wp/dashboard` in a new tab.
 //
-// Render strategy: use ComfyUI's DEFAULT actionbar button styling
-// (no inline overrides, no LoRA-Manager-replica). We only swap the
-// Iconify placeholder `<i>` for our brand SVG so the button carries
-// the WP identity. Everything else — padding, border-radius, hover
-// background, text color — comes from ComfyUI's button CSS so we
-// blend in with the rest of the topbar regardless of palette.
+// Render strategy: borrow LoRA Manager's *visual* treatment (filled
+// `--primary-bg` background, 4px border-radius, hover ramp) so the
+// button reads as a brand-tagged "primary action" — but use ComfyUI's
+// *default size* (no `padding: 6px` override, no 20px SVG dimensions).
+// The icon inherits ComfyUI's standard `size-4` (1rem = 16px) class
+// instead. Net effect: an actionbar button shaped like the queue /
+// settings buttons next to it, painted in our brand color, carrying
+// our brand SVG.
 //
 // Two render paths, picked by ComfyUI frontend version:
 //
 //   - Frontend ≥ 1.33.9 → `actionBarButtons` extension property.
-//     ComfyUI's Vue actionbar renders our entry inside the
-//     `actionbar-container`. We replace the icon `<i>` with our SVG
-//     via a `requestAnimationFrame` loop once Vue mounts the button.
+//     ComfyUI's Vue actionbar (`src/components/topbar/ActionBarButtons.vue`)
+//     renders our entry inside the rounded `actionbar-container` as
+//     `<Button variant="muted-textonly" size="sm" class="h-7 rounded-full">`.
+//     We swap the Iconify placeholder `<i>` for our brand SVG and
+//     overwrite the inherited `rounded-full` + muted text with the
+//     LoRA-style primary-bg + 4px border-radius via a small style
+//     block keyed on our aria-label.
 //   - Frontend  < 1.33.9 → legacy direct attach: build a `ComfyButton`
-//     via `/scripts/ui/components/{button,buttonGroup}.js` and insert
-//     before `app.menu.settingsGroup`. Default `comfyui-button`
-//     classList only — no `primary` modifier or per-button styles.
+//     via `/scripts/ui/components/{button,buttonGroup}.js` with the
+//     `primary` classList modifier (so the button carries primary-bg
+//     out of the box) and insert before `app.menu.settingsGroup`.
 //
 // SVG construction goes through DOMParser (not `innerHTML = ...`)
 // because the project's pre-tool security hook flags raw innerHTML
@@ -35,6 +41,7 @@ const TOOLTIP = "Wildcard Pipeline Workspace (opens in a new window)";
 const POPUP_FEATURES = "width=1280,height=900,resizable=yes,scrollbars=yes,status=yes";
 const BUTTON_GROUP_CLASS = "wp-top-menu-group";
 const BUTTON_MARKER_CLASS = "wp-top-menu-button";
+const STYLE_ELEMENT_ID = "wp-top-menu-button-styles";
 
 // Frontend version threshold for the new actionBarButtons API.
 // Versions below ship a different menu shell where the
@@ -151,9 +158,42 @@ function parseBrandIcon(): SVGElement | null {
 }
 
 /**
+ * Inject the WP-tagged button's brand styling. Idempotent via the
+ * element-id guard. Three rules:
+ *
+ *   1. Override the default actionbar `rounded-full` + muted-textonly
+ *      with primary-bg + 4px border-radius (LoRA Manager's brand
+ *      treatment).
+ *   2. Hover ramp uses ComfyUI's `--primary-hover-bg` token so it
+ *      stays palette-aware.
+ *   3. Force `color: #fff` on the button so the icon's `currentColor`
+ *      fill renders as white over the primary-bg fill (otherwise it
+ *      inherits the muted-foreground gray and washes out).
+ */
+function injectStyles(): void {
+  if (document.getElementById(STYLE_ELEMENT_ID)) return;
+  const style = document.createElement("style");
+  style.id = STYLE_ELEMENT_ID;
+  style.textContent = `
+    button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS} {
+      background-color: var(--primary-bg) !important;
+      border: 1px solid transparent;
+      border-radius: 4px !important;
+      color: #fff !important;
+      transition: all 0.2s ease;
+    }
+    button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS}:hover {
+      background-color: var(--primary-hover-bg) !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+/**
  * Replace the Iconify placeholder `<i>` inside every WP-tagged button
- * with our brand SVG. No inline styles — ComfyUI's default button CSS
- * keeps the icon sized + positioned correctly.
+ * with our brand SVG. No inline padding/size on the SVG — ComfyUI's
+ * `size-4` (1rem = 16px) class on the icon slot governs sizing so the
+ * button stays the same height as its siblings.
  *
  * Returns the count of buttons touched so the caller can decide
  * whether to keep polling (button not yet mounted) or stop.
@@ -171,12 +211,10 @@ function applyBrandIcon(): number {
     if (btn.querySelector("svg.wp-brand-icon")) return;
     const fresh = parseBrandIcon();
     if (!fresh) return;
-    fresh.classList.add("wp-brand-icon");
-    // ComfyUI's actionBar button uses `size-4` (Tailwind 1rem = 16px) on
-    // the icon `<i>`. Apply the equivalent inline so our SVG scales the
-    // same as siblings without needing a hover/transition stylesheet.
-    fresh.setAttribute("width", "1em");
-    fresh.setAttribute("height", "1em");
+    fresh.classList.add("wp-brand-icon", "size-4");
+    // No explicit width/height — `size-4` (Tailwind 1rem) handles it,
+    // matching ComfyUI's other actionbar icons. Hardcoded `20px` was a
+    // LoRA-Manager-replica detail the user explicitly opted out of.
     btn.replaceChildren(fresh);
   });
   return buttons.length;
@@ -195,6 +233,7 @@ function applyBrandIcon(): number {
  */
 export function startIconReplaceLoop(): void {
   if (typeof document === "undefined") return;
+  injectStyles();
   const tick = (): void => {
     const touched = applyBrandIcon();
     if (touched === 0) {
@@ -253,10 +292,10 @@ export async function attachLegacyTopbarButton(app: AppLike, attempt = 0): Promi
     tooltip: TOOLTIP,
     app,
     enabled: true,
-    // Default ComfyUI button class only — no `primary` modifier so the
-    // button picks up the same styling as ComfyUI's other topbar
-    // entries (queue, manager, settings).
-    classList: "comfyui-button comfyui-menu-mobile-collapse",
+    // `primary` modifier carries the LoRA-style primary-bg out of the
+    // box. Default size (no padding/dimension overrides) keeps the
+    // button at ComfyUI's standard topbar height.
+    classList: "comfyui-button comfyui-menu-mobile-collapse primary",
   });
 
   button.element.setAttribute("aria-label", TOOLTIP);
@@ -265,9 +304,8 @@ export async function attachLegacyTopbarButton(app: AppLike, attempt = 0): Promi
   if (button.iconElement) {
     const svg = parseBrandIcon();
     if (svg) {
-      svg.classList.add("wp-brand-icon");
-      svg.setAttribute("width", "1em");
-      svg.setAttribute("height", "1em");
+      svg.classList.add("wp-brand-icon", "size-4");
+      // No explicit width/height — `size-4` (Tailwind 1rem) handles it.
       button.iconElement.replaceChildren(svg);
     }
   }
