@@ -128,6 +128,9 @@
   --wp-node-border: #1a1a1a;
   --wp-node-text:   #d0d0d0;
   --wp-node-text-2: #b0b0b0;
+
+  --wp-bg-deep:     #222;
+  --wp-border-soft: #444;
 }
 
 .wp-theme-light {
@@ -138,9 +141,6 @@
   --wp-bg-deep: #d0d0d0;
   --wp-bg4:    #e6e6ee;
 
-  --wp-bg-1: var(--wp-bg-1);
-  --wp-bg-2: var(--wp-bg-2);
-  --wp-bg-3: var(--wp-bg-3);
   --wp-bg-4: var(--wp-bg4);
 
   --wp-border:        #b0b0b0;
@@ -160,8 +160,8 @@
   --wp-accent-text-strong: #5b21b6;
 
   /* Status colors nudged darker for legibility on light surfaces. */
-  --wp-modified: #c2410c;
-  --wp-warn:     #b45309;
+  --wp-status-modified: #c2410c;
+  --wp-warn:           #b45309;
   --wp-danger:   #b91c1c;
   --wp-green:    #15803d;
   --wp-red:      #b91c1c;
