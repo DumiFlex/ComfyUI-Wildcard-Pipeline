@@ -101,10 +101,12 @@ app.registerExtension({
   // Mount the brand button. Two paths:
   //   - actionBar: Vue actionbar already rendered our entry from
   //     `actionBarButtons` above; we just need the rAF loop that
-  //     swaps in the brand SVG + LoRA-matching inline styles once
-  //     Vue's mount cycle settles.
-  //   - legacy: manually build a ComfyButton + group and attach
-  //     before app.menu.settingsGroup, then run the same swap loop.
+  //     swaps the Iconify placeholder `<i>` for our brand SVG once
+  //     Vue's mount cycle settles. ComfyUI's default button styling
+  //     handles padding/hover/text-color — no inline overrides.
+  //   - legacy: manually build a default ComfyButton + group and
+  //     attach before app.menu.settingsGroup, then run the same
+  //     icon swap loop.
   async setup() {
     if (!useActionBar) {
       await topbarMod.attachLegacyTopbarButton(app);

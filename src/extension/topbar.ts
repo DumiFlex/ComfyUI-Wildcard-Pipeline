@@ -1,25 +1,27 @@
 // Wildcard Pipeline topbar/toolbar button — opens the manager SPA at
-// `/wp/dashboard` in a new tab. Code path is a near-verbatim copy of
-// ComfyUI-Lora-Manager's `top_menu_extension.js` so the rendered
-// button is visually identical to LoRA Manager's.
+// `/wp/dashboard` in a new tab.
+//
+// Render strategy: use ComfyUI's DEFAULT actionbar button styling
+// (no inline overrides, no LoRA-Manager-replica). We only swap the
+// Iconify placeholder `<i>` for our brand SVG so the button carries
+// the WP identity. Everything else — padding, border-radius, hover
+// background, text color — comes from ComfyUI's button CSS so we
+// blend in with the rest of the topbar regardless of palette.
 //
 // Two render paths, picked by ComfyUI frontend version:
 //
 //   - Frontend ≥ 1.33.9 → `actionBarButtons` extension property.
-//     ComfyUI's Vue actionbar renders our entry inside the rounded
-//     `actionbar-container` next to LoRA Manager's button. We swap
-//     the icon + inline styles via a `requestAnimationFrame` loop
-//     once Vue has mounted the button.
+//     ComfyUI's Vue actionbar renders our entry inside the
+//     `actionbar-container`. We replace the icon `<i>` with our SVG
+//     via a `requestAnimationFrame` loop once Vue mounts the button.
 //   - Frontend  < 1.33.9 → legacy direct attach: build a `ComfyButton`
 //     via `/scripts/ui/components/{button,buttonGroup}.js` and insert
-//     before `app.menu.settingsGroup` (or after LoRA Manager's group
-//     if it's there).
+//     before `app.menu.settingsGroup`. Default `comfyui-button`
+//     classList only — no `primary` modifier or per-button styles.
 //
-// One intentional delta from LoRA Manager: the SVG string is parsed
-// through DOMParser instead of `innerHTML = ...` because the
-// project's pre-tool security hook flags raw innerHTML writes.
-// Outcome is identical (same DOM tree under the button) — just a
-// safer construction path.
+// SVG construction goes through DOMParser (not `innerHTML = ...`)
+// because the project's pre-tool security hook flags raw innerHTML
+// writes. Outcome is identical, just safer.
 //
 // Belt-and-suspenders: also register `commands` + `menuCommands` for
 // the topbar dropdown so the SPA stays reachable even when
@@ -29,16 +31,14 @@
 import wpLogoSvg from "../components/shared/wp-logo.svg?raw";
 
 const SPA_PATH = "/wp/dashboard";
-const TOOLTIP = "Launch Wildcard Pipeline (Shift+Click opens in new window)";
+const TOOLTIP = "Wildcard Pipeline Workspace (opens in a new window)";
 const POPUP_FEATURES = "width=1280,height=900,resizable=yes,scrollbars=yes,status=yes";
 const BUTTON_GROUP_CLASS = "wp-top-menu-group";
-const BUTTON_CLASS = "wp-top-menu-button";
-const STYLE_ELEMENT_ID = "wp-top-menu-button-styles";
-const LORA_GROUP_SELECTOR = ".lora-manager-top-menu-group";
+const BUTTON_MARKER_CLASS = "wp-top-menu-button";
 
-// Frontend version threshold for the new actionBarButtons API. LoRA
-// Manager uses the same threshold — versions below ship a different
-// menu shell where the actionbar-container doesn't exist.
+// Frontend version threshold for the new actionBarButtons API.
+// Versions below ship a different menu shell where the
+// actionbar-container doesn't exist.
 const MIN_VERSION_FOR_ACTION_BAR: readonly [number, number, number] = [1, 33, 9];
 
 // Cap the polling retry — `app.menu.settingsGroup` mounts a few rAF
@@ -83,9 +83,7 @@ function openSpa(event?: MouseEvent | KeyboardEvent): void {
 
 /** Parse a "1.33.9" / "v1.33.9-beta" -style frontend version string
  *  into a `[major, minor, patch]` triple, padding shorter strings with
- *  zeros and stripping pre-release suffixes. Mirrors LoRA Manager's
- *  `parseVersion` exactly so any version-comparison drift between the
- *  two extensions stays at zero. */
+ *  zeros and stripping pre-release suffixes. */
 function parseVersion(v: string): [number, number, number] {
   if (!v) return [0, 0, 0];
   const clean = v.replace(/^[vV]/, "").split("-")[0];
@@ -125,22 +123,19 @@ export async function supportsActionBar(): Promise<boolean> {
 }
 
 /**
- * Strip the bundled brand SVG down to a flat-white glyph and parse it
- * into a real SVGElement. Each call returns a fresh node, because we
- * re-run the icon swap (mirroring LoRA Manager's `replaceButtonIcon`
- * rAF loop) and the same node can't live in two places.
+ * Strip the bundled brand SVG down to a flat `currentColor` glyph and
+ * parse it into a real SVGElement. Each call returns a fresh node,
+ * because we re-run the icon swap and the same node can't live in
+ * two places.
  *
- * Why explicit `#fff` and not `currentColor`: the actionBar button's
- * surrounding Vue classes set `text-muted-foreground` (a low-contrast
- * grey) on the button. With `fill="currentColor"` our paths inherited
- * that grey and looked washed out next to LoRA Manager's saturated
- * multi-color logo. Hard-coding white forces the icon to stay white
- * regardless of the parent's text color, matching the brightness of
- * LoRA Manager's icon (which uses its own per-path `#D3E2E7`/`#1B3F68`
- * fills and likewise doesn't depend on text color).
+ * `fill="currentColor"` lets the icon inherit ComfyUI's button text
+ * color so it adapts to whatever palette is active (light/dark/etc).
+ * Replaces the previous `#fff` hardcode that paired with the
+ * LoRA-Manager-replica primary-bg button — now that we use ComfyUI's
+ * default button styling, hardcoded white would clash on light themes.
  *
- * Returns null on a malformed parse — caller handles by leaving the
- * placeholder ComfyButton mdi class in place.
+ * Returns null on a malformed parse — caller leaves the placeholder
+ * Iconify `<i>` in place.
  */
 function parseBrandIcon(): SVGElement | null {
   if (typeof DOMParser === "undefined") return null;
@@ -148,54 +143,41 @@ function parseBrandIcon(): SVGElement | null {
     .replace(/<defs>[\s\S]*?<\/defs>/g, "")
     .replace(/\sclass="[^"]*"/g, "")
     .replace(/\sfill="[^"]*"/g, "")
-    .replace(/<svg([^>]*)>/, '<svg$1 fill="#fff">');
+    .replace(/<svg([^>]*)>/, '<svg$1 fill="currentColor">');
   const doc = new DOMParser().parseFromString(monochrome, "image/svg+xml");
   const root = doc.documentElement;
   if (root.nodeName === "parsererror" || root.nodeName.toLowerCase() !== "svg") return null;
   return document.importNode(root, true) as unknown as SVGElement;
 }
 
-/** Inject the hover/transition style block. Idempotent via the element
- *  id guard. Mirrors LoRA Manager's `lm-top-menu-button-styles` rule
- *  set 1:1, just with our aria-label selector + class name. */
-function injectStyles(): void {
-  if (document.getElementById(STYLE_ELEMENT_ID)) return;
-  const style = document.createElement("style");
-  style.id = STYLE_ELEMENT_ID;
-  style.textContent = `
-    button[aria-label="${TOOLTIP}"].${BUTTON_CLASS} {
-      transition: all 0.2s ease;
-      border: 1px solid transparent;
-    }
-    button[aria-label="${TOOLTIP}"].${BUTTON_CLASS}:hover {
-      background-color: var(--primary-hover-bg) !important;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-/** Apply the brand SVG + LoRA-Manager-matching inline styles to every
- *  button matching our aria-label currently in the DOM. Used by both
- *  the actionBar and legacy paths.
+/**
+ * Replace the Iconify placeholder `<i>` inside every WP-tagged button
+ * with our brand SVG. No inline styles — ComfyUI's default button CSS
+ * keeps the icon sized + positioned correctly.
  *
- *  Returns the number of buttons it touched so the caller can decide
- *  whether to keep polling (button not yet mounted) or stop. */
-function applyButtonStyles(): number {
+ * Returns the count of buttons touched so the caller can decide
+ * whether to keep polling (button not yet mounted) or stop.
+ */
+function applyBrandIcon(): number {
   const buttons = document.querySelectorAll<HTMLButtonElement>(
     `button[aria-label="${TOOLTIP}"]`,
   );
   buttons.forEach((btn) => {
-    btn.classList.add(BUTTON_CLASS);
+    btn.classList.add(BUTTON_MARKER_CLASS);
+    // Skip if our SVG is already mounted (rAF tick after a previous
+    // success). Iconify renders an `<i>` placeholder; once we replace
+    // it with `<svg>` the next tick would otherwise no-op safely, but
+    // checking is cheaper than re-parsing the SVG.
+    if (btn.querySelector("svg.wp-brand-icon")) return;
     const fresh = parseBrandIcon();
-    if (fresh) btn.replaceChildren(fresh);
-    btn.style.borderRadius = "4px";
-    btn.style.padding = "6px";
-    btn.style.backgroundColor = "var(--primary-bg)";
-    const innerSvg = btn.querySelector("svg");
-    if (innerSvg) {
-      innerSvg.style.width = "20px";
-      innerSvg.style.height = "20px";
-    }
+    if (!fresh) return;
+    fresh.classList.add("wp-brand-icon");
+    // ComfyUI's actionBar button uses `size-4` (Tailwind 1rem = 16px) on
+    // the icon `<i>`. Apply the equivalent inline so our SVG scales the
+    // same as siblings without needing a hover/transition stylesheet.
+    fresh.setAttribute("width", "1em");
+    fresh.setAttribute("height", "1em");
+    btn.replaceChildren(fresh);
   });
   return buttons.length;
 }
@@ -204,19 +186,17 @@ function applyButtonStyles(): number {
  * Drive the post-mount icon swap loop. Used by both paths — the
  * actionBar path needs it because Vue mounts the button asynchronously
  * (the rAF tick gives us the moment after first paint), and the
- * legacy path needs it because `comfyui-button.primary` may apply
- * child layout that the construction-time iconElement swap doesn't
- * fully tame.
+ * legacy path needs it because `comfyui-button` may apply child
+ * layout that the construction-time iconElement swap doesn't fully
+ * tame.
  *
  * Loop terminates the first frame at least one matching button is
- * found AND has been processed. Re-applies styles too — a defensive
- * second-pass in case Vue's mount cycle reset the inline values.
+ * found AND has been processed.
  */
 export function startIconReplaceLoop(): void {
   if (typeof document === "undefined") return;
-  injectStyles();
   const tick = (): void => {
-    const touched = applyButtonStyles();
+    const touched = applyBrandIcon();
     if (touched === 0) {
       requestAnimationFrame(tick);
     }
@@ -225,11 +205,10 @@ export function startIconReplaceLoop(): void {
 }
 
 /**
- * Legacy direct-attach path for ComfyUI < 1.33.9. Mirrors LoRA
- * Manager's `attachTopMenuButton`: build a `ComfyButton` via the
- * runtime-served core JS, wrap it in a `ComfyButtonGroup`, attach to
- * the topbar before `settingsGroup` (or after LoRA's group if
- * present).
+ * Legacy direct-attach path for ComfyUI < 1.33.9. Build a default
+ * `ComfyButton` (no `primary` modifier) and insert before
+ * `settingsGroup`. ComfyUI's default button styling carries the
+ * tooltip + hover behavior — we only swap the icon afterwards.
  *
  * Polls via rAF until `settingsGroup` is mountable. Idempotent — a
  * guard query on the group class short-circuits double mounts.
@@ -274,7 +253,10 @@ export async function attachLegacyTopbarButton(app: AppLike, attempt = 0): Promi
     tooltip: TOOLTIP,
     app,
     enabled: true,
-    classList: "comfyui-button comfyui-menu-mobile-collapse primary",
+    // Default ComfyUI button class only — no `primary` modifier so the
+    // button picks up the same styling as ComfyUI's other topbar
+    // entries (queue, manager, settings).
+    classList: "comfyui-button comfyui-menu-mobile-collapse",
   });
 
   button.element.setAttribute("aria-label", TOOLTIP);
@@ -282,9 +264,12 @@ export async function attachLegacyTopbarButton(app: AppLike, attempt = 0): Promi
 
   if (button.iconElement) {
     const svg = parseBrandIcon();
-    if (svg) button.iconElement.replaceChildren(svg);
-    button.iconElement.style.width = "1.2rem";
-    button.iconElement.style.height = "1.2rem";
+    if (svg) {
+      svg.classList.add("wp-brand-icon");
+      svg.setAttribute("width", "1em");
+      svg.setAttribute("height", "1em");
+      button.iconElement.replaceChildren(svg);
+    }
   }
 
   button.element.addEventListener("click", openSpa as EventListener);
@@ -292,26 +277,20 @@ export async function attachLegacyTopbarButton(app: AppLike, attempt = 0): Promi
   const group = new groupMod.ComfyButtonGroup(button.element);
   group.element.classList.add(BUTTON_GROUP_CLASS);
 
-  // Adjacent to LoRA Manager when present, else before-settings.
-  const loraGroup = document.querySelector(LORA_GROUP_SELECTOR);
-  if (loraGroup && loraGroup.parentElement) {
-    loraGroup.after(group.element);
-  } else {
-    settingsGroup.element.before(group.element);
-  }
+  settingsGroup.element.before(group.element);
 }
 
 // `actionBarButtons` — modern extension API path for ComfyUI ≥ 1.33.9.
 // ComfyUI's Vue actionbar renders our entry inside the rounded
-// `actionbar-container` next to LoRA Manager's button (extensions are
-// rendered in registration order, so installation order determines
-// left-to-right). The icon string is an Iconify class that ComfyUI's
-// Vue button component turns into a placeholder `<i>`; we swap it for
-// our brand SVG via `startIconReplaceLoop` once Vue has mounted the
-// element.
+// `actionbar-container`. The icon string is an Iconify class that
+// ComfyUI's Vue button component turns into a placeholder `<i>`; we
+// swap it for our brand SVG via `startIconReplaceLoop` once Vue has
+// mounted the element. Iconify class chosen so the placeholder is at
+// least vaguely on-brand if our SVG swap ever fails — `mdi--cards`
+// reads as "library / wildcards".
 export const ACTION_BAR_BUTTONS = [
   {
-    icon: "icon-[mdi--puzzle-outline] size-4",
+    icon: "icon-[mdi--cards-outline] size-4",
     tooltip: TOOLTIP,
     onClick: openSpa,
   },
