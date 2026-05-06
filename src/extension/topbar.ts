@@ -147,8 +147,14 @@ export async function supportsActionBar(): Promise<boolean> {
 /** Pixel size of the rendered brand SVG. Set as explicit `width` /
  *  `height` attrs so ComfyUI's
  *  `[&_svg:not([width]):not([height])]:size-4` Tailwind selector
- *  doesn't match and clobber us back to 16px. */
-const BRAND_ICON_PX = 24;
+ *  doesn't match and clobber us back to 16px.
+ *
+ *  20px chosen to match LoRA Manager's effective icon size — the
+ *  brand glyph reads cleanly at this size inside the h-7 (28px)
+ *  button without forcing the button to grow taller than its
+ *  siblings. 24px overflowed and made the button visually bigger
+ *  than LoRA's. */
+const BRAND_ICON_PX = 20;
 
 function parseBrandIcon(): SVGElement | null {
   if (typeof DOMParser === "undefined") return null;
@@ -196,10 +202,6 @@ function injectStyles(): void {
       border: 1px solid transparent;
       border-radius: 4px !important;
       color: #fff !important;
-      /* Override default 'py-1' (4px each side) so a 24px size-6 icon
-       * fits inside the h-7 (28px) button without clipping. 2px each
-       * side = 28 - 4 - 24 = exact fit. */
-      padding: 2px 8px !important;
       transition: all 0.2s ease;
     }
     button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS}:hover {
