@@ -158,13 +158,13 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
     expect(wrapper.find("[data-test='fv-values-table']").exists()).toBe(true);
   });
 
-  it("combine → shows CombineEditorBody placeholder", async () => {
+  it("combine → shows CombineEditorBody (template textarea rendered)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeCombine() },
     });
     await nextTick();
-    expect(wrapper.text()).toContain("TODO Task 17");
+    expect(wrapper.find("[data-test='cb-template']").exists()).toBe(true);
   });
 
   it("derivation → shows DerivationEditorBody placeholder", async () => {
@@ -454,8 +454,78 @@ describe("ModuleEditModal — fixed_values editor body", () => {
   it.todo("reset button absent on inline-created fixed_values — see Task 16");
 });
 
-describe("ModuleEditModal — combine preview (body)", () => {
-  it.todo("renders the template + output var — see Task 17");
+describe("ModuleEditModal — combine editor body", () => {
+  beforeEach(() => _resetForTests());
+
+  it("template textarea renders payload.template and emits patchPayload({ template })", async () => {
+    const mod = makeCombine();
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    const ta = wrapper.find("[data-test='cb-template']");
+    expect(ta.exists()).toBe(true);
+    expect((ta.element as HTMLTextAreaElement).value).toBe("Hello $name");
+    (ta.element as HTMLTextAreaElement).value = "$foo and $bar";
+    await ta.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect((saved.payload as { template?: string }).template).toBe("$foo and $bar");
+  });
+
+  it("output variable strips leading $ and special chars on input", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeCombine() },
+    });
+    await nextTick();
+    const input = wrapper.find("[data-test='cb-output-var']");
+    expect(input.exists()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe("greeting");
+    (input.element as HTMLInputElement).value = "$new-output!";
+    await input.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    // Leading $ stripped, hyphen and ! stripped → "newoutput"
+    expect((saved.payload as { output_var?: string }).output_var).toBe("newoutput");
+  });
+
+  it("detected inputs auto-extracted from template ($foo $bar → 2 chips)", async () => {
+    const mod: ModuleEntry = {
+      id: "33333333", type: "combine", enabled: true,
+      meta: { name: "Multi" }, entries: [],
+      payload: { template: "$foo and $bar", output_var: "result", input_vars: [] },
+      payload_hash: "h2",
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    const chips = wrapper.find("[data-test='cb-detected']");
+    expect(chips.exists()).toBe(true);
+    // Should have 2 var chips: foo and bar
+    const spans = chips.findAll("span.wp-pill");
+    expect(spans.length).toBe(2);
+    const texts = spans.map((s) => s.text());
+    expect(texts.some((t) => t.includes("foo"))).toBe(true);
+    expect(texts.some((t) => t.includes("bar"))).toBe(true);
+  });
+
+  it("preview section shows → stored as $output_var", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeCombine() },
+    });
+    await nextTick();
+    const preview = wrapper.find("[data-test='cb-preview']");
+    expect(preview.exists()).toBe(true);
+    expect(preview.text()).toContain("greeting");
+    expect(preview.text()).toContain("→");
+  });
 });
 
 describe("ModuleEditModal — derivation preview (body)", () => {
