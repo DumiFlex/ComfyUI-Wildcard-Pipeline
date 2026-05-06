@@ -110,3 +110,71 @@
    * reference the shorter name resolve to the same Inter stack. */
   --wp-font: var(--wp-font-sans);
 }
+
+/* ── Phase 5.5.7 — light theme overrides + canvas/node namespace ───────
+ * The graph-side widgets need to react to ComfyUI's `Comfy.ColorPalette`
+ * setting. Dark tokens stay on `:root`; `.wp-theme-light` overrides only
+ * surface / text / border tokens (brand accent, kind colors, var palette
+ * cascade unchanged). The `--wp-canvas-*` / `--wp-node-*` namespace
+ * mirrors ComfyUI's own canvas + node interior colors so the widget
+ * frame visually matches the surrounding ComfyUI chrome regardless of
+ * theme. */
+
+:root, .wp-theme-dark {
+  --wp-canvas-bg:   #161618;
+  --wp-node-bg:     #353535;
+  --wp-node-bg-2:   #2c2c2c;
+  --wp-node-bg-3:   #2a2a2a;
+  --wp-node-border: #1a1a1a;
+  --wp-node-text:   #d0d0d0;
+  --wp-node-text-2: #b0b0b0;
+}
+
+.wp-theme-light {
+  --wp-bg:    #e8e8e8;
+  --wp-bg-1:  #f5f5f5;
+  --wp-bg-2:  #fff;
+  --wp-bg-3:  #f0f0f0;
+  --wp-bg-deep: #d0d0d0;
+  --wp-bg4:    #e6e6ee;
+
+  --wp-bg-1: var(--wp-bg-1);
+  --wp-bg-2: var(--wp-bg-2);
+  --wp-bg-3: var(--wp-bg-3);
+  --wp-bg-4: var(--wp-bg4);
+
+  --wp-border:        #b0b0b0;
+  --wp-border-soft:   #c4c4c4;
+  --wp-border2:       #999;
+  --wp-border-strong: #999;
+
+  --wp-text:        #1a1a1a;
+  --wp-text2:       #555;
+  --wp-text3:       #888;
+  --wp-text4:       #6b7280;
+  --wp-text-muted:  #555;
+  --wp-text-dim:    #888;
+
+  /* Accent text adjusted for contrast on near-white surfaces. */
+  --wp-accent-text:        #6d28d9;
+  --wp-accent-text-strong: #5b21b6;
+
+  /* Status colors nudged darker for legibility on light surfaces. */
+  --wp-modified: #c2410c;
+  --wp-warn:     #b45309;
+  --wp-danger:   #b91c1c;
+  --wp-green:    #15803d;
+  --wp-red:      #b91c1c;
+  --wp-amber:    #b45309;
+
+  --wp-canvas-bg:   #d8d8d8;
+  --wp-node-bg:     #cacaca;
+  --wp-node-bg-2:   #b8b8b8;
+  --wp-node-bg-3:   #c2c2c2;
+  --wp-node-border: #888;
+  --wp-node-text:   #1a1a1a;
+  --wp-node-text-2: #404040;
+
+  --wp-shadow-lg: 0 12px 40px rgba(15,15,30,0.12);
+  --wp-overlay-bg: rgba(15, 15, 30, 0.30);
+}
