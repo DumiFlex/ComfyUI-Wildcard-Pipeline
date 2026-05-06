@@ -225,15 +225,21 @@
               class="wp-picker__row"
               :data-kind="row.type"
               :data-multi="multiMode || null"
-              :data-checked="multiMode && selected.has(row.id) ? '' : null"
+              :data-checked="selected.has(row.id) ? '' : null"
               :data-disabled="!isPickable(row) || null"
               :data-testid="`picker-row-${row.id}`"
+              :data-test="`picker-row-${row.id}`"
               :disabled="!isPickable(row)"
               :title="isPickable(row) ? '' : 'Module has no payload — cannot embed.'"
               @click="onRowClick(row)"
             >
-              <span v-if="multiMode" class="wp-picker__check">
-                <i v-if="selected.has(row.id)" class="pi pi-check" aria-hidden="true"></i>
+              <span
+                class="wp-picker__check"
+                data-test="picker-checkbox"
+                :class="{ on: selected.has(row.id) }"
+                aria-hidden="true"
+              >
+                <i v-if="selected.has(row.id)" class="pi pi-check"></i>
               </span>
               <span class="wp-picker__row-icon" :data-kind="row.type">
                 <i :class="['pi', kindIcon(row.type)]" aria-hidden="true"></i>
@@ -309,6 +315,13 @@
           <i v-if="embedding" class="pi pi-spin pi-spinner" aria-hidden="true"></i>
           <span>{{ embedding ? "Embedding…" : `Embed ${selected.size}` }}</span>
         </button>
+        <button
+          type="button"
+          class="wp-picker__btn wp-picker__btn--primary"
+          data-test="picker-add-btn"
+          :disabled="selected.size === 0"
+          @click="commitAdd"
+        ><i class="pi pi-plus" aria-hidden="true"></i> Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</button>
       </footer>
     </div>
   </ModalShell>
@@ -342,7 +355,7 @@
  * when a row has no payload (broken library entry) — that's the only
  * remaining gate.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 
 interface PickerModule {
@@ -368,6 +381,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** Single-pick or multi-pick result. Always an array, even for single. */
   (e: "pick", uuids: string[]): void;
+  /** Checkbox-driven multi-select: emits array of selected ids when user clicks "Add N". */
+  (e: "add", ids: string[]): void;
   (e: "close"): void;
 }>();
 
@@ -390,7 +405,9 @@ const rootEl = ref<HTMLDivElement | null>(null);
 
 const activeTab = ref<string | null>(null); // null = "All"
 const multiMode = ref(false);
-const selected = ref<Set<string>>(new Set());
+// Use reactive() so Vue can track .has()/.size/.add()/.delete()/.clear() individually
+// (plain ref<Set> only tracks the ref's .value assignment, not Set mutations).
+const selected = reactive<Set<string>>(new Set());
 
 // ── Filters ────────────────────────────────────────────────────────
 // Three orthogonal filters, all AND-combined with the kind tab +
@@ -523,7 +540,7 @@ watch(
     // Re-fetch each time the modal opens — library may have changed.
     void reload();
     // Reset transient UI state.
-    selected.value = new Set();
+    selected.clear();
     searchTerm.value = "";
     activeTab.value = null;
     favoritesOnly.value = false;
@@ -720,26 +737,27 @@ function isPickable(m: PickerModule): boolean {
 // ── Click handlers ─────────────────────────────────────────────────
 function toggleMulti() {
   multiMode.value = !multiMode.value;
-  if (!multiMode.value) selected.value = new Set();
+  if (!multiMode.value) selected.clear();
 }
 
 function onRowClick(m: PickerModule) {
   if (!isPickable(m)) return;
-  if (multiMode.value) {
-    if (selected.value.has(m.id)) selected.value.delete(m.id);
-    else selected.value.add(m.id);
-    // Force reactivity since Set mutation isn't tracked field-by-field.
-    selected.value = new Set(selected.value);
-  } else {
-    embedding.value = true;
-    emit("pick", [m.id]);
-  }
+  // Checkbox-driven multi-select: clicking any row toggles its checkbox.
+  // Single-click-add is replaced by the "Add N" footer button.
+  if (selected.has(m.id)) selected.delete(m.id);
+  else selected.add(m.id);
 }
 
 function onEmbedSelected() {
-  if (selected.value.size === 0) return;
+  if (selected.size === 0) return;
   embedding.value = true;
-  emit("pick", [...selected.value]);
+  emit("pick", [...selected]);
+}
+
+/** Checkbox-driven multi-select commit: emit `add` with all selected ids. */
+function commitAdd() {
+  emit("add", [...selected]);
+  selected.clear();
 }
 
 // ── Keyboard navigation ───────────────────────────────────────────
@@ -814,7 +832,7 @@ function captureKeyDown(e: KeyboardEvent) {
   }
 
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-    if (multiMode.value && selected.value.size > 0) {
+    if (multiMode.value && selected.size > 0) {
       e.preventDefault();
       onEmbedSelected();
     }
@@ -1220,17 +1238,11 @@ onBeforeUnmount(detachCaptureListeners);
 }
 
 .wp-picker__row {
-  /* Single-pick (default): 3 cols — icon | main | uuid.
-   * Multi-pick: 4 cols — checkbox | icon | main | uuid.
-   *
-   * Earlier rev used `auto 24px 1fr auto` for both modes. CSS Grid
-   * does NOT collapse a missing leading `auto` column, so the icon
-   * landed in col 1 (auto), main fell into the fixed 24px col 2 and
-   * got clipped to a single character. The `[data-multi]` variant
-   * below restores the 4-col layout only when the checkbox actually
-   * renders. */
+  /* Checkbox-driven multi-select: always 4 cols —
+   * checkbox | icon | main | uuid. The checkbox (18px) is always
+   * rendered so the grid is always 4-column. */
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-columns: 18px 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -1245,9 +1257,7 @@ onBeforeUnmount(detachCaptureListeners);
   text-align: left;
   transition: background 100ms ease;
 }
-.wp-picker__row[data-multi] {
-  grid-template-columns: 18px 24px minmax(0, 1fr) auto;
-}
+/* [data-multi] no longer changes the column layout — checkbox is always present. */
 .wp-picker__row:hover { background: var(--wp-bg-3); }
 .wp-picker__row:focus-visible {
   /* Keyboard focus. The SPA's outset accent halo
@@ -1291,7 +1301,8 @@ onBeforeUnmount(detachCaptureListeners);
   font-size: 9px;
   color: #fff;
 }
-.wp-picker__row[data-checked] .wp-picker__check {
+.wp-picker__row[data-checked] .wp-picker__check,
+.wp-picker__check.on {
   background: var(--wp-accent-600);
   border-color: var(--wp-accent-500);
 }

@@ -151,6 +151,90 @@ describe("ModulePickerModal — filters", () => {
   });
 });
 
+// ── mountPicker helper ────────────────────────────────────────────────────────
+// Stubs fetch so the component's reload() resolves immediately with the
+// provided modules array (no categories needed for multi-select tests).
+// ModalShell is stubbed with a plain passthrough div to avoid the slot
+// re-mounting issue that the teleport:true stub causes: with Teleport
+// stubbed at the ModalShell level, Vue re-creates (rather than patches)
+// the v-for row elements on re-render, making DOMWrapper references stale.
+async function mountPicker(opts: {
+  modules: Array<{ id: string; type: string; name: string; payload: Record<string, unknown> }>;
+}) {
+  vi.stubGlobal(
+    "fetch",
+    stubFetch({
+      "/wp/api/modules":    { items: opts.modules },
+      "/wp/api/categories": { items: [] },
+    }),
+  );
+  const wrapper = mount(ModulePickerModal, {
+    global: {
+      stubs: {
+        teleport: true,
+        ModalShell: { template: "<div><slot /></div>" },
+      },
+    },
+    props: { visible: true, alreadyAdded: [] },
+  });
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+  await nextTick();
+  return wrapper;
+}
+
+describe("ModulePickerModal multi-select", () => {
+  it("renders a checkbox cell on every row", async () => {
+    const wrapper = await mountPicker({
+      modules: [
+        { id: "a1", type: "wildcard", name: "hair_style", payload: {} },
+        { id: "b2", type: "fixed_values", name: "style_pack", payload: {} },
+      ],
+    });
+    expect(wrapper.findAll('[data-test="picker-checkbox"]')).toHaveLength(2);
+  });
+
+  it("clicking a row toggles its checkbox", async () => {
+    const wrapper = await mountPicker({
+      modules: [{ id: "a1", type: "wildcard", name: "hair_style", payload: {} }],
+    });
+    const row = wrapper.find('[data-test="picker-row-a1"]');
+    await row.trigger("click");
+    expect(row.find('[data-test="picker-checkbox"]').classes()).toContain("on");
+    await row.trigger("click");
+    expect(row.find('[data-test="picker-checkbox"]').classes()).not.toContain("on");
+  });
+
+  it("footer button label updates with selection count", async () => {
+    const wrapper = await mountPicker({
+      modules: [
+        { id: "a1", type: "wildcard", name: "hair_style", payload: {} },
+        { id: "b2", type: "wildcard", name: "mood", payload: {} },
+      ],
+    });
+    expect(wrapper.find('[data-test="picker-add-btn"]').text()).toMatch(/Add 0 modules/);
+    await wrapper.find('[data-test="picker-row-a1"]').trigger("click");
+    expect(wrapper.find('[data-test="picker-add-btn"]').text()).toMatch(/Add 1 module/);
+    await wrapper.find('[data-test="picker-row-b2"]').trigger("click");
+    expect(wrapper.find('[data-test="picker-add-btn"]').text()).toMatch(/Add 2 modules/);
+  });
+
+  it("Add button emits all selected module ids on click", async () => {
+    const wrapper = await mountPicker({
+      modules: [
+        { id: "a1", type: "wildcard", name: "hair_style", payload: {} },
+        { id: "b2", type: "wildcard", name: "mood", payload: {} },
+      ],
+    });
+    await wrapper.find('[data-test="picker-row-a1"]').trigger("click");
+    await wrapper.find('[data-test="picker-row-b2"]').trigger("click");
+    await wrapper.find('[data-test="picker-add-btn"]').trigger("click");
+    const events = wrapper.emitted("add");
+    expect(events).toHaveLength(1);
+    expect(events![0][0]).toEqual(["a1", "b2"]);
+  });
+});
+
 describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
   /**
    * Lock the post-5.5.6 contract: every embeddable kind with a payload
