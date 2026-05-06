@@ -7,7 +7,6 @@
         <div class="wp-picker__head-text">
           <div class="wp-picker__eyebrow">
             Add modules from library
-            <span v-if="multiMode" class="wp-picker__eyebrow-tag">multi-select</span>
           </div>
           <div class="wp-picker__title">
             Browse Library
@@ -16,17 +15,6 @@
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          class="wp-picker__multi-toggle"
-          :data-active="multiMode || null"
-          :aria-pressed="multiMode"
-          :title="multiMode ? 'Switch to single-pick' : 'Switch to multi-pick'"
-          @click="toggleMulti"
-        >
-          <i class="pi pi-check-square" aria-hidden="true"></i>
-          Multi
-        </button>
         <button type="button" class="wp-picker__close" aria-label="Close" @click="$emit('close')">
           <i class="pi pi-times" aria-hidden="true"></i>
         </button>
@@ -224,7 +212,6 @@
               type="button"
               class="wp-picker__row"
               :data-kind="row.type"
-              :data-multi="multiMode || null"
               :data-checked="selected.has(row.id) ? '' : null"
               :data-disabled="!isPickable(row) || null"
               :data-testid="`picker-row-${row.id}`"
@@ -254,8 +241,8 @@
         </template>
       </div>
 
-      <!-- Selection drawer (multi-mode only, when ≥1 picked) -->
-      <div v-if="multiMode && selected.size > 0" class="wp-picker__selection">
+      <!-- Selection drawer (when ≥1 picked) -->
+      <div v-if="selected.size > 0" class="wp-picker__selection">
         <div class="wp-picker__selection-top">
           <span class="wp-picker__selection-count">
             <strong>{{ selected.size }}</strong>
@@ -297,24 +284,11 @@
         <span class="wp-picker__hint">
           <kbd>↑</kbd><kbd>↓</kbd> nav
           · <kbd>tab</kbd> kind
-          <span v-if="multiMode">· <kbd>space</kbd> toggle · <kbd>⌘↵</kbd> embed</span>
-          <span v-else>· <kbd>↵</kbd> embed</span>
-          · <kbd>m</kbd> {{ multiMode ? "exit multi" : "multi" }}
+          · <kbd>space</kbd> toggle · <kbd>⌘↵</kbd> add
           · <kbd>esc</kbd> cancel
         </span>
         <span class="wp-picker__footer-spacer"></span>
         <button type="button" class="wp-picker__btn" @click="$emit('close')">Cancel</button>
-        <button
-          v-if="multiMode"
-          type="button"
-          class="wp-picker__btn wp-picker__btn--primary"
-          :disabled="selected.size === 0 || embedding"
-          data-testid="picker-embed-multi"
-          @click="onEmbedSelected"
-        >
-          <i v-if="embedding" class="pi pi-spin pi-spinner" aria-hidden="true"></i>
-          <span>{{ embedding ? "Embedding…" : `Embed ${selected.size}` }}</span>
-        </button>
         <button
           type="button"
           class="wp-picker__btn wp-picker__btn--primary"
@@ -329,31 +303,22 @@
 
 <script setup lang="ts">
 /**
- * ModulePickerModal — Phase 5.5.4 library browser.
+ * ModulePickerModal — library browser for WP_Context nodes.
  *
- * Replaces the legacy "kind chooser" (which only knew about
- * fixed_values) with a real library browser: lists every module the
- * SPA returns from `/wp/api/modules/list`, lets the user filter by
- * kind + search, and emits picks back to the parent ContextWidget so
- * it can call `/wp/api/modules/embed-bundle` and store the resulting
- * snapshots in the workflow JSON.
+ * Lists every module the SPA returns from `/wp/api/modules`, lets the
+ * user filter by kind + search + tags + category, and emits an `add`
+ * event with the array of selected ids when the user clicks "Add N
+ * modules". The parent (ContextWidget) calls embed-bundle — the picker
+ * stays state-light and easy to test in isolation.
  *
- * Pick flow:
- *   - Single-pick (default): click a row → emit `pick` with one uuid →
- *     close. Fastest path; matches the recommended UX.
- *   - Multi-pick (toggle in header): rows accumulate in a sticky
- *     selection drawer. "Embed N" emits all uuids at once.
+ * Add flow: checkboxes are always visible. Click any row to toggle it;
+ * a selection drawer appears above the footer when ≥1 module is
+ * selected. Press "Add N modules" (or Cmd/Ctrl+Enter) to confirm.
  *
- * The picker DOES NOT call embed-bundle itself — that's the parent's
- * job, so the picker stays state-light and easy to test in isolation.
- *
- * Surfacing for non-wildcard kinds: post-5.5.6 every kind is
- * pickable. The runtime engine has handlers for all six kinds
- * (wildcard / fixed_values / combine / derivation / constraint /
- * pipeline) registered in `engine/modules/__init__.py`, so a
- * WP_Context graph node can run any mix. Rows still render disabled
- * when a row has no payload (broken library entry) — that's the only
- * remaining gate.
+ * Every embeddable kind with a payload is pickable. Pipeline is
+ * intentionally hidden until the modal grows a pipeline preview.
+ * Rows render disabled only when their payload is missing (broken
+ * library entry).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -379,9 +344,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  /** Single-pick or multi-pick result. Always an array, even for single. */
-  (e: "pick", uuids: string[]): void;
-  /** Checkbox-driven multi-select: emits array of selected ids when user clicks "Add N". */
+  /** Emits array of selected module ids when user clicks "Add N modules". */
   (e: "add", ids: string[]): void;
   (e: "close"): void;
 }>();
@@ -396,7 +359,6 @@ const modules = ref<PickerModule[]>([]);
 const categories = ref<CategoryRow[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
-const embedding = ref(false);
 
 const searchTerm = ref("");
 const searchFocused = ref(false);
@@ -404,7 +366,6 @@ const searchInput = ref<HTMLInputElement | null>(null);
 const rootEl = ref<HTMLDivElement | null>(null);
 
 const activeTab = ref<string | null>(null); // null = "All"
-const multiMode = ref(false);
 // Use reactive() so Vue can track .has()/.size/.add()/.delete()/.clear() individually
 // (plain ref<Set> only tracks the ref's .value assignment, not Set mutations).
 const selected = reactive<Set<string>>(new Set());
@@ -548,7 +509,6 @@ watch(
     selectedTags.value = new Set();
     selectedCategoryId.value = null;
     filtersOpen.value = false;
-    embedding.value = false;
     void nextTick(() => searchInput.value?.focus());
   },
   { immediate: true },
@@ -735,26 +695,14 @@ function isPickable(m: PickerModule): boolean {
 }
 
 // ── Click handlers ─────────────────────────────────────────────────
-function toggleMulti() {
-  multiMode.value = !multiMode.value;
-  if (!multiMode.value) selected.clear();
-}
-
 function onRowClick(m: PickerModule) {
   if (!isPickable(m)) return;
-  // Checkbox-driven multi-select: clicking any row toggles its checkbox.
-  // Single-click-add is replaced by the "Add N" footer button.
+  // Clicking a row toggles its checkbox. Confirm with "Add N modules" footer button.
   if (selected.has(m.id)) selected.delete(m.id);
   else selected.add(m.id);
 }
 
-function onEmbedSelected() {
-  if (selected.size === 0) return;
-  embedding.value = true;
-  emit("pick", [...selected]);
-}
-
-/** Checkbox-driven multi-select commit: emit `add` with all selected ids. */
+/** Emit `add` with all selected ids and reset selection. */
 function commitAdd() {
   emit("add", [...selected]);
   selected.clear();
@@ -832,9 +780,9 @@ function captureKeyDown(e: KeyboardEvent) {
   }
 
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-    if (multiMode.value && selected.size > 0) {
+    if (selected.size > 0) {
       e.preventDefault();
-      onEmbedSelected();
+      commitAdd();
     }
     return;
   }
@@ -862,20 +810,6 @@ function captureKeyDown(e: KeyboardEvent) {
 
   const target = e.target as HTMLElement | null;
   const inSearch = target === searchInput.value;
-
-  // `m` toggles multi-pick mode — but only when the search input is
-  // NOT focused (so users can still type the letter "m" to filter).
-  // Any modifier disqualifies (avoids stealing Cmd+M / Alt+M from
-  // the host).
-  if (
-    e.key === "m" &&
-    !inSearch &&
-    !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
-  ) {
-    e.preventDefault();
-    toggleMulti();
-    return;
-  }
 
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
 
@@ -1005,16 +939,6 @@ onBeforeUnmount(detachCaptureListeners);
   font-weight: 600;
   display: flex; align-items: center; gap: 8px;
 }
-.wp-picker__eyebrow-tag {
-  font-family: var(--wp-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: var(--wp-accent-text);
-  background: rgba(139, 92, 246, 0.16);
-  border: 1px solid rgba(139, 92, 246, 0.36);
-  padding: 1px 5px;
-  border-radius: 999px;
-}
 .wp-picker__title {
   font-size: 14px;
   font-weight: 600;
@@ -1027,37 +951,6 @@ onBeforeUnmount(detachCaptureListeners);
   margin-left: 6px;
   font-weight: 400;
 }
-.wp-picker__multi-toggle {
-  height: 26px;
-  padding: 0 10px;
-  display: inline-flex; align-items: center; gap: 6px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 500;
-  font-family: inherit;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-.wp-picker__multi-toggle:hover {
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border-color: var(--wp-border-strong);
-}
-.wp-picker__multi-toggle[data-active] {
-  background: rgba(139, 92, 246, 0.16);
-  border-color: rgba(139, 92, 246, 0.5);
-  color: var(--wp-accent-text-strong, var(--wp-accent-text));
-}
-.wp-picker__multi-toggle:focus-visible {
-  outline: none;
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
-}
-.wp-picker__multi-toggle .pi { font-size: 10px; }
-
 .wp-picker__close {
   width: 28px; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -1238,9 +1131,8 @@ onBeforeUnmount(detachCaptureListeners);
 }
 
 .wp-picker__row {
-  /* Checkbox-driven multi-select: always 4 cols —
-   * checkbox | icon | main | uuid. The checkbox (18px) is always
-   * rendered so the grid is always 4-column. */
+  /* Always 4-column grid: checkbox | icon | main | uuid.
+   * Checkbox (18px) is always rendered. */
   display: grid;
   grid-template-columns: 18px 24px minmax(0, 1fr) auto;
   align-items: center;
@@ -1257,7 +1149,6 @@ onBeforeUnmount(detachCaptureListeners);
   text-align: left;
   transition: background 100ms ease;
 }
-/* [data-multi] no longer changes the column layout — checkbox is always present. */
 .wp-picker__row:hover { background: var(--wp-bg-3); }
 .wp-picker__row:focus-visible {
   /* Keyboard focus. The SPA's outset accent halo
@@ -1286,8 +1177,6 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__row[data-disabled]:hover { background: transparent; }
 
-/* multi-mode: row gets a checkbox column on the left.
- * single-mode: the checkbox column collapses (auto width with no element). */
 .wp-picker__check {
   width: 16px; height: 16px;
   border: 1.4px solid var(--wp-border-strong);

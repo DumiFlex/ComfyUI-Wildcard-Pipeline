@@ -545,12 +545,12 @@ describe("ContextWidget — fixed_values picked from library", () => {
       props: { nodeId: 300, initialJson: '{"version":1,"modules":[]}', upstreamVars: [], onChange },
     });
 
-    // Drive a library pick by directly invoking the picker emit
+    // Drive a library add by directly invoking the picker emit
     // — the picker UI is exercised by its own tests; here we want
-    // the widget's onLibraryPick branch to run with our stub.
+    // the widget's onPickerAdd branch to run with our stub.
     const picker = wrapper.findComponent({ name: "ModulePickerModal" });
     expect(picker.exists()).toBe(true);
-    picker.vm.$emit("pick", ["12345abc"]);
+    picker.vm.$emit("add", ["12345abc"]);
 
     await flushPromises();
 

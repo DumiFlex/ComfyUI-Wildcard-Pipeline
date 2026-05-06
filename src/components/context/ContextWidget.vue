@@ -599,9 +599,9 @@ function summaryFor(m: ModuleEntry): string {
  * array — they each become their own card so the user sees what
  * was auto-included.
  */
-/** Checkbox-driven multi-select: `add` event emits string[] of selected ids. */
-function onPickerAdd(ids: string[]): void {
-  if (ids.length > 0) void onLibraryPick(ids);
+async function onPickerAdd(ids: string[]) {
+  if (ids.length === 0) return;
+  await onLibraryPick(ids);
 }
 
 async function onLibraryPick(uuids: string[]) {
@@ -1355,7 +1355,6 @@ function onDrop(ev: DragEvent, targetId: string | null) {
     <ModulePickerModal
       :visible="showPicker"
       :already-added="value.modules.map((m) => m.id)"
-      @pick="onLibraryPick"
       @add="onPickerAdd"
       @close="showPicker = false"
     />
