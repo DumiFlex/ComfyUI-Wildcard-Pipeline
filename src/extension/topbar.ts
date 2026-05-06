@@ -225,10 +225,12 @@ function applyBrandIcon(): number {
     if (btn.querySelector("svg.wp-brand-icon")) return;
     const fresh = parseBrandIcon();
     if (!fresh) return;
-    fresh.classList.add("wp-brand-icon", "size-4");
-    // No explicit width/height — `size-4` (Tailwind 1rem) handles it,
-    // matching ComfyUI's other actionbar icons. Hardcoded `20px` was a
-    // LoRA-Manager-replica detail the user explicitly opted out of.
+    fresh.classList.add("wp-brand-icon", "size-5");
+    // No explicit width/height — `size-5` (Tailwind 1.25rem = 20px)
+    // handles it. Slightly larger than ComfyUI's default `size-4` (16px)
+    // because the brand glyph reads better at 20px inside the h-7
+    // (28px) button — same effective icon size LoRA Manager ended up
+    // with via its `width: 20px; height: 20px` inline override.
     btn.replaceChildren(fresh);
   });
   return buttons.length;
@@ -318,8 +320,10 @@ export async function attachLegacyTopbarButton(app: AppLike, attempt = 0): Promi
   if (button.iconElement) {
     const svg = parseBrandIcon();
     if (svg) {
-      svg.classList.add("wp-brand-icon", "size-4");
-      // No explicit width/height — `size-4` (Tailwind 1rem) handles it.
+      svg.classList.add("wp-brand-icon", "size-5");
+      // No explicit width/height — `size-5` (Tailwind 1.25rem = 20px).
+      // Matches the modern-path icon size for visual parity if a host
+      // running both code paths ever displays them side by side.
       button.iconElement.replaceChildren(svg);
     }
   }
