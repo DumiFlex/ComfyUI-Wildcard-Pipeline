@@ -194,6 +194,10 @@ function injectStyles(): void {
       border: 1px solid transparent;
       border-radius: 4px !important;
       color: #fff !important;
+      /* Override default 'py-1' (4px each side) so a 24px size-6 icon
+       * fits inside the h-7 (28px) button without clipping. 2px each
+       * side = 28 - 4 - 24 = exact fit. */
+      padding: 2px 8px !important;
       transition: all 0.2s ease;
     }
     button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS}:hover {
@@ -225,12 +229,12 @@ function applyBrandIcon(): number {
     if (btn.querySelector("svg.wp-brand-icon")) return;
     const fresh = parseBrandIcon();
     if (!fresh) return;
-    fresh.classList.add("wp-brand-icon", "size-5");
-    // No explicit width/height — `size-5` (Tailwind 1.25rem = 20px)
-    // handles it. Slightly larger than ComfyUI's default `size-4` (16px)
-    // because the brand glyph reads better at 20px inside the h-7
-    // (28px) button — same effective icon size LoRA Manager ended up
-    // with via its `width: 20px; height: 20px` inline override.
+    fresh.classList.add("wp-brand-icon", "size-6");
+    // `size-6` = 24px. Bigger than ComfyUI's default `size-4` (16px)
+    // because the brand glyph reads better punched up inside the h-7
+    // (28px) button. Goes paired with the `padding: 2px 8px` override
+    // in injectStyles — default `py-1` (4px each side) would cap the
+    // icon area at 20px and clip a 24px glyph.
     btn.replaceChildren(fresh);
   });
   return buttons.length;
