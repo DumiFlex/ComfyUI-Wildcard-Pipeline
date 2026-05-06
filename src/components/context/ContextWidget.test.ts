@@ -40,9 +40,10 @@ describe("ContextWidget.vue", () => {
     const wrapper = mount(ContextWidget, {
       props: { nodeId: 1, initialJson: '{"version":1,"modules":[]}', upstreamVars: [], onChange: () => {} },
     });
-    // Empty hero shows the brand title + the "Add your first module" CTA.
-    expect(wrapper.text()).toContain("Wildcard Pipeline");
-    expect(wrapper.text()).toContain("Add your first module");
+    // Empty hero shows the "No modules yet" title + the "Add module" CTA.
+    expect(wrapper.find('[data-test="context-empty"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("No modules yet");
+    expect(wrapper.text()).toContain("Add module");
   });
 
   it("opens the library picker and surfaces it in the DOM", async () => {

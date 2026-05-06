@@ -14,7 +14,6 @@ import {
 import ModulePickerModal from "./ModulePickerModal.vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
-import Logo from "../shared/Logo.vue";
 import { dragState } from "./drag-store";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
@@ -821,14 +820,26 @@ function setAllCollapsed(collapsed: boolean) {
   };
 }
 
-/** True when EVERY module is collapsed. Drives the section-header
- *  toggle's icon + tooltip — chevron flips between "expand all" and
- *  "collapse all" semantics based on current majority state. Mixed
- *  state (some collapsed, some not) reads as "not all collapsed"
- *  → next click collapses all. */
-const allCollapsed = computed<boolean>(() =>
-  value.value.modules.length > 0 && value.value.modules.every((m) => m.collapsed === true),
-);
+/** Toolbar counts — total modules + how many are enabled. */
+const totalCount = computed(() => value.value.modules.length);
+const enabledCount = computed(() => value.value.modules.filter((m) => m.enabled).length);
+
+/** Toolbar bulk actions — wrappers so the toolbar template stays compact. */
+function collapseAll(): void { setAllCollapsed(true); }
+function expandAll(): void { setAllCollapsed(false); }
+function toggleAllEnabled(): void {
+  const anyEnabled = value.value.modules.some((m) => m.enabled);
+  // If any are enabled, disable all; otherwise enable all.
+  value.value = {
+    ...value.value,
+    modules: value.value.modules.map((m) => ({ ...m, enabled: !anyEnabled })),
+  };
+}
+
+/** Open the SPA library in a new tab. */
+function openSpaLibrary(): void {
+  window.open("/wp/", "_blank", "noopener");
+}
 
 /**
  * Edit opens `ModuleEditModal` for every kind. The modal renders a
@@ -1095,18 +1106,10 @@ function onDrop(ev: DragEvent, targetId: string | null) {
          stack. Recovery panel + drop-zone live outside the swap. -->
     <Transition name="wp-page" mode="out-in">
       <div v-if="!isEmpty" key="populated" class="wp-page">
-        <!-- Section label matches AssemblerHelper "VARIABLES" / "PREVIEW"
-             and picker section labels for visual consistency. -->
-        <div class="wp-section-label">
-          <i class="pi pi-th-large wp-section-label__icon" aria-hidden="true"></i>
-          Modules
-          <!-- Hide count when 0 — during the populated→empty Transition the
-               array is already empty but this block is still rendering its
-               last patched state during the fade-out. -->
-          <span
-            v-if="value.modules.length > 0"
-            class="wp-section-label__count"
-          >{{ value.modules.length }}</span>
+        <!-- Toolbar: module count + bulk-drift refresh + collapse/expand/toggle-all. -->
+        <div class="wp-w-toolbar">
+          <span class="wp-w-toolbar-label">modules</span>
+          <span class="wp-w-count">{{ enabledCount }} / {{ totalCount }}</span>
 
           <!-- Bulk-refresh drifted. Visible only when at least one module
                drifted from its library version; orange accent matches the
@@ -1123,23 +1126,28 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             <span>refresh {{ driftedCount }} drifted</span>
           </button>
 
-          <!-- Bulk-collapse toggle. Chevron direction follows the
-               action that the click WILL take: ▾ when nothing is
-               collapsed (click → collapse all), ▸ when everything is
-               (click → expand all). Mixed state reads as "not all
-               collapsed" so it nudges toward collapse first. Pushed
-               to the right of the row via flex auto-margin. -->
+          <span class="wp-w-toolbar-spacer" />
           <button
-            v-if="value.modules.length > 1"
             type="button"
-            class="wp-section-label__bulk"
-            :title="allCollapsed ? 'Expand all modules' : 'Collapse all modules'"
-            data-testid="bulk-collapse-toggle"
-            @click="setAllCollapsed(!allCollapsed)"
-          >
-            <i :class="['pi', allCollapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i>
-            <span>{{ allCollapsed ? "expand all" : "collapse all" }}</span>
-          </button>
+            class="wp-btn wp-btn--icon"
+            title="Collapse all"
+            aria-label="Collapse all modules"
+            @click="collapseAll"
+          ><i class="pi pi-chevron-up" /></button>
+          <button
+            type="button"
+            class="wp-btn wp-btn--icon"
+            title="Expand all"
+            aria-label="Expand all modules"
+            @click="expandAll"
+          ><i class="pi pi-chevron-down" /></button>
+          <button
+            type="button"
+            class="wp-btn wp-btn--icon"
+            title="Toggle all enabled"
+            aria-label="Toggle all enabled"
+            @click="toggleAllEnabled"
+          ><i class="pi pi-eye" /></button>
         </div>
 
         <TransitionGroup name="wp-list" tag="div" class="wp-modules">
@@ -1289,44 +1297,45 @@ function onDrop(ev: DragEvent, targetId: string | null) {
       </div>
         </TransitionGroup>
 
-        <button
-          type="button"
-          class="wp-add-btn"
-          data-testid="open-picker"
-          @click="openPicker"
-        >+ add module</button>
+        <!-- Footer: primary add + SPA link. Shown only when list is non-empty. -->
+        <div class="wp-w-footer">
+          <button
+            class="wp-btn wp-btn--primary"
+            data-testid="open-picker"
+            @click="openPicker"
+          >
+            <i class="pi pi-plus" /> Add module
+          </button>
+          <button class="wp-btn" @click="openSpaLibrary">
+            Open in SPA <i class="pi pi-external-link" />
+          </button>
+        </div>
       </div>
 
-      <!-- Empty-state hero (2.3) — shown when modules is empty and there's
-           no recovery panel up. Brand language matches the picker modal:
-           Logo + plain title + body + gradient CTA. -->
+      <!-- Empty-state hero — shown when modules is empty and there's no
+           recovery panel up. Brand glyph + dual CTA (add + SPA link). -->
       <div
         v-else-if="!parseError"
         key="empty"
-        class="wp-emptystate"
+        class="wp-empty-hero"
+        data-test="context-empty"
       >
-        <div class="wp-emptystate__logo">
-          <Logo :size="40" />
+        <div class="wp-empty-hero-glyph" aria-hidden="true" />
+        <div class="wp-empty-hero-title">No modules yet</div>
+        <div class="wp-empty-hero-sub">
+          Add a wildcard, fixed values pack, combine, derivation or constraint to start
+          building this context.
         </div>
-        <div class="wp-emptystate__title">Wildcard Pipeline</div>
-        <div class="wp-emptystate__body">
-          Compose prompt fragments as modules. Reference them in your template
-          with <code>$variable</code>.
+        <div class="wp-empty-hero-actions">
+          <button
+            class="wp-btn wp-btn--primary"
+            data-testid="open-picker"
+            @click="openPicker"
+          >
+            <i class="pi pi-plus" /> Add module
+          </button>
+          <button class="wp-btn" @click="openSpaLibrary">Open library ↗</button>
         </div>
-        <!-- 4.5 — first-run hint, dismissed permanently after first click. -->
-        <div v-if="!firstRunHintDismissed" class="wp-firstrun-hint" aria-hidden="true">
-          <span class="wp-firstrun-hint__caption">Start here</span>
-          <i class="pi pi-arrow-down wp-firstrun-hint__arrow"></i>
-        </div>
-        <button
-          type="button"
-          class="wp-emptystate__cta"
-          data-testid="open-picker"
-          @click="openPicker"
-        >
-          <i class="pi pi-plus" aria-hidden="true"></i>
-          Add your first module
-        </button>
       </div>
     </Transition>
 
@@ -1580,64 +1589,42 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
 }
 
-/* ── Empty-state hero (2.3) + first-run hint (4.5) ──────────────────────
- * Restrained to match the picker modal — plain title, body, gradient
- * action button. Same visual restraint principle as picker so the
- * transition empty → populated is smooth, not jarring. */
-.wp-emptystate {
+/* ── Empty-state hero (Task 10) ─────────────────────────────────────────
+ * Brand-glyph hero with "No modules yet" copy + dual CTA. Replaces the
+ * old .wp-emptystate layout (logo + "Wildcard Pipeline" title). */
+.wp-empty-hero {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 16px 12px 12px;
-  gap: 6px;
-  /* Fade-in is handled by the outer .wp-page Transition (mode="out-in"),
-   * so no element-local keyframe is needed here. */
-}
-.wp-emptystate__logo {
-  display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 4px;
+  padding: 32px 16px;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px dashed var(--wp-border-soft, var(--wp-border2));
+  border-radius: var(--wp-radius, 4px);
+  gap: 10px;
+  text-align: center;
 }
-.wp-emptystate__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--wp-text);
-  letter-spacing: 0.01em;
+.wp-empty-hero-glyph {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--wp-kind-wildcard), var(--wp-accent) 60%, transparent 75%);
+  opacity: 0.5;
+  filter: blur(0.5px);
+  position: relative;
 }
-.wp-emptystate__body {
-  font-size: 11px;
-  color: var(--wp-text2);
-  max-width: 240px;
-  line-height: 1.5;
-  margin-bottom: 2px;
+.wp-empty-hero-glyph::after {
+  content: "✦";
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 18px; opacity: 0.85;
 }
-.wp-emptystate__body code {
-  font-family: var(--wp-font-mono);
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-violet-bg);
-  color: var(--wp-violet);
-}
-.wp-firstrun-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: var(--wp-violet);
-  font-size: 10px;
-  font-family: var(--wp-font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  gap: 1px;
-  animation: wp-bob 1.4s ease-in-out infinite;
-}
-.wp-firstrun-hint__arrow { font-size: 12px; line-height: 1; }
-@keyframes wp-bob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(3px); }
-}
+.wp-empty-hero-title { font: 500 13px/1.3 var(--wp-font-sans); color: var(--wp-text); }
+.wp-empty-hero-sub   { font: 11px/1.5 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text2)); max-width: 280px; }
+.wp-empty-hero-actions { display: flex; gap: 6px; margin-top: 4px; }
+
+/* Kept for CSS cascade completeness — actual value that gets used in
+ * empty-state CTA is via .wp-btn--primary below. Placeholder rule to avoid
+ * breaking any potential refs to these old class names (none after Task 10). */
 .wp-emptystate__cta {
   background: var(--wp-brand-gradient);
   border: none;
@@ -1996,30 +1983,38 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   width: 100%;
 }
 
-/* Smaller sibling of the empty-state CTA — same brand gradient surface so
- * the action affordance reads identically across empty + populated states. */
-.wp-add-btn {
-  background: var(--wp-brand-gradient);
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  color: #fff;
-  font-family: var(--wp-font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 7px;
+/* ── Toolbar (Task 10) ──────────────────────────────────────────────────
+ * Replaces wp-section-label for the populated header row. */
+.wp-w-toolbar { display: flex; align-items: center; gap: 4px; padding: 4px 0 8px; }
+.wp-w-toolbar-label { font: 500 11px/1 var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text3)); text-transform: lowercase; letter-spacing: 0.02em; }
+.wp-w-count { font: 500 11px/1 var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); padding: 2px 6px; background: var(--wp-bg-deep, var(--wp-bg)); border-radius: var(--wp-radius, 4px); }
+.wp-w-toolbar-spacer { flex: 1; }
+
+/* ── Generic button system (Task 10) ────────────────────────────────────
+ * .wp-btn--icon-sm (Task 9) already exists for inline card actions;
+ * these are the larger toolbar/footer variants. */
+.wp-btn {
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border2);
+  color: var(--wp-text);
+  font: 500 11px/1 var(--wp-font-sans);
+  padding: 5px 9px;
+  border-radius: var(--wp-radius, 4px);
   cursor: pointer;
-  width: 100%;
-  text-align: center;
-  letter-spacing: 0.03em;
-  /* Dimmed at rest; hover lifts to full brand saturation. */
-  filter: brightness(0.82) saturate(0.85);
-  transition: filter 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background .12s ease, border-color .12s ease;
 }
-.wp-add-btn:hover { filter: brightness(1) saturate(1); }
-.wp-add-btn:focus-visible {
-  outline: 2px solid var(--wp-violet);
-  outline-offset: 2px;
-}
+.wp-btn:hover { background: var(--wp-bg4); border-color: var(--wp-border, var(--wp-border2)); }
+.wp-btn--icon { padding: 5px 6px; width: 26px; height: 26px; justify-content: center; }
+.wp-btn--icon .pi { font-size: 12px; }
+.wp-btn--primary { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; }
+.wp-btn--primary:hover { background: var(--wp-accent); border-color: var(--wp-accent); filter: brightness(1.08); }
+
+/* ── Footer (Task 10) ───────────────────────────────────────────────── */
+.wp-w-footer { display: flex; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--wp-border-soft, var(--wp-border2)); }
+.wp-w-footer .wp-btn { flex: 1; justify-content: center; }
 
 .wp-drop-end {
   display: none;
