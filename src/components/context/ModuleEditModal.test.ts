@@ -167,13 +167,13 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
     expect(wrapper.find("[data-test='cb-template']").exists()).toBe(true);
   });
 
-  it("derivation → shows DerivationEditorBody placeholder", async () => {
+  it("derivation → shows DerivationEditorBody (add-rule button rendered)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeDerivation() },
     });
     await nextTick();
-    expect(wrapper.text()).toContain("TODO Task 18");
+    expect(wrapper.find("[data-test='dv-add-rule']").exists()).toBe(true);
   });
 
   it("constraint → shows ConstraintEditorBody placeholder", async () => {
@@ -528,8 +528,121 @@ describe("ModuleEditModal — combine editor body", () => {
   });
 });
 
-describe("ModuleEditModal — derivation preview (body)", () => {
-  it.todo("renders rule list with branches and else — see Task 18");
+describe("ModuleEditModal — derivation editor body", () => {
+  beforeEach(() => _resetForTests());
+
+  it("Add rule appends to payload.rules on save", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeDerivation() },
+    });
+    await nextTick();
+    // starts with 0 rules; click Add rule
+    await wrapper.find("[data-test='dv-add-rule']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const rules = (saved.payload as { rules?: unknown[] } | undefined)?.rules ?? [];
+    expect(rules.length).toBe(1);
+  });
+
+  it("IF branch When-var input emits patchPayload with updated branches[0].condition.var", async () => {
+    const mod: ModuleEntry = {
+      id: "22222222", type: "derivation", enabled: true,
+      meta: { name: "Mood" }, entries: [],
+      payload: {
+        rules: [
+          {
+            id: "r1",
+            branches: [{ condition: { var: "", op: "equals", value: "" }, action: { target_var: "", mode: "replace", value: "" } }],
+          },
+        ],
+      },
+      payload_hash: "h",
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    // The condition.var input is aria-label "Condition variable for rule 1 branch 1"
+    const varInput = wrapper.find("[aria-label='Condition variable for rule 1 branch 1']");
+    expect(varInput.exists()).toBe(true);
+    (varInput.element as HTMLInputElement).value = "$mood";
+    await varInput.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const rules = (saved.payload as { rules: Array<{ branches: Array<{ condition: { var: string } }> }> }).rules;
+    expect(rules[0].branches[0].condition.var).toBe("$mood");
+  });
+
+  it("Add ELIF appends a second branch with default fields", async () => {
+    const mod: ModuleEntry = {
+      id: "22222222", type: "derivation", enabled: true,
+      meta: { name: "Mood" }, entries: [],
+      payload: {
+        rules: [
+          {
+            id: "r1",
+            branches: [{ condition: { var: "", op: "equals", value: "" }, action: { target_var: "", mode: "replace", value: "" } }],
+          },
+        ],
+      },
+      payload_hash: "h",
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    await wrapper.find("[data-test='dv-add-elif-0']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const rules = (saved.payload as { rules: Array<{ branches: unknown[] }> }).rules;
+    // Rule 0 now has 2 branches: IF + ELIF
+    expect(rules[0].branches.length).toBe(2);
+  });
+
+  it("Add ELSE toggles rule.else; Remove ELSE drops it", async () => {
+    const mod: ModuleEntry = {
+      id: "22222222", type: "derivation", enabled: true,
+      meta: { name: "Mood" }, entries: [],
+      payload: {
+        rules: [
+          {
+            id: "r1",
+            branches: [{ condition: { var: "", op: "equals", value: "" }, action: { target_var: "", mode: "replace", value: "" } }],
+          },
+        ],
+      },
+      payload_hash: "h",
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    // Add ELSE
+    await wrapper.find("[data-test='dv-add-else-0']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved1 = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const rules1 = (saved1.payload as { rules: Array<{ else?: unknown }> }).rules;
+    expect(rules1[0].else).toBeDefined();
+
+    // Remove ELSE
+    await wrapper.find("[data-test='dv-remove-else-0']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved2 = wrapper.emitted("save")?.[1][0] as ModuleEntry;
+    const rules2 = (saved2.payload as { rules: Array<{ else?: unknown }> }).rules;
+    expect(rules2[0].else).toBeUndefined();
+  });
+
+  it.todo("removing a rule reduces payload.rules.length by 1 — see Task 18");
+  it.todo("collapsing a rule hides its branches — see Task 18");
 });
 
 describe("ModuleEditModal — constraint preview (body)", () => {
