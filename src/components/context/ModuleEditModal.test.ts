@@ -149,13 +149,13 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
     expect(wrapper.find("[data-test='wc-options-table']").exists()).toBe(true);
   });
 
-  it("fixed_values → shows FixedValuesEditorBody placeholder", async () => {
+  it("fixed_values → shows FixedValuesEditorBody (values table rendered)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeFixedValues() },
     });
     await nextTick();
-    expect(wrapper.text()).toContain("TODO Task 16");
+    expect(wrapper.find("[data-test='fv-values-table']").exists()).toBe(true);
   });
 
   it("combine → shows CombineEditorBody placeholder", async () => {
@@ -392,10 +392,63 @@ describe("ModuleEditModal — wildcard option editor (body)", () => {
   it.todo("does not render name/description inputs for snapshot kinds — see Task 15");
 });
 
-describe("ModuleEditModal — fixed_values two-tier saves (body)", () => {
+describe("ModuleEditModal — fixed_values editor body", () => {
+  beforeEach(() => _resetForTests());
+
+  it("name input renders module.meta.name and emits update with patched meta", async () => {
+    const mod = makeFixedValues();
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    const input = wrapper.find("[data-test='fv-name']");
+    expect(input.exists()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe("presets");
+    (input.element as HTMLInputElement).value = "portrait presets";
+    await input.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.meta.name).toBe("portrait presets");
+  });
+
+  it("$variable name strips leading $ and special chars on input", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeFixedValues() },
+    });
+    await nextTick();
+    // First row variable input — makeFixedValues has values[0].name = "lens"
+    const varInputs = wrapper.findAll("[data-test='fv-values-table'] tbody input[aria-label='Variable name']");
+    expect(varInputs.length).toBeGreaterThan(0);
+    const firstInput = varInputs[0];
+    (firstInput.element as HTMLInputElement).value = "$new-var!";
+    await firstInput.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const vals = (saved.payload as { values: Array<{ name: string; value: string }> }).values;
+    // Leading $ stripped, hyphen and ! stripped → "newvar"
+    expect(vals[0].name).toBe("newvar");
+  });
+
+  it("Add value appends a new row to payload.values on save", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeFixedValues() },
+    });
+    await nextTick();
+    await wrapper.find("[data-test='fv-add-value']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const vals = (saved.payload as { values?: unknown[] } | undefined)?.values ?? [];
+    // Started with 2, added 1 → 3
+    expect(vals.length).toBe(3);
+  });
+
   it.todo("library-tracked save with edited entries writes instance.values_overrides — see Task 16");
-  it.todo("library-tracked save with NO edits leaves no override (clean state) — see Task 16");
-  it.todo("inline-created save writes payload.values directly, no override — see Task 16");
   it.todo("reset button clears overrides and reloads entries from library payload — see Task 16");
   it.todo("reset button absent on library-tracked fixed_values with no overrides — see Task 16");
   it.todo("reset button absent on inline-created fixed_values — see Task 16");
