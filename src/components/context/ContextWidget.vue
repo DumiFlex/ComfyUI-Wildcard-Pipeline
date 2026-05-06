@@ -1347,7 +1347,9 @@ function onDrop(ev: DragEvent, targetId: string | null) {
           >
             <i class="pi pi-plus" /> Add module
           </button>
-          <button class="wp-btn" @click="openSpaLibrary">Open library ↗</button>
+          <button class="wp-btn" @click="openSpaLibrary">
+            Open in SPA <i class="pi pi-external-link" />
+          </button>
         </div>
       </div>
     </Transition>
