@@ -3,25 +3,11 @@ import { computed, ref } from "vue";
 import { varColorClass } from "../shared/var-color";
 
 const props = defineProps<{
-  /**
-   * Unified `(name → value)` map of every variable an upstream
-   * `WP_Context` would bind at graph-run time. The resolver
-   * (`extension/graph.ts:collectUpstreamResolved`) populates it
-   * deterministically — wildcards always pick option `[0]` so the
-   * preview is stable as the user edits the template. Real graph
-   * runs reseed randomly each time; the assembled prompt at edit
-   * time is therefore a sample, not a guarantee.
-   *
-   * Mutually exclusive with `upstreamVars` + `resolved` — the component
-   * accepts either the legacy record-based shape OR the array-based
-   * shape used by headless tests and the new widget API.
-   */
-  upstreamResolved?: Record<string, string>;
-  /** Alternative flat-array shape for upstream names (used by new tests). */
+  /** Flat array of upstream variable names. Primary prop shape. */
   upstreamVars?: string[];
-  /** Pre-extracted template variable names (used by new tests). */
+  /** Pre-extracted template variable names. */
   templateVars?: string[];
-  /** Pre-resolved string (used by new tests + future async path). */
+  /** Pre-resolved string — template with $var replaced by resolved values. */
   resolved?: string;
   template: string;
   onInsert?: (token: string) => void;
@@ -31,10 +17,8 @@ const props = defineProps<{
    *  binds). Optional — host widgets can skip wiring it if they
    *  don't want the click affordance. */
   onRemoveVar?: (varname: string) => void;
-  /** Seed used by the server-side preview resolver. Surfaced in the
-   *  PREVIEW header so users see "PREVIEW · 42" — the same seed a
-   *  WP_Context node would use at run time when set to that value.
-   *  Optional; defaults to 42 for stable preview rolls. */
+  /** Seed used by the server-side preview resolver. Optional; defaults
+   *  to 42 for stable preview rolls. */
   previewSeed?: number;
 }>();
 
@@ -43,20 +27,15 @@ const emit = defineEmits<{
 }>();
 
 // ---------------------------------------------------------------------------
-// Normalised derived state — works from either prop shape
+// Derived state
 // ---------------------------------------------------------------------------
 
-/** Upstream variable names, derived from whichever prop shape is supplied. */
-const upstreamNames = computed(() => {
-  if (props.upstreamVars) return props.upstreamVars;
-  if (props.upstreamResolved) return Object.keys(props.upstreamResolved);
-  return [];
-});
+/** Upstream variable names. */
+const upstreamNames = computed(() => props.upstreamVars ?? []);
 
 // Sentinel survives both regex passes — the Unicode replacement character;
 // doubled, it can't appear in real prompts.
 const ESCAPE_PLACEHOLDER = "��";
-const ESCAPE_RE = /��/g;
 const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 const TEMPLATE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
 
@@ -70,27 +49,12 @@ const templateVarsInternal = computed(() => {
 });
 
 /**
- * Variables referenced in the template but NOT present in the upstream map.
- * When `templateVars` prop is provided (new shape), "missing" means not in
- * `upstreamVars`. When using the legacy shape, it means not in
- * `upstreamResolved`.
+ * Variables referenced in the template but NOT present in the upstream list.
  */
 const missing = computed(() => {
-  if (props.templateVars && props.upstreamVars) {
-    const upstream = props.upstreamVars;
-    return props.templateVars.filter((v) => !upstream.includes(v));
-  }
-  return templateVarsInternal.value.filter(
-    (v) => !Object.prototype.hasOwnProperty.call(props.upstreamResolved ?? {}, v),
-  );
+  const upstream = props.upstreamVars ?? [];
+  return templateVarsInternal.value.filter((v) => !upstream.includes(v));
 });
-
-// Alias for legacy test compatibility
-const missingVars = missing;
-
-function isUsed(v: string): boolean {
-  return templateVarsInternal.value.includes(v);
-}
 
 // ---------------------------------------------------------------------------
 // Preview tokenisation
@@ -101,8 +65,6 @@ interface PreviewToken { kind: "literal" | "var"; text: string; varName?: string
 const previewTokens = computed<PreviewToken[]>(() => {
   if (!props.template) return [];
 
-  // When a pre-resolved string is provided (new prop shape) use the
-  // parallel-walk tokeniser so each substring carries its source variable.
   if (props.resolved !== undefined) {
     if (!props.resolved) {
       // No resolved string yet — render template with var highlights.
@@ -153,44 +115,7 @@ const previewTokens = computed<PreviewToken[]>(() => {
     return tokens;
   }
 
-  return []; // legacy path uses previewHtml below
-});
-
-// ---------------------------------------------------------------------------
-// Legacy HTML preview (used when upstreamResolved record is provided)
-// ---------------------------------------------------------------------------
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-// Stable per-name hue — kept for legacy v-html preview.
-function hueFor(name: string): number {
-  let h = 5381;
-  for (let i = 0; i < name.length; i++) h = ((h << 5) + h + name.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
-
-const previewHtml = computed(() => {
-  if (!props.template) {
-    return '<span class="wp-asm-empty-inline">Template is empty.</span>';
-  }
-  const escaped = props.template.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
-  const safe = escapeHtml(escaped).replace(VAR_RE, (full, name: string) => {
-    if (name.startsWith("__")) return full;
-    const hue = hueFor(name);
-    const colorStyle = `style="color: hsl(${hue}, 65%, 70%); background: hsla(${hue}, 65%, 55%, 0.15);"`;
-    if (Object.prototype.hasOwnProperty.call(props.upstreamResolved ?? {}, name)) {
-      return `<span class="wp-tok-resolved" ${colorStyle}>${escapeHtml((props.upstreamResolved ?? {})[name])}</span>`;
-    }
-    return `<span class="wp-tok-miss">$${name}</span>`;
-  });
-  return safe.replace(ESCAPE_RE, "$");
+  return [];
 });
 
 // ---------------------------------------------------------------------------
@@ -209,7 +134,6 @@ function onChipClick(ev: MouseEvent, v: string) {
     const cur = ripples.value.get(v);
     if (cur && Date.now() - cur.t >= 380) ripples.value.delete(v);
   }, 420);
-  // Support both callback prop (legacy) and emit (new shape)
   if (props.onInsert) props.onInsert(`$${v}`);
   emit("insertVar", v);
 }
@@ -223,16 +147,10 @@ function rippleStyle(v: string): Record<string, string> {
   };
 }
 
-/** Whether to use the new chip-strip + token preview layout vs the legacy layout. */
-const useNewLayout = computed(() => props.upstreamVars !== undefined || props.resolved !== undefined);
 </script>
 
 <template>
-  <!-- ============================================================
-       NEW LAYOUT — chip strip + tokenised preview
-       Activated when `upstreamVars` or `resolved` props are present.
-       ============================================================ -->
-  <div v-if="useNewLayout" class="wp-asm-helper">
+  <div class="wp-asm-helper">
     <!-- variables section -->
     <div class="wp-asm-section">
       <span>variables</span>
@@ -278,68 +196,6 @@ const useNewLayout = computed(() => props.upstreamVars !== undefined || props.re
     <div class="wp-asm-hint">
       <span>click chip → insert <kbd>$var</kbd> at caret</span>
       <span style="margin-left: auto;">drop wildcard onto template → autoinsert</span>
-    </div>
-  </div>
-
-  <!-- ============================================================
-       LEGACY LAYOUT — upstreamResolved record shape
-       Preserves existing behaviour for the widget host (assembler.ts)
-       and the pre-existing tests.
-       ============================================================ -->
-  <div v-else class="wp-asm">
-    <div v-if="upstreamNames.length" class="wp-asm__section">
-      <label class="wp-asm__label">VARIABLES</label>
-      <div class="wp-asm__chips">
-        <button
-          v-for="v in upstreamNames" :key="v"
-          type="button"
-          class="wp-asm__chip"
-          :class="[isUsed(v) ? 'used' : 'available', { 'wp-asm__chip--ripple': ripples.has(v) }]"
-          :style="{ ...rippleStyle(v), color: `hsl(${hueFor(v)}, 65%, 65%)`, background: `hsla(${hueFor(v)}, 65%, 55%, 0.15)` }"
-          data-testid="chip"
-          :title="(upstreamResolved ?? {})[v] ?? ''"
-          @click="(ev) => onChipClick(ev, v)"
-        >${{ v }}</button>
-      </div>
-    </div>
-
-    <div v-else class="wp-asm__section wp-asm__section--empty">
-      <span class="wp-asm__empty">Connect a Pipeline Context to see available variables</span>
-    </div>
-
-    <div class="wp-asm__section">
-      <label class="wp-asm__label">PREVIEW <span class="wp-asm__label-sep">·</span> <span class="wp-asm__label-seed">{{ previewSeed ?? 42 }}</span></label>
-      <div v-if="!template" class="wp-asm__skeleton">
-        <span class="wp-asm__skel-line"></span>
-        <span class="wp-asm__skel-line wp-asm__skel-line--short"></span>
-      </div>
-      <div v-else class="wp-asm__rendered" v-html="previewHtml"></div>
-    </div>
-
-    <div v-if="missingVars.length" class="wp-asm__section">
-      <label class="wp-asm__label wp-asm__label--warn">
-        UNRESOLVED <span class="wp-asm__label-sep">·</span>
-        <span v-if="onRemoveVar">click to remove from template</span><span v-else>dropped from prompt</span>
-      </label>
-      <div class="wp-asm__chips">
-        <button
-          v-for="v in missingVars"
-          v-if="onRemoveVar"
-          :key="v"
-          type="button"
-          class="wp-asm__chip missing wp-asm__chip--clickable"
-          data-testid="missing-chip"
-          :title="`Remove $${v} from template`"
-          @click="onRemoveVar!(v)"
-        >${{ v }}<i class="pi pi-times wp-asm__chip-x" aria-hidden="true"></i></button>
-        <span
-          v-for="v in missingVars"
-          v-else
-          :key="`s-${v}`"
-          class="wp-asm__chip missing"
-          data-testid="missing-chip"
-        >${{ v }}</span>
-      </div>
     </div>
   </div>
 </template>
@@ -454,187 +310,4 @@ const useNewLayout = computed(() => props.upstreamVars !== undefined || props.re
   color: var(--wp-text-muted);
 }
 
-/* ======================================================
-   LEGACY LAYOUT — .wp-asm (upstreamResolved shape)
-   ====================================================== */
-.wp-asm, .wp-asm * { box-sizing: border-box; }
-.wp-asm {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 12px;
-  color: var(--wp-text);
-  cursor: default;
-  user-select: none;
-}
-
-.wp-asm__section {
-  padding: 8px 10px;
-}
-.wp-asm__section + .wp-asm__section {
-  border-top: 1px solid var(--wp-border);
-}
-
-.wp-asm__label {
-  font-size: 9px;
-  font-family: var(--wp-font-mono, monospace);
-  color: var(--wp-text3);
-  letter-spacing: 0.08em;
-  margin-bottom: 6px;
-  display: block;
-}
-.wp-asm__label--warn { color: var(--wp-amber); }
-
-.wp-asm__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.wp-asm__chip {
-  font-size: 10px;
-  font-family: var(--wp-font-mono, monospace);
-  padding: 2px 7px;
-  border-radius: 3px;
-  user-select: none;
-  border: none;
-  transition: background 0.12s, color 0.12s, transform 0.12s;
-  position: relative;
-  overflow: hidden;
-}
-.wp-asm__chip.available { cursor: pointer; }
-.wp-asm__chip.used { cursor: pointer; }
-.wp-asm__chip.used::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.wp-asm__chip.available:hover,
-.wp-asm__chip.used:hover {
-  filter: brightness(1.3) saturate(1.15);
-}
-.wp-asm__chip.missing {
-  background: var(--wp-amber-bg) !important;
-  color: var(--wp-amber) !important;
-  cursor: default;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.wp-asm__chip--clickable { cursor: pointer; }
-.wp-asm__chip--clickable:hover {
-  background: color-mix(in srgb, var(--wp-amber) 30%, transparent) !important;
-}
-.wp-asm__chip-x { font-size: 8px; opacity: 0.7; }
-.wp-asm__chip--clickable:hover .wp-asm__chip-x { opacity: 1; }
-.wp-asm__label-sep { color: var(--wp-text3); margin: 0 2px; }
-.wp-asm__label-seed {
-  color: var(--wp-text2);
-  font-family: var(--wp-font-mono, monospace);
-  font-weight: 700;
-}
-
-/* Ripple */
-.wp-asm__chip--ripple::before {
-  content: "";
-  position: absolute;
-  left: var(--wp-ripple-x, 50%);
-  top: var(--wp-ripple-y, 50%);
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: var(--wp-border-strong);
-  transform: translate(-50%, -50%);
-  animation: wp-asm-ripple 0.4s ease-out;
-  pointer-events: none;
-}
-@keyframes wp-asm-ripple {
-  0%   { width: 0; height: 0; opacity: 0.6; }
-  100% { width: 120px; height: 120px; opacity: 0; }
-}
-
-.wp-asm__rendered {
-  background: var(--wp-bg3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  padding: 6px 8px;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--wp-text2);
-  word-break: break-word;
-  white-space: pre-wrap;
-  min-height: 32px;
-}
-
-.wp-asm__skeleton {
-  background: var(--wp-bg3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  padding: 8px;
-  min-height: 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.wp-asm__skel-line {
-  display: block;
-  height: 8px;
-  border-radius: 3px;
-  background: linear-gradient(
-    90deg,
-    var(--wp-bg2) 0%,
-    var(--wp-bg4) 50%,
-    var(--wp-bg2) 100%
-  );
-  background-size: 200% 100%;
-  animation: wp-asm-shimmer 1.4s ease-in-out infinite;
-}
-.wp-asm__skel-line--short { width: 60%; }
-@keyframes wp-asm-shimmer {
-  0%   { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
-
-.wp-asm__section--empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-}
-.wp-asm__empty {
-  color: var(--wp-text3);
-  font-size: 11px;
-  font-style: italic;
-}
-</style>
-
-<style>
-/* Unscoped — rendered via v-html (legacy preview path). */
-.wp-tok-resolved {
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-weight: 600;
-}
-.wp-tok-ok {
-  padding: 1px 3px;
-  border-radius: 3px;
-}
-.wp-tok-miss {
-  color: var(--wp-amber);
-  background: var(--wp-amber-bg, rgba(212, 168, 67, 0.1));
-  padding: 1px 3px;
-  border-radius: 3px;
-  text-decoration: underline wavy;
-}
-.wp-asm-empty-inline {
-  color: var(--wp-text-dim);
-  font-style: italic;
-}
 </style>

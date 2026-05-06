@@ -224,6 +224,10 @@ export function mountHelper(node: AssemblerNode) {
           });
       }
 
+      // Template variable extraction — matches the same regex AssemblerHelper
+      // uses internally so chip state and preview tokenisation stay in sync.
+      const TEMPLATE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
+
       return () => {
         refetchIfChanged();
         // Stickiness: once we have ANY API result, keep showing it
@@ -235,9 +239,31 @@ export function mountHelper(node: AssemblerNode) {
         // only renders when we've never had an API response (first
         // mount before /wp/api/preview/resolve has settled).
         const fresh = apiResolved.value ?? snapshot.value.fallbackResolved;
+        const template = snapshot.value.template;
+
+        // Compute new-layout props ----------------------------------------
+        const upstreamVars = Object.keys(fresh);
+
+        const templateVarsArr: string[] = [];
+        const seen = new Set<string>();
+        for (const m of template.matchAll(TEMPLATE_VAR_RE)) {
+          if (m[1] && !seen.has(m[1])) {
+            seen.add(m[1]);
+            templateVarsArr.push(m[1]);
+          }
+        }
+
+        // Substitute $var with its resolved value when present; leave literal otherwise.
+        const resolvedStr = template.replace(TEMPLATE_VAR_RE, (_match, name: string) =>
+          Object.prototype.hasOwnProperty.call(fresh, name) ? fresh[name] : `$${name}`,
+        );
+        // -----------------------------------------------------------------
+
         return h(AssemblerHelper, {
-          upstreamResolved: fresh,
-          template: snapshot.value.template,
+          upstreamVars,
+          templateVars: templateVarsArr,
+          template,
+          resolved: resolvedStr,
           previewSeed: PREVIEW_SEED,
           onInsert: (token: string) => insertIntoTemplate(node, token),
           onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
