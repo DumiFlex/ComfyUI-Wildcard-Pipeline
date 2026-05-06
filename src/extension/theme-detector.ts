@@ -1,12 +1,19 @@
 /**
  * Reads ComfyUI's `Comfy.ColorPalette` setting and applies a matching
- * `wp-theme-dark` / `wp-theme-light` class to widget host elements.
+ * `wp-theme-dark` / `wp-theme-light` class to widget host elements
+ * AND to `document.documentElement`.
+ *
+ * Why both? Vue `<Teleport to="body">` modals (ModuleEditModal,
+ * ModulePickerModal) escape the widget host subtree, so a host-only
+ * class doesn't reach them. Mounting the same class on `<html>` makes
+ * the cascade reach every descendant — host widgets AND teleported
+ * modals — without giving up the host-scoped class for tests/devtools.
  *
  * ComfyUI ships several palettes (dark / light / github / solarized /
- * arc / nord / etc). For our purposes only the dark/light split
- * matters — non-dark palettes typically all read as "light" in the
- * ColorPalette enum. We treat exactly `"light"` as light; everything
- * else falls through to dark.
+ * arc / nord / etc). We treat exactly `"dark"` (and unset) as dark;
+ * everything else maps to light. This is the inverse of what we
+ * shipped initially (which only lit up on `"light"`) — the new
+ * mapping handles all the non-dark palettes ComfyUI actually ships.
  *
  * The detector exposes two surfaces:
  *  - `applyTheme(host, theme)` — pure mutation, used by mount glue
@@ -31,21 +38,37 @@ const COLOR_PALETTE_KEY = "Comfy.ColorPalette";
 const CLASS_DARK = "wp-theme-dark";
 const CLASS_LIGHT = "wp-theme-light";
 
-/** Mutates `host` so it carries exactly one of `wp-theme-dark` / `wp-theme-light`. */
+function paletteToTheme(value: unknown): WpTheme {
+  // Treat `dark` (and unset) as dark; every other palette maps to light.
+  if (value === undefined || value === null || value === "" || value === "dark") {
+    return "dark";
+  }
+  return "light";
+}
+
+/**
+ * Mutate `host` AND `document.documentElement` so they carry exactly one of
+ * `wp-theme-dark` / `wp-theme-light`. Documenting twice is intentional —
+ * see file header for the teleported-modal rationale.
+ */
 export function applyTheme(host: HTMLElement, theme: WpTheme): void {
-  if (theme === "dark") {
-    host.classList.add(CLASS_DARK);
-    host.classList.remove(CLASS_LIGHT);
-  } else {
-    host.classList.add(CLASS_LIGHT);
-    host.classList.remove(CLASS_DARK);
+  const targets: Element[] = [host];
+  // SSR / unit tests without a document fall through gracefully.
+  if (typeof document !== "undefined" && document.documentElement) {
+    targets.push(document.documentElement);
+  }
+  const add = theme === "dark" ? CLASS_DARK : CLASS_LIGHT;
+  const remove = theme === "dark" ? CLASS_LIGHT : CLASS_DARK;
+  for (const t of targets) {
+    t.classList.add(add);
+    t.classList.remove(remove);
   }
 }
 
 /** Reads `Comfy.ColorPalette` once, returns the matching `WpTheme`. Defaults to dark. */
 export function detectInitialTheme(app: AppLike): WpTheme {
   const value = app.extensionManager?.setting?.get?.(COLOR_PALETTE_KEY);
-  return value === "light" ? "light" : "dark";
+  return paletteToTheme(value);
 }
 
 /**
@@ -67,7 +90,7 @@ export function attachThemeDetector(host: HTMLElement, app: AppLike): () => void
   }
 
   const unsub = onChange(COLOR_PALETTE_KEY, (value) => {
-    applyTheme(host, value === "light" ? "light" : "dark");
+    applyTheme(host, paletteToTheme(value));
   });
 
   return () => {

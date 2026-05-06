@@ -253,17 +253,19 @@ export function mountHelper(node: AssemblerNode) {
           }
         }
 
-        // Substitute $var with its resolved value when present; leave literal otherwise.
-        const resolvedStr = template.replace(TEMPLATE_VAR_RE, (_match, name: string) =>
-          Object.prototype.hasOwnProperty.call(fresh, name) ? fresh[name] : `$${name}`,
-        );
+        // Pass the per-var resolved map directly. AssemblerHelper tokenises
+        // the preview against this map so each var's resolved substring
+        // gets its own color even when one var's value contains the
+        // literal that bounds the next (e.g. `$hair_style $mood` where
+        // $hair_style → "short cropped" — boundary disambiguation
+        // would otherwise mis-color across the embedded space).
         // -----------------------------------------------------------------
 
         return h(AssemblerHelper, {
           upstreamVars,
           templateVars: templateVarsArr,
           template,
-          resolved: resolvedStr,
+          resolvedMap: fresh,
           previewSeed: PREVIEW_SEED,
           onInsert: (token: string) => insertIntoTemplate(node, token),
           onRemoveVar: (varname: string) => removeFromTemplate(node, varname),

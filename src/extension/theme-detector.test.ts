@@ -14,6 +14,11 @@ describe("theme-detector", () => {
   });
 
   describe("applyTheme", () => {
+    afterEach(() => {
+      // Test pollutes documentElement; reset between cases so tests don't bleed.
+      document.documentElement.classList.remove("wp-theme-dark", "wp-theme-light");
+    });
+
     it("adds wp-theme-dark + removes wp-theme-light when palette is dark", () => {
       host.classList.add("wp-theme-light");
       applyTheme(host, "dark");
@@ -34,6 +39,16 @@ describe("theme-detector", () => {
       expect(host.classList.contains("wp-theme-dark")).toBe(true);
       expect(host.classList.contains("wp-theme-light")).toBe(false);
     });
+
+    it("also applies the class to document.documentElement so teleported modals inherit", () => {
+      applyTheme(host, "light");
+      expect(document.documentElement.classList.contains("wp-theme-light")).toBe(true);
+      expect(document.documentElement.classList.contains("wp-theme-dark")).toBe(false);
+
+      applyTheme(host, "dark");
+      expect(document.documentElement.classList.contains("wp-theme-dark")).toBe(true);
+      expect(document.documentElement.classList.contains("wp-theme-light")).toBe(false);
+    });
   });
 
   describe("detectInitialTheme", () => {
@@ -41,14 +56,23 @@ describe("theme-detector", () => {
       expect(detectInitialTheme({})).toBe("dark");
     });
 
+    it("returns 'dark' when ColorPalette setting reads 'dark'", () => {
+      const app = { extensionManager: { setting: { get: vi.fn().mockReturnValue("dark") } } };
+      expect(detectInitialTheme(app)).toBe("dark");
+    });
+
     it("returns 'light' when ColorPalette setting reads 'light'", () => {
       const app = { extensionManager: { setting: { get: vi.fn().mockReturnValue("light") } } };
       expect(detectInitialTheme(app)).toBe("light");
     });
 
-    it("returns 'dark' when ColorPalette reads any other value", () => {
-      const app = { extensionManager: { setting: { get: vi.fn().mockReturnValue("github") } } };
-      expect(detectInitialTheme(app)).toBe("dark");
+    it("returns 'light' for non-dark palettes (github / arc / nord / solarized)", () => {
+      for (const palette of ["github", "arc", "nord", "solarized"]) {
+        const app = {
+          extensionManager: { setting: { get: vi.fn().mockReturnValue(palette) } },
+        };
+        expect(detectInitialTheme(app)).toBe("light");
+      }
     });
 
     it("treats nullish setting as dark default", () => {

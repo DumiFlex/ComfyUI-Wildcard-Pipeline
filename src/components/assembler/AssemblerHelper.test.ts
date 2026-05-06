@@ -117,6 +117,89 @@ describe("AssemblerHelper.vue", () => {
   });
 });
 
+describe("AssemblerHelper resolvedMap (#12 — boundary-disambiguation fix)", () => {
+  it("colors each var's resolved substring independently when one value contains the bounding literal", () => {
+    // template: `$hair_style $mood`
+    // hair_style = "short cropped"  (contains the bounding " ")
+    // mood = "melancholic"
+    // Pre-substituted "short cropped melancholic" can't be tokenised by parallel walk
+    // because indexOf(" ", 0) lands inside hair_style. The resolvedMap path bypasses
+    // that entirely.
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["hair_style", "mood"],
+        templateVars: ["hair_style", "mood"],
+        template: "$hair_style $mood",
+        resolvedMap: { hair_style: "short cropped", mood: "melancholic" },
+      },
+    });
+    const preview = wrapper.find('[data-test="asm-preview"]');
+    const varSpans = preview.findAll("span.res");
+    expect(varSpans.length).toBe(2);
+    expect(varSpans[0].text()).toBe("short cropped");
+    expect(varSpans[1].text()).toBe("melancholic");
+    expect(varSpans[0].classes()).toContain(varColorClass("hair_style"));
+    expect(varSpans[1].classes()).toContain(varColorClass("mood"));
+  });
+
+  it("renders unresolved vars as `$name` when not in the map", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["a"],
+        templateVars: ["a", "b"],
+        template: "$a and $b",
+        resolvedMap: { a: "alpha" },
+      },
+    });
+    const preview = wrapper.find('[data-test="asm-preview"]');
+    const varSpans = preview.findAll("span.res");
+    expect(varSpans[0].text()).toBe("alpha");
+    expect(varSpans[1].text()).toBe("$b");
+  });
+
+  it("section stat reports 'resolved' when resolvedMap has any entries", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["a"],
+        templateVars: ["a"],
+        template: "$a",
+        resolvedMap: { a: "alpha" },
+      },
+    });
+    expect(wrapper.text()).toContain("resolved");
+  });
+});
+
+describe("AssemblerHelper missing-chip click (#20 — autoremove regression)", () => {
+  it("clicking a missing chip calls onRemoveVar with the var name", async () => {
+    let removed = "";
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["style"],
+        templateVars: ["style", "missing_var"],
+        template: "$style $missing_var",
+        resolved: "",
+        onRemoveVar: (v: string) => { removed = v; },
+      },
+    });
+    await wrapper.find('[data-test="asm-chip-missing_var"]').trigger("click");
+    expect(removed).toBe("missing_var");
+  });
+
+  it("missing chip is not clickable when onRemoveVar is not wired", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["style"],
+        templateVars: ["style", "missing_var"],
+        template: "$style $missing_var",
+        resolved: "",
+      },
+    });
+    const chip = wrapper.find('[data-test="asm-chip-missing_var"]');
+    expect(chip.classes()).not.toContain("wp-asm-var--clickable");
+  });
+});
+
 describe("AssemblerHelper var-color rendering", () => {
   it("emits the same var-N class for the same binding across chip + preview", () => {
     const wrapper = mount(AssemblerHelper, {

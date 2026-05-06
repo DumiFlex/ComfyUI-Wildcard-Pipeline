@@ -7,7 +7,19 @@ const props = defineProps<{
   upstreamVars?: string[];
   /** Pre-extracted template variable names. */
   templateVars?: string[];
-  /** Pre-resolved string — template with $var replaced by resolved values. */
+  /**
+   * Per-variable resolved values. Primary source for preview tokenisation —
+   * lets us color each var's resolved substring independently without
+   * fragile parallel-walk over the resolved string. When present, takes
+   * precedence over `resolved`.
+   */
+  resolvedMap?: Record<string, string>;
+  /**
+   * Pre-resolved string — template with $var replaced by resolved values.
+   * Legacy fallback when `resolvedMap` not provided. Suffers from
+   * boundary-disambiguation bugs when one var's resolved value contains
+   * the literal that bounds the next var; prefer `resolvedMap`.
+   */
   resolved?: string;
   template: string;
   onInsert?: (token: string) => void;
@@ -65,6 +77,30 @@ interface PreviewToken { kind: "literal" | "var"; text: string; varName?: string
 const previewTokens = computed<PreviewToken[]>(() => {
   if (!props.template) return [];
 
+  // Primary path: per-var resolved map. Walk template + look up each $var
+  // directly. No boundary-disambiguation needed.
+  if (props.resolvedMap !== undefined) {
+    const tokens: PreviewToken[] = [];
+    let last = 0;
+    for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
+      const idx = m.index ?? 0;
+      if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
+      const name = m[1];
+      const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
+      // Unresolved var → keep `$name` so user sees what's missing.
+      tokens.push({
+        kind: "var",
+        text: has ? props.resolvedMap[name] : `$${name}`,
+        varName: name,
+      });
+      last = idx + m[0].length;
+    }
+    if (last < props.template.length) {
+      tokens.push({ kind: "literal", text: props.template.slice(last) });
+    }
+    return tokens;
+  }
+
   if (props.resolved !== undefined) {
     if (!props.resolved) {
       // No resolved string yet — render template with var highlights.
@@ -80,7 +116,9 @@ const previewTokens = computed<PreviewToken[]>(() => {
       return tokens;
     }
 
-    // Resolved string present — walk template + resolved in parallel.
+    // Legacy fallback — walk template + resolved in parallel. Suffers from
+    // boundary-disambiguation bugs (see #12) when one resolved value
+    // contains the literal that bounds the next var. Prefer `resolvedMap`.
     const tpl = props.template;
     const res = props.resolved;
     const segments: Array<{ kind: "literal" | "var"; text: string; varName?: string }> = [];
@@ -116,6 +154,11 @@ const previewTokens = computed<PreviewToken[]>(() => {
   }
 
   return [];
+});
+
+const isResolved = computed(() => {
+  if (props.resolvedMap !== undefined) return Object.keys(props.resolvedMap).length > 0;
+  return Boolean(props.resolved);
 });
 
 // ---------------------------------------------------------------------------
@@ -174,15 +217,17 @@ function rippleStyle(v: string): Record<string, string> {
         v-for="v in missing"
         :key="`miss-${v}`"
         :data-test="`asm-chip-${v}`"
-        class="wp-asm-var wp-asm-var--missing"
+        :class="['wp-asm-var', 'wp-asm-var--missing', { 'wp-asm-var--clickable': !!onRemoveVar }]"
+        :title="onRemoveVar ? `Click to remove $${v} from template` : undefined"
+        @click="onRemoveVar?.(v)"
       ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
     </div>
 
     <!-- preview section -->
     <div class="wp-asm-section">
       <span>preview</span>
-      <span :class="['wp-asm-section-stat', resolved ? 'is-ok' : '']">
-        {{ resolved ? "resolved" : "(template empty or unresolved)" }}
+      <span :class="['wp-asm-section-stat', isResolved ? 'is-ok' : '']">
+        {{ isResolved ? "resolved" : "(template empty or unresolved)" }}
       </span>
     </div>
     <div class="wp-asm-preview" data-test="asm-preview">
@@ -195,7 +240,7 @@ function rippleStyle(v: string): Record<string, string> {
     <!-- hint -->
     <div class="wp-asm-hint">
       <span>click chip → insert <kbd>$var</kbd> at caret</span>
-      <span style="margin-left: auto;">drop wildcard onto template → autoinsert</span>
+      <span style="margin-left: auto;">click missing → remove from template</span>
     </div>
   </div>
 </template>
@@ -271,6 +316,14 @@ function rippleStyle(v: string): Record<string, string> {
   color: var(--wp-text-dim);
   border-style: dashed;
   cursor: default;
+}
+.wp-asm-var--missing.wp-asm-var--clickable {
+  cursor: pointer;
+}
+.wp-asm-var--missing.wp-asm-var--clickable:hover {
+  border-color: var(--wp-warn);
+  color: var(--wp-warn);
+  background: var(--wp-bg-2);
 }
 .wp-asm-var--missing i {
   font-size: 10px;
