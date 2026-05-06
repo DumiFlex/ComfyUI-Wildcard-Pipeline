@@ -146,11 +146,25 @@ export async function supportsActionBar(): Promise<boolean> {
  */
 function parseBrandIcon(): SVGElement | null {
   if (typeof DOMParser === "undefined") return null;
+  // Strip width/height attributes from the root <svg> so:
+  //  (a) ComfyUI's `[&_svg:not([width]):not([height])]:size-4` Tailwind
+  //      selector matches and applies size-4 (1rem = 16px) — same auto-size
+  //      every other actionbar icon gets.
+  //  (b) The `size-4` class we add on the SVG isn't fighting the source
+  //      file's hardcoded 1024×1024 attrs (CSS *should* win over the
+  //      attr per spec, but some Chromium versions render the attr-based
+  //      intrinsic dimensions during the first paint, briefly flashing a
+  //      huge icon before the cascade settles).
   const monochrome = wpLogoSvg
     .replace(/<defs>[\s\S]*?<\/defs>/g, "")
     .replace(/\sclass="[^"]*"/g, "")
     .replace(/\sfill="[^"]*"/g, "")
-    .replace(/<svg([^>]*)>/, '<svg$1 fill="currentColor">');
+    .replace(/<svg([^>]*)>/, (_match, attrs: string) => {
+      const cleaned = attrs
+        .replace(/\swidth="[^"]*"/g, "")
+        .replace(/\sheight="[^"]*"/g, "");
+      return `<svg${cleaned} fill="currentColor">`;
+    });
   const doc = new DOMParser().parseFromString(monochrome, "image/svg+xml");
   const root = doc.documentElement;
   if (root.nodeName === "parsererror" || root.nodeName.toLowerCase() !== "svg") return null;
