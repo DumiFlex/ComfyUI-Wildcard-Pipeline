@@ -308,19 +308,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         <span class="wp-card__hint">Pick the two wildcards whose sub-categories form the matrix</span>
       </template>
       <div class="cn-pair">
-        <Field label="Target wildcard" hint="Rows of the matrix">
-          <Select
-            :model-value="targetWildcardId"
-            :options="wildcardOptions"
-            placeholder="Pick target"
-            clearable
-            data-test="target-wildcard-select"
-            aria-label="Target wildcard"
-            @update:model-value="(v) => { targetWildcardId = v as string | null; matrix = {}; }"
-          />
-        </Field>
-        <div class="cn-cross"><i class="pi pi-times" /></div>
-        <Field label="Source wildcard" hint="Columns of the matrix">
+        <Field label="Source wildcard" hint="Rows of the matrix">
           <Select
             :model-value="sourceWildcardId"
             :options="wildcardOptions"
@@ -329,6 +317,18 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
             data-test="source-wildcard-select"
             aria-label="Source wildcard"
             @update:model-value="(v) => { sourceWildcardId = v as string | null; matrix = {}; }"
+          />
+        </Field>
+        <div class="cn-cross"><i class="pi pi-times" /></div>
+        <Field label="Target wildcard" hint="Columns of the matrix">
+          <Select
+            :model-value="targetWildcardId"
+            :options="wildcardOptions"
+            placeholder="Pick target"
+            clearable
+            data-test="target-wildcard-select"
+            aria-label="Target wildcard"
+            @update:model-value="(v) => { targetWildcardId = v as string | null; matrix = {}; }"
           />
         </Field>
       </div>
