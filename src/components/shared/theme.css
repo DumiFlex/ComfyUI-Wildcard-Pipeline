@@ -178,3 +178,30 @@
   --wp-shadow-lg: 0 12px 40px rgba(15,15,30,0.12);
   --wp-overlay-bg: rgba(15, 15, 30, 0.30);
 }
+
+/* Variable color palette — hash output (var-1..var-8) paints chips +
+ * preview substrings + module-row meta consistently across widgets.
+ * Same `$hair_style` rendering everywhere uses the same hue.
+ *
+ * Hues chosen for contrast on `--wp-bg` (dark) AND `--wp-bg-2` (light)
+ * surfaces. Pulled from a deliberate rainbow; light theme keeps the
+ * same hues since saturation reads on both backgrounds. */
+:root, .wp-theme-dark, .wp-theme-light {
+  --wp-var-1: #93c5fd;  /* sky blue */
+  --wp-var-2: #fcd34d;  /* amber */
+  --wp-var-3: #86efac;  /* mint */
+  --wp-var-4: #f9a8d4;  /* rose */
+  --wp-var-5: #fdba74;  /* orange */
+  --wp-var-6: #c4b5fd;  /* lavender */
+  --wp-var-7: #67e8f9;  /* cyan */
+  --wp-var-8: #fda4af;  /* coral */
+}
+
+.var-1 { color: var(--wp-var-1); }
+.var-2 { color: var(--wp-var-2); }
+.var-3 { color: var(--wp-var-3); }
+.var-4 { color: var(--wp-var-4); }
+.var-5 { color: var(--wp-var-5); }
+.var-6 { color: var(--wp-var-6); }
+.var-7 { color: var(--wp-var-7); }
+.var-8 { color: var(--wp-var-8); }
