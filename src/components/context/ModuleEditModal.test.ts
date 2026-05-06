@@ -176,13 +176,13 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
     expect(wrapper.find("[data-test='dv-add-rule']").exists()).toBe(true);
   });
 
-  it("constraint → shows ConstraintEditorBody placeholder", async () => {
+  it("constraint → shows ConstraintEditorBody (add-exception button rendered)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
-    expect(wrapper.text()).toContain("TODO Task 19");
+    expect(wrapper.find("[data-test='cn-add-exception']").exists()).toBe(true);
   });
 });
 
@@ -645,6 +645,87 @@ describe("ModuleEditModal — derivation editor body", () => {
   it.todo("collapsing a rule hides its branches — see Task 18");
 });
 
-describe("ModuleEditModal — constraint preview (body)", () => {
+describe("ModuleEditModal — constraint editor body", () => {
+  beforeEach(() => _resetForTests());
+
+  it("source wildcard field is FIRST in the wildcards pair (source-first ordering)", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint() },
+    });
+    await nextTick();
+    const fields = wrapper.findAll(".wp-cn-pair .wp-field");
+    expect(fields.length).toBeGreaterThanOrEqual(2);
+    expect(fields[0].text()).toContain("Source wildcard");
+    expect(fields[1].text()).toContain("Target wildcard");
+  });
+
+  it("source uuid input emits patchPayload({ source_wildcard_id, matrix: {} })", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint() },
+    });
+    await nextTick();
+    const input = wrapper.find("[data-test='cn-source']");
+    expect(input.exists()).toBe(true);
+    (input.element as HTMLInputElement).value = "eeeeeeee";
+    await input.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(
+      (saved.payload as { source_wildcard_id?: string }).source_wildcard_id,
+    ).toBe("eeeeeeee");
+    expect((saved.payload as { matrix?: unknown }).matrix).toEqual({});
+  });
+
+  it("target uuid input emits patchPayload({ target_wildcard_id, matrix: {} })", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint() },
+    });
+    await nextTick();
+    const input = wrapper.find("[data-test='cn-target']");
+    expect(input.exists()).toBe(true);
+    (input.element as HTMLInputElement).value = "ffffffff";
+    await input.trigger("input");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(
+      (saved.payload as { target_wildcard_id?: string }).target_wildcard_id,
+    ).toBe("ffffffff");
+    expect((saved.payload as { matrix?: unknown }).matrix).toEqual({});
+  });
+
+  it("Add exception appends to payload.exceptions on save", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint() },
+    });
+    await nextTick();
+    // starts with 0 exceptions
+    await wrapper.find("[data-test='cn-add-exception']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const excs = (saved.payload as { exceptions?: unknown[] } | undefined)?.exceptions ?? [];
+    expect(excs.length).toBe(1);
+  });
+
+  it("empty source/target shows matrix-empty hint, not the table", async () => {
+    const mod: ModuleEntry = {
+      ...makeConstraint(),
+      payload: { source_wildcard_id: null, target_wildcard_id: null, matrix: {}, exceptions: [] },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod },
+    });
+    await nextTick();
+    expect(wrapper.find("[data-test='cn-matrix-empty']").exists()).toBe(true);
+    expect(wrapper.find("[data-test='cn-matrix']").exists()).toBe(false);
+  });
+
   it.todo("resolves source/target via siblingModules + reports matrix dims + exceptions count — see Task 19");
 });
