@@ -473,13 +473,6 @@ function toggleInternalOnCard(m: ModuleEntry) {
   };
 }
 
-/** Whether to expose the inline lock toggle on the card. Lock only
- *  affects wildcard kind — for fixed_values + others it's a no-op
- *  in the engine, so we hide it to reduce header noise. */
-function showLockToggle(m: ModuleEntry): boolean {
-  return m.type === "wildcard";
-}
-
 /** Tooltip listing what's been overridden on the module — surfaced
  *  on hover of the modified-indicator dot. Order matches the modal's
  *  field layout for visual consistency. */
@@ -534,6 +527,21 @@ function lookupSiblingName(uuid: string | null | undefined): string | null {
   if (lk?.varBinding) return lk.varBinding;
   if (lk?.name) return lk.name;
   return null;
+}
+
+/**
+ * Returns null when the module is the only instance of its uuid in the
+ * current Context, or `{ index: 1-based, total }` when it has siblings.
+ * Used to render the `#N of M` badge.
+ *
+ * Phase A: counts in-Context only. Phase B may broaden to whole-
+ * workflow scope when wiring the auto-fork prompt.
+ */
+function siblingInfo(m: ModuleEntry): { index: number; total: number } | null {
+  const sameUuid = value.value.modules.filter((x) => x.id === m.id);
+  if (sameUuid.length <= 1) return null;
+  const index = sameUuid.findIndex((x) => x === m) + 1;
+  return { index, total: sameUuid.length };
 }
 
 function summaryFor(m: ModuleEntry): string {
@@ -1195,6 +1203,15 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             {{ m.meta.name || "(unnamed)" }}
           </span>
 
+          <!-- Sibling badge — shown when the same uuid appears more
+               than once in this Context (Phase A: count only; Phase B
+               will wire auto-fork). -->
+          <span
+            v-if="siblingInfo(m)"
+            class="wp-mod-badge wp-mod-badge--sibling"
+            :title="`used ${siblingInfo(m)!.total} times in this Context`"
+          >#{{ siblingInfo(m)!.index }} of {{ siblingInfo(m)!.total }}</span>
+
           <!-- Status-dots cluster — read-only indicators grouped so
                the eye reads them as a single "module health" glance.
                Order modified → drift → missing → conflict (severity
@@ -1228,34 +1245,40 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             ></span>
           </span>
 
-          <!-- Toggle-buttons cluster — lock + internal both rendered
-               (when applicable) so on/off is one click away without
-               opening the modal. Modal EXECUTION row stays as the
-               deeper editor (seed input, reroll, …). Lock only on
-               wildcard kind — engine ignores it elsewhere. -->
-          <button
-            v-if="showLockToggle(m)"
-            type="button"
-            class="wp-card-toggle"
-            :class="{ 'wp-card-toggle--on': isLocked(m) }"
-            :title="isLocked(m) ? `Locked seed: ${m.instance?.locked_seed}. Click to unlock.` : 'Lock seed — freeze the pick across runs (open modal to set seed).'"
-            @click.stop="toggleLockOnCard(m)"
-          ><i :class="['pi', isLocked(m) ? 'pi-lock' : 'pi-lock-open']" aria-hidden="true"></i></button>
-          <button
-            type="button"
-            class="wp-card-toggle"
-            :class="{ 'wp-card-toggle--on': isInternal(m) }"
-            :title="isInternal(m) ? 'Internal — bindings hidden from public payload. Click to publish.' : 'Mark internal — hide bindings from public payload (downstream modules can still read them).'"
-            @click.stop="toggleInternalOnCard(m)"
-          ><i :class="['pi', isInternal(m) ? 'pi-eye-slash' : 'pi-eye']" aria-hidden="true"></i></button>
-
-          <button
-            type="button"
-            aria-label="remove"
-            title="Remove module"
-            class="wp-icon-btn wp-delete"
-            @click="removeModule(m.id)"
-          ><i class="pi pi-times" aria-hidden="true"></i></button>
+          <!-- Inline action cluster — lock + internal + remove.
+               Fades in on row hover via .wp-mod-actions opacity
+               transition. Lock + internal only on wildcard kind
+               (engine ignores them elsewhere). -->
+          <div class="wp-mod-actions">
+            <button
+              v-if="m.type === 'wildcard'"
+              type="button"
+              class="wp-btn wp-btn--icon-sm"
+              :class="{ 'is-locked': isLocked(m) }"
+              data-test="row-action-lock"
+              :title="isLocked(m) ? `Locked seed: ${m.instance?.locked_seed}. Click to unlock.` : 'Lock seed'"
+              :aria-label="isLocked(m) ? 'Unlock seed' : 'Lock seed'"
+              @click.stop="toggleLockOnCard(m)"
+            ><i class="pi pi-lock" /></button>
+            <button
+              v-if="m.type === 'wildcard'"
+              type="button"
+              class="wp-btn wp-btn--icon-sm"
+              :class="{ 'is-active': isInternal(m) }"
+              data-test="row-action-internal"
+              :title="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
+              :aria-label="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
+              @click.stop="toggleInternalOnCard(m)"
+            ><i class="pi pi-globe" /></button>
+            <button
+              type="button"
+              class="wp-btn wp-btn--icon-sm wp-btn--danger"
+              data-test="row-action-remove"
+              title="Remove"
+              aria-label="Remove module"
+              @click.stop="removeModule(m.id)"
+            ><i class="pi pi-trash" /></button>
+          </div>
         </div>
 
         <Transition name="wp-collapse">
@@ -1896,53 +1919,68 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border-color: var(--wp-danger);
 }
 
-/* In-card lock + internal toggle buttons. Always rendered so the
- * on/off state is one click away. Off = ghost (transparent bg,
- * muted text); on = accent fill. Sit next to the conflict/missing
- * dots in the header so the eye groups "per-instance state" all in
- * the same region. */
-.wp-card-toggle {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  color: var(--wp-text3);
-  cursor: pointer;
+/* ── Sibling badge ──────────────────────────────────────────────────────
+ * Rendered when the same uuid appears more than once in this Context.
+ * Phase A: count display only. Phase B will wire auto-fork prompt. */
+.wp-mod-badge {
+  font: 600 9px/1 var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 5px;
+  border-radius: 2px;
+}
+.wp-mod-badge--sibling {
+  background: color-mix(in srgb, var(--wp-text-dim, var(--wp-text3)) 22%, transparent);
+  color: var(--wp-text-muted, var(--wp-text3));
+  font-family: var(--wp-font-mono);
+  text-transform: none;
   flex-shrink: 0;
-  font-size: 10px;
-  width: 18px;
-  height: 18px;
+}
+
+/* ── Inline action cluster (lock + internal + remove) ───────────────────
+ * Fades in on row hover; uses PrimeIcons via `pi` class (Task 9).
+ * Replaces the old wp-card-toggle + wp-icon-btn / wp-delete pattern. */
+.wp-mod-actions {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity .12s ease;
+  flex-shrink: 0;
+}
+.wp-module:hover .wp-mod-actions { opacity: 1; }
+.wp-btn--icon-sm {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
+  font: 500 11px/1 var(--wp-font-sans);
+  padding: 3px;
+  border-radius: var(--wp-radius, 4px);
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.wp-card-toggle:hover {
+.wp-btn--icon-sm:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-border-soft, var(--wp-border2));
   color: var(--wp-text);
-  border-color: var(--wp-border2);
 }
-.wp-card-toggle--on {
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-  border-color: var(--wp-accent);
-  color: var(--wp-accent);
+.wp-btn--icon-sm .pi { font-size: 11px; }
+.wp-btn--icon-sm.is-active {
+  color: var(--wp-accent-text, var(--wp-accent));
+  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
 }
-.wp-card-toggle--on:hover {
-  background: color-mix(in srgb, var(--wp-accent) 28%, transparent);
-  color: var(--wp-accent2, var(--wp-accent));
+.wp-btn--icon-sm.is-locked {
+  color: var(--wp-warn);
+  background: color-mix(in srgb, var(--wp-warn) 14%, transparent);
 }
-.wp-card-toggle .pi { font-size: 10px; }
-
-.wp-icon-btn {
-  background: none;
-  border: none;
-  color: var(--wp-text3);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 2px;
-  line-height: 1;
+.wp-btn--danger:hover {
+  color: var(--wp-danger);
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
 }
-.wp-icon-btn:hover { color: var(--wp-text); }
-.wp-icon-btn.wp-delete:hover { color: var(--wp-red); }
 
 /* Summary line — read-only preview. Edit via right-click → Edit (or Enter
  * on focused card). Keeping the card chrome non-interactive avoids

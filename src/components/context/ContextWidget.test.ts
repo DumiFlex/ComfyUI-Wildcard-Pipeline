@@ -562,3 +562,77 @@ describe("ContextWidget — fixed_values picked from library", () => {
     wrapper.unmount();
   });
 });
+
+// ── Task 9 helpers ──────────────────────────────────────────────────────────
+
+/** Minimal mount helper for Task 9 tests. Accepts a compact module descriptor
+ *  array and serialises it into the initialJson format ContextWidget expects.
+ *  `id`, `type`, and `enabled` are required; remaining fields default to safe
+ *  empty values so callers only specify what the test cares about. */
+type StubModule = {
+  id: string;
+  type: string;
+  enabled: boolean;
+  payload?: Record<string, unknown>;
+  instance?: Record<string, unknown>;
+};
+function mountWithModules(stubs: StubModule[]) {
+  const modules = stubs.map((s) => ({
+    id: s.id,
+    type: s.type,
+    enabled: s.enabled,
+    meta: { name: `mod-${s.id}`, description: "", tags: [] },
+    entries: [],
+    payload: s.payload ?? {},
+    ...(s.instance !== undefined ? { instance: s.instance } : {}),
+  }));
+  const initialJson = JSON.stringify({ version: 1, modules });
+  return mount(ContextWidget, {
+    props: { nodeId: 9000, initialJson, upstreamVars: [], onChange: () => {} },
+  });
+}
+
+// ── Sibling badge ───────────────────────────────────────────────────────────
+
+describe("ContextWidget sibling badge", () => {
+  it("renders #N of M badge when uuid duplicated in same Context", () => {
+    const wrapper = mountWithModules([
+      { id: "abc12345", type: "wildcard", enabled: true },
+      { id: "abc12345", type: "wildcard", enabled: true },
+    ]);
+    const badges = wrapper.findAll(".wp-mod-badge--sibling");
+    expect(badges).toHaveLength(2);
+    expect(badges[0].text()).toMatch(/#1\s*of\s*2/);
+    expect(badges[1].text()).toMatch(/#2\s*of\s*2/);
+    expect(badges[0].attributes("title")).toBe("used 2 times in this Context");
+  });
+
+  it("does NOT render sibling badge when uuid appears once", () => {
+    const wrapper = mountWithModules([
+      { id: "abc12345", type: "wildcard", enabled: true },
+    ]);
+    expect(wrapper.find(".wp-mod-badge--sibling").exists()).toBe(false);
+  });
+});
+
+// ── Inline actions ──────────────────────────────────────────────────────────
+
+describe("ContextWidget inline actions", () => {
+  it("renders lock + internal + remove icons for wildcard rows", () => {
+    const wrapper = mountWithModules([
+      { id: "abc12345", type: "wildcard", enabled: true },
+    ]);
+    expect(wrapper.find('[data-test="row-action-lock"]').find("i.pi.pi-lock").exists()).toBe(true);
+    expect(wrapper.find('[data-test="row-action-internal"]').find("i.pi.pi-globe").exists()).toBe(true);
+    expect(wrapper.find('[data-test="row-action-remove"]').find("i.pi.pi-trash").exists()).toBe(true);
+  });
+
+  it("hides lock + internal for non-wildcard rows", () => {
+    const wrapper = mountWithModules([
+      { id: "def67890", type: "fixed_values", enabled: true },
+    ]);
+    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="row-action-remove"]').exists()).toBe(true);
+  });
+});
