@@ -17,6 +17,7 @@ import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import Logo from "../shared/Logo.vue";
 import { dragState } from "./drag-store";
 import { pushToast } from "../shared/toast-store";
+import { kindIcon } from "../shared/kind-icons";
 import {
   forceRefresh as forceRefreshHashes,
   hashes as libraryHashes,
@@ -240,21 +241,6 @@ function conflictTooltip(id: string): string {
     }
     return `${conflictLabelFor(c.type)}: $${c.variable}`;
   }).join("\n");
-}
-
-// Type-icon mapping per the brand sheet. Forward-compatible with P5+ types.
-// Per-kind PrimeIcons mapping. Color comes from the matching
-// `.type-X` CSS class on `.wp-type-icon`.
-function iconFor(type: ModuleEntry["type"]): string {
-  switch (type) {
-    case "wildcard":     return "pi-th-large";
-    case "fixed_values": return "pi-tag";
-    case "combine":      return "pi-share-alt";
-    case "derivation":   return "pi-code";
-    case "constraint":   return "pi-sitemap";
-    case "pipeline":     return "pi-list";
-    default:             return "pi-question";
-  }
 }
 
 /**
@@ -1153,6 +1139,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
         v-for="m in value.modules"
         :key="m.id"
         :data-module-id="m.id"
+        :data-kind="m.type"
         class="wp-module"
         tabindex="0"
         :class="{
@@ -1164,6 +1151,9 @@ function onDrop(ev: DragEvent, targetId: string | null) {
           'wp-state-drift': isDrifted(m),
           'wp-state-missing': isMissingFromLibrary(m),
           'wp-drop-target': dragOverId === m.id,
+          'wp-mod--mod': isModified(m),
+          'wp-mod--drift': isDrifted(m),
+          'wp-mod--err': isMissingFromLibrary(m),
         }"
         @dragenter="(ev) => onDragEnter(ev, m.id)"
         @dragover="onDragOver"
@@ -1197,11 +1187,9 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             <span class="wp-toggle-mark"></span>
           </label>
 
-          <i
-            :class="['pi', iconFor(m.type), 'wp-type-icon', `type-${m.type}`]"
-            :title="m.type"
-            aria-hidden="true"
-          ></i>
+          <span class="wp-mod-icon" :title="m.type" aria-hidden="true">
+            <i :class="kindIcon(m.type)" />
+          </span>
 
           <span class="wp-module-name" :title="m.meta.name || '(unnamed)'">
             {{ m.meta.name || "(unnamed)" }}
@@ -1654,6 +1642,8 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-module {
   background: var(--wp-bg3);
   border: 1px solid var(--wp-border);
+  border-left-width: 3px;
+  border-left-color: var(--wp-kind-wildcard);
   border-radius: var(--wp-radius-sm);
   padding: 6px 8px;
   display: flex;
@@ -1661,6 +1651,11 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   gap: 4px;
   transition: background-color 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
+/* Kind border-left color — driven by data-kind attribute (Task 8). */
+.wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
+.wp-module[data-kind="derivation"]   { border-left-color: var(--wp-kind-derivation); }
+.wp-module[data-kind="constraint"]   { border-left-color: var(--wp-kind-constraint); }
+.wp-module[data-kind="fixed_values"] { border-left-color: var(--wp-kind-fixed); }
 .wp-module:hover {
   border-color: var(--wp-border2);
   background: var(--wp-bg4);
@@ -1708,6 +1703,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border-color: var(--wp-accent);
   box-shadow: inset 0 2px 0 var(--wp-accent);
 }
+
+/* Status-state full-border + bg tint (Task 8).
+ * Applied in ADDITION to the existing legacy state classes so the
+ * kind border-left is preserved while the full border reflects status.
+ * Lower specificity than wp-drop-target so drop feedback wins. */
+.wp-module.wp-mod--mod   { border-color: var(--wp-status-modified); background: color-mix(in srgb, var(--wp-status-modified) 8%, var(--wp-bg3)); }
+.wp-module.wp-mod--drift { border-color: var(--wp-warn);            background: color-mix(in srgb, var(--wp-warn) 8%, var(--wp-bg3)); }
+.wp-module.wp-mod--err   { border-color: var(--wp-danger);          background: color-mix(in srgb, var(--wp-danger) 8%, var(--wp-bg3)); }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
@@ -1790,6 +1793,23 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-type-icon.type-derivation   { color: var(--wp-kind-derivation); }
 .wp-type-icon.type-constraint   { color: var(--wp-kind-constraint); }
 .wp-type-icon.type-pipeline     { color: var(--wp-kind-pipeline); }
+
+/* Kind icon — canonical PrimeIcons per module type (Task 8).
+ * Color follows the same --wp-kind-* token map as the border-left. */
+.wp-mod-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--wp-kind-wildcard);
+}
+.wp-mod-icon .pi { font-size: 12px; line-height: 1; }
+.wp-module[data-kind="combine"]      .wp-mod-icon { color: var(--wp-kind-combine); }
+.wp-module[data-kind="derivation"]   .wp-mod-icon { color: var(--wp-kind-derivation); }
+.wp-module[data-kind="constraint"]   .wp-mod-icon { color: var(--wp-kind-constraint); }
+.wp-module[data-kind="fixed_values"] .wp-mod-icon { color: var(--wp-kind-fixed); }
 
 .wp-module-name {
   flex: 1;
