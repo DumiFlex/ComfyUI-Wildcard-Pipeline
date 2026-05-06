@@ -156,20 +156,29 @@
         </div>
         </div><!-- /wp-picker__toolbar-top -->
 
-        <div class="wp-picker__tabs" role="tablist">
+        <div class="wp-picker-tabs" role="tablist">
           <button
-            v-for="tab in tabs"
-            :key="tab.value ?? 'all'"
             type="button"
-            class="wp-picker__tab"
+            data-test="picker-tab-all"
+            data-testid="picker-tab-all"
+            :class="['wp-picker-tab', { active: kindFilter === 'all' }]"
             role="tab"
-            :data-active="activeTab === tab.value || null"
-            :data-testid="`picker-tab-${tab.value ?? 'all'}`"
-            @click="activeTab = tab.value"
-          >
-            <i v-if="tab.icon" :class="['pi', tab.icon, 'wp-picker__tab-icon']" aria-hidden="true"></i>
-            <span>{{ tab.label }}</span>
-            <span class="wp-picker__tab-count">{{ countFor(tab.value) }}</span>
+            :aria-selected="kindFilter === 'all'"
+            @click="kindFilter = 'all'"
+          ><i class="pi pi-th-large" />All <span class="wp-pill-count">{{ totalCount }}</span></button>
+
+          <button
+            v-for="(label, kind) in KIND_LABELS"
+            :key="kind"
+            type="button"
+            :data-test="`picker-tab-${kind}`"
+            :data-k="kind"
+            :class="['wp-picker-tab', { active: kindFilter === kind }]"
+            role="tab"
+            :aria-selected="kindFilter === kind"
+            @click="kindFilter = kind as KindFilter"
+          ><i :class="kindIcon(kind)" />{{ label }}
+            <span class="wp-pill-count">{{ countByKind(kind) }}</span>
           </button>
         </div>
       </div>
@@ -323,6 +332,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
+import { kindIcon } from "../shared/kind-icons";
 
 interface PickerModule {
   id: string;
@@ -372,10 +382,12 @@ const searchFocused = ref(false);
 const searchInput = ref<HTMLInputElement | null>(null);
 const rootEl = ref<HTMLDivElement | null>(null);
 
-const activeTab = ref<string | null>(null); // null = "All"
 // Use reactive() so Vue can track .has()/.size/.add()/.delete()/.clear() individually
 // (plain ref<Set> only tracks the ref's .value assignment, not Set mutations).
 const selected = reactive<Set<string>>(new Set());
+
+type KindFilter = "all" | "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint";
+const kindFilter = ref<KindFilter>("all");
 
 // ── Filters ────────────────────────────────────────────────────────
 // Three orthogonal filters, all AND-combined with the kind tab +
@@ -439,7 +451,7 @@ const hasActiveFilter = computed(() =>
   || hideAlreadyAdded.value
   || selectedTags.value.size > 0
   || selectedCategoryId.value !== null
-  || activeTab.value !== null
+  || kindFilter.value !== "all"
   || !!searchTerm.value.trim(),
 );
 
@@ -448,7 +460,7 @@ function clearAllFilters() {
   hideAlreadyAdded.value = false;
   selectedTags.value = new Set();
   selectedCategoryId.value = null;
-  activeTab.value = null;
+  kindFilter.value = "all";
   searchTerm.value = "";
 }
 
@@ -510,7 +522,7 @@ watch(
     // Reset transient UI state.
     selected.clear();
     searchTerm.value = "";
-    activeTab.value = null;
+    kindFilter.value = "all";
     favoritesOnly.value = false;
     hideAlreadyAdded.value = true;
     selectedTags.value = new Set();
@@ -532,32 +544,22 @@ const byId = computed(() => {
   return m;
 });
 
-interface KindTab {
-  /** null = "All" tab. */
-  value: string | null;
-  label: string;
-  icon: string | null;
-}
-
 // Pipeline kind is intentionally absent from the picker — the modal
 // has no read-only preview for pipelines yet (deferred from 5.5.6
 // pending cross-kind step lookup design), so embedding one would
-// give the user no way to inspect it from the graph. Re-add the
-// `pipeline` tab here when pipeline preview ships.
-const tabs: KindTab[] = [
-  { value: null,            label: "All",         icon: null },
-  { value: "wildcard",      label: "Wildcards",   icon: "pi-th-large" },
-  { value: "combine",       label: "Combines",    icon: "pi-share-alt" },
-  { value: "derivation",    label: "Derivations", icon: "pi-code" },
-  { value: "constraint",    label: "Constraints", icon: "pi-sitemap" },
-  { value: "fixed_values",  label: "Fixed",       icon: "pi-tag" },
-];
+// give the user no way to inspect it from the graph.
+const KIND_LABELS: Record<string, string> = {
+  wildcard:     "Wildcards",
+  fixed_values: "Fixed",
+  combine:      "Combines",
+  derivation:   "Derivations",
+  constraint:   "Constraints",
+};
 
-/** Pipelines are hidden from the picker until preview support ships
- *  (see `tabs` comment). Rows from this set never reach the visible
- *  list, so neither the tab list nor the "All" filter shows them.
- *  Also gates `isPickable` defensively for any path that bypasses the
- *  filter (e.g. future programmatic pick). */
+/** Pipelines are hidden from the picker until preview support ships.
+ *  Rows from this set never reach the visible list, so neither the tab
+ *  list nor the "All" filter shows them. Also gates `isPickable`
+ *  defensively for any path that bypasses the filter. */
 const HIDDEN_KINDS = new Set<string>(["pipeline"]);
 
 /** Modules visible to the picker. Excludes hidden kinds (pipeline at
@@ -569,10 +571,10 @@ const visibleModules = computed<PickerModule[]>(() =>
   modules.value.filter((m) => !HIDDEN_KINDS.has(m.type)),
 );
 
-function countFor(kind: string | null): number {
-  if (kind === null) return visibleModules.value.length;
+function countByKind(kind: string): number {
   return visibleModules.value.filter((m) => m.type === kind).length;
 }
+const totalCount = computed(() => visibleModules.value.length);
 
 const alreadyAddedSet = computed<Set<string>>(() => {
   const ids = [...(props.alreadyAdded ?? []), ...(props.alreadyAddedIds ?? [])];
@@ -588,7 +590,7 @@ const filteredModules = computed(() => {
   const tagFilter = selectedTags.value;
   return visibleModules.value.filter((m) => {
     // Kind tab.
-    if (activeTab.value !== null && m.type !== activeTab.value) return false;
+    if (kindFilter.value !== "all" && m.type !== kindFilter.value) return false;
     // Favorites toggle.
     if (favoritesOnly.value && !m.is_favorite) return false;
     // Hide-already-added toggle.
@@ -638,17 +640,7 @@ const groupedFiltered = computed<{ kind: string; items: PickerModule[] }[]>(() =
 });
 
 // ── Display helpers ────────────────────────────────────────────────
-function kindIcon(kind: string): string {
-  switch (kind) {
-    case "wildcard":     return "pi-th-large";
-    case "combine":      return "pi-share-alt";
-    case "derivation":   return "pi-code";
-    case "constraint":   return "pi-sitemap";
-    case "pipeline":     return "pi-list";
-    case "fixed_values": return "pi-tag";
-    default:             return "pi-circle";
-  }
-}
+// `kindIcon` imported from ../shared/kind-icons
 
 function kindLabel(kind: string): string {
   switch (kind) {
@@ -741,7 +733,7 @@ function getRowButtons(): HTMLButtonElement[] {
 
 function getKindTabs(): HTMLButtonElement[] {
   if (!rootEl.value) return [];
-  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>(".wp-picker__tab"));
+  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>(".wp-picker-tab"));
 }
 
 // ── Capture-phase key isolation ───────────────────────────────────
@@ -1034,51 +1026,34 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__search-clear:hover { color: var(--wp-text); }
 
-.wp-picker__tabs {
-  /* Wrap rather than overflow — a horizontal scrollbar inside a modal
-   * is unfriendly. At 720px width the 7 tabs fit comfortably on one
-   * row; if they don't (translated labels, narrower modal) they drop
-   * to a second row instead of hiding behind a scroll affordance. */
-  display: flex; gap: 4px 6px;
-  flex-wrap: wrap;
+.wp-picker-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--wp-border);
-  margin: 0 -16px;
-  padding: 0 16px;
+  align-items: center;
 }
-.wp-picker__tab {
-  height: 30px;
-  padding: 0 8px;
-  display: inline-flex; align-items: center; gap: 5px;
+.wp-picker-tab {
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  padding: 9px 12px;
+  font: 500 11px/1 var(--wp-font-sans);
   color: var(--wp-text-muted);
   cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 500;
-  font-family: inherit;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  transition: color 120ms ease, border-color 120ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 2px solid transparent;
 }
-.wp-picker__tab:hover { color: var(--wp-text); }
-.wp-picker__tab[data-active] {
-  color: var(--wp-text);
-  border-bottom-color: var(--wp-accent-500);
-}
-.wp-picker__tab:focus-visible {
-  /* Subtle filled pill behind the underline so the keyboard focus
-   * reads as "this is the one Tab landed on" without competing with
-   * the active-state underline. The shadow uses the same accent
-   * recipe the SPA's `.wp-input:focus` convention uses. */
-  outline: none;
-  color: var(--wp-text);
-  background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 38%, transparent);
-  border-radius: 4px;
-}
-.wp-picker__tab-icon { font-size: 10px; }
-.wp-picker__tab-count {
+.wp-picker-tab:hover { color: var(--wp-text); }
+.wp-picker-tab.active { color: var(--wp-text); border-bottom-color: var(--wp-accent); }
+.wp-picker-tab .pi { font-size: 13px; }
+.wp-picker-tab[data-k="wildcard"]    .pi { color: var(--wp-kind-wildcard); }
+.wp-picker-tab[data-k="fixed_values"] .pi { color: var(--wp-kind-fixed); }
+.wp-picker-tab[data-k="combine"]     .pi { color: var(--wp-kind-combine); }
+.wp-picker-tab[data-k="derivation"]  .pi { color: var(--wp-kind-derivation); }
+.wp-picker-tab[data-k="constraint"]  .pi { color: var(--wp-kind-constraint); }
+.wp-pill-count {
   font-family: var(--wp-font-mono);
   font-size: 10px;
   color: var(--wp-text-dim);

@@ -357,3 +357,43 @@ describe("ModulePickerModal hide-already-added", () => {
     expect(row.classes()).toContain("is-already-added");
   });
 });
+
+/** Synchronous mount for static-markup tests (tabs, CSS classes).
+ *  Tabs are rendered immediately on mount — no fetch round-trip needed. */
+function mountPickerSync(opts: {
+  modules: Array<{ id: string; type: string; name: string; payload: Record<string, unknown> }>;
+}) {
+  vi.stubGlobal(
+    "fetch",
+    stubFetch({
+      "/wp/api/modules":    { items: opts.modules },
+      "/wp/api/categories": { items: [] },
+    }),
+  );
+  return mount(ModulePickerModal, {
+    global: {
+      stubs: {
+        teleport: true,
+        ModalShell: { template: "<div><slot /></div>" },
+      },
+    },
+    props: { visible: true, alreadyAdded: [] },
+  });
+}
+
+describe("ModulePickerModal kind tabs", () => {
+  it("renders 6 kind tabs (All + 5 kinds)", () => {
+    const wrapper = mountPickerSync({ modules: [] });
+    expect(wrapper.findAll(".wp-picker-tab")).toHaveLength(6);
+  });
+
+  it("each kind tab uses the canonical PrimeIcons class", () => {
+    const wrapper = mountPickerSync({ modules: [] });
+    const wcTab = wrapper.find('[data-test="picker-tab-wildcard"]');
+    expect(wcTab.find("i").classes().join(" ")).toContain("pi-sparkles");
+    const fxTab = wrapper.find('[data-test="picker-tab-fixed_values"]');
+    expect(fxTab.find("i").classes().join(" ")).toContain("pi-tag");
+    const cnTab = wrapper.find('[data-test="picker-tab-constraint"]');
+    expect(cnTab.find("i").classes().join(" ")).toContain("pi-filter");
+  });
+});
