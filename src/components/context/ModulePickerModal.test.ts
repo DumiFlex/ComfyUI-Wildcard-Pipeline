@@ -68,28 +68,36 @@ async function openFilters(wrapper: ReturnType<typeof mount>) {
 describe("ModulePickerModal — filters", () => {
   it("renders all modules by default (no filters active)", async () => {
     const wrapper = await mountReady();
-    expect(wrapper.findAll(".wp-picker__row")).toHaveLength(3);
+    // hide-already-added is ON by default; outfit (aaaaaaaa) is in alreadyAdded
+    // so it is hidden → 2 visible rows (backdrop + props).
+    expect(wrapper.findAll(".wp-picker__row")).toHaveLength(2);
   });
 
   it("favorites toggle narrows to favorited modules only", async () => {
     const wrapper = await mountReady();
+    // Turn off hide-already-added first so outfit (the only favorite) is visible.
+    await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
     await wrapper.find('[data-testid="picker-filter-favorites"]').trigger("click");
     const rows = wrapper.findAll(".wp-picker__row");
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain("outfit");
   });
 
-  it("hide-already-added toggle drops modules in the alreadyAdded set", async () => {
+  it("hide-already-added toggle default ON hides already-added module; toggling OFF restores it", async () => {
     const wrapper = await mountReady();
+    // Default: hide-already-added ON → outfit hidden, 2 rows.
+    expect(wrapper.findAll(".wp-picker__row")).toHaveLength(2);
+    // Toggle OFF → outfit visible, 3 rows.
     await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
     const rows = wrapper.findAll(".wp-picker__row");
-    expect(rows).toHaveLength(2);
-    // outfit (aaaaaaaa) is excluded.
-    expect(rows.find((r) => r.text().includes("outfit"))).toBeUndefined();
+    expect(rows).toHaveLength(3);
+    expect(rows.find((r) => r.text().includes("outfit"))).toBeDefined();
   });
 
   it("tag chip narrows to modules carrying that tag (AND across multi-select)", async () => {
     const wrapper = await mountReady();
+    // Turn off hide-already-added so outfit is visible.
+    await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
     await openFilters(wrapper);
     await wrapper.find('[data-testid="picker-tag-clothing"]').trigger("click");
     let rows = wrapper.findAll(".wp-picker__row");
@@ -114,15 +122,20 @@ describe("ModulePickerModal — filters", () => {
 
   it("clear button resets every active filter", async () => {
     const wrapper = await mountReady();
+    // Turn off hide-already-added so favorites + tag can include outfit.
+    await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
     await wrapper.find('[data-testid="picker-filter-favorites"]').trigger("click");
     await openFilters(wrapper);
     await wrapper.find('[data-testid="picker-tag-clothing"]').trigger("click");
     await wrapper.find('[data-testid="picker-filter-clear"]').trigger("click");
+    // clearAllFilters resets hideAlreadyAdded → false, so all 3 rows are visible.
     expect(wrapper.findAll(".wp-picker__row")).toHaveLength(3);
   });
 
   it("filters combine via AND (favorites + tag clothing → only outfit)", async () => {
     const wrapper = await mountReady();
+    // Turn off hide-already-added so outfit (the only favorite) is visible.
+    await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
     await wrapper.find('[data-testid="picker-filter-favorites"]').trigger("click");
     await openFilters(wrapper);
     await wrapper.find('[data-testid="picker-tag-clothing"]').trigger("click");
@@ -144,6 +157,8 @@ describe("ModulePickerModal — filters", () => {
   it("inline favorites toggle works without opening the popover", async () => {
     const wrapper = await mountReady();
     expect(wrapper.find('[data-testid="picker-filter-pop"]').exists()).toBe(false);
+    // Turn off hide-already-added so outfit (the only favorite) is visible.
+    await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
     await wrapper.find('[data-testid="picker-filter-favorites"]').trigger("click");
     // Popover stayed closed.
     expect(wrapper.find('[data-testid="picker-filter-pop"]').exists()).toBe(false);
@@ -160,6 +175,7 @@ describe("ModulePickerModal — filters", () => {
 // the v-for row elements on re-render, making DOMWrapper references stale.
 async function mountPicker(opts: {
   modules: Array<{ id: string; type: string; name: string; payload: Record<string, unknown> }>;
+  alreadyAddedIds?: string[];
 }) {
   vi.stubGlobal(
     "fetch",
@@ -175,7 +191,11 @@ async function mountPicker(opts: {
         ModalShell: { template: "<div><slot /></div>" },
       },
     },
-    props: { visible: true, alreadyAdded: [] },
+    props: {
+      visible: true,
+      alreadyAdded: opts.alreadyAddedIds ?? [],
+      alreadyAddedIds: opts.alreadyAddedIds,
+    },
   });
   await new Promise((r) => setTimeout(r, 0));
   await new Promise((r) => setTimeout(r, 0));
@@ -306,5 +326,34 @@ describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
     const row = wrapper.find(".wp-picker__row");
     expect(row.exists()).toBe(true);
     expect(row.attributes("data-disabled")).toBe("true");
+  });
+});
+
+describe("ModulePickerModal hide-already-added", () => {
+  it("dims rows whose id is in alreadyAddedIds", async () => {
+    const wrapper = await mountPicker({
+      modules: [
+        { id: "a1", type: "wildcard", name: "hair_style", payload: {} },
+        { id: "b2", type: "wildcard", name: "mood", payload: {} },
+      ],
+      alreadyAddedIds: ["a1"],
+    });
+    // hide-already-added is ON by default → row a1 hidden, only b2 visible.
+    expect(wrapper.find('[data-test="picker-row-a1"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="picker-row-b2"]').exists()).toBe(true);
+  });
+
+  it("toggling the pill OFF re-shows already-added rows with dimmed style", async () => {
+    const wrapper = await mountPicker({
+      modules: [
+        { id: "a1", type: "wildcard", name: "hair_style", payload: {} },
+        { id: "b2", type: "wildcard", name: "mood", payload: {} },
+      ],
+      alreadyAddedIds: ["a1"],
+    });
+    await wrapper.find('[data-test="hide-added-toggle"]').trigger("click");
+    const row = wrapper.find('[data-test="picker-row-a1"]');
+    expect(row.exists()).toBe(true);
+    expect(row.classes()).toContain("is-already-added");
   });
 });

@@ -1354,7 +1354,8 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
     <ModulePickerModal
       :visible="showPicker"
-      :already-added="value.modules.map((m) => m.id)"
+      :already-added="value.modules.map((m: ModuleEntry) => m.id)"
+      :already-added-ids="value.modules.map((m: ModuleEntry) => m.id)"
       @add="onPickerAdd"
       @close="showPicker = false"
     />

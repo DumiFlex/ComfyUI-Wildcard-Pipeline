@@ -64,12 +64,13 @@
           <i :class="['pi', favoritesOnly ? 'pi-star-fill' : 'pi-star']" aria-hidden="true"></i>
         </button>
         <button
-          v-if="alreadyAdded && alreadyAdded.length > 0"
+          v-if="alreadyAddedSet.size > 0"
           type="button"
           class="wp-picker__icon-btn"
           :class="{ 'wp-picker__icon-btn--active': hideAlreadyAdded }"
-          :title="hideAlreadyAdded ? `Hiding ${alreadyAdded.length} already-added modules · click to show` : `Hide ${alreadyAdded.length} already-added modules`"
+          :title="hideAlreadyAdded ? `Hiding ${alreadyAddedSet.size} already-added modules · click to show` : `Hide ${alreadyAddedSet.size} already-added modules`"
           data-testid="picker-filter-hide-added"
+          data-test="hide-added-toggle"
           @click="hideAlreadyAdded = !hideAlreadyAdded"
         >
           <i :class="['pi', hideAlreadyAdded ? 'pi-eye-slash' : 'pi-eye']" aria-hidden="true"></i>
@@ -210,15 +211,15 @@
               v-for="row in group.items"
               :key="row.id"
               type="button"
-              class="wp-picker__row"
+              :class="['wp-picker__row', { 'is-already-added': isAlreadyAdded(row.id) }]"
               :data-kind="row.type"
               :data-checked="selected.has(row.id) ? '' : null"
               :data-disabled="!isPickable(row) || null"
               :data-testid="`picker-row-${row.id}`"
               :data-test="`picker-row-${row.id}`"
               :disabled="!isPickable(row)"
-              :title="isPickable(row) ? '' : 'Module has no payload — cannot embed.'"
-              @click="onRowClick(row)"
+              :title="isPickable(row) ? (isAlreadyAdded(row.id) ? 'Already added to this Context.' : '') : 'Module has no payload — cannot embed.'"
+              @click="isAlreadyAdded(row.id) ? undefined : onRowClick(row)"
             >
               <span
                 class="wp-picker__check"
@@ -341,6 +342,12 @@ const props = defineProps<{
    * users browsing a big library can focus on net-new picks.
    */
   alreadyAdded?: string[];
+  /**
+   * Alias accepted alongside `alreadyAdded`. Both are merged into the
+   * same set so callers can use either spelling. Provided for API
+   * symmetry with the task-12 spec (`alreadyAddedIds`).
+   */
+  alreadyAddedIds?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -375,7 +382,7 @@ const selected = reactive<Set<string>>(new Set());
 // search box. None affect the data load — pure client-side narrowing
 // over `modules`.
 const favoritesOnly = ref(false);
-const hideAlreadyAdded = ref(false);
+const hideAlreadyAdded = ref(true);
 const selectedTags = ref<Set<string>>(new Set());
 const selectedCategoryId = ref<string | null>(null); // null = "any"
 const filtersOpen = ref(false); // popover state for category + tags
@@ -505,7 +512,7 @@ watch(
     searchTerm.value = "";
     activeTab.value = null;
     favoritesOnly.value = false;
-    hideAlreadyAdded.value = false;
+    hideAlreadyAdded.value = true;
     selectedTags.value = new Set();
     selectedCategoryId.value = null;
     filtersOpen.value = false;
@@ -567,9 +574,14 @@ function countFor(kind: string | null): number {
   return visibleModules.value.filter((m) => m.type === kind).length;
 }
 
-const alreadyAddedSet = computed<Set<string>>(() =>
-  new Set(props.alreadyAdded ?? []),
-);
+const alreadyAddedSet = computed<Set<string>>(() => {
+  const ids = [...(props.alreadyAdded ?? []), ...(props.alreadyAddedIds ?? [])];
+  return new Set(ids);
+});
+
+function isAlreadyAdded(id: string): boolean {
+  return alreadyAddedSet.value.has(id);
+}
 
 const filteredModules = computed(() => {
   const q = searchTerm.value.trim().toLowerCase();
@@ -1176,6 +1188,13 @@ onBeforeUnmount(detachCaptureListeners);
   opacity: 0.42;
 }
 .wp-picker__row[data-disabled]:hover { background: transparent; }
+
+.wp-picker__row.is-already-added {
+  opacity: 0.4;
+  border: 1px dashed var(--wp-border-strong);
+  cursor: default;
+}
+.wp-picker__row.is-already-added:hover { background: transparent; }
 
 .wp-picker__check {
   width: 16px; height: 16px;
