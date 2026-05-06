@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import AssemblerHelper from "./AssemblerHelper.vue";
+import { varColorClass } from "../shared/var-color";
 
 const baseProps = {
   upstreamResolved: {} as Record<string, string>,
@@ -124,5 +125,47 @@ describe("AssemblerHelper.vue", () => {
     const html = wrapper.find(".wp-asm__rendered").html();
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("AssemblerHelper var-color rendering", () => {
+  it("emits the same var-N class for the same binding across chip + preview", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["hair_style", "mood"],
+        templateVars: ["hair_style"],
+        template: "$hair_style portrait",
+        resolved: "long flowing portrait",
+      },
+    });
+    const chipClass = wrapper.find('[data-test="asm-chip-hair_style"]').classes();
+    expect(chipClass).toContain(varColorClass("hair_style"));
+  });
+
+  it("missing chips render with the missing modifier + warn icon", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["hair_style"],
+        templateVars: ["hair_style", "lighting"],
+        template: "$hair_style $lighting",
+        resolved: "",
+      },
+    });
+    const missing = wrapper.find('[data-test="asm-chip-lighting"]');
+    expect(missing.classes()).toContain("wp-asm-var--missing");
+    expect(missing.find("i.pi.pi-exclamation-triangle").exists()).toBe(true);
+  });
+
+  it("section stat shows upstream count + missing count", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["hair_style", "mood"],
+        templateVars: ["hair_style", "lighting", "lens"],
+        template: "$hair_style $lighting $lens",
+        resolved: "",
+      },
+    });
+    expect(wrapper.text()).toMatch(/2\s*upstream/);
+    expect(wrapper.text()).toMatch(/2\s*missing/);
   });
 });

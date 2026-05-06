@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { varColorClass } from "../shared/var-color";
 
 const props = defineProps<{
   /**
@@ -10,10 +11,20 @@ const props = defineProps<{
    * preview is stable as the user edits the template. Real graph
    * runs reseed randomly each time; the assembled prompt at edit
    * time is therefore a sample, not a guarantee.
+   *
+   * Mutually exclusive with `upstreamVars` + `resolved` — the component
+   * accepts either the legacy record-based shape OR the array-based
+   * shape used by headless tests and the new widget API.
    */
-  upstreamResolved: Record<string, string>;
+  upstreamResolved?: Record<string, string>;
+  /** Alternative flat-array shape for upstream names (used by new tests). */
+  upstreamVars?: string[];
+  /** Pre-extracted template variable names (used by new tests). */
+  templateVars?: string[];
+  /** Pre-resolved string (used by new tests + future async path). */
+  resolved?: string;
   template: string;
-  onInsert: (token: string) => void;
+  onInsert?: (token: string) => void;
   /** Strip every occurrence of `$varname` from the template. Wired
    *  to the UNRESOLVED chips so users can one-click drop a name
    *  they accidentally typed (or that an upstream module no longer
@@ -27,15 +38,126 @@ const props = defineProps<{
   previewSeed?: number;
 }>();
 
-/** Variable names known upstream — thin keys-of helper for the
- *  chip strip + the missing-vs-known check below. */
-const upstreamNames = computed(() => Object.keys(props.upstreamResolved));
+const emit = defineEmits<{
+  (e: "insertVar", v: string): void;
+}>();
 
-// Sentinel survives both regex passes — � is the Unicode replacement
-// character; doubled, it can't appear in real prompts.
+// ---------------------------------------------------------------------------
+// Normalised derived state — works from either prop shape
+// ---------------------------------------------------------------------------
+
+/** Upstream variable names, derived from whichever prop shape is supplied. */
+const upstreamNames = computed(() => {
+  if (props.upstreamVars) return props.upstreamVars;
+  if (props.upstreamResolved) return Object.keys(props.upstreamResolved);
+  return [];
+});
+
+// Sentinel survives both regex passes — the Unicode replacement character;
+// doubled, it can't appear in real prompts.
 const ESCAPE_PLACEHOLDER = "��";
 const ESCAPE_RE = /��/g;
 const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const TEMPLATE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
+
+/** Variable names referenced in the template. */
+const templateVarsInternal = computed(() => {
+  if (props.templateVars) return props.templateVars;
+  const sanitized = props.template.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
+  const matches = sanitized.match(VAR_RE);
+  if (!matches) return [];
+  return [...new Set(matches.map((m) => m.slice(1)).filter((v) => !v.startsWith("__")))];
+});
+
+/**
+ * Variables referenced in the template but NOT present in the upstream map.
+ * When `templateVars` prop is provided (new shape), "missing" means not in
+ * `upstreamVars`. When using the legacy shape, it means not in
+ * `upstreamResolved`.
+ */
+const missing = computed(() => {
+  if (props.templateVars && props.upstreamVars) {
+    return props.templateVars.filter((v) => !props.upstreamVars!.includes(v));
+  }
+  return templateVarsInternal.value.filter(
+    (v) => !Object.prototype.hasOwnProperty.call(props.upstreamResolved ?? {}, v),
+  );
+});
+
+// Alias for legacy test compatibility
+const missingVars = missing;
+
+function isUsed(v: string): boolean {
+  return templateVarsInternal.value.includes(v);
+}
+
+// ---------------------------------------------------------------------------
+// Preview tokenisation
+// ---------------------------------------------------------------------------
+
+interface PreviewToken { kind: "literal" | "var"; text: string; varName?: string }
+
+const previewTokens = computed<PreviewToken[]>(() => {
+  if (!props.template) return [];
+
+  // When a pre-resolved string is provided (new prop shape) use the
+  // parallel-walk tokeniser so each substring carries its source variable.
+  if (props.resolved !== undefined) {
+    if (!props.resolved) {
+      // No resolved string yet — render template with var highlights.
+      const tokens: PreviewToken[] = [];
+      let last = 0;
+      for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
+        const idx = m.index ?? 0;
+        if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
+        tokens.push({ kind: "var", text: `$${m[1]}`, varName: m[1] });
+        last = idx + m[0].length;
+      }
+      if (last < props.template.length) tokens.push({ kind: "literal", text: props.template.slice(last) });
+      return tokens;
+    }
+
+    // Resolved string present — walk template + resolved in parallel.
+    const tpl = props.template;
+    const res = props.resolved;
+    const segments: Array<{ kind: "literal" | "var"; text: string; varName?: string }> = [];
+    let last = 0;
+    for (const m of tpl.matchAll(TEMPLATE_VAR_RE)) {
+      const idx = m.index ?? 0;
+      if (idx > last) segments.push({ kind: "literal", text: tpl.slice(last, idx) });
+      segments.push({ kind: "var", text: m[0], varName: m[1] });
+      last = idx + m[0].length;
+    }
+    if (last < tpl.length) segments.push({ kind: "literal", text: tpl.slice(last) });
+
+    const tokens: PreviewToken[] = [];
+    let cursor = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.kind === "literal") {
+        const slice = res.slice(cursor, cursor + seg.text.length);
+        tokens.push({ kind: "literal", text: slice });
+        cursor += seg.text.length;
+      } else {
+        const next = segments[i + 1];
+        let end = res.length;
+        if (next && next.kind === "literal" && next.text.length > 0) {
+          const nextIdx = res.indexOf(next.text, cursor);
+          if (nextIdx >= 0) end = nextIdx;
+        }
+        tokens.push({ kind: "var", text: res.slice(cursor, end), varName: seg.varName });
+        cursor = end;
+      }
+    }
+    return tokens;
+  }
+
+  return []; // legacy path uses previewHtml below
+});
+
+// ---------------------------------------------------------------------------
+// Legacy HTML preview (used when upstreamResolved record is provided)
+// ---------------------------------------------------------------------------
 
 function escapeHtml(s: string): string {
   return s
@@ -46,38 +168,11 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// Stable per-name hue. djb2-ish hash → 0..359°. Deterministic across runs
-// so the same variable always gets the same color in chip + preview.
+// Stable per-name hue — kept for legacy v-html preview.
 function hueFor(name: string): number {
   let h = 5381;
   for (let i = 0; i < name.length; i++) h = ((h << 5) + h + name.charCodeAt(i)) >>> 0;
   return h % 360;
-}
-
-function chipColor(name: string): string {
-  return `hsl(${hueFor(name)}, 65%, 65%)`;
-}
-function chipBg(name: string): string {
-  return `hsla(${hueFor(name)}, 65%, 55%, 0.15)`;
-}
-
-const templateVars = computed(() => {
-  const sanitized = props.template.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
-  const matches = sanitized.match(VAR_RE);
-  if (!matches) return [];
-  return [...new Set(matches.map((m) => m.slice(1)).filter((v) => !v.startsWith("__")))];
-});
-
-// "Missing" now means: template references `$foo` and NO upstream
-// module binds `foo`. There is no longer a "name known but value
-// unknown" middle state — the resolver always produces a value (a
-// runtime-random wildcard's preview pick is just option [0]).
-const missingVars = computed(() =>
-  templateVars.value.filter((v) => !Object.prototype.hasOwnProperty.call(props.upstreamResolved, v)),
-);
-
-function isUsed(v: string): boolean {
-  return templateVars.value.includes(v);
 }
 
 const previewHtml = computed(() => {
@@ -89,16 +184,18 @@ const previewHtml = computed(() => {
     if (name.startsWith("__")) return full;
     const hue = hueFor(name);
     const colorStyle = `style="color: hsl(${hue}, 65%, 70%); background: hsla(${hue}, 65%, 55%, 0.15);"`;
-    if (Object.prototype.hasOwnProperty.call(props.upstreamResolved, name)) {
-      return `<span class="wp-tok-resolved" ${colorStyle}>${escapeHtml(props.upstreamResolved[name])}</span>`;
+    if (Object.prototype.hasOwnProperty.call(props.upstreamResolved ?? {}, name)) {
+      return `<span class="wp-tok-resolved" ${colorStyle}>${escapeHtml((props.upstreamResolved ?? {})[name])}</span>`;
     }
     return `<span class="wp-tok-miss">$${name}</span>`;
   });
   return safe.replace(ESCAPE_RE, "$");
 });
 
-// Ripple effect — track most-recent click coords per chip element to drive
-// the radial-gradient animation. Cleared after the animation duration.
+// ---------------------------------------------------------------------------
+// Ripple effect
+// ---------------------------------------------------------------------------
+
 const ripples = ref<Map<string, { x: number; y: number; t: number }>>(new Map());
 
 function onChipClick(ev: MouseEvent, v: string) {
@@ -107,12 +204,13 @@ function onChipClick(ev: MouseEvent, v: string) {
   const x = ev.clientX - rect.left;
   const y = ev.clientY - rect.top;
   ripples.value.set(v, { x, y, t: Date.now() });
-  // Clear after animation finishes so the chip re-renders without it.
   setTimeout(() => {
     const cur = ripples.value.get(v);
     if (cur && Date.now() - cur.t >= 380) ripples.value.delete(v);
   }, 420);
-  props.onInsert(`$${v}`);
+  // Support both callback prop (legacy) and emit (new shape)
+  if (props.onInsert) props.onInsert(`$${v}`);
+  emit("insertVar", v);
 }
 
 function rippleStyle(v: string): Record<string, string> {
@@ -123,10 +221,71 @@ function rippleStyle(v: string): Record<string, string> {
     "--wp-ripple-y": `${r.y}px`,
   };
 }
+
+/** Whether to use the new chip-strip + token preview layout vs the legacy layout. */
+const useNewLayout = computed(() => props.upstreamVars !== undefined || props.resolved !== undefined);
 </script>
 
 <template>
-  <div class="wp-asm">
+  <!-- ============================================================
+       NEW LAYOUT — chip strip + tokenised preview
+       Activated when `upstreamVars` or `resolved` props are present.
+       ============================================================ -->
+  <div v-if="useNewLayout" class="wp-asm-helper">
+    <!-- variables section -->
+    <div class="wp-asm-section">
+      <span>variables</span>
+      <span class="wp-asm-section-stat">
+        {{ upstreamNames.length }} upstream
+        <template v-if="missing.length">
+          · <span class="wp-asm-section-stat--warn">{{ missing.length }} missing</span>
+        </template>
+      </span>
+    </div>
+    <div class="wp-asm-vars">
+      <span
+        v-for="v in upstreamNames"
+        :key="v"
+        :data-test="`asm-chip-${v}`"
+        :class="['wp-asm-var', varColorClass(v), { 'wp-asm__chip--ripple': ripples.has(v) }]"
+        :style="rippleStyle(v)"
+        @click="(ev) => onChipClick(ev, v)"
+      ><span class="var-tok">{{ v }}</span></span>
+      <span
+        v-for="v in missing"
+        :key="`miss-${v}`"
+        :data-test="`asm-chip-${v}`"
+        class="wp-asm-var wp-asm-var--missing"
+      ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
+    </div>
+
+    <!-- preview section -->
+    <div class="wp-asm-section">
+      <span>preview</span>
+      <span :class="['wp-asm-section-stat', resolved ? 'is-ok' : '']">
+        {{ resolved ? "resolved" : "(template empty or unresolved)" }}
+      </span>
+    </div>
+    <div class="wp-asm-preview" data-test="asm-preview">
+      <template v-for="(tok, i) in previewTokens" :key="i">
+        <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
+        <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
+      </template>
+    </div>
+
+    <!-- hint -->
+    <div class="wp-asm-hint">
+      <span>click chip → insert <kbd>$var</kbd> at caret</span>
+      <span style="margin-left: auto;">drop wildcard onto template → autoinsert</span>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       LEGACY LAYOUT — upstreamResolved record shape
+       Preserves existing behaviour for the widget host (assembler.ts)
+       and the pre-existing tests.
+       ============================================================ -->
+  <div v-else class="wp-asm">
     <div v-if="upstreamNames.length" class="wp-asm__section">
       <label class="wp-asm__label">VARIABLES</label>
       <div class="wp-asm__chips">
@@ -135,9 +294,9 @@ function rippleStyle(v: string): Record<string, string> {
           type="button"
           class="wp-asm__chip"
           :class="[isUsed(v) ? 'used' : 'available', { 'wp-asm__chip--ripple': ripples.has(v) }]"
-          :style="{ ...rippleStyle(v), color: chipColor(v), background: chipBg(v) }"
+          :style="{ ...rippleStyle(v), color: `hsl(${hueFor(v)}, 65%, 65%)`, background: `hsla(${hueFor(v)}, 65%, 55%, 0.15)` }"
           data-testid="chip"
-          :title="upstreamResolved[v] ?? ''"
+          :title="(upstreamResolved ?? {})[v] ?? ''"
           @click="(ev) => onChipClick(ev, v)"
         >${{ v }}</button>
       </div>
@@ -158,14 +317,10 @@ function rippleStyle(v: string): Record<string, string> {
 
     <div v-if="missingVars.length" class="wp-asm__section">
       <label class="wp-asm__label wp-asm__label--warn">
-        UNRESOLVED <span class="wp-asm__label-sep">·</span> <span v-if="onRemoveVar">click to remove from template</span><span v-else>dropped from prompt</span>
+        UNRESOLVED <span class="wp-asm__label-sep">·</span>
+        <span v-if="onRemoveVar">click to remove from template</span><span v-else>dropped from prompt</span>
       </label>
       <div class="wp-asm__chips">
-        <!-- When `onRemoveVar` is wired, render as a button that
-             strips `$varname` from the host widget's template on
-             click. Without the callback we keep the static-span
-             rendering so headless mounts (without widget glue) still
-             show the chips. -->
         <button
           v-for="v in missingVars"
           v-if="onRemoveVar"
@@ -174,7 +329,7 @@ function rippleStyle(v: string): Record<string, string> {
           class="wp-asm__chip missing wp-asm__chip--clickable"
           data-testid="missing-chip"
           :title="`Remove $${v} from template`"
-          @click="onRemoveVar(v)"
+          @click="onRemoveVar!(v)"
         >${{ v }}<i class="pi pi-times wp-asm__chip-x" aria-hidden="true"></i></button>
         <span
           v-for="v in missingVars"
@@ -193,6 +348,114 @@ function rippleStyle(v: string): Record<string, string> {
 </style>
 
 <style scoped>
+/* ======================================================
+   NEW LAYOUT — .wp-asm-helper
+   ====================================================== */
+.wp-asm-helper {
+  font-family: var(--wp-font-sans);
+  padding: 6px;
+  color: var(--wp-text);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wp-asm-section {
+  display: flex;
+  align-items: center;
+  margin: 6px 0 4px;
+  font: 500 11px/1 var(--wp-font-sans);
+  color: var(--wp-text-muted);
+  text-transform: lowercase;
+}
+.wp-asm-section-stat {
+  margin-left: auto;
+  font: 11px/1 var(--wp-font-mono);
+  color: var(--wp-text-dim);
+}
+.wp-asm-section-stat--warn { color: var(--wp-warn); }
+.wp-asm-section-stat.is-ok { color: var(--wp-green); }
+
+.wp-asm-vars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+}
+.wp-asm-var {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border-soft);
+  border-radius: 3px;
+  padding: 3px 7px;
+  font: 11px/1 var(--wp-font-mono);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  position: relative;
+  overflow: hidden;
+}
+.wp-asm-var .var-tok {
+  font: 600 11px/1 var(--wp-font-mono);
+}
+.wp-asm-var .var-tok::before {
+  content: "$";
+  opacity: 0.7;
+  margin-right: 1px;
+}
+.wp-asm-var:hover {
+  border-color: currentColor;
+  background: var(--wp-bg-2);
+}
+.wp-asm-var--missing {
+  color: var(--wp-text-dim);
+  border-style: dashed;
+  cursor: default;
+}
+.wp-asm-var--missing i {
+  font-size: 10px;
+  color: var(--wp-warn);
+}
+
+.wp-asm-preview {
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  padding: 8px 10px;
+  font: 11px/1.55 var(--wp-font-mono);
+  color: var(--wp-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow: auto;
+}
+.wp-asm-preview .literal { color: var(--wp-text); }
+.wp-asm-preview .res { font-weight: 600; }
+
+.wp-asm-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font: 11px/1.3 var(--wp-font-sans);
+  color: var(--wp-text-dim);
+}
+.wp-asm-hint kbd {
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border-soft);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  font: 10px/1 var(--wp-font-mono);
+  padding: 1px 4px;
+  color: var(--wp-text-muted);
+}
+
+/* ======================================================
+   LEGACY LAYOUT — .wp-asm (upstreamResolved shape)
+   ====================================================== */
 .wp-asm, .wp-asm * { box-sizing: border-box; }
 .wp-asm {
   display: flex;
@@ -242,9 +505,6 @@ function rippleStyle(v: string): Record<string, string> {
 .wp-asm__chip.available { cursor: pointer; }
 .wp-asm__chip.used { cursor: pointer; }
 .wp-asm__chip.used::after {
-  /* Tiny indicator pinned to the top-right corner. No padding override —
-   * chip stays the same width as available chips. The dot sits in the
-   * tight corner gap above the variable glyphs' ascender. */
   content: "";
   position: absolute;
   top: 2px;
@@ -256,8 +516,6 @@ function rippleStyle(v: string): Record<string, string> {
 }
 .wp-asm__chip.available:hover,
 .wp-asm__chip.used:hover {
-  /* filter brightens whatever inline hsla() the chip got from its name hash —
-   * works without overriding the inline style. */
   filter: brightness(1.3) saturate(1.15);
 }
 .wp-asm__chip.missing {
@@ -270,8 +528,6 @@ function rippleStyle(v: string): Record<string, string> {
 }
 .wp-asm__chip--clickable { cursor: pointer; }
 .wp-asm__chip--clickable:hover {
-  /* On hover, suggest "delete" — the small × glyph next to the name
-   * already telegraphs intent; tint the bg to reinforce. */
   background: color-mix(in srgb, var(--wp-amber) 30%, transparent) !important;
 }
 .wp-asm__chip-x { font-size: 8px; opacity: 0.7; }
@@ -283,7 +539,7 @@ function rippleStyle(v: string): Record<string, string> {
   font-weight: 700;
 }
 
-/* Ripple — radial expanding overlay anchored to click coords */
+/* Ripple */
 .wp-asm__chip--ripple::before {
   content: "";
   position: absolute;
@@ -292,7 +548,6 @@ function rippleStyle(v: string): Record<string, string> {
   width: 0;
   height: 0;
   border-radius: 50%;
-  /* Theme-aware ripple — white-tint in dark, ink-tint in light. */
   background: var(--wp-border-strong);
   transform: translate(-50%, -50%);
   animation: wp-asm-ripple 0.4s ease-out;
@@ -317,8 +572,6 @@ function rippleStyle(v: string): Record<string, string> {
   min-height: 32px;
 }
 
-/* Skeleton when template is empty (also briefly visible during async chunk
- * resolution before Vue patches the props in). */
 .wp-asm__skeleton {
   background: var(--wp-bg3);
   border: 1px solid var(--wp-border);
@@ -362,12 +615,10 @@ function rippleStyle(v: string): Record<string, string> {
 </style>
 
 <style>
-/* Unscoped — rendered via v-html. */
+/* Unscoped — rendered via v-html (legacy preview path). */
 .wp-tok-resolved {
   padding: 1px 4px;
   border-radius: 3px;
-  /* 600 not 500 — we only bundle Inter 400 + 600 to keep the chunk small.
-   * 500 would substitute via system fallback and look out of family. */
   font-weight: 600;
 }
 .wp-tok-ok {
