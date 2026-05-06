@@ -654,10 +654,14 @@ describe("ModuleEditModal — constraint editor body", () => {
       props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
-    const fields = wrapper.findAll(".wp-cn-pair .wp-field");
-    expect(fields.length).toBeGreaterThanOrEqual(2);
-    expect(fields[0].text()).toContain("Source wildcard");
-    expect(fields[1].text()).toContain("Target wildcard");
+    // After the X-cross alignment fix, labels are direct grid children
+    // with `grid-area: src-label / tgt-label` instead of being wrapped in
+    // `<label class="wp-field">`. The source-first invariant is the same:
+    // first label-text is "Source wildcard", second is "Target wildcard".
+    const labels = wrapper.findAll(".wp-cn-pair .wp-field-label");
+    expect(labels.length).toBeGreaterThanOrEqual(2);
+    expect(labels[0].text()).toContain("Source wildcard");
+    expect(labels[1].text()).toContain("Target wildcard");
   });
 
   it("source uuid input emits patchPayload({ source_wildcard_id, matrix: {} })", async () => {

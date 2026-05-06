@@ -842,9 +842,12 @@ function toggleAllEnabled(): void {
   };
 }
 
-/** Open the SPA library in a new tab. */
+/** Open the SPA dashboard in a new tab. Mirrors `extension/topbar.ts`'s
+ *  `openSpa` so widget + topbar both land on the dashboard overview
+ *  rather than the wildcards list (which is what the SPA root redirect
+ *  resolves to). */
 function openSpaLibrary(): void {
-  window.open("/wp/", "_blank", "noopener");
+  window.open("/wp/dashboard", "_blank", "noopener");
 }
 
 /**

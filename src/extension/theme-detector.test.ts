@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyTheme, detectInitialTheme } from "./theme-detector";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { applyTheme, attachThemeDetector, detectInitialTheme } from "./theme-detector";
 
 describe("theme-detector", () => {
   let host: HTMLDivElement;
@@ -11,29 +11,26 @@ describe("theme-detector", () => {
 
   afterEach(() => {
     host.remove();
+    document.body.classList.remove("dark-theme");
+    document.documentElement.classList.remove("wp-theme-dark", "wp-theme-light");
   });
 
   describe("applyTheme", () => {
-    afterEach(() => {
-      // Test pollutes documentElement; reset between cases so tests don't bleed.
-      document.documentElement.classList.remove("wp-theme-dark", "wp-theme-light");
-    });
-
-    it("adds wp-theme-dark + removes wp-theme-light when palette is dark", () => {
+    it("adds wp-theme-dark + removes wp-theme-light when theme is dark", () => {
       host.classList.add("wp-theme-light");
       applyTheme(host, "dark");
       expect(host.classList.contains("wp-theme-dark")).toBe(true);
       expect(host.classList.contains("wp-theme-light")).toBe(false);
     });
 
-    it("adds wp-theme-light + removes wp-theme-dark when palette is light", () => {
+    it("adds wp-theme-light + removes wp-theme-dark when theme is light", () => {
       host.classList.add("wp-theme-dark");
       applyTheme(host, "light");
       expect(host.classList.contains("wp-theme-light")).toBe(true);
       expect(host.classList.contains("wp-theme-dark")).toBe(false);
     });
 
-    it("does not toggle when palette is already applied", () => {
+    it("does not toggle when theme is already applied", () => {
       host.classList.add("wp-theme-dark");
       applyTheme(host, "dark");
       expect(host.classList.contains("wp-theme-dark")).toBe(true);
@@ -51,33 +48,60 @@ describe("theme-detector", () => {
     });
   });
 
-  describe("detectInitialTheme", () => {
-    it("returns 'dark' when extensionManager is unavailable", () => {
-      expect(detectInitialTheme({})).toBe("dark");
+  describe("detectInitialTheme — body.dark-theme observation", () => {
+    it("returns 'dark' when <body> has the dark-theme class", () => {
+      document.body.classList.add("dark-theme");
+      expect(detectInitialTheme()).toBe("dark");
     });
 
-    it("returns 'dark' when ColorPalette setting reads 'dark'", () => {
-      const app = { extensionManager: { setting: { get: vi.fn().mockReturnValue("dark") } } };
-      expect(detectInitialTheme(app)).toBe("dark");
+    it("returns 'light' when <body> lacks the dark-theme class", () => {
+      document.body.classList.remove("dark-theme");
+      expect(detectInitialTheme()).toBe("light");
+    });
+  });
+
+  describe("attachThemeDetector — MutationObserver", () => {
+    it("applies initial theme based on body class", () => {
+      document.body.classList.add("dark-theme");
+      const cleanup = attachThemeDetector(host);
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
+      cleanup();
     });
 
-    it("returns 'light' when ColorPalette setting reads 'light'", () => {
-      const app = { extensionManager: { setting: { get: vi.fn().mockReturnValue("light") } } };
-      expect(detectInitialTheme(app)).toBe("light");
+    it("flips to light when dark-theme class is removed from body", async () => {
+      document.body.classList.add("dark-theme");
+      const cleanup = attachThemeDetector(host);
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
+
+      document.body.classList.remove("dark-theme");
+      // MutationObserver fires asynchronously — yield to the microtask queue.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(host.classList.contains("wp-theme-light")).toBe(true);
+      expect(host.classList.contains("wp-theme-dark")).toBe(false);
+      cleanup();
     });
 
-    it("returns 'light' for non-dark palettes (github / arc / nord / solarized)", () => {
-      for (const palette of ["github", "arc", "nord", "solarized"]) {
-        const app = {
-          extensionManager: { setting: { get: vi.fn().mockReturnValue(palette) } },
-        };
-        expect(detectInitialTheme(app)).toBe("light");
-      }
+    it("flips to dark when dark-theme class is added to body", async () => {
+      document.body.classList.remove("dark-theme");
+      const cleanup = attachThemeDetector(host);
+      expect(host.classList.contains("wp-theme-light")).toBe(true);
+
+      document.body.classList.add("dark-theme");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
+      expect(host.classList.contains("wp-theme-light")).toBe(false);
+      cleanup();
     });
 
-    it("treats nullish setting as dark default", () => {
-      const app = { extensionManager: { setting: { get: vi.fn().mockReturnValue(undefined) } } };
-      expect(detectInitialTheme(app)).toBe("dark");
+    it("disconnects the observer on cleanup so further body changes are ignored", async () => {
+      document.body.classList.add("dark-theme");
+      const cleanup = attachThemeDetector(host);
+      cleanup();
+
+      document.body.classList.remove("dark-theme");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      // host class should NOT have flipped — observer is disconnected.
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
     });
   });
 });

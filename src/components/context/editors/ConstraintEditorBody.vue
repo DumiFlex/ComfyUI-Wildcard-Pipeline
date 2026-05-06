@@ -235,44 +235,47 @@ function setException(
           pick the two wildcards whose sub-categories form the matrix
         </small>
       </div>
+      <!-- 3-col × 2-row grid: labels in row 1, inputs + cross in row 2.
+           Putting cross + inputs in the same row lets the cross
+           vertical-center against the input only (not against the
+           label-stacked field column), which is how the SPA mockup
+           reads. Areas avoid magic margins. -->
       <div class="wp-cn-pair">
-        <label class="wp-field">
-          <span class="wp-field-label">
-            Source wildcard
-            <small class="wp-field-hint">rows of the matrix</small>
-          </span>
-          <input
-            class="wp-input wp-input--mono"
-            :value="sourceId"
-            placeholder="source uuid"
-            data-test="cn-source"
-            @input="
-              patchPayload({
-                source_wildcard_id: ($event.target as HTMLInputElement).value || null,
-                matrix: {},
-              })
-            "
-          />
-        </label>
+        <span class="wp-field-label" style="grid-area: src-label">
+          Source wildcard
+          <small class="wp-field-hint">rows of the matrix</small>
+        </span>
+        <span class="wp-field-label" style="grid-area: tgt-label">
+          Target wildcard
+          <small class="wp-field-hint">columns of the matrix</small>
+        </span>
+        <input
+          class="wp-input wp-input--mono"
+          style="grid-area: src-input"
+          :value="sourceId"
+          placeholder="source uuid"
+          data-test="cn-source"
+          @input="
+            patchPayload({
+              source_wildcard_id: ($event.target as HTMLInputElement).value || null,
+              matrix: {},
+            })
+          "
+        />
         <div class="wp-cn-cross"><i class="pi pi-times" /></div>
-        <label class="wp-field">
-          <span class="wp-field-label">
-            Target wildcard
-            <small class="wp-field-hint">columns of the matrix</small>
-          </span>
-          <input
-            class="wp-input wp-input--mono"
-            :value="targetId"
-            placeholder="target uuid"
-            data-test="cn-target"
-            @input="
-              patchPayload({
-                target_wildcard_id: ($event.target as HTMLInputElement).value || null,
-                matrix: {},
-              })
-            "
-          />
-        </label>
+        <input
+          class="wp-input wp-input--mono"
+          style="grid-area: tgt-input"
+          :value="targetId"
+          placeholder="target uuid"
+          data-test="cn-target"
+          @input="
+            patchPayload({
+              target_wildcard_id: ($event.target as HTMLInputElement).value || null,
+              matrix: {},
+            })
+          "
+        />
       </div>
     </section>
 
@@ -441,17 +444,19 @@ function setException(
 .wp-cn-pair {
   display: grid;
   grid-template-columns: 1fr 24px 1fr;
-  gap: 12px;
-  align-items: end;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "src-label .     tgt-label"
+    "src-input cross tgt-input";
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
 }
 .wp-cn-cross {
-  /* Mirrors SPA `.cn-cross` (manager/views/ConstraintEditor.vue) — let the
-   * label-aware grid stretch naturally and pin the icon to the input row
-   * baseline via padding-bottom. Beats the previous fixed-height + flex
-   * center, which mis-aligned by ~6px because the input has 6px bottom
-   * padding the cross box didn't account for. */
-  padding-bottom: 8px;
-  text-align: center;
+  grid-area: cross;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--wp-text-dim, var(--wp-text3));
 }
 

@@ -211,11 +211,10 @@ function removeTag(t: string): void {
         <span
           v-for="v in detectedInputs"
           :key="v"
-          class="wp-pill"
-          :class="varColorClass(v)"
+          class="wp-pill wp-pill--var"
         >
-          <i class="pi pi-tag" style="font-size: 9px; opacity: 0.7;" />
-          <span class="wp-input--mono">{{ v }}</span>
+          <i class="pi pi-tag" :class="varColorClass(v)" style="font-size: 9px; opacity: 0.85;" />
+          <span :class="['wp-input--mono', varColorClass(v)]" style="font-weight: 600;">{{ v }}</span>
         </span>
       </div>
       <div v-else class="wp-empty-row">None — type a template above.</div>

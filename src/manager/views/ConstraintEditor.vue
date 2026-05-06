@@ -13,7 +13,6 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
-import Field from "../components/ui/Field.vue";
 import Button from "../components/ui/Button.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
@@ -307,9 +306,19 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
       <template #actions>
         <span class="wp-card__hint">Pick the two wildcards whose sub-categories form the matrix</span>
       </template>
+      <!-- 3-col × 3-row grid (label / input / hint), grid-template-areas
+           place the X cross in the input row only — vertically centered
+           against the Select, not the label-stacked Field column. -->
       <div class="cn-pair">
-        <Field label="Source wildcard" hint="Rows of the matrix">
+        <label class="cn-pair-label" style="grid-area: src-label" for="cn-source-select">
+          Source wildcard
+        </label>
+        <label class="cn-pair-label" style="grid-area: tgt-label" for="cn-target-select">
+          Target wildcard
+        </label>
+        <div style="grid-area: src-input">
           <Select
+            id="cn-source-select"
             :model-value="sourceWildcardId"
             :options="wildcardOptions"
             placeholder="Pick source"
@@ -318,10 +327,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
             aria-label="Source wildcard"
             @update:model-value="(v) => { sourceWildcardId = v as string | null; matrix = {}; }"
           />
-        </Field>
+        </div>
         <div class="cn-cross"><i class="pi pi-times" /></div>
-        <Field label="Target wildcard" hint="Columns of the matrix">
+        <div style="grid-area: tgt-input">
           <Select
+            id="cn-target-select"
             :model-value="targetWildcardId"
             :options="wildcardOptions"
             placeholder="Pick target"
@@ -330,7 +340,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
             aria-label="Target wildcard"
             @update:model-value="(v) => { targetWildcardId = v as string | null; matrix = {}; }"
           />
-        </Field>
+        </div>
+        <div class="cn-pair-hint" style="grid-area: src-hint">Rows of the matrix</div>
+        <div class="cn-pair-hint" style="grid-area: tgt-hint">Columns of the matrix</div>
       </div>
     </Card>
 
@@ -443,13 +455,29 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 .cn-pair {
   display: grid;
   grid-template-columns: 1fr 24px 1fr;
-  gap: 12px;
-  align-items: end;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "src-label .     tgt-label"
+    "src-input cross tgt-input"
+    "src-hint  .     tgt-hint";
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
+}
+.cn-pair-label {
+  font: 500 12px/1.2 var(--wp-font);
+  color: var(--wp-text-muted);
+}
+.cn-pair-hint {
+  font: 11px/1.3 var(--wp-font);
+  color: var(--wp-text-dim);
 }
 .cn-cross {
-  padding-bottom: 8px;
+  grid-area: cross;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--wp-text-dim);
-  text-align: center;
 }
 .cn-col-mode { width: 130px; }
 .cn-col-factor { width: 120px; }
