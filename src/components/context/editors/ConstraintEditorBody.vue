@@ -130,6 +130,19 @@ function cycleCell(srcSub: string, tgtSub: string): void {
   setCell(srcSub, tgtSub, { ...cur, mode: MODE_CYCLE[cur.mode] });
 }
 
+function tuneCell(srcSub: string, tgtSub: string): void {
+  const cur = getCell(srcSub, tgtSub);
+  // Phase A simplification: native prompt for factor edit. SPA uses a popover.
+  const input = window.prompt(
+    `Factor for "${srcSub}" → "${tgtSub}" (current ${cur.factor}). Used by boost/reduce modes.`,
+    String(cur.factor),
+  );
+  if (input === null) return;
+  const next = Number(input);
+  if (!Number.isFinite(next) || next < 0) return;
+  setCell(srcSub, tgtSub, { ...cur, factor: next });
+}
+
 // ── Exception helpers ─────────────────────────────────────────────────────────
 
 function addException(): void {
@@ -267,7 +280,9 @@ function setException(
     <section class="wp-edit-section">
       <div class="wp-edit-section-title">
         Rule matrix
-        <small class="wp-edit-section-meta">click cycles · allow → exclude → boost → reduce</small>
+        <small class="wp-edit-section-meta">
+          click cycles mode · cog tunes factor
+        </small>
       </div>
       <div v-if="!sourceId || !targetId" class="wp-empty-row" data-test="cn-matrix-empty">
         Pick a source and target wildcard to populate the matrix.
@@ -293,20 +308,34 @@ function setException(
           <tr v-for="s in sourceSubs" :key="s">
             <th class="wp-cmx-axis">{{ s }}</th>
             <td v-for="t in targetSubs" :key="t">
-              <button
-                type="button"
+              <div
                 class="wp-cmx-cell"
                 :data-mode="getCell(s, t).mode"
                 :title="`${getCell(s, t).mode} (factor ${getCell(s, t).factor})`"
-                @click="cycleCell(s, t)"
               >
-                {{ getCell(s, t).mode
-                }}<template
-                  v-if="getCell(s, t).mode === 'boost' || getCell(s, t).mode === 'reduce'"
+                <button
+                  type="button"
+                  class="wp-cmx-mode-btn"
+                  :data-test="`cn-cell-mode-${s}-${t}`"
+                  @click="cycleCell(s, t)"
                 >
-                  ×{{ getCell(s, t).factor }}</template
+                  {{ getCell(s, t).mode
+                  }}<template
+                    v-if="getCell(s, t).mode === 'boost' || getCell(s, t).mode === 'reduce'"
+                  >
+                    ×{{ getCell(s, t).factor }}</template
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="wp-cmx-cog"
+                  :title="`Tune factor (current ${getCell(s, t).factor})`"
+                  :data-test="`cn-cell-cog-${s}-${t}`"
+                  @click.stop="tuneCell(s, t)"
                 >
-              </button>
+                  <i class="pi pi-cog" />
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -465,15 +494,15 @@ function setException(
 }
 
 .wp-cmx-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   width: 100%;
-  background: transparent;
-  border: 0;
-  padding: 4px 6px;
-  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px;
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  border-radius: 2px;
 }
 .wp-cmx-cell[data-mode="allow"] {
   background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent);
@@ -490,6 +519,39 @@ function setException(
 .wp-cmx-cell[data-mode="reduce"] {
   background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent);
   color: var(--wp-warn, #f59e0b);
+}
+
+.wp-cmx-mode-btn {
+  flex: 1 1 auto;
+  background: transparent;
+  border: 0;
+  padding: 2px 2px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: center;
+}
+.wp-cmx-cog {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--wp-text-dim, var(--wp-text3));
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 2px;
+  opacity: 0.55;
+}
+.wp-cmx-cog:hover,
+.wp-cmx-cog:focus-visible {
+  opacity: 1;
+  outline: none;
 }
 
 /* ── Options table (exceptions) ──────────────────────────────────────────── */

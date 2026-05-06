@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -728,4 +728,137 @@ describe("ModuleEditModal — constraint editor body", () => {
   });
 
   it.todo("resolves source/target via siblingModules + reports matrix dims + exceptions count — see Task 19");
+
+  it("matrix cell renders cog icon for factor tuning (per spec)", async () => {
+    const mod: ModuleEntry = {
+      ...makeConstraint(),
+      payload: {
+        source_wildcard_id: "src-uuid",
+        target_wildcard_id: "tgt-uuid",
+        matrix: {},
+        exceptions: [],
+      },
+    };
+    const siblings: ModuleEntry[] = [
+      {
+        id: "src-uuid",
+        type: "wildcard",
+        enabled: true,
+        meta: { name: "src" },
+        entries: [],
+        payload: { sub_categories: ["a"] },
+        payload_hash: "h",
+      },
+      {
+        id: "tgt-uuid",
+        type: "wildcard",
+        enabled: true,
+        meta: { name: "tgt" },
+        entries: [],
+        payload: { sub_categories: ["b"] },
+        payload_hash: "h",
+      },
+    ];
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod, siblingModules: siblings },
+    });
+    await nextTick();
+    expect(wrapper.find("[data-test='cn-matrix']").exists()).toBe(true);
+    const cog = wrapper.find("[data-test='cn-cell-cog-a-b']");
+    expect(cog.exists()).toBe(true);
+    expect(cog.find("i.pi-cog").exists()).toBe(true);
+  });
+
+  it("cog click triggers factor prompt + setCell on valid number", async () => {
+    const mod: ModuleEntry = {
+      ...makeConstraint(),
+      payload: {
+        source_wildcard_id: "src-uuid",
+        target_wildcard_id: "tgt-uuid",
+        matrix: { a: { b: { mode: "boost", factor: 1 } } },
+        exceptions: [],
+      },
+    };
+    const siblings: ModuleEntry[] = [
+      {
+        id: "src-uuid",
+        type: "wildcard",
+        enabled: true,
+        meta: { name: "src" },
+        entries: [],
+        payload: { sub_categories: ["a"] },
+        payload_hash: "h",
+      },
+      {
+        id: "tgt-uuid",
+        type: "wildcard",
+        enabled: true,
+        meta: { name: "tgt" },
+        entries: [],
+        payload: { sub_categories: ["b"] },
+        payload_hash: "h",
+      },
+    ];
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("2.5");
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod, siblingModules: siblings },
+    });
+    await nextTick();
+    await wrapper.find("[data-test='cn-cell-cog-a-b']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const matrix = (saved.payload as { matrix?: Record<string, Record<string, { factor?: number }>> })
+      .matrix;
+    expect(matrix?.a?.b?.factor).toBe(2.5);
+    promptSpy.mockRestore();
+  });
+
+  it("cog cancel (prompt returns null) leaves factor unchanged", async () => {
+    const mod: ModuleEntry = {
+      ...makeConstraint(),
+      payload: {
+        source_wildcard_id: "src-uuid",
+        target_wildcard_id: "tgt-uuid",
+        matrix: { a: { b: { mode: "boost", factor: 3 } } },
+        exceptions: [],
+      },
+    };
+    const siblings: ModuleEntry[] = [
+      {
+        id: "src-uuid",
+        type: "wildcard",
+        enabled: true,
+        meta: { name: "src" },
+        entries: [],
+        payload: { sub_categories: ["a"] },
+        payload_hash: "h",
+      },
+      {
+        id: "tgt-uuid",
+        type: "wildcard",
+        enabled: true,
+        meta: { name: "tgt" },
+        entries: [],
+        payload: { sub_categories: ["b"] },
+        payload_hash: "h",
+      },
+    ];
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue(null);
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: mod, siblingModules: siblings },
+    });
+    await nextTick();
+    await wrapper.find("[data-test='cn-cell-cog-a-b']").trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const matrix = (saved.payload as { matrix?: Record<string, Record<string, { factor?: number }>> })
+      .matrix;
+    expect(matrix?.a?.b?.factor).toBe(3);
+    promptSpy.mockRestore();
+  });
 });
