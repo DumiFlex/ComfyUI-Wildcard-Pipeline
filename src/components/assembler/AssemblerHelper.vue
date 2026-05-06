@@ -77,7 +77,8 @@ const templateVarsInternal = computed(() => {
  */
 const missing = computed(() => {
   if (props.templateVars && props.upstreamVars) {
-    return props.templateVars.filter((v) => !props.upstreamVars!.includes(v));
+    const upstream = props.upstreamVars;
+    return props.templateVars.filter((v) => !upstream.includes(v));
   }
   return templateVarsInternal.value.filter(
     (v) => !Object.prototype.hasOwnProperty.call(props.upstreamResolved ?? {}, v),
