@@ -144,17 +144,19 @@ export async function supportsActionBar(): Promise<boolean> {
  * Returns null on a malformed parse — caller leaves the placeholder
  * Iconify `<i>` in place.
  */
+/** Pixel size of the rendered brand SVG. Set as explicit `width` /
+ *  `height` attrs so ComfyUI's
+ *  `[&_svg:not([width]):not([height])]:size-4` Tailwind selector
+ *  doesn't match and clobber us back to 16px. */
+const BRAND_ICON_PX = 24;
+
 function parseBrandIcon(): SVGElement | null {
   if (typeof DOMParser === "undefined") return null;
-  // Strip width/height attributes from the root <svg> so:
-  //  (a) ComfyUI's `[&_svg:not([width]):not([height])]:size-4` Tailwind
-  //      selector matches and applies size-4 (1rem = 16px) — same auto-size
-  //      every other actionbar icon gets.
-  //  (b) The `size-4` class we add on the SVG isn't fighting the source
-  //      file's hardcoded 1024×1024 attrs (CSS *should* win over the
-  //      attr per spec, but some Chromium versions render the attr-based
-  //      intrinsic dimensions during the first paint, briefly flashing a
-  //      huge icon before the cascade settles).
+  // Strip the source file's hardcoded 1024×1024 dims and replace them
+  // with our own explicit pixel size. We need width/height ON the SVG
+  // (not absent) so ComfyUI's auto-size selector
+  // `[&_svg:not([width]):not([height])]:size-4` skips us — its parent>child
+  // specificity beats any class="size-N" we add to the SVG.
   const monochrome = wpLogoSvg
     .replace(/<defs>[\s\S]*?<\/defs>/g, "")
     .replace(/\sclass="[^"]*"/g, "")
@@ -163,7 +165,7 @@ function parseBrandIcon(): SVGElement | null {
       const cleaned = attrs
         .replace(/\swidth="[^"]*"/g, "")
         .replace(/\sheight="[^"]*"/g, "");
-      return `<svg${cleaned} fill="currentColor">`;
+      return `<svg${cleaned} width="${BRAND_ICON_PX}" height="${BRAND_ICON_PX}" fill="currentColor">`;
     });
   const doc = new DOMParser().parseFromString(monochrome, "image/svg+xml");
   const root = doc.documentElement;
@@ -229,12 +231,12 @@ function applyBrandIcon(): number {
     if (btn.querySelector("svg.wp-brand-icon")) return;
     const fresh = parseBrandIcon();
     if (!fresh) return;
-    fresh.classList.add("wp-brand-icon", "size-6");
-    // `size-6` = 24px. Bigger than ComfyUI's default `size-4` (16px)
-    // because the brand glyph reads better punched up inside the h-7
-    // (28px) button. Goes paired with the `padding: 2px 8px` override
-    // in injectStyles — default `py-1` (4px each side) would cap the
-    // icon area at 20px and clip a 24px glyph.
+    fresh.classList.add("wp-brand-icon");
+    // Pixel size set via `width=` / `height=` attrs in `parseBrandIcon`
+    // (see BRAND_ICON_PX). Adding a Tailwind size-N class here is moot —
+    // ComfyUI's parent>child `[&_svg:not(...)]:size-4` selector beats
+    // it on specificity, but the explicit width/height attrs stop that
+    // selector from matching at all.
     btn.replaceChildren(fresh);
   });
   return buttons.length;
@@ -324,10 +326,8 @@ export async function attachLegacyTopbarButton(app: AppLike, attempt = 0): Promi
   if (button.iconElement) {
     const svg = parseBrandIcon();
     if (svg) {
-      svg.classList.add("wp-brand-icon", "size-5");
-      // No explicit width/height — `size-5` (Tailwind 1.25rem = 20px).
-      // Matches the modern-path icon size for visual parity if a host
-      // running both code paths ever displays them side by side.
+      svg.classList.add("wp-brand-icon");
+      // Pixel size already set via width/height attrs in parseBrandIcon.
       button.iconElement.replaceChildren(svg);
     }
   }
