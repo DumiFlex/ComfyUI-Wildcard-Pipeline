@@ -1,5 +1,7 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
+import { attachThemeDetector } from "../extension/theme-detector";
 
 const DebugViewer = defineAsyncComponent(() => import("../components/debug/DebugViewer.vue"));
 
@@ -22,6 +24,7 @@ export function create(node: DebugNode, inputName: string) {
     minHeight: 200,
     minWidth: 280,
   });
+  attachThemeDetector(host.widget.element, app);
   const orig = node.onExecuted;
   node.onExecuted = function (output) {
     orig?.call(this, output);

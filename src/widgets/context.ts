@@ -4,6 +4,7 @@ import {
   createDomWidgetHost, parseWidgetJson, serializeWidgetJson, emptyContextValue,
   type ContextWidgetValue, type MountTargetNode,
 } from "./_shared";
+import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectDownstreamWildcardUuids,
   collectUpstreamVariables,
@@ -157,6 +158,7 @@ export function create(node: ContextNode, inputName: string) {
       if (v !== currentJson.value) currentJson.value = v;
     },
   });
+  attachThemeDetector(host.widget.element, app);
 
   // No `beforeQueued` per-module snapshot anymore. That path read
   // `seedWidget.value` which is:

@@ -1,6 +1,7 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
+import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectUpstreamChain,
   collectUpstreamResolved,
@@ -244,10 +245,11 @@ export function mountHelper(node: AssemblerNode) {
       };
     },
   };
-  createDomWidgetHost(node, "assembler-helper", wrapper, {
+  const assemblerHost = createDomWidgetHost(node, "assembler-helper", wrapper, {
     minHeight: 80,
     minWidth: 280,
   });
+  attachThemeDetector(assemblerHost.widget.element, app);
 }
 
 function insertIntoTemplate(node: AssemblerNode, token: string) {
