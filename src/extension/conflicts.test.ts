@@ -448,3 +448,61 @@ describe("scanConflicts — constraint ordering", () => {
     expect(types).toContain("constraint_target_before_self");
   });
 });
+
+describe("conflict scanner — instance.variable_binding override", () => {
+  it("reads instance.variable_binding before payload.var_binding", () => {
+    // Two wildcards: m1 has payload.var_binding="outfit" but the user
+    // overrode it via instance.variable_binding="renamed". m2 then
+    // binds to "renamed" via its own payload. Scanner must see m1's
+    // EFFECTIVE binding ("renamed") to flag the duplicate. Pre-fix
+    // the scanner read m1.payload.var_binding ("outfit") and missed
+    // the collision entirely.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "m1", type: "wildcard", enabled: true, meta: { name: "outfit" },
+          entries: [],
+          payload: { var_binding: "outfit", options: [{ id: "o1", value: "x", weight: 1 }] },
+          instance: { variable_binding: "renamed" },
+        },
+        {
+          id: "m2", type: "wildcard", enabled: true, meta: { name: "other" },
+          entries: [],
+          payload: { var_binding: "renamed", options: [{ id: "o1", value: "x", weight: 1 }] },
+        },
+      ],
+    };
+    const conflicts = scanConflicts(value, []);
+    const dupes = conflicts.filter((c) => c.type === "duplicate_variable");
+    expect(dupes.length).toBeGreaterThan(0);
+    expect(dupes[0]).toMatchObject({ moduleId: "m2", variable: "renamed" });
+  });
+
+  it("falls back to payload.var_binding when instance.variable_binding is empty/null", () => {
+    // Empty string and null both mean "use library default" per the
+    // _shared.ts contract. Scanner must not treat them as the
+    // effective name.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "m1", type: "wildcard", enabled: true, meta: { name: "outfit" },
+          entries: [],
+          payload: { var_binding: "outfit", options: [{ id: "o1", value: "x", weight: 1 }] },
+          instance: { variable_binding: "" },
+        },
+        {
+          id: "m2", type: "wildcard", enabled: true, meta: { name: "other" },
+          entries: [],
+          payload: { var_binding: "outfit", options: [{ id: "o1", value: "x", weight: 1 }] },
+          instance: { variable_binding: null },
+        },
+      ],
+    };
+    const conflicts = scanConflicts(value, []);
+    const dupes = conflicts.filter((c) => c.type === "duplicate_variable");
+    expect(dupes.length).toBeGreaterThan(0);
+    expect(dupes[0]).toMatchObject({ moduleId: "m2", variable: "outfit" });
+  });
+});

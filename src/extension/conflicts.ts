@@ -1,5 +1,22 @@
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
 
+/** Resolve a wildcard's effective var-binding name. Mirrors the engine
+ *  precedence in `wildcard_handler.py`: per-instance override
+ *  (`instance.variable_binding`) wins when set to a non-empty string,
+ *  otherwise fall back to the library-snapshot default
+ *  (`payload.var_binding`). Empty string and null both mean "use
+ *  library default" per the `_shared.ts` instance-shape contract.
+ *  Returns "" for non-wildcard kinds. Single source of truth so any
+ *  surface that needs the effective binding stays in lockstep with the
+ *  override layer. */
+function bindingNameOf(m: ModuleEntry): string {
+  if (m.type !== "wildcard") return "";
+  const overrideName = m.instance?.variable_binding;
+  if (typeof overrideName === "string" && overrideName.length > 0) return overrideName;
+  const payloadName = (m.payload as { var_binding?: string } | undefined)?.var_binding;
+  return typeof payloadName === "string" ? payloadName : "";
+}
+
 /** Same kind-aware writes-extraction `extension/graph.ts:moduleWrites` uses.
  *  Inlined here to keep the conflicts module dependency-light. */
 function writesOf(m: ModuleEntry): string[] {
@@ -37,7 +54,12 @@ function writesOf(m: ModuleEntry): string[] {
   }
   const p = (m.payload ?? {}) as Record<string, unknown>;
   if (m.type === "wildcard") {
-    const b = (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
+    // Honour `instance.variable_binding` override before falling back
+    // to `payload.var_binding` — same precedence as the engine. A
+    // direct `payload.var_binding` read would miss user-renamed
+    // wildcards and skip duplicate / shadow detection on the
+    // EFFECTIVE binding the runtime will write.
+    const b = bindingNameOf(m).replace(/^\$/, "").trim();
     if (b) out.push(b);
   } else if (m.type === "combine") {
     const o = (p.output_var as string | undefined)?.replace(/^\$/, "").trim();
