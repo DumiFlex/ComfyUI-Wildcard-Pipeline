@@ -17,6 +17,16 @@ import { KIND_TITLE, kindHeaderIcon } from "./editors/_shell";
  * library-integration pass. Falls back to an empty string for
  * unknown kinds so the subtitle slot collapses cleanly.
  */
+/**
+ * Normalize a module type into the slug used by the
+ * `--wp-kind-{slug}` palette tokens. Engine stores `fixed_values`
+ * but the colour token is `--wp-kind-fixed`, so the kind chip
+ * needs the same alias map ContextWidget uses.
+ */
+function kindChipModifier(kind: string): string {
+  return kind === "fixed_values" ? "fixed" : kind;
+}
+
 const KIND_SUBTITLE: Record<string, string> = {
   wildcard:    "Library entry · weighted options resolved per pick",
   fixed_values:"Pinned $var → value pairs · no resolution",
@@ -167,20 +177,29 @@ function cancel() {
              KIND_SUBTITLE static map; library timestamps + content
              hashes will land in Phase B's library-integration pass. -->
         <div class="wp-medit__title-block">
-          <!-- fixed_values: editable name. Snapshot kinds: read-only —
-               name belongs to the library row, not the per-instance
-               override surface. -->
-          <input
-            v-if="draft.type === 'fixed_values'"
-            v-model="draft.meta.name"
-            class="wp-medit__name-input"
-            placeholder="module name"
-            spellcheck="false"
-          />
-          <span v-else class="wp-medit__name-readonly">
-            {{ draft.meta.name || draft.type }}
-            <span class="wp-medit__name-kind">· {{ KIND_TITLE[draft.type] ?? draft.type }}</span>
-          </span>
+          <!-- Title row holds the name (editable for fixed_values,
+               read-only for snapshot kinds) PLUS the kind chip
+               (V3, mockup v5 line 1039) — chip is the canonical
+               "this kind" cue across the row, picker, and editor.
+               Reuses the same `.wp-kind-chip` styling defined in
+               ContextWidget. -->
+          <div class="wp-medit__title-row">
+            <input
+              v-if="draft.type === 'fixed_values'"
+              v-model="draft.meta.name"
+              class="wp-medit__name-input"
+              placeholder="module name"
+              spellcheck="false"
+            />
+            <span v-else class="wp-medit__name-readonly">
+              {{ draft.meta.name || draft.type }}
+            </span>
+            <span
+              class="wp-kind-chip"
+              :class="`wp-kind-chip--${kindChipModifier(draft.type)}`"
+            >{{ KIND_TITLE[draft.type] ?? draft.type }}</span>
+          </div>
+
           <div v-if="KIND_SUBTITLE[draft.type]" class="wp-medit__sub">
             {{ KIND_SUBTITLE[draft.type] }}
           </div>
@@ -337,6 +356,17 @@ function cancel() {
   margin: 0 0 2px;
 }
 
+/* V3 — name + kind chip share a flex row inside the title block
+ * (mockup v5 line 1039). Chip is `.wp-kind-chip` from the shared
+ * theme; this row just lays them out on a single line and keeps
+ * the input/span flexing into the available space. */
+.wp-medit__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 /* Read-only name header for snapshot kinds (non-fixed_values). */
 .wp-medit__name-readonly {
   flex: 1;
@@ -349,13 +379,6 @@ function cancel() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.wp-medit__name-kind {
-  color: var(--wp-text3);
-  font-weight: 400;
-  font-size: 11px;
-  margin-left: 4px;
-  font-family: var(--wp-font-mono, monospace);
 }
 
 .wp-medit__foot {

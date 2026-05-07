@@ -2057,28 +2057,9 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   color: var(--wp-danger);
 }
 
-/* Kind chip (mockup v5 lines 681, 696, 711, 722, 733) — small kind
- * label that sits inline next to the module name. Tinted with the
- * kind palette so the eye reads the row's kind at a glance even
- * when the kind icon is too small to parse. Same colour triple is
- * used in the picker rows + the edit-modal header so the chip is
- * the canonical "this kind looks like X" cue throughout the UI. */
-.wp-kind-chip {
-  font: 600 9px/1 var(--wp-font-sans);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-  padding: 3px 5px;
-  border-radius: 2px;
-  flex-shrink: 0;
-  background: color-mix(in oklab, var(--wp-text-dim, var(--wp-text3)) 18%, transparent);
-  color: var(--wp-text-muted, var(--wp-text3));
-}
-.wp-kind-chip--wildcard   { background: color-mix(in oklab, var(--wp-kind-wildcard)   22%, transparent); color: var(--wp-kind-wildcard);   }
-.wp-kind-chip--fixed      { background: color-mix(in oklab, var(--wp-kind-fixed)      22%, transparent); color: var(--wp-kind-fixed);      }
-.wp-kind-chip--combine    { background: color-mix(in oklab, var(--wp-kind-combine)    22%, transparent); color: var(--wp-kind-combine);    }
-.wp-kind-chip--derivation { background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent); color: var(--wp-kind-derivation); }
-.wp-kind-chip--constraint { background: color-mix(in oklab, var(--wp-kind-constraint) 22%, transparent); color: var(--wp-kind-constraint); }
-.wp-kind-chip--pipeline   { background: color-mix(in oklab, var(--wp-kind-pipeline)   22%, transparent); color: var(--wp-kind-pipeline);   }
+/* `.wp-kind-chip` rules live in shared/theme.css so the chip stays
+ * visually identical across the row, picker, and edit-modal header.
+ * Kept as a comment-only anchor here for grep discoverability. */
 
 /* ── Inline action cluster (lock + internal + remove) ───────────────────
  * Fades in on row hover; uses PrimeIcons via `pi` class (Task 9).

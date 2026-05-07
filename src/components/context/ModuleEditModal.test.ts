@@ -108,13 +108,16 @@ describe("ModuleEditModal — shell header", () => {
     expect(wrapper.find(".wp-medit__name-readonly").exists()).toBe(false);
   });
 
-  it("shows kind label in read-only name span (non-fixed_values)", async () => {
+  it("shows kind label as a kind-chip in the header (non-fixed_values)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeWildcard() },
     });
     await nextTick();
-    expect(wrapper.find(".wp-medit__name-kind").text()).toContain("wildcard");
+    // V3 replaced the `· wildcard` plain text with `.wp-kind-chip`.
+    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain("wildcard");
   });
 
   it("renders nothing when module is null", async () => {
@@ -904,3 +907,38 @@ describe("ModuleEditModal — V2 two-line header", () => {
   });
 });
 
+describe("ModuleEditModal — V3 kind chip in header", () => {
+  beforeEach(() => _resetForTests());
+
+  it("renders .wp-kind-chip in header for wildcard kind", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toBe("wildcard");
+  });
+
+  it("kind chip carries its kind-color modifier class", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeCombine() },
+    });
+    await nextTick();
+    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
+    expect(chip.classes()).toContain("wp-kind-chip--combine");
+  });
+
+  it("renders chip even for fixed_values (editable name) kind", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeFixedValues() },
+    });
+    await nextTick();
+    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toBe("fixed");
+  });
+});
