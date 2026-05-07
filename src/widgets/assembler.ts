@@ -79,7 +79,15 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "pinned_option_id",
   "locked_seed",
   "internal",
+  // Tier 2:
+  "disabled_rule_ids",
+  "disabled_exception_keys",
+  "disabled_matrix_cells",
 ]);
+
+/** Test-only export. Allows whitelist invariants to be asserted without
+ *  re-stringifying the chain. NOT used by production code path. */
+export const RELEVANT_INSTANCE_KEYS_FOR_TEST = RELEVANT_INSTANCE_KEYS;
 
 function relevantModule(m: unknown): unknown {
   if (!m || typeof m !== "object") return m;

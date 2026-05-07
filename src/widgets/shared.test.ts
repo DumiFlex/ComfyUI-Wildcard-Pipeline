@@ -124,3 +124,18 @@ describe("parseWidgetJsonWithRecovery — _ui migration", () => {
     expect(result.value.modules[0].instance?._ui?.last_locked_seed).toBe(42);
   });
 });
+
+describe("RELEVANT_INSTANCE_KEYS — tier 2 cache invalidation", () => {
+  it("includes disabled_rule_ids, disabled_exception_keys, disabled_matrix_cells", async () => {
+    const { RELEVANT_INSTANCE_KEYS_FOR_TEST } = await import("./assembler");
+    expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("disabled_rule_ids")).toBe(true);
+    expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("disabled_exception_keys")).toBe(true);
+    expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("disabled_matrix_cells")).toBe(true);
+  });
+
+  it("excludes _ui namespace from cache key", async () => {
+    const { RELEVANT_INSTANCE_KEYS_FOR_TEST } = await import("./assembler");
+    expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("_ui")).toBe(false);
+    expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("last_locked_seed")).toBe(false);
+  });
+});

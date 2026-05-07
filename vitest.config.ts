@@ -8,6 +8,8 @@ export default defineConfig({
     alias: [
       { find: "@", replacement: resolve(__dirname, "./src") },
       { find: "vue", replacement: "vue/dist/vue.runtime.esm-bundler.js" },
+      // Mock ComfyUI runtime APIs for widget tests.
+      { find: "#comfyui/app", replacement: resolve(__dirname, "./src/test-setup.ts") },
       // Stub absolute public-asset paths that don't exist under jsdom tests.
       { find: /^\/wp\/images\/.*\.svg$/, replacement: resolve(__dirname, "./src/manager/__tests__/stubs/asset.svg") },
     ],
