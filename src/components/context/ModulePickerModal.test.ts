@@ -57,11 +57,11 @@ async function mountReady() {
   return wrapper;
 }
 
-/** No-op shim — V1 made the filter strip always-visible, so tag
- *  chips + category pills are reachable without opening anything.
- *  Kept as a shim so test diffs stay small and intent stays
- *  obvious for any future filter-row helper. */
-async function openFilters(_wrapper: ReturnType<typeof mount>) {
+/** Open the filters popover so tag chips + category select are
+ *  reachable. Quick-toggle filters (favorites, hide-added) sit
+ *  inline on the toolbar and don't need this. */
+async function openFilters(wrapper: ReturnType<typeof mount>) {
+  await wrapper.find('[data-testid="picker-filter-trigger"]').trigger("click");
   await nextTick();
 }
 
@@ -109,10 +109,12 @@ describe("ModulePickerModal — filters", () => {
     expect(rows[0].text()).toContain("outfit");
   });
 
-  it("category pill narrows to the chosen category", async () => {
+  it("category dropdown narrows to the chosen category", async () => {
     const wrapper = await mountReady();
-    // V1 — categories are pills now, not a dropdown.
-    await wrapper.find('[data-testid="picker-filter-category-cat-scene"]').trigger("click");
+    await openFilters(wrapper);
+    const select = wrapper.find<HTMLSelectElement>('[data-testid="picker-filter-category"]');
+    select.element.value = "cat-scene";
+    await select.trigger("change");
     const rows = wrapper.findAll(".wp-picker__row");
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain("backdrop");
@@ -142,24 +144,24 @@ describe("ModulePickerModal — filters", () => {
     expect(rows[0].text()).toContain("outfit");
   });
 
-  it("inline 'clear (N)' pill reflects the active filter count", async () => {
+  it("filter trigger badge shows count of active popover filters", async () => {
     const wrapper = await mountReady();
-    // Default state — hide-already-added is on by default → count 1.
-    let clear = wrapper.find('[data-testid="picker-filter-clear"]');
-    expect(clear.exists()).toBe(true);
-    expect(clear.text()).toContain("(1)");
-    // Stack two more filters — tag clothing + tag warm → count 3.
+    // Initially no popover-tracked filters → no badge.
+    expect(wrapper.find(".wp-picker__filter-badge").exists()).toBe(false);
+    await openFilters(wrapper);
     await wrapper.find('[data-testid="picker-tag-clothing"]').trigger("click");
     await wrapper.find('[data-testid="picker-tag-warm"]').trigger("click");
-    clear = wrapper.find('[data-testid="picker-filter-clear"]');
-    expect(clear.text()).toContain("(3)");
+    expect(wrapper.find(".wp-picker__filter-badge").text()).toBe("2");
   });
 
-  it("inline favorites toggle works without any popover step", async () => {
+  it("inline favorites toggle works without opening the popover", async () => {
     const wrapper = await mountReady();
+    expect(wrapper.find('[data-testid="picker-filter-pop"]').exists()).toBe(false);
     // Turn off hide-already-added so outfit (the only favorite) is visible.
     await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
     await wrapper.find('[data-testid="picker-filter-favorites"]').trigger("click");
+    // Popover stayed closed.
+    expect(wrapper.find('[data-testid="picker-filter-pop"]').exists()).toBe(false);
     expect(wrapper.findAll(".wp-picker__row")).toHaveLength(1);
   });
 });
@@ -393,47 +395,5 @@ describe("ModulePickerModal kind tabs", () => {
     expect(fxTab.find("i").classes().join(" ")).toContain("pi-tag");
     const cnTab = wrapper.find('[data-test="picker-tab-constraint"]');
     expect(cnTab.find("i").classes().join(" ")).toContain("pi-filter");
-  });
-});
-
-// ── V1: always-visible filter strip (mockup v5 lines 932-942) ───────────
-// Replaces the popover trigger with an inline filter strip below the kind
-// tabs. Category pills + tag chips + clear pill are always rendered when
-// the underlying data exists.
-
-describe("ModulePickerModal — V1 always-visible filter strip", () => {
-  it("renders the .wp-picker-filters strip without needing a trigger click", async () => {
-    const wrapper = await mountReady();
-    // Strip is rendered immediately — no popover trigger to click.
-    expect(wrapper.find(".wp-picker-filters").exists()).toBe(true);
-    // Old popover trigger is gone (was data-testid="picker-filter-trigger").
-    expect(wrapper.find('[data-testid="picker-filter-trigger"]').exists()).toBe(false);
-  });
-
-  it("category pills + tag chips are reachable without opening anything", async () => {
-    const wrapper = await mountReady();
-    // Category pill for the fixture's "Clothing" category.
-    expect(wrapper.find('[data-testid="picker-filter-category-cat-clothing"]').exists()).toBe(true);
-    // Tag chips already had data-testid; they live inside the strip now.
-    expect(wrapper.find('[data-testid="picker-tag-clothing"]').exists()).toBe(true);
-  });
-
-  it("clicking a category pill narrows rows to that category", async () => {
-    const wrapper = await mountReady();
-    await wrapper.find('[data-testid="picker-filter-category-cat-scene"]').trigger("click");
-    const rows = wrapper.findAll(".wp-picker__row");
-    expect(rows).toHaveLength(1);
-    expect(rows[0].text()).toContain("backdrop");
-  });
-
-  it("inline 'clear (N)' pill appears only when at least one filter is active", async () => {
-    const wrapper = await mountReady();
-    // Default state — hide-already-added is on by default (counts as active filter).
-    // Toggle it off so we start from a fully clean slate.
-    await wrapper.find('[data-testid="picker-filter-hide-added"]').trigger("click");
-    expect(wrapper.find('[data-testid="picker-filter-clear"]').exists()).toBe(false);
-    // Activate one filter → clear pill appears.
-    await wrapper.find('[data-testid="picker-tag-clothing"]').trigger("click");
-    expect(wrapper.find('[data-testid="picker-filter-clear"]').exists()).toBe(true);
   });
 });
