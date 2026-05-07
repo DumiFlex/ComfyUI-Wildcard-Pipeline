@@ -351,11 +351,34 @@ export interface ParseRecovery<T> {
  * Empty input is NOT an error — fresh nodes have no value yet and should
  * just receive the fallback silently.
  */
+function migrateLegacyLastLockedSeed(modules: unknown): void {
+  if (!Array.isArray(modules)) return;
+  for (const m of modules) {
+    if (!m || typeof m !== "object") continue;
+    const inst = (m as Record<string, unknown>).instance;
+    if (!inst || typeof inst !== "object") continue;
+    const instRec = inst as Record<string, unknown>;
+    if (typeof instRec.last_locked_seed === "number") {
+      const ui = (instRec._ui as Record<string, unknown> | undefined) ?? {};
+      if (ui.last_locked_seed === undefined) {
+        ui.last_locked_seed = instRec.last_locked_seed;
+      }
+      instRec._ui = ui;
+      delete instRec.last_locked_seed;
+    }
+  }
+}
+
 export function parseWidgetJsonWithRecovery<T>(raw: string, fallback: T): ParseRecovery<T> {
   if (!raw) return { value: fallback, error: null, raw };
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") return { value: parsed as T, error: null, raw };
+    if (parsed && typeof parsed === "object") {
+      // Migrate legacy instance.last_locked_seed to instance._ui.last_locked_seed
+      const parsedRecord = parsed as Record<string, unknown>;
+      migrateLegacyLastLockedSeed(parsedRecord.modules);
+      return { value: parsed as T, error: null, raw };
+    }
     return { value: fallback, error: `Expected an object, got ${typeof parsed}.`, raw };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

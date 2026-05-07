@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { defineComponent, h } from "vue";
-import type { ModuleEntry } from "./_shared";
-import { createDomWidgetHost, parseWidgetJson, serializeWidgetJson } from "./_shared";
+import type { ModuleEntry, ContextWidgetValue } from "./_shared";
+import { createDomWidgetHost, parseWidgetJson, parseWidgetJsonWithRecovery, serializeWidgetJson } from "./_shared";
 
 describe("createDomWidgetHost", () => {
   it("mounts a Vue component into a fresh div and returns the host element", () => {
@@ -89,5 +89,38 @@ describe("ModuleEntry.instance — Tier 2 + _ui shape", () => {
       instance: { _ui: { last_locked_seed: 42 } },
     };
     expect(m.instance?._ui?.last_locked_seed).toBe(42);
+  });
+});
+
+describe("parseWidgetJsonWithRecovery — _ui migration", () => {
+  it("moves legacy instance.last_locked_seed into instance._ui.last_locked_seed", () => {
+    const legacy = JSON.stringify({
+      modules: [{
+        id: "ab12cd34", type: "wildcard", enabled: true,
+        meta: { name: "x" }, entries: [],
+        payload: { options: [] },
+        instance: { locked_seed: 100, last_locked_seed: 100 },
+      }],
+    });
+    const fallback: ContextWidgetValue = { version: 1, modules: [] };
+    const result = parseWidgetJsonWithRecovery<ContextWidgetValue>(legacy, fallback);
+    const m = result.value.modules[0];
+    expect(m.instance?._ui?.last_locked_seed).toBe(100);
+    expect((m.instance as Record<string, unknown>)?.last_locked_seed).toBeUndefined();
+    expect(m.instance?.locked_seed).toBe(100);  // unrelated field preserved
+  });
+
+  it("leaves _ui untouched when last_locked_seed already lives there", () => {
+    const fresh = JSON.stringify({
+      modules: [{
+        id: "ab12cd34", type: "wildcard", enabled: true,
+        meta: { name: "x" }, entries: [],
+        payload: { options: [] },
+        instance: { _ui: { last_locked_seed: 42 } },
+      }],
+    });
+    const fallback: ContextWidgetValue = { version: 1, modules: [] };
+    const result = parseWidgetJsonWithRecovery<ContextWidgetValue>(fresh, fallback);
+    expect(result.value.modules[0].instance?._ui?.last_locked_seed).toBe(42);
   });
 });
