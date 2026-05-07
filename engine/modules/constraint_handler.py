@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.modules._keys import encode_key
 from engine.modules.dispatcher import ModuleHandler
 
 _VALID_MODES = {"allow", "exclude", "boost", "reduce"}
@@ -150,11 +151,12 @@ class ConstraintHandler(ModuleHandler):
                 raise ValueError(
                     f"constraint payload.exceptions[{i}] must be an object"
                 )
-            for key in ("source", "target"):
-                v = exc.get(key)
+            # Support both legacy (source/target) and tier 2 (source_value/target_value) naming
+            for key_legacy, key_tier2 in (("source", "source_value"), ("target", "target_value")):
+                v = exc.get(key_legacy) or exc.get(key_tier2)
                 if not isinstance(v, str) or not v:
                     raise ValueError(
-                        f"constraint payload.exceptions[{i}].{key} must be a "
+                        f"constraint payload.exceptions[{i}].{key_legacy} must be a "
                         f"non-empty string"
                     )
             mode = exc.get("mode")
@@ -185,13 +187,44 @@ class ConstraintHandler(ModuleHandler):
         ctx: Any,
     ) -> dict[str, str]:
         cls.validate_payload(payload)
+
+        # Tier 2 instance filters — runtime projection layer, applied
+        # before recording into ctx so downstream consumers see only the
+        # active subset.
+        disabled_cells = set(instance.get("disabled_matrix_cells") or [])
+        disabled_excs = set(instance.get("disabled_exception_keys") or [])
+
+        raw_matrix = payload.get("matrix", {})
+        if disabled_cells:
+            matrix: dict[str, Any] = {}
+            for src, row in raw_matrix.items():
+                kept = {
+                    tgt: cell
+                    for tgt, cell in row.items()
+                    if encode_key([src, tgt]) not in disabled_cells
+                }
+                if kept:
+                    matrix[src] = kept
+        else:
+            matrix = raw_matrix
+
+        raw_excs = payload.get("exceptions", [])
+        if disabled_excs:
+            exceptions = [
+                e for e in raw_excs
+                if encode_key([
+                    e.get("source_value") or e.get("source", ""),
+                    e.get("target_value") or e.get("target", ""),
+                ]) not in disabled_excs
+            ]
+        else:
+            exceptions = raw_excs
+
         meta = {
             "source_wildcard_id": payload["source_wildcard_id"],
             "target_wildcard_id": payload["target_wildcard_id"],
-            "matrix": payload.get("matrix", {}),
-            "exceptions": payload.get("exceptions", []),
+            "matrix": matrix,
+            "exceptions": exceptions,
         }
         _ctx_set_constraint(ctx, meta)
-        # Pass-through stub: return no bindings — WildcardHandler is expected
-        # to consume ctx["__wp_constraints__"] when it grows constraint awareness.
         return {}
