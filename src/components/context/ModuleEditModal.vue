@@ -9,6 +9,23 @@ import DerivationEditorBody from "./editors/DerivationEditorBody.vue";
 import ConstraintEditorBody from "./editors/ConstraintEditorBody.vue";
 import { KIND_TITLE, kindHeaderIcon } from "./editors/_shell";
 
+/**
+ * Per-kind subtitle text shown under the modal title (mockup v5
+ * lines 1040, 1180, 1260, 1317, 1436). Phase A keeps these as
+ * static taglines describing the kind's behaviour at a glance —
+ * library timestamps + content hashes are deferred to the Phase B
+ * library-integration pass. Falls back to an empty string for
+ * unknown kinds so the subtitle slot collapses cleanly.
+ */
+const KIND_SUBTITLE: Record<string, string> = {
+  wildcard:    "Library entry · weighted options resolved per pick",
+  fixed_values:"Pinned $var → value pairs · no resolution",
+  combine:     "Template interpolates $vars into a single string · stored at output binding",
+  derivation:  "Rules independent · per-rule branches IF/ELIF/ELSE — first match wins",
+  constraint:  "Source pick → modifies target option weights · matrix + per-value exceptions",
+};
+
+
 const props = defineProps<{
   visible: boolean;
   module: ModuleEntry | null;
@@ -142,19 +159,33 @@ function cancel() {
           :class="[kindHeaderIcon(draft.type), 'wp-medit__head-icon', `type-${draft.type}`]"
           aria-hidden="true"
         ></i>
-        <!-- fixed_values: editable name. Snapshot kinds: read-only — name
-             belongs to the library row, not the per-instance override surface. -->
-        <input
-          v-if="draft.type === 'fixed_values'"
-          v-model="draft.meta.name"
-          class="wp-medit__name-input"
-          placeholder="module name"
-          spellcheck="false"
-        />
-        <span v-else class="wp-medit__name-readonly">
-          {{ draft.meta.name || draft.type }}
-          <span class="wp-medit__name-kind">· {{ KIND_TITLE[draft.type] ?? draft.type }}</span>
-        </span>
+
+        <!-- Title block — V2 (mockup v5 lines 1039-1040, 1180, 1260,
+             1317, 1436). Stacks the name row over a kind-specific
+             subtitle so the modal reads as a real header instead of
+             a single-line title. Subtitle text comes from the
+             KIND_SUBTITLE static map; library timestamps + content
+             hashes will land in Phase B's library-integration pass. -->
+        <div class="wp-medit__title-block">
+          <!-- fixed_values: editable name. Snapshot kinds: read-only —
+               name belongs to the library row, not the per-instance
+               override surface. -->
+          <input
+            v-if="draft.type === 'fixed_values'"
+            v-model="draft.meta.name"
+            class="wp-medit__name-input"
+            placeholder="module name"
+            spellcheck="false"
+          />
+          <span v-else class="wp-medit__name-readonly">
+            {{ draft.meta.name || draft.type }}
+            <span class="wp-medit__name-kind">· {{ KIND_TITLE[draft.type] ?? draft.type }}</span>
+          </span>
+          <div v-if="KIND_SUBTITLE[draft.type]" class="wp-medit__sub">
+            {{ KIND_SUBTITLE[draft.type] }}
+          </div>
+        </div>
+
         <button type="button" class="wp-medit__close" aria-label="Close" @click="cancel">
           <i class="pi pi-times" aria-hidden="true"></i>
         </button>
@@ -254,6 +285,25 @@ function cancel() {
   min-width: 0;
 }
 .wp-medit__name-input:focus { outline: none; border-color: var(--wp-accent); }
+/* V2 — title block stacks the name row over the kind subtitle so
+ * the modal header reads as a real two-line title (mockup v5 lines
+ * 1039-1040). Flexes to fill the space between the kind icon on
+ * the left and the close button on the right. */
+.wp-medit__title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wp-medit__sub {
+  font: 11px/1.35 var(--wp-font-sans, sans-serif);
+  color: var(--wp-text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .wp-medit__close {
   background: none;
   border: none;

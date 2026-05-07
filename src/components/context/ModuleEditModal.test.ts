@@ -866,3 +866,41 @@ describe("ModuleEditModal — constraint editor body", () => {
     promptSpy.mockRestore();
   });
 });
+
+// ── V2 + V3: two-line modal header (mockup v5 lines 1039-1040, 1180, 1260, 1317, 1436) ─
+
+describe("ModuleEditModal — V2 two-line header", () => {
+  beforeEach(() => _resetForTests());
+
+  it("renders the .wp-medit__sub subtitle line for wildcard kind", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    const sub = wrapper.find(".wp-medit__sub");
+    expect(sub.exists()).toBe(true);
+    expect(sub.text().length).toBeGreaterThan(0);
+  });
+
+  it("subtitle text varies per kind (combine ≠ constraint)", async () => {
+    const cb = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeCombine() },
+    });
+    await nextTick();
+    const cbSub = cb.find(".wp-medit__sub").text();
+
+    const ws = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    const wsSub = ws.find(".wp-medit__sub").text();
+
+    expect(cbSub).not.toBe("");
+    expect(wsSub).not.toBe("");
+    expect(cbSub).not.toBe(wsSub);
+  });
+});
+
