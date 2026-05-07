@@ -418,7 +418,12 @@ function cancel() {
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  width: 540px;
+  /* Width bumped from 540px to 820px after Instance tab landed —
+   * sections like option-weights tables, constraint matrix grids, and
+   * disabled-rules lists all benefit from more horizontal room without
+   * forcing horizontal scroll inside the body. Clamps to 100% on
+   * narrow viewports via the max-width below. */
+  width: 820px;
   max-width: 100%;
   max-height: 80vh;
   display: flex;
