@@ -692,3 +692,93 @@ describe("ContextWidget inline actions", () => {
     expect(wrapper.find('[data-test="row-action-remove"]').exists()).toBe(true);
   });
 });
+
+
+// ── B2: status badges (mockup v5 lines 714, 736, 861) ──────────────────────
+// Text-style labels next to the existing 7px dots so users discover the
+// indicator meaning without hovering for the tooltip.
+
+describe("ContextWidget status badges", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/list")) {
+          return new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+  });
+
+  it("renders 'drift' text badge alongside the drift dot", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live" } }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 800,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "embedded" },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+
+    await vi.waitFor(() => {
+      const badge = wrapper.find(".wp-mod-badge--drift");
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toBe("drift");
+    });
+    wrapper.unmount();
+  });
+
+  it("renders 'missing' text badge when uuid is not in library", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Empty hashes map → uuid not in lib → missing.
+          return new Response(JSON.stringify({ hashes: {} }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 801,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "aaaaaaaa", type: "wildcard", enabled: true, meta: { name: "a" }, entries: [], payload: {}, payload_hash: "embedded" },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+
+    await vi.waitFor(() => {
+      const badge = wrapper.find(".wp-mod-badge--missing");
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toBe("missing");
+    });
+    wrapper.unmount();
+  });
+});

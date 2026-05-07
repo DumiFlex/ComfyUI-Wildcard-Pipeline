@@ -1274,7 +1274,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
                the eye reads them as a single "module health" glance.
                Order modified → drift → missing → conflict (severity
                rises left → right). Buttons sit AFTER this cluster so
-               dots never split the interactive controls. -->
+               dots never split the interactive controls.
+               Each kind ALSO renders a text badge (mockup v5
+               lines 714, 736, 861) so users recognise the state
+               without hovering for the tooltip. The dot remains as
+               the compact glance affordance at canvas zoom; the
+               badge gives the textual handle. -->
           <span class="wp-mod-dots">
             <span
               v-if="isModified(m)"
@@ -1283,17 +1288,32 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               aria-hidden="true"
             ></span>
             <span
+              v-if="isModified(m)"
+              class="wp-mod-badge wp-mod-badge--mod"
+              :title="modifiedTooltip(m)"
+            >mod</span>
+            <span
               v-if="isDrifted(m)"
               class="wp-mod-dot wp-mod-dot--drift"
               title="Drifted — library has a newer version. Right-click → Refresh from library."
               aria-hidden="true"
             ></span>
             <span
+              v-if="isDrifted(m)"
+              class="wp-mod-badge wp-mod-badge--drift"
+              title="Drifted — library has a newer version. Right-click → Refresh from library."
+            >drift</span>
+            <span
               v-if="isMissingFromLibrary(m)"
               class="wp-mod-dot wp-mod-dot--missing"
               title="Not in library — right-click → Save to library to add it"
               aria-hidden="true"
             ></span>
+            <span
+              v-if="isMissingFromLibrary(m)"
+              class="wp-mod-badge wp-mod-badge--missing"
+              title="Not in library — right-click → Save to library to add it"
+            >missing</span>
             <span
               v-if="severityFor(m.id)"
               class="wp-conflict-dot"
@@ -1983,6 +2003,34 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   font-family: var(--wp-font-mono);
   text-transform: none;
   flex-shrink: 0;
+}
+
+/* Status text-badges (mockup v5 lines 714, 736, 861) — kind-tinted
+ * label that pairs with the matching `.wp-mod-dot--*` so users see
+ * BOTH the colour glance and the textual state. Kind palette is the
+ * same triple used by the dot cluster:
+ *   --wp-status-modified  → "mod"     (user diff vs library)
+ *   --wp-warn             → "drift"   (library has a newer version)
+ *   --wp-warn             → "no link" (Injector socket — re-uses drift hue)
+ *   --wp-danger           → "missing" (gone from library)
+ */
+.wp-mod-badge--mod,
+.wp-mod-badge--drift,
+.wp-mod-badge--missing {
+  flex-shrink: 0;
+  cursor: help;
+}
+.wp-mod-badge--mod {
+  background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
+  color: var(--wp-status-modified);
+}
+.wp-mod-badge--drift {
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
+  color: var(--wp-warn);
+}
+.wp-mod-badge--missing {
+  background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
+  color: var(--wp-danger);
 }
 
 /* ── Inline action cluster (lock + internal + remove) ───────────────────
