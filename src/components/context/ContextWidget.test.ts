@@ -838,3 +838,64 @@ describe("ContextWidget kind chip", () => {
     expect(chip.classes()).toContain("wp-kind-chip--constraint");
   });
 });
+
+// ── Conflict badges (QA follow-up — labels next to wp-conflict-dot) ────────
+// Pairs with the existing wp-conflict-dot the same way the status badges
+// pair with wp-mod-dot. Covers shadows_upstream → "override" and
+// missing_template_variable → "missing var".
+
+describe("ContextWidget conflict badges", () => {
+  it("renders 'override' badge when binding shadows an upstream var", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 950,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            // wildcard binding "x" — collides with upstream "x" → shadows_upstream
+            {
+              id: "ww111111",
+              type: "wildcard",
+              enabled: true,
+              meta: { name: "x" },
+              entries: [],
+              payload: { var_binding: "x", options: [] },
+            },
+          ],
+        }),
+        upstreamVars: ["x"],
+        onChange: () => {},
+      },
+    });
+    const badge = wrapper.find(".wp-conflict-badge");
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toBe("override");
+  });
+
+  it("renders 'missing var' badge when combine references a var not in scope", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 951,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            // combine template references $undefined — not in upstream nor sibling
+            {
+              id: "cb111111",
+              type: "combine",
+              enabled: true,
+              meta: { name: "phrase" },
+              entries: [],
+              payload: { template: "uses $undefined", output_var: "out" },
+            },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const badge = wrapper.find(".wp-conflict-badge");
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toBe("missing var");
+  });
+});

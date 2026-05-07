@@ -226,6 +226,44 @@ function severityFor(id: string): "error" | "warning" | "info" | null {
   return "info";
 }
 
+/**
+ * Short text label for the conflict badge that sits next to the
+ * `.wp-conflict-dot`. Picks the most-severe conflict on this
+ * module (error > warning > info) and maps its type to a 1-2 word
+ * tag so users recognise the issue without hovering for the
+ * tooltip — pairs with the dot the same way the status badges
+ * pair with the drift / missing / mod dots above. Returns `null`
+ * if the module has no conflicts.
+ *
+ * Wording stays short on purpose; the full sentence form lives in
+ * `conflictTooltip` for the title attribute. Constraint-specific
+ * subtypes get their own short form so a constraint row with a
+ * source/target wiring issue surfaces a meaningful label rather
+ * than the generic "conflict".
+ */
+function conflictBadgeText(id: string): string | null {
+  const list = conflictsByModule.value[id];
+  if (!list?.length) return null;
+  // Pick the highest-severity conflict; tie-break by first occurrence
+  // so the badge wording stays stable across renders.
+  const order = { error: 0, warning: 1, info: 2 } as const;
+  const top = [...list].sort(
+    (a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9),
+  )[0];
+  switch (top.type) {
+    case "shadows_upstream":           return "override";
+    case "duplicate_variable":         return "duplicate";
+    case "missing_template_variable":  return "missing var";
+    case "constraint_source_after_self":     return "src after";
+    case "constraint_source_missing":        return "src missing";
+    case "constraint_target_before_self":    return "tgt before";
+    case "constraint_target_in_upstream":    return "tgt upstream";
+    case "constraint_target_missing":        return "tgt missing";
+    case "constraint_source_in_downstream":  return "src downstream";
+    default:                                  return "conflict";
+  }
+}
+
 function conflictTooltip(id: string): string {
   const list = conflictsByModule.value[id];
   if (!list?.length) return "";
@@ -1349,6 +1387,19 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               :title="conflictTooltip(m.id)"
               aria-hidden="true"
             ></span>
+            <!-- Conflict text badge — pairs with the conflict dot
+                 the same way the status badges pair with their dots
+                 above. Wording comes from `conflictBadgeText` and
+                 covers shadows_upstream ("override"),
+                 missing_template_variable ("missing var"), and the
+                 constraint-* subtypes. Severity-tinted via
+                 --info / --warning / --error variants. -->
+            <span
+              v-if="severityFor(m.id) && conflictBadgeText(m.id)"
+              class="wp-conflict-badge"
+              :class="`wp-conflict-badge--${severityFor(m.id)}`"
+              :title="conflictTooltip(m.id)"
+            >{{ conflictBadgeText(m.id) }}</span>
           </span>
 
           <!-- Inline action cluster — lock + internal + remove.
@@ -1964,6 +2015,33 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-conflict-dot--error {
   background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
   border-color: var(--wp-red);
+}
+
+/* Conflict text badges — pair with `.wp-conflict-dot--*`. Same
+ * shape + sizing as `.wp-mod-badge` (status badges next to status
+ * dots), but tinted off the conflict-severity tokens so the badge
+ * picks up the same hue as its dot. Surfaces `override`,
+ * `missing var`, `duplicate`, and the constraint-* short labels. */
+.wp-conflict-badge {
+  font: 600 9px/1 var(--wp-font-sans, sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  cursor: help;
+}
+.wp-conflict-badge--info {
+  background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
+}
+.wp-conflict-badge--warning {
+  background: color-mix(in oklab, var(--wp-amber) 18%, transparent);
+  color: var(--wp-amber);
+}
+.wp-conflict-badge--error {
+  background: color-mix(in oklab, var(--wp-red) 18%, transparent);
+  color: var(--wp-red);
 }
 
 /* Cluster wrapper — keeps every status dot (modified, missing,
