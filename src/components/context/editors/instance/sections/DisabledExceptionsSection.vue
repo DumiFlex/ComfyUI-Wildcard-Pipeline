@@ -3,8 +3,16 @@ import { computed } from "vue";
 import { encodeKey } from "../keys";
 
 interface Exception {
-  source_value: string;
-  target_value: string;
+  // Tier 2 (current) shape uses `*_value`; legacy payloads use bare
+  // `source` / `target`. Engine accepts either via the same fallback
+  // chain — see `engine/modules/constraint_handler.py:215`. Mirror it
+  // here so a constraint authored against the legacy shape still keys
+  // its disabled cells correctly. Reading only `*_value` would emit
+  // `encodeKey([undefined, undefined])` and silently drop selections.
+  source_value?: string;
+  target_value?: string;
+  source?: string;
+  target?: string;
   mode: string;
   factor: number;
 }
@@ -29,7 +37,7 @@ interface Row {
 
 const rows = computed<Row[]>(() =>
   props.library.map((ex, index) => ({
-    key: encodeKey([ex.source_value, ex.target_value]),
+    key: encodeKey([ex.source_value ?? ex.source ?? "", ex.target_value ?? ex.target ?? ""]),
     exception: ex,
     index,
   })),
@@ -89,7 +97,7 @@ function onClickReset(): void {
           :checked="isDisabled(row.key)"
           @change="(ev) => onToggle(row.key, ev)"
         />
-        <span class="wp-instance-row-id">{{ row.exception.source_value }} &rarr; {{ row.exception.target_value }}</span>
+        <span class="wp-instance-row-id">{{ row.exception.source_value ?? row.exception.source ?? "" }} &rarr; {{ row.exception.target_value ?? row.exception.target ?? "" }}</span>
         <span class="wp-instance-row-value">{{ row.exception.mode }} ({{ row.exception.factor }})</span>
       </label>
     </div>

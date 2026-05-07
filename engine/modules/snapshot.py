@@ -52,9 +52,21 @@ class SnapshotEntry(TypedDict):
 
 
 def _fresh_instance() -> dict[str, Any]:
-    """Default per-snapshot instance overrides. Fresh dict per call."""
+    """Default per-snapshot instance overrides. Fresh dict per call.
+
+    Invariant: every field defaults to ``None``. The frontend
+    "modified-state" predicate is ``value != null``, so any non-None
+    sentinel (e.g. ``""`` for a string field, ``False`` for a bool)
+    would falsely light up the orange dot, force the modal to default
+    to the Instance tab, and tag the section as modified — even on a
+    pristine snapshot. Engine readers already tolerate ``None`` (see
+    ``wildcard_handler.py:216`` for the binding fallback chain and
+    ``pipeline.py:160`` for the internal-flag coercion), so we keep a
+    single contract: ``None`` everywhere = "no override, use library
+    default".
+    """
     return {
-        "variable_binding": "",
+        "variable_binding": None,
         "enabled_options": None,
         "category_filter": None,
         "option_weights": None,
@@ -74,8 +86,9 @@ def _fresh_instance() -> dict[str, Any]:
         # Internal — when True, every binding this module produces is
         # marked engine-only by `PipelineEngine.run` (via
         # `__wp_internal_flags__`). Downstream modules still see the
-        # value; the public socket payload doesn't.
-        "internal": False,
+        # value; the public socket payload doesn't. ``None`` is coerced
+        # to ``False`` at the read site, so the default stays "off".
+        "internal": None,
         "disabled_rule_ids": None,
         "disabled_exception_keys": None,
         "disabled_matrix_cells": None,

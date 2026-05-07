@@ -51,14 +51,14 @@ def test_freeze_snapshot_includes_required_fields():
     assert snap["category_id"] == "style"
     assert snap["payload"] == {"options": []}
     assert snap["instance"] == {
-        "variable_binding": "",
+        "variable_binding": None,
         "enabled_options": None,
         "category_filter": None,
         "option_weights": None,
         "mode": None,
         "pinned_option_id": None,
         "locked_seed": None,
-        "internal": False,
+        "internal": None,
         "disabled_rule_ids": None,
         "disabled_exception_keys": None,
         "disabled_matrix_cells": None,
@@ -73,7 +73,7 @@ def test_freeze_snapshot_each_call_yields_fresh_instance_dict():
     a = freeze_snapshot(library_row)
     b = freeze_snapshot(library_row)
     a["instance"]["variable_binding"] = "$mutated"
-    assert b["instance"]["variable_binding"] == ""
+    assert b["instance"]["variable_binding"] is None
 
 
 def test_freeze_snapshot_handles_missing_category_id():
@@ -105,7 +105,7 @@ def test_coerce_legacy_module_fills_missing_fields_for_fixed_values():
     assert coerced["payload"]["values"][1] == {
         "id": "val_0001", "name": "angle", "value": "wide",
     }
-    assert coerced["instance"]["variable_binding"] == ""
+    assert coerced["instance"]["variable_binding"] is None
 
 
 def test_coerce_legacy_module_passes_through_already_coerced():
@@ -183,5 +183,5 @@ def test_coerce_legacy_module_preserves_user_instance_overrides():
     assert coerced["instance"]["enabled_options"] == ["o1"]
     assert coerced["instance"]["option_weights"] == {"o1": 5.0}
     # Defaults still present for keys the user didn't override.
-    assert coerced["instance"]["variable_binding"] == ""
+    assert coerced["instance"]["variable_binding"] is None
     assert coerced["instance"]["category_filter"] is None

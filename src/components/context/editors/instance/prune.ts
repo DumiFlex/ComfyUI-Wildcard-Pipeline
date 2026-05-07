@@ -1,6 +1,6 @@
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { ModuleKind } from "../_shell";
-import { decodeKey } from "./keys";
+import { encodeKey } from "./keys";
 
 type Instance = NonNullable<ModuleEntry["instance"]>;
 
@@ -79,18 +79,32 @@ export function pruneStaleInstanceRefs(
       }
     }
   } else if (kind === "constraint") {
+    // Engine accepts both Tier 2 (`source_value`/`target_value`) and
+    // legacy (`source`/`target`) exception shapes — see
+    // `engine/modules/constraint_handler.py:215`. Mirror the same
+    // fallback chain when computing prune keys; otherwise a refresh
+    // against a legacy-shaped payload would emit
+    // `encodeKey([undefined, undefined])` and falsely flag every saved
+    // disable selection as stale.
     const payload = (newPayload ?? {}) as {
       matrix?: Record<string, Record<string, unknown>>;
-      exceptions?: Array<{ source_value: string; target_value: string }>;
+      exceptions?: Array<{
+        source_value?: string;
+        target_value?: string;
+        source?: string;
+        target?: string;
+      }>;
     };
     const matrixKeys = new Set<string>();
     for (const [src, row] of Object.entries(payload.matrix ?? {})) {
       for (const tgt of Object.keys(row ?? {})) {
-        matrixKeys.add(JSON.stringify([src, tgt]));
+        matrixKeys.add(encodeKey([src, tgt]));
       }
     }
     const exceptionKeys = new Set(
-      (payload.exceptions ?? []).map((e) => JSON.stringify([e.source_value, e.target_value])),
+      (payload.exceptions ?? []).map((e) =>
+        encodeKey([e.source_value ?? e.source ?? "", e.target_value ?? e.target ?? ""]),
+      ),
     );
     if (Array.isArray(out.disabled_matrix_cells)) {
       const before = out.disabled_matrix_cells;
@@ -113,8 +127,6 @@ export function pruneStaleInstanceRefs(
       }
     }
   }
-
-  void decodeKey;
 
   return { instance: out, warnings };
 }
