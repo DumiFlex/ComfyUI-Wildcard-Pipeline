@@ -7,7 +7,23 @@ import FixedValuesEditorBody from "./editors/FixedValuesEditorBody.vue";
 import CombineEditorBody from "./editors/CombineEditorBody.vue";
 import DerivationEditorBody from "./editors/DerivationEditorBody.vue";
 import ConstraintEditorBody from "./editors/ConstraintEditorBody.vue";
-import { KIND_TITLE, kindHeaderIcon } from "./editors/_shell";
+import {
+  KIND_TITLE,
+  kindHeaderIcon,
+  INSTANCE_FIELDS_PER_KIND,
+  INSTANCE_TAB_VISIBLE,
+  type InstanceFieldKey,
+} from "./editors/_shell";
+import ModalTabStrip from "./editors/tabs/ModalTabStrip.vue";
+import LibraryRoundTripActions from "./editors/library/LibraryRoundTripActions.vue";
+import WildcardInstanceBody from "./editors/instance/WildcardInstanceBody.vue";
+import FixedValuesInstanceBody from "./editors/instance/FixedValuesInstanceBody.vue";
+import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
+import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
+import ConstraintInstanceBody from "./editors/instance/ConstraintInstanceBody.vue";
+import { pruneStaleInstanceRefs } from "./editors/instance/prune";
+import { hashes } from "./drift-store";
+import { pushToast } from "../shared/toast-store";
 
 /**
  * Per-kind subtitle text shown under the modal title (mockup v5
@@ -68,9 +84,15 @@ const emit = defineEmits<{
 // via JSON round-trip (Proxy-safe at every depth, unlike structuredClone).
 const draft = ref<ModuleEntry | null>(null);
 
+// Active tab — Library shows the existing kind-body editors (snapshot
+// state), Instance shows per-kind override editors. Smart-defaulted when
+// a draft loads via `pickInitialTab()`.
+const activeTab = ref<"library" | "instance">("library");
+
 watch(() => props.visible, (v) => {
   if (v && props.module) {
     draft.value = JSON.parse(JSON.stringify(props.module));
+    activeTab.value = pickInitialTab();
     window.addEventListener("keydown", onKeydown);
   } else {
     window.removeEventListener("keydown", onKeydown);
@@ -100,9 +122,111 @@ const kindBody = computed(() => {
   }
 });
 
+// Per-kind instance override body. Mirrors `kindBody` but for the
+// Instance tab — pipelines have no overrides and resolve to null.
+const instanceBody = computed(() => {
+  switch (draft.value?.type) {
+    case "wildcard":     return WildcardInstanceBody;
+    case "fixed_values": return FixedValuesInstanceBody;
+    case "combine":      return CombineInstanceBody;
+    case "derivation":   return DerivationInstanceBody;
+    case "constraint":   return ConstraintInstanceBody;
+    default:             return null;
+  }
+});
+
+// Tab strip is suppressed for kinds with no instance overrides (today
+// only `pipeline`). Driven by the registry in `_shell.ts` so adding a
+// new kind needs only one source of truth.
+const hasInstanceTab = computed(() =>
+  draft.value ? INSTANCE_TAB_VISIBLE[draft.value.type] : false,
+);
+
+// Modified-state — true when ANY registry field on `instance` is
+// non-null. The `_ui` namespace is excluded by virtue of not appearing
+// in `INSTANCE_FIELDS_PER_KIND`, so toggling Lock off (which leaves a
+// `_ui.last_locked_seed` behind) does NOT light the orange dot.
+const instanceModified = computed(() => {
+  if (!draft.value) return false;
+  const fields = INSTANCE_FIELDS_PER_KIND[draft.value.type];
+  const inst = draft.value.instance;
+  if (!inst) return false;
+  return fields.some((f) => (inst as Record<string, unknown>)[f] != null);
+});
+
+const isLibraryTracked = computed(() => !!draft.value?.payload_hash);
+const isDrifted = computed(() => {
+  if (!draft.value || !draft.value.payload_hash) return false;
+  const live = hashes.value?.[draft.value.id];
+  return live != null && live !== draft.value.payload_hash;
+});
+
+/**
+ * Smart default for the active tab on draft load. If the kind has no
+ * Instance tab → Library. Otherwise: Instance when any registry field
+ * is non-null, Library when none are. Spec §6.3.
+ */
+function pickInitialTab(): "library" | "instance" {
+  if (!draft.value) return "library";
+  if (!INSTANCE_TAB_VISIBLE[draft.value.type]) return "library";
+  const fields = INSTANCE_FIELDS_PER_KIND[draft.value.type];
+  const inst = draft.value.instance;
+  if (!inst) return "library";
+  return fields.some((f) => (inst as Record<string, unknown>)[f] != null)
+    ? "instance"
+    : "library";
+}
+
 function onUpdate(patch: Record<string, unknown>): void {
   if (!draft.value) return;
   draft.value = { ...draft.value, ...patch };
+}
+
+/**
+ * "Clear all overrides" footer button on the Instance tab. Confirms
+ * with the user, then nulls every registry field for the current kind.
+ * `_ui` is preserved (it's not in the registry, so it isn't touched).
+ */
+function onClearAllOverrides(): void {
+  if (!draft.value) return;
+  const ok = window.confirm(
+    `Clear all instance overrides for "${draft.value.meta?.name || "this module"}"?`,
+  );
+  if (!ok) return;
+  const fields = INSTANCE_FIELDS_PER_KIND[draft.value.type];
+  const cleared: Record<string, unknown> = { ...(draft.value.instance ?? {}) };
+  for (const f of fields) {
+    cleared[f as InstanceFieldKey] = null;
+  }
+  draft.value = {
+    ...draft.value,
+    instance: cleared as NonNullable<ModuleEntry["instance"]>,
+  };
+}
+
+/**
+ * "Reset to library" — replaces draft.payload + payload_hash with the
+ * refreshed library snapshot, then prunes any instance refs that no
+ * longer match the new payload (e.g. dropped option ids). Surfaces a
+ * toast summarising whether stale overrides got removed.
+ */
+function onResetFromLibrary(refreshed: ModuleEntry): void {
+  if (!draft.value) return;
+  const pruned = pruneStaleInstanceRefs(
+    draft.value.instance, refreshed.payload, refreshed.type,
+  );
+  if (pruned.warnings.length > 0) {
+    pushToast(
+      `Reset complete. ${pruned.warnings.length} stale override(s) removed.`,
+      { severity: "warning" },
+    );
+  } else {
+    pushToast("Reset from library", { severity: "success" });
+  }
+  draft.value = {
+    ...refreshed,
+    instance: pruned.instance,
+  };
 }
 
 function save() {
@@ -210,27 +334,70 @@ function cancel() {
         </button>
       </header>
 
+      <ModalTabStrip
+        v-model="activeTab"
+        :has-instance-tab="hasInstanceTab"
+        :instance-modified="instanceModified"
+      />
+
       <div class="wp-medit__body">
-        <component
-          :is="kindBody"
-          v-if="kindBody"
-          :module="draft"
-          :upstream-vars="upstreamVars"
-          :sibling-vars="siblingVars"
-          :sibling-modules="siblingModules"
-          :last-used-seed-reader="lastUsedSeedReader"
-          @update="onUpdate"
-        />
-        <section v-else class="wp-medit__section">
-          <label class="wp-medit__section-label">SNAPSHOT</label>
-          <p class="wp-medit__hint-line">
-            <strong>{{ draft.type }}</strong> kind has no per-instance overrides yet.
-            Edit the library row in the SPA to change behaviour.
-          </p>
-        </section>
+        <!-- Library tab — existing kind-body editors. -->
+        <template v-if="activeTab === 'library'">
+          <component
+            :is="kindBody"
+            v-if="kindBody"
+            :module="draft"
+            :upstream-vars="upstreamVars"
+            :sibling-vars="siblingVars"
+            :sibling-modules="siblingModules"
+            :last-used-seed-reader="lastUsedSeedReader"
+            @update="onUpdate"
+          />
+          <section v-else class="wp-medit__section">
+            <label class="wp-medit__section-label">SNAPSHOT</label>
+            <p class="wp-medit__hint-line">
+              <strong>{{ draft.type }}</strong> kind has no library editor yet.
+              Edit the library row in the SPA to change behaviour.
+            </p>
+          </section>
+        </template>
+        <!-- Instance tab — per-kind override editors. -->
+        <template v-else>
+          <component
+            :is="instanceBody"
+            v-if="instanceBody"
+            :module="draft"
+            :sibling-modules="siblingModules"
+            @update="onUpdate"
+          />
+        </template>
       </div>
 
       <footer class="wp-medit__foot">
+        <!-- Library tab footer: round-trip actions (Open in SPA / Reset / Save). -->
+        <template v-if="activeTab === 'library'">
+          <LibraryRoundTripActions
+            :module="draft"
+            :is-library-tracked="isLibraryTracked"
+            :is-drifted="isDrifted"
+            @reset-from-library="onResetFromLibrary"
+            @saved-to-library="() => {}"
+          />
+        </template>
+        <!-- Instance tab footer: clear-all-overrides shortcut. -->
+        <template v-else>
+          <button
+            v-if="instanceModified"
+            type="button"
+            class="wp-medit__btn"
+            data-test="clear-all-overrides"
+            @click="onClearAllOverrides"
+          >
+            <i class="pi pi-replay" aria-hidden="true"></i>
+            Clear all overrides
+          </button>
+          <span v-else></span>
+        </template>
         <span class="wp-medit__hint">Esc to cancel · Ctrl+Enter to save</span>
         <div class="wp-medit__buttons">
           <button type="button" class="wp-medit__btn" @click="cancel">Cancel</button>

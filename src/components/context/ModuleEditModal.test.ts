@@ -4,6 +4,10 @@ import { nextTick } from "vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { _resetForTests } from "../../extension/preview-resolver";
+import { INSTANCE_TAB_VISIBLE } from "./editors/_shell";
+
+// Reference-only — keeps imports stable for the new tab-strip section.
+void INSTANCE_TAB_VISIBLE;
 
 // ModalShell uses <Teleport to="body">. VTU's `find` only walks the
 // component's own subtree, so disable teleport globally for these tests
@@ -940,5 +944,98 @@ describe("ModuleEditModal — V3 kind chip in header", () => {
     const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
     expect(chip.exists()).toBe(true);
     expect(chip.text()).toBe("fixed");
+  });
+});
+
+// ── Task 25: tab strip + dispatcher ────────────────────────────────────────
+
+describe("ModuleEditModal — tab strip + dispatcher", () => {
+  beforeEach(() => _resetForTests());
+
+  it("renders tab strip with both tabs for kinds where INSTANCE_TAB_VISIBLE is true", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(true);
+  });
+
+  it("hides Instance tab for pipeline kind", async () => {
+    const m: ModuleEntry = {
+      id: "ppppppp1", type: "pipeline", enabled: true,
+      meta: { name: "p" }, entries: [],
+      payload: {},
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts, props: { visible: true, module: m },
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
+  });
+
+  it("smart default: opens Library tab when instance has no overrides", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: { ...makeWildcard(), instance: {} } },
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="tab-library"]').attributes("aria-selected")).toBe("true");
+  });
+
+  it("smart default: opens Instance tab when any registry field is non-null", async () => {
+    const m = { ...makeWildcard(), instance: { variable_binding: "x" } };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts, props: { visible: true, module: m },
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="tab-instance"]').attributes("aria-selected")).toBe("true");
+  });
+
+  it("orange dot appears on Instance tab when modified-state is true", async () => {
+    const m = { ...makeWildcard(), instance: { variable_binding: "x" } };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts, props: { visible: true, module: m },
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="tab-instance-dot"]').exists()).toBe(true);
+  });
+
+  it("modified-state ignores _ui namespace", async () => {
+    const m = { ...makeWildcard(), instance: { _ui: { last_locked_seed: 42 } } };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts, props: { visible: true, module: m },
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="tab-instance-dot"]').exists()).toBe(false);
+  });
+
+  it("Clear all overrides footer button exists on Instance tab", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: { ...makeWildcard(), instance: { locked_seed: 5 } } },
+    });
+    await nextTick();
+    // Instance tab is the smart default for this module
+    expect(wrapper.find('[data-test="clear-all-overrides"]').exists()).toBe(true);
+  });
+
+  it("Clear all sets all registry fields to null on confirm", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const m = {
+      ...makeWildcard(),
+      instance: { variable_binding: "x", locked_seed: 5 },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts, props: { visible: true, module: m },
+    });
+    await nextTick();
+    await wrapper.find('[data-test="clear-all-overrides"]').trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.variable_binding).toBeNull();
+    expect(saved.instance?.locked_seed).toBeNull();
   });
 });
