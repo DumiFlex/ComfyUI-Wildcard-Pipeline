@@ -103,6 +103,61 @@ describe("ContextWidget.vue", () => {
     // or Enter on the focused card.
     expect(summary.element.tagName).toBe("DIV");
   });
+
+  // B1: meta line var-token highlighting (mockup v5 lines 682, 697, 712, 723, 734)
+  it("renders variable names in summary as .var-tok spans with kind-color class", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 6,
+        initialJson: moduleJson([
+          { name: "style", value: "noir" },
+          { name: "subject", value: "fox" },
+        ]),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const summary = wrapper.find(".wp-summary");
+    // Each $var token gets its own span, color-classed via varColorClass.
+    const tokens = summary.findAll(".var-tok");
+    expect(tokens.length).toBe(2);
+    expect(tokens[0].text()).toBe("$style");
+    expect(tokens[1].text()).toBe("$subject");
+    // Color class hashes the binding name (without leading $).
+    expect(tokens[0].classes().some((c) => /^var-\d+$/.test(c))).toBe(true);
+    expect(tokens[1].classes().some((c) => /^var-\d+$/.test(c))).toBe(true);
+    // Concatenated text still matches the legacy summary string so existing
+    // tests + screen-reader output stay equivalent.
+    expect(summary.text()).toBe("$style, $subject");
+  });
+
+  it("renders wildcard summary with binding token + opt count as separate spans", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 7,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            {
+              id: "wc1",
+              type: "wildcard",
+              enabled: true,
+              meta: { name: "hair_style" },
+              entries: [],
+              payload: { var_binding: "hair_style", options: [{}, {}, {}] },
+            },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const summary = wrapper.find(".wp-summary");
+    const tokens = summary.findAll(".var-tok");
+    expect(tokens.length).toBe(1);
+    expect(tokens[0].text()).toBe("$hair_style");
+    expect(summary.text()).toContain("3 options");
+  });
 });
 
 describe("ContextWidget drift dot", () => {

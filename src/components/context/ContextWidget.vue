@@ -17,6 +17,7 @@ import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
+import { varColorClass } from "../shared/var-color";
 import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
   forceRefresh as forceRefreshHashes,
@@ -544,29 +545,64 @@ function siblingInfo(m: ModuleEntry): { index: number; total: number } | null {
   return { index, total: sameUuid.length };
 }
 
-function summaryFor(m: ModuleEntry): string {
+/**
+ * One token of the summary line. `var` tokens get the kind-color
+ * `var-N` class via `varColorClass`; `literal` tokens render plain.
+ *
+ * Same shape as the assembler / combine preview tokenization
+ * (`wp-asm-preview` in AssemblerHelper.vue) so the eye reads
+ * `$hair_style` as the same hue everywhere it appears.
+ */
+type SummaryToken =
+  | { kind: "literal"; text: string }
+  | { kind: "var"; text: string; varName: string };
+
+/**
+ * Structured per-module summary used by the row's meta line. Each
+ * entry is rendered as either a colored `<span class="var-tok var-N">`
+ * (for `$binding` references) or plain text. Shape mirrors the
+ * mockup at `_temp/design-demos/widgets-redesign-v5.html:682, 697,
+ * 712, 723, 734` so colored variable tokens land in-place of the
+ * previous all-plaintext meta string.
+ */
+function summaryTokens(m: ModuleEntry): SummaryToken[] {
+  // Tiny helper — wrap a binding name as a `$name` var token so the
+  // colour hash is computed against the bare name (matching how
+  // `varColorClass` is used elsewhere in the codebase).
+  const v = (name: string): SummaryToken => ({ kind: "var", text: `$${name}`, varName: name });
+  const lit = (text: string): SummaryToken => ({ kind: "literal", text });
+
   if (m.type === "fixed_values") {
     const named = m.entries.filter((e) => e.variable_name.trim() !== "");
-    if (named.length === 0) return "(empty)";
-    const heads = named.slice(0, 2).map((e) => `$${e.variable_name}`);
+    if (named.length === 0) return [lit("(empty)")];
+    const heads = named.slice(0, 2);
     const more = named.length - heads.length;
-    return more > 0 ? `${heads.join(", ")}, +${more} more` : heads.join(", ");
+    const out: SummaryToken[] = [];
+    heads.forEach((e, i) => {
+      if (i > 0) out.push(lit(", "));
+      out.push(v(e.variable_name));
+    });
+    if (more > 0) out.push(lit(`, +${more} more`));
+    return out;
   }
+
   const p = (m.payload ?? {}) as Record<string, unknown>;
   switch (m.type) {
     case "wildcard": {
       const binding = (p.var_binding as string)?.trim();
       const opts = Array.isArray(p.options) ? p.options.length : 0;
-      const head = binding ? `$${binding}` : "wildcard";
-      return opts ? `${head} · ${opts} option${opts === 1 ? "" : "s"}` : head;
+      const head: SummaryToken = binding ? v(binding) : lit("wildcard");
+      return opts
+        ? [head, lit(` · ${opts} option${opts === 1 ? "" : "s"}`)]
+        : [head];
     }
     case "combine": {
       const out = (p.output_var as string)?.trim();
-      return out ? `→ $${out}` : "template";
+      return out ? [lit("→ "), v(out)] : [lit("template")];
     }
     case "derivation": {
       const rules = Array.isArray(p.rules) ? p.rules.length : 0;
-      return `${rules} rule${rules === 1 ? "" : "s"}`;
+      return [lit(`${rules} rule${rules === 1 ? "" : "s"}`)];
     }
     case "constraint": {
       const cp = p as Partial<{
@@ -578,11 +614,16 @@ function summaryFor(m: ModuleEntry): string {
       const tgt = lookupSiblingName(cp.target_wildcard_id) ?? "?";
       const rowKeys = Object.keys(cp.matrix ?? {});
       const colKeys = Object.keys(Object.values(cp.matrix ?? {})[0] ?? {});
-      return `$${src} → $${tgt} · ${rowKeys.length}×${colKeys.length}`;
+      return [v(src), lit(" → "), v(tgt), lit(` · ${rowKeys.length}×${colKeys.length}`)];
     }
-    case "pipeline":     return `${Array.isArray(p.steps) ? p.steps.length : 0} steps`;
-    default:             return m.type;
+    case "pipeline":     return [lit(`${Array.isArray(p.steps) ? p.steps.length : 0} steps`)];
+    default:             return [lit(m.type)];
   }
+}
+
+/** Plain-text fallback — used for `:title` tooltip + a11y text. */
+function summaryFor(m: ModuleEntry): string {
+  return summaryTokens(m).map((t) => t.text).join("");
 }
 
 /**
@@ -1300,7 +1341,10 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
         <Transition name="wp-collapse">
           <div v-if="!isCollapsed(m)" class="wp-summary" :title="summaryFor(m)">
-            {{ summaryFor(m) }}
+            <template v-for="(tok, i) in summaryTokens(m)" :key="i"><span
+              v-if="tok.kind === 'var'"
+              :class="['var-tok', varColorClass(tok.varName)]"
+            >{{ tok.text }}</span><template v-else>{{ tok.text }}</template></template>
           </div>
         </Transition>
       </div>
@@ -1998,6 +2042,15 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   text-overflow: ellipsis;
   white-space: nowrap;
   width: 100%;
+}
+/* Var tokens inside the summary — re-use the same kind-color hashing
+ * as the assembler chip strip + combine preview so the eye reads
+ * `$hair_style` as the same hue everywhere it appears. Falls back to
+ * --wp-text if the kind palette is not loaded. Color only — no chip
+ * background — to keep the meta line dense at canvas zoom. */
+.wp-summary .var-tok {
+  font-weight: 600;
+  color: var(--wp-var-color, var(--wp-text));
 }
 
 /* ── Toolbar (Task 10) ──────────────────────────────────────────────────
