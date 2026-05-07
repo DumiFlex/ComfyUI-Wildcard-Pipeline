@@ -180,3 +180,57 @@ def test_resolve_via_dispatcher_after_import():
     ctx = _ctx(a="1")
     out = resolve_module(snap, ctx=ctx)
     assert out == {"b": "2"}
+
+
+def test_derivation_skips_rules_in_disabled_rule_ids():
+    payload = {
+        "rules": [
+            {
+                "id": "r1",
+                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
+                               "action": {"target_var": "out", "mode": "replace", "value": "from-r1"}}],
+            },
+            {
+                "id": "r2",
+                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
+                               "action": {"target_var": "out", "mode": "replace", "value": "from-r2"}}],
+            },
+        ],
+    }
+    instance = {"disabled_rule_ids": ["r1"]}
+    ctx = _ctx(x="1")
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    # r1 is skipped, r2 matches and wins
+    assert out.get("out") == "from-r2"
+
+
+def test_derivation_empty_disabled_list_processes_all_rules():
+    payload = {
+        "rules": [
+            {
+                "id": "r1",
+                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
+                               "action": {"target_var": "out", "mode": "replace", "value": "matched"}}],
+            },
+        ],
+    }
+    ctx = _ctx(x="1")
+    out = DerivationHandler.resolve(payload, {"disabled_rule_ids": None}, ctx)
+    # empty/None disabled list means all rules process
+    assert out.get("out") == "matched"
+
+
+def test_derivation_disabled_id_not_in_payload_is_noop():
+    payload = {
+        "rules": [
+            {
+                "id": "r1",
+                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
+                               "action": {"target_var": "out", "mode": "replace", "value": "matched"}}],
+            },
+        ],
+    }
+    ctx = _ctx(x="1")
+    out = DerivationHandler.resolve(payload, {"disabled_rule_ids": ["nonexistent"]}, ctx)
+    # nonexistent rule id in disabled list doesn't affect r1, so r1 still matches
+    assert out.get("out") == "matched"

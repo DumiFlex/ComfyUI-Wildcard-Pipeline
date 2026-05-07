@@ -183,7 +183,13 @@ class DerivationHandler(ModuleHandler):
         cls.validate_payload(payload)
         resolve_ctx = build_resolve_ctx(ctx, surface="derivation")
         out: dict[str, str] = {}
+
+        # Tier 2 instance filter — skip rules whose id is disabled.
+        disabled_rule_ids = set(instance.get("disabled_rule_ids") or [])
+
         for rule in payload.get("rules", []):
+            if rule.get("id") in disabled_rule_ids:
+                continue
             applied = False
             for branch in rule.get("branches", []):
                 if _match_condition(branch.get("condition", {}), ctx):
