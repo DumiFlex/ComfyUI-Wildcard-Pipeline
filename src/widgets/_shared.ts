@@ -232,6 +232,13 @@ export interface ModuleEntry {
    */
   instance?: {
     /**
+     * Override for the wildcard's emit-to-variable name. When set, the
+     * wildcard binds its picked value to this var name instead of the
+     * library default `payload.var_binding`. Empty/null = use library
+     * default. Engine reads this in `wildcard_handler.py:216`.
+     */
+    variable_binding?: string | null;
+    /**
      * Subset of `payload.options[].id` allowed to be picked. `null` /
      * absent = all options enabled (engine default). Empty list = all
      * options disabled (engine returns empty binding).

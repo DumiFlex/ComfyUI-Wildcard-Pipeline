@@ -7,6 +7,7 @@ const baseModule = (): ModuleEntry => ({
   meta: { name: "test" }, entries: [],
   payload: { options: [{ id: "o1", value: "red", weight: 1 }] },
   instance: {
+    variable_binding: "foo",
     enabled_options: ["o1"],
     option_weights: { o1: 2 },
     _ui: { last_locked_seed: 99 },
@@ -17,14 +18,15 @@ describe("patchInstance", () => {
   it("merges field/value into instance shallow-spread, preserves siblings", () => {
     const patch = patchInstance(baseModule(), "locked_seed", 123);
     expect(patch.instance?.locked_seed).toBe(123);
+    expect(patch.instance?.variable_binding).toBe("foo");
     expect(patch.instance?.enabled_options).toEqual(["o1"]);
     expect(patch.instance?.option_weights).toEqual({ o1: 2 });
     expect(patch.instance?._ui?.last_locked_seed).toBe(99);
   });
 
   it("clears field with null without nuking siblings", () => {
-    const patch = patchInstance(baseModule(), "enabled_options", null);
-    expect(patch.instance?.enabled_options).toBeNull();
+    const patch = patchInstance(baseModule(), "variable_binding", null);
+    expect(patch.instance?.variable_binding).toBeNull();
     expect(patch.instance?.option_weights).toEqual({ o1: 2 });
   });
 
