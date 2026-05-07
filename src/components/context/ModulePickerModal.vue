@@ -76,84 +76,6 @@
           <i :class="['pi', hideAlreadyAdded ? 'pi-eye-slash' : 'pi-eye']" aria-hidden="true"></i>
         </button>
 
-        <!-- Filters popover trigger. Renders only when there's
-             actually category or tag data to filter on. Badge shows
-             the count of dimensions currently active (category
-             selection + selected tag count) so users see at a
-             glance there's an active filter without opening it. -->
-        <div
-          v-if="usedCategories.length || availableTags.length"
-          class="wp-picker__filters-pop"
-        >
-          <button
-            type="button"
-            class="wp-picker__icon-btn wp-picker__filter-trigger"
-            :class="{ 'wp-picker__icon-btn--active': activePopoverCount > 0 || filtersOpen }"
-            :title="filtersOpen ? 'Close filters' : 'More filters'"
-            :aria-expanded="filtersOpen"
-            data-testid="picker-filter-trigger"
-            @click="filtersOpen = !filtersOpen"
-          >
-            <i class="pi pi-filter" aria-hidden="true"></i>
-            <span
-              v-if="activePopoverCount > 0"
-              class="wp-picker__filter-badge"
-              aria-label="active filter count"
-            >{{ activePopoverCount }}</span>
-          </button>
-
-          <!-- Popover panel. Anchored under the trigger button.
-               Click-outside closes via the `wp-picker__pop-shield`
-               full-modal cover. Stacked vertically so categories +
-               tags both have generous room without crowding the
-               toolbar. -->
-          <Transition name="wp-pop">
-            <div v-if="filtersOpen" class="wp-picker__pop" data-testid="picker-filter-pop">
-              <div v-if="usedCategories.length" class="wp-picker__pop-section">
-                <div class="wp-picker__pop-label">CATEGORY</div>
-                <select
-                  class="wp-picker__filter-cat-select"
-                  :value="selectedCategoryId ?? ''"
-                  aria-label="Filter by category"
-                  data-testid="picker-filter-category"
-                  @change="selectedCategoryId = ($event.target as HTMLSelectElement).value || null"
-                >
-                  <option value="">All categories</option>
-                  <option v-for="c in usedCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
-              </div>
-
-              <div v-if="availableTags.length" class="wp-picker__pop-section">
-                <div class="wp-picker__pop-label">
-                  TAGS
-                  <span class="wp-picker__pop-label-hint">click to AND-narrow</span>
-                </div>
-                <div class="wp-picker__filter-tags">
-                  <button
-                    v-for="tag in availableTags"
-                    :key="tag"
-                    type="button"
-                    class="wp-picker__tag-chip"
-                    :class="{ 'wp-picker__tag-chip--active': selectedTags.has(tag) }"
-                    :data-testid="`picker-tag-${tag}`"
-                    @click="toggleTag(tag)"
-                  >{{ tag }}</button>
-                </div>
-              </div>
-
-              <button
-                v-if="hasActiveFilter"
-                type="button"
-                class="wp-picker__pop-clear"
-                data-testid="picker-filter-clear"
-                @click="clearAllFilters"
-              >
-                <i class="pi pi-filter-slash" aria-hidden="true"></i>
-                Clear all filters
-              </button>
-            </div>
-          </Transition>
-        </div>
         </div><!-- /wp-picker__toolbar-top -->
 
         <div class="wp-picker-tabs" role="tablist">
@@ -181,17 +103,55 @@
             <span class="wp-pill-count">{{ countByKind(kind) }}</span>
           </button>
         </div>
-      </div>
 
-      <!-- Click-shield: when popover is open, a transparent layer
-           over the rest of the modal closes it on click. Sized to
-           the modal interior so the popover itself stays
-           interactive. -->
-      <div
-        v-if="filtersOpen"
-        class="wp-picker__pop-shield"
-        @click="filtersOpen = false"
-      ></div>
+        <!-- V1 — always-visible filter strip (mockup v5 lines 932-942).
+             Replaces the previous "click filter icon → popover" pattern
+             with an inline pills+chips row that surfaces every available
+             category and tag right under the kind tabs. Categories are
+             single-select (clicking the active one clears it); tags are
+             multi-select AND-narrowed. The trailing "clear (N)" pill is
+             rendered only when at least one filter is active. -->
+        <div
+          v-if="usedCategories.length || availableTags.length"
+          class="wp-picker-filters"
+        >
+          <span class="wp-picker-filters-label">filter</span>
+
+          <button
+            v-for="c in usedCategories"
+            :key="c.id"
+            type="button"
+            class="wp-pill"
+            :class="{ on: selectedCategoryId === c.id }"
+            :data-testid="`picker-filter-category-${c.id}`"
+            @click="selectedCategoryId = selectedCategoryId === c.id ? null : c.id"
+          >
+            <span class="wp-picker-filters-dot" aria-hidden="true"></span>{{ c.name }}
+          </button>
+
+          <button
+            v-for="tag in availableTags"
+            :key="`tag-${tag}`"
+            type="button"
+            class="wp-pill"
+            :class="{ on: selectedTags.has(tag) }"
+            :data-testid="`picker-tag-${tag}`"
+            @click="toggleTag(tag)"
+          >
+            <i class="pi pi-tag" aria-hidden="true"></i>{{ tag }}
+          </button>
+
+          <button
+            v-if="hasActiveFilter"
+            type="button"
+            class="wp-pill wp-picker-filters-clear"
+            data-testid="picker-filter-clear"
+            @click="clearAllFilters"
+          >
+            <i class="pi pi-times" aria-hidden="true"></i>clear ({{ activeFilterCount }})
+          </button>
+        </div>
+      </div>
 
       <!-- Body: scrollable list grouped by kind -->
       <div class="wp-picker__body">
@@ -397,20 +357,22 @@ const favoritesOnly = ref(false);
 const hideAlreadyAdded = ref(true);
 const selectedTags = ref<Set<string>>(new Set());
 const selectedCategoryId = ref<string | null>(null); // null = "any"
-const filtersOpen = ref(false); // popover state for category + tags
 
 /**
- * Count of filter dimensions currently active inside the popover
- * (category + tags). Drives the badge on the trigger button so
- * users see at-a-glance there's a hidden filter active without
- * opening the popover. Excludes the inline toggles
- * (favorites + hide-added) — those have their own visible state
- * via the icon-button's accent fill.
+ * Count of filter dimensions currently active across the entire
+ * filter strip — category + tags + favorites + hide-already-added +
+ * non-default kind tab + non-empty search. Drives the trailing
+ * "clear (N)" pill in the filter strip so users see at a glance
+ * how many filters they have stacked.
  */
-const activePopoverCount = computed<number>(() => {
+const activeFilterCount = computed<number>(() => {
   let n = 0;
   if (selectedCategoryId.value !== null) n++;
   n += selectedTags.value.size;
+  if (favoritesOnly.value) n++;
+  if (hideAlreadyAdded.value) n++;
+  if (kindFilter.value !== "all") n++;
+  if (searchTerm.value.trim()) n++;
   return n;
 });
 
@@ -527,7 +489,6 @@ watch(
     hideAlreadyAdded.value = true;
     selectedTags.value = new Set();
     selectedCategoryId.value = null;
-    filtersOpen.value = false;
     void nextTick(() => searchInput.value?.focus());
   },
   { immediate: true },
@@ -1423,100 +1384,45 @@ onBeforeUnmount(detachCaptureListeners);
   pointer-events: none;
 }
 
-/* ── Filters popover ────────────────────────────────────────────
- * Anchored under the trigger button. Sits inside the modal at
- * z-index above body but below the click-shield's covered area.
- * Tags + category live here so a 50-tag library doesn't crowd
- * the toolbar. */
-.wp-picker__filters-pop {
-  position: relative;
-  display: inline-flex;
-}
-.wp-picker__pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 10;
-  min-width: 280px;
-  max-width: 360px;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-  padding: 10px;
+/* ── Filter strip (V1, mockup v5 lines 932-942) ─────────────────
+ * Always-visible row of filter pills sitting under the kind tabs.
+ * Replaces the previous popover UI: surfaces every category and
+ * tag inline so users see all available facets at a glance and
+ * can apply / clear without an extra click. */
+.wp-picker-filters {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.wp-picker__pop-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.wp-picker__pop-label {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 9px;
-  font-family: var(--wp-font-mono, monospace);
-  color: var(--wp-text3);
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-.wp-picker__pop-label-hint {
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--wp-text3);
-  font-style: italic;
-  text-transform: none;
-}
-.wp-picker__pop-clear {
-  background: none;
-  border: 1px dashed var(--wp-border2);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text2);
-  cursor: pointer;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 10px;
-  padding: 5px 8px;
-  display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
+  gap: 6px;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--wp-border);
 }
-.wp-picker__pop-clear:hover {
-  color: var(--wp-accent);
-  border-color: var(--wp-accent);
+.wp-picker-filters-label {
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--wp-text3);
+  text-transform: uppercase;
+  margin-right: 2px;
 }
-.wp-picker__pop-clear .pi { font-size: 10px; }
-
-/* Click-shield — covers the rest of the modal so a click outside
- * the popover closes it. Transparent. Excluded from the popover's
- * own area via z-index ordering (popover is z:10, shield is z:5). */
-.wp-picker__pop-shield {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
+.wp-picker-filters-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wp-kind-wildcard);
+  display: inline-block;
 }
-
-/* Pop animation — quick scale + fade so the panel doesn't pop
- * abruptly. Origin at top-right anchors the open animation toward
- * the trigger. */
-.wp-pop-enter-active,
-.wp-pop-leave-active {
-  transition: opacity 0.12s, transform 0.12s;
-  transform-origin: top right;
+.wp-picker-filters-clear {
+  margin-left: auto;
+  color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-pop-enter-from,
-.wp-pop-leave-to {
-  opacity: 0;
-  transform: scale(0.96) translateY(-2px);
-}
-
-/* Tag chips inside popover (same visual as before, just in a
- * tighter container). */
-.wp-picker__tag-chip {
+/* Local `.wp-pill` base — the editor bodies all define this scoped,
+ * but the picker modal had no copy. Mirrors the same shape used by
+ * CombineEditorBody / ConstraintEditorBody so the strip pills feel
+ * native (rounded, kind-tinted on `.on`, accent-bordered on hover).
+ */
+.wp-picker-filters .wp-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1532,55 +1438,17 @@ onBeforeUnmount(detachCaptureListeners);
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.wp-picker__tag-chip:hover {
+.wp-picker-filters .wp-pill:hover {
   color: var(--wp-text);
   border-color: var(--wp-border2);
 }
-.wp-picker__tag-chip--active {
+.wp-picker-filters .wp-pill.on {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-accent);
 }
-.wp-picker__tag-chip--active:hover {
+.wp-picker-filters .wp-pill.on:hover {
   background: color-mix(in srgb, var(--wp-accent) 28%, transparent);
-  color: var(--wp-accent2, var(--wp-accent));
 }
-
-.wp-picker__filter-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  /* Tag panel scrolls vertically inside the popover when the
-   * library has too many tags — keeps popover height bounded. */
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-/* Category dropdown — same chrome as before but full-width inside
- * the popover panel. Hide native browser arrow + draw our own. */
-.wp-picker__filter-cat-select {
-  width: 100%;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 11px;
-  padding: 5px 22px 5px 8px;
-  cursor: pointer;
-  outline: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
-                    linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 12px) 50%, calc(100% - 7px) 50%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-}
-.wp-picker__filter-cat-select:focus { border-color: var(--wp-accent); }
-.wp-picker__filter-cat-select option {
-  background: var(--wp-bg2);
-  color: var(--wp-text);
-}
+.wp-picker-filters .wp-pill .pi { font-size: 10px; }
 </style>
