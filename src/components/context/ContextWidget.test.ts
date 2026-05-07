@@ -782,3 +782,59 @@ describe("ContextWidget status badges", () => {
     wrapper.unmount();
   });
 });
+
+// ── B3: kind chip next to module name (mockup v5 lines 681, 696, 711, 722, 733) ─
+
+describe("ContextWidget kind chip", () => {
+  it("renders inline kind chip next to the module name", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 900,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "wc", type: "wildcard", enabled: true, meta: { name: "hair" }, entries: [], payload: {} },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find(".wp-kind-chip");
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toBe("wildcard");
+  });
+
+  it("uses KIND_TITLE label for fixed_values kind", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 901,
+        initialJson: moduleJson([{ name: "x", value: "y" }]),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find(".wp-kind-chip");
+    expect(chip.exists()).toBe(true);
+    // KIND_TITLE.fixed_values === "fixed" — matches mockup line 733.
+    expect(chip.text()).toBe("fixed");
+  });
+
+  it("tags chip with a kind-color modifier class (e.g. wp-kind-chip--wildcard)", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 902,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "c1", type: "constraint", enabled: true, meta: { name: "rule" }, entries: [], payload: {} },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find(".wp-kind-chip");
+    expect(chip.classes()).toContain("wp-kind-chip--constraint");
+  });
+});

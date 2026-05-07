@@ -17,6 +17,7 @@ import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
+import { KIND_TITLE } from "./editors/_shell";
 import { varColorClass } from "../shared/var-color";
 import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
@@ -624,6 +625,18 @@ function summaryTokens(m: ModuleEntry): SummaryToken[] {
 /** Plain-text fallback — used for `:title` tooltip + a11y text. */
 function summaryFor(m: ModuleEntry): string {
   return summaryTokens(m).map((t) => t.text).join("");
+}
+
+/**
+ * Normalize a module type into the slug used by the
+ * `--wp-kind-{slug}` CSS tokens (see `shared/theme.css`). The engine
+ * uses `fixed_values` but the colour token is `--wp-kind-fixed`, so
+ * the kind chip needs a small alias map. Other kinds pass through
+ * unchanged so adding a new kind requires only a token + a
+ * `KIND_TITLE` entry, no chip-side change.
+ */
+function kindChipModifier(kind: string): string {
+  return kind === "fixed_values" ? "fixed" : kind;
 }
 
 /**
@@ -1260,6 +1273,17 @@ function onDrop(ev: DragEvent, targetId: string | null) {
           <span class="wp-module-name" :title="m.meta.name || '(unnamed)'">
             {{ m.meta.name || "(unnamed)" }}
           </span>
+
+          <!-- Kind chip — small kind label that sits inline next to
+               the module name (mockup v5 lines 681, 696, 711, 722,
+               733). Falls back to the raw `m.type` if KIND_TITLE
+               doesn't have an entry, mirroring the same fallback
+               used by ModuleEditModal's title row. -->
+          <span
+            v-if="KIND_TITLE[m.type] || m.type"
+            class="wp-kind-chip"
+            :class="`wp-kind-chip--${kindChipModifier(m.type)}`"
+          >{{ KIND_TITLE[m.type] ?? m.type }}</span>
 
           <!-- Sibling badge — shown when the same uuid appears more
                than once in this Context (Phase A: count only; Phase B
@@ -2032,6 +2056,29 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
   color: var(--wp-danger);
 }
+
+/* Kind chip (mockup v5 lines 681, 696, 711, 722, 733) — small kind
+ * label that sits inline next to the module name. Tinted with the
+ * kind palette so the eye reads the row's kind at a glance even
+ * when the kind icon is too small to parse. Same colour triple is
+ * used in the picker rows + the edit-modal header so the chip is
+ * the canonical "this kind looks like X" cue throughout the UI. */
+.wp-kind-chip {
+  font: 600 9px/1 var(--wp-font-sans);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  padding: 3px 5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: color-mix(in oklab, var(--wp-text-dim, var(--wp-text3)) 18%, transparent);
+  color: var(--wp-text-muted, var(--wp-text3));
+}
+.wp-kind-chip--wildcard   { background: color-mix(in oklab, var(--wp-kind-wildcard)   22%, transparent); color: var(--wp-kind-wildcard);   }
+.wp-kind-chip--fixed      { background: color-mix(in oklab, var(--wp-kind-fixed)      22%, transparent); color: var(--wp-kind-fixed);      }
+.wp-kind-chip--combine    { background: color-mix(in oklab, var(--wp-kind-combine)    22%, transparent); color: var(--wp-kind-combine);    }
+.wp-kind-chip--derivation { background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent); color: var(--wp-kind-derivation); }
+.wp-kind-chip--constraint { background: color-mix(in oklab, var(--wp-kind-constraint) 22%, transparent); color: var(--wp-kind-constraint); }
+.wp-kind-chip--pipeline   { background: color-mix(in oklab, var(--wp-kind-pipeline)   22%, transparent); color: var(--wp-kind-pipeline);   }
 
 /* ── Inline action cluster (lock + internal + remove) ───────────────────
  * Fades in on row hover; uses PrimeIcons via `pi` class (Task 9).
