@@ -187,13 +187,17 @@ def test_derivation_skips_rules_in_disabled_rule_ids():
         "rules": [
             {
                 "id": "r1",
-                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
-                               "action": {"target_var": "out", "mode": "replace", "value": "from-r1"}}],
+                "branches": [{
+                    "condition": {"var": "x", "op": "equals", "value": "1"},
+                    "action": {"target_var": "out", "mode": "replace", "value": "from-r1"},
+                }],
             },
             {
                 "id": "r2",
-                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
-                               "action": {"target_var": "out", "mode": "replace", "value": "from-r2"}}],
+                "branches": [{
+                    "condition": {"var": "x", "op": "equals", "value": "1"},
+                    "action": {"target_var": "out", "mode": "replace", "value": "from-r2"},
+                }],
             },
         ],
     }
@@ -209,8 +213,10 @@ def test_derivation_empty_disabled_list_processes_all_rules():
         "rules": [
             {
                 "id": "r1",
-                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
-                               "action": {"target_var": "out", "mode": "replace", "value": "matched"}}],
+                "branches": [{
+                    "condition": {"var": "x", "op": "equals", "value": "1"},
+                    "action": {"target_var": "out", "mode": "replace", "value": "matched"},
+                }],
             },
         ],
     }
@@ -225,8 +231,10 @@ def test_derivation_disabled_id_not_in_payload_is_noop():
         "rules": [
             {
                 "id": "r1",
-                "branches": [{"condition": {"var": "x", "op": "equals", "value": "1"},
-                               "action": {"target_var": "out", "mode": "replace", "value": "matched"}}],
+                "branches": [{
+                    "condition": {"var": "x", "op": "equals", "value": "1"},
+                    "action": {"target_var": "out", "mode": "replace", "value": "matched"},
+                }],
             },
         ],
     }

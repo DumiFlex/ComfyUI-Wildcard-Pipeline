@@ -10,7 +10,10 @@ import re
 
 from engine.schemas.instance_schemas import INSTANCE_SCHEMAS
 
-SHELL_TS = pathlib.Path(__file__).parent.parent / "src" / "components" / "context" / "editors" / "_shell.ts"
+SHELL_TS = (
+    pathlib.Path(__file__).parent.parent
+    / "src" / "components" / "context" / "editors" / "_shell.ts"
+)
 
 
 def _parse_ts_registry() -> dict[str, list[str]]:
