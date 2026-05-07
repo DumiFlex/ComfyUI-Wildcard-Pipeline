@@ -1270,20 +1270,24 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             <i :class="kindIcon(m.type)" />
           </span>
 
-          <span class="wp-module-name" :title="m.meta.name || '(unnamed)'">
-            {{ m.meta.name || "(unnamed)" }}
-          </span>
-
-          <!-- Kind chip — small kind label that sits inline next to
-               the module name (mockup v5 lines 681, 696, 711, 722,
-               733). Falls back to the raw `m.type` if KIND_TITLE
-               doesn't have an entry, mirroring the same fallback
-               used by ModuleEditModal's title row. -->
+          <!-- Kind chip — small kind label grouped with the kind
+               icon on the LEFT side of the row so it stays adjacent
+               to the name regardless of how wide the action cluster
+               is. (Mockup v5 lines 681, 696, 711, 722, 733 show it
+               trailing the name, but our row layout flexes the name
+               to fill space, which would push the chip far right
+               where it reads as floating chrome rather than as part
+               of the module's identity. Anchoring left keeps the
+               kind icon + chip + name as one visual unit.) -->
           <span
             v-if="KIND_TITLE[m.type] || m.type"
             class="wp-kind-chip"
             :class="`wp-kind-chip--${kindChipModifier(m.type)}`"
           >{{ KIND_TITLE[m.type] ?? m.type }}</span>
+
+          <span class="wp-module-name" :title="m.meta.name || '(unnamed)'">
+            {{ m.meta.name || "(unnamed)" }}
+          </span>
 
           <!-- Sibling badge — shown when the same uuid appears more
                than once in this Context (Phase A: count only; Phase B
@@ -2121,12 +2125,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 }
 /* Var tokens inside the summary — re-use the same kind-color hashing
  * as the assembler chip strip + combine preview so the eye reads
- * `$hair_style` as the same hue everywhere it appears. Falls back to
- * --wp-text if the kind palette is not loaded. Color only — no chip
- * background — to keep the meta line dense at canvas zoom. */
+ * `$hair_style` as the same hue everywhere it appears. Color comes
+ * from the `.var-N` class set by `varColorClass()` (defined in the
+ * shared theme); we only bump font-weight here. NO color override —
+ * Vue's scoped specificity would beat the unscoped `.var-N` rule
+ * and force the fallback colour, which would silently blank the
+ * highlighting (the user-facing bug fixed here). */
 .wp-summary .var-tok {
   font-weight: 600;
-  color: var(--wp-var-color, var(--wp-text));
 }
 
 /* ── Toolbar (Task 10) ──────────────────────────────────────────────────
