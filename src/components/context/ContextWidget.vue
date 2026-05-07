@@ -67,7 +67,7 @@ const props = withDefaults(defineProps<{
    * unlocked + re-ran in between).
    *
    * Returns `null` when the user hasn't queued yet —
-   * `last_locked_seed` falls through next, then 0 as final default.
+   * `_ui.last_locked_seed` falls through next, then 0 as final default.
    * Optional so headless mounts (tests) can skip wiring it.
    */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
@@ -460,7 +460,7 @@ function isInternal(m: ModuleEntry): boolean {
 }
 
 /** In-card lock toggle. Off → null `locked_seed` but keep
- *  `last_locked_seed` so the next toggle-on has a fallback.
+ *  `_ui.last_locked_seed` so the next toggle-on has a fallback.
  *  On → fallback chain (per-module priority so re-locking captures
  *  what THIS specific wildcard actually rolled with):
  *    1. lastUsedSeedReader(m.id) — seed THIS wildcard used last
@@ -469,7 +469,7 @@ function isInternal(m: ModuleEntry): boolean {
  *       lock→run→unlock→lock case correctly: the locked-and-then-
  *       unlocked wildcard restores to ITS locked seed, not the
  *       chain seed of that run.
- *    2. `last_locked_seed` — cold-start fallback when no queue
+ *    2. `_ui.last_locked_seed` — cold-start fallback when no queue
  *       has happened yet this session.
  *    3. 0 (final default). */
 function toggleLockOnCard(m: ModuleEntry) {
@@ -482,12 +482,12 @@ function toggleLockOnCard(m: ModuleEntry) {
     const lastUsed = props.lastUsedSeedReader?.(m.id);
     if (typeof lastUsed === "number") {
       fallback = lastUsed;
-    } else if (typeof inst.last_locked_seed === "number") {
-      fallback = inst.last_locked_seed;
+    } else if (typeof inst._ui?.last_locked_seed === "number") {
+      fallback = inst._ui.last_locked_seed;
     } else {
       fallback = 0;
     }
-    nextInst = { ...inst, locked_seed: fallback, last_locked_seed: fallback };
+    nextInst = { ...inst, locked_seed: fallback, _ui: { ...inst._ui, last_locked_seed: fallback } };
   }
   value.value = {
     ...value.value,

@@ -89,7 +89,7 @@ function mkEntry(over: Partial<ModuleEntry> = {}): ModuleEntry {
     entries: [{ variable_name: "$x", value: "v" }],
     payload: { options: ["old"] },
     payload_hash: "h-old",
-    instance: { locked_seed: 42, last_locked_seed: 42 },
+    instance: { locked_seed: 42, _ui: { last_locked_seed: 42 } },
     collapsed: true,
     ...over,
   };

@@ -387,9 +387,9 @@ describe("ModuleEditModal — wildcard option editor (body)", () => {
   it.todo("toggling Lock on the first time defaults to seed 0 — see Task 15");
   it.todo("toggling Lock with lastUsedSeedReader uses the reader value — see Task 15");
   it.todo("reader is called with module id (per-module seed lookup) — see Task 15");
-  it.todo("lastUsedSeedReader wins over last_locked_seed — see Task 15");
-  it.todo("toggling Lock off then on restores last_locked_seed — see Task 15");
-  it.todo("toggling Lock off retains last_locked_seed in the saved JSON — see Task 15");
+  it.todo("lastUsedSeedReader wins over _ui.last_locked_seed — see Task 15");
+  it.todo("toggling Lock off then on restores _ui.last_locked_seed — see Task 15");
+  it.todo("toggling Lock off retains _ui.last_locked_seed in the saved JSON — see Task 15");
   it.todo("editing the locked-seed input persists the new value — see Task 15");
   it.todo("toggling Internal sets the flag; untoggle drops the field — see Task 15");
   it.todo("does not render name/description inputs for snapshot kinds — see Task 15");

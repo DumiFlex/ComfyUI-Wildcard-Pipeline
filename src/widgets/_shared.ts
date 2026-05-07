@@ -275,16 +275,6 @@ export interface ModuleEntry {
      */
     locked_seed?: number | null;
     /**
-     * Last-used locked seed. Persists across lock toggles so users
-     * who briefly unlock to test something can re-lock to the SAME
-     * seed they had before, instead of getting a fresh random value.
-     * Set whenever `locked_seed` is set (toggle on, manual edit,
-     * reroll). Read on toggle-on as the default value.
-     *
-     * Engine ignores this field — only the modal/card glue read it.
-     */
-    last_locked_seed?: number;
-    /**
      * Internal — when true, every binding this module produces is
      * marked engine-only. Downstream modules in the same chain can
      * still read the value; the public PIPELINE_CONTEXT socket
@@ -305,6 +295,32 @@ export interface ModuleEntry {
      * because there's no library state to preserve.
      */
     values_overrides?: Array<{ id: string; name: string; value: string }> | null;
+    /**
+     * Per-instance disable list for derivation rules. Engine skips rules
+     * whose `id` matches any entry. Null/absent = all rules active.
+     */
+    disabled_rule_ids?: string[] | null;
+    /**
+     * Per-instance disable list for constraint exceptions. Composite key
+     * via `encodeKey([source, target])` — JSON 2-string-array, stable
+     * across reorder. Null/absent = all exceptions active.
+     */
+    disabled_exception_keys?: string[] | null;
+    /**
+     * Per-instance disable list for constraint matrix cells. Composite
+     * key via `encodeKey([src_subcat, tgt_subcat])`. Null/absent = all cells active.
+     */
+    disabled_matrix_cells?: string[] | null;
+    /**
+     * UI-scratch namespace. Single-underscore prefix signals "not engine
+     * input"; engine handlers ignore the entire `_ui` subtree. Persisted
+     * across workflow save/load but excluded from drift hash and engine
+     * reads. See spec §2 for the lifecycle invariant.
+     */
+    _ui?: {
+      /** Restore-on-toggle-on memory for the lock seed input. */
+      last_locked_seed?: number;
+    };
   };
 }
 
