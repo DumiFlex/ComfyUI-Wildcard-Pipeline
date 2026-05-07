@@ -202,6 +202,11 @@ function injectStyles(): void {
       border: 1px solid transparent;
       border-radius: 4px !important;
       color: #fff !important;
+      /* Override default 'px-2' (8px each side) to 6px each side so
+       * our button is the same total width as LoRA Manager's
+       * (6 + 20 + 6 = 32px). Vertical padding stays via h-7. */
+      padding-left: 6px !important;
+      padding-right: 6px !important;
       transition: all 0.2s ease;
     }
     button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS}:hover {
