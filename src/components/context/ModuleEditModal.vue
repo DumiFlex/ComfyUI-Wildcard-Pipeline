@@ -263,7 +263,9 @@ function cancel() {
 
 .wp-medit__head {
   display: flex;
-  align-items: center;
+  /* Top-align so the kind icon tracks the name line, not the
+   * vertical center of the (taller) name + subtitle stack. */
+  align-items: flex-start;
   gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--wp-border);
@@ -282,6 +284,9 @@ function cancel() {
   font-size: 14px;
   color: var(--wp-text2);
   flex-shrink: 0;
+  /* Nudge down so the icon visually centers with the 13px name
+   * line rather than sitting flush with its top edge. */
+  padding-top: 4px;
 }
 /* Kind-specific colors mirror the kind-borders on ContextWidget rows so
  * the modal header reads the same kind-identity at a glance. */
@@ -321,6 +326,9 @@ function cancel() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Tiny top margin pulls the subtitle off the name baseline so
+   * the two lines don't read as one wrapped sentence. */
+  margin-top: 2px;
 }
 
 .wp-medit__close {
@@ -356,10 +364,12 @@ function cancel() {
   margin: 0 0 2px;
 }
 
-/* V3 — name + kind chip share a flex row inside the title block
- * (mockup v5 line 1039). Chip is `.wp-kind-chip` from the shared
- * theme; this row just lays them out on a single line and keeps
- * the input/span flexing into the available space. */
+/* V3 — name + kind chip share a flex row inside the title block.
+ * Name takes only its content width (no flex grow) so the chip
+ * sits FLUSH next to the name instead of being shoved to the far
+ * right of the row by a flex-fill name span. The title-block's
+ * own `flex: 1` already carves out the right-hand space for the
+ * close button, so nothing here needs to push it. */
 .wp-medit__title-row {
   display: flex;
   align-items: center;
@@ -369,12 +379,12 @@ function cancel() {
 
 /* Read-only name header for snapshot kinds (non-fixed_values). */
 .wp-medit__name-readonly {
-  flex: 1;
+  flex: 0 1 auto;
   color: var(--wp-text);
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 13px;
   font-weight: 600;
-  padding: 4px 8px;
+  padding: 4px 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
