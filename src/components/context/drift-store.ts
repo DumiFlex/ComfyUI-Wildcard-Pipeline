@@ -148,6 +148,16 @@ export function mergeRefresh(m: ModuleEntry, live: SnapshotEntry): ModuleEntry {
   };
 }
 
+/** Update the local library-hash for one module id. Used by save-to-library
+ *  flow to apply the server's new hash from the PUT response directly,
+ *  sidestepping the polling vs forceRefresh race window.
+ *
+ *  See: docs/superpowers/specs/2026-05-07-instance-overrides-modal-design.md §8.5
+ */
+export function setLibraryHash(id: string, hash: string): void {
+  hashes.value = { ...(hashes.value ?? {}), [id]: hash };
+}
+
 /** Test-only — reset internal counters between cases. */
 export function _resetForTests(): void {
   refCount = 0;

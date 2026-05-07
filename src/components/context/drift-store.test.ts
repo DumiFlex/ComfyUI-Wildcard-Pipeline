@@ -4,6 +4,7 @@ import {
   hashes,
   subscribe,
   unsubscribe,
+  setLibraryHash,
 } from "./drift-store";
 
 beforeEach(() => {
@@ -208,5 +209,27 @@ describe("drift-store: refreshMany partial failure", () => {
     const result = await refreshMany([a]);
     expect(result.refreshed).toEqual([]);
     expect(result.failed[0].reason).toContain("500");
+  });
+});
+
+describe("setLibraryHash — direct hash update without re-fetch", () => {
+  beforeEach(() => {
+    _resetForTests?.();
+    hashes.value = {};
+  });
+
+  it("updates the local hash for the given module id", () => {
+    setLibraryHash("abc123", "newhash456");
+    expect(hashes.value).not.toBeNull();
+    if (hashes.value) {
+      expect(hashes.value["abc123"]).toBe("newhash456");
+    }
+  });
+
+  it("preserves other module hashes", () => {
+    setLibraryHash("a", "ha");
+    setLibraryHash("b", "hb");
+    setLibraryHash("a", "ha-updated");
+    expect(hashes.value).toEqual({ a: "ha-updated", b: "hb" });
   });
 });
