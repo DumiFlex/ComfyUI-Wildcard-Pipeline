@@ -1,6 +1,8 @@
 import { kindIcon } from "../../shared/kind-icons";
 import type { ModuleEntryKind } from "../../../widgets/_shared";
 
+export type ModuleKind = ModuleEntryKind;
+
 export const KIND_TITLE: Record<string, string> = {
   wildcard: "wildcard",
   fixed_values: "fixed",
