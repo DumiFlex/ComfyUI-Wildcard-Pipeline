@@ -29,6 +29,8 @@ async def test_snapshot_returns_frozen_shape(wp_client):
         "variable_binding": "", "enabled_options": None, "category_filter": None,
         "option_weights": None, "mode": None, "pinned_option_id": None,
         "locked_seed": None, "internal": False,
+        "disabled_rule_ids": None, "disabled_exception_keys": None,
+        "disabled_matrix_cells": None,
     }
 
 

@@ -76,6 +76,9 @@ def _fresh_instance() -> dict[str, Any]:
         # `__wp_internal_flags__`). Downstream modules still see the
         # value; the public socket payload doesn't.
         "internal": False,
+        "disabled_rule_ids": None,
+        "disabled_exception_keys": None,
+        "disabled_matrix_cells": None,
     }
 
 
