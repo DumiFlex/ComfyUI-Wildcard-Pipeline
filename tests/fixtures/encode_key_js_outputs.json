@@ -1,0 +1,44 @@
+[
+  {
+    "input": [
+      "red",
+      "blue"
+    ],
+    "output": "[\"red\",\"blue\"]"
+  },
+  {
+    "input": [
+      "é",
+      "中"
+    ],
+    "output": "[\"é\",\"中\"]"
+  },
+  {
+    "input": [
+      "\"q\"",
+      "back\\slash"
+    ],
+    "output": "[\"\\\"q\\\"\",\"back\\\\slash\"]"
+  },
+  {
+    "input": [
+      "",
+      ""
+    ],
+    "output": "[\"\",\"\"]"
+  },
+  {
+    "input": [
+      "a,b",
+      "c:d"
+    ],
+    "output": "[\"a,b\",\"c:d\"]"
+  },
+  {
+    "input": [
+      "𝄞",
+      "music"
+    ],
+    "output": "[\"𝄞\",\"music\"]"
+  }
+]
