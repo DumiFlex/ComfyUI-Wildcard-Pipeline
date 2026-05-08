@@ -110,7 +110,7 @@ function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
           if (id === SETTING_CONTRAST) return "auto";
           if (id === SETTING_DENSITY) return overrides.density ?? "comfortable";
           if (id === SETTING_DECORATION) return overrides.decoration ?? "full";
-          if (id === SETTING_INDICATOR) return overrides.indicatorStyle ?? "both";
+          if (id === SETTING_INDICATOR) return overrides.indicatorStyle ?? "dot";
           if (id === SETTING_BORDER) return overrides.borderHighlight ?? true;
           if (id === SETTING_COLLAPSED) return overrides.collapsedByDefault ?? false;
           if (id === SETTING_FOCUS) return overrides.focusMode ?? false;
@@ -421,12 +421,13 @@ describe("a11y settings", () => {
 
   // ── Display preferences — indicator style ───────────────────────
 
-  it("indicatorStyle boot — applies wp-indicator-both by default", () => {
+  it("indicatorStyle boot — applies wp-indicator-dot by default", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
     applyDisplayPrefs(makeAppWithDisplay());
 
-    expect(document.body.classList.contains("wp-indicator-both")).toBe(true);
+    expect(document.body.classList.contains("wp-indicator-dot")).toBe(true);
+    expect(document.body.classList.contains("wp-indicator-both")).toBe(false);
   });
 
   it("indicatorStyle boot — reads stored badge value", () => {
@@ -435,7 +436,7 @@ describe("a11y settings", () => {
     applyDisplayPrefs(makeAppWithDisplay({ indicatorStyle: "badge" }));
 
     expect(document.body.classList.contains("wp-indicator-badge")).toBe(true);
-    expect(document.body.classList.contains("wp-indicator-both")).toBe(false);
+    expect(document.body.classList.contains("wp-indicator-dot")).toBe(false);
   });
 
   it("indicatorStyle onChange — flips body class", () => {
@@ -444,9 +445,10 @@ describe("a11y settings", () => {
     applyDisplayPrefs(makeAppWithDisplay());
 
     const settings = buildSettings(makeApp());
-    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("dot", "both");
+    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("both", "dot");
 
-    expect(document.body.classList.contains("wp-indicator-dot")).toBe(true);
+    expect(document.body.classList.contains("wp-indicator-both")).toBe(true);
+    expect(document.body.classList.contains("wp-indicator-dot")).toBe(false);
   });
 
   it("indicatorStyle toast — fires with descriptive message", () => {
@@ -456,10 +458,10 @@ describe("a11y settings", () => {
     markBootCompleted();
 
     const settings = buildSettings(makeApp());
-    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("dot", "both");
+    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("badge", "dot");
 
     expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0].message).toBe("Indicators: dot only");
+    expect(toasts.value[0].message).toBe("Indicators: badge only");
     expect(toasts.value[0].singletonKey).toBe("wp-indicator");
   });
 

@@ -65,9 +65,9 @@ const DECORATION_OPTIONS = [
 ];
 
 const INDICATOR_OPTIONS = [
-  { text: "Both (dot + badge)", value: "both" },
+  { text: "Dot only (default)", value: "dot" },
   { text: "Badge only", value: "badge" },
-  { text: "Dot only", value: "dot" },
+  { text: "Both (dot + badge)", value: "both" },
 ];
 
 interface ExtensionManager {
@@ -96,7 +96,7 @@ const state: {
   contrast: "auto",
   density: "comfortable",
   decoration: "full",
-  indicatorStyle: "both",
+  indicatorStyle: "dot",
   borderHighlight: true,
   collapsedByDefault: false,
   focusMode: false,
@@ -122,7 +122,7 @@ function asIndicator(v: unknown, fallback: IndicatorStyle): IndicatorStyle {
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
   state.decoration = "full";
-  state.indicatorStyle = "both";
+  state.indicatorStyle = "dot";
   state.borderHighlight = true;
   state.collapsedByDefault = false;
   state.focusMode = false;
@@ -261,7 +261,7 @@ export function applyA11yClasses(app: AppLike): void {
 export function applyDisplayPrefs(app: AppLike): void {
   state.density = asDensity(app.extensionManager?.setting?.get(SETTING_ID_DENSITY), "comfortable");
   state.decoration = asDecoration(app.extensionManager?.setting?.get(SETTING_ID_DECORATION), "full");
-  state.indicatorStyle = asIndicator(app.extensionManager?.setting?.get(SETTING_ID_INDICATOR), "both");
+  state.indicatorStyle = asIndicator(app.extensionManager?.setting?.get(SETTING_ID_INDICATOR), "dot");
   // Boolean default true — only an explicit `=== false` reading flips the
   // marker. `undefined` (settings panel never visited) falls through to true.
   state.borderHighlight = app.extensionManager?.setting?.get(SETTING_ID_BORDER) !== false;
@@ -457,14 +457,14 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       name: "Indicator style",
       type: "combo",
       options: INDICATOR_OPTIONS,
-      defaultValue: "both",
+      defaultValue: "dot",
       tooltip:
         "How module state markers (mod, missing, drift, override, conflict) " +
-        "appear. Both shows colored dot + text label; badge shows label only; " +
-        "dot shows the colored dot only.",
+        "appear. Dot is the compact default — colored dot only. Badge shows " +
+        "the text label only. Both stacks dot + label for max visibility.",
       category: ["Wildcard Pipeline", "Display", "Indicator style"],
       onChange: (newVal) => {
-        const next = asIndicator(newVal, "both");
+        const next = asIndicator(newVal, "dot");
         const changed = next !== state.indicatorStyle;
         state.indicatorStyle = next;
         syncMarkers();
