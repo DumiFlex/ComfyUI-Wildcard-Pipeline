@@ -224,4 +224,27 @@ describe("ValuesSection", () => {
     });
     expect(w.find(".tpl-tok--var-error").exists()).toBe(true);
   });
+
+  it("mixed-token sweep: alt + escape + var-error each render with correct class", () => {
+    // 3 rows × 3 token kinds. Single mount, multiple class assertions
+    // — confirms shared preview-tokens.ts paints fixed_values surface
+    // values consistently across rows.
+    const w = mount(ValuesSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            values: [
+              { id: "v1", name: "color", value: "{red|blue}" },
+              { id: "v2", name: "price", value: "$$5.99" },
+              { id: "v3", name: "msg", value: "$other" },
+            ],
+          },
+        }),
+      },
+    });
+    const html = w.html();
+    expect(html).toContain("tpl-tok--alt");
+    expect(html).toContain("tpl-tok--escape");
+    expect(html).toContain("tpl-tok--var-error");
+  });
 });

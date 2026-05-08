@@ -1,6 +1,8 @@
 """Tests for FixedValuesHandler — emits one mapping per named value."""
 import random as _random
 
+import pytest
+
 from engine.modules.fixed_values_handler import FixedValuesHandler
 
 
@@ -232,3 +234,49 @@ def test_fixed_values_values_overrides_path_preserved():
     ]}
     out = FixedValuesHandler.resolve(payload, instance, _make_seedctx(0))
     assert out == {"key": "from_instance"}
+
+
+# ── Task 14: e2e test sweep ──────────────────────────────────────────
+
+
+def test_fixed_values_locked_seed_idempotent_across_repeated_resolves():
+    """Same locked_seed + same payload = same {a|b|c} resolution
+    across repeated `resolve` calls. Idempotency property is
+    load-bearing for the seed-lock UX: lock the seed, the next 100
+    queues all produce the same value (for that lock) until user
+    changes the seed.
+
+    Regression guard against the RNG accidentally consuming module
+    state between calls (would break the "lock and forget" promise).
+    """
+    payload = {"values": [
+        {"id": "v1", "name": "color", "value": "{red|blue|green|yellow|orange}"},
+        {"id": "v2", "name": "shape", "value": "{circle|square|triangle|hexagon}"},
+        {"id": "v3", "name": "tone", "value": "{warm|cool|neutral}"},
+    ]}
+    instance = {"locked_seed": 1234}
+    # 5 fresh ctx + handler calls — seeds derived deterministically
+    # so all five must agree.
+    runs = [
+        FixedValuesHandler.resolve(payload, instance, _make_seedctx(99))
+        for _ in range(5)
+    ]
+    assert all(r == runs[0] for r in runs), (
+        f"Expected all runs equal, got: {runs}"
+    )
+
+
+def test_fixed_values_ref_raises_ref_out_of_surface():
+    """`@{uuid}` refs must not resolve in fixed_values surface — engine
+    raises RefOutOfSurfaceError. Tested via strict ctx so the engine
+    actually raises (lenient mode warns instead, which is covered by
+    the var_out_of_surface test above).
+    """
+    from engine.modules import build_resolve_ctx
+    from engine.syntax import resolve_text
+    from engine.syntax.types import RefOutOfSurfaceError
+
+    raw_ctx = _make_seedctx(0)
+    resolve_ctx = build_resolve_ctx(raw_ctx, surface="fixed_values", strict=True)
+    with pytest.raises(RefOutOfSurfaceError):
+        resolve_text("see @{abcdef12} ref", resolve_ctx)
