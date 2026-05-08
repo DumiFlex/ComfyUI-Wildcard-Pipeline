@@ -260,11 +260,11 @@ function fmtPct(p: number): string {
 .opt__name {
   font: 11px var(--wp-font-mono);
   color: var(--wp-text);
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0;
-  line-height: 1.4;
+  /* Stay `display: inline` so whitespace between text/pill tokens
+   * renders naturally — `inline-flex` collapsed the spaces and the
+   * pills butted up against the surrounding words. */
+  line-height: 1.55;
+  word-break: break-word;
 }
 .opt--off .opt__name {
   color: var(--wp-text-dim, var(--wp-text3));
@@ -276,8 +276,13 @@ function fmtPct(p: number): string {
  * for vars, warn yellow for choice-blocks, muted for escapes. */
 .opt__tok {
   border-radius: 3px;
-  padding: 0 3px;
+  padding: 0 4px;
+  margin: 0 1px;
   font-weight: 500;
+  /* Inline-block so vertical padding + box-shadow render without
+   * interfering with the surrounding line's baseline. */
+  display: inline-block;
+  vertical-align: baseline;
 }
 .opt__tok--ref {
   color: var(--wp-kind-wildcard, #f0abfc);
