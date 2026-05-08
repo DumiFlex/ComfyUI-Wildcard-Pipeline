@@ -98,9 +98,6 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="wildcard"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-bars" aria-hidden="true"></i
-          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -143,9 +140,6 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="fixed_values"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-bars" aria-hidden="true"></i
-          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -180,9 +174,6 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="combine"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-bars" aria-hidden="true"></i
-          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -217,9 +208,6 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="wildcard"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-bars" aria-hidden="true"></i
-          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -296,7 +284,11 @@ function toggleCollapsed(key: ModuleKey): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Mirror the canvas-side grab affordance so the modal preview
+   * matches what the user will feel on the live ContextWidget. */
+  cursor: grab;
 }
+.wp-pg-mockup .wp-module:active { cursor: grabbing; }
 /* Per-kind border-left + icon-color overrides — mirrors ContextWidget */
 .wp-pg-mockup .wp-module[data-kind="fixed_values"] { border-left-color: var(--wp-kind-fixed); }
 .wp-pg-mockup .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
@@ -334,17 +326,6 @@ function toggleCollapsed(key: ModuleKey): void {
   align-items: center;
   gap: 6px;
 }
-.wp-pg-mockup .wp-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: grab;
-  flex-shrink: 0;
-}
-.wp-pg-mockup .wp-drag-handle .pi { font-size: 10px; }
 .wp-pg-mockup .wp-collapse-btn {
   background: transparent;
   border: none;

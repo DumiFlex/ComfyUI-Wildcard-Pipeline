@@ -1412,19 +1412,10 @@ function onDrop(ev: DragEvent, targetId: string | null) {
         @keydown="(ev) => onCardKeydown(ev, m)"
       >
         <div class="wp-module-header">
-          <!-- Visual drag affordance only — the entire `.wp-module` is
-               now `draggable="true"` so user can grab anywhere on the
-               card. Keeping the handle as a discoverable "this row is
-               sortable" hint (still gets cursor: grab on hover). The
-               `aria-hidden` matches the sibling decorative icons; the
-               actual reorder semantics are exposed via keyboard
-               (Shift+ArrowUp/Down) which is screen-reader-friendly. -->
-          <span
-            class="wp-drag-handle"
-            aria-hidden="true"
-            title="Drag to reorder (entire row is grabbable)"
-          ><i class="pi pi-bars" aria-hidden="true"></i></span>
-
+          <!-- Phase 3a removed the bars handle — the whole `.wp-module`
+               is `draggable="true"` and shows `cursor: grab` on hover,
+               so the icon was redundant chrome. Keyboard reorder still
+               works via Shift+ArrowUp/Down. -->
           <button
             type="button"
             class="wp-collapse-btn"
@@ -1961,8 +1952,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   /* `position: relative` is the anchor for the ::before / ::after
    * insertion-line pseudos used by the drop indicators below. */
   position: relative;
+  /* Whole-card grab affordance (Phase 3a). Inline controls
+   * (.wp-collapse-btn, .wp-toggle, action buttons) declare
+   * `cursor: pointer` themselves so they win locally — the grab
+   * cursor only shows on the empty card body. */
+  cursor: grab;
   transition: background-color 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
+.wp-module:active { cursor: grabbing; }
 /* Kind border-left color — driven by data-kind attribute (Task 8). */
 .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
 .wp-module[data-kind="derivation"]   { border-left-color: var(--wp-kind-derivation); }
@@ -2051,32 +2048,6 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-module.wp-drop-target--after::after  { bottom: -3px; }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
-
-.wp-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: grab;
-  color: var(--wp-text3);
-  font-size: 11px;
-  line-height: 1;
-  user-select: none;
-  width: 14px;
-  flex-shrink: 0;
-  /* Stay subtle on idle cards; reveal on hover/focus so the chrome isn't
-   * noisy in lists with many modules. */
-  opacity: 0.35;
-  transition: opacity 0.15s, color 0.15s, transform 0.15s;
-}
-.wp-module:hover .wp-drag-handle,
-.wp-module:focus-within .wp-drag-handle {
-  opacity: 1;
-}
-.wp-drag-handle:hover {
-  color: var(--wp-text);
-  transform: translateX(-1px);
-}
-.wp-drag-handle:active { cursor: grabbing; }
 
 .wp-collapse-btn {
   background: none;
