@@ -358,7 +358,7 @@ function toggleCollapsed(key: ModuleKey): void {
   cursor: pointer;
   flex-shrink: 0;
 }
-.wp-pg-mockup .wp-collapse-btn .pi { font-size: 10px; }
+.wp-pg-mockup .wp-collapse-btn .pi { font-size: 8px; }
 .wp-pg-mockup .wp-toggle {
   display: inline-flex;
   align-items: center;

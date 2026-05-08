@@ -1971,7 +1971,10 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border: none;
   color: var(--wp-text3);
   cursor: pointer;
-  font-size: 10px;
+  /* Caret sized to ~57% of btn width — proportional to standard tree
+     disclosure idioms (macOS Finder, VSCode tree). Btn dimensions
+     unchanged so the hit area stays comfortable. */
+  font-size: 8px;
   padding: 0;
   line-height: 1;
   display: inline-flex;
