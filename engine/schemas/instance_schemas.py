@@ -30,6 +30,7 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
     },
     "fixed_values": {
         "values_overrides": "list[dict]",
+        "enabled_options": "list[string]",
     },
     "combine": {
         "internal": "boolean",

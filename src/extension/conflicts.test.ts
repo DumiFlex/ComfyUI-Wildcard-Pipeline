@@ -506,3 +506,81 @@ describe("conflict scanner — instance.variable_binding override", () => {
     expect(dupes[0]).toMatchObject({ moduleId: "m2", variable: "outfit" });
   });
 });
+
+describe("conflict scanner — cross-kind same-node override demotion", () => {
+  it("wildcard $test after fixed_values $test in same node = shadows_upstream (info), not duplicate", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "fv01", type: "fixed_values", enabled: true,
+          meta: { name: "default" },
+          entries: [{ variable_name: "test", value: "default" }],
+          payload: { values: [{ id: "v1", name: "test", value: "default" }] },
+        },
+        {
+          id: "wc01", type: "wildcard", enabled: true,
+          meta: { name: "rand" },
+          entries: [],
+          payload: { var_binding: "test", options: [{ id: "o1", value: "x", weight: 1 }] },
+        },
+      ],
+    };
+    const conflicts = scanConflicts(value, []);
+    const dupes = conflicts.filter((c) => c.type === "duplicate_variable");
+    const shadows = conflicts.filter((c) => c.type === "shadows_upstream" && c.variable === "test");
+    expect(dupes).toHaveLength(0);
+    expect(shadows).toHaveLength(1);
+    expect(shadows[0]).toMatchObject({ moduleId: "wc01", variable: "test", severity: "info" });
+  });
+
+  it("fixed_values $test after wildcard $test in same node also demoted (reverse direction)", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "wc01", type: "wildcard", enabled: true,
+          meta: { name: "rand" },
+          entries: [],
+          payload: { var_binding: "test", options: [{ id: "o1", value: "x", weight: 1 }] },
+        },
+        {
+          id: "fv01", type: "fixed_values", enabled: true,
+          meta: { name: "default" },
+          entries: [{ variable_name: "test", value: "default" }],
+          payload: { values: [{ id: "v1", name: "test", value: "default" }] },
+        },
+      ],
+    };
+    const conflicts = scanConflicts(value, []);
+    const dupes = conflicts.filter((c) => c.type === "duplicate_variable");
+    const shadows = conflicts.filter((c) => c.type === "shadows_upstream" && c.variable === "test");
+    expect(dupes).toHaveLength(0);
+    expect(shadows).toHaveLength(1);
+    expect(shadows[0]).toMatchObject({ moduleId: "fv01" });
+  });
+
+  it("two wildcards in same node both writing $color STILL flag duplicate_variable (likely bug)", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "w1", type: "wildcard", enabled: true,
+          meta: { name: "a" },
+          entries: [],
+          payload: { var_binding: "color", options: [{ id: "o1", value: "x", weight: 1 }] },
+        },
+        {
+          id: "w2", type: "wildcard", enabled: true,
+          meta: { name: "b" },
+          entries: [],
+          payload: { var_binding: "color", options: [{ id: "o1", value: "y", weight: 1 }] },
+        },
+      ],
+    };
+    const conflicts = scanConflicts(value, []);
+    const dupes = conflicts.filter((c) => c.type === "duplicate_variable");
+    expect(dupes).toHaveLength(1);
+    expect(dupes[0]).toMatchObject({ moduleId: "w2", variable: "color" });
+  });
+});

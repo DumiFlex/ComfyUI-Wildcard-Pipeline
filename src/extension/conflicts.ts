@@ -249,6 +249,15 @@ export function scanConflicts(
     if (m.type === "wildcard") localWildcardIndex.set(m.id, i);
   });
   const written = new Set<string>();
+  // Track the kind of the FIRST module to write each name in this
+  // node. Used to distinguish intentional cross-kind overrides
+  // (e.g. wildcard `$test` after fixed_values `$test` upstream — the
+  // user is layering a literal default with a randomised variant)
+  // from genuinely duplicated bindings (e.g. two wildcards both
+  // writing `$color`, almost always a config bug). Cross-kind same-
+  // node collisions emit `shadows_upstream` (info), same-kind emits
+  // `duplicate_variable` (warning).
+  const firstWriterKind = new Map<string, ModuleEntry["type"]>();
   const out: Conflict[] = [];
   for (let i = 0; i < value.modules.length; i++) {
     const m = value.modules[i];
@@ -284,9 +293,22 @@ export function scanConflicts(
         // Intended override — surface it but don't scream.
         out.push({ moduleId: m.id, variable: name, type: "shadows_upstream", severity: "info" });
       } else if (written.has(name)) {
-        out.push({ moduleId: m.id, variable: name, type: "duplicate_variable", severity: "warning" });
+        const prevKind = firstWriterKind.get(name);
+        if (prevKind && prevKind !== m.type) {
+          // Cross-kind same-node override — e.g. wildcard `$test`
+          // after fixed_values `$test`. Last-write-wins by design;
+          // surface as info so the user sees the layering without
+          // the duplicate-variable warning.
+          out.push({ moduleId: m.id, variable: name, type: "shadows_upstream", severity: "info" });
+        } else {
+          // Same-kind same-node duplicate (two wildcards both
+          // writing `$color`, two fixed_values rows etc.) — almost
+          // always a config bug. Keep the warning.
+          out.push({ moduleId: m.id, variable: name, type: "duplicate_variable", severity: "warning" });
+        }
       } else {
         written.add(name);
+        firstWriterKind.set(name, m.type);
       }
     }
 

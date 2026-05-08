@@ -37,7 +37,7 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     "variable_binding", "enabled_options",
     "option_weights", "category_filter", "locked_seed", "internal",
   ],
-  fixed_values: ["values_overrides"],
+  fixed_values: ["values_overrides", "enabled_options"],
   combine: ["internal"],
   derivation: ["disabled_rule_ids"],
   constraint: ["disabled_exception_keys", "disabled_matrix_cells"],

@@ -9,7 +9,7 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "variable_binding", "enabled_options",
       "option_weights", "category_filter", "locked_seed", "internal",
     ]);
-    expect(INSTANCE_FIELDS_PER_KIND.fixed_values).toEqual(["values_overrides"]);
+    expect(INSTANCE_FIELDS_PER_KIND.fixed_values).toEqual(["values_overrides", "enabled_options"]);
     expect(INSTANCE_FIELDS_PER_KIND.combine).toEqual(["internal"]);
     expect(INSTANCE_FIELDS_PER_KIND.derivation).toEqual(["disabled_rule_ids"]);
     expect(INSTANCE_FIELDS_PER_KIND.constraint).toEqual([

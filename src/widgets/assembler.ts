@@ -79,6 +79,8 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "pinned_option_id",
   "locked_seed",
   "internal",
+  // fixed_values:
+  "values_overrides",
   // Tier 2:
   "disabled_rule_ids",
   "disabled_exception_keys",

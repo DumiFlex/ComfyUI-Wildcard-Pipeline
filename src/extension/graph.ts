@@ -540,21 +540,48 @@ function writeBindings(
     // overrides win when present, else library payload, else the
     // widget-side `entries` mirror (covers inline-created modules
     // whose payload lives only in entries until first save).
-    const inst = (m.instance ?? {}) as { values_overrides?: Array<{ name?: string; value?: string }> };
+    //
+    // `instance.enabled_options` filters which row ids emit bindings
+    // (engine `fixed_values_handler.py:64`). Apply the same filter
+    // here so disabled rows don't appear in upstream-vars / preview.
+    const inst = (m.instance ?? {}) as {
+      values_overrides?: Array<{ id?: string; name?: string; value?: string }>;
+      enabled_options?: string[] | null;
+    };
+    const enabledFilter = Array.isArray(inst.enabled_options)
+      ? new Set(inst.enabled_options)
+      : null;
+    const passesFilter = (id: string | undefined): boolean =>
+      enabledFilter === null || (typeof id === "string" && enabledFilter.has(id));
+
     const overrides = Array.isArray(inst.values_overrides) ? inst.values_overrides : null;
     if (overrides && overrides.length > 0) {
       for (const val of overrides) {
+        if (!passesFilter(val.id)) continue;
         const name = (val.name ?? "").replace(/^\$/, "").trim();
         if (name) ctx[name] = String(val.value ?? "");
       }
       return;
     }
+    // No instance-overrides → entries (UI mirror) + payload.values
+    // (library) feed the ctx. `entries` lacks ids, so filter only by
+    // matching variable_name back against payload.values (which has
+    // the canonical ids). When entries diverge from payload, we trust
+    // entries and skip the filter.
+    const libValues = (m.payload as { values?: Array<{ id?: string; name?: string; value?: string }> } | undefined)?.values ?? [];
+    const libNameToId = new Map<string, string>();
+    for (const v of libValues) {
+      if (typeof v.name === "string" && typeof v.id === "string") libNameToId.set(v.name, v.id);
+    }
     for (const e of m.entries) {
       const name = e.variable_name.replace(/^\$/, "").trim();
-      if (name) ctx[name] = String(e.value ?? "");
+      if (!name) continue;
+      const libId = libNameToId.get(e.variable_name);
+      if (!passesFilter(libId)) continue;
+      ctx[name] = String(e.value ?? "");
     }
-    const values = (m.payload as { values?: Array<{ name?: string; value?: string }> } | undefined)?.values ?? [];
-    for (const val of values) {
+    for (const val of libValues) {
+      if (!passesFilter(val.id)) continue;
       const name = (val.name ?? "").replace(/^\$/, "").trim();
       if (name) ctx[name] = String(val.value ?? "");
     }
