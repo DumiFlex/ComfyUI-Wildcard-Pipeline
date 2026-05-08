@@ -50,13 +50,29 @@ export type DisplayKey =
 /** A11y setting key — last segment of the dotted ID. */
 export type A11yKey = "reduceMotion" | "contrast";
 
-export type SettingKey = DisplayKey | A11yKey;
+/** Behavior setting key — runtime-gating axes (Phase 2). */
+export type BehaviorKey =
+  | "validation"
+  | "toastLifetime"
+  | "suppressInfoToasts"
+  | "newModuleDisabled";
+
+export type SettingKey = DisplayKey | A11yKey | BehaviorKey;
+
+const A11Y_KEYS = new Set<string>(["reduceMotion", "contrast"]);
+const BEHAVIOR_KEYS = new Set<string>([
+  "validation",
+  "toastLifetime",
+  "suppressInfoToasts",
+  "newModuleDisabled",
+]);
 
 function settingId(key: SettingKey): string {
-  // A11y entries live under `.a11y.` namespace; display under `.display.`
-  const namespace =
-    key === "reduceMotion" || key === "contrast" ? "a11y" : "display";
-  return `wildcardPipeline.${namespace}.${key}`;
+  // Three namespaces match the buildSettings registration in
+  // settings.ts. Keep this routing in sync if a new key is added.
+  if (A11Y_KEYS.has(key)) return `wildcardPipeline.a11y.${key}`;
+  if (BEHAVIOR_KEYS.has(key)) return `wildcardPipeline.behavior.${key}`;
+  return `wildcardPipeline.display.${key}`;
 }
 
 /** Read current stored value for a setting (undefined if not set). */

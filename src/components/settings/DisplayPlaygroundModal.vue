@@ -42,6 +42,8 @@ type Decoration = "full" | "minimal" | "off";
 type IndicatorStyle = "both" | "badge" | "dot";
 type KindStyle = "both" | "icon" | "chip";
 type A11yMode = "auto" | "on" | "off";
+type ValidationMode = "strict" | "relaxed" | "permissive";
+type ToastLifetime = "short" | "default" | "long" | "sticky";
 
 function asString(v: unknown, fallback: string): string {
   return typeof v === "string" ? v : fallback;
@@ -67,6 +69,11 @@ const collapsedByDefault = ref<boolean>(false);
 const focusMode = ref<boolean>(false);
 const reduceMotion = ref<A11yMode>("auto");
 const contrast = ref<A11yMode>("auto");
+// Phase 2 — behavior axes
+const validation = ref<ValidationMode>("strict");
+const toastLifetime = ref<ToastLifetime>("default");
+const suppressInfoToasts = ref<boolean>(false);
+const newModuleDisabled = ref<boolean>(false);
 
 /**
  * Pull every value from the store into the local refs. Called on
@@ -83,6 +90,10 @@ function syncFromStore(): void {
   focusMode.value = asBool(getSettingValue("focusMode"), false);
   reduceMotion.value = asString(getSettingValue("reduceMotion"), "auto") as A11yMode;
   contrast.value = asString(getSettingValue("contrast"), "auto") as A11yMode;
+  validation.value = asString(getSettingValue("validation"), "strict") as ValidationMode;
+  toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
+  suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
+  newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
 }
 
 // Per-ref watchers persist to extensionManager whenever a control
@@ -100,6 +111,10 @@ watch(collapsedByDefault, (v) => applySetting("collapsedByDefault", v));
 watch(focusMode, (v) => applySetting("focusMode", v));
 watch(reduceMotion, (v) => applySetting("reduceMotion", v));
 watch(contrast, (v) => applySetting("contrast", v));
+watch(validation, (v) => applySetting("validation", v));
+watch(toastLifetime, (v) => applySetting("toastLifetime", v));
+watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
+watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
 
 interface Defaults {
   density: Density;
@@ -111,6 +126,10 @@ interface Defaults {
   focusMode: boolean;
   reduceMotion: A11yMode;
   contrast: A11yMode;
+  validation: ValidationMode;
+  toastLifetime: ToastLifetime;
+  suppressInfoToasts: boolean;
+  newModuleDisabled: boolean;
 }
 
 const defaults: Defaults = {
@@ -123,6 +142,10 @@ const defaults: Defaults = {
   focusMode: false,
   reduceMotion: "auto",
   contrast: "auto",
+  validation: "strict",
+  toastLifetime: "default",
+  suppressInfoToasts: false,
+  newModuleDisabled: false,
 };
 
 function onResetAll(): void {
@@ -302,6 +325,43 @@ onBeforeUnmount(() => {
                   <option value="on">High contrast</option>
                   <option value="off">Standard</option>
                 </select>
+              </label>
+            </fieldset>
+
+            <fieldset class="wp-pg__group">
+              <legend class="wp-pg__group-title">Behavior</legend>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Validation strictness</span>
+                <select v-model="validation" class="wp-pg__select">
+                  <option value="strict">Strict (default)</option>
+                  <option value="relaxed">Relaxed (hide info)</option>
+                  <option value="permissive">Permissive (off)</option>
+                </select>
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Toast lifetime</span>
+                <select v-model="toastLifetime" class="wp-pg__select">
+                  <option value="short">Short (3 s)</option>
+                  <option value="default">Default (5 s)</option>
+                  <option value="long">Long (10 s)</option>
+                  <option value="sticky">Sticky</option>
+                </select>
+              </label>
+              <label class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">Suppress info toasts</span>
+                <input
+                  v-model="suppressInfoToasts"
+                  type="checkbox"
+                  class="wp-pg__check"
+                />
+              </label>
+              <label class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">New modules start disabled</span>
+                <input
+                  v-model="newModuleDisabled"
+                  type="checkbox"
+                  class="wp-pg__check"
+                />
               </label>
             </fieldset>
           </section>
