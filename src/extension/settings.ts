@@ -14,6 +14,7 @@
 import "../components/shared/a11y.css";
 import "../components/shared/display-prefs.css";
 import { pushToast } from "../components/shared/toast-store";
+import { openPlayground } from "../components/settings/playground-store";
 
 export type A11yMode = "auto" | "on" | "off";
 export type Density = "comfortable" | "compact" | "minimal";
@@ -487,6 +488,47 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     // Display preferences — ordered by visual concern (sizing → look →
     // chrome → state markers → behavior). Tooltips kept short; the
     // dropdown options carry the detailed mode descriptions.
+    //
+    // The first row uses the SettingCustomRenderer escape hatch
+    // (`type: function`) to render a launcher button — clicking it
+    // opens the Display Playground modal where users get a live
+    // mockup paired with every control. Pattern adopted from
+    // rgthree-comfy + ComfyUI-KJNodes. The native settings entries
+    // below stay as quick-toggle access for power users who already
+    // know what each mode does.
+    {
+      id: "wildcardPipeline.display._playground",
+      name: "Open Display Playground",
+      type: (_name, _setter, _value, _attrs) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Open playground";
+        btn.title = "Live preview of every display setting in one place.";
+        btn.style.cssText = [
+          "background: var(--wp-accent, #6366f1)",
+          "border: 1px solid var(--wp-accent, #6366f1)",
+          "border-radius: var(--wp-radius-sm, 4px)",
+          "color: #fff",
+          "font: 600 12px var(--wp-font-sans, sans-serif)",
+          "padding: 6px 14px",
+          "cursor: pointer",
+          "transition: background-color 0.15s, border-color 0.15s",
+        ].join("; ");
+        btn.addEventListener("mouseenter", () => {
+          btn.style.background = "var(--wp-accent2, #a970ff)";
+          btn.style.borderColor = "var(--wp-accent2, #a970ff)";
+        });
+        btn.addEventListener("mouseleave", () => {
+          btn.style.background = "var(--wp-accent, #6366f1)";
+          btn.style.borderColor = "var(--wp-accent, #6366f1)";
+        });
+        btn.addEventListener("click", () => openPlayground());
+        return btn;
+      },
+      defaultValue: null,
+      tooltip: "Live preview of every display setting in one place.",
+      category: ["Wildcard Pipeline", "Display", "Display Playground"],
+    },
     {
       id: SETTING_ID_DENSITY,
       name: "Module density",

@@ -19,6 +19,8 @@ const [
   settingsMod,
   aboutMod,
   topbarMod,
+  PlaygroundModule,
+  playgroundStoreMod,
 ] = await Promise.all([
   import("./widgets/context"),
   import("./widgets/debug"),
@@ -31,6 +33,8 @@ const [
   import("./extension/settings"),
   import("./extension/about-badges"),
   import("./extension/topbar"),
+  import("./components/settings/DisplayPlaygroundModal.vue"),
+  import("./components/settings/playground-store"),
   // Webfonts (Inter 400/600 + JetBrains Mono 400) — side-effect import,
   // the module just owns the @font-face CSS chunk.
   import("./extension/fonts"),
@@ -43,6 +47,18 @@ const toastRoot = document.createElement("div");
 toastRoot.id = "wp-toast-root";
 document.body.appendChild(toastRoot);
 createApp(ToastModule.default).mount(toastRoot);
+
+// Singleton Display Playground modal — same lifecycle pattern as the
+// toast root. The `settings.ts` launcher button flips the reactive
+// `playgroundOpen` ref; this app renders the modal on top of any
+// surface (settings panel, canvas, anywhere). Capture the app
+// reference so the modal can read/write settings via
+// extensionManager.setting.set/get.
+const playgroundRoot = document.createElement("div");
+playgroundRoot.id = "wp-playground-root";
+document.body.appendChild(playgroundRoot);
+createApp(PlaygroundModule.default).mount(playgroundRoot);
+playgroundStoreMod.setComfyApp(app);
 
 // ComfyUI hands us untyped LiteGraph nodes; we only care about the surface
 // the glue files import. Typing the param as the parameter of `create` /
