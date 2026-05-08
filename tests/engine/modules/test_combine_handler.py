@@ -164,3 +164,84 @@ def test_combine_handler_ref_emits_empty_with_warning():
     )
     assert out["result"] == "x  y"
     assert any(w["type"] == "ref_out_of_surface" for w in ctx["__wp_warnings__"])
+
+
+# ── Phase: combine v2 + syntax parity cycle ──────────────────────────
+
+
+def _make_seedctx(seed: int = 0) -> dict:
+    """Build a ctx dict with chain seed + max_ref_depth so build_resolve_ctx
+    composes a valid ResolveContext."""
+    return {
+        "__wp_rng__": random.Random(0),
+        "__wp_node_seed__": seed,
+        "__wp_warnings__": [],
+        "__wp_max_ref_depth__": 8,
+        "__wp_catalog__": {},
+        "__wp_developer_mode__": False,
+    }
+
+
+def test_combine_reads_template_override():
+    """instance.template_override wins over payload.template — same
+    precedence pattern wildcard's option_weights and fixed_values'
+    values_overrides use."""
+    payload = {
+        "template": "library template",
+        "output_var": "result",
+        "input_vars": [],
+    }
+    instance = {"template_override": "instance template"}
+    ctx = _make_seedctx(seed=0)
+    out = CombineHandler.resolve(payload, instance, ctx)
+    assert out == {"result": "instance template"}
+
+
+def test_combine_falls_back_to_payload_template_when_override_null():
+    payload = {
+        "template": "library template",
+        "output_var": "result",
+        "input_vars": [],
+    }
+    instance = {"template_override": None}
+    ctx = _make_seedctx(seed=0)
+    out = CombineHandler.resolve(payload, instance, ctx)
+    assert out == {"result": "library template"}
+
+
+def test_combine_locked_seed_makes_alternation_deterministic():
+    """Same locked_seed + same template = same {a|b|c} output across runs."""
+    payload = {
+        "template": "{a|b|c|d|e|f|g|h}",
+        "output_var": "pick",
+        "input_vars": [],
+    }
+    out1 = CombineHandler.resolve(payload, {"locked_seed": 12345}, _make_seedctx(0))
+    out2 = CombineHandler.resolve(payload, {"locked_seed": 12345}, _make_seedctx(0))
+    assert out1 == out2
+
+
+def test_combine_different_locked_seeds_can_yield_different_picks():
+    """Sanity check that the seed actually affects RNG (statistical)."""
+    payload = {
+        "template": "{a|b|c|d|e|f|g|h}",
+        "output_var": "pick",
+        "input_vars": [],
+    }
+    picks = set()
+    for seed in range(20):
+        out = CombineHandler.resolve(payload, {"locked_seed": seed}, _make_seedctx(0))
+        picks.add(out["pick"])
+    assert len(picks) > 1
+
+
+def test_combine_unlocked_uses_chain_seed():
+    """Without locked_seed, RNG derives from ctx __wp_node_seed__."""
+    payload = {
+        "template": "{a|b|c|d|e|f|g|h}",
+        "output_var": "pick",
+        "input_vars": [],
+    }
+    ctx_a = _make_seedctx(seed=11111)
+    out_a = CombineHandler.resolve(payload, {}, ctx_a)
+    assert out_a["pick"] in {"a", "b", "c", "d", "e", "f", "g", "h"}
