@@ -626,7 +626,10 @@ export function installDebugHelpers(): void {
 
 export function buildSettings(_app: AppLike): ComfySetting[] {
   // ComfyUI groups settings by 2nd-level category (alphabetical) and
-  // renders entries in array order within each section. Two sections:
+  // renders entries in REVERSE array order within each section
+  // (last in source = first in panel — verified empirically against
+  // the live frontend, the registration store appears to render
+  // bottom-up). Two sections:
   //
   //   - "Display"  — visual axes (sorts first because D < R)
   //   - "Runtime"  — behavior gates (sorts second; renamed from
@@ -634,13 +637,19 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
   //                  ABOVE Display and shove the playground out of
   //                  the top slot)
   //
+  // Source order below reads top-to-bottom in the SAME order users
+  // see in the panel — playground first, sizing next, etc. The
+  // `.reverse()` at the bottom of the function flips the literal
+  // into ComfyUI's expected order so what we write matches what
+  // users see, instead of reading in confusing reverse logical order.
+  //
   // Within Display, array order forms logical clusters that the user
   // can scan top-to-bottom: playground → sizing (density / decoration /
   // color-intensity) → identity (module-type) → state markers →
   // collapse + focus → accessibility. ComfyUI doesn't render
   // separators, but the array order makes the clusters obvious as
   // adjacent rows.
-  return [
+  const entries: ComfySetting[] = [
     // Launcher row — uses the SettingCustomRenderer escape hatch
     // (`type: function`) to render a button styled like a PrimeVue
     // Select control so it visually fits the rest of the panel. Click
@@ -1026,4 +1035,8 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
     },
   ];
+  // ComfyUI's settings panel renders entries in reverse array order
+  // within a section. Reverse so what we wrote in logical top-to-bottom
+  // order matches what the user sees in the panel.
+  return entries.reverse();
 }
