@@ -24,6 +24,7 @@ export type IndicatorStyle = "both" | "badge" | "dot";
 export type KindStyle = "both" | "icon" | "chip";
 export type ValidationMode = "strict" | "relaxed" | "permissive";
 export type ToastLifetime = "short" | "default" | "long" | "sticky";
+export type CollapseMode = "independent" | "accordion";
 
 /**
  * Setting widget types ComfyUI's settings panel can render natively.
@@ -97,6 +98,7 @@ const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
 const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
 const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
+const SETTING_ID_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
 
 const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
 const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
@@ -152,6 +154,11 @@ const TOAST_LIFETIME_OPTIONS = [
   { text: "Sticky (no auto-dismiss)", value: "sticky" },
 ];
 
+const COLLAPSE_MODE_OPTIONS = [
+  { text: "Independent (default)", value: "independent" },
+  { text: "Accordion (expanding one collapses siblings)", value: "accordion" },
+];
+
 interface ExtensionManager {
   setting?: { get(id: string): unknown };
 }
@@ -185,6 +192,7 @@ const state = reactive<{
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
+  collapseMode: CollapseMode;
 }>({
   reduceMotion: "auto",
   contrast: "auto",
@@ -199,6 +207,7 @@ const state = reactive<{
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
+  collapseMode: "independent",
 });
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -229,6 +238,10 @@ function asToastLifetime(v: unknown, fallback: ToastLifetime): ToastLifetime {
   return v === "short" || v === "default" || v === "long" || v === "sticky" ? v : fallback;
 }
 
+function asCollapseMode(v: unknown, fallback: CollapseMode): CollapseMode {
+  return v === "independent" || v === "accordion" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
@@ -242,6 +255,7 @@ export function _resetDisplayStateForTesting(): void {
   state.toastLifetime = "default";
   state.suppressInfoToasts = false;
   state.newModuleDisabled = false;
+  state.collapseMode = "independent";
 }
 
 /**
@@ -298,6 +312,20 @@ export function shouldSuppressInfoToasts(): boolean {
  * it before letting it run. Existing modules are unaffected. */
 export function getNewModuleDisabled(): boolean {
   return state.newModuleDisabled;
+}
+
+/**
+ * Read accessor for the collapse-stack mode. ContextWidget reads this
+ * inside `toggleCollapsed` to decide whether expanding one module
+ * should collapse all siblings (accordion) or leave them alone
+ * (independent — current default).
+ *
+ *   - "independent" → each module's collapse state is orthogonal (default)
+ *   - "accordion"   → only one module can be expanded at a time;
+ *                     expanding any module collapses every other one
+ */
+export function getCollapseMode(): CollapseMode {
+  return state.collapseMode;
 }
 
 // Toast feedback gate. ComfyUI fires onChange for stored values during
@@ -373,6 +401,12 @@ function describeSuppressInfo(on: boolean): string {
 
 function describeNewModuleDisabled(on: boolean): string {
   return on ? "New modules start disabled" : "New modules start enabled";
+}
+
+function describeCollapseMode(mode: CollapseMode): string {
+  return mode === "accordion"
+    ? "Collapse mode: ACCORDION"
+    : "Collapse mode: INDEPENDENT";
 }
 
 function describeBorder(on: boolean): string {
@@ -471,6 +505,9 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.toastLifetime = asToastLifetime(app.extensionManager?.setting?.get(SETTING_ID_TOAST_LIFETIME), "default");
   state.suppressInfoToasts = app.extensionManager?.setting?.get(SETTING_ID_SUPPRESS_INFO) === true;
   state.newModuleDisabled = app.extensionManager?.setting?.get(SETTING_ID_NEW_DISABLED) === true;
+  // Phase 3b — collapse-stack mode. Pure Vue state (no body class) since
+  // the behavior is JS-driven (toggleCollapsed reads via getCollapseMode).
+  state.collapseMode = asCollapseMode(app.extensionManager?.setting?.get(SETTING_ID_COLLAPSE_MODE), "independent");
   syncMarkers();
 }
 
@@ -535,6 +572,9 @@ export function installDebugHelpers(): void {
     collapsedByDefault: (on: boolean) => { state.collapsedByDefault = on; },
     focusMode: (on: boolean) => { state.focusMode = on; syncMarkers(); },
     kindStyle: (mode: KindStyle) => { state.kindStyle = mode; syncMarkers(); },
+    // collapseMode is pure Vue state — no syncMarkers since it has
+    // no body class. ContextWidget reads via getCollapseMode().
+    collapseMode: (mode: CollapseMode) => { state.collapseMode = mode; },
     state: () => ({
       density: state.density,
       decoration: state.decoration,
@@ -543,6 +583,7 @@ export function installDebugHelpers(): void {
       collapsedByDefault: state.collapsedByDefault,
       focusMode: state.focusMode,
       kindStyle: state.kindStyle,
+      collapseMode: state.collapseMode,
     }),
   };
 
@@ -724,6 +765,29 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeCollapsed(next), {
             severity: "info",
             singletonKey: "wp-collapsed-default",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_COLLAPSE_MODE,
+      name: "Collapse stack mode",
+      type: "combo",
+      options: COLLAPSE_MODE_OPTIONS,
+      defaultValue: "independent",
+      tooltip:
+        "Independent: each module collapses on its own. " +
+        "Accordion: expanding a module collapses all others.",
+      category: ["Wildcard Pipeline", "Display", "Collapse stack mode"],
+      onChange: (newVal) => {
+        const next = asCollapseMode(newVal, "independent");
+        const changed = next !== state.collapseMode;
+        state.collapseMode = next;
+        // No syncMarkers — pure Vue state read by ContextWidget on toggle.
+        if (bootCompleted && changed) {
+          pushToast(describeCollapseMode(next), {
+            severity: "info",
+            singletonKey: "wp-collapse-mode",
           });
         }
       },

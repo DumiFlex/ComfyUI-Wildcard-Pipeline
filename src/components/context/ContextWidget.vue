@@ -7,6 +7,7 @@ import {
 } from "../../widgets/_shared";
 import { scanConflicts, labelFor as conflictLabelFor, type Conflict } from "../../extension/conflicts";
 import {
+  getCollapseMode,
   getCollapsedByDefault,
   getNewModuleDisabled,
   getValidationMode,
@@ -787,7 +788,13 @@ async function onLibraryPick(uuids: string[]) {
     // user opted into either, every newly-embedded module respects
     // the preference. Existing modules retain their previous state
     // because we only mutate `newEntries` here, not existing cards.
-    const startCollapsed = getCollapsedByDefault();
+    //
+    // Accordion mode wins over collapsedByDefault for new adds: only
+    // one module can be expanded at a time, and we don't know which
+    // freshly-added module the user wants expanded — so start them
+    // all collapsed and let the user click to expand whichever they
+    // need. This keeps the accordion invariant (max 1 expanded) intact.
+    const startCollapsed = getCollapseMode() === "accordion" ? true : getCollapsedByDefault();
     const startDisabled = getNewModuleDisabled();
 
     // Append picks first (in input order) so user-picked rows land
@@ -937,7 +944,22 @@ function toggleEnabled(id: string) {
 }
 
 function toggleCollapsed(id: string) {
-  const list = value.value.modules.map((m) => m.id !== id ? m : { ...m, collapsed: !m.collapsed });
+  const target = value.value.modules.find((m) => m.id === id);
+  if (!target) return;
+  // currently collapsed (true | undefined-treated-as-expanded) → about to expand
+  const willExpand = target.collapsed === true;
+
+  // Accordion mode: when the user expands a module, collapse every other
+  // module so only one body is visible at a time. Collapsing a module
+  // never auto-expands siblings (allows 0 expanded). Bulk actions
+  // (expandAll / collapseAll) bypass this — they're intentional overrides.
+  const accordion = getCollapseMode() === "accordion" && willExpand;
+
+  const list = value.value.modules.map((m) => {
+    if (m.id === id) return { ...m, collapsed: !m.collapsed };
+    if (accordion) return { ...m, collapsed: true };
+    return m;
+  });
   value.value = { ...value.value, modules: list };
 }
 
