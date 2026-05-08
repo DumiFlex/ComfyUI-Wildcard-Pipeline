@@ -27,7 +27,7 @@
  * instantly), and emits a toast. No "Apply" button needed; closing
  * the modal just dismisses it, settings persist as you go.
  */
-import { computed, onBeforeUnmount, onMounted, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   playgroundOpen,
   closePlayground,
@@ -50,51 +50,56 @@ function asBool(v: unknown, fallback: boolean): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
 
-// Reactive view of current setting values — re-read whenever the modal
-// opens so we pick up the latest from extensionManager. Computed so
-// flipping a control via applySetting → onChange → re-read keeps the
-// select binding in sync without manual state plumbing.
-const density = computed<Density>({
-  get: () => asString(getSettingValue("density"), "comfortable") as Density,
-  set: (v) => applySetting("density", v),
-});
-const decoration = computed<Decoration>({
-  get: () => asString(getSettingValue("decoration"), "full") as Decoration,
-  set: (v) => applySetting("decoration", v),
-});
-const indicatorStyle = computed<IndicatorStyle>({
-  get: () => asString(getSettingValue("indicatorStyle"), "badge") as IndicatorStyle,
-  set: (v) => applySetting("indicatorStyle", v),
-});
-const kindStyle = computed<KindStyle>({
-  get: () => asString(getSettingValue("kindStyle"), "chip") as KindStyle,
-  set: (v) => applySetting("kindStyle", v),
-});
-const borderHighlight = computed<boolean>({
-  get: () => asBool(getSettingValue("borderHighlight"), true),
-  set: (v) => applySetting("borderHighlight", v),
-});
-const collapsedByDefault = computed<boolean>({
-  get: () => asBool(getSettingValue("collapsedByDefault"), false),
-  set: (v) => applySetting("collapsedByDefault", v),
-});
-const focusMode = computed<boolean>({
-  get: () => asBool(getSettingValue("focusMode"), false),
-  set: (v) => applySetting("focusMode", v),
-});
+// Local refs mirror the stored setting values. We use plain refs (not
+// computed) because the underlying source — extensionManager.setting.get
+// — is NOT a Vue reactive value, so a computed getter wouldn't know
+// when to re-evaluate. Instead, we resync from the store every time
+// the modal opens (see watch(playgroundOpen) below) and write back via
+// applySetting on every change. This guarantees the controls always
+// reflect the latest persisted state, even after edits made via the
+// native settings panel between modal opens.
+const density = ref<Density>("comfortable");
+const decoration = ref<Decoration>("full");
+const indicatorStyle = ref<IndicatorStyle>("badge");
+const kindStyle = ref<KindStyle>("chip");
+const borderHighlight = ref<boolean>(true);
+const collapsedByDefault = ref<boolean>(false);
+const focusMode = ref<boolean>(false);
+const reduceMotion = ref<A11yMode>("auto");
+const contrast = ref<A11yMode>("auto");
 
-// A11y settings — combo tri-state (auto / on / off). Auto follows the
-// OS preference via matchMedia listeners (already wired in
-// settings.ts). Surfaced here so users can preview the effect on the
-// mockup without leaving the playground.
-const reduceMotion = computed<A11yMode>({
-  get: () => asString(getSettingValue("reduceMotion"), "auto") as A11yMode,
-  set: (v) => applySetting("reduceMotion", v),
-});
-const contrast = computed<A11yMode>({
-  get: () => asString(getSettingValue("contrast"), "auto") as A11yMode,
-  set: (v) => applySetting("contrast", v),
-});
+/**
+ * Pull every value from the store into the local refs. Called on
+ * every modal open so external changes (settings panel, OS prefs
+ * change, another tab editing the same workflow) reflect immediately.
+ */
+function syncFromStore(): void {
+  density.value = asString(getSettingValue("density"), "comfortable") as Density;
+  decoration.value = asString(getSettingValue("decoration"), "full") as Decoration;
+  indicatorStyle.value = asString(getSettingValue("indicatorStyle"), "badge") as IndicatorStyle;
+  kindStyle.value = asString(getSettingValue("kindStyle"), "chip") as KindStyle;
+  borderHighlight.value = asBool(getSettingValue("borderHighlight"), true);
+  collapsedByDefault.value = asBool(getSettingValue("collapsedByDefault"), false);
+  focusMode.value = asBool(getSettingValue("focusMode"), false);
+  reduceMotion.value = asString(getSettingValue("reduceMotion"), "auto") as A11yMode;
+  contrast.value = asString(getSettingValue("contrast"), "auto") as A11yMode;
+}
+
+// Per-ref watchers persist to extensionManager whenever a control
+// flips. The onChange handler in buildSettings() short-circuits when
+// `next === state.X` so syncFromStore's redundant writes (every open)
+// are no-ops — no toast, no body class re-flip. Means we don't need
+// a suppression flag; the change-detection lives one layer down where
+// it already had to live for ComfyUI's load-fire suppression.
+watch(density, (v) => applySetting("density", v));
+watch(decoration, (v) => applySetting("decoration", v));
+watch(indicatorStyle, (v) => applySetting("indicatorStyle", v));
+watch(kindStyle, (v) => applySetting("kindStyle", v));
+watch(borderHighlight, (v) => applySetting("borderHighlight", v));
+watch(collapsedByDefault, (v) => applySetting("collapsedByDefault", v));
+watch(focusMode, (v) => applySetting("focusMode", v));
+watch(reduceMotion, (v) => applySetting("reduceMotion", v));
+watch(contrast, (v) => applySetting("contrast", v));
 
 interface Defaults {
   density: Density;
@@ -124,6 +129,9 @@ function onResetAll(): void {
   for (const [key, value] of Object.entries(defaults) as [SettingKey, unknown][]) {
     applySetting(key, value);
   }
+  // Resync local refs immediately so the controls reflect the reset
+  // without waiting for the next reopen.
+  syncFromStore();
 }
 
 function onClose(): void {
@@ -142,6 +150,12 @@ watch(
   playgroundOpen,
   (open) => {
     if (open) {
+      // Resync local refs from the store on every open so external
+      // changes (settings panel edits between modal opens, OS pref
+      // changes, debug-helper writes) reflect immediately. Without
+      // this, refs hold whatever they were when the modal last
+      // closed and the user sees stale values.
+      syncFromStore();
       window.addEventListener("keydown", onKeydown);
       // Lock body scroll while the modal is open — same pattern as
       // ModalShell uses for ModuleEditModal / ModulePickerModal.
@@ -244,10 +258,9 @@ onBeforeUnmount(() => {
               <label class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Border highlights</span>
                 <input
+                  v-model="borderHighlight"
                   type="checkbox"
                   class="wp-pg__check"
-                  :checked="borderHighlight"
-                  @change="borderHighlight = ($event.target as HTMLInputElement).checked"
                 />
               </label>
             </fieldset>
@@ -257,19 +270,17 @@ onBeforeUnmount(() => {
               <label class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new modules by default</span>
                 <input
+                  v-model="collapsedByDefault"
                   type="checkbox"
                   class="wp-pg__check"
-                  :checked="collapsedByDefault"
-                  @change="collapsedByDefault = ($event.target as HTMLInputElement).checked"
                 />
               </label>
               <label class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
                 <input
+                  v-model="focusMode"
                   type="checkbox"
                   class="wp-pg__check"
-                  :checked="focusMode"
-                  @change="focusMode = ($event.target as HTMLInputElement).checked"
                 />
               </label>
             </fieldset>
