@@ -888,7 +888,30 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
   });
 
   it("Clear all sets all registry fields to null on confirm", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const m = {
+      ...makeCombine(),
+      instance: { internal: true },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts, props: { visible: true, module: m },
+    });
+    await nextTick();
+    // Click the Clear-all button → ConfirmDialog opens (themed,
+    // replaces window.confirm). Click the dialog's Confirm button to
+    // approve, then save the modal and assert the cleared field.
+    // Teleport stub keeps the dialog inside the wrapper DOM in tests.
+    await wrapper.find('[data-test="clear-all-overrides"]').trigger("click");
+    await nextTick();
+    const confirmBtn = wrapper.find('[data-test="confirm-confirm"]');
+    expect(confirmBtn.exists()).toBe(true);
+    await confirmBtn.trigger("click");
+    await nextTick();
+    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.internal).toBeNull();
+  });
+
+  it("Clear all does NOT clear when user cancels the confirm dialog", async () => {
     const m = {
       ...makeCombine(),
       instance: { internal: true },
@@ -899,9 +922,12 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
     await nextTick();
     await wrapper.find('[data-test="clear-all-overrides"]').trigger("click");
     await nextTick();
+    await wrapper.find('[data-test="confirm-cancel"]').trigger("click");
+    await nextTick();
     await wrapper.find(".wp-medit__btn--primary").trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(saved.instance?.internal).toBeNull();
+    // Cancelled → original override survives
+    expect(saved.instance?.internal).toBe(true);
   });
 });
 

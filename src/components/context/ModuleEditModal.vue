@@ -23,6 +23,7 @@ import ConstraintInstanceBody from "./editors/instance/ConstraintInstanceBody.vu
 import { pruneStaleInstanceRefs } from "./editors/instance/prune";
 import { hashes, refreshModule, setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
+import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 
 /**
@@ -185,6 +186,34 @@ function onUpdate(patch: Record<string, unknown>): void {
 }
 
 /**
+ * Themed confirm dialog — replaces `window.confirm()`. Each prompt
+ * configures title/body/labels/variant + a callback to fire on
+ * Confirm. Cancel always closes. Single-action queue (one dialog
+ * at a time) since browser confirm was the same.
+ */
+interface ConfirmConfig {
+  title: string;
+  body?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: "default" | "danger";
+  onConfirm: () => void;
+}
+const confirmDialog = ref<ConfirmConfig | null>(null);
+
+function askConfirm(config: ConfirmConfig): void {
+  confirmDialog.value = config;
+}
+function onConfirmDialogConfirm(): void {
+  const cb = confirmDialog.value?.onConfirm;
+  confirmDialog.value = null;
+  cb?.();
+}
+function onConfirmDialogCancel(): void {
+  confirmDialog.value = null;
+}
+
+/**
  * "Reset overrides" — clears identity + pool overrides while preserving
  * runtime state (lock, internal). For wildcard the scope is:
  *   identity → variable_binding, meta.name (restored from
@@ -203,11 +232,18 @@ const WILDCARD_RESET_FIELDS: readonly InstanceFieldKey[] = [
 
 function onClearAllOverrides(): void {
   if (!draft.value) return;
-  const ok = window.confirm(
-    `Reset overrides on "${draft.value.meta?.name || "this module"}"?`,
-  );
-  if (!ok) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Reset overrides?",
+    body: `All instance overrides on "${moduleName}" will be cleared. Lock state and Hide-from-prompt are preserved.`,
+    confirmLabel: "Reset",
+    variant: "danger",
+    onConfirm: doClearAllOverrides,
+  });
+}
 
+function doClearAllOverrides(): void {
+  if (!draft.value) return;
   const isWildcard = draft.value.type === "wildcard";
   const fields = isWildcard
     ? WILDCARD_RESET_FIELDS
@@ -265,12 +301,20 @@ function onResetFromLibrary(refreshed: ModuleEntry): void {
  * later phases will fold this into a shared helper once all kinds
  * migrate to v2.
  */
-async function onWildcardResetClick(): Promise<void> {
+function onWildcardResetClick(): void {
   if (!draft.value) return;
-  const ok = window.confirm(
-    `Discard ${draft.value.meta?.name || "this module"}'s local edits and restore from library?`,
-  );
-  if (!ok) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Reset to library?",
+    body: `Discard ${moduleName}'s local edits and restore the library version. Stale option overrides will be pruned.`,
+    confirmLabel: "Reset to library",
+    variant: "danger",
+    onConfirm: () => { void doWildcardReset(); },
+  });
+}
+
+async function doWildcardReset(): Promise<void> {
+  if (!draft.value) return;
   try {
     const refreshed = await refreshModule(draft.value);
     onResetFromLibrary(refreshed);
@@ -279,13 +323,19 @@ async function onWildcardResetClick(): Promise<void> {
   }
 }
 
-async function onWildcardSaveToLibraryClick(): Promise<void> {
+function onWildcardSaveToLibraryClick(): void {
   if (!draft.value) return;
-  const ok = window.confirm(
-    `Push current changes to library entry "${draft.value.meta?.name}"? ` +
-    `Other workflows referencing this module will see the new version on their next open.`,
-  );
-  if (!ok) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Save to library?",
+    body: `Push current changes to library entry "${moduleName}". Other workflows referencing this module will see the new version on their next open.`,
+    confirmLabel: "Save to library",
+    onConfirm: () => { void doWildcardSaveToLibrary(); },
+  });
+}
+
+async function doWildcardSaveToLibrary(): Promise<void> {
+  if (!draft.value) return;
   try {
     const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
       method: "PUT",
@@ -496,6 +546,20 @@ function cancel() {
       </footer>
     </div>
   </ModalShell>
+
+  <!-- Themed confirm dialog — replaces window.confirm() for any
+       prompt the modal raises (reset overrides, reset to library,
+       save to library). Single-instance: only one prompt at a time. -->
+  <ConfirmDialog
+    :visible="confirmDialog !== null"
+    :title="confirmDialog?.title ?? ''"
+    :body="confirmDialog?.body ?? ''"
+    :confirm-label="confirmDialog?.confirmLabel ?? 'Confirm'"
+    :cancel-label="confirmDialog?.cancelLabel ?? 'Cancel'"
+    :variant="confirmDialog?.variant ?? 'default'"
+    @confirm="onConfirmDialogConfirm"
+    @cancel="onConfirmDialogCancel"
+  />
 </template>
 
 <style>
