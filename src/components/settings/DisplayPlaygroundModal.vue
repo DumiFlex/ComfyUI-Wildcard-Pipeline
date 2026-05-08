@@ -45,6 +45,7 @@ type A11yMode = "auto" | "on" | "off";
 type ValidationMode = "strict" | "relaxed" | "permissive";
 type ToastLifetime = "short" | "default" | "long" | "sticky";
 type CollapseMode = "independent" | "accordion";
+type ColorIntensity = "muted" | "standard" | "vivid";
 
 function asString(v: unknown, fallback: string): string {
   return typeof v === "string" ? v : fallback;
@@ -68,6 +69,7 @@ const kindStyle = ref<KindStyle>("chip");
 const borderHighlight = ref<boolean>(true);
 const collapsedByDefault = ref<boolean>(false);
 const collapseMode = ref<CollapseMode>("independent");
+const colorIntensity = ref<ColorIntensity>("standard");
 const focusMode = ref<boolean>(false);
 const reduceMotion = ref<A11yMode>("auto");
 const contrast = ref<A11yMode>("auto");
@@ -90,6 +92,7 @@ function syncFromStore(): void {
   borderHighlight.value = asBool(getSettingValue("borderHighlight"), true);
   collapsedByDefault.value = asBool(getSettingValue("collapsedByDefault"), false);
   collapseMode.value = asString(getSettingValue("collapseMode"), "independent") as CollapseMode;
+  colorIntensity.value = asString(getSettingValue("colorIntensity"), "standard") as ColorIntensity;
   focusMode.value = asBool(getSettingValue("focusMode"), false);
   reduceMotion.value = asString(getSettingValue("reduceMotion"), "auto") as A11yMode;
   contrast.value = asString(getSettingValue("contrast"), "auto") as A11yMode;
@@ -112,6 +115,7 @@ watch(kindStyle, (v) => applySetting("kindStyle", v));
 watch(borderHighlight, (v) => applySetting("borderHighlight", v));
 watch(collapsedByDefault, (v) => applySetting("collapsedByDefault", v));
 watch(collapseMode, (v) => applySetting("collapseMode", v));
+watch(colorIntensity, (v) => applySetting("colorIntensity", v));
 watch(focusMode, (v) => applySetting("focusMode", v));
 watch(reduceMotion, (v) => applySetting("reduceMotion", v));
 watch(contrast, (v) => applySetting("contrast", v));
@@ -128,6 +132,7 @@ interface Defaults {
   borderHighlight: boolean;
   collapsedByDefault: boolean;
   collapseMode: CollapseMode;
+  colorIntensity: ColorIntensity;
   focusMode: boolean;
   reduceMotion: A11yMode;
   contrast: A11yMode;
@@ -145,6 +150,7 @@ const defaults: Defaults = {
   borderHighlight: true,
   collapsedByDefault: false,
   collapseMode: "independent",
+  colorIntensity: "standard",
   focusMode: false,
   reduceMotion: "auto",
   contrast: "auto",
@@ -258,6 +264,14 @@ onBeforeUnmount(() => {
                   <option value="full">Full (default)</option>
                   <option value="minimal">Minimal</option>
                   <option value="off">Off (flat)</option>
+                </select>
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Color intensity</span>
+                <select v-model="colorIntensity" class="wp-pg__select">
+                  <option value="muted">Muted (low saturation)</option>
+                  <option value="standard">Standard (default)</option>
+                  <option value="vivid">Vivid (high saturation)</option>
                 </select>
               </label>
             </fieldset>
