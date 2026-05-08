@@ -2072,7 +2072,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-mod-dots {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
+  /* Cap so a long stack of state badges (mod + drift + missing +
+   * override) doesn't push action buttons off the row. Wrap to a
+   * second line if needed — module card grows slightly taller, but
+   * the name + action cluster stay aligned. */
+  max-width: 50%;
+  justify-content: flex-end;
 }
 .wp-mod-dots:empty { display: none; }
 
