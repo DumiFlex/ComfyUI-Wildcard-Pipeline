@@ -910,3 +910,117 @@ describe("ContextWidget conflict badges", () => {
     expect(badge.text()).toBe("missing var");
   });
 });
+
+// ── Phase 3b: collapse stack mode (independent vs accordion) ───────────────
+// Verifies that toggleCollapsed reads getCollapseMode() and acts accordingly:
+// independent (default) leaves siblings alone, accordion forces only one
+// expanded at a time. Collapsing never auto-expands siblings in either mode.
+
+describe("ContextWidget collapse stack mode", () => {
+  beforeEach(async () => {
+    const { _resetDisplayStateForTesting } = await import("../../extension/settings");
+    _resetDisplayStateForTesting();
+  });
+
+  /** Build a per-mode stub app whose extensionManager.setting.get returns
+   *  the requested collapseMode (and safe defaults for everything else). */
+  function makeAppFor(mode: "independent" | "accordion") {
+    return {
+      extensionManager: {
+        setting: {
+          get: (id: string) => {
+            if (id === "wildcardPipeline.display.collapseMode") return mode;
+            if (id === "wildcardPipeline.display.density") return "comfortable";
+            if (id === "wildcardPipeline.display.decoration") return "full";
+            if (id === "wildcardPipeline.display.indicatorStyle") return "badge";
+            if (id === "wildcardPipeline.display.borderHighlight") return true;
+            if (id === "wildcardPipeline.display.collapsedByDefault") return false;
+            if (id === "wildcardPipeline.display.focusMode") return false;
+            if (id === "wildcardPipeline.display.kindStyle") return "chip";
+            if (id === "wildcardPipeline.behavior.validation") return "strict";
+            if (id === "wildcardPipeline.behavior.toastLifetime") return "default";
+            if (id === "wildcardPipeline.behavior.suppressInfoToasts") return false;
+            if (id === "wildcardPipeline.behavior.newModuleDisabled") return false;
+            return undefined;
+          },
+        },
+      },
+    };
+  }
+
+  /** Mount three fixed_values modules with explicit collapsed state per index. */
+  function mountThreeWithCollapse(states: boolean[]) {
+    const modules = states.map((collapsed, i) => ({
+      id: `mod${i}aaaa`,
+      type: "fixed_values",
+      enabled: true,
+      meta: { name: `m${i}`, description: "", tags: [] },
+      entries: [{ variable_name: `v${i}`, value: "x" }],
+      payload: {},
+      collapsed,
+    }));
+    return mount(ContextWidget, {
+      props: {
+        nodeId: 9100,
+        initialJson: JSON.stringify({ version: 1, modules }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+  }
+
+  /** Read collapse state from chevron icon classes (caret-right = collapsed). */
+  function readCollapsed(wrapper: ReturnType<typeof mountThreeWithCollapse>) {
+    return wrapper
+      .findAll(".wp-collapse-btn i.pi")
+      .map((el) => el.classes().includes("pi-caret-right"));
+  }
+
+  it("independent mode: expanding one leaves siblings unchanged", async () => {
+    const { applyDisplayPrefs } = await import("../../extension/settings");
+    applyDisplayPrefs(makeAppFor("independent"));
+
+    // m0+m1 collapsed, m2 expanded
+    const wrapper = mountThreeWithCollapse([true, true, false]);
+    expect(readCollapsed(wrapper)).toEqual([true, true, false]);
+
+    // Click expand on m0 → m0 becomes expanded; m2 stays expanded.
+    const btns = wrapper.findAll(".wp-collapse-btn");
+    await btns[0].trigger("click");
+    await flushPromises();
+
+    expect(readCollapsed(wrapper)).toEqual([false, true, false]);
+  });
+
+  it("accordion mode: expanding one collapses every sibling", async () => {
+    const { applyDisplayPrefs } = await import("../../extension/settings");
+    applyDisplayPrefs(makeAppFor("accordion"));
+
+    // m0+m1 collapsed, m2 expanded
+    const wrapper = mountThreeWithCollapse([true, true, false]);
+    expect(readCollapsed(wrapper)).toEqual([true, true, false]);
+
+    // Click expand on m0 → m0 expanded; accordion collapses m2.
+    const btns = wrapper.findAll(".wp-collapse-btn");
+    await btns[0].trigger("click");
+    await flushPromises();
+
+    expect(readCollapsed(wrapper)).toEqual([false, true, true]);
+  });
+
+  it("accordion mode: collapsing a module does not auto-expand siblings", async () => {
+    const { applyDisplayPrefs } = await import("../../extension/settings");
+    applyDisplayPrefs(makeAppFor("accordion"));
+
+    // m0+m1 collapsed, m2 expanded
+    const wrapper = mountThreeWithCollapse([true, true, false]);
+    expect(readCollapsed(wrapper)).toEqual([true, true, false]);
+
+    // Click collapse on m2 → m2 collapsed; siblings stay where they were.
+    const btns = wrapper.findAll(".wp-collapse-btn");
+    await btns[2].trigger("click");
+    await flushPromises();
+
+    expect(readCollapsed(wrapper)).toEqual([true, true, true]);
+  });
+});

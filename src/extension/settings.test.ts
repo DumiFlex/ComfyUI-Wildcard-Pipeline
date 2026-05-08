@@ -32,6 +32,7 @@ const SETTING_VALIDATION = "wildcardPipeline.behavior.validation";
 const SETTING_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
 const SETTING_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 const SETTING_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
+const SETTING_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
 
 interface FakeMQL {
   matches: boolean;
@@ -109,6 +110,7 @@ interface DisplayOverrides {
   toastLifetime?: string;
   suppressInfoToasts?: boolean;
   newModuleDisabled?: boolean;
+  collapseMode?: string;
 }
 
 function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
@@ -129,6 +131,7 @@ function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
           if (id === SETTING_TOAST_LIFETIME) return overrides.toastLifetime ?? "default";
           if (id === SETTING_SUPPRESS_INFO) return overrides.suppressInfoToasts ?? false;
           if (id === SETTING_NEW_DISABLED) return overrides.newModuleDisabled ?? false;
+          if (id === SETTING_COLLAPSE_MODE) return overrides.collapseMode ?? "independent";
           return undefined;
         },
       },
@@ -771,6 +774,76 @@ describe("a11y settings", () => {
       expect(toasts.value).toHaveLength(1);
       expect(toasts.value[0].message).toContain("disabled");
       expect(toasts.value[0].singletonKey).toBe("wp-new-module-disabled");
+    });
+  });
+
+  describe("collapseMode combo", () => {
+    it("defaults to independent on boot", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+
+      const settings = buildSettings(makeApp());
+      const entry = settings.find((s) => s.id === SETTING_COLLAPSE_MODE);
+      expect(entry?.defaultValue).toBe("independent");
+    });
+
+    it("reads stored 'accordion' on boot", async () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ collapseMode: "accordion" }));
+
+      const { getCollapseMode } = await import("./settings");
+      expect(getCollapseMode()).toBe("accordion");
+    });
+
+    it("onChange flips state + fires toast post-boot", async () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_COLLAPSE_MODE)?.onChange?.("accordion", "independent");
+
+      const { getCollapseMode } = await import("./settings");
+      expect(getCollapseMode()).toBe("accordion");
+      expect(toasts.value).toHaveLength(1);
+      expect(toasts.value[0].message).toContain("ACCORDION");
+      expect(toasts.value[0].singletonKey).toBe("wp-collapse-mode");
+    });
+
+    it("onChange suppresses toast during boot window", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      // boot NOT completed
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_COLLAPSE_MODE)?.onChange?.("accordion", "independent");
+
+      expect(toasts.value).toHaveLength(0);
+    });
+
+    it("onChange with same value is a no-op (no toast)", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ collapseMode: "accordion" }));
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_COLLAPSE_MODE)?.onChange?.("accordion", "accordion");
+
+      expect(toasts.value).toHaveLength(0);
+    });
+
+    it("invalid stored value falls back to independent", async () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ collapseMode: "garbage" }));
+
+      const { getCollapseMode } = await import("./settings");
+      expect(getCollapseMode()).toBe("independent");
     });
   });
 
