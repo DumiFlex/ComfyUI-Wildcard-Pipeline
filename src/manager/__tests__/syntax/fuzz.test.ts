@@ -5,7 +5,7 @@
  * Fixed seed for reproducibility.
  */
 import { describe, expect, it } from "vitest";
-import { tokenizeRich } from "../../utils/richTokenize";
+import { tokenizeRich } from "../../../widgets/richTokenize";
 import { resolveTokens } from "../../utils/resolveTokens";
 import { mulberry32 } from "./_rng-helper";
 

@@ -12,7 +12,7 @@
  * token captures into `meta.uuid`. No suffix extraction needed.
  */
 import type { ModuleRow, WildcardOption, WildcardPayload } from "../api/types";
-import { tokenizeRich } from "./richTokenize";
+import { tokenizeRich } from "../../widgets/richTokenize";
 import { toIdentifier } from "./slug";
 
 export interface SyntaxFlags {

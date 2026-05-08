@@ -17,7 +17,7 @@ import Field from "../components/ui/Field.vue";
 import Chip from "../components/ui/Chip.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
-import { tokenizeRich } from "../utils/richTokenize";
+import { tokenizeRich } from "../../widgets/richTokenize";
 import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";

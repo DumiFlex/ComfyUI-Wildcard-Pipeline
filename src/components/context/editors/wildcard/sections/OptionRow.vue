@@ -7,6 +7,8 @@ import {
   type InstanceLike,
   type WildcardOption,
 } from "../probability";
+import { tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
+import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
 
 interface OptionFull extends WildcardOption {
   value: string;
@@ -24,6 +26,36 @@ const emit = defineEmits<{
 }>();
 
 const enabled = computed(() => isEnabled(props.option, props.instance));
+
+/**
+ * Tokenize the option's `value` so nested `@{uuid}` refs render with
+ * resolved names + colour, brace-blocks (`{a|b|c}`) get the warn hue,
+ * and `$vars` look like the SPA editor's chip style. Reads
+ * `cacheVersion` so the computed re-runs when the preview-resolver
+ * lands a new uuid → name mapping.
+ *
+ * Side-effect: kicks `ensure(...)` for unseen uuids the first time the
+ * row tokenizes — fires-and-forgets, the resolver picks up missing
+ * names asynchronously and bumps `cacheVersion`.
+ */
+const tokens = computed<RichToken[]>(() => {
+  void cacheVersion.value;
+  const toks = tokenizeRich(props.option.value ?? "");
+  const uuids = toks
+    .filter((t) => t.kind === "ref")
+    .map((t) => t.meta?.uuid)
+    .filter((u): u is string => typeof u === "string");
+  if (uuids.length > 0) ensure(uuids);
+  return toks;
+});
+
+function refDisplay(uuid: string | undefined, raw: string): string {
+  if (!uuid) return raw;
+  const hit = lookup(uuid);
+  if (hit?.varBinding && hit.varBinding.trim()) return `@${hit.varBinding.trim()}`;
+  if (hit?.name && hit.name.trim()) return `@${hit.name.trim()}`;
+  return raw;
+}
 
 /** Distinguish two reasons a row might be disabled:
  *   - per-option toggle off (`enabled_options` array excludes this id)
@@ -115,7 +147,28 @@ function fmtPct(p: number): string {
               stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </span>
-    <span class="opt__name" data-test="opt-name">{{ option.value }}</span>
+    <span class="opt__name" data-test="opt-name">
+      <template v-for="(tok, idx) in tokens" :key="idx">
+        <span
+          v-if="tok.kind === 'ref'"
+          class="opt__tok opt__tok--ref"
+          :data-uuid="tok.meta?.uuid"
+        >{{ refDisplay(tok.meta?.uuid, tok.raw) }}</span>
+        <span
+          v-else-if="tok.kind === 'var'"
+          class="opt__tok opt__tok--var"
+        >{{ tok.raw }}</span>
+        <span
+          v-else-if="tok.kind === 'dp-brace' || tok.kind === 'dp-multi'"
+          class="opt__tok opt__tok--dp"
+        >{{ tok.raw }}</span>
+        <span
+          v-else-if="tok.kind === 'escape'"
+          class="opt__tok opt__tok--escape"
+        >{{ tok.raw }}</span>
+        <template v-else>{{ tok.raw }}</template>
+      </template>
+    </span>
     <span class="opt__prob">
       <span class="opt__prob-bar" aria-hidden="true">
         <span :style="{ width: `${Math.round(probability * 100)}%` }" />
@@ -207,10 +260,48 @@ function fmtPct(p: number): string {
 .opt__name {
   font: 11px var(--wp-font-mono);
   color: var(--wp-text);
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  line-height: 1.4;
 }
 .opt--off .opt__name {
   color: var(--wp-text-dim, var(--wp-text3));
   text-decoration: line-through;
+}
+/* Inline-syntax chips inside option values. Mirror the SPA's
+ * rich-text.css colour palette so an `@nestedName` reads the same
+ * here as in the SPA editor — wildcard pink for refs, accent violet
+ * for vars, warn yellow for choice-blocks, muted for escapes. */
+.opt__tok {
+  border-radius: 3px;
+  padding: 0 3px;
+  font-weight: 500;
+}
+.opt__tok--ref {
+  color: var(--wp-kind-wildcard, #f0abfc);
+  background: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 45%, transparent);
+}
+.opt__tok--var {
+  color: var(--wp-accent-text-strong, var(--wp-accent-text, #c4b5fd));
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
+}
+.opt__tok--dp {
+  color: var(--wp-warn, #fcd34d);
+  font-weight: 600;
+}
+.opt__tok--escape {
+  color: var(--wp-text-muted, var(--wp-text2));
+  opacity: 0.7;
+}
+.opt--off .opt__tok {
+  background: transparent;
+  box-shadow: none;
+  text-decoration: line-through;
+  opacity: 0.65;
 }
 .opt__prob {
   display: flex;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tokenizeRich, mirrorHtmlWithIdx } from "../utils/richTokenize";
+import { tokenizeRich, mirrorHtmlWithIdx } from "../../widgets/richTokenize";
 
 describe("tokenizeRich", () => {
   it("returns empty array for empty input", () => {

@@ -15,7 +15,7 @@
  * Reference: docs/design-handoff/wildcardpipeline/project/rich-input.jsx.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { tokenizeRich } from "../utils/richTokenize";
+import { tokenizeRich } from "../../widgets/richTokenize";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 
 interface Props {

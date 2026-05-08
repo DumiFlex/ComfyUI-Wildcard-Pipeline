@@ -3,7 +3,7 @@
  * tokenizeRich, dispatching by kind. Used by Test Runner; same semantics
  * as the Python engine.
  */
-import { tokenizeRich, type RichToken } from "./richTokenize";
+import { tokenizeRich, type RichToken } from "../../widgets/richTokenize";
 
 export type SurfaceKind = "wildcard" | "combine" | "derivation" | "assembler";
 

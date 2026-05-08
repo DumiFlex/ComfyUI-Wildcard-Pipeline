@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import OptionRow from "./OptionRow.vue";
+import { _resetForTests, _setForTests } from "../../../../../extension/preview-resolver";
 
 const baseOption = { id: "o1", value: "red", weight: 1, sub_category: "warm" };
 const allOptions = [
@@ -9,6 +10,8 @@ const allOptions = [
 ];
 
 describe("OptionRow", () => {
+  beforeEach(() => _resetForTests());
+
   it("renders option name + category label", () => {
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: {} },
@@ -154,5 +157,35 @@ describe("OptionRow", () => {
     const down = w.find<HTMLButtonElement>('[data-test="opt-weight-down"]').element;
     expect(up.disabled).toBe(true);
     expect(down.disabled).toBe(true);
+  });
+
+  it("renders @{uuid} ref token with raw uuid form when name not yet cached", () => {
+    const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_category: "warm" };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
+    expect(ref.exists()).toBe(true);
+    expect(ref.attributes("data-uuid")).toBe("a361dbdc");
+    // Until preview-resolver lands the lookup, raw form is the fallback.
+    expect(ref.text()).toBe("@{a361dbdc}");
+  });
+
+  it("renders @{uuid} ref as @<varBinding> once resolver caches the entry", () => {
+    _setForTests("a361dbdc", { name: "subject", varBinding: "subject_name" });
+    const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_category: "warm" };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
+    expect(ref.text()).toBe("@subject_name");
+  });
+
+  it("renders {a|b|c} brace block as a dp token (warn colour)", () => {
+    const opt = { id: "o9", value: "color {a|b|c}", weight: 1, sub_category: "warm" };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find('[data-test="opt-name"] .opt__tok--dp').exists()).toBe(true);
+  });
+
+  it("renders $varname as a var token", () => {
+    const opt = { id: "o9", value: "uses $style here", weight: 1, sub_category: "warm" };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find('[data-test="opt-name"] .opt__tok--var').text()).toBe("$style");
   });
 });

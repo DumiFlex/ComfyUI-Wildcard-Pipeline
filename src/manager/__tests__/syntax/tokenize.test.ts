@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { tokenizeRich, type RichToken } from "../../utils/richTokenize";
+import { tokenizeRich, type RichToken } from "../../../widgets/richTokenize";
 
 const EXPECTED_CORPUS_VERSION = 1;
 

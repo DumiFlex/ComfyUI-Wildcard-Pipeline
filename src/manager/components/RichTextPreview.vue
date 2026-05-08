@@ -14,7 +14,7 @@
  * delegation on the wrapper so we keep the single-`v-html` render path.
  */
 import { computed } from "vue";
-import { tokenizeRich } from "../utils/richTokenize";
+import { tokenizeRich } from "../../widgets/richTokenize";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 
 interface Props {
