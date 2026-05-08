@@ -33,6 +33,7 @@ const SETTING_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
 const SETTING_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 const SETTING_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
 const SETTING_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
+const SETTING_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
 
 interface FakeMQL {
   matches: boolean;
@@ -111,6 +112,7 @@ interface DisplayOverrides {
   suppressInfoToasts?: boolean;
   newModuleDisabled?: boolean;
   collapseMode?: string;
+  colorIntensity?: string;
 }
 
 function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
@@ -132,6 +134,7 @@ function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
           if (id === SETTING_SUPPRESS_INFO) return overrides.suppressInfoToasts ?? false;
           if (id === SETTING_NEW_DISABLED) return overrides.newModuleDisabled ?? false;
           if (id === SETTING_COLLAPSE_MODE) return overrides.collapseMode ?? "independent";
+          if (id === SETTING_COLOR_INTENSITY) return overrides.colorIntensity ?? "standard";
           return undefined;
         },
       },
@@ -844,6 +847,88 @@ describe("a11y settings", () => {
 
       const { getCollapseMode } = await import("./settings");
       expect(getCollapseMode()).toBe("independent");
+    });
+  });
+
+  describe("colorIntensity combo", () => {
+    it("defaults to standard on boot + flips body class", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+
+      expect(document.body.classList.contains("wp-color-standard")).toBe(true);
+      expect(document.body.classList.contains("wp-color-muted")).toBe(false);
+      expect(document.body.classList.contains("wp-color-vivid")).toBe(false);
+
+      const settings = buildSettings(makeApp());
+      const entry = settings.find((s) => s.id === SETTING_COLOR_INTENSITY);
+      expect(entry?.defaultValue).toBe("standard");
+    });
+
+    it("reads stored 'muted' on boot + flips body class", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ colorIntensity: "muted" }));
+
+      expect(document.body.classList.contains("wp-color-muted")).toBe(true);
+      expect(document.body.classList.contains("wp-color-standard")).toBe(false);
+    });
+
+    it("reads stored 'vivid' on boot + flips body class", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ colorIntensity: "vivid" }));
+
+      expect(document.body.classList.contains("wp-color-vivid")).toBe(true);
+      expect(document.body.classList.contains("wp-color-standard")).toBe(false);
+    });
+
+    it("onChange flips body class + fires toast post-boot", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_COLOR_INTENSITY)?.onChange?.("vivid", "standard");
+
+      expect(document.body.classList.contains("wp-color-vivid")).toBe(true);
+      expect(document.body.classList.contains("wp-color-standard")).toBe(false);
+      expect(toasts.value).toHaveLength(1);
+      expect(toasts.value[0].message).toContain("VIVID");
+      expect(toasts.value[0].singletonKey).toBe("wp-color-intensity");
+    });
+
+    it("onChange suppresses toast during boot window", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      // boot NOT completed
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_COLOR_INTENSITY)?.onChange?.("muted", "standard");
+
+      expect(toasts.value).toHaveLength(0);
+    });
+
+    it("onChange with same value is a no-op (no toast)", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ colorIntensity: "vivid" }));
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_COLOR_INTENSITY)?.onChange?.("vivid", "vivid");
+
+      expect(toasts.value).toHaveLength(0);
+    });
+
+    it("invalid stored value falls back to standard", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ colorIntensity: "garbage" }));
+
+      expect(document.body.classList.contains("wp-color-standard")).toBe(true);
     });
   });
 

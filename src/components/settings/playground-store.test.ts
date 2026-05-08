@@ -137,11 +137,13 @@ describe("playground-store", () => {
       applySetting("kindStyle", "icon");
       applySetting("focusMode", true);
       applySetting("collapseMode", "accordion");
+      applySetting("colorIntensity", "muted");
 
       expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.density", "compact");
       expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.kindStyle", "icon");
       expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.focusMode", true);
       expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.collapseMode", "accordion");
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.colorIntensity", "muted");
     });
 
     it("a11y keys (reduceMotion, contrast) go under wildcardPipeline.a11y.*", () => {
