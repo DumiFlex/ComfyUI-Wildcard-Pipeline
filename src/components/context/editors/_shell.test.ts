@@ -4,7 +4,9 @@ import { INSTANCE_FIELDS_PER_KIND, INSTANCE_TAB_VISIBLE } from "./_shell";
 describe("INSTANCE_FIELDS_PER_KIND registry", () => {
   it("lists exactly the fields each kind exposes per spec §5.5", () => {
     expect(INSTANCE_FIELDS_PER_KIND.wildcard).toEqual([
-      "variable_binding", "mode", "pinned_option_id", "enabled_options",
+      // v2 dropped `mode` + `pinned_option_id` — see
+      // docs/superpowers/specs/2026-05-08-instance-overrides-v2-design.md §6.1.
+      "variable_binding", "enabled_options",
       "option_weights", "category_filter", "locked_seed", "internal",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.fixed_values).toEqual(["values_overrides"]);

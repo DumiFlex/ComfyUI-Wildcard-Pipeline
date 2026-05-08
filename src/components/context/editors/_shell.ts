@@ -31,7 +31,10 @@ export type InstanceFieldKey =
  */
 export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]> = {
   wildcard: [
-    "variable_binding", "mode", "pinned_option_id", "enabled_options",
+    // `mode` + `pinned_option_id` dropped in v2 — resolve mode is
+    // implicit in pool state. Engine handler still reads them on
+    // legacy snapshots; UI never writes them.
+    "variable_binding", "enabled_options",
     "option_weights", "category_filter", "locked_seed", "internal",
   ],
   fixed_values: ["values_overrides"],

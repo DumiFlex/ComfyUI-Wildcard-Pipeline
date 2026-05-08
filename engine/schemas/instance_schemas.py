@@ -21,10 +21,12 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "enabled_options": "list[string]",
         "option_weights": "dict[string,number]",
         "category_filter": "list[string]",
-        "mode": "string",
-        "pinned_option_id": "string",
         "locked_seed": "number",
         "internal": "boolean",
+        # `mode` and `pinned_option_id` removed in v2 — resolve mode is
+        # implicit in pool state. Engine handler still reads them when
+        # present in legacy snapshots; the schema validator now flags
+        # them as unknown fields with an advisory warning.
     },
     "fixed_values": {
         "values_overrides": "list[dict]",
