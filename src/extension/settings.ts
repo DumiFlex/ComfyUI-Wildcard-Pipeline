@@ -11,6 +11,7 @@
 // Side-effect import — owns the a11y CSS chunk so cssInjectedByJsPlugin
 // can attach the runtime injection to a JS module. A bare CSS import
 // from main.ts emits a chunk with no JS owner and the plugin warns.
+import { reactive } from "vue";
 import "../components/shared/a11y.css";
 import "../components/shared/display-prefs.css";
 import { pushToast } from "../components/shared/toast-store";
@@ -21,6 +22,8 @@ export type Density = "comfortable" | "compact" | "minimal";
 export type Decoration = "full" | "minimal" | "off";
 export type IndicatorStyle = "both" | "badge" | "dot";
 export type KindStyle = "both" | "icon" | "chip";
+export type ValidationMode = "strict" | "relaxed" | "permissive";
+export type ToastLifetime = "short" | "default" | "long" | "sticky";
 
 /**
  * Setting widget types ComfyUI's settings panel can render natively.
@@ -95,6 +98,11 @@ const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
 const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 
+const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
+const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
+const SETTING_ID_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
+const SETTING_ID_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
+
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
   { text: "Always reduce", value: "on" },
@@ -131,6 +139,19 @@ const KIND_STYLE_OPTIONS = [
   { text: "Both (verbose)", value: "both" },
 ];
 
+const VALIDATION_OPTIONS = [
+  { text: "Strict (show all conflicts)", value: "strict" },
+  { text: "Relaxed (hide info-level overrides)", value: "relaxed" },
+  { text: "Permissive (scanner off — no warnings)", value: "permissive" },
+];
+
+const TOAST_LIFETIME_OPTIONS = [
+  { text: "Short (3 s)", value: "short" },
+  { text: "Default (5 s)", value: "default" },
+  { text: "Long (10 s)", value: "long" },
+  { text: "Sticky (no auto-dismiss)", value: "sticky" },
+];
+
 interface ExtensionManager {
   setting?: { get(id: string): unknown };
 }
@@ -143,7 +164,14 @@ interface AppLike {
 // extensionManager.setting.get() to reflect the new value (it can lag
 // the onChange fire by a tick, which made settings only "stick" after a
 // hard refresh in the live UI).
-const state: {
+// Wrap in `reactive()` so consumers reading via getValidationMode() /
+// getCollapsedByDefault() / etc. get Vue dependency tracking — when a
+// computed in ContextWidget reads getValidationMode(), Vue tracks the
+// underlying `state.validation` access; flipping the mode via onChange
+// then triggers the computed to recompute. Without `reactive`, the
+// `conflicts` filter would stay stale until something else upstream
+// (props, value) happened to invalidate the cache.
+const state = reactive<{
   reduceMotion: A11yMode;
   contrast: A11yMode;
   density: Density;
@@ -153,7 +181,11 @@ const state: {
   collapsedByDefault: boolean;
   focusMode: boolean;
   kindStyle: KindStyle;
-} = {
+  validation: ValidationMode;
+  toastLifetime: ToastLifetime;
+  suppressInfoToasts: boolean;
+  newModuleDisabled: boolean;
+}>({
   reduceMotion: "auto",
   contrast: "auto",
   density: "comfortable",
@@ -163,7 +195,11 @@ const state: {
   collapsedByDefault: false,
   focusMode: false,
   kindStyle: "chip",
-};
+  validation: "strict",
+  toastLifetime: "default",
+  suppressInfoToasts: false,
+  newModuleDisabled: false,
+});
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
   return v === "on" || v === "off" || v === "auto" ? v : fallback;
@@ -185,6 +221,14 @@ function asKindStyle(v: unknown, fallback: KindStyle): KindStyle {
   return v === "both" || v === "icon" || v === "chip" ? v : fallback;
 }
 
+function asValidation(v: unknown, fallback: ValidationMode): ValidationMode {
+  return v === "strict" || v === "relaxed" || v === "permissive" ? v : fallback;
+}
+
+function asToastLifetime(v: unknown, fallback: ToastLifetime): ToastLifetime {
+  return v === "short" || v === "default" || v === "long" || v === "sticky" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
@@ -194,6 +238,10 @@ export function _resetDisplayStateForTesting(): void {
   state.collapsedByDefault = false;
   state.focusMode = false;
   state.kindStyle = "chip";
+  state.validation = "strict";
+  state.toastLifetime = "default";
+  state.suppressInfoToasts = false;
+  state.newModuleDisabled = false;
 }
 
 /**
@@ -204,6 +252,52 @@ export function _resetDisplayStateForTesting(): void {
  */
 export function getCollapsedByDefault(): boolean {
   return state.collapsedByDefault;
+}
+
+/**
+ * Read accessor for the conflict-scanner mode. Conflict consumers
+ * (ContextWidget, subgraph-badge) call this to decide which conflicts
+ * to surface:
+ *   - "strict"     → all conflicts visible (current default)
+ *   - "relaxed"    → drop info-severity (shadows_upstream is hidden)
+ *   - "permissive" → empty array (scanner-off)
+ */
+export function getValidationMode(): ValidationMode {
+  return state.validation;
+}
+
+/**
+ * Read accessor for the default toast lifetime in milliseconds.
+ * `pushToast` reads this when no explicit `lifeMs` option is passed,
+ * so user changes to the setting reach all callers without per-callsite
+ * threading. Returns 0 for "sticky" — `pushToast` interprets 0 as
+ * "no auto-dismiss". */
+export function getToastLifetimeMs(): number {
+  switch (state.toastLifetime) {
+    case "short":   return 3000;
+    case "long":    return 10000;
+    case "sticky":  return 0;
+    case "default": default: return 5000;
+  }
+}
+
+/**
+ * Read accessor for the suppress-info-toasts boolean. The toast store
+ * checks this on each push — when true, info-severity toasts are
+ * dropped silently. Used to filter out chatty status confirmations
+ * (a11y mode toggles, density changes, etc.) without losing the
+ * warning + error severities, which always render. */
+export function shouldSuppressInfoToasts(): boolean {
+  return state.suppressInfoToasts;
+}
+
+/**
+ * Read accessor for the newModuleDisabled boolean. ContextWidget
+ * checks this when embedding new modules from the picker — when true,
+ * each new module starts with `enabled: false` so users can configure
+ * it before letting it run. Existing modules are unaffected. */
+export function getNewModuleDisabled(): boolean {
+  return state.newModuleDisabled;
 }
 
 // Toast feedback gate. ComfyUI fires onChange for stored values during
@@ -258,6 +352,27 @@ function describeKindStyle(mode: KindStyle): string {
   if (mode === "both") return "Module type: chip + icon";
   if (mode === "icon") return "Module type: icon only";
   return "Module type: chip only";
+}
+
+function describeValidation(mode: ValidationMode): string {
+  if (mode === "permissive") return "Validation: PERMISSIVE (scanner off)";
+  if (mode === "relaxed") return "Validation: RELAXED";
+  return "Validation: STRICT";
+}
+
+function describeToastLifetime(mode: ToastLifetime): string {
+  if (mode === "sticky") return "Toast lifetime: STICKY";
+  if (mode === "short") return "Toast lifetime: 3 s";
+  if (mode === "long") return "Toast lifetime: 10 s";
+  return "Toast lifetime: 5 s";
+}
+
+function describeSuppressInfo(on: boolean): string {
+  return `Info-severity toasts: ${on ? "SUPPRESSED" : "shown"}`;
+}
+
+function describeNewModuleDisabled(on: boolean): string {
+  return on ? "New modules start disabled" : "New modules start enabled";
 }
 
 function describeBorder(on: boolean): string {
@@ -349,6 +464,13 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.collapsedByDefault = app.extensionManager?.setting?.get(SETTING_ID_COLLAPSED) === true;
   state.focusMode = app.extensionManager?.setting?.get(SETTING_ID_FOCUS) === true;
   state.kindStyle = asKindStyle(app.extensionManager?.setting?.get(SETTING_ID_KIND_STYLE), "chip");
+  // Phase 2 — behavior axes. None of these flip body classes (they
+  // gate consumer logic in conflicts.ts / toast-store / ContextWidget
+  // add path), but they read from the same store at boot.
+  state.validation = asValidation(app.extensionManager?.setting?.get(SETTING_ID_VALIDATION), "strict");
+  state.toastLifetime = asToastLifetime(app.extensionManager?.setting?.get(SETTING_ID_TOAST_LIFETIME), "default");
+  state.suppressInfoToasts = app.extensionManager?.setting?.get(SETTING_ID_SUPPRESS_INFO) === true;
+  state.newModuleDisabled = app.extensionManager?.setting?.get(SETTING_ID_NEW_DISABLED) === true;
   syncMarkers();
 }
 
@@ -680,6 +802,98 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeContrast(next), {
             severity: "info",
             singletonKey: "a11y-contrast",
+          });
+        }
+      },
+    },
+    // ── Behavior axes (Phase 2) ──────────────────────────────────
+    // Live in their own "Behavior" section so users browsing the
+    // panel can scan visual axes (Display) separately from runtime
+    // gates (Behavior). Section sorts after Display alphabetically.
+    {
+      id: SETTING_ID_VALIDATION,
+      name: "Validation strictness",
+      type: "combo",
+      options: VALIDATION_OPTIONS,
+      defaultValue: "strict",
+      tooltip:
+        "How aggressively the conflict scanner surfaces issues. " +
+        "Permissive turns it off — use only if you know what you're doing.",
+      category: ["Wildcard Pipeline", "Behavior", "Validation"],
+      onChange: (newVal) => {
+        const next = asValidation(newVal, "strict");
+        const changed = next !== state.validation;
+        state.validation = next;
+        if (bootCompleted && changed) {
+          pushToast(describeValidation(next), {
+            severity: next === "permissive" ? "warning" : "info",
+            singletonKey: "wp-validation",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_TOAST_LIFETIME,
+      name: "Toast lifetime",
+      type: "combo",
+      options: TOAST_LIFETIME_OPTIONS,
+      defaultValue: "default",
+      tooltip: "How long status toasts stay on screen before auto-dismissing.",
+      category: ["Wildcard Pipeline", "Behavior", "Toast lifetime"],
+      onChange: (newVal) => {
+        const next = asToastLifetime(newVal, "default");
+        const changed = next !== state.toastLifetime;
+        state.toastLifetime = next;
+        if (bootCompleted && changed) {
+          pushToast(describeToastLifetime(next), {
+            severity: "info",
+            singletonKey: "wp-toast-lifetime",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_SUPPRESS_INFO,
+      name: "Suppress info-severity toasts",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "When on, info toasts (status confirmations) are filtered out. " +
+        "Warnings + errors still show.",
+      category: ["Wildcard Pipeline", "Behavior", "Suppress info toasts"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.suppressInfoToasts;
+        state.suppressInfoToasts = next;
+        if (bootCompleted && changed) {
+          // This toast is allowed to show even when suppressing info,
+          // because the user just chose the suppression — they need
+          // confirmation. Use warning severity so it bypasses any
+          // filter logic that reads state lazily.
+          pushToast(describeSuppressInfo(next), {
+            severity: "warning",
+            singletonKey: "wp-suppress-info",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_NEW_DISABLED,
+      name: "New modules start disabled",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "When on, modules added from the picker start with their toggle off. " +
+        "Useful when configuring before letting them run.",
+      category: ["Wildcard Pipeline", "Behavior", "New module default"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.newModuleDisabled;
+        state.newModuleDisabled = next;
+        if (bootCompleted && changed) {
+          pushToast(describeNewModuleDisabled(next), {
+            severity: "info",
+            singletonKey: "wp-new-module-disabled",
           });
         }
       },
