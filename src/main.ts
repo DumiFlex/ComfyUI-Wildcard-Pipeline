@@ -83,6 +83,12 @@ const settings = settingsMod.buildSettings(app);
 settingsMod.applyA11yClasses(app);
 settingsMod.applyDisplayPrefs(app);
 settingsMod.watchA11ySystemPrefs();
+// Wire the toast store to read its default lifeMs + suppress-info
+// filter from the settings store. Setter pattern avoids the circular
+// import that would form if toast-store imported from settings
+// directly (settings already imports pushToast).
+toastStoreMod.setLifetimeProvider(() => settingsMod.getToastLifetimeMs());
+toastStoreMod.setSuppressInfoFilter(() => settingsMod.shouldSuppressInfoToasts());
 // Dev-only: expose `wpDebugA11y` on window so contributors can flip
 // reduce-motion / high-contrast classes from the DevTools console
 // without touching OS-level settings.

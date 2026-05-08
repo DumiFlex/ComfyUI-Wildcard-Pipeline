@@ -6,7 +6,11 @@ import {
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
 import { scanConflicts, labelFor as conflictLabelFor, type Conflict } from "../../extension/conflicts";
-import { getCollapsedByDefault } from "../../extension/settings";
+import {
+  getCollapsedByDefault,
+  getNewModuleDisabled,
+  getValidationMode,
+} from "../../extension/settings";
 import {
   ensure as ensurePreviewLookup,
   lookup as previewLookup,
@@ -206,12 +210,23 @@ const conflicts = computed<Conflict[]>(() => {
     ...value.value,
     modules: value.value.modules.filter((m) => m.enabled),
   };
-  return scanConflicts(
+  const all = scanConflicts(
     enabledOnly,
     props.upstreamVars,
     props.upstreamWildcardUuids,
     props.downstreamWildcardUuids,
   );
+  // Filter by user's validation-strictness preference. The accessor
+  // reads from the same module-level state map the panel onChange
+  // updates, so the computed picks up the new mode without manual
+  // wiring (computed re-evaluates whenever its reactive deps —
+  // value, props — change; the validation read is captured fresh
+  // each evaluation, which is fine here because state changes
+  // always coincide with a reactive trigger upstream).
+  const mode = getValidationMode();
+  if (mode === "permissive") return [];
+  if (mode === "relaxed") return all.filter((c) => c.severity !== "info");
+  return all;
 });
 const conflictsByModule = computed(() => {
   const out: Record<string, Conflict[]> = {};
@@ -768,11 +783,12 @@ async function onLibraryPick(uuids: string[]) {
         }));
     }
 
-    // Honor wp.collapsedByDefault — if the user opted in, every newly-
-    // embedded module renders with its body collapsed (header only).
-    // Existing modules retain their previous collapse state because
-    // we only mutate `newEntries` here, not the existing cards.
+    // Honor wp.collapsedByDefault + wp.newModuleDisabled — if the
+    // user opted into either, every newly-embedded module respects
+    // the preference. Existing modules retain their previous state
+    // because we only mutate `newEntries` here, not existing cards.
     const startCollapsed = getCollapsedByDefault();
+    const startDisabled = getNewModuleDisabled();
 
     // Append picks first (in input order) so user-picked rows land
     // before any transitive deps in the resulting card list.
@@ -785,7 +801,7 @@ async function onLibraryPick(uuids: string[]) {
       newEntries.push({
         id: uuid,
         type: entry.type as ModuleEntry["type"],
-        enabled: true,
+        enabled: !startDisabled,
         meta: { name: entry.name, library_name: entry.name },
         entries: entriesFromSnapshot(entry),
         payload: entry.payload,
@@ -801,7 +817,7 @@ async function onLibraryPick(uuids: string[]) {
       newEntries.push({
         id: uuid,
         type: entry.type as ModuleEntry["type"],
-        enabled: true,
+        enabled: !startDisabled,
         meta: { name: entry.name, library_name: entry.name },
         entries: entriesFromSnapshot(entry),
         payload: entry.payload,
