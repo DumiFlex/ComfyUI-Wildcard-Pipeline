@@ -12,22 +12,50 @@
  *   2. fixed_values module with no state markers — clean kind-chip
  *      styling, different border-left color
  *   3. combine module (clean) — third kind-color contrast
- *   4. wildcard module disabled (toggle off, dimmed) — shows the
- *      `wp-disabled` styling so users see what muted modules look
- *      like at the chosen density
+ *   4. wildcard module starts disabled — shows the wp-disabled
+ *      stripe pattern; user can flip it back on to test the toggle
  *
- * The mockup is a static DOM tree with the same class names
- * ContextWidget uses, so the body-class CSS rules in display-prefs.css
- * (density tokens, indicator hide rules, kind-style hide rules,
- * border-highlight off, etc.) apply automatically.
+ * Each module's enable + collapse state is reactive so users can
+ * actually interact with the mockup:
+ *   - Click the checkbox to flip enable → see disabled stripe pattern
+ *     toggle (and the no-motion sweep neutralizes the transition if
+ *     reduce-motion is on)
+ *   - Click the chevron to collapse/expand → see the summary line
+ *     slide via the same wp-collapse Vue transition ContextWidget
+ *     uses; reduce-motion off → smooth slide, on → instant snap
  *
- * Style rules below are a SUBSET of ContextWidget's scoped styles —
- * Vue's `<style scoped>` attaches a `[data-v-*]` attribute that
- * doesn't match across components, so we duplicate just enough chrome
- * to render presentable cards. Drift risk: if ContextWidget's chrome
- * changes substantially this mockup gets stale; future refactor could
- * extract a shared module-card.css both consume.
+ * The mockup uses the same class names ContextWidget uses, so the
+ * body-class CSS rules in display-prefs.css (density tokens,
+ * indicator hide rules, kind-style hide rules, border-highlight off,
+ * etc.) apply automatically. Style rules below are a SUBSET of
+ * ContextWidget's scoped styles — Vue's `<style scoped>` attaches a
+ * `[data-v-*]` attribute that doesn't match across components, so we
+ * duplicate just enough chrome to render presentable cards. Drift
+ * risk: if ContextWidget's chrome changes substantially this mockup
+ * gets stale; future refactor could extract a shared module-card.css.
  */
+import { reactive } from "vue";
+
+interface ModuleState {
+  enabled: boolean;
+  collapsed: boolean;
+}
+
+// Per-module enable + collapse state. Defaults match the original
+// static markup: first three start enabled + expanded; the fourth
+// starts disabled + collapsed so the user immediately sees both
+// styles side-by-side.
+const state = reactive<{
+  m1: ModuleState;
+  m2: ModuleState;
+  m3: ModuleState;
+  m4: ModuleState;
+}>({
+  m1: { enabled: true,  collapsed: false },
+  m2: { enabled: true,  collapsed: false },
+  m3: { enabled: true,  collapsed: false },
+  m4: { enabled: false, collapsed: true },
+});
 </script>
 
 <template>
@@ -42,16 +70,23 @@
 
       <!-- 1. Wildcard module with all the state markers active so
            users see indicator-style + priority filter side-by-side -->
-      <div class="wp-module" data-kind="wildcard">
+      <div
+        class="wp-module"
+        :class="{ 'wp-disabled': !state.m1.enabled }"
+        data-kind="wildcard"
+      >
         <div class="wp-module-header">
           <span class="wp-drag-handle" aria-hidden="true"
             ><i class="pi pi-bars" aria-hidden="true"></i
           ></span>
-          <button class="wp-collapse-btn" type="button" tabindex="-1"
-            ><i class="pi pi-chevron-down" aria-hidden="true"></i
-          ></button>
+          <button
+            class="wp-collapse-btn"
+            type="button"
+            :title="state.m1.collapsed ? 'Expand' : 'Collapse'"
+            @click="state.m1.collapsed = !state.m1.collapsed"
+          ><i :class="['pi', state.m1.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
-            <input type="checkbox" checked tabindex="-1" />
+            <input v-model="state.m1.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
           </label>
           <span class="wp-mod-icon" aria-hidden="true"
@@ -70,24 +105,33 @@
             <span class="wp-conflict-badge wp-conflict-badge--info">override</span>
           </span>
         </div>
-        <div class="wp-summary">
-          <span class="wp-pg-mockup__var">$backdrop</span>
-          <span class="wp-pg-mockup__lit"> · 12 options</span>
-        </div>
+        <Transition name="wp-collapse">
+          <div v-if="!state.m1.collapsed" class="wp-summary">
+            <span class="wp-pg-mockup__var">$backdrop</span>
+            <span class="wp-pg-mockup__lit"> · 12 options</span>
+          </div>
+        </Transition>
       </div>
 
       <!-- 2. Fixed-values module — different kind-color, no state markers
            so users see the un-stacked default look -->
-      <div class="wp-module" data-kind="fixed_values">
+      <div
+        class="wp-module"
+        :class="{ 'wp-disabled': !state.m2.enabled }"
+        data-kind="fixed_values"
+      >
         <div class="wp-module-header">
           <span class="wp-drag-handle" aria-hidden="true"
             ><i class="pi pi-bars" aria-hidden="true"></i
           ></span>
-          <button class="wp-collapse-btn" type="button" tabindex="-1"
-            ><i class="pi pi-chevron-down" aria-hidden="true"></i
-          ></button>
+          <button
+            class="wp-collapse-btn"
+            type="button"
+            :title="state.m2.collapsed ? 'Expand' : 'Collapse'"
+            @click="state.m2.collapsed = !state.m2.collapsed"
+          ><i :class="['pi', state.m2.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
-            <input type="checkbox" checked tabindex="-1" />
+            <input v-model="state.m2.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
           </label>
           <span class="wp-mod-icon" aria-hidden="true"
@@ -97,25 +141,34 @@
           <span class="wp-module-name">Model settings</span>
           <span class="wp-mod-dots"></span>
         </div>
-        <div class="wp-summary">
-          <span class="wp-pg-mockup__var">$cfg</span>
-          <span class="wp-pg-mockup__lit">, </span>
-          <span class="wp-pg-mockup__var">$steps</span>
-          <span class="wp-pg-mockup__lit">, +1 more</span>
-        </div>
+        <Transition name="wp-collapse">
+          <div v-if="!state.m2.collapsed" class="wp-summary">
+            <span class="wp-pg-mockup__var">$cfg</span>
+            <span class="wp-pg-mockup__lit">, </span>
+            <span class="wp-pg-mockup__var">$steps</span>
+            <span class="wp-pg-mockup__lit">, +1 more</span>
+          </div>
+        </Transition>
       </div>
 
       <!-- 3. Combine module — third kind-color, also clean -->
-      <div class="wp-module" data-kind="combine">
+      <div
+        class="wp-module"
+        :class="{ 'wp-disabled': !state.m3.enabled }"
+        data-kind="combine"
+      >
         <div class="wp-module-header">
           <span class="wp-drag-handle" aria-hidden="true"
             ><i class="pi pi-bars" aria-hidden="true"></i
           ></span>
-          <button class="wp-collapse-btn" type="button" tabindex="-1"
-            ><i class="pi pi-chevron-down" aria-hidden="true"></i
-          ></button>
+          <button
+            class="wp-collapse-btn"
+            type="button"
+            :title="state.m3.collapsed ? 'Expand' : 'Collapse'"
+            @click="state.m3.collapsed = !state.m3.collapsed"
+          ><i :class="['pi', state.m3.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
-            <input type="checkbox" checked tabindex="-1" />
+            <input v-model="state.m3.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
           </label>
           <span class="wp-mod-icon" aria-hidden="true"
@@ -125,24 +178,34 @@
           <span class="wp-module-name">Final prompt</span>
           <span class="wp-mod-dots"></span>
         </div>
-        <div class="wp-summary">
-          <span class="wp-pg-mockup__lit">→ </span>
-          <span class="wp-pg-mockup__var">$prompt</span>
-        </div>
+        <Transition name="wp-collapse">
+          <div v-if="!state.m3.collapsed" class="wp-summary">
+            <span class="wp-pg-mockup__lit">→ </span>
+            <span class="wp-pg-mockup__var">$prompt</span>
+          </div>
+        </Transition>
       </div>
 
-      <!-- 4. Disabled wildcard — toggle off, dim text — shows what
-           muted modules look like at the chosen density -->
-      <div class="wp-module wp-disabled" data-kind="wildcard">
+      <!-- 4. Disabled wildcard — starts off + collapsed; user can flip
+           the toggle to see the disable→enable transition + stripe
+           pattern dropping. -->
+      <div
+        class="wp-module"
+        :class="{ 'wp-disabled': !state.m4.enabled }"
+        data-kind="wildcard"
+      >
         <div class="wp-module-header">
           <span class="wp-drag-handle" aria-hidden="true"
             ><i class="pi pi-bars" aria-hidden="true"></i
           ></span>
-          <button class="wp-collapse-btn" type="button" tabindex="-1"
-            ><i class="pi pi-chevron-right" aria-hidden="true"></i
-          ></button>
+          <button
+            class="wp-collapse-btn"
+            type="button"
+            :title="state.m4.collapsed ? 'Expand' : 'Collapse'"
+            @click="state.m4.collapsed = !state.m4.collapsed"
+          ><i :class="['pi', state.m4.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
-            <input type="checkbox" tabindex="-1" />
+            <input v-model="state.m4.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
           </label>
           <span class="wp-mod-icon" aria-hidden="true"
@@ -152,13 +215,20 @@
           <span class="wp-module-name">Hair style</span>
           <span class="wp-mod-dots"></span>
         </div>
+        <Transition name="wp-collapse">
+          <div v-if="!state.m4.collapsed" class="wp-summary">
+            <span class="wp-pg-mockup__var">$hair_style</span>
+            <span class="wp-pg-mockup__lit"> · 28 options</span>
+          </div>
+        </Transition>
       </div>
     </div>
     <p class="wp-pg-mockup__hint">
-      Four sample modules — different kinds, states, and an off
-      toggle — so density / indicator / kind-style flips show their
-      effect at a glance. Settings apply live to your real canvas
-      modules too.
+      Try the toggles + chevrons — flipping enable/disable shows the
+      stripe pattern and dim text; collapsing slides via the same
+      transition reduce-motion neutralizes. Every density / indicator
+      / kind-style change applies live to these mockups AND your real
+      canvas modules.
     </p>
   </div>
 </template>
@@ -219,9 +289,20 @@
   border-color: var(--wp-danger);
 }
 
-/* Disabled module styling — mirrors ContextWidget's `.wp-disabled`. */
+/* Disabled module styling — mirrors ContextWidget's `.wp-disabled`
+ * exactly: stripe pattern + opacity dim + grey name text. The
+ * stripe is a 45deg repeating-linear-gradient between bg3 and bg2
+ * so it reads as "muted and offline" without losing kind-color
+ * legibility. */
 .wp-pg-mockup .wp-module.wp-disabled {
-  opacity: 0.6;
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--wp-bg3),
+    var(--wp-bg3) 6px,
+    var(--wp-bg2) 6px,
+    var(--wp-bg2) 8px
+  );
 }
 .wp-pg-mockup .wp-module.wp-disabled .wp-module-name {
   color: var(--wp-text3);
@@ -420,4 +501,34 @@
 .wp-pg-mockup__lit {
   color: var(--wp-text-dim, var(--wp-text3));
 }
+
+/* Collapse Vue transition — mirrors ContextWidget's `wp-collapse`
+ * scoped styles so the slide reads identically here. The reduce-motion
+ * sweep in a11y.css already targets `.wp-pg` (added by the
+ * decoration-cleanup commit) so flipping reduce-motion to ON
+ * collapses transition-duration to 0.01ms — instant snap, no fade. */
+.wp-pg-mockup .wp-collapse-enter-active,
+.wp-pg-mockup .wp-collapse-leave-active {
+  transition: max-height 0.2s ease, opacity 0.15s, padding 0.15s;
+  overflow: hidden;
+}
+.wp-pg-mockup .wp-collapse-enter-from,
+.wp-pg-mockup .wp-collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.wp-pg-mockup .wp-collapse-enter-to,
+.wp-pg-mockup .wp-collapse-leave-from {
+  max-height: 32px;
+  opacity: 1;
+}
+
+/* Make the toggle + chevron actually clickable in the mockup —
+ * remove the cursor: default that some UAs apply to disabled-feel
+ * controls when there's no native interaction. */
+.wp-pg-mockup .wp-toggle { cursor: pointer; }
+.wp-pg-mockup .wp-collapse-btn { cursor: pointer; }
+.wp-pg-mockup .wp-collapse-btn:hover { color: var(--wp-text); }
 </style>
