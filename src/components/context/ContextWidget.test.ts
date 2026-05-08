@@ -683,9 +683,20 @@ describe("ContextWidget inline actions", () => {
     expect(wrapper.find('[data-test="row-action-remove"]').find("i.pi.pi-trash").exists()).toBe(true);
   });
 
-  it("hides lock + internal for non-wildcard rows", () => {
+  it("hides lock for non-wildcard rows but keeps internal for binding-producers", () => {
+    // Lock is wildcard-only (RNG seed). Internal applies to any kind
+    // that emits bindings — wildcard, fixed_values, combine, derivation.
     const wrapper = mountWithModules([
       { id: "def67890", type: "fixed_values", enabled: true },
+    ]);
+    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="row-action-remove"]').exists()).toBe(true);
+  });
+
+  it("hides both lock and internal for constraint kind (no bindings produced)", () => {
+    const wrapper = mountWithModules([
+      { id: "def67890", type: "constraint", enabled: true },
     ]);
     expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(false);
     expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(false);

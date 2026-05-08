@@ -412,17 +412,6 @@ function save() {
   if (!draft.value) return;
   const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
   if (next.type === "fixed_values") {
-    // v2 FixedValuesInstanceModal keeps `entries` in sync with row
-    // state (each emit pushes a fresh entries array derived from the
-    // current draft rows). save() runs the v1 reconciliation
-    // unchanged — it derives `values` from entries, compares against
-    // library, and either drops or sets `instance.values_overrides`.
-    // Because v2 syncs entries, the reconciliation produces the same
-    // patch shape v2 already emitted, just routed through the entries
-    // field. v1 inputs (FixedValuesEditorBody, still alive for
-    // backward compat until removed in a later phase) keep working
-    // through the same path.
-    //
     // Two-tier model:
     //   - Inline-created (no `payload_hash`, no library link): the
     //     module is local-only, so user edits write straight into
@@ -433,37 +422,65 @@ function save() {
     //     wildcard pattern. The engine's resolver picks overrides
     //     when present, library payload otherwise. Modified-state +
     //     "reset to library" both pivot on the override field.
-    const values = next.entries.map((e, i) => ({
-      id: `val_${i.toString(16).padStart(4, "0")}`,
-      name: e.variable_name,
-      value: e.value,
-    }));
+    //
+    // v2 FixedValuesInstanceModal sets `instance.values_overrides`
+    // directly with library-row IDs preserved. Detect that path and
+    // skip the entries→values rebuild — otherwise we'd re-derive
+    // `val_NNNN` IDs from position and stomp the original library
+    // IDs, which makes every row render as instance-added (green) on
+    // reopen.
+    const inst = { ...(next.instance ?? {}) };
+    const v2Override = (inst as { values_overrides?: unknown }).values_overrides;
     if (next.payload_hash) {
-      // Library-tracked path. Compare against library `payload.values`
-      // first — when the user reverts every entry to its library state
-      // we drop the override entirely so the modified dot clears
-      // automatically (a "soft reset"). Engine's empty-override
-      // fallback covers the wire shape either way.
       const libraryValues = (next.payload as { values?: unknown } | undefined)?.values;
-      const sameAsLibrary =
-        Array.isArray(libraryValues)
-        && libraryValues.length === values.length
-        && libraryValues.every((lib, i) => {
-          const l = lib as { name?: unknown; value?: unknown };
-          const cur = values[i];
-          return l.name === cur.name && l.value === cur.value;
-        });
-      const inst = { ...(next.instance ?? {}) };
-      if (sameAsLibrary) {
-        delete (inst as { values_overrides?: unknown }).values_overrides;
+      if (Array.isArray(v2Override)) {
+        // v2 path — IDs already correct; just check sameAsLibrary so
+        // a fully reverted instance drops the override field cleanly.
+        const sameAsLibrary =
+          Array.isArray(libraryValues)
+          && libraryValues.length === v2Override.length
+          && libraryValues.every((lib, i) => {
+            const l = lib as { id?: unknown; name?: unknown; value?: unknown };
+            const cur = v2Override[i] as { id?: unknown; name?: unknown; value?: unknown };
+            return l.id === cur.id && l.name === cur.name && l.value === cur.value;
+          });
+        if (sameAsLibrary) {
+          delete (inst as { values_overrides?: unknown }).values_overrides;
+        }
+        next.instance = inst;
       } else {
-        (inst as { values_overrides: typeof values }).values_overrides = values;
+        // v1 path — derive values from entries (FixedValuesEditorBody
+        // round-trip still routes through entries; kept for backward
+        // compatibility until the v1 inline editor is removed).
+        const values = next.entries.map((e, i) => ({
+          id: `val_${i.toString(16).padStart(4, "0")}`,
+          name: e.variable_name,
+          value: e.value,
+        }));
+        const sameAsLibrary =
+          Array.isArray(libraryValues)
+          && libraryValues.length === values.length
+          && libraryValues.every((lib, i) => {
+            const l = lib as { name?: unknown; value?: unknown };
+            const cur = values[i];
+            return l.name === cur.name && l.value === cur.value;
+          });
+        if (sameAsLibrary) {
+          delete (inst as { values_overrides?: unknown }).values_overrides;
+        } else {
+          (inst as { values_overrides: typeof values }).values_overrides = values;
+        }
+        next.instance = inst;
       }
-      next.instance = inst;
-      // Library payload stays untouched.
     } else {
-      // Inline-created path — original behaviour. payload.values is
-      // the only store; entries flow into it.
+      // Inline-created path — payload.values is the only store. v2
+      // modal still emits entries in sync, so derivation works
+      // identically to the v1 path.
+      const values = next.entries.map((e, i) => ({
+        id: `val_${i.toString(16).padStart(4, "0")}`,
+        name: e.variable_name,
+        value: e.value,
+      }));
       next.payload = { ...(next.payload ?? {}), values };
     }
   }

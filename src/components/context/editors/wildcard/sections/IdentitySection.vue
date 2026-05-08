@@ -36,14 +36,14 @@ function onNameInput(ev: Event): void {
 
 function onBindingInput(ev: Event): void {
   const raw = (ev.target as HTMLInputElement).value;
-  // Clear the override when user types the library default back —
-  // engine reads `instance.variable_binding` first, so an exact match
-  // is functionally identical to `null` but `null` is the canonical
-  // "no override" state. Drop it so the field stops looking modified.
-  if (raw === libraryBinding.value) {
-    emit("update", patchInstance(props.module, "variable_binding", null));
-    return;
-  }
+  // Don't auto-clear on exact library match — that snaps the input
+  // back to empty mid-typing when users want a name that starts with
+  // the library default (e.g. "backdrop" → typing "backdrop-test").
+  // The visual `--mod` class is derived from `bindingValue !==
+  // libraryBinding`, so an exact match drops the highlight on its
+  // own, and the engine treats `instance.variable_binding === payload.var_binding`
+  // identically to `null`. Empty input still nulls so the field
+  // shows the library default placeholder.
   emit("update", patchInstance(props.module, "variable_binding", raw.length > 0 ? raw : null));
 }
 

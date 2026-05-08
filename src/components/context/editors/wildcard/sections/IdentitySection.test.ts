@@ -110,12 +110,30 @@ describe("IdentitySection", () => {
     expect(w.find('[data-test="id-binding"]').classes()).toContain("id__input--mod");
   });
 
-  it("typing binding back to library default clears the override (null)", async () => {
+  it("typing binding equal to library default does NOT auto-clear (override sticks)", async () => {
+    // Earlier behaviour auto-cleared on library match, which clobbered
+    // input mid-typing for names that prefix the library default (e.g.
+    // typing 'backdrop-test' got reset to empty when 'backdrop' was
+    // first typed). Now the override sticks; --mod class drops on its
+    // own because `bindingValue === libraryBinding`. Use the per-field
+    // reset button to explicitly null the override.
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
     });
     const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
     input.element.value = "outfit"; // matches library var_binding
+    await input.trigger("input");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.variable_binding).toBe("outfit");
+  });
+
+  it("clearing binding input fully (empty string) emits null", async () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
+    });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    input.element.value = "";
     await input.trigger("input");
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;

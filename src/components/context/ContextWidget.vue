@@ -1427,7 +1427,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               @click.stop="toggleLockOnCard(m)"
             ><i class="pi pi-lock" /></button>
             <button
-              v-if="m.type === 'wildcard'"
+              v-if="m.type === 'wildcard' || m.type === 'fixed_values' || m.type === 'combine' || m.type === 'derivation'"
               type="button"
               class="wp-btn wp-btn--icon-sm"
               :class="{ 'is-active': isInternal(m) }"
