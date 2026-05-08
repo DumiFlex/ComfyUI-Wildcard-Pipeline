@@ -28,6 +28,10 @@ const SETTING_BORDER = "wildcardPipeline.display.borderHighlight";
 const SETTING_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 const SETTING_FOCUS = "wildcardPipeline.display.focusMode";
 const SETTING_KIND_STYLE = "wildcardPipeline.display.kindStyle";
+const SETTING_VALIDATION = "wildcardPipeline.behavior.validation";
+const SETTING_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
+const SETTING_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
+const SETTING_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
 
 interface FakeMQL {
   matches: boolean;
@@ -101,6 +105,10 @@ interface DisplayOverrides {
   collapsedByDefault?: boolean;
   focusMode?: boolean;
   kindStyle?: string;
+  validation?: string;
+  toastLifetime?: string;
+  suppressInfoToasts?: boolean;
+  newModuleDisabled?: boolean;
 }
 
 function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
@@ -117,6 +125,10 @@ function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
           if (id === SETTING_COLLAPSED) return overrides.collapsedByDefault ?? false;
           if (id === SETTING_FOCUS) return overrides.focusMode ?? false;
           if (id === SETTING_KIND_STYLE) return overrides.kindStyle ?? "chip";
+          if (id === SETTING_VALIDATION) return overrides.validation ?? "strict";
+          if (id === SETTING_TOAST_LIFETIME) return overrides.toastLifetime ?? "default";
+          if (id === SETTING_SUPPRESS_INFO) return overrides.suppressInfoToasts ?? false;
+          if (id === SETTING_NEW_DISABLED) return overrides.newModuleDisabled ?? false;
           return undefined;
         },
       },
@@ -623,6 +635,143 @@ describe("a11y settings", () => {
     expect(toasts.value).toHaveLength(1);
     expect(toasts.value[0].message).toBe("Module type: icon only");
     expect(toasts.value[0].singletonKey).toBe("wp-kind-style");
+  });
+
+  // ── Phase 2: behavior axes ──────────────────────────────────────
+
+  describe("validation combo", () => {
+    it("defaults to strict on boot", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+
+      const settings = buildSettings(makeApp());
+      const entry = settings.find((s) => s.id === SETTING_VALIDATION);
+      expect(entry?.defaultValue).toBe("strict");
+    });
+
+    it("reads stored permissive value", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ validation: "permissive" }));
+
+      // No body class for behavior settings — verify via toast emission
+      // when re-applying same value (should be no-op via change-detection
+      // but we can't easily inspect the state map from outside).
+      markBootCompleted();
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_VALIDATION)?.onChange?.("permissive", "permissive");
+      expect(toasts.value).toHaveLength(0);
+    });
+
+    it("onChange fires warning-severity toast when going permissive", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_VALIDATION)?.onChange?.("permissive", "strict");
+
+      expect(toasts.value).toHaveLength(1);
+      expect(toasts.value[0].message).toContain("PERMISSIVE");
+      expect(toasts.value[0].severity).toBe("warning");
+      expect(toasts.value[0].singletonKey).toBe("wp-validation");
+    });
+
+    it("onChange fires info-severity toast for non-permissive flips", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_VALIDATION)?.onChange?.("relaxed", "strict");
+
+      expect(toasts.value).toHaveLength(1);
+      expect(toasts.value[0].message).toContain("RELAXED");
+      expect(toasts.value[0].severity).toBe("info");
+    });
+  });
+
+  describe("toastLifetime combo", () => {
+    it("defaults to default on boot", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+
+      const settings = buildSettings(makeApp());
+      const entry = settings.find((s) => s.id === SETTING_TOAST_LIFETIME);
+      expect(entry?.defaultValue).toBe("default");
+    });
+
+    it("onChange fires toast describing new value", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_TOAST_LIFETIME)?.onChange?.("sticky", "default");
+
+      expect(toasts.value).toHaveLength(1);
+      expect(toasts.value[0].message).toContain("STICKY");
+      expect(toasts.value[0].singletonKey).toBe("wp-toast-lifetime");
+    });
+  });
+
+  describe("suppressInfoToasts boolean", () => {
+    it("defaults to false", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+
+      const settings = buildSettings(makeApp());
+      const entry = settings.find((s) => s.id === SETTING_SUPPRESS_INFO);
+      expect(entry?.defaultValue).toBe(false);
+    });
+
+    it("onChange fires WARNING-severity toast (so confirmation isn't suppressed by itself)", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_SUPPRESS_INFO)?.onChange?.(true, false);
+
+      expect(toasts.value).toHaveLength(1);
+      // Warning severity bypasses the suppression filter — user sees the
+      // confirmation even though they just enabled the suppression.
+      expect(toasts.value[0].severity).toBe("warning");
+      expect(toasts.value[0].message).toContain("SUPPRESSED");
+    });
+  });
+
+  describe("newModuleDisabled boolean", () => {
+    it("defaults to false", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+
+      const settings = buildSettings(makeApp());
+      const entry = settings.find((s) => s.id === SETTING_NEW_DISABLED);
+      expect(entry?.defaultValue).toBe(false);
+    });
+
+    it("onChange fires toast", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_NEW_DISABLED)?.onChange?.(true, false);
+
+      expect(toasts.value).toHaveLength(1);
+      expect(toasts.value[0].message).toContain("disabled");
+      expect(toasts.value[0].singletonKey).toBe("wp-new-module-disabled");
+    });
   });
 
   it("installDebugHelpers exposes window.wpDebug with a11y + display sub-namespaces", () => {

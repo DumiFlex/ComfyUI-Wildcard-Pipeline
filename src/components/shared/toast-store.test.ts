@@ -3,11 +3,19 @@
 // themselves instead of stacking.
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { toasts, pushToast, dismissToast } from "./toast-store";
+import {
+  toasts,
+  pushToast,
+  dismissToast,
+  setLifetimeProvider,
+  setSuppressInfoFilter,
+  _resetToastProvidersForTesting,
+} from "./toast-store";
 
 describe("toast-store", () => {
   beforeEach(() => {
     toasts.value = [];
+    _resetToastProvidersForTesting();
   });
 
   it("pushToast without options appends a default-severity toast", () => {
@@ -75,5 +83,67 @@ describe("toast-store", () => {
     const id = pushToast("dismissable", { singletonKey: "x" });
     dismissToast(id);
     expect(toasts.value).toHaveLength(0);
+  });
+
+  describe("lifetime provider", () => {
+    it("uses 5000ms default when no provider registered", () => {
+      pushToast("hello");
+      expect(toasts.value[0].lifeMs).toBe(5000);
+    });
+
+    it("reads from registered provider when no explicit lifeMs", () => {
+      setLifetimeProvider(() => 3000);
+      pushToast("hello");
+      expect(toasts.value[0].lifeMs).toBe(3000);
+    });
+
+    it("explicit options.lifeMs always wins over provider", () => {
+      setLifetimeProvider(() => 3000);
+      pushToast("hello", { lifeMs: 8000 });
+      expect(toasts.value[0].lifeMs).toBe(8000);
+    });
+
+    it("provider returning 0 marks toast sticky (no auto-dismiss)", () => {
+      setLifetimeProvider(() => 0);
+      const id = pushToast("sticky");
+      expect(toasts.value[0].lifeMs).toBe(0);
+      // Manual dismissal still works.
+      dismissToast(id);
+      expect(toasts.value).toHaveLength(0);
+    });
+  });
+
+  describe("suppress-info filter", () => {
+    it("when filter returns true, info toasts are dropped silently", () => {
+      setSuppressInfoFilter(() => true);
+      const id = pushToast("status", { severity: "info" });
+      expect(toasts.value).toHaveLength(0);
+      expect(id).toBe(0);  // dropped path returns 0
+    });
+
+    it("warnings + errors always render even with filter on", () => {
+      setSuppressInfoFilter(() => true);
+      pushToast("careful", { severity: "warning" });
+      pushToast("broken", { severity: "error" });
+      expect(toasts.value).toHaveLength(2);
+      expect(toasts.value[0].severity).toBe("warning");
+      expect(toasts.value[1].severity).toBe("error");
+    });
+
+    it("filter checked at push-time so changing it mid-session works", () => {
+      let suppress = false;
+      setSuppressInfoFilter(() => suppress);
+
+      pushToast("a", { severity: "info" });
+      expect(toasts.value).toHaveLength(1);
+
+      suppress = true;
+      pushToast("b", { severity: "info" });
+      expect(toasts.value).toHaveLength(1);  // dropped
+
+      suppress = false;
+      pushToast("c", { severity: "info" });
+      expect(toasts.value).toHaveLength(2);
+    });
   });
 });

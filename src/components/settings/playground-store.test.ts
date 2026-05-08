@@ -165,5 +165,31 @@ describe("playground-store", () => {
       expect(getSettingValue("contrast")).toBe("off");
       expect(getSettingValue("density")).toBe("compact");
     });
+
+    it("behavior keys go under wildcardPipeline.behavior.*", () => {
+      const { app, setSpy } = makeFakeApp();
+      setComfyApp(app as never);
+
+      applySetting("validation", "permissive");
+      applySetting("toastLifetime", "sticky");
+      applySetting("suppressInfoToasts", true);
+      applySetting("newModuleDisabled", true);
+
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.behavior.validation", "permissive");
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.behavior.toastLifetime", "sticky");
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.behavior.suppressInfoToasts", true);
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.behavior.newModuleDisabled", true);
+    });
+
+    it("getSettingValue routes behavior keys correctly", () => {
+      const { app } = makeFakeApp({
+        "wildcardPipeline.behavior.validation": "relaxed",
+        "wildcardPipeline.behavior.toastLifetime": "long",
+      });
+      setComfyApp(app as never);
+
+      expect(getSettingValue("validation")).toBe("relaxed");
+      expect(getSettingValue("toastLifetime")).toBe("long");
+    });
   });
 });
