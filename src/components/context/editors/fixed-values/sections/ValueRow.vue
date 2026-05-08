@@ -5,11 +5,24 @@ import {
   type DraftRow,
   type LibraryRow,
 } from "../defaults";
+import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
 
 const props = defineProps<{
   row: DraftRow;
   library: LibraryRow | undefined;
 }>();
+
+// Per-row token preview — surface="fixed_values" gates VAR + REF as
+// invalid (engine treats them the same: warn + render literal). The
+// preview pane mirrors the engine's lenient semantics: alt + repeat +
+// escape paint as valid colors; VAR + REF render with error class so
+// the user spots the unsupported token before it ships.
+const valueTokens = computed<PreviewToken[]>(() =>
+  tokenize(props.row.value, "fixed_values"),
+);
+const hasNonTextToken = computed(() =>
+  valueTokens.value.some((t) => t.kind !== "text"),
+);
 
 const emit = defineEmits<{
   "toggle": [rowId: string];
@@ -103,19 +116,56 @@ function onDelete(): void {
     </span>
 
     <span
-      class="row__value-wrap"
-      :class="{ 'row__value-wrap--mod': valueOverridden }"
-      data-test="row-value-wrap"
+      class="row__value-cell"
+      :class="{ 'row__value-cell--mod': valueOverridden }"
+      data-test="row-value-cell"
     >
-      <input
-        class="row__value"
-        data-test="row-value"
-        type="text"
-        :value="row.value"
-        :disabled="!row.enabled"
-        :aria-label="`Value for row ${row.id}`"
-        @input="onValueInput"
-      />
+      <span
+        class="row__value-wrap"
+        :class="{ 'row__value-wrap--mod': valueOverridden }"
+        data-test="row-value-wrap"
+      >
+        <input
+          class="row__value"
+          data-test="row-value"
+          type="text"
+          :value="row.value"
+          :disabled="!row.enabled"
+          :aria-label="`Value for row ${row.id}`"
+          @input="onValueInput"
+        />
+      </span>
+      <span
+        v-if="hasNonTextToken"
+        class="row__value-preview"
+        data-test="row-value-preview"
+        aria-hidden="true"
+      >
+        <template v-for="(tok, i) in valueTokens" :key="i">
+          <span v-if="tok.kind === 'text'" class="tpl-tok--text">{{ tok.raw }}</span>
+          <span
+            v-else-if="tok.kind === 'var' && tok.invalid"
+            class="tpl-tok--var-error"
+            :title="`$var refs not supported in fixed_values surface`"
+          >{{ tok.raw }}</span>
+          <span
+            v-else-if="tok.kind === 'var'"
+            class="tpl-tok--var"
+          >{{ tok.raw }}</span>
+          <span
+            v-else-if="tok.kind === 'ref' && tok.invalid"
+            class="tpl-tok--ref-error"
+            :title="`@{uuid} refs not supported in fixed_values surface`"
+          >{{ tok.raw }}</span>
+          <span
+            v-else-if="tok.kind === 'ref'"
+            class="tpl-tok--ref"
+          >{{ tok.raw }}</span>
+          <span v-else-if="tok.kind === 'alt'" class="tpl-tok--alt">{{ tok.raw }}</span>
+          <span v-else-if="tok.kind === 'repeat'" class="tpl-tok--repeat">{{ tok.raw }}</span>
+          <span v-else-if="tok.kind === 'escape'" class="tpl-tok--escape">{{ tok.raw }}</span>
+        </template>
+      </span>
     </span>
 
     <button
@@ -237,4 +287,53 @@ function onDelete(): void {
   background: rgba(251, 146, 60, 0.10);
 }
 .row__reset .pi, .row__delete .pi { font-size: 10px; }
+
+/* Per-row preview tokens — appears below the input only when the
+ * value contains non-text tokens (alt/repeat/var/ref/escape). Mirrors
+ * the engine's lenient surface: VAR + REF on fixed_values surface
+ * render with error class so the user fixes them before queue time. */
+.row__value-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.row__value-cell--mod .row__value-wrap { border-color: var(--wp-accent); }
+.row__value-preview {
+  margin-top: 3px;
+  padding: 2px 6px;
+  font: 10px/1.4 var(--wp-font-mono);
+  color: var(--wp-text-muted, var(--wp-text2));
+  border-left: 2px solid var(--wp-border-soft, var(--wp-border));
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border-radius: 0 2px 2px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tpl-tok--text { color: var(--wp-text); }
+.tpl-tok--var { font-weight: 600; }
+.tpl-tok--var-error {
+  color: var(--wp-danger, #e05252);
+  text-decoration: underline dashed;
+  text-underline-offset: 2px;
+}
+.tpl-tok--ref {
+  color: var(--wp-accent);
+  font-weight: 600;
+}
+.tpl-tok--ref-error {
+  color: var(--wp-danger, #e05252);
+  text-decoration: underline dashed;
+  text-underline-offset: 2px;
+}
+.tpl-tok--alt {
+  color: var(--wp-amber, #d4a04a);
+  font-weight: 600;
+}
+.tpl-tok--repeat {
+  color: var(--wp-teal, #4ad4c4);
+  font-weight: 600;
+}
+.tpl-tok--escape {
+  color: var(--wp-text-dim, var(--wp-text3));
+}
 </style>

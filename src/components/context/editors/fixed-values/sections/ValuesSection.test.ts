@@ -190,4 +190,38 @@ describe("ValuesSection", () => {
     expect(summary).toContain("1 override");
     expect(summary).toContain("1 added");
   });
+
+  // ── Per-row preview tokens (added in 2026-05-08 syntax-parity cycle).
+  // Engine resolves `{a|b|c}` + escapes per value on fixed_values surface;
+  // VAR + REF are not allowed (binding producer, not consumer). UI
+  // mirrors the engine: alt + repeat + escape highlighted, VAR + REF
+  // flagged with error class so the user fixes invalid syntax at edit
+  // time rather than seeing literal `$name` in the resolved output.
+
+  it("alt-token highlighted in row's value preview when value contains {a|b|c}", () => {
+    const w = mount(ValuesSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            values: [{ id: "v1", name: "color", value: "{red|blue|green}" }],
+          },
+        }),
+      },
+    });
+    expect(w.find(".tpl-tok--alt").exists()).toBe(true);
+    expect(w.find(".tpl-tok--alt").text()).toBe("{red|blue|green}");
+  });
+
+  it("VAR token flagged with .tpl-tok--var-error on fixed_values surface", () => {
+    const w = mount(ValuesSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            values: [{ id: "v1", name: "msg", value: "see $other ref" }],
+          },
+        }),
+      },
+    });
+    expect(w.find(".tpl-tok--var-error").exists()).toBe(true);
+  });
 });
