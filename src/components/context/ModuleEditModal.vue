@@ -22,8 +22,9 @@ import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
 import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
 import ConstraintInstanceBody from "./editors/instance/ConstraintInstanceBody.vue";
 import { pruneStaleInstanceRefs } from "./editors/instance/prune";
-import { hashes } from "./drift-store";
+import { hashes, refreshModule, setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
+import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 
 /**
  * Per-kind subtitle text shown under the modal title (mockup v5
@@ -229,6 +230,50 @@ function onResetFromLibrary(refreshed: ModuleEntry): void {
   };
 }
 
+/**
+ * Wildcard v2 round-trip handlers — bridge `WildcardInstanceModal`
+ * kebab-menu events to the same fetch / confirm / toast logic that
+ * `LibraryRoundTripActions` runs for v1 kinds. Inline here (vs reusing
+ * the v1 component) so the wildcard branch stays self-contained;
+ * later phases will fold this into a shared helper once all kinds
+ * migrate to v2.
+ */
+async function onWildcardResetClick(): Promise<void> {
+  if (!draft.value) return;
+  const ok = window.confirm(
+    `Discard ${draft.value.meta?.name || "this module"}'s local edits and restore from library?`,
+  );
+  if (!ok) return;
+  try {
+    const refreshed = await refreshModule(draft.value);
+    onResetFromLibrary(refreshed);
+  } catch (err) {
+    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
+async function onWildcardSaveToLibraryClick(): Promise<void> {
+  if (!draft.value) return;
+  const ok = window.confirm(
+    `Push current changes to library entry "${draft.value.meta?.name}"? ` +
+    `Other workflows referencing this module will see the new version on their next open.`,
+  );
+  if (!ok) return;
+  try {
+    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json() as { new_hash: string };
+    setLibraryHash(draft.value.id, body.new_hash);
+    pushToast("Saved to library", { severity: "success" });
+  } catch (err) {
+    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
 function save() {
   if (!draft.value) return;
   const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
@@ -287,7 +332,24 @@ function cancel() {
 
 <template>
   <ModalShell :visible="visible" @close="cancel">
-    <div v-if="draft" class="wp-medit">
+    <!-- v2 wildcard branch — single-pane tailored modal renders its
+         own header/footer/body. No v1 chrome (no .wp-medit wrapper,
+         no tab strip, no LibraryRoundTripActions footer). -->
+    <WildcardInstanceModal
+      v-if="draft && draft.type === 'wildcard'"
+      :module="draft"
+      :is-drifted="isDrifted"
+      @update="onUpdate"
+      @save="save"
+      @cancel="cancel"
+      @reset-from-library="onWildcardResetClick"
+      @save-to-library="onWildcardSaveToLibraryClick"
+    />
+
+    <!-- v1 tabbed branch — non-wildcard kinds keep the existing
+         Library/Instance tab structure until each kind is migrated
+         to its own v2 single-pane modal. -->
+    <div v-else-if="draft" class="wp-medit">
       <header class="wp-medit__head">
         <i
           :class="[kindHeaderIcon(draft.type), 'wp-medit__head-icon', `type-${draft.type}`]"

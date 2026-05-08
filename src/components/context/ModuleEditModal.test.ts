@@ -91,14 +91,16 @@ function makeConstraint(): ModuleEntry {
 describe("ModuleEditModal — shell header", () => {
   beforeEach(() => _resetForTests());
 
-  it("shows read-only name for wildcard kind", async () => {
+  it("shows read-only name for non-fixed_values v1 kind", async () => {
+    // Wildcard now goes through WildcardInstanceModal (v2), so we use a
+    // kind that still renders the v1 .wp-medit shell.
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeCombine() },
     });
     await nextTick();
     expect(wrapper.find(".wp-medit__name-readonly").exists()).toBe(true);
-    expect(wrapper.find(".wp-medit__name-readonly").text()).toContain("outfit");
+    expect(wrapper.find(".wp-medit__name-readonly").text()).toContain("Greeting");
     expect(wrapper.find(".wp-medit__name-input").exists()).toBe(false);
   });
 
@@ -115,13 +117,13 @@ describe("ModuleEditModal — shell header", () => {
   it("shows kind label as a kind-chip in the header (non-fixed_values)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeCombine() },
     });
     await nextTick();
-    // V3 replaced the `· wildcard` plain text with `.wp-kind-chip`.
+    // V3 replaced the `· combine` plain text with `.wp-kind-chip`.
     const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
     expect(chip.exists()).toBe(true);
-    expect(chip.text()).toContain("wildcard");
+    expect(chip.text()).toContain("combine");
   });
 
   it("renders nothing when module is null", async () => {
@@ -136,7 +138,7 @@ describe("ModuleEditModal — shell header", () => {
   it("renders nothing when not visible", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: false, module: makeWildcard() },
+      props: { visible: false, module: makeCombine() },
     });
     await nextTick();
     expect(wrapper.find(".wp-medit").exists()).toBe(false);
@@ -146,15 +148,9 @@ describe("ModuleEditModal — shell header", () => {
 describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
   beforeEach(() => _resetForTests());
 
-  it("wildcard → shows WildcardEditorBody (options table rendered)", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
-    });
-    await nextTick();
-    // Scaffold placeholder is gone; the real body renders an options table.
-    expect(wrapper.find("[data-test='wc-options-table']").exists()).toBe(true);
-  });
+  // wildcard → WildcardInstanceModal (v2 single-pane) — see
+  // src/components/context/editors/wildcard/WildcardInstanceModal.test.ts.
+  // Removed from the v1 dispatcher set.
 
   it("fixed_values → shows FixedValuesEditorBody (values table rendered)", async () => {
     const wrapper = mount(ModuleEditModal, {
@@ -196,18 +192,18 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
 describe("ModuleEditModal — footer / save / cancel", () => {
   beforeEach(() => _resetForTests());
 
-  it("Cancel emits close", async () => {
+  it("Cancel emits close (v1 kind)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeCombine() },
     });
     await nextTick();
     await wrapper.find(".wp-medit__btn:not(.wp-medit__btn--primary)").trigger("click");
     expect(wrapper.emitted("close")).toBeTruthy();
   });
 
-  it("Save emits save with the draft module", async () => {
-    const mod = makeWildcard();
+  it("Save emits save with the draft module (v1 kind)", async () => {
+    const mod = makeCombine();
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: mod },
@@ -216,14 +212,14 @@ describe("ModuleEditModal — footer / save / cancel", () => {
     await wrapper.find(".wp-medit__btn--primary").trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     expect(saved).toBeDefined();
-    expect(saved.id).toBe("ab12cd34");
-    expect(saved.type).toBe("wildcard");
+    expect(saved.id).toBe("11111111");
+    expect(saved.type).toBe("combine");
   });
 
-  it("Ctrl+Enter triggers save", async () => {
+  it("Ctrl+Enter triggers save (v1 kind)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeCombine() },
     });
     await nextTick();
     const ev = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true });
@@ -268,136 +264,6 @@ describe("ModuleEditModal — footer / save / cancel", () => {
   });
 });
 
-// ── Per-kind body field tests (Task 15 — WildcardEditorBody) ────────────────
-
-describe("ModuleEditModal — wildcard option editor (body)", () => {
-  beforeEach(() => _resetForTests());
-
-  it("renders one row per option from payload.options", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
-    });
-    await nextTick();
-    // makeWildcard has 3 options: red, blue, green
-    const rows = wrapper.findAll("[data-test='wc-options-table'] tbody tr");
-    // 3 data rows (not the empty-row fallback)
-    expect(rows.length).toBe(3);
-  });
-
-  it("name input renders module.meta.name and emits update with patched meta", async () => {
-    const mod = makeWildcard();
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod },
-    });
-    await nextTick();
-    const input = wrapper.find("[data-test='wc-name']");
-    expect(input.exists()).toBe(true);
-    expect((input.element as HTMLInputElement).value).toBe("outfit");
-    // VTU doesn't allow target in trigger; set value directly then dispatch event.
-    (input.element as HTMLInputElement).value = "newname";
-    await input.trigger("input");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(saved.meta.name).toBe("newname");
-  });
-
-  it("$varBinding strips leading $ and special chars on input", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
-    });
-    await nextTick();
-    const input = wrapper.find("[data-test='wc-var-binding']");
-    expect(input.exists()).toBe(true);
-    // VTU doesn't allow target in trigger; set value directly then dispatch event.
-    (input.element as HTMLInputElement).value = "$hair-style!";
-    await input.trigger("input");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const binding = (saved.payload as { var_binding?: string } | undefined)?.var_binding;
-    // Leading $ stripped, hyphens and ! stripped → "hairstyle"
-    expect(binding).toBe("hairstyle");
-  });
-
-  it("Add option appends a new row to payload.options on save", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
-    });
-    await nextTick();
-    await wrapper.find("[data-test='wc-add-option']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const opts = (saved.payload as { options?: unknown[] } | undefined)?.options ?? [];
-    // Started with 3, added 1 → 4
-    expect(opts.length).toBe(4);
-  });
-
-  it("Add sub-category appends to payload.sub_categories on save", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
-    });
-    await nextTick();
-    const subInput = wrapper.find("[data-test='wc-sub-input']");
-    await subInput.setValue("warm tones");
-    await subInput.trigger("keydown", { key: "Enter" });
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const subs = (saved.payload as { sub_categories?: string[] } | undefined)?.sub_categories ?? [];
-    expect(subs).toContain("warm tones");
-  });
-
-  it("probability bar reflects weight ratio (weight 2 out of total 4 → 50%)", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
-    });
-    await nextTick();
-    // options: red=1, blue=2, green=1 → total=4, blue=50%
-    const pcts = wrapper.findAll(".wp-prob-pct");
-    expect(pcts.length).toBe(3);
-    // blue is row index 1 → 50%
-    expect(pcts[1].text()).toBe("50%");
-    // red and green are each 25%
-    expect(pcts[0].text()).toBe("25%");
-    expect(pcts[2].text()).toBe("25%");
-  });
-
-  it.todo("disables an option → emits save with enabled_options excluding that id — see Task 15");
-  it.todo("dropping all overrides → enabled_options falls back to null — see Task 15");
-  it.todo("changing a weight → emits save with option_weights[id] set — see Task 15");
-  it.todo("setting a weight back to library value drops the override — see Task 15");
-  it.todo("bulk disable-all → enabled_options is empty array — see Task 15");
-  it.todo("reset clears all instance overrides — see Task 15");
-  it.todo("switching to pinned mode defaults pinned_option_id to first option — see Task 15");
-  it.todo("pinned mode renders radio inputs, not checkboxes — see Task 15");
-  it.todo("changing pinned target → emits save with new pinned_option_id — see Task 15");
-  it.todo("leaving pinned mode clears pinned_option_id — see Task 15");
-  it.todo("renders @{uuid} refs as @name when preview-resolver cache has them — see Task 15");
-  it.todo("subset mode renders sub-category chips when wildcard declares them — see Task 15");
-  it.todo("subset mode hides sub-category chips when wildcard has none — see Task 15");
-  it.todo("toggling a category chip narrows visible options + persists category_filter — see Task 15");
-  it.todo("re-enabling the last category drops category_filter to null — see Task 15");
-  it.todo("leaving subcategory mode clears category_filter — see Task 15");
-  it.todo("SPA editor href uses /wp/<segment>/<id>/edit (HTML5 history mode) — see Task 15");
-  it.todo("toggling Lock sets locked_seed to a number; untoggle drops it to null — see Task 15");
-  it.todo("toggling Lock on the first time defaults to seed 0 — see Task 15");
-  it.todo("toggling Lock with lastUsedSeedReader uses the reader value — see Task 15");
-  it.todo("reader is called with module id (per-module seed lookup) — see Task 15");
-  it.todo("lastUsedSeedReader wins over _ui.last_locked_seed — see Task 15");
-  it.todo("toggling Lock off then on restores _ui.last_locked_seed — see Task 15");
-  it.todo("toggling Lock off retains _ui.last_locked_seed in the saved JSON — see Task 15");
-  it.todo("editing the locked-seed input persists the new value — see Task 15");
-  it.todo("toggling Internal sets the flag; untoggle drops the field — see Task 15");
-  it.todo("does not render name/description inputs for snapshot kinds — see Task 15");
-});
 
 describe("ModuleEditModal — fixed_values editor body", () => {
   beforeEach(() => _resetForTests());
@@ -879,10 +745,10 @@ describe("ModuleEditModal — constraint editor body", () => {
 describe("ModuleEditModal — V2 two-line header", () => {
   beforeEach(() => _resetForTests());
 
-  it("renders the .wp-medit__sub subtitle line for wildcard kind", async () => {
+  it("renders the .wp-medit__sub subtitle line for v1 kind", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeCombine() },
     });
     await nextTick();
     const sub = wrapper.find(".wp-medit__sub");
@@ -890,7 +756,7 @@ describe("ModuleEditModal — V2 two-line header", () => {
     expect(sub.text().length).toBeGreaterThan(0);
   });
 
-  it("subtitle text varies per kind (combine ≠ constraint)", async () => {
+  it("subtitle text varies per kind (combine ≠ derivation)", async () => {
     const cb = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeCombine() },
@@ -898,31 +764,31 @@ describe("ModuleEditModal — V2 two-line header", () => {
     await nextTick();
     const cbSub = cb.find(".wp-medit__sub").text();
 
-    const ws = mount(ModuleEditModal, {
+    const dv = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeDerivation() },
     });
     await nextTick();
-    const wsSub = ws.find(".wp-medit__sub").text();
+    const dvSub = dv.find(".wp-medit__sub").text();
 
     expect(cbSub).not.toBe("");
-    expect(wsSub).not.toBe("");
-    expect(cbSub).not.toBe(wsSub);
+    expect(dvSub).not.toBe("");
+    expect(cbSub).not.toBe(dvSub);
   });
 });
 
 describe("ModuleEditModal — V3 kind chip in header", () => {
   beforeEach(() => _resetForTests());
 
-  it("renders .wp-kind-chip in header for wildcard kind", async () => {
+  it("renders .wp-kind-chip in header for v1 kind", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeDerivation() },
     });
     await nextTick();
     const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
     expect(chip.exists()).toBe(true);
-    expect(chip.text()).toBe("wildcard");
+    expect(chip.text()).toBe("derivation");
   });
 
   it("kind chip carries its kind-color modifier class", async () => {
@@ -949,13 +815,13 @@ describe("ModuleEditModal — V3 kind chip in header", () => {
 
 // ── Task 25: tab strip + dispatcher ────────────────────────────────────────
 
-describe("ModuleEditModal — tab strip + dispatcher", () => {
+describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
   beforeEach(() => _resetForTests());
 
-  it("renders tab strip with both tabs for kinds where INSTANCE_TAB_VISIBLE is true", async () => {
+  it("renders tab strip with both tabs for v1 kinds where INSTANCE_TAB_VISIBLE is true", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeWildcard() },
+      props: { visible: true, module: makeCombine() },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
@@ -978,14 +844,14 @@ describe("ModuleEditModal — tab strip + dispatcher", () => {
   it("smart default: opens Library tab when instance has no overrides", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: { ...makeWildcard(), instance: {} } },
+      props: { visible: true, module: { ...makeCombine(), instance: {} } },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-library"]').attributes("aria-selected")).toBe("true");
   });
 
   it("smart default: opens Instance tab when any registry field is non-null", async () => {
-    const m = { ...makeWildcard(), instance: { variable_binding: "x" } };
+    const m = { ...makeCombine(), instance: { internal: true } };
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts, props: { visible: true, module: m },
     });
@@ -994,7 +860,7 @@ describe("ModuleEditModal — tab strip + dispatcher", () => {
   });
 
   it("orange dot appears on Instance tab when modified-state is true", async () => {
-    const m = { ...makeWildcard(), instance: { variable_binding: "x" } };
+    const m = { ...makeCombine(), instance: { internal: true } };
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts, props: { visible: true, module: m },
     });
@@ -1003,7 +869,7 @@ describe("ModuleEditModal — tab strip + dispatcher", () => {
   });
 
   it("modified-state ignores _ui namespace", async () => {
-    const m = { ...makeWildcard(), instance: { _ui: { last_locked_seed: 42 } } };
+    const m = { ...makeCombine(), instance: { _ui: { last_locked_seed: 42 } } };
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts, props: { visible: true, module: m },
     });
@@ -1014,7 +880,7 @@ describe("ModuleEditModal — tab strip + dispatcher", () => {
   it("Clear all overrides footer button exists on Instance tab", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: { ...makeWildcard(), instance: { locked_seed: 5 } } },
+      props: { visible: true, module: { ...makeCombine(), instance: { internal: true } } },
     });
     await nextTick();
     // Instance tab is the smart default for this module
@@ -1024,8 +890,8 @@ describe("ModuleEditModal — tab strip + dispatcher", () => {
   it("Clear all sets all registry fields to null on confirm", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const m = {
-      ...makeWildcard(),
-      instance: { variable_binding: "x", locked_seed: 5 },
+      ...makeCombine(),
+      instance: { internal: true },
     };
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts, props: { visible: true, module: m },
@@ -1035,7 +901,48 @@ describe("ModuleEditModal — tab strip + dispatcher", () => {
     await nextTick();
     await wrapper.find(".wp-medit__btn--primary").trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(saved.instance?.variable_binding).toBeNull();
-    expect(saved.instance?.locked_seed).toBeNull();
+    expect(saved.instance?.internal).toBeNull();
+  });
+});
+
+// ── Wildcard v2 dispatcher branch ─────────────────────────────────────────
+
+describe("ModuleEditModal — wildcard v2 dispatcher", () => {
+  beforeEach(() => _resetForTests());
+
+  it("renders WildcardInstanceModal (no tab strip) for wildcard kind", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    expect(wrapper.findComponent({ name: "WildcardInstanceModal" }).exists()).toBe(true);
+    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
+  });
+
+  it("renders v1 tab strip for non-wildcard kinds", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeFixedValues() },
+    });
+    await nextTick();
+    expect(wrapper.findComponent({ name: "WildcardInstanceModal" }).exists()).toBe(false);
+    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
+  });
+
+  it("forwards WildcardInstanceModal update event into draft mutation", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeWildcard() },
+    });
+    await nextTick();
+    const wcm = wrapper.findComponent({ name: "WildcardInstanceModal" });
+    wcm.vm.$emit("update", { instance: { variable_binding: "renamed" } });
+    await nextTick();
+    // Save and check the emitted draft has the binding override applied.
+    await wrapper.find('[data-test="wcm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.variable_binding).toBe("renamed");
   });
 });
