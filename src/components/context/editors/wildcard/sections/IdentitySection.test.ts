@@ -121,4 +121,48 @@ describe("IdentitySection", () => {
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.variable_binding).toBeNull();
   });
+
+  it("name reset button appears only when name is overridden", () => {
+    const noOverride = mount(IdentitySection, {
+      props: { module: makeModule({ meta: { name: "outfit", library_name: "outfit" } }) },
+    });
+    expect(noOverride.find('[data-test="id-name-reset"]').exists()).toBe(false);
+
+    const overridden = mount(IdentitySection, {
+      props: { module: makeModule({ meta: { name: "Custom", library_name: "outfit" } }) },
+    });
+    expect(overridden.find('[data-test="id-name-reset"]').exists()).toBe(true);
+  });
+
+  it("name reset button restores meta.name to library_name", async () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ meta: { name: "Custom", library_name: "outfit" } }) },
+    });
+    await w.find('[data-test="id-name-reset"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.meta?.name).toBe("outfit");
+  });
+
+  it("binding reset button appears only when binding is overridden", () => {
+    const noOverride = mount(IdentitySection, {
+      props: { module: makeModule() },
+    });
+    expect(noOverride.find('[data-test="id-binding-reset"]').exists()).toBe(false);
+
+    const overridden = mount(IdentitySection, {
+      props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
+    });
+    expect(overridden.find('[data-test="id-binding-reset"]').exists()).toBe(true);
+  });
+
+  it("binding reset button clears variable_binding override (null)", async () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
+    });
+    await w.find('[data-test="id-binding-reset"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.variable_binding).toBeNull();
+  });
 });

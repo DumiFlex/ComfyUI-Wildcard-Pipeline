@@ -46,6 +46,20 @@ function onBindingInput(ev: Event): void {
   }
   emit("update", patchInstance(props.module, "variable_binding", raw.length > 0 ? raw : null));
 }
+
+/** Per-field reset — restores the field to its library default without
+ *  touching anything else. Shows up next to the input only when
+ *  `--mod` is active. Pairs with the global "Reset overrides" footer
+ *  button: per-field is precise, footer is sweep. */
+function onResetName(): void {
+  const lib = libraryName.value;
+  if (lib === "") return;
+  emit("update", { meta: { ...props.module.meta, name: lib } });
+}
+
+function onResetBinding(): void {
+  emit("update", patchInstance(props.module, "variable_binding", null));
+}
 </script>
 
 <template>
@@ -54,35 +68,57 @@ function onBindingInput(ev: Event): void {
 
     <div class="id__row">
       <span class="id__key">Display name</span>
-      <input
-        class="id__input"
-        :class="{ 'id__input--mod': nameOverridden }"
-        data-test="id-name"
-        type="text"
-        :value="nameValue"
-        :placeholder="module.meta?.library_name ?? 'module name'"
-        aria-label="Display name"
-        @input="onNameInput"
-      />
+      <div class="id__input-row">
+        <input
+          class="id__input"
+          :class="{ 'id__input--mod': nameOverridden }"
+          data-test="id-name"
+          type="text"
+          :value="nameValue"
+          :placeholder="module.meta?.library_name ?? 'module name'"
+          aria-label="Display name"
+          @input="onNameInput"
+        />
+        <button
+          v-if="nameOverridden"
+          type="button"
+          class="id__reset"
+          data-test="id-name-reset"
+          :title="`Restore name to library default: ${libraryName}`"
+          aria-label="Reset display name to library default"
+          @click="onResetName"
+        ><i class="pi pi-replay" aria-hidden="true" /></button>
+      </div>
     </div>
 
     <div class="id__row">
       <span class="id__key">Variable binding</span>
-      <div
-        class="id__input-wrap"
-        :class="{ 'id__input-wrap--mod': bindingOverridden }"
-      >
-        <span class="id__input-prefix" data-test="id-binding-prefix">$</span>
-        <input
-          class="id__input id__input--prefixed"
-          :class="{ 'id__input--mod': bindingOverridden }"
-          data-test="id-binding"
-          type="text"
-          :value="bindingValue"
-          :placeholder="libraryBinding"
-          aria-label="Variable binding"
-          @input="onBindingInput"
-        />
+      <div class="id__input-row">
+        <div
+          class="id__input-wrap"
+          :class="{ 'id__input-wrap--mod': bindingOverridden }"
+        >
+          <span class="id__input-prefix" data-test="id-binding-prefix">$</span>
+          <input
+            class="id__input id__input--prefixed"
+            :class="{ 'id__input--mod': bindingOverridden }"
+            data-test="id-binding"
+            type="text"
+            :value="bindingValue"
+            :placeholder="libraryBinding"
+            aria-label="Variable binding"
+            @input="onBindingInput"
+          />
+        </div>
+        <button
+          v-if="bindingOverridden"
+          type="button"
+          class="id__reset"
+          data-test="id-binding-reset"
+          :title="`Restore binding to library default: $${libraryBinding}`"
+          aria-label="Reset variable binding to library default"
+          @click="onResetBinding"
+        ><i class="pi pi-replay" aria-hidden="true" /></button>
       </div>
     </div>
   </section>
@@ -141,9 +177,39 @@ function onBindingInput(ev: Event): void {
   border: 1px solid var(--wp-border);
   border-radius: 3px;
   overflow: hidden;
+  flex: 1;
 }
 .id__input-wrap:focus-within { border-color: var(--wp-accent); }
 .id__input-wrap--mod { border-color: var(--wp-accent); }
+
+/* Per-field row: input + optional inline reset button. The reset
+ * shows up only when the field is in `--mod` state, giving the user
+ * a precise way to drop one override without sweeping every other
+ * instance change via the footer's Reset overrides. */
+.id__input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.id__input-row .id__input { flex: 1; min-width: 0; }
+.id__reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: auto;
+  background: transparent;
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.id__reset:hover {
+  border-color: var(--wp-accent);
+  color: var(--wp-accent-text, var(--wp-text));
+}
+.id__reset .pi { font-size: 10px; }
 .id__input-prefix {
   background: var(--wp-bg2);
   color: var(--wp-text-dim, var(--wp-text3));
