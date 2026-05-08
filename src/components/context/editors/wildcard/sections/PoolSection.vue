@@ -192,7 +192,8 @@ const skewedTowards = computed(() => {
 }
 .pool__opt-head {
   display: grid;
-  grid-template-columns: 22px 130px 1fr 56px 60px;
+  /* Match OptionRow column widths so cell alignment stays in lockstep. */
+  grid-template-columns: 22px 1fr 110px 64px 60px;
   gap: 12px;
   padding: 4px 10px;
   border-bottom: 1px solid var(--wp-border);

@@ -188,4 +188,32 @@ describe("OptionRow", () => {
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     expect(w.find('[data-test="opt-name"] .opt__tok--var').text()).toBe("$style");
   });
+
+  it("typing weight back to library default clears the override (null)", async () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { option_weights: { o1: 1.8 } } },
+    });
+    const input = w.find<HTMLInputElement>('[data-test="opt-weight"]');
+    // baseOption.weight = 1 — matching library default should drop override
+    input.element.value = "1";
+    await input.trigger("input");
+    expect(w.emitted("weight")?.[0]).toEqual(["o1", null]);
+  });
+
+  it("up-spinner from library default emits +0.1 (modified)", async () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: {} },
+    });
+    await w.find('[data-test="opt-weight-up"]').trigger("click");
+    expect(w.emitted("weight")?.[0]).toEqual(["o1", 1.1]);
+  });
+
+  it("down-spinner returning to library default clears override", async () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { option_weights: { o1: 1.1 } } },
+    });
+    await w.find('[data-test="opt-weight-down"]').trigger("click");
+    // 1.1 - 0.1 = 1.0 = library default → cleared
+    expect(w.emitted("weight")?.[0]).toEqual(["o1", null]);
+  });
 });

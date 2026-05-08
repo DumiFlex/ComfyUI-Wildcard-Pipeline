@@ -9,9 +9,25 @@ const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 const libraryBinding = computed(
   () => ((props.module.payload ?? {}) as { var_binding?: string }).var_binding ?? "",
 );
+const libraryName = computed(() => props.module.meta?.library_name ?? "");
 const instance = computed(() => props.module.instance ?? {});
 const bindingValue = computed(() => instance.value.variable_binding ?? "");
 const nameValue = computed(() => props.module.meta?.name ?? "");
+
+/**
+ * "Modified" highlight is purely derived from "current value diverges
+ * from library default". This is the visual contract for any field
+ * that surfaces an instance override — no separate `mod` badge, just
+ * accent border + accent text. When the user types a value back to
+ * the library default, the highlight clears automatically because
+ * `nameOverridden` / `bindingOverridden` flip to false.
+ */
+const nameOverridden = computed(() =>
+  libraryName.value !== "" && nameValue.value !== libraryName.value,
+);
+const bindingOverridden = computed(() =>
+  bindingValue.value !== "" && bindingValue.value !== libraryBinding.value,
+);
 
 function onNameInput(ev: Event): void {
   const next = (ev.target as HTMLInputElement).value;
@@ -20,6 +36,14 @@ function onNameInput(ev: Event): void {
 
 function onBindingInput(ev: Event): void {
   const raw = (ev.target as HTMLInputElement).value;
+  // Clear the override when user types the library default back —
+  // engine reads `instance.variable_binding` first, so an exact match
+  // is functionally identical to `null` but `null` is the canonical
+  // "no override" state. Drop it so the field stops looking modified.
+  if (raw === libraryBinding.value) {
+    emit("update", patchInstance(props.module, "variable_binding", null));
+    return;
+  }
   emit("update", patchInstance(props.module, "variable_binding", raw.length > 0 ? raw : null));
 }
 </script>
@@ -32,6 +56,7 @@ function onBindingInput(ev: Event): void {
       <span class="id__key">Display name</span>
       <input
         class="id__input"
+        :class="{ 'id__input--mod': nameOverridden }"
         data-test="id-name"
         type="text"
         :value="nameValue"
@@ -43,10 +68,14 @@ function onBindingInput(ev: Event): void {
 
     <div class="id__row">
       <span class="id__key">Variable binding</span>
-      <div class="id__input-wrap">
+      <div
+        class="id__input-wrap"
+        :class="{ 'id__input-wrap--mod': bindingOverridden }"
+      >
         <span class="id__input-prefix" data-test="id-binding-prefix">$</span>
         <input
           class="id__input id__input--prefixed"
+          :class="{ 'id__input--mod': bindingOverridden }"
           data-test="id-binding"
           type="text"
           :value="bindingValue"
@@ -97,6 +126,14 @@ function onBindingInput(ev: Event): void {
   outline: none;
 }
 .id__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
+/* "Modified" highlight — diverges from library default. Accent
+ * border + accent text, no badge. When the user types the value
+ * back to library default the parent computed flips and the class
+ * drops automatically. */
+.id__input--mod {
+  border-color: var(--wp-accent);
+  color: var(--wp-accent-text, var(--wp-text));
+}
 .id__input-wrap {
   display: flex;
   align-items: stretch;
@@ -106,6 +143,7 @@ function onBindingInput(ev: Event): void {
   overflow: hidden;
 }
 .id__input-wrap:focus-within { border-color: var(--wp-accent); }
+.id__input-wrap--mod { border-color: var(--wp-accent); }
 .id__input-prefix {
   background: var(--wp-bg2);
   color: var(--wp-text-dim, var(--wp-text3));

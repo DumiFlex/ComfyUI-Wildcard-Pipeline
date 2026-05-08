@@ -84,6 +84,24 @@ function onToggle(): void {
   emit("toggle", props.option.id);
 }
 
+/** Library default — used to clear the override map entry when the
+ *  user types the same value back, so the row stops looking modified
+ *  without forcing a manual reset. */
+const libraryWeight = computed(() =>
+  typeof props.option.weight === "number" ? props.option.weight : 1.0,
+);
+
+function emitWeight(next: number | null): void {
+  if (next !== null && next === libraryWeight.value) {
+    // Match library default → drop the override entry. Engine reads
+    // the same value either way; clearing here keeps the visual
+    // override-state honest.
+    emit("weight", props.option.id, null);
+    return;
+  }
+  emit("weight", props.option.id, next);
+}
+
 function onWeightInput(ev: Event): void {
   const raw = (ev.target as HTMLInputElement).value.trim();
   if (raw === "") {
@@ -92,7 +110,7 @@ function onWeightInput(ev: Event): void {
   }
   const n = Number(raw);
   if (Number.isFinite(n)) {
-    emit("weight", props.option.id, n);
+    emitWeight(n);
   }
 }
 
@@ -102,7 +120,7 @@ function bumpWeight(direction: 1 | -1): void {
   if (!enabled.value) return;
   // Round to 1 decimal so 1.0 + 0.1 doesn't drift to 1.0999... visually.
   const next = Math.max(0, Math.round((weight.value + direction * WEIGHT_STEP) * 10) / 10);
-  emit("weight", props.option.id, next);
+  emitWeight(next);
 }
 
 function fmtPct(p: number): string {
@@ -219,7 +237,11 @@ function fmtPct(p: number): string {
 <style scoped>
 .opt {
   display: grid;
-  grid-template-columns: 22px 130px 1fr 56px 60px;
+  /* Columns: check · option name (1fr — generous for long values) ·
+   * probability (compact, ~110px is enough for a 50px bar + 32px %
+   * label) · weight input · category. The earlier 1fr-on-probability
+   * stretched the bar past usefulness and squeezed the name. */
+  grid-template-columns: 22px 1fr 110px 64px 60px;
   align-items: center;
   gap: 12px;
   padding: 7px 10px;

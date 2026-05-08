@@ -88,4 +88,37 @@ describe("IdentitySection", () => {
     });
     expect(w.find<HTMLInputElement>('[data-test="id-name"]').element.placeholder).toBe("outfit (lib)");
   });
+
+  it("name input gets mod class when value differs from library_name", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ meta: { name: "Custom", library_name: "outfit" } }) },
+    });
+    expect(w.find('[data-test="id-name"]').classes()).toContain("id__input--mod");
+  });
+
+  it("name input does NOT get mod class when value equals library_name", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ meta: { name: "outfit", library_name: "outfit" } }) },
+    });
+    expect(w.find('[data-test="id-name"]').classes()).not.toContain("id__input--mod");
+  });
+
+  it("binding input gets mod class when override is set", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
+    });
+    expect(w.find('[data-test="id-binding"]').classes()).toContain("id__input--mod");
+  });
+
+  it("typing binding back to library default clears the override (null)", async () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
+    });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    input.element.value = "outfit"; // matches library var_binding
+    await input.trigger("input");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.variable_binding).toBeNull();
+  });
 });
