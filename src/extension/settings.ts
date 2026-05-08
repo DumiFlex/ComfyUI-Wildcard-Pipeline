@@ -38,6 +38,7 @@ const SETTING_ID_DECORATION = "wildcardPipeline.display.decoration";
 const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
 const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
 const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
+const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -89,6 +90,7 @@ const state: {
   indicatorStyle: IndicatorStyle;
   borderHighlight: boolean;
   collapsedByDefault: boolean;
+  focusMode: boolean;
 } = {
   reduceMotion: "auto",
   contrast: "auto",
@@ -97,6 +99,7 @@ const state: {
   indicatorStyle: "both",
   borderHighlight: true,
   collapsedByDefault: false,
+  focusMode: false,
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -122,6 +125,7 @@ export function _resetDisplayStateForTesting(): void {
   state.indicatorStyle = "both";
   state.borderHighlight = true;
   state.collapsedByDefault = false;
+  state.focusMode = false;
 }
 
 /**
@@ -190,6 +194,10 @@ function describeCollapsed(on: boolean): string {
   return on ? "New modules: collapsed by default" : "New modules: expanded by default";
 }
 
+function describeFocus(on: boolean): string {
+  return `Focus mode: ${on ? "ON" : "OFF"}`;
+}
+
 /**
  * Apply current state + matchMedia to the body marker classes. Pure read
  * of the in-memory `state` map — no async layer. CSS keys off the markers:
@@ -229,6 +237,9 @@ function syncMarkers(): void {
   // Display — border highlight (state-marker borders)
   document.body.classList.toggle("wp-border-highlight-on", state.borderHighlight === true);
   document.body.classList.toggle("wp-border-highlight-off", state.borderHighlight === false);
+
+  // Display — focus mode (hovering one module dims siblings)
+  document.body.classList.toggle("wp-focus-mode", state.focusMode === true);
 }
 
 /**
@@ -257,6 +268,7 @@ export function applyDisplayPrefs(app: AppLike): void {
   // Boolean default false — only an explicit `=== true` enables it.
   // No body class for this setting; ContextWidget reads via getCollapsedByDefault().
   state.collapsedByDefault = app.extensionManager?.setting?.get(SETTING_ID_COLLAPSED) === true;
+  state.focusMode = app.extensionManager?.setting?.get(SETTING_ID_FOCUS) === true;
   syncMarkers();
 }
 
@@ -489,6 +501,29 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeCollapsed(next), {
             severity: "info",
             singletonKey: "wp-collapsed-default",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_FOCUS,
+      name: "Focus mode (dim non-hovered modules)",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "When on, hovering a module dims the others — useful for focusing " +
+        "on one card in a long list. Browser support requires :has() " +
+        "(Chrome 105+, Firefox 121+, Safari 15.4+).",
+      category: ["Wildcard Pipeline", "Display", "Focus mode"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.focusMode;
+        state.focusMode = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeFocus(next), {
+            severity: "info",
+            singletonKey: "wp-focus-mode",
           });
         }
       },

@@ -540,6 +540,39 @@ describe("a11y settings", () => {
     expect(toasts.value[0].singletonKey).toBe("wp-collapsed-default");
   });
 
+  // ── Display preferences — focus mode ────────────────────────────
+
+  it("focusMode boot — class absent by default", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    expect(document.body.classList.contains("wp-focus-mode")).toBe(false);
+  });
+
+  it("focusMode boot — class present when stored true", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ focusMode: true }));
+
+    expect(document.body.classList.contains("wp-focus-mode")).toBe(true);
+  });
+
+  it("focusMode onChange — flips class + emits toast", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_FOCUS)?.onChange?.(true, false);
+
+    expect(document.body.classList.contains("wp-focus-mode")).toBe(true);
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Focus mode: ON");
+    expect(toasts.value[0].singletonKey).toBe("wp-focus-mode");
+  });
+
   it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
