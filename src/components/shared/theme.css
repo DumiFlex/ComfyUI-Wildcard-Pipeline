@@ -172,6 +172,13 @@
   --wp-bg-deep: #d0d0d0;
   --wp-bg4:    #e6e6ee;
 
+  /* Mirror the dark-theme alias pattern in BOTH directions so
+   * components can use either hyphenated (--wp-bg-2) or
+   * non-hyphenated (--wp-bg2) names without theme-dependent breakage.
+   * Dark `:root` declares `--wp-bgN` then aliases `--wp-bg-N: var(--wp-bgN)`;
+   * light declares `--wp-bg-N` then aliases the other direction. */
+  --wp-bg2: var(--wp-bg-2);
+  --wp-bg3: var(--wp-bg-3);
   --wp-bg-4: var(--wp-bg4);
 
   --wp-border:        #b0b0b0;

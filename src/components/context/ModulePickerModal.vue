@@ -1084,7 +1084,7 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 8px;
 }
 .wp-picker__state .pi { font-size: 18px; color: var(--wp-text-dim); }
-.wp-picker__state--error { color: #fca5a5; }
+.wp-picker__state--error { color: var(--wp-danger, #fca5a5); }
 .wp-picker__retry {
   margin-top: 8px;
   height: 28px;
