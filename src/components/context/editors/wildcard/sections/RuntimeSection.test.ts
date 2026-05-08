@@ -145,4 +145,35 @@ describe("RuntimeSection", () => {
     expect(w.find('[data-test="runtime-seed-up"]').exists()).toBe(false);
     expect(w.find('[data-test="runtime-seed-down"]').exists()).toBe(false);
   });
+
+  it("seed up button preserves large ComfyUI seeds (>2^31) instead of clamping", async () => {
+    // Regression: bump-up on 728_451_244_582_250 used to clamp to
+    // 0x7fffffff because the cap was 32-bit. ComfyUI seeds reach into
+    // 2^53 — keep the full safe-integer range round-trippable.
+    const w = mount(RuntimeSection, {
+      props: { module: makeModule({ instance: { locked_seed: 728_451_244_582_250 } }) },
+    });
+    await w.find('[data-test="runtime-seed-up"]').trigger("click");
+    expect(lastPatch(w).instance?.locked_seed).toBe(728_451_244_582_251);
+  });
+
+  it("seed up clamps at Number.MAX_SAFE_INTEGER", async () => {
+    const w = mount(RuntimeSection, {
+      props: { module: makeModule({ instance: { locked_seed: Number.MAX_SAFE_INTEGER } }) },
+    });
+    await w.find('[data-test="runtime-seed-up"]').trigger("click");
+    expect(lastPatch(w).instance?.locked_seed).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("roll button generates a seed inside the safe-integer range", async () => {
+    const w = mount(RuntimeSection, {
+      props: { module: makeModule({ instance: { locked_seed: 12345 } }) },
+    });
+    await w.find('[data-test="runtime-roll"]').trigger("click");
+    const seed = lastPatch(w).instance?.locked_seed;
+    expect(typeof seed).toBe("number");
+    expect(Number.isSafeInteger(seed)).toBe(true);
+    expect(seed).toBeGreaterThanOrEqual(0);
+    expect(seed).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+  });
 });

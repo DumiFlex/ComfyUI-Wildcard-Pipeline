@@ -17,8 +17,21 @@ function emitInstance(patchFields: Record<string, unknown>): void {
   emit("update", { instance: next });
 }
 
+/** Match ComfyUI's seed widget range — server-side seeds run up to
+ *  2^64-1, but JS `Number` only represents integers exactly up to
+ *  2^53-1 (`Number.MAX_SAFE_INTEGER`). Picking that as the ceiling
+ *  keeps the value round-trippable through JSON without precision
+ *  loss. ComfyUI's stock seed widget already operates inside this
+ *  same safe range, so locked seeds compose cleanly. */
+const SEED_MAX = Number.MAX_SAFE_INTEGER;
+
 function randomSeed(): number {
-  return Math.floor(Math.random() * 0x7fffffff);
+  // `Math.random() * SEED_MAX` loses precision near the top of the
+  // range; combining two 32-bit halves keeps the distribution uniform
+  // across the full safe-integer space.
+  const hi = Math.floor(Math.random() * 0x200000); // top 21 bits
+  const lo = Math.floor(Math.random() * 0x100000000); // bottom 32 bits
+  return hi * 0x100000000 + lo;
 }
 
 function onLockClick(): void {
@@ -66,8 +79,8 @@ function bumpSeed(direction: 1 | -1): void {
   const current = typeof instance.value.locked_seed === "number"
     ? instance.value.locked_seed
     : 0;
-  // Clamp to [0, 0x7fffffff] — same range as randomSeed produces.
-  const next = Math.max(0, Math.min(0x7fffffff, current + direction));
+  // Clamp to [0, SEED_MAX] — same safe-integer range as randomSeed.
+  const next = Math.max(0, Math.min(SEED_MAX, current + direction));
   const ui = instance.value._ui ?? {};
   emitInstance({
     locked_seed: next,
