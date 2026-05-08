@@ -25,6 +25,7 @@ import { hashes, refreshModule, setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
+import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
 
 /**
  * Per-kind subtitle text shown under the modal title (mockup v5
@@ -352,10 +353,76 @@ async function doWildcardSaveToLibrary(): Promise<void> {
   }
 }
 
+/**
+ * Fixed-values v2 round-trip handlers — siblings of the wildcard
+ * pair. Same fetch / confirm / toast logic, just framed for the
+ * fixed_values kind.
+ */
+function onFixedValuesResetClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Reset to library?",
+    body: `Discard ${moduleName}'s local edits and restore the library version. Stale row overrides will be pruned.`,
+    confirmLabel: "Reset to library",
+    variant: "danger",
+    onConfirm: () => { void doFixedValuesReset(); },
+  });
+}
+
+async function doFixedValuesReset(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const refreshed = await refreshModule(draft.value);
+    onResetFromLibrary(refreshed);
+  } catch (err) {
+    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
+function onFixedValuesSaveToLibraryClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Save to library?",
+    body: `Push current values to library entry "${moduleName}". Other workflows referencing this module will see the new version on their next open.`,
+    confirmLabel: "Save to library",
+    onConfirm: () => { void doFixedValuesSaveToLibrary(); },
+  });
+}
+
+async function doFixedValuesSaveToLibrary(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json() as { new_hash: string };
+    setLibraryHash(draft.value.id, body.new_hash);
+    pushToast("Saved to library", { severity: "success" });
+  } catch (err) {
+    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
 function save() {
   if (!draft.value) return;
   const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
   if (next.type === "fixed_values") {
+    // v2 FixedValuesInstanceModal keeps `entries` in sync with row
+    // state (each emit pushes a fresh entries array derived from the
+    // current draft rows). save() runs the v1 reconciliation
+    // unchanged — it derives `values` from entries, compares against
+    // library, and either drops or sets `instance.values_overrides`.
+    // Because v2 syncs entries, the reconciliation produces the same
+    // patch shape v2 already emitted, just routed through the entries
+    // field. v1 inputs (FixedValuesEditorBody, still alive for
+    // backward compat until removed in a later phase) keep working
+    // through the same path.
+    //
     // Two-tier model:
     //   - Inline-created (no `payload_hash`, no library link): the
     //     module is local-only, so user edits write straight into
@@ -425,9 +492,22 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     />
 
-    <!-- v1 tabbed branch — non-wildcard kinds keep the existing
-         Library/Instance tab structure until each kind is migrated
-         to its own v2 single-pane modal. -->
+    <!-- v2 fixed-values branch — single-pane tailored modal. -->
+    <FixedValuesInstanceModal
+      v-else-if="draft && draft.type === 'fixed_values'"
+      :module="draft"
+      :is-drifted="isDrifted"
+      @update="onUpdate"
+      @save="save"
+      @cancel="cancel"
+      @reset-from-library="onFixedValuesResetClick"
+      @save-to-library="onFixedValuesSaveToLibraryClick"
+      @clear-all-overrides="onClearAllOverrides"
+    />
+
+    <!-- v1 tabbed branch — non-wildcard, non-fixed_values kinds keep
+         the existing Library/Instance tab structure until each kind
+         is migrated to its own v2 single-pane modal. -->
     <div v-else-if="draft" class="wp-medit">
       <header class="wp-medit__head">
         <i

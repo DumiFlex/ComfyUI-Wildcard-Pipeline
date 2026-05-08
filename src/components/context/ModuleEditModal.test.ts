@@ -104,14 +104,15 @@ describe("ModuleEditModal — shell header", () => {
     expect(wrapper.find(".wp-medit__name-input").exists()).toBe(false);
   });
 
-  it("shows editable name input for fixed_values kind", async () => {
+  it("fixed_values kind goes through v2 modal (no v1 .wp-medit shell)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeFixedValues() },
     });
     await nextTick();
-    expect(wrapper.find(".wp-medit__name-input").exists()).toBe(true);
-    expect(wrapper.find(".wp-medit__name-readonly").exists()).toBe(false);
+    // v2 dispatch — name editing happens in IdentitySection now.
+    expect(wrapper.findComponent({ name: "FixedValuesInstanceModal" }).exists()).toBe(true);
+    expect(wrapper.find('[data-test="id-name"]').exists()).toBe(true);
   });
 
   it("shows kind label as a kind-chip in the header (non-fixed_values)", async () => {
@@ -152,14 +153,9 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
   // src/components/context/editors/wildcard/WildcardInstanceModal.test.ts.
   // Removed from the v1 dispatcher set.
 
-  it("fixed_values → shows FixedValuesEditorBody (values table rendered)", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeFixedValues() },
-    });
-    await nextTick();
-    expect(wrapper.find("[data-test='fv-values-table']").exists()).toBe(true);
-  });
+  // fixed_values → FixedValuesInstanceModal (v2 single-pane) — see
+  // src/components/context/editors/fixed-values/FixedValuesInstanceModal.test.ts.
+  // Removed from the v1 dispatcher set.
 
   it("combine → shows CombineEditorBody (template textarea rendered)", async () => {
     const wrapper = mount(ModuleEditModal, {
@@ -228,7 +224,7 @@ describe("ModuleEditModal — footer / save / cancel", () => {
     expect(wrapper.emitted("save")).toBeTruthy();
   });
 
-  it("save with fixed_values (inline, no payload_hash) writes payload.values", async () => {
+  it("save with fixed_values (inline, no payload_hash) writes payload.values via v2 reconciliation", async () => {
     const inline: ModuleEntry = {
       id: "inline01",
       type: "fixed_values",
@@ -242,7 +238,8 @@ describe("ModuleEditModal — footer / save / cancel", () => {
       props: { visible: true, module: inline },
     });
     await flushPromises();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    // v2 modal Save button.
+    await wrapper.find('[data-test="fvm-save"]').trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     // Inline path: payload.values carries the entry, no override created.
     const vals = (saved.payload as { values: Array<{ name: string; value: string }> }).values;
@@ -257,75 +254,13 @@ describe("ModuleEditModal — footer / save / cancel", () => {
       props: { visible: true, module: makeFixedValues() },
     });
     await flushPromises();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
+    await wrapper.find('[data-test="fvm-save"]').trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     const ov = (saved.instance as { values_overrides?: unknown } | undefined)?.values_overrides;
     expect(ov).toBeUndefined();
   });
 });
 
-
-describe("ModuleEditModal — fixed_values editor body", () => {
-  beforeEach(() => _resetForTests());
-
-  it("name input renders module.meta.name and emits update with patched meta", async () => {
-    const mod = makeFixedValues();
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod },
-    });
-    await nextTick();
-    const input = wrapper.find("[data-test='fv-name']");
-    expect(input.exists()).toBe(true);
-    expect((input.element as HTMLInputElement).value).toBe("presets");
-    (input.element as HTMLInputElement).value = "portrait presets";
-    await input.trigger("input");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(saved.meta.name).toBe("portrait presets");
-  });
-
-  it("$variable name strips leading $ and special chars on input", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeFixedValues() },
-    });
-    await nextTick();
-    // First row variable input — makeFixedValues has values[0].name = "lens"
-    const varInputs = wrapper.findAll("[data-test='fv-values-table'] tbody input[aria-label='Variable name']");
-    expect(varInputs.length).toBeGreaterThan(0);
-    const firstInput = varInputs[0];
-    (firstInput.element as HTMLInputElement).value = "$new-var!";
-    await firstInput.trigger("input");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const vals = (saved.payload as { values: Array<{ name: string; value: string }> }).values;
-    // Leading $ stripped, hyphen and ! stripped → "newvar"
-    expect(vals[0].name).toBe("newvar");
-  });
-
-  it("Add value appends a new row to payload.values on save", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeFixedValues() },
-    });
-    await nextTick();
-    await wrapper.find("[data-test='fv-add-value']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const vals = (saved.payload as { values?: unknown[] } | undefined)?.values ?? [];
-    // Started with 2, added 1 → 3
-    expect(vals.length).toBe(3);
-  });
-
-  it.todo("library-tracked save with edited entries writes instance.values_overrides — see Task 16");
-  it.todo("reset button clears overrides and reloads entries from library payload — see Task 16");
-  it.todo("reset button absent on library-tracked fixed_values with no overrides — see Task 16");
-  it.todo("reset button absent on inline-created fixed_values — see Task 16");
-});
 
 describe("ModuleEditModal — combine editor body", () => {
   beforeEach(() => _resetForTests());
@@ -801,15 +736,17 @@ describe("ModuleEditModal — V3 kind chip in header", () => {
     expect(chip.classes()).toContain("wp-kind-chip--combine");
   });
 
-  it("renders chip even for fixed_values (editable name) kind", async () => {
+  it("v2 fixed_values modal renders its own kind chip via FixedValuesInstanceModal", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeFixedValues() },
     });
     await nextTick();
-    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
+    // v2 modal owns the chip now (data-test="fvm-chip"), not the v1
+    // .wp-medit__head shell.
+    const chip = wrapper.find('[data-test="fvm-chip"]');
     expect(chip.exists()).toBe(true);
-    expect(chip.text()).toBe("fixed");
+    expect(chip.text().toLowerCase()).toBe("fixed");
   });
 });
 
@@ -947,13 +884,14 @@ describe("ModuleEditModal — wildcard v2 dispatcher", () => {
     expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
   });
 
-  it("renders v1 tab strip for non-wildcard kinds", async () => {
+  it("renders v1 tab strip for kinds still on v1 (combine, derivation, constraint)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeFixedValues() },
+      props: { visible: true, module: makeCombine() },
     });
     await nextTick();
     expect(wrapper.findComponent({ name: "WildcardInstanceModal" }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: "FixedValuesInstanceModal" }).exists()).toBe(false);
     expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
   });
 
@@ -972,3 +910,76 @@ describe("ModuleEditModal — wildcard v2 dispatcher", () => {
     expect(saved.instance?.variable_binding).toBe("renamed");
   });
 });
+
+// ── Fixed-values v2 dispatcher branch ───────────────────────────────────
+
+describe("ModuleEditModal — fixed_values v2 dispatcher", () => {
+  beforeEach(() => _resetForTests());
+
+  it("renders FixedValuesInstanceModal (no tab strip) for fixed_values kind", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeFixedValues() },
+    });
+    await nextTick();
+    expect(wrapper.findComponent({ name: "FixedValuesInstanceModal" }).exists()).toBe(true);
+    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
+  });
+
+  it("forwards FixedValuesInstanceModal update events into draft mutation", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeFixedValues() },
+    });
+    await nextTick();
+    const fvm = wrapper.findComponent({ name: "FixedValuesInstanceModal" });
+    // v2 ValuesSection always emits `entries` in sync with the
+    // values_overrides shape, so save()'s reconciliation re-derives
+    // the same patch. Mirror that here.
+    fvm.vm.$emit("update", {
+      instance: {
+        values_overrides: [
+          { id: "v1", name: "lens", value: "50mm" },
+          { id: "v2", name: "angle", value: "wide" },
+        ],
+      },
+      entries: [
+        { variable_name: "lens", value: "50mm" },
+        { variable_name: "angle", value: "wide" },
+      ],
+    });
+    await nextTick();
+    await wrapper.find('[data-test="fvm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.values_overrides?.[0].value).toBe("50mm");
+  });
+
+  it("v2 ValuesSection emit + save() round-trip writes payload.values for inline modules", async () => {
+    const inline: ModuleEntry = {
+      id: "inline01",
+      type: "fixed_values",
+      enabled: true,
+      meta: { name: "scratch" },
+      entries: [{ variable_name: "tag", value: "noir" }],
+      payload: { values: [{ id: "x1", name: "tag", value: "noir" }] },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: inline },
+    });
+    await nextTick();
+    const fvm = wrapper.findComponent({ name: "FixedValuesInstanceModal" });
+    // Mirror ValuesSection's emit shape — entries kept in sync.
+    fvm.vm.$emit("update", {
+      instance: { values_overrides: null, enabled_options: null },
+      entries: [{ variable_name: "tag", value: "vivid" }],
+    });
+    await nextTick();
+    await wrapper.find('[data-test="fvm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    const vals = (saved.payload as { values: Array<{ name: string; value: string }> }).values;
+    expect(vals[0].value).toBe("vivid");
+  });
+});
+

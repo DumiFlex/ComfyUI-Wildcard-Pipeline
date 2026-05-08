@@ -58,7 +58,17 @@ function emitDraft(next: DraftRow[]): void {
     values_overrides: valuesOverrides,
     enabled_options: nextEnabledOptions,
   };
-  emit("update", { instance: nextInstance });
+  // Keep `entries` in sync with the draft rows so the v1 save()
+  // reconciliation in ModuleEditModal can re-derive the same patch
+  // shape we just emitted. Without this sync, the existing
+  // entries→values conversion would clobber our values_overrides on
+  // save (entries would still hold the original library values from
+  // the picker's hoist step).
+  const nextEntries = next.map((r) => ({
+    variable_name: r.name,
+    value: r.value,
+  }));
+  emit("update", { instance: nextInstance, entries: nextEntries });
 }
 
 function onToggle(rowId: string): void {
