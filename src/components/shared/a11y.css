@@ -44,30 +44,98 @@
   scroll-behavior: auto !important;
 }
 
-/* ── High contrast — bump border + text tones, thicken focus outlines ── */
+/* ── High contrast ──────────────────────────────────────────────────── */
+/* Three layers:
+ *   1. Token overrides — bg darker, text brighter, borders much brighter,
+ *      accent punchier. Alias tokens (--wp-bg-1, --wp-text-muted, etc.)
+ *      follow automatically because custom properties resolve at use-site.
+ *   2. Border-width sweep — every WP-owned bordered surface goes 1px → 2px
+ *      so element edges read clearly even in dimly-lit rooms.
+ *   3. Focus-ring sweep — every focusable WP element gets a uniform 3px
+ *      violet ring with 2px offset. The offset is the load-bearing
+ *      detail: without it the focus ring merges into the element's own
+ *      border and disappears at a glance, which is why high-contrast
+ *      mode often "looks broken" out of the box. */
 .wp-a11y-high-contrast {
-  --wp-border: #6e6e6e;
-  --wp-border2: #9a9a9a;
-  --wp-text2: #e6e6e6;
-  --wp-text3: #b0b0b0;
-  --wp-text4: #c5c5c5;
+  /* Backgrounds — closer to true black for sharper text contrast */
+  --wp-bg: #0a0a0a;
+  --wp-bg2: #121212;
+  --wp-bg3: #1c1c1c;
+  --wp-bg4: #2a2a2a;
+
+  /* Borders — brighter so edges read at a glance */
+  --wp-border: #7a7a7a;
+  --wp-border2: #a8a8a8;
+
+  /* Text — every tier bumped; primary tier is true white */
+  --wp-text: #ffffff;
+  --wp-text2: #d0d0d0;
+  --wp-text3: #9a9a9a;
+  --wp-text4: #c0c0c0;
+
+  /* Accent — punchier so brand color survives the brighter borders */
+  --wp-accent: #818cf8;
+  --wp-accent2: #c4b5fd;
+  --wp-violet: #c4b5fd;
 }
-.wp-a11y-high-contrast .wp-module,
-.wp-a11y-high-contrast .wp-recovery,
-.wp-a11y-high-contrast .wp-asm__rendered,
-.wp-a11y-high-contrast .wp-recovery__btn,
-.wp-a11y-high-contrast .wp-emptystate__cta,
-.wp-a11y-high-contrast .wp-add-btn,
-.wp-a11y-high-contrast .wp-toast {
+
+/* Border-width sweep on every WP-owned bordered surface */
+.wp-a11y-high-contrast :where(
+  .wp-module,
+  .wp-recovery,
+  .wp-asm__rendered,
+  .wp-recovery__btn,
+  .wp-emptystate__cta,
+  .wp-add-btn,
+  .wp-btn,
+  .wp-toast,
+  .wp-medit,
+  .wp-medit__btn,
+  .wp-confirm,
+  .wp-confirm__btn,
+  .wp-picker,
+  .wp-picker-tab,
+  .wp-chip,
+  .wp-chip--toggle,
+  .wp-pill,
+  .wp-tag-chip,
+  .wp-kind-chip,
+  .wp-toggle-mark
+) {
   border-width: 2px !important;
 }
-.wp-a11y-high-contrast .wp-module:focus,
-.wp-a11y-high-contrast .wp-module:focus-visible,
-.wp-a11y-high-contrast .wp-emptystate__cta:focus-visible,
-.wp-a11y-high-contrast .wp-add-btn:focus-visible {
+
+/* Focus-ring sweep — uniform across every focusable WP surface */
+.wp-a11y-high-contrast :where(
+  .wp-module,
+  .wp-emptystate__cta,
+  .wp-add-btn,
+  .wp-btn,
+  .wp-medit__btn,
+  .wp-confirm__btn,
+  .wp-picker-tab,
+  .wp-recovery__btn,
+  .wp-chip,
+  .wp-chip--toggle,
+  .wp-pill,
+  .wp-tag-chip,
+  .wp-kind-chip
+):focus-visible,
+.wp-a11y-high-contrast :is(
+  .wp-context,
+  .wp-medit,
+  .wp-picker,
+  .wp-app,
+  .wp-asm-helper
+) :is(input, textarea, select):focus-visible {
   outline: 3px solid var(--wp-violet) !important;
-  outline-offset: 2px;
+  outline-offset: 2px !important;
 }
-.wp-a11y-high-contrast .wp-toggle-mark {
-  border-width: 2px !important;
+
+/* Toggle mark uses an adjacent-sibling box-shadow ring instead of an
+ * outline because the actual focused element is the visually hidden
+ * <input>. Bump the ring width to match the rest of the high-contrast
+ * pass so toggles don't feel like a weaker focus target than buttons. */
+.wp-a11y-high-contrast .wp-toggle input:focus-visible + .wp-toggle-mark {
+  box-shadow: 0 0 0 3px var(--wp-violet) !important;
 }
