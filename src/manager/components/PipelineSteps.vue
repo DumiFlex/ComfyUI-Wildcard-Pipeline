@@ -599,7 +599,7 @@ function onDragEnd() {
   letter-spacing: 0.06em;
   cursor: pointer;
   margin-top: 4px;
-  transition: all 120ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 .wp-pl-add:hover {
   border-style: solid;

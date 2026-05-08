@@ -1950,7 +1950,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border-radius: 2px;
   border: 1px solid var(--wp-border2);
   background: var(--wp-bg2);
-  transition: all 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .wp-toggle input:checked + .wp-toggle-mark { background: var(--wp-accent); border-color: var(--wp-accent); }
 .wp-toggle input:focus-visible + .wp-toggle-mark {

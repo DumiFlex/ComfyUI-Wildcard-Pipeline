@@ -628,7 +628,10 @@ defineExpose({
 /* Toggle-able chip used in the extra-filter row. Inherits the global
    `.wp-chip` pill (999 radius, 2/8 padding, 11px font) and overrides the
    active state with the accent tint per prototype `lists.jsx:185-211`. */
-.wp-chip--toggle { cursor: pointer; transition: all 0.12s ease; }
+.wp-chip--toggle {
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
 .wp-chip--toggle:hover {
   background: var(--wp-bg-4);
   color: var(--wp-text);

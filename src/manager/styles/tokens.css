@@ -617,7 +617,7 @@ input, textarea, select { font: inherit; }
   color: var(--wp-text-muted);
   border-radius: 999px;
   letter-spacing: 0.02em;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .wp-tag-chip:hover { background: var(--wp-bg-4); color: var(--wp-text); }
 /* Active state defined globally so scoped view files can use color-mix and this
@@ -2024,7 +2024,7 @@ input, textarea, select { font: inherit; }
   letter-spacing: 0.06em;
   cursor: pointer;
   margin-top: 4px;
-  transition: all 120ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 .wp-pl-add:hover {
   border-style: solid;
@@ -2047,7 +2047,7 @@ input, textarea, select { font: inherit; }
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 .wp-pl-tab:hover {
   background: var(--wp-bg3);

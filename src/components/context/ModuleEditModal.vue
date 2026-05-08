@@ -852,7 +852,7 @@ function cancel() {
   font-size: 12px;
   padding: 5px 14px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
 .wp-medit__btn:hover { border-color: var(--wp-border2); }
 .wp-medit__btn--primary {

@@ -296,7 +296,7 @@ function rippleStyle(v: string): Record<string, string> {
   padding: 3px 7px;
   font: 11px/1 var(--wp-font-mono);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   position: relative;
   overflow: hidden;
 }
