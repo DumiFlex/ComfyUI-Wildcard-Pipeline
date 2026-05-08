@@ -46,23 +46,49 @@
 
 .wp-decor-off :where(
   .wp-module,
+  .wp-medit,
   .wp-medit__btn,
   .wp-confirm,
   .wp-asm__rendered,
   .wp-toast,
+  .wp-toast-stack,
   .wp-empty-hero,
-  .wp-recovery
+  .wp-emptystate__cta,
+  .wp-recovery,
+  .wp-picker,
+  .wp-ctxmenu
 ) {
   box-shadow: none !important;
   backdrop-filter: none !important;
 }
 
+/* Decor-off — also nuke the brand-gradient wash overlay on modal heads
+ * so the now-solid background shows through cleanly. Without this, the
+ * `::after { background: rgba(35,35,35,0.85) }` layer makes solid+wash
+ * look identical to gradient+wash and the user sees no visible change. */
+.wp-decor-off .wp-medit__head::after,
+.wp-decor-off .wp-wci__head::after,
+.wp-decor-off .wp-fvi__head::after {
+  display: none !important;
+}
+
+/* Decor-off — drop the brand filter (saturation/brightness) on the empty-
+ * state CTA so it reads as flat. Default rule applies a brightness/saturate
+ * filter for a slight at-rest dim; flat mode keeps it crisp. */
+.wp-decor-off .wp-emptystate__cta,
+.wp-decor-off .wp-btn--primary {
+  filter: none !important;
+}
+
 .wp-decor-minimal :where(
   .wp-module,
+  .wp-medit,
   .wp-medit__btn,
   .wp-confirm,
   .wp-asm__rendered,
-  .wp-toast
+  .wp-toast,
+  .wp-picker,
+  .wp-ctxmenu
 ) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
   backdrop-filter: blur(2px) !important;
