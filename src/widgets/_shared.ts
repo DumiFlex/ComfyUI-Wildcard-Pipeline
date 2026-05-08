@@ -308,6 +308,13 @@ export interface ModuleEntry {
      */
     values_overrides?: Array<{ id: string; name: string; value: string }> | null;
     /**
+     * Combine per-instance template override. When set, the engine
+     * reads this string in place of `payload.template`. Empty/null =
+     * use library default. Modal collapses to null when input matches
+     * library template. Engine reads in `combine_handler.py:64-65`.
+     */
+    template_override?: string | null;
+    /**
      * Per-instance disable list for derivation rules. Engine skips rules
      * whose `id` matches any entry. Null/absent = all rules active.
      */
