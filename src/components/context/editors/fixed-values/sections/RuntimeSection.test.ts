@@ -48,4 +48,36 @@ describe("fixed-values RuntimeSection", () => {
     expect(btn.classes()).toContain("toggle--on");
     expect(btn.attributes("aria-checked")).toBe("true");
   });
+
+  // ── Lock seed (added in 2026-05-08 syntax-parity cycle) ─────────────
+  // fixed_values now resolves `{a|b|c}` per value, so it gains seed-lock
+  // parity with wildcard + combine. RuntimeSection copies the combine
+  // RuntimeSection 1:1 — same Lock seed UX (toggle, seed input, roll
+  // button, ±1 spinner, _ui memory).
+
+  it("renders Lock seed + Hide toggles together", () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule() } });
+    const lock = w.find('[data-test="runtime-lock"]');
+    expect(lock.exists()).toBe(true);
+    expect(lock.text()).toContain("Lock seed");
+    expect(w.find('[data-test="runtime-hide"]').exists()).toBe(true);
+  });
+
+  it("Lock toggle off → click → emits a numeric locked_seed", async () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule() } });
+    await w.find('[data-test="runtime-lock"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(typeof patch.instance?.locked_seed).toBe("number");
+    expect(Number.isInteger(patch.instance?.locked_seed)).toBe(true);
+  });
+
+  it("seed input visible only when locked_seed is set", () => {
+    const off = mount(RuntimeSection, { props: { module: makeModule() } });
+    expect(off.find('[data-test="runtime-seed"]').exists()).toBe(false);
+    const on = mount(RuntimeSection, {
+      props: { module: makeModule({ instance: { locked_seed: 42 } }) },
+    });
+    expect(on.find('[data-test="runtime-seed"]').exists()).toBe(true);
+  });
 });
