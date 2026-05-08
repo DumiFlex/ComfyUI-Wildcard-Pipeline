@@ -112,11 +112,11 @@ function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
           if (id === SETTING_CONTRAST) return "auto";
           if (id === SETTING_DENSITY) return overrides.density ?? "comfortable";
           if (id === SETTING_DECORATION) return overrides.decoration ?? "full";
-          if (id === SETTING_INDICATOR) return overrides.indicatorStyle ?? "dot";
+          if (id === SETTING_INDICATOR) return overrides.indicatorStyle ?? "badge";
           if (id === SETTING_BORDER) return overrides.borderHighlight ?? true;
           if (id === SETTING_COLLAPSED) return overrides.collapsedByDefault ?? false;
           if (id === SETTING_FOCUS) return overrides.focusMode ?? false;
-          if (id === SETTING_KIND_STYLE) return overrides.kindStyle ?? "icon";
+          if (id === SETTING_KIND_STYLE) return overrides.kindStyle ?? "chip";
           return undefined;
         },
       },
@@ -424,22 +424,22 @@ describe("a11y settings", () => {
 
   // ── Display preferences — indicator style ───────────────────────
 
-  it("indicatorStyle boot — applies wp-indicator-dot by default", () => {
+  it("indicatorStyle boot — applies wp-indicator-badge by default", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
     applyDisplayPrefs(makeAppWithDisplay());
 
-    expect(document.body.classList.contains("wp-indicator-dot")).toBe(true);
-    expect(document.body.classList.contains("wp-indicator-both")).toBe(false);
-  });
-
-  it("indicatorStyle boot — reads stored badge value", () => {
-    const fixture = makeMatchMedia({ motion: false, contrast: false });
-    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
-    applyDisplayPrefs(makeAppWithDisplay({ indicatorStyle: "badge" }));
-
     expect(document.body.classList.contains("wp-indicator-badge")).toBe(true);
     expect(document.body.classList.contains("wp-indicator-dot")).toBe(false);
+  });
+
+  it("indicatorStyle boot — reads stored dot value", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ indicatorStyle: "dot" }));
+
+    expect(document.body.classList.contains("wp-indicator-dot")).toBe(true);
+    expect(document.body.classList.contains("wp-indicator-badge")).toBe(false);
   });
 
   it("indicatorStyle onChange — flips body class", () => {
@@ -448,10 +448,10 @@ describe("a11y settings", () => {
     applyDisplayPrefs(makeAppWithDisplay());
 
     const settings = buildSettings(makeApp());
-    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("both", "dot");
+    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("both", "badge");
 
     expect(document.body.classList.contains("wp-indicator-both")).toBe(true);
-    expect(document.body.classList.contains("wp-indicator-dot")).toBe(false);
+    expect(document.body.classList.contains("wp-indicator-badge")).toBe(false);
   });
 
   it("indicatorStyle toast — fires with descriptive message", () => {
@@ -461,10 +461,10 @@ describe("a11y settings", () => {
     markBootCompleted();
 
     const settings = buildSettings(makeApp());
-    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("badge", "dot");
+    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("dot", "badge");
 
     expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0].message).toBe("Indicators: badge only");
+    expect(toasts.value[0].message).toBe("Indicators: dot only");
     expect(toasts.value[0].singletonKey).toBe("wp-indicator");
   });
 
@@ -580,23 +580,23 @@ describe("a11y settings", () => {
 
   // ── Display preferences — kind style ────────────────────────────
 
-  it("kindStyle boot — applies wp-kind-style-icon by default", () => {
+  it("kindStyle boot — applies wp-kind-style-chip by default", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
     applyDisplayPrefs(makeAppWithDisplay());
 
-    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(true);
-    expect(document.body.classList.contains("wp-kind-style-chip")).toBe(false);
+    expect(document.body.classList.contains("wp-kind-style-chip")).toBe(true);
+    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(false);
     expect(document.body.classList.contains("wp-kind-style-both")).toBe(false);
   });
 
-  it("kindStyle boot — reads stored chip value", () => {
+  it("kindStyle boot — reads stored icon value", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
-    applyDisplayPrefs(makeAppWithDisplay({ kindStyle: "chip" }));
+    applyDisplayPrefs(makeAppWithDisplay({ kindStyle: "icon" }));
 
-    expect(document.body.classList.contains("wp-kind-style-chip")).toBe(true);
-    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(false);
+    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(true);
+    expect(document.body.classList.contains("wp-kind-style-chip")).toBe(false);
   });
 
   it("kindStyle onChange — flips body class", () => {
@@ -605,10 +605,10 @@ describe("a11y settings", () => {
     applyDisplayPrefs(makeAppWithDisplay());
 
     const settings = buildSettings(makeApp());
-    settings.find((s) => s.id === SETTING_KIND_STYLE)?.onChange?.("both", "icon");
+    settings.find((s) => s.id === SETTING_KIND_STYLE)?.onChange?.("both", "chip");
 
     expect(document.body.classList.contains("wp-kind-style-both")).toBe(true);
-    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(false);
+    expect(document.body.classList.contains("wp-kind-style-chip")).toBe(false);
   });
 
   it("kindStyle toast — fires with descriptive message", () => {
@@ -618,10 +618,10 @@ describe("a11y settings", () => {
     markBootCompleted();
 
     const settings = buildSettings(makeApp());
-    settings.find((s) => s.id === SETTING_KIND_STYLE)?.onChange?.("chip", "icon");
+    settings.find((s) => s.id === SETTING_KIND_STYLE)?.onChange?.("icon", "chip");
 
     expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0].message).toBe("Module type: chip only");
+    expect(toasts.value[0].message).toBe("Module type: icon only");
     expect(toasts.value[0].singletonKey).toBe("wp-kind-style");
   });
 

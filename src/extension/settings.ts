@@ -67,15 +67,15 @@ const DECORATION_OPTIONS = [
 ];
 
 const INDICATOR_OPTIONS = [
-  { text: "Dot only (default)", value: "dot" },
-  { text: "Badge only", value: "badge" },
-  { text: "Both (dot + badge)", value: "both" },
+  { text: "Badge (default)", value: "badge" },
+  { text: "Dot (compact)", value: "dot" },
+  { text: "Both (verbose)", value: "both" },
 ];
 
 const KIND_STYLE_OPTIONS = [
-  { text: "Icon only (default)", value: "icon" },
-  { text: "Chip only", value: "chip" },
-  { text: "Both (icon + chip)", value: "both" },
+  { text: "Chip (default)", value: "chip" },
+  { text: "Icon (compact)", value: "icon" },
+  { text: "Both (verbose)", value: "both" },
 ];
 
 interface ExtensionManager {
@@ -105,11 +105,11 @@ const state: {
   contrast: "auto",
   density: "comfortable",
   decoration: "full",
-  indicatorStyle: "dot",
+  indicatorStyle: "badge",
   borderHighlight: true,
   collapsedByDefault: false,
   focusMode: false,
-  kindStyle: "icon",
+  kindStyle: "chip",
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -136,11 +136,11 @@ function asKindStyle(v: unknown, fallback: KindStyle): KindStyle {
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
   state.decoration = "full";
-  state.indicatorStyle = "dot";
+  state.indicatorStyle = "badge";
   state.borderHighlight = true;
   state.collapsedByDefault = false;
   state.focusMode = false;
-  state.kindStyle = "icon";
+  state.kindStyle = "chip";
 }
 
 /**
@@ -202,9 +202,9 @@ function describeIndicator(mode: IndicatorStyle): string {
 }
 
 function describeKindStyle(mode: KindStyle): string {
-  if (mode === "both") return "Module type: icon + chip";
-  if (mode === "chip") return "Module type: chip only";
-  return "Module type: icon only";
+  if (mode === "both") return "Module type: chip + icon";
+  if (mode === "icon") return "Module type: icon only";
+  return "Module type: chip only";
 }
 
 function describeBorder(on: boolean): string {
@@ -287,7 +287,7 @@ export function applyA11yClasses(app: AppLike): void {
 export function applyDisplayPrefs(app: AppLike): void {
   state.density = asDensity(app.extensionManager?.setting?.get(SETTING_ID_DENSITY), "comfortable");
   state.decoration = asDecoration(app.extensionManager?.setting?.get(SETTING_ID_DECORATION), "full");
-  state.indicatorStyle = asIndicator(app.extensionManager?.setting?.get(SETTING_ID_INDICATOR), "dot");
+  state.indicatorStyle = asIndicator(app.extensionManager?.setting?.get(SETTING_ID_INDICATOR), "badge");
   // Boolean default true — only an explicit `=== false` reading flips the
   // marker. `undefined` (settings panel never visited) falls through to true.
   state.borderHighlight = app.extensionManager?.setting?.get(SETTING_ID_BORDER) !== false;
@@ -295,7 +295,7 @@ export function applyDisplayPrefs(app: AppLike): void {
   // No body class for this setting; ContextWidget reads via getCollapsedByDefault().
   state.collapsedByDefault = app.extensionManager?.setting?.get(SETTING_ID_COLLAPSED) === true;
   state.focusMode = app.extensionManager?.setting?.get(SETTING_ID_FOCUS) === true;
-  state.kindStyle = asKindStyle(app.extensionManager?.setting?.get(SETTING_ID_KIND_STYLE), "icon");
+  state.kindStyle = asKindStyle(app.extensionManager?.setting?.get(SETTING_ID_KIND_STYLE), "chip");
   syncMarkers();
 }
 
@@ -432,16 +432,16 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         }
       },
     },
+    // Display preferences — ordered by visual concern (sizing → look →
+    // chrome → state markers → behavior). Tooltips kept short; the
+    // dropdown options carry the detailed mode descriptions.
     {
       id: SETTING_ID_DENSITY,
-      name: "Density",
+      name: "Module density",
       type: "combo",
       options: DENSITY_OPTIONS,
       defaultValue: "comfortable",
-      tooltip:
-        "Controls Wildcard Pipeline widget sizing. Comfortable preserves the " +
-        "spacious default; compact reduces padding and chip sizes; minimal is " +
-        "the tightest packing for power users.",
+      tooltip: "Module spacing and chip sizes.",
       category: ["Wildcard Pipeline", "Display", "Density"],
       onChange: (newVal) => {
         const next = asDensity(newVal, "comfortable");
@@ -462,11 +462,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       type: "combo",
       options: DECORATION_OPTIONS,
       defaultValue: "full",
-      tooltip:
-        "Controls visual embellishment — gradients, shadows, brand gradients " +
-        "on modal headers. Full keeps all decoration; minimal drops gradients " +
-        "but keeps subtle shadows; off is flat (best for weak GPUs / remote " +
-        "desktops).",
+      tooltip: "Gradients & shadows. Off = flat (weak GPU / remote desktop).",
       category: ["Wildcard Pipeline", "Display", "Decoration"],
       onChange: (newVal) => {
         const next = asDecoration(newVal, "full");
@@ -482,18 +478,36 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
     },
     {
+      id: SETTING_ID_KIND_STYLE,
+      name: "Module type style",
+      type: "combo",
+      options: KIND_STYLE_OPTIONS,
+      defaultValue: "chip",
+      tooltip: "How module type shows: chip text, icon glyph, or both.",
+      category: ["Wildcard Pipeline", "Display", "Module type style"],
+      onChange: (newVal) => {
+        const next = asKindStyle(newVal, "chip");
+        const changed = next !== state.kindStyle;
+        state.kindStyle = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeKindStyle(next), {
+            severity: "info",
+            singletonKey: "wp-kind-style",
+          });
+        }
+      },
+    },
+    {
       id: SETTING_ID_INDICATOR,
-      name: "Indicator style",
+      name: "State indicator style",
       type: "combo",
       options: INDICATOR_OPTIONS,
-      defaultValue: "dot",
-      tooltip:
-        "How module state markers (mod, missing, drift, override, conflict) " +
-        "appear. Dot is the compact default — colored dot only. Badge shows " +
-        "the text label only. Both stacks dot + label for max visibility.",
-      category: ["Wildcard Pipeline", "Display", "Indicator style"],
+      defaultValue: "badge",
+      tooltip: "How mod / missing / drift / conflict markers appear.",
+      category: ["Wildcard Pipeline", "Display", "State indicator style"],
       onChange: (newVal) => {
-        const next = asIndicator(newVal, "dot");
+        const next = asIndicator(newVal, "badge");
         const changed = next !== state.indicatorStyle;
         state.indicatorStyle = next;
         syncMarkers();
@@ -507,14 +521,11 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     },
     {
       id: SETTING_ID_BORDER,
-      name: "Border highlights for state markers",
+      name: "State border highlights",
       type: "boolean",
       defaultValue: true,
-      tooltip:
-        "Whether modules in mod / missing / drift / conflict states show " +
-        "colored border highlights. When off, only the dot/badge indicators " +
-        "signal state — borders stay neutral.",
-      category: ["Wildcard Pipeline", "Display", "Border highlights"],
+      tooltip: "Color the module border by its state.",
+      category: ["Wildcard Pipeline", "Display", "State border highlights"],
       onChange: (newVal) => {
         const next = newVal !== false;
         const changed = next !== state.borderHighlight;
@@ -533,10 +544,8 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       name: "Collapse new modules by default",
       type: "boolean",
       defaultValue: false,
-      tooltip:
-        "When on, newly added modules render with their body collapsed " +
-        "(header only). Existing modules retain their previous collapse state.",
-      category: ["Wildcard Pipeline", "Display", "Collapsed by default"],
+      tooltip: "New modules render with body hidden (header only).",
+      category: ["Wildcard Pipeline", "Display", "Collapse default"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.collapsedByDefault;
@@ -552,13 +561,10 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     },
     {
       id: SETTING_ID_FOCUS,
-      name: "Focus mode (dim non-hovered modules)",
+      name: "Focus mode",
       type: "boolean",
       defaultValue: false,
-      tooltip:
-        "When on, hovering a module dims the others — useful for focusing " +
-        "on one card in a long list. Browser support requires :has() " +
-        "(Chrome 105+, Firefox 121+, Safari 15.4+).",
+      tooltip: "Hover a module to dim the others.",
       category: ["Wildcard Pipeline", "Display", "Focus mode"],
       onChange: (newVal) => {
         const next = newVal === true;
@@ -569,31 +575,6 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeFocus(next), {
             severity: "info",
             singletonKey: "wp-focus-mode",
-          });
-        }
-      },
-    },
-    {
-      id: SETTING_ID_KIND_STYLE,
-      name: "Module type style",
-      type: "combo",
-      options: KIND_STYLE_OPTIONS,
-      defaultValue: "icon",
-      tooltip:
-        "How a module's type is shown in its header. Icon is the compact " +
-        "default — colored PrimeIcon per kind. Chip shows the text label " +
-        "(\"wildcard\", \"fixed\", \"combine\"...). Both stacks icon + chip " +
-        "for users who want maximum info.",
-      category: ["Wildcard Pipeline", "Display", "Module type style"],
-      onChange: (newVal) => {
-        const next = asKindStyle(newVal, "icon");
-        const changed = next !== state.kindStyle;
-        state.kindStyle = next;
-        syncMarkers();
-        if (bootCompleted && changed) {
-          pushToast(describeKindStyle(next), {
-            severity: "info",
-            singletonKey: "wp-kind-style",
           });
         }
       },
