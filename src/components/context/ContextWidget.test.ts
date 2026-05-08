@@ -704,6 +704,41 @@ describe("ContextWidget inline actions", () => {
   });
 });
 
+// ── Modal dispatch: combine v2 routing ──────────────────────────────────
+// Sanity check: when ContextWidget opens its edit modal for a combine
+// module, the v2 CombineInstanceModal renders (NOT the v1 .wp-medit
+// tabbed shell). Mirrors the existing wildcard / fixed_values v2
+// dispatch coverage in ModuleEditModal.test.ts but at the
+// ContextWidget level so the integration path stays guarded.
+
+describe("ContextWidget combine v2 modal dispatch", () => {
+  it("opens CombineInstanceModal (no v1 .wp-medit) for a combine module", async () => {
+    // Mount with teleport stub so ModalShell content lands inline
+    // where wrapper.find can reach it (rather than appended to body).
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [{
+        id: "cb123456",
+        type: "combine",
+        enabled: true,
+        meta: { name: "mod-cb123456", description: "", tags: [] },
+        entries: [],
+        payload: { template: "$style portrait", output_var: "result" },
+      }],
+    });
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 9000, initialJson, upstreamVars: [], onChange: () => {} },
+      global: { stubs: { teleport: true } },
+    });
+    const card = wrapper.find(".wp-module");
+    await card.trigger("keydown", { key: "Enter" });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find(".cbm").exists()).toBe(true);
+    expect(wrapper.find(".wp-medit").exists()).toBe(false);
+  });
+});
+
 
 // ── B2: status badges (mockup v5 lines 714, 736, 861) ──────────────────────
 // Text-style labels next to the existing 7px dots so users discover the
