@@ -1,0 +1,84 @@
+import { describe, it, expect } from "vitest";
+import { mount } from "@vue/test-utils";
+import IdentitySection from "./IdentitySection.vue";
+import type { ModuleEntry } from "../../../../../widgets/_shared";
+
+function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
+  return {
+    id: "ab12cd34",
+    type: "wildcard",
+    enabled: true,
+    meta: { name: "outfit" },
+    entries: [],
+    payload: { var_binding: "outfit", options: [] },
+    instance: {},
+    ...overrides,
+  };
+}
+
+describe("IdentitySection", () => {
+  it("renders name input bound to module.meta.name", () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    const input = w.find<HTMLInputElement>('[data-test="id-name"]').element;
+    expect(input.value).toBe("outfit");
+  });
+
+  it("emits update with new meta.name when name input changes", async () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    const input = w.find<HTMLInputElement>('[data-test="id-name"]');
+    input.element.value = "Top color picker";
+    await input.trigger("input");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.meta?.name).toBe("Top color picker");
+  });
+
+  it("renders binding input with current instance.variable_binding", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
+    });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]').element;
+    expect(input.value).toBe("outfit_top");
+  });
+
+  it("placeholder on binding input shows library var_binding when no override", () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]').element;
+    expect(input.placeholder).toBe("outfit");
+    expect(input.value).toBe("");
+  });
+
+  it("emits update with new variable_binding when binding input changes", async () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    input.element.value = "outfit_top";
+    await input.trigger("input");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.variable_binding).toBe("outfit_top");
+  });
+
+  it("emits variable_binding=null when binding input is cleared to empty", async () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
+    });
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    input.element.value = "";
+    await input.trigger("input");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.variable_binding).toBeNull();
+  });
+
+  it("renders $-prefix label on binding input", () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="id-binding-prefix"]').text()).toBe("$");
+  });
+
+  it("name input renders with non-default value", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ meta: { name: "Custom" } }) },
+    });
+    expect(w.find<HTMLInputElement>('[data-test="id-name"]').element.value).toBe("Custom");
+  });
+});
