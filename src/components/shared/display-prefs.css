@@ -253,3 +253,53 @@
   ) {
   display: none !important;
 }
+
+/* ── Color intensity (Phase 3c) ──────────────────────────────────────────
+ * Three intensity levels override the accent / kind / status color tokens
+ * via `oklch(from <base> l calc(c * <multiplier>) h)`. The lightness `l`
+ * stays put so contrast against the bg doesn't shift; only the chroma
+ * `c` (saturation) flexes per intensity.
+ *
+ *   - muted    → c × 0.55  (calmer palette, lower contrast pop)
+ *   - standard → no override (current values, default)
+ *   - vivid    → c × 1.30  (higher saturation, stronger pop)
+ *
+ * `oklch(from ...)` (CSS Color 5 relative color syntax) requires
+ * Chromium 119+ / Firefox 128+ / Safari 16.4+. ComfyUI desktop ships
+ * with recent Chromium and most browser users update; older Firefox
+ * users degrade gracefully (the override silently fails, tokens keep
+ * their standard values — same UX as if the user picked "standard").
+ */
+body.wp-color-muted {
+  --wp-accent:           oklch(from #6366f1 l calc(c * 0.55) h);
+  --wp-accent2:          oklch(from #a970ff l calc(c * 0.55) h);
+  --wp-violet:           oklch(from #a970ff l calc(c * 0.55) h);
+  --wp-amber:            oklch(from #fbbf24 l calc(c * 0.55) h);
+  --wp-red:              oklch(from #f87171 l calc(c * 0.55) h);
+  --wp-warn:             oklch(from #f59e0b l calc(c * 0.55) h);
+  --wp-danger:           oklch(from #ef4444 l calc(c * 0.55) h);
+  --wp-status-modified:  oklch(from #fb923c l calc(c * 0.55) h);
+  --wp-kind-wildcard:    oklch(from #a78bfa l calc(c * 0.55) h);
+  --wp-kind-combine:     oklch(from #34d399 l calc(c * 0.55) h);
+  --wp-kind-derivation:  oklch(from #fbbf24 l calc(c * 0.55) h);
+  --wp-kind-constraint:  oklch(from #f472b6 l calc(c * 0.55) h);
+  --wp-kind-pipeline:    oklch(from #fb7185 l calc(c * 0.55) h);
+  --wp-kind-fixed:       oklch(from #22d3ee l calc(c * 0.55) h);
+}
+
+body.wp-color-vivid {
+  --wp-accent:           oklch(from #6366f1 l calc(c * 1.30) h);
+  --wp-accent2:          oklch(from #a970ff l calc(c * 1.30) h);
+  --wp-violet:           oklch(from #a970ff l calc(c * 1.30) h);
+  --wp-amber:            oklch(from #fbbf24 l calc(c * 1.30) h);
+  --wp-red:              oklch(from #f87171 l calc(c * 1.30) h);
+  --wp-warn:             oklch(from #f59e0b l calc(c * 1.30) h);
+  --wp-danger:           oklch(from #ef4444 l calc(c * 1.30) h);
+  --wp-status-modified:  oklch(from #fb923c l calc(c * 1.30) h);
+  --wp-kind-wildcard:    oklch(from #a78bfa l calc(c * 1.30) h);
+  --wp-kind-combine:     oklch(from #34d399 l calc(c * 1.30) h);
+  --wp-kind-derivation:  oklch(from #fbbf24 l calc(c * 1.30) h);
+  --wp-kind-constraint:  oklch(from #f472b6 l calc(c * 1.30) h);
+  --wp-kind-pipeline:    oklch(from #fb7185 l calc(c * 1.30) h);
+  --wp-kind-fixed:       oklch(from #22d3ee l calc(c * 1.30) h);
+}

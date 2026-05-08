@@ -25,6 +25,7 @@ export type KindStyle = "both" | "icon" | "chip";
 export type ValidationMode = "strict" | "relaxed" | "permissive";
 export type ToastLifetime = "short" | "default" | "long" | "sticky";
 export type CollapseMode = "independent" | "accordion";
+export type ColorIntensity = "muted" | "standard" | "vivid";
 
 /**
  * Setting widget types ComfyUI's settings panel can render natively.
@@ -99,6 +100,7 @@ const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
 const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 const SETTING_ID_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
+const SETTING_ID_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
 
 const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
 const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
@@ -159,6 +161,12 @@ const COLLAPSE_MODE_OPTIONS = [
   { text: "Accordion (expanding one collapses siblings)", value: "accordion" },
 ];
 
+const COLOR_INTENSITY_OPTIONS = [
+  { text: "Muted (low saturation)", value: "muted" },
+  { text: "Standard (default)", value: "standard" },
+  { text: "Vivid (high saturation)", value: "vivid" },
+];
+
 interface ExtensionManager {
   setting?: { get(id: string): unknown };
 }
@@ -193,6 +201,7 @@ const state = reactive<{
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
   collapseMode: CollapseMode;
+  colorIntensity: ColorIntensity;
 }>({
   reduceMotion: "auto",
   contrast: "auto",
@@ -208,6 +217,7 @@ const state = reactive<{
   suppressInfoToasts: false,
   newModuleDisabled: false,
   collapseMode: "independent",
+  colorIntensity: "standard",
 });
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -242,6 +252,10 @@ function asCollapseMode(v: unknown, fallback: CollapseMode): CollapseMode {
   return v === "independent" || v === "accordion" ? v : fallback;
 }
 
+function asColorIntensity(v: unknown, fallback: ColorIntensity): ColorIntensity {
+  return v === "muted" || v === "standard" || v === "vivid" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
@@ -256,6 +270,7 @@ export function _resetDisplayStateForTesting(): void {
   state.suppressInfoToasts = false;
   state.newModuleDisabled = false;
   state.collapseMode = "independent";
+  state.colorIntensity = "standard";
 }
 
 /**
@@ -409,6 +424,10 @@ function describeCollapseMode(mode: CollapseMode): string {
     : "Collapse mode: INDEPENDENT";
 }
 
+function describeColorIntensity(mode: ColorIntensity): string {
+  return `Color intensity: ${mode.toUpperCase()}`;
+}
+
 function describeBorder(on: boolean): string {
   return `Border highlights: ${on ? "ON" : "OFF"}`;
 }
@@ -468,6 +487,12 @@ function syncMarkers(): void {
   document.body.classList.toggle("wp-kind-style-icon", state.kindStyle === "icon");
   document.body.classList.toggle("wp-kind-style-chip", state.kindStyle === "chip");
   document.body.classList.toggle("wp-kind-style-both", state.kindStyle === "both");
+
+  // Display — color intensity (overrides accent / kind / status tokens
+  // via oklch() chroma multipliers; see display-prefs.css)
+  document.body.classList.toggle("wp-color-muted", state.colorIntensity === "muted");
+  document.body.classList.toggle("wp-color-standard", state.colorIntensity === "standard");
+  document.body.classList.toggle("wp-color-vivid", state.colorIntensity === "vivid");
 }
 
 /**
@@ -508,6 +533,9 @@ export function applyDisplayPrefs(app: AppLike): void {
   // Phase 3b — collapse-stack mode. Pure Vue state (no body class) since
   // the behavior is JS-driven (toggleCollapsed reads via getCollapseMode).
   state.collapseMode = asCollapseMode(app.extensionManager?.setting?.get(SETTING_ID_COLLAPSE_MODE), "independent");
+  // Phase 3c — color intensity. Body class drives oklch() chroma
+  // overrides for accent / kind / status tokens (see display-prefs.css).
+  state.colorIntensity = asColorIntensity(app.extensionManager?.setting?.get(SETTING_ID_COLOR_INTENSITY), "standard");
   syncMarkers();
 }
 
@@ -575,6 +603,7 @@ export function installDebugHelpers(): void {
     // collapseMode is pure Vue state — no syncMarkers since it has
     // no body class. ContextWidget reads via getCollapseMode().
     collapseMode: (mode: CollapseMode) => { state.collapseMode = mode; },
+    colorIntensity: (mode: ColorIntensity) => { state.colorIntensity = mode; syncMarkers(); },
     state: () => ({
       density: state.density,
       decoration: state.decoration,
@@ -584,6 +613,7 @@ export function installDebugHelpers(): void {
       focusMode: state.focusMode,
       kindStyle: state.kindStyle,
       collapseMode: state.collapseMode,
+      colorIntensity: state.colorIntensity,
     }),
   };
 
@@ -788,6 +818,29 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeCollapseMode(next), {
             severity: "info",
             singletonKey: "wp-collapse-mode",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_COLOR_INTENSITY,
+      name: "Color intensity",
+      type: "combo",
+      options: COLOR_INTENSITY_OPTIONS,
+      defaultValue: "standard",
+      tooltip:
+        "How saturated accent / kind / status colors render. " +
+        "Muted reduces chroma for a calmer palette; vivid bumps it for pop.",
+      category: ["Wildcard Pipeline", "Display", "Color intensity"],
+      onChange: (newVal) => {
+        const next = asColorIntensity(newVal, "standard");
+        const changed = next !== state.colorIntensity;
+        state.colorIntensity = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeColorIntensity(next), {
+            severity: "info",
+            singletonKey: "wp-color-intensity",
           });
         }
       },
