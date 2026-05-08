@@ -1089,7 +1089,7 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
   }
   items.push(
     { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(m.id) },
-    { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-chevron-down" : "pi-chevron-right", onSelect: () => toggleCollapsed(m.id) },
+    { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-caret-down" : "pi-caret-right", onSelect: () => toggleCollapsed(m.id) },
     { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(m.id), divider: true },
     { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(m.id, "top") },
     { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(m.id, "bottom") },
@@ -1326,7 +1326,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             class="wp-collapse-btn"
             :title="isCollapsed(m) ? 'Expand' : 'Collapse'"
             @click="toggleCollapsed(m.id)"
-          ><i :class="['pi', isCollapsed(m) ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
+          ><i :class="['pi', isCollapsed(m) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
 
           <label class="wp-toggle" :title="m.enabled ? 'Disable' : 'Enable'">
             <input

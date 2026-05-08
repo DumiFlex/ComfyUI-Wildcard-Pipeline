@@ -84,7 +84,7 @@ const state = reactive<{
             type="button"
             :title="state.m1.collapsed ? 'Expand' : 'Collapse'"
             @click="state.m1.collapsed = !state.m1.collapsed"
-          ><i :class="['pi', state.m1.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
+          ><i :class="['pi', state.m1.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m1.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
@@ -129,7 +129,7 @@ const state = reactive<{
             type="button"
             :title="state.m2.collapsed ? 'Expand' : 'Collapse'"
             @click="state.m2.collapsed = !state.m2.collapsed"
-          ><i :class="['pi', state.m2.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
+          ><i :class="['pi', state.m2.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m2.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
@@ -166,7 +166,7 @@ const state = reactive<{
             type="button"
             :title="state.m3.collapsed ? 'Expand' : 'Collapse'"
             @click="state.m3.collapsed = !state.m3.collapsed"
-          ><i :class="['pi', state.m3.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
+          ><i :class="['pi', state.m3.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m3.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
@@ -203,7 +203,7 @@ const state = reactive<{
             type="button"
             :title="state.m4.collapsed ? 'Expand' : 'Collapse'"
             @click="state.m4.collapsed = !state.m4.collapsed"
-          ><i :class="['pi', state.m4.collapsed ? 'pi-chevron-right' : 'pi-chevron-down']" aria-hidden="true"></i></button>
+          ><i :class="['pi', state.m4.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m4.enabled" type="checkbox" />
             <span class="wp-toggle-mark"></span>
