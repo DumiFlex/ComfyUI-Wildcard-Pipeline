@@ -1,23 +1,32 @@
 <script setup lang="ts">
 /**
  * Live preview mockup for the Display Playground modal — renders a
- * fake module card so users can see how density / decoration /
+ * fake module list so users can see how density / decoration /
  * indicator-style / kind-style toggles change the rendering before
  * committing.
  *
- * The mockup is just a static DOM tree with the same class names
- * ContextWidget uses, so all the body-class CSS rules in
- * `display-prefs.css` (density tokens, indicator hide rules, kind
- * style hide rules, border highlight off, etc.) apply automatically.
+ * Four modules cover the most-noticed visual variations:
+ *   1. wildcard module with stacked states (mod + drift + missing +
+ *      override) — exercises the priority-filter + indicator/dot
+ *      width
+ *   2. fixed_values module with no state markers — clean kind-chip
+ *      styling, different border-left color
+ *   3. combine module (clean) — third kind-color contrast
+ *   4. wildcard module disabled (toggle off, dimmed) — shows the
+ *      `wp-disabled` styling so users see what muted modules look
+ *      like at the chosen density
+ *
+ * The mockup is a static DOM tree with the same class names
+ * ContextWidget uses, so the body-class CSS rules in display-prefs.css
+ * (density tokens, indicator hide rules, kind-style hide rules,
+ * border-highlight off, etc.) apply automatically.
  *
  * Style rules below are a SUBSET of ContextWidget's scoped styles —
- * the chrome rules (module card frame, header layout, dots cluster,
- * etc.) are duplicated here because Vue's `<style scoped>` attaches
- * a `[data-v-*]` attribute that doesn't match across components.
- *
- * Drift risk: if ContextWidget's chrome changes substantially, this
- * mockup will get out of sync. Acceptable trade-off for keeping the
- * playground self-contained without a tokens-vs-chrome refactor.
+ * Vue's `<style scoped>` attaches a `[data-v-*]` attribute that
+ * doesn't match across components, so we duplicate just enough chrome
+ * to render presentable cards. Drift risk: if ContextWidget's chrome
+ * changes substantially this mockup gets stale; future refactor could
+ * extract a shared module-card.css both consume.
  */
 </script>
 
@@ -25,26 +34,30 @@
   <div class="wp-pg-mockup">
     <div class="wp-pg-mockup__caption">Live preview</div>
     <div class="wp-modules">
+      <!-- 1. Wildcard module with all the state markers active so
+           users see indicator-style + priority filter side-by-side -->
       <div class="wp-module" data-kind="wildcard">
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true">
-            <i class="pi pi-bars" />
-          </span>
-          <button class="wp-collapse-btn" type="button" tabindex="-1">
-            <i class="pi pi-chevron-down" />
-          </button>
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-bars" aria-hidden="true"></i
+          ></span>
+          <button class="wp-collapse-btn" type="button" tabindex="-1"
+            ><i class="pi pi-chevron-down" aria-hidden="true"></i
+          ></button>
           <label class="wp-toggle">
             <input type="checkbox" checked tabindex="-1" />
             <span class="wp-toggle-mark"></span>
           </label>
-          <span class="wp-mod-icon" aria-hidden="true">
-            <i class="pi pi-asterisk" />
-          </span>
+          <span class="wp-mod-icon" aria-hidden="true"
+            ><i class="pi pi-asterisk" aria-hidden="true"></i
+          ></span>
           <span class="wp-kind-chip wp-kind-chip--wildcard">wildcard</span>
           <span class="wp-module-name">$backdrop</span>
           <span class="wp-mod-dots">
             <span class="wp-mod-dot wp-mod-dot--modified" aria-hidden="true"></span>
             <span class="wp-mod-badge wp-mod-badge--mod">mod</span>
+            <span class="wp-mod-dot wp-mod-dot--drift" aria-hidden="true"></span>
+            <span class="wp-mod-badge wp-mod-badge--drift">drift</span>
             <span class="wp-mod-dot wp-mod-dot--missing" aria-hidden="true"></span>
             <span class="wp-mod-badge wp-mod-badge--missing">missing</span>
             <span class="wp-conflict-dot wp-conflict-dot--info" aria-hidden="true"></span>
@@ -53,12 +66,82 @@
         </div>
         <div class="wp-summary">$backdrop = "rocky beach at golden hour"</div>
       </div>
+
+      <!-- 2. Fixed-values module — different kind-color, no state markers
+           so users see the un-stacked default look -->
+      <div class="wp-module" data-kind="fixed_values">
+        <div class="wp-module-header">
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-bars" aria-hidden="true"></i
+          ></span>
+          <button class="wp-collapse-btn" type="button" tabindex="-1"
+            ><i class="pi pi-chevron-down" aria-hidden="true"></i
+          ></button>
+          <label class="wp-toggle">
+            <input type="checkbox" checked tabindex="-1" />
+            <span class="wp-toggle-mark"></span>
+          </label>
+          <span class="wp-mod-icon" aria-hidden="true"
+            ><i class="pi pi-tag" aria-hidden="true"></i
+          ></span>
+          <span class="wp-kind-chip wp-kind-chip--fixed">fixed</span>
+          <span class="wp-module-name">$model_settings</span>
+          <span class="wp-mod-dots"></span>
+        </div>
+        <div class="wp-summary">cfg=4.5 · steps=28 · sampler=dpmpp_2m</div>
+      </div>
+
+      <!-- 3. Combine module — third kind-color, also clean -->
+      <div class="wp-module" data-kind="combine">
+        <div class="wp-module-header">
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-bars" aria-hidden="true"></i
+          ></span>
+          <button class="wp-collapse-btn" type="button" tabindex="-1"
+            ><i class="pi pi-chevron-down" aria-hidden="true"></i
+          ></button>
+          <label class="wp-toggle">
+            <input type="checkbox" checked tabindex="-1" />
+            <span class="wp-toggle-mark"></span>
+          </label>
+          <span class="wp-mod-icon" aria-hidden="true"
+            ><i class="pi pi-link" aria-hidden="true"></i
+          ></span>
+          <span class="wp-kind-chip wp-kind-chip--combine">combine</span>
+          <span class="wp-module-name">$prompt</span>
+          <span class="wp-mod-dots"></span>
+        </div>
+        <div class="wp-summary">$backdrop, $model_settings → $prompt</div>
+      </div>
+
+      <!-- 4. Disabled wildcard — toggle off, dim text — shows what
+           muted modules look like at the chosen density -->
+      <div class="wp-module wp-disabled" data-kind="wildcard">
+        <div class="wp-module-header">
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-bars" aria-hidden="true"></i
+          ></span>
+          <button class="wp-collapse-btn" type="button" tabindex="-1"
+            ><i class="pi pi-chevron-right" aria-hidden="true"></i
+          ></button>
+          <label class="wp-toggle">
+            <input type="checkbox" tabindex="-1" />
+            <span class="wp-toggle-mark"></span>
+          </label>
+          <span class="wp-mod-icon" aria-hidden="true"
+            ><i class="pi pi-asterisk" aria-hidden="true"></i
+          ></span>
+          <span class="wp-kind-chip wp-kind-chip--wildcard">wildcard</span>
+          <span class="wp-module-name">$hair_style</span>
+          <span class="wp-mod-dots"></span>
+        </div>
+      </div>
     </div>
     <p class="wp-pg-mockup__hint">
-      The card above shows a wildcard module with multiple states
-      active (modified + missing + override). Flip controls on the
-      left to see how each setting affects this row — and every other
-      Wildcard Pipeline module on your canvas.
+      Four sample modules — different kinds, states, and an off
+      toggle — so density / indicator / kind-style flips show their
+      effect at a glance. Settings apply live to your real canvas
+      modules too.
     </p>
   </div>
 </template>
@@ -105,11 +188,26 @@
   flex-direction: column;
   gap: 4px;
 }
-/* State borders matched to .wp-mod-dots presence — mockup sets all
- * three so the highest-severity (missing) wins when border-highlight
- * is on. */
-.wp-pg-mockup .wp-module {
+/* Per-kind border-left + icon-color overrides — mirrors ContextWidget */
+.wp-pg-mockup .wp-module[data-kind="fixed_values"] { border-left-color: var(--wp-kind-fixed); }
+.wp-pg-mockup .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
+.wp-pg-mockup .wp-module[data-kind="fixed_values"] .wp-mod-icon { color: var(--wp-kind-fixed); }
+.wp-pg-mockup .wp-module[data-kind="combine"]      .wp-mod-icon { color: var(--wp-kind-combine); }
+
+/* Stacked-states wildcard module (the first one) — set its full border
+ * to red so the user sees border-highlight effect on the highest-tier
+ * state (missing). The other modules stay neutral so the kind border-left
+ * accent reads cleanly. */
+.wp-pg-mockup .wp-module:first-child {
   border-color: var(--wp-danger);
+}
+
+/* Disabled module styling — mirrors ContextWidget's `.wp-disabled`. */
+.wp-pg-mockup .wp-module.wp-disabled {
+  opacity: 0.6;
+}
+.wp-pg-mockup .wp-module.wp-disabled .wp-module-name {
+  color: var(--wp-text3);
 }
 .wp-pg-mockup .wp-module-header {
   display: flex;
@@ -157,6 +255,13 @@
   height: 12px;
   border-radius: 2px;
   border: 1px solid var(--wp-border2);
+  background: var(--wp-bg2);
+}
+/* Checked state — matches ContextWidget's `:checked + .wp-toggle-mark`
+ * which fills the box with the brand accent. The disabled-toggle module
+ * (4th in the mockup) leaves the input unchecked so the empty-box look
+ * shows through. */
+.wp-pg-mockup .wp-toggle input:checked + .wp-toggle-mark {
   background: var(--wp-accent);
   border-color: var(--wp-accent);
 }
@@ -180,8 +285,18 @@
   padding: var(--wp-chip-pad);
   border-radius: 2px;
   flex-shrink: 0;
+}
+.wp-pg-mockup .wp-kind-chip--wildcard {
   background: color-mix(in oklab, var(--wp-kind-wildcard) 22%, transparent);
   color: var(--wp-kind-wildcard);
+}
+.wp-pg-mockup .wp-kind-chip--fixed {
+  background: color-mix(in oklab, var(--wp-kind-fixed) 22%, transparent);
+  color: var(--wp-kind-fixed);
+}
+.wp-pg-mockup .wp-kind-chip--combine {
+  background: color-mix(in oklab, var(--wp-kind-combine) 22%, transparent);
+  color: var(--wp-kind-combine);
 }
 .wp-pg-mockup .wp-module-name {
   flex: 1;
@@ -212,6 +327,10 @@
   background: color-mix(in oklab, var(--wp-status-modified) 14%, transparent);
   border-color: var(--wp-status-modified);
 }
+.wp-pg-mockup .wp-mod-dot--drift {
+  background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
+  border-color: var(--wp-warn);
+}
 .wp-pg-mockup .wp-mod-dot--missing {
   background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
   border-color: var(--wp-danger);
@@ -239,6 +358,10 @@
 .wp-pg-mockup .wp-mod-badge--mod {
   background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
   color: var(--wp-status-modified);
+}
+.wp-pg-mockup .wp-mod-badge--drift {
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
+  color: var(--wp-warn);
 }
 .wp-pg-mockup .wp-mod-badge--missing {
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent);

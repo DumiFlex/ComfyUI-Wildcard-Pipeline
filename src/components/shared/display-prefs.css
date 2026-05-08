@@ -58,7 +58,8 @@
   .wp-picker,
   .wp-ctxmenu,
   .wcm,
-  .fvm
+  .fvm,
+  .wp-pg
 ) {
   box-shadow: none !important;
   backdrop-filter: none !important;
@@ -75,7 +76,8 @@
  * which match nothing in the DOM. */
 .wp-decor-off .wp-medit__head::after,
 .wp-decor-off .wcm__head::after,
-.wp-decor-off .fvm__head::after {
+.wp-decor-off .fvm__head::after,
+.wp-decor-off .wp-pg__head::after {
   display: none !important;
 }
 
@@ -86,7 +88,8 @@
  * head element with high specificity. */
 .wp-decor-off .wp-medit__head,
 .wp-decor-off .wcm__head,
-.wp-decor-off .fvm__head {
+.wp-decor-off .fvm__head,
+.wp-decor-off .wp-pg__head {
   background: var(--wp-bg2) !important;
 }
 
@@ -108,7 +111,8 @@
   .wp-picker,
   .wp-ctxmenu,
   .wcm,
-  .fvm
+  .fvm,
+  .wp-pg
 ) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
   backdrop-filter: blur(2px) !important;
