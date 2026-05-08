@@ -113,14 +113,14 @@
   /* ── Density tokens — overridden by .wp-density-{compact,minimal} body
    * classes from display-prefs.css. Components reference these via
    * `var(--wp-pad-row)` etc. so density mode flexes the chrome without
-   * each component declaring its own breakpoints. */
-  --wp-pad-row: 8px 10px;
+   * each component declaring its own breakpoints. Values match the
+   * existing comfortable-default behavior so this token introduction
+   * is a pure refactor (no visual change). */
+  --wp-pad-row: 6px 8px;
   --wp-row-gap: 6px;
-  --wp-header-height: 28px;
-  --wp-chip-pad: 2px 8px;
-  --wp-chip-font: 11px;
-  --wp-mod-font: 12.5px;
-  --wp-action-btn: 26px;
+  --wp-chip-pad: 3px 5px;
+  --wp-chip-font: 9px;
+  --wp-mod-font: 12px;
 }
 
 /* ── Phase 5.5.7 — light theme overrides + canvas/node namespace ───────
@@ -227,10 +227,13 @@
  * surfaces pick up the same colour triple without duplication.
  * ────────────────────────────────────────────────────────────────── */
 .wp-kind-chip {
-  font: 600 9px/1 var(--wp-font-sans, sans-serif);
+  font-family: var(--wp-font-sans, sans-serif);
+  font-weight: 600;
+  font-size: var(--wp-chip-font);
+  line-height: 1;
   text-transform: lowercase;
   letter-spacing: 0.04em;
-  padding: 3px 5px;
+  padding: var(--wp-chip-pad);
   border-radius: 2px;
   flex-shrink: 0;
   background: color-mix(in oklab, var(--wp-text-dim, var(--wp-text3)) 18%, transparent);

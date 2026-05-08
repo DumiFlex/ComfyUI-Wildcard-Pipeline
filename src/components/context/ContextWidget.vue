@@ -1599,7 +1599,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-modules {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--wp-row-gap);
 }
 
 /* ── Populated ↔ Empty page swap ───────────────────────────────────────
@@ -1824,7 +1824,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border-left-width: 3px;
   border-left-color: var(--wp-kind-wildcard);
   border-radius: var(--wp-radius-sm);
-  padding: 6px 8px;
+  padding: var(--wp-pad-row);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1992,7 +1992,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
 .wp-module-name {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--wp-mod-font);
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2032,10 +2032,13 @@ function onDrop(ev: DragEvent, targetId: string | null) {
  * picks up the same hue as its dot. Surfaces `override`,
  * `missing var`, `duplicate`, and the constraint-* short labels. */
 .wp-conflict-badge {
-  font: 600 9px/1 var(--wp-font-sans, sans-serif);
+  font-family: var(--wp-font-sans, sans-serif);
+  font-weight: 600;
+  font-size: var(--wp-chip-font);
+  line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 3px 5px;
+  padding: var(--wp-chip-pad);
   border-radius: 2px;
   flex-shrink: 0;
   cursor: help;
@@ -2106,10 +2109,16 @@ function onDrop(ev: DragEvent, targetId: string | null) {
  * Rendered when the same uuid appears more than once in this Context.
  * Phase A: count display only. Phase B will wire auto-fork prompt. */
 .wp-mod-badge {
-  font: 600 9px/1 var(--wp-font-sans);
+  /* Longhand instead of `font:` shorthand so font-size can flex with the
+   * --wp-chip-font density token without each density mode re-declaring
+   * the full shorthand. */
+  font-family: var(--wp-font-sans);
+  font-weight: 600;
+  font-size: var(--wp-chip-font);
+  line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 3px 5px;
+  padding: var(--wp-chip-pad);
   border-radius: 2px;
 }
 .wp-mod-badge--sibling {
