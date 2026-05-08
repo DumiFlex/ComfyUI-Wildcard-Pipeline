@@ -2310,8 +2310,13 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-collapse-enter-to,
 .wp-collapse-leave-from { max-height: 32px; opacity: 1; }
 
-/* Conflict dot pulse on first appear */
-.wp-conflict-dot {
+/* Pulse on first appear — applies uniformly to every state-marker dot
+ * (mod / drift / missing AND every conflict severity) so the user gets
+ * the same visual cue regardless of which state surfaced. Previously
+ * only `.wp-conflict-dot` carried the animation, which made conflict
+ * dots feel different from mod-state dots in side-by-side testing. */
+.wp-conflict-dot,
+.wp-mod-dot {
   animation: wp-pulse 0.8s ease-out;
 }
 @keyframes wp-pulse {
