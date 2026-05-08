@@ -6,6 +6,7 @@ import {
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
 import { scanConflicts, labelFor as conflictLabelFor, type Conflict } from "../../extension/conflicts";
+import { getCollapsedByDefault } from "../../extension/settings";
 import {
   ensure as ensurePreviewLookup,
   lookup as previewLookup,
@@ -767,6 +768,12 @@ async function onLibraryPick(uuids: string[]) {
         }));
     }
 
+    // Honor wp.collapsedByDefault — if the user opted in, every newly-
+    // embedded module renders with its body collapsed (header only).
+    // Existing modules retain their previous collapse state because
+    // we only mutate `newEntries` here, not the existing cards.
+    const startCollapsed = getCollapsedByDefault();
+
     // Append picks first (in input order) so user-picked rows land
     // before any transitive deps in the resulting card list.
     const seenInBundle = new Set<string>();
@@ -783,6 +790,7 @@ async function onLibraryPick(uuids: string[]) {
         entries: entriesFromSnapshot(entry),
         payload: entry.payload,
         payload_hash: entry.payload_hash,
+        collapsed: startCollapsed,
       });
     }
     // Then any transitive deps the walker pulled in but that weren't
@@ -798,6 +806,7 @@ async function onLibraryPick(uuids: string[]) {
         entries: entriesFromSnapshot(entry),
         payload: entry.payload,
         payload_hash: entry.payload_hash,
+        collapsed: startCollapsed,
       });
     }
 
