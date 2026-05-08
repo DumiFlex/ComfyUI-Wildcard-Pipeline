@@ -109,6 +109,18 @@
   /* Alias `--wp-font` → `--wp-font-sans` so SPA-derived components that
    * reference the shorter name resolve to the same Inter stack. */
   --wp-font: var(--wp-font-sans);
+
+  /* ── Density tokens — overridden by .wp-density-{compact,minimal} body
+   * classes from display-prefs.css. Components reference these via
+   * `var(--wp-pad-row)` etc. so density mode flexes the chrome without
+   * each component declaring its own breakpoints. */
+  --wp-pad-row: 8px 10px;
+  --wp-row-gap: 6px;
+  --wp-header-height: 28px;
+  --wp-chip-pad: 2px 8px;
+  --wp-chip-font: 11px;
+  --wp-mod-font: 12.5px;
+  --wp-action-btn: 26px;
 }
 
 /* ── Phase 5.5.7 — light theme overrides + canvas/node namespace ───────
