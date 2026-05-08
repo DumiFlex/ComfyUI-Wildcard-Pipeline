@@ -66,6 +66,10 @@ const settings = settingsMod.buildSettings(app);
 // the case where the extensionManager is ready before the load-fire.
 settingsMod.applyA11yClasses(app);
 settingsMod.watchA11ySystemPrefs();
+// Dev-only: expose `wpDebugA11y` on window so contributors can flip
+// reduce-motion / high-contrast classes from the DevTools console
+// without touching OS-level settings.
+settingsMod.installDebugHelpers();
 
 // Detect ComfyUI frontend version BEFORE registerExtension so we can
 // pick the right topbar render path. ≥ 1.33.9 → declarative

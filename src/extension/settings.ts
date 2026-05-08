@@ -112,6 +112,46 @@ export function watchA11ySystemPrefs(): () => void {
   };
 }
 
+/**
+ * Dev-only console helpers for verifying the a11y CSS layer without
+ * having to toggle OS-level preferences. Exposes:
+ *
+ *   wpDebugA11y.motion("on" | "off" | "auto")     // force a mode
+ *   wpDebugA11y.contrast("on" | "off" | "auto")
+ *   wpDebugA11y.refresh()                          // re-derive markers
+ *   wpDebugA11y.state()                            // snapshot current state
+ *
+ * Gated on `import.meta.env.DEV` so the helpers don't ship to a packaged
+ * extension. Workflow:
+ *
+ *   wpDebugA11y.state()        // { reduceMotion: "auto", contrast: "auto" }
+ *   wpDebugA11y.contrast("on") // body class flips, CSS rules apply instantly
+ *   wpDebugA11y.refresh()      // recompute (e.g. after manually toggling OS pref)
+ */
+export function installDebugHelpers(): void {
+  if (!import.meta.env.DEV) return;
+  const target = window as unknown as {
+    wpDebugA11y?: {
+      motion: (mode: A11yMode) => void;
+      contrast: (mode: A11yMode) => void;
+      refresh: () => void;
+      state: () => { reduceMotion: A11yMode; contrast: A11yMode };
+    };
+  };
+  target.wpDebugA11y = {
+    motion: (mode: A11yMode) => {
+      state.reduceMotion = mode;
+      syncMarkers();
+    },
+    contrast: (mode: A11yMode) => {
+      state.contrast = mode;
+      syncMarkers();
+    },
+    refresh: () => syncMarkers(),
+    state: () => ({ ...state }),
+  };
+}
+
 export function buildSettings(_app: AppLike): ComfySetting[] {
   return [
     {

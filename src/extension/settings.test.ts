@@ -4,7 +4,12 @@
 // (the last is the kind of leak that surfaces only after HMR cycles).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { applyA11yClasses, watchA11ySystemPrefs, buildSettings } from "./settings";
+import {
+  applyA11yClasses,
+  watchA11ySystemPrefs,
+  buildSettings,
+  installDebugHelpers,
+} from "./settings";
 
 const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
@@ -188,5 +193,34 @@ describe("a11y settings", () => {
 
     applyA11yClasses(makeApp());
     expect(() => watchA11ySystemPrefs()()).not.toThrow();
+  });
+
+  it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp());
+
+    installDebugHelpers();
+
+    const helpers = (window as unknown as { wpDebugA11y?: {
+      motion: (m: string) => void;
+      contrast: (m: string) => void;
+      refresh: () => void;
+      state: () => { reduceMotion: string; contrast: string };
+    } }).wpDebugA11y;
+    expect(helpers).toBeDefined();
+    expect(typeof helpers?.motion).toBe("function");
+    expect(typeof helpers?.contrast).toBe("function");
+    expect(typeof helpers?.refresh).toBe("function");
+    expect(typeof helpers?.state).toBe("function");
+
+    // Drive a flip via the helper and verify the body class follows.
+    helpers?.motion("on");
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
+
+    helpers?.contrast("on");
+    expect(document.body.classList.contains("wp-a11y-high-contrast")).toBe(true);
+
+    expect(helpers?.state()).toEqual({ reduceMotion: "on", contrast: "on" });
   });
 });
