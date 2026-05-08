@@ -25,6 +25,7 @@ import { pushToast } from "../shared/toast-store";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
+import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 
 /**
  * Per-kind subtitle text shown under the modal title (mockup v5
@@ -422,6 +423,62 @@ async function doFixedValuesSaveToLibrary(): Promise<void> {
   }
 }
 
+/**
+ * Combine v2 round-trip handlers — siblings of the wildcard +
+ * fixed-values pairs. Same fetch / confirm / toast logic, framed for
+ * the combine kind. Library "edit" still routes to the SPA; this just
+ * handles the modal-level reset + save-to-library round-trip.
+ */
+function onCombineResetClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Reset to library?",
+    body: `Discard ${moduleName}'s local edits and restore the library template + binding.`,
+    confirmLabel: "Reset to library",
+    variant: "danger",
+    onConfirm: () => { void doCombineReset(); },
+  });
+}
+
+async function doCombineReset(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const refreshed = await refreshModule(draft.value);
+    onResetFromLibrary(refreshed);
+  } catch (err) {
+    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
+function onCombineSaveToLibraryClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Save to library?",
+    body: `Push current template + binding to library entry "${moduleName}".`,
+    confirmLabel: "Save to library",
+    onConfirm: () => { void doCombineSaveToLibrary(); },
+  });
+}
+
+async function doCombineSaveToLibrary(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json() as { new_hash: string };
+    setLibraryHash(draft.value.id, body.new_hash);
+    pushToast("Saved to library", { severity: "success" });
+  } catch (err) {
+    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
 function save() {
   if (!draft.value) return;
   const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
@@ -536,9 +593,24 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     />
 
-    <!-- v1 tabbed branch — non-wildcard, non-fixed_values kinds keep
-         the existing Library/Instance tab structure until each kind
-         is migrated to its own v2 single-pane modal. -->
+    <!-- v2 combine branch — single-pane tailored modal. Library-defining
+         edits stay in SPA; modal exposes only runtime + per-instance
+         overrides (template_override, locked_seed, hide-from-prompt). -->
+    <CombineInstanceModal
+      v-else-if="draft && draft.type === 'combine'"
+      :module="draft"
+      :is-drifted="isDrifted"
+      @update="onUpdate"
+      @save="save"
+      @cancel="cancel"
+      @reset-from-library="onCombineResetClick"
+      @save-to-library="onCombineSaveToLibraryClick"
+      @clear-all-overrides="onClearAllOverrides"
+    />
+
+    <!-- v1 tabbed branch — non-v2 kinds keep the existing
+         Library/Instance tab structure until each kind is migrated to
+         its own v2 single-pane modal. -->
     <div v-else-if="draft" class="wp-medit">
       <header class="wp-medit__head">
         <i

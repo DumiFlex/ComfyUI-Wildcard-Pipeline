@@ -31,8 +31,20 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
     "fixed_values": {
         "values_overrides": "list[dict]",
         "enabled_options": "list[string]",
+        # Added in 2026-05-08 syntax-parity cycle: per-value `{a|b|c}`
+        # resolution gives fixed_values seed-lock parity with wildcard
+        # + combine. Locked seed pins the alternation outcome.
+        "locked_seed": "number",
     },
     "combine": {
+        # v2 single-pane modal exposes a richer override surface:
+        #   - template_override: per-instance template string
+        #   - variable_binding: rebind the produced var (mirrors wildcard)
+        #   - locked_seed: pin {a|b|c} resolution
+        #   - internal: hide-from-prompt toggle
+        "template_override": "string",
+        "variable_binding": "string",
+        "locked_seed": "number",
         "internal": "boolean",
     },
     "derivation": {
