@@ -34,6 +34,12 @@
   <div class="wp-pg-mockup">
     <div class="wp-pg-mockup__caption">Live preview</div>
     <div class="wp-modules">
+      <!-- Real module names mirror m.meta.name from ContextWidget — the
+           human-friendly library name, NOT the variable binding. The
+           summary uses summaryTokens() shape: `$binding · N options`
+           for wildcards, `$var, $var, +N more` for fixed_values, etc.
+           Icons match kindIcon() in shared/kind-icons.ts. -->
+
       <!-- 1. Wildcard module with all the state markers active so
            users see indicator-style + priority filter side-by-side -->
       <div class="wp-module" data-kind="wildcard">
@@ -49,10 +55,10 @@
             <span class="wp-toggle-mark"></span>
           </label>
           <span class="wp-mod-icon" aria-hidden="true"
-            ><i class="pi pi-asterisk" aria-hidden="true"></i
+            ><i class="pi pi-sparkles" aria-hidden="true"></i
           ></span>
           <span class="wp-kind-chip wp-kind-chip--wildcard">wildcard</span>
-          <span class="wp-module-name">$backdrop</span>
+          <span class="wp-module-name">Backdrop</span>
           <span class="wp-mod-dots">
             <span class="wp-mod-dot wp-mod-dot--modified" aria-hidden="true"></span>
             <span class="wp-mod-badge wp-mod-badge--mod">mod</span>
@@ -64,7 +70,10 @@
             <span class="wp-conflict-badge wp-conflict-badge--info">override</span>
           </span>
         </div>
-        <div class="wp-summary">$backdrop = "rocky beach at golden hour"</div>
+        <div class="wp-summary">
+          <span class="wp-pg-mockup__var">$backdrop</span>
+          <span class="wp-pg-mockup__lit"> · 12 options</span>
+        </div>
       </div>
 
       <!-- 2. Fixed-values module — different kind-color, no state markers
@@ -85,10 +94,15 @@
             ><i class="pi pi-tag" aria-hidden="true"></i
           ></span>
           <span class="wp-kind-chip wp-kind-chip--fixed">fixed</span>
-          <span class="wp-module-name">$model_settings</span>
+          <span class="wp-module-name">Model settings</span>
           <span class="wp-mod-dots"></span>
         </div>
-        <div class="wp-summary">cfg=4.5 · steps=28 · sampler=dpmpp_2m</div>
+        <div class="wp-summary">
+          <span class="wp-pg-mockup__var">$cfg</span>
+          <span class="wp-pg-mockup__lit">, </span>
+          <span class="wp-pg-mockup__var">$steps</span>
+          <span class="wp-pg-mockup__lit">, +1 more</span>
+        </div>
       </div>
 
       <!-- 3. Combine module — third kind-color, also clean -->
@@ -108,10 +122,13 @@
             ><i class="pi pi-link" aria-hidden="true"></i
           ></span>
           <span class="wp-kind-chip wp-kind-chip--combine">combine</span>
-          <span class="wp-module-name">$prompt</span>
+          <span class="wp-module-name">Final prompt</span>
           <span class="wp-mod-dots"></span>
         </div>
-        <div class="wp-summary">$backdrop, $model_settings → $prompt</div>
+        <div class="wp-summary">
+          <span class="wp-pg-mockup__lit">→ </span>
+          <span class="wp-pg-mockup__var">$prompt</span>
+        </div>
       </div>
 
       <!-- 4. Disabled wildcard — toggle off, dim text — shows what
@@ -129,10 +146,10 @@
             <span class="wp-toggle-mark"></span>
           </label>
           <span class="wp-mod-icon" aria-hidden="true"
-            ><i class="pi pi-asterisk" aria-hidden="true"></i
+            ><i class="pi pi-sparkles" aria-hidden="true"></i
           ></span>
           <span class="wp-kind-chip wp-kind-chip--wildcard">wildcard</span>
-          <span class="wp-module-name">$hair_style</span>
+          <span class="wp-module-name">Hair style</span>
           <span class="wp-mod-dots"></span>
         </div>
       </div>
@@ -391,5 +408,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   width: 100%;
+}
+/* Variable tokens in the summary line — colored to match the var-color
+ * hash used elsewhere (assembler chip strip + combine preview). Single
+ * accent here since the mockup doesn't compute hash colors per name —
+ * the visual cue (var-tok styling) is what matters for preview. */
+.wp-pg-mockup__var {
+  color: var(--wp-violet);
+  font-weight: 600;
+}
+.wp-pg-mockup__lit {
+  color: var(--wp-text-dim, var(--wp-text3));
 }
 </style>
