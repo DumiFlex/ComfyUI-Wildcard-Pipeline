@@ -1,5 +1,4 @@
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
-import { recordScanDuration } from "./perf-stats";
 
 /** Resolve a wildcard's effective var-binding name. Mirrors the engine
  *  precedence in `wildcard_handler.py`: per-instance override
@@ -233,11 +232,6 @@ export function scanConflicts(
   upstreamWildcardUuids: string[] = [],
   downstreamWildcardUuids: string[] = [],
 ): Conflict[] {
-  // Phase 3d — record scan duration into perf-stats so the optional
-  // HUD can show how expensive the scanner is per call. Hot path:
-  // ContextWidget triggers a scan on every reactive change (deep
-  // watcher), so this metric reflects the user's edit-tick latency.
-  const _scanT0 = performance.now();
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
   const downstreamUuids = new Set(downstreamWildcardUuids);
@@ -412,7 +406,6 @@ export function scanConflicts(
       }
     }
   }
-  recordScanDuration(performance.now() - _scanT0);
   return out;
 }
 

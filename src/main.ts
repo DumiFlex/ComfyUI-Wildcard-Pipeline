@@ -21,8 +21,6 @@ const [
   topbarMod,
   PlaygroundModule,
   playgroundStoreMod,
-  PerfOverlayModule,
-  perfStatsMod,
 ] = await Promise.all([
   import("./widgets/context"),
   import("./widgets/debug"),
@@ -37,8 +35,6 @@ const [
   import("./extension/topbar"),
   import("./components/settings/DisplayPlaygroundModal.vue"),
   import("./components/settings/playground-store"),
-  import("./components/perf/PerfOverlay.vue"),
-  import("./extension/perf-stats"),
   // Webfonts (Inter 400/600 + JetBrains Mono 400) — side-effect import,
   // the module just owns the @font-face CSS chunk.
   import("./extension/fonts"),
@@ -63,16 +59,6 @@ playgroundRoot.id = "wp-playground-root";
 document.body.appendChild(playgroundRoot);
 createApp(PlaygroundModule.default).mount(playgroundRoot);
 playgroundStoreMod.setComfyApp(app);
-
-// Singleton Performance Overlay HUD — same lifecycle as toast / playground.
-// PerfOverlay.vue uses `<Teleport to="body">` internally so the mount
-// host can be a generic div; the panel itself anchors to fixed-position
-// in the viewport. Visibility is gated on `perfOverlayVisible` ref in
-// perf-stats; settings.ts flips that ref via setPerfOverlayVisible().
-const perfRoot = document.createElement("div");
-perfRoot.id = "wp-perf-root";
-document.body.appendChild(perfRoot);
-createApp(PerfOverlayModule.default).mount(perfRoot);
 
 // ComfyUI hands us untyped LiteGraph nodes; we only care about the surface
 // the glue files import. Typing the param as the parameter of `create` /
@@ -112,36 +98,6 @@ settingsMod.installDebugHelpers();
 // while toast feedback is still suppressed. Without this, every page
 // load would pop a toast for whichever a11y mode is currently saved.
 setTimeout(() => settingsMod.markBootCompleted(), 100);
-
-// Phase 3d — periodic graph-wide module count for the perf overlay.
-// Walks every node + every nested subgraph node. Counter pushed into
-// perf-stats which the HUD reads reactively. 1s interval is plenty
-// snappy without burning CPU; mutations between ticks aren't visible
-// to the user as a metric anyway. Only runs when perfOverlay is on
-// to skip the walk for users who don't care.
-function countModules(): number {
-  const root = (app as unknown as { graph?: LiteGraphLike }).graph;
-  if (!root) return 0;
-  let total = 0;
-  for (const { node } of graphMod.walkAllNodes(root)) {
-    if (node.type !== "WP_Context") continue;
-    const w = (node.widgets as unknown as Array<{ name: string; value: unknown }> | undefined)
-      ?.find((x) => x.name === "modules");
-    const raw = typeof w?.value === "string" ? w.value : "";
-    if (!raw) continue;
-    try {
-      const parsed = JSON.parse(raw) as { modules?: unknown[] };
-      if (Array.isArray(parsed.modules)) total += parsed.modules.length;
-    } catch {
-      /* corrupt JSON — count as zero, recovery panel surfaces the issue */
-    }
-  }
-  return total;
-}
-setInterval(() => {
-  if (!perfStatsMod.perfOverlayVisible.value) return;
-  perfStatsMod.setModuleCount(countModules());
-}, 1000);
 
 // Detect ComfyUI frontend version BEFORE registerExtension so we can
 // pick the right topbar render path. ≥ 1.33.9 → declarative
@@ -397,10 +353,6 @@ function mountFlashOverlay(node: FocusableNode, canvas: AppCanvas) {
 const origQueuePrompt = appQ.queuePrompt;
 if (typeof origQueuePrompt === "function") {
   appQ.queuePrompt = function (...args: unknown[]) {
-    // Phase 3d — record total time spent in the pre-run validation +
-    // queue dispatch. Wraps the whole patched function so users see
-    // both the scan cost AND any awaitable inside origQueuePrompt.
-    const t0 = performance.now();
     try {
       const graph = appQ.graph as unknown as LiteGraphLike;
       // Note: per-Context seed snapshot now happens via each
@@ -448,9 +400,7 @@ if (typeof origQueuePrompt === "function") {
       // Validation must never block the queue — log and proceed.
       console.warn("[wildcard-pipeline] pre-run scan failed:", err);
     }
-    const result = origQueuePrompt.apply(this, args);
-    perfStatsMod.recordQueueDuration(performance.now() - t0);
-    return result;
+    return origQueuePrompt.apply(this, args);
   };
 }
 
