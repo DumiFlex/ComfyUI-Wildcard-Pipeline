@@ -432,84 +432,36 @@ export function installDebugHelpers(): void {
 }
 
 export function buildSettings(_app: AppLike): ComfySetting[] {
+  // ComfyUI groups settings by 2nd-level category (alphabetical) and
+  // renders entries in array order within each section. To put the
+  // playground first in the WP tab, all entries live under a single
+  // "Display" section — accessibility (motion + contrast) used to
+  // have its own section but it sorted alphabetically before Display
+  // (A < D), pushing the playground launcher to second place. Keeping
+  // them all in one section lets array order alone control layout.
   return [
-    {
-      id: SETTING_ID_REDUCE_MOTION,
-      name: "Reduce motion",
-      type: "combo",
-      options: MOTION_OPTIONS,
-      defaultValue: "auto",
-      tooltip:
-        "Disables Wildcard Pipeline animations and transitions. " +
-        "Match system honors the OS prefers-reduced-motion setting.",
-      category: ["Wildcard Pipeline", "Accessibility", "Reduce motion"],
-      // Use newVal directly — extensionManager.setting.get() can lag the
-      // onChange fire by a tick, which delayed the marker swap until a
-      // page reload in the live UI. Toast feedback is gated on
-      // `bootCompleted` so ComfyUI's load-fire (with the stored value)
-      // doesn't pop a toast every refresh, and uses singletonKey so
-      // rapid dropdown clicks replace the existing toast in place.
-      onChange: (newVal) => {
-        const next = asMode(newVal, "auto");
-        const changed = next !== state.reduceMotion;
-        state.reduceMotion = next;
-        syncMarkers();
-        if (bootCompleted && changed) {
-          pushToast(describeMotion(next), {
-            severity: "info",
-            singletonKey: "a11y-motion",
-          });
-        }
-      },
-    },
-    {
-      id: SETTING_ID_HIGH_CONTRAST,
-      name: "Contrast",
-      type: "combo",
-      options: CONTRAST_OPTIONS,
-      defaultValue: "auto",
-      tooltip:
-        "Bumps border + text contrast on Wildcard Pipeline widgets. " +
-        "Match system honors the OS prefers-contrast setting.",
-      category: ["Wildcard Pipeline", "Accessibility", "Contrast"],
-      onChange: (newVal) => {
-        const next = asMode(newVal, "auto");
-        const changed = next !== state.contrast;
-        state.contrast = next;
-        syncMarkers();
-        if (bootCompleted && changed) {
-          pushToast(describeContrast(next), {
-            severity: "info",
-            singletonKey: "a11y-contrast",
-          });
-        }
-      },
-    },
-    // Display preferences — ordered by visual concern (sizing → look →
-    // chrome → state markers → behavior). Tooltips kept short; the
-    // dropdown options carry the detailed mode descriptions.
-    //
-    // The first row uses the SettingCustomRenderer escape hatch
-    // (`type: function`) to render a launcher button — clicking it
-    // opens the Display Playground modal where users get a live
-    // mockup paired with every control. Pattern adopted from
-    // rgthree-comfy + ComfyUI-KJNodes. The native settings entries
-    // below stay as quick-toggle access for power users who already
-    // know what each mode does.
+    // Launcher row — uses the SettingCustomRenderer escape hatch
+    // (`type: function`) to render a button styled like a PrimeVue
+    // Select control so it visually fits the rest of the panel. Click
+    // → opens the playground modal with live mockup + all controls.
+    // Pattern adopted from rgthree-comfy + ComfyUI-KJNodes.
     {
       id: "wildcardPipeline.display._playground",
-      name: "Open Display Playground",
+      name: "Display playground",
       type: (_name, _setter, _value, _attrs) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.textContent = "Open playground";
-        btn.title = "Live preview of every display setting in one place.";
+        btn.title = "Live preview of every display + a11y setting in one place.";
         btn.style.cssText = [
           "background: var(--wp-accent, #6366f1)",
           "border: 1px solid var(--wp-accent, #6366f1)",
           "border-radius: var(--wp-radius-sm, 4px)",
           "color: #fff",
-          "font: 600 12px var(--wp-font-sans, sans-serif)",
+          "font: 600 13px/1.2 var(--wp-font-sans, sans-serif)",
+          // Match PrimeVue Select control height (~32-34px) so the
+          // button doesn't sit shorter than its dropdown neighbours.
+          "min-height: 32px",
           "padding: 6px 14px",
           "cursor: pointer",
           "transition: background-color 0.15s, border-color 0.15s",
@@ -526,9 +478,10 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         return btn;
       },
       defaultValue: null,
-      tooltip: "Live preview of every display setting in one place.",
-      category: ["Wildcard Pipeline", "Display", "Display Playground"],
+      tooltip: "Live preview of every display + a11y setting in one place.",
+      category: ["Wildcard Pipeline", "Display", "Playground"],
     },
+    // Visual axes — sizing, embellishment, identity
     {
       id: SETTING_ID_DENSITY,
       name: "Module density",
@@ -669,6 +622,64 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeFocus(next), {
             severity: "info",
             singletonKey: "wp-focus-mode",
+          });
+        }
+      },
+    },
+    // Accessibility — motion + contrast. Lives under Display section
+    // (instead of a dedicated Accessibility section as before) so the
+    // playground launcher can stay first in the WP tab. The settings
+    // panel still renders these as combos; the playground modal
+    // mirrors them in its A11y section so users see effects live.
+    //
+    // Use newVal directly — extensionManager.setting.get() can lag the
+    // onChange fire by a tick, which delayed the marker swap until a
+    // page reload in the live UI. Toast feedback is gated on
+    // `bootCompleted` so ComfyUI's load-fire (with the stored value)
+    // doesn't pop a toast every refresh, and uses singletonKey so
+    // rapid dropdown clicks replace the existing toast in place.
+    {
+      id: SETTING_ID_REDUCE_MOTION,
+      name: "Reduce motion",
+      type: "combo",
+      options: MOTION_OPTIONS,
+      defaultValue: "auto",
+      tooltip:
+        "Disables Wildcard Pipeline animations. " +
+        "Match system honors prefers-reduced-motion.",
+      category: ["Wildcard Pipeline", "Display", "Reduce motion"],
+      onChange: (newVal) => {
+        const next = asMode(newVal, "auto");
+        const changed = next !== state.reduceMotion;
+        state.reduceMotion = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeMotion(next), {
+            severity: "info",
+            singletonKey: "a11y-motion",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_HIGH_CONTRAST,
+      name: "Contrast",
+      type: "combo",
+      options: CONTRAST_OPTIONS,
+      defaultValue: "auto",
+      tooltip:
+        "Bumps borders + text contrast. " +
+        "Match system honors prefers-contrast.",
+      category: ["Wildcard Pipeline", "Display", "Contrast"],
+      onChange: (newVal) => {
+        const next = asMode(newVal, "auto");
+        const changed = next !== state.contrast;
+        state.contrast = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeContrast(next), {
+            severity: "info",
+            singletonKey: "a11y-contrast",
           });
         }
       },
