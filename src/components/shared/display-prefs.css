@@ -160,13 +160,20 @@
 /* ── Border highlight ───────────────────────────────────────────────
  * State-marker module borders (mod / missing / drift / conflict /
  * override) are colored by their --wp-* state hue. When this is off,
- * border falls back to the neutral chrome color and only dots/badges
- * indicate state. !important is required because state borders are
- * set on BEM modifier classes (.wp-module--mod, .wp-state-missing,
- * .wp-conflict-warning, etc.) which the user preference must override. */
+ * the top/right/bottom borders fall back to the neutral chrome color
+ * — but the LEFT border preserves its kind-accent color (the 3px
+ * stripe that signals module type via --wp-kind-{wildcard,fixed,...}).
+ * Only the state-indicating sides drop their color; the type accent
+ * stays so users can still scan kind at a glance.
+ *
+ * !important is required because state borders are set on BEM modifier
+ * classes (.wp-module--mod, .wp-state-missing, .wp-conflict-warning,
+ * etc.) which the user preference must override. */
 
 .wp-border-highlight-off .wp-module {
-  border-color: var(--wp-border) !important;
+  border-top-color: var(--wp-border) !important;
+  border-right-color: var(--wp-border) !important;
+  border-bottom-color: var(--wp-border) !important;
 }
 
 /* ── Focus mode ─────────────────────────────────────────────────────
