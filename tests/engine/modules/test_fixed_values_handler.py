@@ -1,4 +1,6 @@
 """Tests for FixedValuesHandler — emits one mapping per named value."""
+import random as _random
+
 from engine.modules.fixed_values_handler import FixedValuesHandler
 
 
@@ -168,3 +170,65 @@ def test_resolve_no_warning_when_overrides_absent():
     ctx = {"__wp_warnings__": []}
     FixedValuesHandler.resolve(payload, instance={}, ctx=ctx)
     assert ctx["__wp_warnings__"] == []
+
+
+# ── Phase: combine v2 + syntax parity cycle ──────────────────────────
+
+
+def _make_seedctx(seed: int = 0) -> dict:
+    """Build a ctx dict with chain seed + max_ref_depth so build_resolve_ctx
+    composes a valid ResolveContext."""
+    return {
+        "__wp_rng__": _random.Random(0),
+        "__wp_node_seed__": seed,
+        "__wp_warnings__": [],
+        "__wp_max_ref_depth__": 8,
+        "__wp_catalog__": {},
+        "__wp_developer_mode__": False,
+    }
+
+
+def test_fixed_values_resolves_alternation_per_value():
+    payload = {"values": [
+        {"id": "v1", "name": "color", "value": "{red|blue|green}"},
+    ]}
+    out = FixedValuesHandler.resolve(payload, {"locked_seed": 42}, _make_seedctx(0))
+    assert out["color"] in {"red", "blue", "green"}
+
+
+def test_fixed_values_locked_seed_deterministic():
+    """Same locked_seed across calls = same {a|b|c} resolution per value."""
+    payload = {"values": [
+        {"id": "v1", "name": "color", "value": "{red|blue|green|yellow}"},
+        {"id": "v2", "name": "shape", "value": "{circle|square|tri}"},
+    ]}
+    out1 = FixedValuesHandler.resolve(payload, {"locked_seed": 99}, _make_seedctx(0))
+    out2 = FixedValuesHandler.resolve(payload, {"locked_seed": 99}, _make_seedctx(0))
+    assert out1 == out2
+
+
+def test_fixed_values_resolves_escape():
+    """$$ → literal $ via resolve_text on fixed_values surface."""
+    payload = {"values": [{"id": "v1", "name": "price", "value": "$$5.99"}]}
+    out = FixedValuesHandler.resolve(payload, {}, _make_seedctx(0))
+    assert out["price"] == "$5.99"
+
+
+def test_fixed_values_var_warns_renders_literal():
+    """$var on fixed_values surface: warn + render literal $name (lenient)."""
+    payload = {"values": [{"id": "v1", "name": "msg", "value": "see $other"}]}
+    ctx = _make_seedctx(0)
+    out = FixedValuesHandler.resolve(payload, {}, ctx)
+    assert out["msg"] == "see $other"
+    warnings = ctx["__wp_warnings__"]
+    assert any(w.get("type") == "var_out_of_surface" for w in warnings)
+
+
+def test_fixed_values_values_overrides_path_preserved():
+    """Existing instance.values_overrides precedence still works after the rewrite."""
+    payload = {"values": [{"id": "v1", "name": "key", "value": "from_lib"}]}
+    instance = {"values_overrides": [
+        {"id": "v1", "name": "key", "value": "from_instance"},
+    ]}
+    out = FixedValuesHandler.resolve(payload, instance, _make_seedctx(0))
+    assert out == {"key": "from_instance"}
