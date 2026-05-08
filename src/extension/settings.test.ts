@@ -462,6 +462,50 @@ describe("a11y settings", () => {
     expect(toasts.value[0].singletonKey).toBe("wp-indicator");
   });
 
+  // ── Display preferences — border highlight ──────────────────────
+
+  it("borderHighlight boot — applies wp-border-highlight-on by default", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    expect(document.body.classList.contains("wp-border-highlight-on")).toBe(true);
+    expect(document.body.classList.contains("wp-border-highlight-off")).toBe(false);
+  });
+
+  it("borderHighlight boot — reads stored false value", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ borderHighlight: false }));
+
+    expect(document.body.classList.contains("wp-border-highlight-off")).toBe(true);
+  });
+
+  it("borderHighlight onChange — flips classes", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_BORDER)?.onChange?.(false, true);
+
+    expect(document.body.classList.contains("wp-border-highlight-off")).toBe(true);
+  });
+
+  it("borderHighlight toast — fires with on/off message", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_BORDER)?.onChange?.(false, true);
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Border highlights: OFF");
+    expect(toasts.value[0].singletonKey).toBe("wp-border-highlight");
+  });
+
   it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;

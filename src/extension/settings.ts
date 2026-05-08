@@ -36,6 +36,7 @@ const SETTING_ID_HIGH_CONTRAST = "wildcardPipeline.a11y.contrast";
 const SETTING_ID_DENSITY = "wildcardPipeline.display.density";
 const SETTING_ID_DECORATION = "wildcardPipeline.display.decoration";
 const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
+const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -85,12 +86,14 @@ const state: {
   density: Density;
   decoration: Decoration;
   indicatorStyle: IndicatorStyle;
+  borderHighlight: boolean;
 } = {
   reduceMotion: "auto",
   contrast: "auto",
   density: "comfortable",
   decoration: "full",
   indicatorStyle: "both",
+  borderHighlight: true,
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -114,6 +117,7 @@ export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
   state.decoration = "full";
   state.indicatorStyle = "both";
+  state.borderHighlight = true;
 }
 
 // Toast feedback gate. ComfyUI fires onChange for stored values during
@@ -164,6 +168,10 @@ function describeIndicator(mode: IndicatorStyle): string {
   return "Indicators: dot only";
 }
 
+function describeBorder(on: boolean): string {
+  return `Border highlights: ${on ? "ON" : "OFF"}`;
+}
+
 /**
  * Apply current state + matchMedia to the body marker classes. Pure read
  * of the in-memory `state` map — no async layer. CSS keys off the markers:
@@ -199,6 +207,10 @@ function syncMarkers(): void {
   document.body.classList.toggle("wp-indicator-both", state.indicatorStyle === "both");
   document.body.classList.toggle("wp-indicator-badge", state.indicatorStyle === "badge");
   document.body.classList.toggle("wp-indicator-dot", state.indicatorStyle === "dot");
+
+  // Display — border highlight (state-marker borders)
+  document.body.classList.toggle("wp-border-highlight-on", state.borderHighlight === true);
+  document.body.classList.toggle("wp-border-highlight-off", state.borderHighlight === false);
 }
 
 /**
@@ -221,6 +233,9 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.density = asDensity(app.extensionManager?.setting?.get(SETTING_ID_DENSITY), "comfortable");
   state.decoration = asDecoration(app.extensionManager?.setting?.get(SETTING_ID_DECORATION), "full");
   state.indicatorStyle = asIndicator(app.extensionManager?.setting?.get(SETTING_ID_INDICATOR), "both");
+  // Boolean default true — only an explicit `=== false` reading flips the
+  // marker. `undefined` (settings panel never visited) falls through to true.
+  state.borderHighlight = app.extensionManager?.setting?.get(SETTING_ID_BORDER) !== false;
   syncMarkers();
 }
 
@@ -408,6 +423,29 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeIndicator(next), {
             severity: "info",
             singletonKey: "wp-indicator",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_BORDER,
+      name: "Border highlights for state markers",
+      type: "boolean",
+      defaultValue: true,
+      tooltip:
+        "Whether modules in mod / missing / drift / conflict states show " +
+        "colored border highlights. When off, only the dot/badge indicators " +
+        "signal state — borders stay neutral.",
+      category: ["Wildcard Pipeline", "Display", "Border highlights"],
+      onChange: (newVal) => {
+        const next = newVal !== false;
+        const changed = next !== state.borderHighlight;
+        state.borderHighlight = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeBorder(next), {
+            severity: "info",
+            singletonKey: "wp-border-highlight",
           });
         }
       },
