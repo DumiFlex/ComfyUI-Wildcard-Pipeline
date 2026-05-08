@@ -98,9 +98,24 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="wildcard"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
-          ></span>
+          <span class="wp-drag-handle" aria-hidden="true">
+            <svg
+              class="wp-drag-handle__grip"
+              viewBox="0 0 6 12"
+              width="6"
+              height="12"
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="1.5" cy="2" r="1" />
+              <circle cx="4.5" cy="2" r="1" />
+              <circle cx="1.5" cy="6" r="1" />
+              <circle cx="4.5" cy="6" r="1" />
+              <circle cx="1.5" cy="10" r="1" />
+              <circle cx="4.5" cy="10" r="1" />
+            </svg>
+          </span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -143,9 +158,24 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="fixed_values"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
-          ></span>
+          <span class="wp-drag-handle" aria-hidden="true">
+            <svg
+              class="wp-drag-handle__grip"
+              viewBox="0 0 6 12"
+              width="6"
+              height="12"
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="1.5" cy="2" r="1" />
+              <circle cx="4.5" cy="2" r="1" />
+              <circle cx="1.5" cy="6" r="1" />
+              <circle cx="4.5" cy="6" r="1" />
+              <circle cx="1.5" cy="10" r="1" />
+              <circle cx="4.5" cy="10" r="1" />
+            </svg>
+          </span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -180,9 +210,24 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="combine"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
-          ></span>
+          <span class="wp-drag-handle" aria-hidden="true">
+            <svg
+              class="wp-drag-handle__grip"
+              viewBox="0 0 6 12"
+              width="6"
+              height="12"
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="1.5" cy="2" r="1" />
+              <circle cx="4.5" cy="2" r="1" />
+              <circle cx="1.5" cy="6" r="1" />
+              <circle cx="4.5" cy="6" r="1" />
+              <circle cx="1.5" cy="10" r="1" />
+              <circle cx="4.5" cy="10" r="1" />
+            </svg>
+          </span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -217,9 +262,24 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="wildcard"
       >
         <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true"
-            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
-          ></span>
+          <span class="wp-drag-handle" aria-hidden="true">
+            <svg
+              class="wp-drag-handle__grip"
+              viewBox="0 0 6 12"
+              width="6"
+              height="12"
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="1.5" cy="2" r="1" />
+              <circle cx="4.5" cy="2" r="1" />
+              <circle cx="1.5" cy="6" r="1" />
+              <circle cx="4.5" cy="6" r="1" />
+              <circle cx="1.5" cy="10" r="1" />
+              <circle cx="4.5" cy="10" r="1" />
+            </svg>
+          </span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -296,11 +356,7 @@ function toggleCollapsed(key: ModuleKey): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Mirror the canvas-side grab affordance so the modal preview
-   * matches what the user will feel on the live ContextWidget. */
-  cursor: grab;
 }
-.wp-pg-mockup .wp-module:active { cursor: grabbing; }
 /* Per-kind border-left + icon-color overrides — mirrors ContextWidget */
 .wp-pg-mockup .wp-module[data-kind="fixed_values"] { border-left-color: var(--wp-kind-fixed); }
 .wp-pg-mockup .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
@@ -343,11 +399,13 @@ function toggleCollapsed(key: ModuleKey): void {
   align-items: center;
   justify-content: center;
   color: var(--wp-text-dim, var(--wp-text3));
-  width: 8px;
+  width: 6px;
   flex-shrink: 0;
+  cursor: grab;
   opacity: 0.6;
 }
-.wp-pg-mockup .wp-drag-handle .pi { font-size: 11px; }
+.wp-pg-mockup .wp-drag-handle:active { cursor: grabbing; }
+.wp-pg-mockup .wp-drag-handle__grip { display: block; }
 .wp-pg-mockup .wp-collapse-btn {
   background: transparent;
   border: none;

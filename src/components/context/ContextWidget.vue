@@ -1427,19 +1427,35 @@ function onDrop(ev: DragEvent, targetId: string | null) {
         @keydown="(ev) => onCardKeydown(ev, m)"
       >
         <div class="wp-module-header">
-          <!-- Visual drag affordance — narrow 3-dot icon. The whole
-               card is `draggable="true"` so users can grab anywhere,
-               but keeping a small icon as discovery cue + alignment
-               anchor reads cleaner than a header that starts straight
-               on the collapse caret. The handle inherits the card's
-               `cursor: grab` so hover still shows the hand cursor.
-               `pi-ellipsis-v` is narrower than the old `pi-bars`, so
-               net row width drops vs the original handle. -->
+          <!-- 6-dot drag affordance (2 columns × 3 rows) — standard
+               grip icon shape (Notion / Linear / VSCode tree). PrimeIcons
+               has no equivalent so the dots render as inline SVG with
+               `currentColor` fill so they pick up the parent's text
+               color. The whole card is `draggable="true"` so dragging
+               from anywhere still works — but the `cursor: grab` is
+               scoped to this handle, matching the visual affordance. -->
           <span
             class="wp-drag-handle"
             aria-hidden="true"
-            title="Drag to reorder (entire row is grabbable)"
-          ><i class="pi pi-ellipsis-v" aria-hidden="true"></i></span>
+            title="Drag to reorder"
+          >
+            <svg
+              class="wp-drag-handle__grip"
+              viewBox="0 0 6 12"
+              width="6"
+              height="12"
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="1.5" cy="2" r="1" />
+              <circle cx="4.5" cy="2" r="1" />
+              <circle cx="1.5" cy="6" r="1" />
+              <circle cx="4.5" cy="6" r="1" />
+              <circle cx="1.5" cy="10" r="1" />
+              <circle cx="4.5" cy="10" r="1" />
+            </svg>
+          </span>
 
           <button
             type="button"
@@ -1977,14 +1993,8 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   /* `position: relative` is the anchor for the ::before / ::after
    * insertion-line pseudos used by the drop indicators below. */
   position: relative;
-  /* Whole-card grab affordance (Phase 3a). Inline controls
-   * (.wp-collapse-btn, .wp-toggle, action buttons) declare
-   * `cursor: pointer` themselves so they win locally — the grab
-   * cursor only shows on the empty card body. */
-  cursor: grab;
   transition: background-color 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
-.wp-module:active { cursor: grabbing; }
 /* Kind border-left color — driven by data-kind attribute (Task 8). */
 .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
 .wp-module[data-kind="derivation"]   { border-left-color: var(--wp-kind-derivation); }
@@ -2074,20 +2084,23 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
-/* Narrow 3-dot drag affordance. The card carries the actual draggable
- * behavior + cursor — this span is purely visual. Subtle by default,
- * brightens on row hover/focus so dense lists don't look noisy. */
+/* Narrow 6-dot grip handle. The card itself is draggable so a click on
+ * any other part still drags — but the `cursor: grab` is scoped here so
+ * the hand cursor only signals on the explicit affordance, like Notion /
+ * Linear. Subtle by default, brightens on row hover/focus. */
 .wp-drag-handle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--wp-text3);
-  width: 8px;
+  width: 6px;
   flex-shrink: 0;
+  cursor: grab;
   opacity: 0.45;
   transition: opacity 0.15s, color 0.15s;
 }
-.wp-drag-handle .pi { font-size: 11px; }
+.wp-drag-handle:active { cursor: grabbing; }
+.wp-drag-handle__grip { display: block; }
 .wp-module:hover .wp-drag-handle,
 .wp-module:focus-within .wp-drag-handle { opacity: 1; color: var(--wp-text2); }
 
