@@ -418,6 +418,50 @@ describe("a11y settings", () => {
     expect(toasts.value[0].singletonKey).toBe("wp-decoration");
   });
 
+  // ── Display preferences — indicator style ───────────────────────
+
+  it("indicatorStyle boot — applies wp-indicator-both by default", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    expect(document.body.classList.contains("wp-indicator-both")).toBe(true);
+  });
+
+  it("indicatorStyle boot — reads stored badge value", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ indicatorStyle: "badge" }));
+
+    expect(document.body.classList.contains("wp-indicator-badge")).toBe(true);
+    expect(document.body.classList.contains("wp-indicator-both")).toBe(false);
+  });
+
+  it("indicatorStyle onChange — flips body class", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("dot", "both");
+
+    expect(document.body.classList.contains("wp-indicator-dot")).toBe(true);
+  });
+
+  it("indicatorStyle toast — fires with descriptive message", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_INDICATOR)?.onChange?.("dot", "both");
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Indicators: dot only");
+    expect(toasts.value[0].singletonKey).toBe("wp-indicator");
+  });
+
   it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;

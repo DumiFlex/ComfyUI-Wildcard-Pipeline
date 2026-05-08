@@ -18,6 +18,7 @@ import { pushToast } from "../components/shared/toast-store";
 export type A11yMode = "auto" | "on" | "off";
 export type Density = "comfortable" | "compact" | "minimal";
 export type Decoration = "full" | "minimal" | "off";
+export type IndicatorStyle = "both" | "badge" | "dot";
 
 export interface ComfySetting {
   id: string;
@@ -34,6 +35,7 @@ const SETTING_ID_REDUCE_MOTION = "wildcardPipeline.a11y.reduceMotion";
 const SETTING_ID_HIGH_CONTRAST = "wildcardPipeline.a11y.contrast";
 const SETTING_ID_DENSITY = "wildcardPipeline.display.density";
 const SETTING_ID_DECORATION = "wildcardPipeline.display.decoration";
+const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -59,6 +61,12 @@ const DECORATION_OPTIONS = [
   { text: "Off (flat)", value: "off" },
 ];
 
+const INDICATOR_OPTIONS = [
+  { text: "Both (dot + badge)", value: "both" },
+  { text: "Badge only", value: "badge" },
+  { text: "Dot only", value: "dot" },
+];
+
 interface ExtensionManager {
   setting?: { get(id: string): unknown };
 }
@@ -76,11 +84,13 @@ const state: {
   contrast: A11yMode;
   density: Density;
   decoration: Decoration;
+  indicatorStyle: IndicatorStyle;
 } = {
   reduceMotion: "auto",
   contrast: "auto",
   density: "comfortable",
   decoration: "full",
+  indicatorStyle: "both",
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -95,10 +105,15 @@ function asDecoration(v: unknown, fallback: Decoration): Decoration {
   return v === "full" || v === "minimal" || v === "off" ? v : fallback;
 }
 
+function asIndicator(v: unknown, fallback: IndicatorStyle): IndicatorStyle {
+  return v === "both" || v === "badge" || v === "dot" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
   state.decoration = "full";
+  state.indicatorStyle = "both";
 }
 
 // Toast feedback gate. ComfyUI fires onChange for stored values during
@@ -143,6 +158,12 @@ function describeDecoration(mode: Decoration): string {
   return `Decoration: ${mode.toUpperCase()}`;
 }
 
+function describeIndicator(mode: IndicatorStyle): string {
+  if (mode === "both") return "Indicators: dot + badge";
+  if (mode === "badge") return "Indicators: badge only";
+  return "Indicators: dot only";
+}
+
 /**
  * Apply current state + matchMedia to the body marker classes. Pure read
  * of the in-memory `state` map — no async layer. CSS keys off the markers:
@@ -173,6 +194,11 @@ function syncMarkers(): void {
   document.body.classList.toggle("wp-decor-full", state.decoration === "full");
   document.body.classList.toggle("wp-decor-minimal", state.decoration === "minimal");
   document.body.classList.toggle("wp-decor-off", state.decoration === "off");
+
+  // Display — indicator style
+  document.body.classList.toggle("wp-indicator-both", state.indicatorStyle === "both");
+  document.body.classList.toggle("wp-indicator-badge", state.indicatorStyle === "badge");
+  document.body.classList.toggle("wp-indicator-dot", state.indicatorStyle === "dot");
 }
 
 /**
@@ -194,6 +220,7 @@ export function applyA11yClasses(app: AppLike): void {
 export function applyDisplayPrefs(app: AppLike): void {
   state.density = asDensity(app.extensionManager?.setting?.get(SETTING_ID_DENSITY), "comfortable");
   state.decoration = asDecoration(app.extensionManager?.setting?.get(SETTING_ID_DECORATION), "full");
+  state.indicatorStyle = asIndicator(app.extensionManager?.setting?.get(SETTING_ID_INDICATOR), "both");
   syncMarkers();
 }
 
@@ -357,6 +384,30 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeDecoration(next), {
             severity: "info",
             singletonKey: "wp-decoration",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_INDICATOR,
+      name: "Indicator style",
+      type: "combo",
+      options: INDICATOR_OPTIONS,
+      defaultValue: "both",
+      tooltip:
+        "How module state markers (mod, missing, drift, override, conflict) " +
+        "appear. Both shows colored dot + text label; badge shows label only; " +
+        "dot shows the colored dot only.",
+      category: ["Wildcard Pipeline", "Display", "Indicator style"],
+      onChange: (newVal) => {
+        const next = asIndicator(newVal, "both");
+        const changed = next !== state.indicatorStyle;
+        state.indicatorStyle = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeIndicator(next), {
+            severity: "info",
+            singletonKey: "wp-indicator",
           });
         }
       },
