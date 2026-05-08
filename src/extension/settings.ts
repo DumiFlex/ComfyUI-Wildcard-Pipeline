@@ -290,47 +290,63 @@ export function watchA11ySystemPrefs(): () => void {
 }
 
 /**
- * Dev-only console helpers for verifying the a11y CSS layer without
- * having to toggle OS-level preferences. Exposes:
+ * Dev-only console helpers for verifying the a11y + display CSS layers
+ * without touching OS-level preferences or the ComfyUI settings panel.
+ * Gated on `import.meta.env.DEV` so they don't ship to a packaged extension.
  *
- *   wpDebugA11y.motion("on" | "off" | "auto")     // force a mode
- *   wpDebugA11y.contrast("on" | "off" | "auto")
- *   wpDebugA11y.refresh()                          // re-derive markers
- *   wpDebugA11y.state()                            // snapshot current state
+ *   wpDebug.a11y.motion("on" | "off" | "auto")
+ *   wpDebug.a11y.contrast("on" | "off" | "auto")
+ *   wpDebug.a11y.refresh()
+ *   wpDebug.a11y.state()
  *
- * Gated on `import.meta.env.DEV` so the helpers don't ship to a packaged
- * extension. Workflow:
+ *   wpDebug.display.density("comfortable" | "compact" | "minimal")
+ *   wpDebug.display.decoration("full" | "minimal" | "off")
+ *   wpDebug.display.indicatorStyle("both" | "badge" | "dot")
+ *   wpDebug.display.borderHighlight(boolean)
+ *   wpDebug.display.collapsedByDefault(boolean)
+ *   wpDebug.display.focusMode(boolean)
+ *   wpDebug.display.state()
  *
- *   wpDebugA11y.state()        // { reduceMotion: "auto", contrast: "auto" }
- *   wpDebugA11y.contrast("on") // body class flips, CSS rules apply instantly
- *   wpDebugA11y.refresh()      // recompute (e.g. after manually toggling OS pref)
+ *   wpDebug.refresh()  // re-derive every body marker
+ *
+ * Note: `window.wpDebugA11y` stays as a back-compat alias for one cycle
+ * (then removed in Phase 2). New code should use `window.wpDebug.a11y`.
  */
 export function installDebugHelpers(): void {
   if (!import.meta.env.DEV) return;
-  const target = window as unknown as {
-    wpDebugA11y?: {
-      motion: (mode: A11yMode) => void;
-      contrast: (mode: A11yMode) => void;
-      refresh: () => void;
-      state: () => { reduceMotion: A11yMode; contrast: A11yMode };
-    };
-  };
-  target.wpDebugA11y = {
-    motion: (mode: A11yMode) => {
-      state.reduceMotion = mode;
-      syncMarkers();
-    },
-    contrast: (mode: A11yMode) => {
-      state.contrast = mode;
-      syncMarkers();
-    },
+  const win = window as unknown as Record<string, unknown>;
+
+  const a11y = {
+    motion: (mode: A11yMode) => { state.reduceMotion = mode; syncMarkers(); },
+    contrast: (mode: A11yMode) => { state.contrast = mode; syncMarkers(); },
     refresh: () => syncMarkers(),
-    // Returns only the a11y subset of state — display-prefs state has its
-    // own debug surface introduced in the wpDebug namespace (see Task 10
-    // of the display-prefs cycle). Keeping a narrow signature here so
-    // callers don't accidentally see fields whose ownership shifted.
     state: () => ({ reduceMotion: state.reduceMotion, contrast: state.contrast }),
   };
+
+  const display = {
+    density: (mode: Density) => { state.density = mode; syncMarkers(); },
+    decoration: (mode: Decoration) => { state.decoration = mode; syncMarkers(); },
+    indicatorStyle: (mode: IndicatorStyle) => { state.indicatorStyle = mode; syncMarkers(); },
+    borderHighlight: (on: boolean) => { state.borderHighlight = on; syncMarkers(); },
+    // collapsedByDefault is pure Vue state — no syncMarkers since it has
+    // no body class. ContextWidget reads via getCollapsedByDefault().
+    collapsedByDefault: (on: boolean) => { state.collapsedByDefault = on; },
+    focusMode: (on: boolean) => { state.focusMode = on; syncMarkers(); },
+    state: () => ({
+      density: state.density,
+      decoration: state.decoration,
+      indicatorStyle: state.indicatorStyle,
+      borderHighlight: state.borderHighlight,
+      collapsedByDefault: state.collapsedByDefault,
+      focusMode: state.focusMode,
+    }),
+  };
+
+  win.wpDebug = { a11y, display, refresh: () => syncMarkers() };
+  // Deprecation alias — kept for one cycle so existing console workflows
+  // (and any external scripts) keep working. Remove on next display-prefs
+  // cycle (Phase 2).
+  win.wpDebugA11y = a11y;
 }
 
 export function buildSettings(_app: AppLike): ComfySetting[] {

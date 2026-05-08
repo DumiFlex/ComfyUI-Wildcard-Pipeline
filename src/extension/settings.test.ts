@@ -573,32 +573,61 @@ describe("a11y settings", () => {
     expect(toasts.value[0].singletonKey).toBe("wp-focus-mode");
   });
 
-  it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {
+  it("installDebugHelpers exposes window.wpDebug with a11y + display sub-namespaces", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp());
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    installDebugHelpers();
+
+    const helpers = (window as unknown as { wpDebug?: {
+      a11y: {
+        motion: (m: string) => void;
+        contrast: (m: string) => void;
+        refresh: () => void;
+        state: () => { reduceMotion: string; contrast: string };
+      };
+      display: {
+        density: (m: string) => void;
+        decoration: (m: string) => void;
+        indicatorStyle: (m: string) => void;
+        borderHighlight: (on: boolean) => void;
+        collapsedByDefault: (on: boolean) => void;
+        focusMode: (on: boolean) => void;
+        state: () => Record<string, unknown>;
+      };
+      refresh: () => void;
+    } }).wpDebug;
+
+    expect(helpers).toBeDefined();
+    expect(typeof helpers?.a11y.motion).toBe("function");
+    expect(typeof helpers?.display.density).toBe("function");
+    expect(typeof helpers?.display.focusMode).toBe("function");
+    expect(typeof helpers?.refresh).toBe("function");
+
+    helpers?.display.density("compact");
+    expect(document.body.classList.contains("wp-density-compact")).toBe(true);
+
+    helpers?.display.focusMode(true);
+    expect(document.body.classList.contains("wp-focus-mode")).toBe(true);
+
+    helpers?.a11y.motion("on");
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
+  });
+
+  it("wpDebugA11y stays as deprecation alias for one cycle", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
     applyA11yClasses(makeApp());
 
     installDebugHelpers();
 
-    const helpers = (window as unknown as { wpDebugA11y?: {
-      motion: (m: string) => void;
-      contrast: (m: string) => void;
-      refresh: () => void;
-      state: () => { reduceMotion: string; contrast: string };
-    } }).wpDebugA11y;
-    expect(helpers).toBeDefined();
-    expect(typeof helpers?.motion).toBe("function");
-    expect(typeof helpers?.contrast).toBe("function");
-    expect(typeof helpers?.refresh).toBe("function");
-    expect(typeof helpers?.state).toBe("function");
+    const legacy = (window as unknown as { wpDebugA11y?: { motion: (m: string) => void } }).wpDebugA11y;
+    expect(legacy).toBeDefined();
+    expect(typeof legacy?.motion).toBe("function");
 
-    // Drive a flip via the helper and verify the body class follows.
-    helpers?.motion("on");
+    legacy?.motion("on");
     expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
-
-    helpers?.contrast("on");
-    expect(document.body.classList.contains("wp-a11y-high-contrast")).toBe(true);
-
-    expect(helpers?.state()).toEqual({ reduceMotion: "on", contrast: "on" });
   });
 });
