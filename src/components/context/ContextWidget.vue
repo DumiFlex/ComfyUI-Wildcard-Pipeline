@@ -89,6 +89,14 @@ const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
 const dragOverId = ref<string | null>(null);
 const dragOverEnd = ref(false);
+/**
+ * Phase 3a — drop position relative to `dragOverId`. The card-level
+ * `dragover` handler measures the pointer's Y relative to the card's
+ * bounding rect midpoint and sets this to "before" (top half) or
+ * "after" (bottom half) so a 2px insertion line can render on the
+ * right edge of the card. `null` while no drag is active.
+ */
+const dragOverPos = ref<"before" | "after" | null>(null);
 
 const ctxMenu = ref<{ visible: boolean; x: number; y: number; items: ContextMenuItem[] }>({
   visible: false,
@@ -119,9 +127,10 @@ const siblingNodeVars = computed<string[]>(() => {
 });
 
 function clearDragHover() {
-  if (dragOverId.value === null && !dragOverEnd.value) return;
+  if (dragOverId.value === null && !dragOverEnd.value && dragOverPos.value === null) return;
   dragOverId.value = null;
   dragOverEnd.value = false;
+  dragOverPos.value = null;
 }
 
 onMounted(() => {
@@ -936,6 +945,13 @@ function moveToEdge(id: string, edge: "top" | "bottom") {
   if (edge === "top") list.unshift(m);
   else list.push(m);
   value.value = { ...value.value, modules: list };
+  // Vue reorders the DOM by detach+reattach; focus is dropped.
+  // Refocus the moved card so the keyboard user can keep navigating
+  // (mirrors `moveModule`'s post-swap focus restoration).
+  nextTick(() => {
+    const el = document.querySelector<HTMLElement>(`.wp-module[data-module-id="${id}"]`);
+    el?.focus();
+  });
 }
 
 function toggleEnabled(id: string) {
@@ -1032,7 +1048,22 @@ function onCardKeydown(ev: KeyboardEvent, m: ModuleEntry) {
     return;
   }
 
-  // Shift+ArrowUp / Shift+ArrowDown — reorder
+  // Ctrl/Cmd+Shift+ArrowUp / ArrowDown — jump to edge of list.
+  // Checked FIRST so the modifier-rich case wins over the plain
+  // Shift+Arrow handler below (otherwise Shift+Arrow would handle
+  // it first and we'd never reach this branch).
+  if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key === "ArrowUp") {
+    ev.preventDefault();
+    moveToEdge(m.id, "top");
+    return;
+  }
+  if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key === "ArrowDown") {
+    ev.preventDefault();
+    moveToEdge(m.id, "bottom");
+    return;
+  }
+
+  // Shift+ArrowUp / Shift+ArrowDown — reorder ±1
   if (ev.shiftKey && ev.key === "ArrowUp") {
     ev.preventDefault();
     moveModule(m.id, -1);
@@ -1140,6 +1171,7 @@ function onDragEnd() {
   sameNodeDropHandled = false;
   dragOverId.value = null;
   dragOverEnd.value = false;
+  dragOverPos.value = null;
 }
 
 let sameNodeDropHandled = false;
@@ -1150,9 +1182,12 @@ function onDragEnter(ev: DragEvent, targetId: string | null) {
   if (targetId === null) {
     dragOverId.value = null;
     dragOverEnd.value = true;
+    dragOverPos.value = null;
   } else {
     dragOverId.value = targetId;
     dragOverEnd.value = false;
+    // dragOverPos seeded by the first onDragOver tick once the
+    // pointer's Y is measurable; stays null on enter alone.
   }
 }
 
@@ -1160,6 +1195,26 @@ function onDragOver(ev: DragEvent) {
   if (!dragState.value) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+}
+
+/**
+ * Card-scoped dragover. Computes whether the pointer is in the top
+ * or bottom half of the hovered card so the insertion line renders
+ * on the correct edge. Top half → "before" (drop above this card);
+ * bottom half → "after" (drop below). Cheap math: read the card's
+ * bounding rect once per move event.
+ */
+function onCardDragOver(ev: DragEvent, targetId: string) {
+  if (!dragState.value) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  const card = ev.currentTarget as HTMLElement;
+  const rect = card.getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+  const next = ev.clientY < midY ? "before" : "after";
+  if (dragOverId.value !== targetId) dragOverId.value = targetId;
+  if (dragOverEnd.value) dragOverEnd.value = false;
+  if (dragOverPos.value !== next) dragOverPos.value = next;
 }
 
 function onContainerLeave(ev: DragEvent) {
@@ -1174,16 +1229,33 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   ev.stopPropagation();
   const ds = dragState.value;
   if (!ds) return;
+  // Snapshot the resolved drop position before clearing the hover state
+  // — we need it to decide whether to insert before or after the target.
+  const dropPos = dragOverPos.value;
   dragOverId.value = null;
   dragOverEnd.value = false;
+  dragOverPos.value = null;
 
   if (ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
     const fromIdx = list.findIndex((m) => m.id === ds.module.id);
     if (fromIdx < 0) return;
     list.splice(fromIdx, 1);
-    const insertIdx = targetId === null ? list.length : list.findIndex((m) => m.id === targetId);
-    list.splice(insertIdx < 0 ? list.length : insertIdx, 0, ds.module);
+    let insertIdx: number;
+    if (targetId === null) {
+      insertIdx = list.length;
+    } else {
+      const targetIdx = list.findIndex((m) => m.id === targetId);
+      if (targetIdx < 0) {
+        insertIdx = list.length;
+      } else {
+        // "before" → land at targetIdx; "after" → targetIdx + 1.
+        // Default to "before" if the position never resolved (drag
+        // ended without a measurable dragover, e.g. keyboard drop).
+        insertIdx = dropPos === "after" ? targetIdx + 1 : targetIdx;
+      }
+    }
+    list.splice(insertIdx, 0, ds.module);
     value.value = { ...value.value, modules: list };
     sameNodeDropHandled = true;
     return;
@@ -1315,6 +1387,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
         :data-kind="m.type"
         class="wp-module"
         tabindex="0"
+        draggable="true"
         :class="{
           'wp-disabled': !m.enabled,
           'wp-conflict-error': severityFor(m.id) === 'error',
@@ -1324,33 +1397,43 @@ function onDrop(ev: DragEvent, targetId: string | null) {
           'wp-state-drift': isDrifted(m),
           'wp-state-missing': isMissingFromLibrary(m),
           'wp-drop-target': dragOverId === m.id,
+          'wp-drop-target--before': dragOverId === m.id && dragOverPos === 'before',
+          'wp-drop-target--after': dragOverId === m.id && dragOverPos === 'after',
           'wp-mod--mod': isModified(m),
           'wp-mod--drift': isDrifted(m),
           'wp-mod--err': isMissingFromLibrary(m),
         }"
+        @dragstart="(ev) => onDragStart(ev, m)"
+        @dragend="onDragEnd"
         @dragenter="(ev) => onDragEnter(ev, m.id)"
-        @dragover="onDragOver"
+        @dragover="(ev) => onCardDragOver(ev, m.id)"
         @drop="(ev) => onDrop(ev, m.id)"
         @contextmenu.stop.prevent="(ev) => openContextMenu(ev, m)"
         @keydown="(ev) => onCardKeydown(ev, m)"
       >
         <div class="wp-module-header">
+          <!-- Visual drag affordance only — the entire `.wp-module` is
+               now `draggable="true"` so user can grab anywhere on the
+               card. Keeping the handle as a discoverable "this row is
+               sortable" hint (still gets cursor: grab on hover). The
+               `aria-hidden` matches the sibling decorative icons; the
+               actual reorder semantics are exposed via keyboard
+               (Shift+ArrowUp/Down) which is screen-reader-friendly. -->
           <span
             class="wp-drag-handle"
-            draggable="true"
-            title="Drag to reorder (drop on another node to move)"
-            @dragstart="(ev) => onDragStart(ev, m)"
-            @dragend="onDragEnd"
+            aria-hidden="true"
+            title="Drag to reorder (entire row is grabbable)"
           ><i class="pi pi-bars" aria-hidden="true"></i></span>
 
           <button
             type="button"
             class="wp-collapse-btn"
+            draggable="false"
             :title="isCollapsed(m) ? 'Expand' : 'Collapse'"
             @click="toggleCollapsed(m.id)"
           ><i :class="['pi', isCollapsed(m) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
 
-          <label class="wp-toggle" :title="m.enabled ? 'Disable' : 'Enable'">
+          <label class="wp-toggle" draggable="false" :title="m.enabled ? 'Disable' : 'Enable'">
             <input
               type="checkbox"
               :checked="m.enabled"
@@ -1462,7 +1545,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
                Fades in on row hover via .wp-mod-actions opacity
                transition. Lock + internal only on wildcard kind
                (engine ignores them elsewhere). -->
-          <div class="wp-mod-actions">
+          <div class="wp-mod-actions" draggable="false">
             <button
               v-if="m.type === 'wildcard'"
               type="button"
@@ -1875,6 +1958,9 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* `position: relative` is the anchor for the ::before / ::after
+   * insertion-line pseudos used by the drop indicators below. */
+  position: relative;
   transition: background-color 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 /* Kind border-left color — driven by data-kind attribute (Task 8). */
@@ -1925,18 +2011,44 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-module.wp-state-drift       { border-color: var(--wp-warn); }
 .wp-module.wp-state-missing     { border-color: var(--wp-danger); }
 .wp-module.wp-conflict-error    { border-color: var(--wp-red); }
-.wp-module.wp-drop-target {
-  border-color: var(--wp-accent);
-  box-shadow: inset 0 2px 0 var(--wp-accent);
-}
-
 /* Status-state full-border + bg tint (Task 8).
  * Applied in ADDITION to the existing legacy state classes so the
- * kind border-left is preserved while the full border reflects status.
- * Lower specificity than wp-drop-target so drop feedback wins. */
+ * kind border-left is preserved while the full border reflects status. */
 .wp-module.wp-mod--mod   { border-color: var(--wp-status-modified); background: color-mix(in srgb, var(--wp-status-modified) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--drift { border-color: var(--wp-warn);            background: color-mix(in srgb, var(--wp-warn) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--err   { border-color: var(--wp-danger);          background: color-mix(in srgb, var(--wp-danger) 8%, var(--wp-bg3)); }
+
+/* Phase 3a — drop indicators. Two states ride on .wp-drop-target:
+ *   - .wp-drop-target--before → insertion line ABOVE this card
+ *   - .wp-drop-target--after  → insertion line BELOW this card
+ * The line renders as a 3px violet bar via ::before / ::after pseudo
+ * pinned to the card edge. The card's own border also gets the
+ * accent color so the drop target reads as a unified affordance.
+ *
+ * Block sits LAST in the cascade so drop feedback wins over the
+ * state-color borders (mod/drift/err) when a user drags onto an
+ * already-flagged module — drop signal trumps state signal because
+ * the user's intent is "I want to put this here", not "this is
+ * broken". State borders re-assert the moment the drag releases. */
+.wp-module.wp-drop-target {
+  border-color: var(--wp-accent);
+}
+.wp-module.wp-drop-target--before::before,
+.wp-module.wp-drop-target--after::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 3px;
+  background: var(--wp-accent);
+  border-radius: 2px;
+  pointer-events: none;
+  /* Sits over the kind border-left so the indicator reads cleanly
+   * as a horizontal bar, not a corner artifact. */
+  z-index: 1;
+}
+.wp-module.wp-drop-target--before::before { top: -3px; }
+.wp-module.wp-drop-target--after::after  { bottom: -3px; }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
