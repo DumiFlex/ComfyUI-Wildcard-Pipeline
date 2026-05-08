@@ -251,7 +251,7 @@ function fmtPct(p: number): string {
   cursor: pointer;
 }
 .opt:last-child { border-bottom: none; }
-.opt:hover { background: rgba(255, 255, 255, 0.02); }
+.opt:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
 .opt__check {
   width: 14px;
   height: 14px;

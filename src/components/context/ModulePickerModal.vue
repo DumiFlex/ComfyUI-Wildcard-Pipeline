@@ -1071,7 +1071,7 @@ onBeforeUnmount(detachCaptureListeners);
   padding: 4px 8px 8px;
 }
 .wp-picker__body::-webkit-scrollbar { width: 8px; }
-.wp-picker__body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 999px; }
+.wp-picker__body::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08)); border-radius: 999px; }
 
 .wp-picker__state {
   padding: 32px 16px;
@@ -1442,7 +1442,7 @@ onBeforeUnmount(detachCaptureListeners);
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--wp-shadow-md, 0 6px 20px rgba(0, 0, 0, 0.45));
   padding: 10px;
   display: flex;
   flex-direction: column;

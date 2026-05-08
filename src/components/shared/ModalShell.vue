@@ -50,7 +50,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.62);
+  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.62));
   font-family: var(--wp-font-sans, sans-serif);
   cursor: default;
 }

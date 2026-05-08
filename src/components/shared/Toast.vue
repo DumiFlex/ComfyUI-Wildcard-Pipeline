@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--wp-accent);
   border-radius: var(--wp-radius-sm);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--wp-shadow-sm, 0 4px 16px rgba(0, 0, 0, 0.4));
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);

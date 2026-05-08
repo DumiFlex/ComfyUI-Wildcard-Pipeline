@@ -93,8 +93,27 @@
   --wp-kind-fixed:       #22d3ee;
 
   --wp-radius-lg: 12px;
+  /* Three shadow scales used across surfaces:
+   *   - sm: subtle drop for inline panels (toasts, context menus)
+   *   - md: card-level (module pickers, edit modals)
+   *   - lg: full overlay shadow for top-level dialogs
+   * Light theme overrides below dial these down — pure black at 0.5
+   * alpha reads harsh on near-white surfaces. */
+  --wp-shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --wp-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
   --wp-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
   --wp-overlay-bg: rgba(0, 0, 0, 0.55);
+  /* Row hover + scrollbar thumb tokens. Pre-Phase 4 these were
+   * inline `rgba(255, 255, 255, 0.02-0.08)` literals — invisible on
+   * light theme because white-on-white. Tokenize so light theme
+   * can override with a dark tint. */
+  --wp-row-hover: rgba(255, 255, 255, 0.02);
+  --wp-scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  /* Inset input shade — used by inputs that want to look "punched in"
+   * relative to their container surface. Dark theme: dark wash;
+   * light theme: subtle warm grey so the input still reads as
+   * inset-from-surface without becoming a hard black bar. */
+  --wp-input-shade: rgba(0, 0, 0, 0.25);
 
   --wp-danger: #ef4444;
   /* Warn = SPA `--wp-warn` (amber). ContextWidget drift-dot + bulk-refresh
@@ -187,8 +206,21 @@
   --wp-node-text:   #1a1a1a;
   --wp-node-text-2: #404040;
 
-  --wp-shadow-lg: 0 12px 40px rgba(15,15,30,0.12);
+  /* Light-theme shadow + overlay overrides — pure black at full
+   * dark-theme alpha reads harsh on near-white. Pull alpha down +
+   * shift toward a slightly cool ink so cards feel grounded without
+   * looking like they're punched into the page. */
+  --wp-shadow-sm: 0 2px 8px rgba(15, 15, 30, 0.08);
+  --wp-shadow-md: 0 4px 14px rgba(15, 15, 30, 0.10);
+  --wp-shadow-lg: 0 12px 40px rgba(15, 15, 30, 0.12);
   --wp-overlay-bg: rgba(15, 15, 30, 0.30);
+  /* Row hover + scrollbar — invert the dark-theme white tint to a
+   * dark tint so subtle surfaces remain visible on light bg. */
+  --wp-row-hover: rgba(15, 15, 30, 0.04);
+  --wp-scrollbar-thumb: rgba(15, 15, 30, 0.18);
+  /* Input shade — soft warm grey so inset inputs read as recessed
+   * surfaces instead of black bars on near-white modals. */
+  --wp-input-shade: rgba(15, 15, 30, 0.06);
 }
 
 /* Variable color palette — hash output (var-1..var-8) paints chips +

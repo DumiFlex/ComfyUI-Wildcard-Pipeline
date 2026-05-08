@@ -154,7 +154,7 @@ function onDelete(): void {
   color: var(--wp-text);
 }
 .row:last-child { border-bottom: none; }
-.row:hover { background: rgba(255, 255, 255, 0.02); }
+.row:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
 .row__check {
   width: 14px;
   height: 14px;

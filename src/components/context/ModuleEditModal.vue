@@ -736,7 +736,10 @@ function cancel() {
 .wp-medit__head-icon.type-pipeline    { color: var(--wp-kind-pipeline); }
 .wp-medit__name-input {
   flex: 1;
-  background: rgba(0, 0, 0, 0.25);
+  /* Inset shaded background — `--wp-input-shade` flips per theme so
+   * the input doesn't look like a black bar on the near-white
+   * light-theme modal head. */
+  background: var(--wp-input-shade, rgba(0, 0, 0, 0.25));
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-sm);
   color: var(--wp-text);
