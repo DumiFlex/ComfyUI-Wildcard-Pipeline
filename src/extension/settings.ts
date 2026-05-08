@@ -626,12 +626,20 @@ export function installDebugHelpers(): void {
 
 export function buildSettings(_app: AppLike): ComfySetting[] {
   // ComfyUI groups settings by 2nd-level category (alphabetical) and
-  // renders entries in array order within each section. To put the
-  // playground first in the WP tab, all entries live under a single
-  // "Display" section — accessibility (motion + contrast) used to
-  // have its own section but it sorted alphabetically before Display
-  // (A < D), pushing the playground launcher to second place. Keeping
-  // them all in one section lets array order alone control layout.
+  // renders entries in array order within each section. Two sections:
+  //
+  //   - "Display"  — visual axes (sorts first because D < R)
+  //   - "Runtime"  — behavior gates (sorts second; renamed from
+  //                  "Behavior" because B < D would push Runtime
+  //                  ABOVE Display and shove the playground out of
+  //                  the top slot)
+  //
+  // Within Display, array order forms logical clusters that the user
+  // can scan top-to-bottom: playground → sizing (density / decoration /
+  // color-intensity) → identity (module-type) → state markers →
+  // collapse + focus → accessibility. ComfyUI doesn't render
+  // separators, but the array order makes the clusters obvious as
+  // adjacent rows.
   return [
     // Launcher row — uses the SettingCustomRenderer escape hatch
     // (`type: function`) to render a button styled like a PrimeVue
@@ -713,6 +721,29 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeDecoration(next), {
             severity: "info",
             singletonKey: "wp-decoration",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_COLOR_INTENSITY,
+      name: "Color intensity",
+      type: "combo",
+      options: COLOR_INTENSITY_OPTIONS,
+      defaultValue: "standard",
+      tooltip:
+        "How saturated accent / kind / status colors render. " +
+        "Muted reduces chroma for a calmer palette; vivid bumps it for pop.",
+      category: ["Wildcard Pipeline", "Display", "Color intensity"],
+      onChange: (newVal) => {
+        const next = asColorIntensity(newVal, "standard");
+        const changed = next !== state.colorIntensity;
+        state.colorIntensity = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeColorIntensity(next), {
+            severity: "info",
+            singletonKey: "wp-color-intensity",
           });
         }
       },
@@ -823,29 +854,6 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
     },
     {
-      id: SETTING_ID_COLOR_INTENSITY,
-      name: "Color intensity",
-      type: "combo",
-      options: COLOR_INTENSITY_OPTIONS,
-      defaultValue: "standard",
-      tooltip:
-        "How saturated accent / kind / status colors render. " +
-        "Muted reduces chroma for a calmer palette; vivid bumps it for pop.",
-      category: ["Wildcard Pipeline", "Display", "Color intensity"],
-      onChange: (newVal) => {
-        const next = asColorIntensity(newVal, "standard");
-        const changed = next !== state.colorIntensity;
-        state.colorIntensity = next;
-        syncMarkers();
-        if (bootCompleted && changed) {
-          pushToast(describeColorIntensity(next), {
-            severity: "info",
-            singletonKey: "wp-color-intensity",
-          });
-        }
-      },
-    },
-    {
       id: SETTING_ID_FOCUS,
       name: "Focus mode",
       type: "boolean",
@@ -923,10 +931,12 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         }
       },
     },
-    // ── Behavior axes (Phase 2) ──────────────────────────────────
-    // Live in their own "Behavior" section so users browsing the
-    // panel can scan visual axes (Display) separately from runtime
-    // gates (Behavior). Section sorts after Display alphabetically.
+    // ── Runtime axes (Phase 2) ──────────────────────────────────
+    // Section name "Runtime" (renamed from "Behavior" in Phase 3c+1)
+    // sorts AFTER "Display" alphabetically (R > D), so the Display
+    // section keeps its top slot in the panel and the Playground
+    // launcher stays first. Behavior was the original name but
+    // sorted before Display, pushing the launcher to second place.
     {
       id: SETTING_ID_VALIDATION,
       name: "Validation strictness",
@@ -936,7 +946,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "How aggressively the conflict scanner surfaces issues. " +
         "Permissive turns it off — use only if you know what you're doing.",
-      category: ["Wildcard Pipeline", "Behavior", "Validation"],
+      category: ["Wildcard Pipeline", "Runtime", "Validation"],
       onChange: (newVal) => {
         const next = asValidation(newVal, "strict");
         const changed = next !== state.validation;
@@ -956,7 +966,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       options: TOAST_LIFETIME_OPTIONS,
       defaultValue: "default",
       tooltip: "How long status toasts stay on screen before auto-dismissing.",
-      category: ["Wildcard Pipeline", "Behavior", "Toast lifetime"],
+      category: ["Wildcard Pipeline", "Runtime", "Toast lifetime"],
       onChange: (newVal) => {
         const next = asToastLifetime(newVal, "default");
         const changed = next !== state.toastLifetime;
@@ -977,7 +987,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "When on, info toasts (status confirmations) are filtered out. " +
         "Warnings + errors still show.",
-      category: ["Wildcard Pipeline", "Behavior", "Suppress info toasts"],
+      category: ["Wildcard Pipeline", "Runtime", "Suppress info toasts"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.suppressInfoToasts;
@@ -1002,7 +1012,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "When on, modules added from the picker start with their toggle off. " +
         "Useful when configuring before letting them run.",
-      category: ["Wildcard Pipeline", "Behavior", "New module default"],
+      category: ["Wildcard Pipeline", "Runtime", "New module default"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.newModuleDisabled;
