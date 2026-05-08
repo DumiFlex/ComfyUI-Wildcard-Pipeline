@@ -113,4 +113,36 @@ describe("RuntimeSection", () => {
     const patch = lastPatch(w);
     expect(patch.instance?.internal === false || patch.instance?.internal === null).toBe(true);
   });
+
+  it("seed up button bumps locked_seed by +1 and updates _ui.last_locked_seed", async () => {
+    const w = mount(RuntimeSection, {
+      props: { module: makeModule({ instance: { locked_seed: 12345 } }) },
+    });
+    await w.find('[data-test="runtime-seed-up"]').trigger("click");
+    const patch = lastPatch(w);
+    expect(patch.instance?.locked_seed).toBe(12346);
+    expect(patch.instance?._ui?.last_locked_seed).toBe(12346);
+  });
+
+  it("seed down button bumps locked_seed by -1", async () => {
+    const w = mount(RuntimeSection, {
+      props: { module: makeModule({ instance: { locked_seed: 12345 } }) },
+    });
+    await w.find('[data-test="runtime-seed-down"]').trigger("click");
+    expect(lastPatch(w).instance?.locked_seed).toBe(12344);
+  });
+
+  it("seed down clamps at 0 (no negative seeds)", async () => {
+    const w = mount(RuntimeSection, {
+      props: { module: makeModule({ instance: { locked_seed: 0 } }) },
+    });
+    await w.find('[data-test="runtime-seed-down"]').trigger("click");
+    expect(lastPatch(w).instance?.locked_seed).toBe(0);
+  });
+
+  it("seed spinner buttons are not rendered when not locked", () => {
+    const w = mount(RuntimeSection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="runtime-seed-up"]').exists()).toBe(false);
+    expect(w.find('[data-test="runtime-seed-down"]').exists()).toBe(false);
+  });
 });

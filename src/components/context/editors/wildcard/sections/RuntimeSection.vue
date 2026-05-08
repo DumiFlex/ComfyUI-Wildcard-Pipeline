@@ -60,6 +60,20 @@ function onRollClick(): void {
 function onHideClick(): void {
   emitInstance({ internal: !internal.value });
 }
+
+function bumpSeed(direction: 1 | -1): void {
+  if (!locked.value) return;
+  const current = typeof instance.value.locked_seed === "number"
+    ? instance.value.locked_seed
+    : 0;
+  // Clamp to [0, 0x7fffffff] — same range as randomSeed produces.
+  const next = Math.max(0, Math.min(0x7fffffff, current + direction));
+  const ui = instance.value._ui ?? {};
+  emitInstance({
+    locked_seed: next,
+    _ui: { ...ui, last_locked_seed: next },
+  });
+}
 </script>
 
 <template>
@@ -94,15 +108,39 @@ function onHideClick(): void {
 
     <div v-if="locked" class="seed-block">
       <span class="seed-block__label">Seed</span>
-      <input
-        class="seed-input"
-        data-test="runtime-seed"
-        type="number"
-        step="1"
-        :value="seedValue"
-        aria-label="Locked seed"
-        @input="onSeedInput"
-      />
+      <span class="seed-input-wrap">
+        <input
+          class="seed-input"
+          data-test="runtime-seed"
+          type="number"
+          step="1"
+          :value="seedValue"
+          aria-label="Locked seed"
+          @input="onSeedInput"
+        />
+        <span class="seed-spin">
+          <button
+            type="button"
+            class="seed-spin-btn"
+            data-test="runtime-seed-up"
+            tabindex="-1"
+            aria-label="Increase seed"
+            @click="bumpSeed(1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
+          </svg></button>
+          <button
+            type="button"
+            class="seed-spin-btn"
+            data-test="runtime-seed-down"
+            tabindex="-1"
+            aria-label="Decrease seed"
+            @click="bumpSeed(-1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
+          </svg></button>
+        </span>
+      </span>
       <button
         type="button"
         class="seed-roll"
@@ -169,18 +207,70 @@ function onHideClick(): void {
   letter-spacing: 0.1em;
   color: var(--wp-accent-text, var(--wp-text));
 }
-.seed-input {
+/* Seed input mirrors the OptionRow weight control: themed wrapper
+ * holding the number field plus a stacked custom up/down spinner.
+ * Native browser spinners hidden via `appearance: textfield` (FF) +
+ * `::-webkit-*-spin-button` (Chrome/Safari). The custom buttons step
+ * by ±1 (integer seed) and clamp to [0, 0x7fffffff]. */
+.seed-input-wrap {
+  display: inline-flex;
+  align-items: stretch;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  padding: 3px 7px;
+  height: 24px;
+  width: 130px;
+  overflow: hidden;
+}
+.seed-input-wrap:focus-within {
+  border-color: var(--wp-accent);
+}
+.seed-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 0 7px;
   font: 11px var(--wp-font-mono);
   color: var(--wp-text);
-  width: 110px;
+  text-align: right;
+  min-width: 0;
+  -moz-appearance: textfield;
+}
+.seed-input::-webkit-outer-spin-button,
+.seed-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .seed-input:focus {
-  border-color: var(--wp-accent);
   outline: none;
+}
+.seed-spin {
+  display: flex;
+  flex-direction: column;
+  width: 14px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--wp-border);
+  background: rgba(99, 102, 241, 0.04);
+}
+.seed-spin-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  line-height: 0;
+}
+.seed-spin-btn + .seed-spin-btn {
+  border-top: 1px solid var(--wp-border);
+}
+.seed-spin-btn:hover {
+  color: var(--wp-accent-text, var(--wp-text));
+  background: rgba(99, 102, 241, 0.12);
 }
 .seed-roll {
   background: transparent;
