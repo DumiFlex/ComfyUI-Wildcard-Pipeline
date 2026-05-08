@@ -16,6 +16,7 @@ import "../components/shared/a11y.css";
 import "../components/shared/display-prefs.css";
 import { pushToast } from "../components/shared/toast-store";
 import { openPlayground } from "../components/settings/playground-store";
+import { setPerfOverlayVisible } from "./perf-stats";
 
 export type A11yMode = "auto" | "on" | "off";
 export type Density = "comfortable" | "compact" | "minimal";
@@ -101,6 +102,7 @@ const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
 const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 const SETTING_ID_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
 const SETTING_ID_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
+const SETTING_ID_PERF_OVERLAY = "wildcardPipeline.display.perfOverlay";
 
 const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
 const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
@@ -202,6 +204,7 @@ const state = reactive<{
   newModuleDisabled: boolean;
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
+  perfOverlay: boolean;
 }>({
   reduceMotion: "auto",
   contrast: "auto",
@@ -218,6 +221,7 @@ const state = reactive<{
   newModuleDisabled: false,
   collapseMode: "independent",
   colorIntensity: "standard",
+  perfOverlay: false,
 });
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -271,6 +275,7 @@ export function _resetDisplayStateForTesting(): void {
   state.newModuleDisabled = false;
   state.collapseMode = "independent";
   state.colorIntensity = "standard";
+  state.perfOverlay = false;
 }
 
 /**
@@ -428,6 +433,10 @@ function describeColorIntensity(mode: ColorIntensity): string {
   return `Color intensity: ${mode.toUpperCase()}`;
 }
 
+function describePerfOverlay(on: boolean): string {
+  return `Performance overlay: ${on ? "ON" : "OFF"}`;
+}
+
 function describeBorder(on: boolean): string {
   return `Border highlights: ${on ? "ON" : "OFF"}`;
 }
@@ -536,6 +545,10 @@ export function applyDisplayPrefs(app: AppLike): void {
   // Phase 3c — color intensity. Body class drives oklch() chroma
   // overrides for accent / kind / status tokens (see display-prefs.css).
   state.colorIntensity = asColorIntensity(app.extensionManager?.setting?.get(SETTING_ID_COLOR_INTENSITY), "standard");
+  // Phase 3d — performance overlay HUD. Toggling drives `perfOverlayVisible`
+  // ref in perf-stats; the HUD `v-if`s on it. Pure JS state — no body class.
+  state.perfOverlay = app.extensionManager?.setting?.get(SETTING_ID_PERF_OVERLAY) === true;
+  setPerfOverlayVisible(state.perfOverlay);
   syncMarkers();
 }
 
@@ -604,6 +617,7 @@ export function installDebugHelpers(): void {
     // no body class. ContextWidget reads via getCollapseMode().
     collapseMode: (mode: CollapseMode) => { state.collapseMode = mode; },
     colorIntensity: (mode: ColorIntensity) => { state.colorIntensity = mode; syncMarkers(); },
+    perfOverlay: (on: boolean) => { state.perfOverlay = on; setPerfOverlayVisible(on); },
     state: () => ({
       density: state.density,
       decoration: state.decoration,
@@ -614,6 +628,7 @@ export function installDebugHelpers(): void {
       kindStyle: state.kindStyle,
       collapseMode: state.collapseMode,
       colorIntensity: state.colorIntensity,
+      perfOverlay: state.perfOverlay,
     }),
   };
 
@@ -858,6 +873,28 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeCollapseMode(next), {
             severity: "info",
             singletonKey: "wp-collapse-mode",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_PERF_OVERLAY,
+      name: "Performance overlay",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "Show a small HUD in the corner with module count, " +
+        "preview cache stats, and last scan / queue timing.",
+      category: ["Wildcard Pipeline", "Display", "Performance overlay"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.perfOverlay;
+        state.perfOverlay = next;
+        setPerfOverlayVisible(next);
+        if (bootCompleted && changed) {
+          pushToast(describePerfOverlay(next), {
+            severity: "info",
+            singletonKey: "wp-perf-overlay",
           });
         }
       },
