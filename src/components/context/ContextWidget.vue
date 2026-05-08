@@ -1971,10 +1971,6 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   border: none;
   color: var(--wp-text3);
   cursor: pointer;
-  /* Caret sized to ~57% of btn width — proportional to standard tree
-     disclosure idioms (macOS Finder, VSCode tree). Btn dimensions
-     unchanged so the hit area stays comfortable. */
-  font-size: 8px;
   padding: 0;
   line-height: 1;
   display: inline-flex;
@@ -1983,6 +1979,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   width: 14px;
   flex-shrink: 0;
 }
+/* PrimeIcons set their own `font-size: 1rem` on `.pi`, so the parent
+ * button's font-size never reaches the glyph. Target `.pi` directly
+ * to shrink the caret to ~57% of the button width — proportional to
+ * standard tree disclosure idioms (macOS Finder, VSCode tree). Button
+ * dimensions stay the same so the hit area stays comfortable. */
+.wp-collapse-btn .pi { font-size: 8px; }
 .wp-collapse-btn:hover { color: var(--wp-text); }
 
 .wp-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
