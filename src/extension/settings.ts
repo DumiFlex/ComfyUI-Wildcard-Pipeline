@@ -19,6 +19,7 @@ export type A11yMode = "auto" | "on" | "off";
 export type Density = "comfortable" | "compact" | "minimal";
 export type Decoration = "full" | "minimal" | "off";
 export type IndicatorStyle = "both" | "badge" | "dot";
+export type KindStyle = "both" | "icon" | "chip";
 
 export interface ComfySetting {
   id: string;
@@ -39,6 +40,7 @@ const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
 const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
 const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
+const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -70,6 +72,12 @@ const INDICATOR_OPTIONS = [
   { text: "Both (dot + badge)", value: "both" },
 ];
 
+const KIND_STYLE_OPTIONS = [
+  { text: "Icon only (default)", value: "icon" },
+  { text: "Chip only", value: "chip" },
+  { text: "Both (icon + chip)", value: "both" },
+];
+
 interface ExtensionManager {
   setting?: { get(id: string): unknown };
 }
@@ -91,6 +99,7 @@ const state: {
   borderHighlight: boolean;
   collapsedByDefault: boolean;
   focusMode: boolean;
+  kindStyle: KindStyle;
 } = {
   reduceMotion: "auto",
   contrast: "auto",
@@ -100,6 +109,7 @@ const state: {
   borderHighlight: true,
   collapsedByDefault: false,
   focusMode: false,
+  kindStyle: "icon",
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -118,6 +128,10 @@ function asIndicator(v: unknown, fallback: IndicatorStyle): IndicatorStyle {
   return v === "both" || v === "badge" || v === "dot" ? v : fallback;
 }
 
+function asKindStyle(v: unknown, fallback: KindStyle): KindStyle {
+  return v === "both" || v === "icon" || v === "chip" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
@@ -126,6 +140,7 @@ export function _resetDisplayStateForTesting(): void {
   state.borderHighlight = true;
   state.collapsedByDefault = false;
   state.focusMode = false;
+  state.kindStyle = "icon";
 }
 
 /**
@@ -186,6 +201,12 @@ function describeIndicator(mode: IndicatorStyle): string {
   return "Indicators: dot only";
 }
 
+function describeKindStyle(mode: KindStyle): string {
+  if (mode === "both") return "Module type: icon + chip";
+  if (mode === "chip") return "Module type: chip only";
+  return "Module type: icon only";
+}
+
 function describeBorder(on: boolean): string {
   return `Border highlights: ${on ? "ON" : "OFF"}`;
 }
@@ -240,6 +261,11 @@ function syncMarkers(): void {
 
   // Display — focus mode (hovering one module dims siblings)
   document.body.classList.toggle("wp-focus-mode", state.focusMode === true);
+
+  // Display — kind style (module type icon vs chip vs both)
+  document.body.classList.toggle("wp-kind-style-icon", state.kindStyle === "icon");
+  document.body.classList.toggle("wp-kind-style-chip", state.kindStyle === "chip");
+  document.body.classList.toggle("wp-kind-style-both", state.kindStyle === "both");
 }
 
 /**
@@ -269,6 +295,7 @@ export function applyDisplayPrefs(app: AppLike): void {
   // No body class for this setting; ContextWidget reads via getCollapsedByDefault().
   state.collapsedByDefault = app.extensionManager?.setting?.get(SETTING_ID_COLLAPSED) === true;
   state.focusMode = app.extensionManager?.setting?.get(SETTING_ID_FOCUS) === true;
+  state.kindStyle = asKindStyle(app.extensionManager?.setting?.get(SETTING_ID_KIND_STYLE), "icon");
   syncMarkers();
 }
 
@@ -332,6 +359,7 @@ export function installDebugHelpers(): void {
     // no body class. ContextWidget reads via getCollapsedByDefault().
     collapsedByDefault: (on: boolean) => { state.collapsedByDefault = on; },
     focusMode: (on: boolean) => { state.focusMode = on; syncMarkers(); },
+    kindStyle: (mode: KindStyle) => { state.kindStyle = mode; syncMarkers(); },
     state: () => ({
       density: state.density,
       decoration: state.decoration,
@@ -339,6 +367,7 @@ export function installDebugHelpers(): void {
       borderHighlight: state.borderHighlight,
       collapsedByDefault: state.collapsedByDefault,
       focusMode: state.focusMode,
+      kindStyle: state.kindStyle,
     }),
   };
 
@@ -540,6 +569,31 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeFocus(next), {
             severity: "info",
             singletonKey: "wp-focus-mode",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_KIND_STYLE,
+      name: "Module type style",
+      type: "combo",
+      options: KIND_STYLE_OPTIONS,
+      defaultValue: "icon",
+      tooltip:
+        "How a module's type is shown in its header. Icon is the compact " +
+        "default — colored PrimeIcon per kind. Chip shows the text label " +
+        "(\"wildcard\", \"fixed\", \"combine\"...). Both stacks icon + chip " +
+        "for users who want maximum info.",
+      category: ["Wildcard Pipeline", "Display", "Module type style"],
+      onChange: (newVal) => {
+        const next = asKindStyle(newVal, "icon");
+        const changed = next !== state.kindStyle;
+        state.kindStyle = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeKindStyle(next), {
+            severity: "info",
+            singletonKey: "wp-kind-style",
           });
         }
       },

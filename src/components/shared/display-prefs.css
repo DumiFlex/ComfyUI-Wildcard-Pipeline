@@ -110,6 +110,24 @@
   display: none;
 }
 
+/* ── Kind style ─────────────────────────────────────────────────────
+ * Module type is currently shown by TWO redundant elements:
+ *   .wp-mod-icon  — the colored PrimeIcon (per kind: wildcard/fixed/...)
+ *   .wp-kind-chip — the text label ("wildcard", "fixed", "combine"...)
+ *
+ * Default `icon` shows the icon and hides the chip — most compact and
+ * the colored icon already telegraphs the kind. `chip` hides the icon
+ * and shows the text label — preferred for users who scan by name.
+ * `both` keeps the legacy stacked layout for users who want max info. */
+
+.wp-kind-style-icon .wp-kind-chip {
+  display: none;
+}
+
+.wp-kind-style-chip .wp-mod-icon {
+  display: none;
+}
+
 /* ── Border highlight ───────────────────────────────────────────────
  * State-marker module borders (mod / missing / drift / conflict /
  * override) are colored by their --wp-* state hue. When this is off,

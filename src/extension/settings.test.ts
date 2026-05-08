@@ -27,6 +27,7 @@ const SETTING_INDICATOR = "wildcardPipeline.display.indicatorStyle";
 const SETTING_BORDER = "wildcardPipeline.display.borderHighlight";
 const SETTING_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 const SETTING_FOCUS = "wildcardPipeline.display.focusMode";
+const SETTING_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 
 interface FakeMQL {
   matches: boolean;
@@ -99,6 +100,7 @@ interface DisplayOverrides {
   borderHighlight?: boolean;
   collapsedByDefault?: boolean;
   focusMode?: boolean;
+  kindStyle?: string;
 }
 
 function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
@@ -114,6 +116,7 @@ function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
           if (id === SETTING_BORDER) return overrides.borderHighlight ?? true;
           if (id === SETTING_COLLAPSED) return overrides.collapsedByDefault ?? false;
           if (id === SETTING_FOCUS) return overrides.focusMode ?? false;
+          if (id === SETTING_KIND_STYLE) return overrides.kindStyle ?? "icon";
           return undefined;
         },
       },
@@ -573,6 +576,53 @@ describe("a11y settings", () => {
     expect(toasts.value).toHaveLength(1);
     expect(toasts.value[0].message).toBe("Focus mode: ON");
     expect(toasts.value[0].singletonKey).toBe("wp-focus-mode");
+  });
+
+  // ── Display preferences — kind style ────────────────────────────
+
+  it("kindStyle boot — applies wp-kind-style-icon by default", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(true);
+    expect(document.body.classList.contains("wp-kind-style-chip")).toBe(false);
+    expect(document.body.classList.contains("wp-kind-style-both")).toBe(false);
+  });
+
+  it("kindStyle boot — reads stored chip value", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ kindStyle: "chip" }));
+
+    expect(document.body.classList.contains("wp-kind-style-chip")).toBe(true);
+    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(false);
+  });
+
+  it("kindStyle onChange — flips body class", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_KIND_STYLE)?.onChange?.("both", "icon");
+
+    expect(document.body.classList.contains("wp-kind-style-both")).toBe(true);
+    expect(document.body.classList.contains("wp-kind-style-icon")).toBe(false);
+  });
+
+  it("kindStyle toast — fires with descriptive message", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_KIND_STYLE)?.onChange?.("chip", "icon");
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Module type: chip only");
+    expect(toasts.value[0].singletonKey).toBe("wp-kind-style");
   });
 
   it("installDebugHelpers exposes window.wpDebug with a11y + display sub-namespaces", () => {
