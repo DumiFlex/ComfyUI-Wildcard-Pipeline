@@ -73,10 +73,23 @@
 
   --wp-shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
   --wp-shadow:    0 4px 16px rgba(0,0,0,0.35);
+  --wp-shadow-md: 0 12px 28px rgba(0,0,0,0.35);
   --wp-shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
+  --wp-shadow-xl: 0 20px 60px rgba(0,0,0,0.5);
 
   /* Overlays / drawers */
   --wp-overlay-bg: rgba(0, 0, 0, 0.45);
+
+  /* Phase 4 — row hover + scrollbar thumb + input-shade tokens.
+   * Pre-fix these were inline `rgba(255,255,255,0.02)` / `rgba(0,0,0,0.32)`
+   * literals across components; tokenize so the light theme override
+   * below can flip the tint instead of leaving white-on-white or
+   * black-on-white surfaces. */
+  --wp-row-hover: rgba(255,255,255,0.02);
+  --wp-row-active: rgba(124,58,237,0.04);
+  --wp-scrollbar-thumb: rgba(255,255,255,0.08);
+  --wp-scrollbar-thumb-hover: rgba(255,255,255,0.16);
+  --wp-input-shade: rgba(0,0,0,0.32);
 
   /* Pipeline / kind stripe accents */
   --wp-kind-stripe-w: 3px;
@@ -121,7 +134,17 @@
 
   --wp-shadow-sm: 0 1px 2px rgba(15,15,30,0.06);
   --wp-shadow:    0 4px 16px rgba(15,15,30,0.08);
+  --wp-shadow-md: 0 8px 22px rgba(15,15,30,0.10);
   --wp-shadow-lg: 0 12px 40px rgba(15,15,30,0.12);
+  --wp-shadow-xl: 0 20px 50px rgba(15,15,30,0.16);
+
+  /* Phase 4 — flip the dark-theme white tints to dark tints so subtle
+   * surfaces remain visible on light bg. */
+  --wp-row-hover: rgba(15,15,30,0.04);
+  --wp-row-active: rgba(124,58,237,0.08);
+  --wp-scrollbar-thumb: rgba(15,15,30,0.14);
+  --wp-scrollbar-thumb-hover: rgba(15,15,30,0.22);
+  --wp-input-shade: rgba(15,15,30,0.06);
 
   /* Light theme needs darker accent text for contrast on near-white surfaces */
   --wp-accent-text:        var(--wp-accent-700);
@@ -159,8 +182,8 @@ input, textarea, select { font: inherit; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
+::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255,255,255,0.08)); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--wp-scrollbar-thumb-hover, rgba(255,255,255,0.16)); }
 
 /* ---------- App shell ---------- */
 .wp-app {
@@ -593,8 +616,8 @@ input, textarea, select { font: inherit; }
   vertical-align: middle;
 }
 .wp-table tbody tr:last-child td { border-bottom: none; }
-.wp-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
-.wp-table tbody tr[data-expanded="true"] > td { background: rgba(124,58,237,0.04); }
+.wp-table tbody tr:hover td { background: var(--wp-row-hover, rgba(255,255,255,0.02)); }
+.wp-table tbody tr[data-expanded="true"] > td { background: var(--wp-row-active, rgba(124,58,237,0.04)); }
 .wp-table .wp-row-expand {
   background: var(--wp-bg-2);
   padding: 12px 16px 14px 56px;
@@ -1306,7 +1329,7 @@ input, textarea, select { font: inherit; }
 /* ---------- History panel ---------- */
 .wp-history-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--wp-overlay-bg, rgba(0,0,0,0.55));
   z-index: 100;
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
@@ -1319,7 +1342,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: 12px;
-  box-shadow: 0 24px 48px rgba(0,0,0,0.5);
+  box-shadow: var(--wp-shadow-xl, 0 24px 48px rgba(0,0,0,0.5));
   display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -1588,7 +1611,7 @@ input, textarea, select { font: inherit; }
   border: 1px solid var(--wp-border-strong);
   border-radius: 10px;
   padding: 10px 12px;
-  box-shadow: 0 12px 28px rgba(0,0,0,.35);
+  box-shadow: var(--wp-shadow-md, 0 12px 28px rgba(0,0,0,.35));
   display: flex; flex-direction: column; gap: 8px;
 }
 .wp-matrix-cell-wrap {
@@ -1803,7 +1826,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
   border-radius: 10px;
-  box-shadow: 0 12px 28px rgba(0,0,0,.4);
+  box-shadow: var(--wp-shadow-md, 0 12px 28px rgba(0,0,0,.4));
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -2157,7 +2180,7 @@ input, textarea, select { font: inherit; }
 .wp-modal__backdrop,
 .wp-modal-backdrop {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--wp-overlay-bg, rgba(0,0,0,0.55));
   backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   z-index: 1000;
@@ -2176,7 +2199,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  box-shadow: var(--wp-shadow-xl, 0 20px 60px rgba(0,0,0,0.5));
   width: 100%;
   max-width: 560px;
   max-height: calc(100vh - 48px);

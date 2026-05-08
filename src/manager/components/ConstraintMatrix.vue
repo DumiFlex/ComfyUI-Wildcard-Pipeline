@@ -431,7 +431,7 @@ defineExpose({ cellAt, cycleCell });
   border: 1px solid var(--wp-border-strong, var(--wp-border2));
   border-radius: 10px;
   padding: 10px 12px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--wp-shadow-md, 0 12px 28px rgba(0, 0, 0, 0.35));
   display: flex;
   flex-direction: column;
   gap: 8px;

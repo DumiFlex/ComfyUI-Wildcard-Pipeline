@@ -197,7 +197,7 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 1100;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.55));
   display: flex;
   align-items: center;
   justify-content: center;

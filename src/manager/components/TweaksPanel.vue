@@ -246,7 +246,7 @@ function onDensity(d: Density) {
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.32));
   /* Backdrop only renders when panel is open; no transition needed. */
 }
 </style>
