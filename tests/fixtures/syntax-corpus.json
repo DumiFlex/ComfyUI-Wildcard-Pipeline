@@ -70,7 +70,7 @@
         "seed": 42,
         "ctx_vars": {"style": "gothic"},
         "catalog": [],
-        "surface": "wildcard",
+        "surface": "combine",
         "output": "gothic"
       }
     },
@@ -86,7 +86,7 @@
         "seed": 42,
         "ctx_vars": {"color": "red"},
         "catalog": [],
-        "surface": "wildcard",
+        "surface": "combine",
         "output": "a red cat"
       }
     },

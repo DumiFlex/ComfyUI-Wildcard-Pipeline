@@ -211,8 +211,17 @@ def test_resolve_inline_pick_in_option():
     assert out["color"] in {"red", "blue", "green"}
 
 
-def test_resolve_var_substitution_in_option():
-    """$var references in option values are expanded from ctx."""
+def test_resolve_var_in_option_renders_literal_warns():
+    """$var references in wildcard option values do NOT read upstream
+    (wildcard surface is a binding PRODUCER, not a consumer). Lenient
+    mode renders the literal `$name` text + emits a warning.
+
+    This contract was tightened during the combine v2 + syntax parity
+    cycle so wildcard / combine / fixed_values surfaces have explicit
+    authority over which token kinds resolve. See
+    docs/superpowers/specs/2026-05-08-combine-and-fixed-values-syntax-parity-design.md
+    "Surface support matrix".
+    """
     ctx = {
         "__wp_rng__": random.Random(0),
         "__wp_warnings__": [],
@@ -223,7 +232,8 @@ def test_resolve_var_substitution_in_option():
     out = WildcardHandler.resolve(
         payload, instance={"variable_binding": "result"}, ctx=ctx,
     )
-    assert out == {"result": "photorealistic photo"}
+    assert out == {"result": "$style photo"}
+    assert any(w.get("type") == "var_out_of_surface" for w in ctx["__wp_warnings__"])
 
 
 def test_resolve_instance_binding_overrides_payload():
@@ -557,14 +567,22 @@ def test_resolve_pinned_mode_falls_back_when_pinned_id_missing():
 
 def test_resolve_pinned_mode_resolves_inline_syntax():
     """Pinned option's value still goes through resolve_text."""
+    # Use alternation instead of $var — wildcard surface no longer
+    # supports $var reads (binding producer, not consumer); see
+    # combine v2 + syntax parity cycle. Pinned mode picks the named
+    # option deterministically, then resolve_text expands inline
+    # syntax that IS supported on wildcard surface (alternations,
+    # escapes, nested wildcard refs).
     ctx = {
         "__wp_rng__": random.Random(0),
         "__wp_warnings__": [],
         "__wp_catalog__": {},
-        "color": "red",
     }
     payload = _payload([
-        {"id": "a", "value": "$color shirt", "weight": 1},
+        # Two-branch alternation that always resolves to "red" — exercises
+        # the resolve_text composition path without depending on $var
+        # (which wildcard surface no longer supports).
+        {"id": "a", "value": "{red|red} shirt", "weight": 1},
     ])
     out = WildcardHandler.resolve(
         payload,

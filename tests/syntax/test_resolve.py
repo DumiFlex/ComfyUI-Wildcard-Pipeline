@@ -13,11 +13,18 @@ from engine.syntax.types import SurfaceKind
 
 @dataclass
 class _FakeCtx:
-    """Test double matching the ResolveContext Protocol."""
+    """Test double matching the ResolveContext Protocol.
+
+    Default surface is "combine" because most tests in this module
+    exercise VAR / DP_BRACE / ESCAPE resolution mechanics that combine
+    surface allows. Wildcard surface (binding producer) does NOT
+    support $var reads — those gating tests live in
+    test_resolve_var_surface.py.
+    """
     rng: random.Random = field(default_factory=lambda: random.Random(42))
     max_ref_depth: int = 8
     strict: bool = False
-    surface: SurfaceKind = "wildcard"
+    surface: SurfaceKind = "combine"
     developer_mode: bool = False
     warnings: list[dict[str, Any]] = field(default_factory=list)
     _vars: dict[str, str] = field(default_factory=dict)

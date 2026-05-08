@@ -62,17 +62,44 @@ def _resolve_tokens(
     return "".join(parts)
 
 
+_VAR_SURFACES_ALLOWED = frozenset(["combine", "derivation", "assembler"])
+
+
 def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
     """Look up a variable in ctx. Returns empty string for missing or
-    internal-key vars. Missing vars also emit a `unknown_var` warning so
+    internal-key vars. Missing vars also emit an `unknown_var` warning so
     the user gets a signal when a Combine / Derivation / Constraint
     template references a variable not bound by any upstream module.
 
     Internal-`__`-prefixed keys are never substituted and never warn —
-    they're engine bookkeeping (`__wp_rng__`, `__wp_catalog__`, etc.)."""
+    they're engine bookkeeping (`__wp_rng__`, `__wp_catalog__`, etc.).
+
+    Surface-gated: only combine/derivation/assembler surfaces support
+    $var reads. Wildcard + fixed_values surfaces are binding PRODUCERS
+    (not consumers); $var reads there warn + render literal in lenient
+    mode, raise VarOutOfSurfaceError in strict mode."""
     name = tok.meta.get("name", "")
     if name.startswith("__"):
         return ""
+    if ctx.surface not in _VAR_SURFACES_ALLOWED:
+        from engine.syntax.types import VarOutOfSurfaceError
+        if ctx.strict:
+            raise VarOutOfSurfaceError(name, ctx.surface)
+        _push_warning(
+            ctx,
+            type="var_out_of_surface",
+            severity="warn",
+            module_id="",
+            source_field="",
+            position=tok.start,
+            token_index=None,
+            detail={"name": name, "surface": ctx.surface},
+            message=(
+                f"${name} ignored in {ctx.surface!r} surface — only "
+                f"combine / derivation / assembler surfaces support $var reads"
+            ),
+        )
+        return f"${name}"
     value = ctx.get_var(name)
     if value is None:
         _push_warning(

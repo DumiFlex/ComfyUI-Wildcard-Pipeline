@@ -19,7 +19,7 @@ from typing import (
     runtime_checkable,
 )
 
-SurfaceKind = Literal["wildcard", "combine", "derivation", "assembler"]
+SurfaceKind = Literal["wildcard", "combine", "derivation", "assembler", "fixed_values"]
 
 
 class TokenKind(enum.Enum):
@@ -106,6 +106,24 @@ class RefOutOfSurfaceError(SyntaxError):
         super().__init__(
             f"ref @{{{uuid}}} not allowed in {surface!r} surface; "
             f"only wildcard option values"
+        )
+
+
+class VarOutOfSurfaceError(SyntaxError):
+    """$var read attempted in a surface that doesn't allow it.
+
+    Combine, derivation, and assembler surfaces support $var reads.
+    Wildcard and fixed_values surfaces are binding PRODUCERS, not
+    consumers — $var reads in those surfaces warn (lenient) or raise
+    (strict) per ResolveContext.strict.
+    """
+
+    def __init__(self, name: str, surface: str) -> None:
+        self.name = name
+        self.surface = surface
+        super().__init__(
+            f"$var ${name} not allowed in {surface!r} surface; "
+            f"only combine / derivation / assembler surfaces support $var reads"
         )
 
 
