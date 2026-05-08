@@ -264,8 +264,22 @@ function doClearAllOverrides(): void {
   // Identity (meta.name) is intentionally left alone — the
   // IdentitySection has its own per-field reset button that owns
   // name restoration. Footer sweep handles pool only.
+  let nextEntries = draft.value.entries;
+  if (draft.value.type === "fixed_values" && draft.value.payload_hash) {
+    // Fixed-values reset must also rewind `entries` to mirror
+    // `payload.values`. Without this, save()'s entries→values
+    // rebuild resurrects the override (with re-derived `val_NNNN`
+    // IDs) on the next save, which breaks library-id match on
+    // reopen and renders every row as instance-added (green).
+    const libValues = (draft.value.payload as { values?: Array<{ name?: string; value?: string }> } | undefined)?.values ?? [];
+    nextEntries = libValues.map((v) => ({
+      variable_name: v.name ?? "",
+      value: v.value ?? "",
+    }));
+  }
   draft.value = {
     ...draft.value,
+    entries: nextEntries,
     instance: cleared as NonNullable<ModuleEntry["instance"]>,
   };
 }
