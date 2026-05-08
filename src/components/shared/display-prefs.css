@@ -181,3 +181,64 @@
   opacity: 0.55;
   transition: opacity 120ms ease;
 }
+
+/* ── State badge priority ───────────────────────────────────────────
+ * In badge or both modes, badges take real horizontal space and
+ * stacking 4-5 of them (mod + drift + missing + override + conflict)
+ * pushes action buttons off the row. Dot mode is fine because dots
+ * are tiny (6px each).
+ *
+ * Two orthogonal severity axes are filtered independently:
+ *
+ *   STATE GROUP (instance health):  missing > drift > mod
+ *   CONFLICT GROUP (graph problems): error > warning > info
+ *
+ * The groups are orthogonal — a module can have "missing" AND a
+ * conflict warning, both visible. Inside each group, only the highest
+ * tier shows; lower tiers hide their dot+badge pair.
+ *
+ * `:has()` browser support: Chrome 105+, Firefox 121+, Safari 15.4+.
+ * Older browsers degrade to "show all badges" — that's the previous
+ * (buggy) behavior, acceptable fallback.
+ *
+ * `:where()` keeps specificity at 0,3,0 so per-component visibility
+ * rules can still override if a future feature needs to.
+ */
+
+/* — STATE GROUP — missing trumps drift + mod */
+:where(.wp-indicator-badge, .wp-indicator-both)
+  .wp-mod-dots:has(.wp-mod-badge--missing)
+  :is(
+    .wp-mod-dot--modified, .wp-mod-badge--mod,
+    .wp-mod-dot--drift,    .wp-mod-badge--drift
+  ) {
+  display: none !important;
+}
+
+/* — STATE GROUP — drift trumps mod (only when missing absent) */
+:where(.wp-indicator-badge, .wp-indicator-both)
+  .wp-mod-dots:has(.wp-mod-badge--drift):not(:has(.wp-mod-badge--missing))
+  :is(
+    .wp-mod-dot--modified, .wp-mod-badge--mod
+  ) {
+  display: none !important;
+}
+
+/* — CONFLICT GROUP — error trumps warning + info */
+:where(.wp-indicator-badge, .wp-indicator-both)
+  .wp-mod-dots:has(.wp-conflict-badge--error)
+  :is(
+    .wp-conflict-dot--info,    .wp-conflict-badge--info,
+    .wp-conflict-dot--warning, .wp-conflict-badge--warning
+  ) {
+  display: none !important;
+}
+
+/* — CONFLICT GROUP — warning trumps info (only when error absent) */
+:where(.wp-indicator-badge, .wp-indicator-both)
+  .wp-mod-dots:has(.wp-conflict-badge--warning):not(:has(.wp-conflict-badge--error))
+  :is(
+    .wp-conflict-dot--info, .wp-conflict-badge--info
+  ) {
+  display: none !important;
+}
