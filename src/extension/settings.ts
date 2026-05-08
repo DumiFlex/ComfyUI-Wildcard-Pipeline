@@ -37,6 +37,7 @@ const SETTING_ID_DENSITY = "wildcardPipeline.display.density";
 const SETTING_ID_DECORATION = "wildcardPipeline.display.decoration";
 const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
 const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
+const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -87,6 +88,7 @@ const state: {
   decoration: Decoration;
   indicatorStyle: IndicatorStyle;
   borderHighlight: boolean;
+  collapsedByDefault: boolean;
 } = {
   reduceMotion: "auto",
   contrast: "auto",
@@ -94,6 +96,7 @@ const state: {
   decoration: "full",
   indicatorStyle: "both",
   borderHighlight: true,
+  collapsedByDefault: false,
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -118,6 +121,17 @@ export function _resetDisplayStateForTesting(): void {
   state.decoration = "full";
   state.indicatorStyle = "both";
   state.borderHighlight = true;
+  state.collapsedByDefault = false;
+}
+
+/**
+ * Read accessor for the collapsedByDefault setting. ContextWidget calls
+ * this when adding a new module to decide whether to push it into the
+ * collapsed set. Module-level state keeps onChange in sync without
+ * needing a Vue store.
+ */
+export function getCollapsedByDefault(): boolean {
+  return state.collapsedByDefault;
 }
 
 // Toast feedback gate. ComfyUI fires onChange for stored values during
@@ -170,6 +184,10 @@ function describeIndicator(mode: IndicatorStyle): string {
 
 function describeBorder(on: boolean): string {
   return `Border highlights: ${on ? "ON" : "OFF"}`;
+}
+
+function describeCollapsed(on: boolean): string {
+  return on ? "New modules: collapsed by default" : "New modules: expanded by default";
 }
 
 /**
@@ -236,6 +254,9 @@ export function applyDisplayPrefs(app: AppLike): void {
   // Boolean default true — only an explicit `=== false` reading flips the
   // marker. `undefined` (settings panel never visited) falls through to true.
   state.borderHighlight = app.extensionManager?.setting?.get(SETTING_ID_BORDER) !== false;
+  // Boolean default false — only an explicit `=== true` enables it.
+  // No body class for this setting; ContextWidget reads via getCollapsedByDefault().
+  state.collapsedByDefault = app.extensionManager?.setting?.get(SETTING_ID_COLLAPSED) === true;
   syncMarkers();
 }
 
@@ -446,6 +467,28 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeBorder(next), {
             severity: "info",
             singletonKey: "wp-border-highlight",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_COLLAPSED,
+      name: "Collapse new modules by default",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "When on, newly added modules render with their body collapsed " +
+        "(header only). Existing modules retain their previous collapse state.",
+      category: ["Wildcard Pipeline", "Display", "Collapsed by default"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.collapsedByDefault;
+        state.collapsedByDefault = next;
+        // No syncMarkers — pure Vue state read by ContextWidget on add.
+        if (bootCompleted && changed) {
+          pushToast(describeCollapsed(next), {
+            severity: "info",
+            singletonKey: "wp-collapsed-default",
           });
         }
       },

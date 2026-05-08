@@ -9,6 +9,7 @@ import {
   applyDisplayPrefs,
   watchA11ySystemPrefs,
   buildSettings,
+  getCollapsedByDefault,
   installDebugHelpers,
   markBootCompleted,
   _resetBootForTesting,
@@ -504,6 +505,39 @@ describe("a11y settings", () => {
     expect(toasts.value).toHaveLength(1);
     expect(toasts.value[0].message).toBe("Border highlights: OFF");
     expect(toasts.value[0].singletonKey).toBe("wp-border-highlight");
+  });
+
+  // ── Display preferences — collapsed-by-default ──────────────────
+
+  it("collapsedByDefault boot — defaults to false", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    expect(getCollapsedByDefault()).toBe(false);
+  });
+
+  it("collapsedByDefault boot — reads stored true value", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ collapsedByDefault: true }));
+
+    expect(getCollapsedByDefault()).toBe(true);
+  });
+
+  it("collapsedByDefault onChange — toast fires + state updates", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_COLLAPSED)?.onChange?.(true, false);
+
+    expect(getCollapsedByDefault()).toBe(true);
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("New modules: collapsed by default");
+    expect(toasts.value[0].singletonKey).toBe("wp-collapsed-default");
   });
 
   it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {
