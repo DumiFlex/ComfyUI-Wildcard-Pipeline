@@ -19,10 +19,14 @@ const emit = defineEmits<{
   "open-spa": [];
   "reset-from-library": [];
   "save-to-library": [];
+  "clear-all-overrides": [];
 }>();
 
 function spaUrl(): string {
-  return `/wp/manager/wildcards/${props.module.id}/edit`;
+  // SPA base is `/wp/` (see `src/manager/router/index.ts:44`),
+  // so wildcard editor lives at `/wp/wildcards/<id>/edit`. The
+  // earlier `/wp/manager/...` prefix didn't match any route.
+  return `/wp/wildcards/${props.module.id}/edit`;
 }
 
 function onUpdate(patch: Partial<ModuleEntry>): void {
@@ -74,6 +78,16 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
+      <button
+        type="button"
+        class="wcm__btn wcm__btn--quiet"
+        data-test="wcm-clear-all"
+        title="Clear all instance overrides on this wildcard"
+        @click="emit('clear-all-overrides')"
+      >
+        <i class="pi pi-replay" aria-hidden="true" />
+        Reset overrides
+      </button>
       <span class="wcm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
@@ -130,9 +144,22 @@ function onSpaClick(): void {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 14px;
-  background: linear-gradient(180deg, var(--wp-bg3) 0%, var(--wp-bg2) 100%);
+  /* Match the v1 modal head: brand gradient (indigo→teal) overlaid
+   * with a near-opaque dark wash so a faint hue bleeds through.
+   * `::after` positions the wash absolutely; children sit on top
+   * via z-index. */
+  background: var(--wp-brand-gradient);
   border-bottom: 1px solid var(--wp-border);
+  position: relative;
 }
+.wcm__head::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(35, 35, 35, 0.85);
+  pointer-events: none;
+}
+.wcm__head > * { position: relative; z-index: 1; }
 .wcm__head-icon {
   color: var(--wp-kind-wildcard);
   font-size: 16px;
@@ -218,4 +245,17 @@ function onSpaClick(): void {
   background: var(--wp-accent);
   color: white;
 }
+.wcm__btn--quiet {
+  border-color: transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+}
+.wcm__btn--quiet:hover {
+  border-color: var(--wp-border);
+  color: var(--wp-text-muted, var(--wp-text2));
+}
+.wcm__btn--quiet .pi { font-size: 10px; }
 </style>

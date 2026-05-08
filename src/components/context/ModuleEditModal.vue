@@ -345,6 +345,7 @@ function cancel() {
       @cancel="cancel"
       @reset-from-library="onWildcardResetClick"
       @save-to-library="onWildcardSaveToLibraryClick"
+      @clear-all-overrides="onClearAllOverrides"
     />
 
     <!-- v1 tabbed branch — non-wildcard kinds keep the existing

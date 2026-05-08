@@ -24,6 +24,23 @@ const emit = defineEmits<{
 }>();
 
 const enabled = computed(() => isEnabled(props.option, props.instance));
+
+/** Distinguish two reasons a row might be disabled:
+ *   - per-option toggle off (`enabled_options` array excludes this id)
+ *   - sub-category filtered out (`category_filter` excludes this option's bucket)
+ *
+ * Per-option toggle remains interactive (user can re-check).
+ * Category-filtered rows are read-only — the sub-category chip is the
+ * authority. Clicking the per-option checkbox while filtered would write
+ * to `enabled_options` invisibly and surprise the user when they re-enable
+ * the category. So we no-op the click in that case.
+ */
+const filteredByCategory = computed(() => {
+  const filter = props.instance.category_filter;
+  if (!Array.isArray(filter) || filter.length === 0) return false;
+  if (!props.option.sub_category) return true;
+  return !filter.includes(props.option.sub_category);
+});
 const probability = computed(() => probabilityFor(props.option, props.allOptions, props.instance));
 const weight = computed(() => effectiveWeight(props.option, props.instance));
 const overrideWeight = computed(
@@ -31,6 +48,7 @@ const overrideWeight = computed(
 );
 
 function onToggle(): void {
+  if (filteredByCategory.value) return;
   emit("toggle", props.option.id);
 }
 
@@ -54,7 +72,12 @@ function fmtPct(p: number): string {
 <template>
   <div
     class="opt"
-    :class="{ 'opt--on': enabled, 'opt--off': !enabled, 'opt--weighted': overrideWeight }"
+    :class="{
+      'opt--on': enabled,
+      'opt--off': !enabled,
+      'opt--weighted': overrideWeight,
+      'opt--filtered': filteredByCategory,
+    }"
   >
     <span
       class="opt__check"
@@ -62,7 +85,8 @@ function fmtPct(p: number): string {
       data-test="opt-check"
       role="checkbox"
       :aria-checked="enabled"
-      tabindex="0"
+      :aria-disabled="filteredByCategory"
+      :tabindex="filteredByCategory ? -1 : 0"
       @click="onToggle"
       @keydown.space.prevent="onToggle"
     >
@@ -113,13 +137,25 @@ function fmtPct(p: number): string {
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 9px;
+  /* Checkmark is 6px so it fits proportionally inside a 14px box.
+   * Earlier 9px overflowed the border + read as a mark instead of
+   * a tick. */
+  font-size: 6px;
+  font-weight: 900;
   background: var(--wp-bg);
 }
 .opt__check--on {
   background: var(--wp-accent);
   border-color: var(--wp-accent);
 }
+/* Category-filtered rows are read-only — the chip controls them.
+ * Show a "not-allowed" cursor + slight opacity so the user knows the
+ * per-option checkbox is intentionally inert in this state. */
+.opt--filtered .opt__check {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.opt--filtered { cursor: default; }
 .opt__name {
   font: 11px var(--wp-font-mono);
   color: var(--wp-text);
@@ -163,6 +199,17 @@ function fmtPct(p: number): string {
   color: var(--wp-text-muted, var(--wp-text2));
   text-align: right;
   width: 100%;
+  /* Native browser spinners (the up/down arrows on number inputs)
+   * default to a system look that clashes with the dark theme.
+   * Hide them entirely on Firefox via `-moz-appearance: textfield`
+   * and on WebKit via the pseudo-element override below. The user
+   * can still adjust via keyboard arrows or by typing. */
+  -moz-appearance: textfield;
+}
+.opt__weight::-webkit-outer-spin-button,
+.opt__weight::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .opt__weight:focus {
   border-color: var(--wp-accent);

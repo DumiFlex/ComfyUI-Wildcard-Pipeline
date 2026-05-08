@@ -97,4 +97,27 @@ describe("OptionRow", () => {
     });
     expect(w.classes()).toContain("opt--weighted");
   });
+
+  it("category-filtered row gets opt--filtered modifier class", () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { category_filter: ["cool"] } },
+    });
+    // baseOption.sub_category = "warm", filter only allows "cool"
+    expect(w.classes()).toContain("opt--filtered");
+  });
+
+  it("category-filtered row does NOT emit toggle on checkbox click", async () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { category_filter: ["cool"] } },
+    });
+    await w.find('[data-test="opt-check"]').trigger("click");
+    expect(w.emitted("toggle")).toBeUndefined();
+  });
+
+  it("category-filtered row exposes aria-disabled=true on checkbox", () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { category_filter: ["cool"] } },
+    });
+    expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("true");
+  });
 });

@@ -91,4 +91,16 @@ describe("WildcardInstanceModal", () => {
     });
     expect(w.find('[data-test="wcm-kebab"]').exists()).toBe(true);
   });
+
+  it("Reset overrides button emits clear-all-overrides event", async () => {
+    const w = mount(WildcardInstanceModal, { props: { module: makeModule() } });
+    await w.find('[data-test="wcm-clear-all"]').trigger("click");
+    expect(w.emitted("clear-all-overrides")).toBeTruthy();
+  });
+
+  it("SPA URL points at /wp/wildcards/<id>/edit (not /wp/manager/...)", () => {
+    const w = mount(WildcardInstanceModal, { props: { module: makeModule() } });
+    const link = w.find<HTMLAnchorElement>('[data-test="wcm-spa-link"]').element;
+    expect(link.getAttribute("href")).toBe("/wp/wildcards/ab12cd34/edit");
+  });
 });
