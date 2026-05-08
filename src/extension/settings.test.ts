@@ -34,6 +34,7 @@ const SETTING_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 const SETTING_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
 const SETTING_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
 const SETTING_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
+const SETTING_PERF_OVERLAY = "wildcardPipeline.display.perfOverlay";
 
 interface FakeMQL {
   matches: boolean;
@@ -113,6 +114,7 @@ interface DisplayOverrides {
   newModuleDisabled?: boolean;
   collapseMode?: string;
   colorIntensity?: string;
+  perfOverlay?: boolean;
 }
 
 function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
@@ -135,6 +137,7 @@ function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
           if (id === SETTING_NEW_DISABLED) return overrides.newModuleDisabled ?? false;
           if (id === SETTING_COLLAPSE_MODE) return overrides.collapseMode ?? "independent";
           if (id === SETTING_COLOR_INTENSITY) return overrides.colorIntensity ?? "standard";
+          if (id === SETTING_PERF_OVERLAY) return overrides.perfOverlay ?? false;
           return undefined;
         },
       },
@@ -929,6 +932,58 @@ describe("a11y settings", () => {
       applyDisplayPrefs(makeAppWithDisplay({ colorIntensity: "garbage" }));
 
       expect(document.body.classList.contains("wp-color-standard")).toBe(true);
+    });
+  });
+
+  describe("perfOverlay boolean", () => {
+    it("defaults to false on boot + perfOverlayVisible is hidden", async () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+
+      const { perfOverlayVisible } = await import("./perf-stats");
+      expect(perfOverlayVisible.value).toBe(false);
+
+      const settings = buildSettings(makeApp());
+      const entry = settings.find((s) => s.id === SETTING_PERF_OVERLAY);
+      expect(entry?.defaultValue).toBe(false);
+    });
+
+    it("reads stored true on boot + flips perfOverlayVisible", async () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay({ perfOverlay: true }));
+
+      const { perfOverlayVisible } = await import("./perf-stats");
+      expect(perfOverlayVisible.value).toBe(true);
+    });
+
+    it("onChange flips perfOverlayVisible + fires toast post-boot", async () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      markBootCompleted();
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_PERF_OVERLAY)?.onChange?.(true, false);
+
+      const { perfOverlayVisible } = await import("./perf-stats");
+      expect(perfOverlayVisible.value).toBe(true);
+      expect(toasts.value).toHaveLength(1);
+      expect(toasts.value[0].message).toContain("ON");
+      expect(toasts.value[0].singletonKey).toBe("wp-perf-overlay");
+    });
+
+    it("onChange suppresses toast during boot window", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      applyDisplayPrefs(makeAppWithDisplay());
+      // boot NOT completed
+
+      const settings = buildSettings(makeApp());
+      settings.find((s) => s.id === SETTING_PERF_OVERLAY)?.onChange?.(true, false);
+
+      expect(toasts.value).toHaveLength(0);
     });
   });
 
