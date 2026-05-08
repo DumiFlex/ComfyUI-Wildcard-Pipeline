@@ -17,33 +17,17 @@ emitted.
 """
 from __future__ import annotations
 
-import hashlib
-import random
 from typing import Any
 
 from engine.modules import build_resolve_ctx
+from engine.modules._seed import derive_module_rng as _derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
-
-def _derive_module_rng(seed: int, binding: str) -> random.Random:
-    """Per-module RNG derived from (seed, binding).
-
-    Used for BOTH locked and unlocked picks — applying the same
-    derivation either way is what lets lock capture the visible
-    roll: locking with `locked_seed = chain_seed` reproduces the
-    unlocked pick exactly because both paths derive from
-    `sha256(chain_seed:binding)`. With a raw `random.Random(seed)`
-    in either branch, the streams diverge and the lock would
-    produce a different pick than the user just saw.
-
-    Hashing also de-couples module picks within a single chain
-    seed: two wildcards binding different vars get independent
-    streams, so adding/removing modules upstream doesn't shift
-    the picks of the surviving ones.
-    """
-    digest = hashlib.sha256(f"{int(seed)}:{binding}".encode()).hexdigest()
-    return random.Random(int(digest[:16], 16))
+# `_derive_module_rng` lifted to engine/modules/_seed.py so combine +
+# fixed_values handlers share the same helper (Phase: combine v2 +
+# syntax parity cycle). The private alias preserves the existing call
+# site at line ~376 unchanged.
 
 
 def _pick_weighted(options: list[dict[str, Any]], rng) -> dict[str, Any] | None:
