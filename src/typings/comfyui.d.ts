@@ -11,7 +11,14 @@ declare module "#comfyui/app" {
     canvas?: { graph?: unknown };
     /** Runtime-only — surfaced when ComfyUI mounts the Vue settings panel. */
     extensionManager?: {
-      setting?: { get(id: string): unknown };
+      setting?: {
+        get(id: string): unknown;
+        /** Programmatically update a setting value. Fires the registered
+         * onChange handler, which lets us live-bind UI controls (e.g.
+         * the Display Playground modal's selects) into the same store
+         * the panel writes to. Available since ComfyUI v1.33+. */
+        set?(id: string, value: unknown): void | Promise<void>;
+      };
     };
     /** Top toolbar/menu surface — exposes `settingsGroup` (the cog
      *  button group) which we anchor our SPA-launcher button to. Older
