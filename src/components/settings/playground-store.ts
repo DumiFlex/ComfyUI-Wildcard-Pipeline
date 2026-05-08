@@ -45,6 +45,7 @@ export type DisplayKey =
   | "kindStyle"
   | "borderHighlight"
   | "collapsedByDefault"
+  | "collapseMode"
   | "focusMode";
 
 /** A11y setting key — last segment of the dotted ID. */

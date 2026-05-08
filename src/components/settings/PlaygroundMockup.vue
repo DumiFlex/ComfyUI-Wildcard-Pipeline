@@ -35,11 +35,14 @@
  * gets stale; future refactor could extract a shared module-card.css.
  */
 import { reactive } from "vue";
+import { getCollapseMode } from "../../extension/settings";
 
 interface ModuleState {
   enabled: boolean;
   collapsed: boolean;
 }
+
+type ModuleKey = "m1" | "m2" | "m3" | "m4";
 
 // Per-module enable + collapse state. Defaults match the original
 // static markup: first three start enabled + expanded; the fourth
@@ -56,6 +59,25 @@ const state = reactive<{
   m3: { enabled: true,  collapsed: false },
   m4: { enabled: false, collapsed: true },
 });
+
+const allKeys: ModuleKey[] = ["m1", "m2", "m3", "m4"];
+
+/**
+ * Mirrors ContextWidget.toggleCollapsed accordion logic so the mockup
+ * demonstrates the live behavior. Independent mode flips just the
+ * targeted module; accordion mode collapses every sibling when the
+ * user expands a module (collapsing never auto-expands siblings).
+ */
+function toggleCollapsed(key: ModuleKey): void {
+  const target = state[key];
+  const willExpand = target.collapsed;
+  const accordion = getCollapseMode() === "accordion" && willExpand;
+  if (accordion) {
+    for (const k of allKeys) state[k].collapsed = k !== key;
+  } else {
+    target.collapsed = !target.collapsed;
+  }
+}
 </script>
 
 <template>
@@ -83,7 +105,7 @@ const state = reactive<{
             class="wp-collapse-btn"
             type="button"
             :title="state.m1.collapsed ? 'Expand' : 'Collapse'"
-            @click="state.m1.collapsed = !state.m1.collapsed"
+            @click="toggleCollapsed('m1')"
           ><i :class="['pi', state.m1.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m1.enabled" type="checkbox" />
@@ -128,7 +150,7 @@ const state = reactive<{
             class="wp-collapse-btn"
             type="button"
             :title="state.m2.collapsed ? 'Expand' : 'Collapse'"
-            @click="state.m2.collapsed = !state.m2.collapsed"
+            @click="toggleCollapsed('m2')"
           ><i :class="['pi', state.m2.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m2.enabled" type="checkbox" />
@@ -165,7 +187,7 @@ const state = reactive<{
             class="wp-collapse-btn"
             type="button"
             :title="state.m3.collapsed ? 'Expand' : 'Collapse'"
-            @click="state.m3.collapsed = !state.m3.collapsed"
+            @click="toggleCollapsed('m3')"
           ><i :class="['pi', state.m3.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m3.enabled" type="checkbox" />
@@ -202,7 +224,7 @@ const state = reactive<{
             class="wp-collapse-btn"
             type="button"
             :title="state.m4.collapsed ? 'Expand' : 'Collapse'"
-            @click="state.m4.collapsed = !state.m4.collapsed"
+            @click="toggleCollapsed('m4')"
           ><i :class="['pi', state.m4.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
           <label class="wp-toggle">
             <input v-model="state.m4.enabled" type="checkbox" />

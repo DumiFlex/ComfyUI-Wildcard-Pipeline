@@ -44,6 +44,7 @@ type KindStyle = "both" | "icon" | "chip";
 type A11yMode = "auto" | "on" | "off";
 type ValidationMode = "strict" | "relaxed" | "permissive";
 type ToastLifetime = "short" | "default" | "long" | "sticky";
+type CollapseMode = "independent" | "accordion";
 
 function asString(v: unknown, fallback: string): string {
   return typeof v === "string" ? v : fallback;
@@ -66,6 +67,7 @@ const indicatorStyle = ref<IndicatorStyle>("badge");
 const kindStyle = ref<KindStyle>("chip");
 const borderHighlight = ref<boolean>(true);
 const collapsedByDefault = ref<boolean>(false);
+const collapseMode = ref<CollapseMode>("independent");
 const focusMode = ref<boolean>(false);
 const reduceMotion = ref<A11yMode>("auto");
 const contrast = ref<A11yMode>("auto");
@@ -87,6 +89,7 @@ function syncFromStore(): void {
   kindStyle.value = asString(getSettingValue("kindStyle"), "chip") as KindStyle;
   borderHighlight.value = asBool(getSettingValue("borderHighlight"), true);
   collapsedByDefault.value = asBool(getSettingValue("collapsedByDefault"), false);
+  collapseMode.value = asString(getSettingValue("collapseMode"), "independent") as CollapseMode;
   focusMode.value = asBool(getSettingValue("focusMode"), false);
   reduceMotion.value = asString(getSettingValue("reduceMotion"), "auto") as A11yMode;
   contrast.value = asString(getSettingValue("contrast"), "auto") as A11yMode;
@@ -108,6 +111,7 @@ watch(indicatorStyle, (v) => applySetting("indicatorStyle", v));
 watch(kindStyle, (v) => applySetting("kindStyle", v));
 watch(borderHighlight, (v) => applySetting("borderHighlight", v));
 watch(collapsedByDefault, (v) => applySetting("collapsedByDefault", v));
+watch(collapseMode, (v) => applySetting("collapseMode", v));
 watch(focusMode, (v) => applySetting("focusMode", v));
 watch(reduceMotion, (v) => applySetting("reduceMotion", v));
 watch(contrast, (v) => applySetting("contrast", v));
@@ -123,6 +127,7 @@ interface Defaults {
   kindStyle: KindStyle;
   borderHighlight: boolean;
   collapsedByDefault: boolean;
+  collapseMode: CollapseMode;
   focusMode: boolean;
   reduceMotion: A11yMode;
   contrast: A11yMode;
@@ -139,6 +144,7 @@ const defaults: Defaults = {
   kindStyle: "chip",
   borderHighlight: true,
   collapsedByDefault: false,
+  collapseMode: "independent",
   focusMode: false,
   reduceMotion: "auto",
   contrast: "auto",
@@ -289,7 +295,7 @@ onBeforeUnmount(() => {
             </fieldset>
 
             <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">Behavior</legend>
+              <legend class="wp-pg__group-title">Collapse &amp; focus</legend>
               <label class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new modules by default</span>
                 <input
@@ -297,6 +303,13 @@ onBeforeUnmount(() => {
                   type="checkbox"
                   class="wp-pg__check"
                 />
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Collapse stack mode</span>
+                <select v-model="collapseMode" class="wp-pg__select">
+                  <option value="independent">Independent (default)</option>
+                  <option value="accordion">Accordion (one at a time)</option>
+                </select>
               </label>
               <label class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
@@ -329,7 +342,7 @@ onBeforeUnmount(() => {
             </fieldset>
 
             <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">Behavior</legend>
+              <legend class="wp-pg__group-title">Runtime behavior</legend>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Validation strictness</span>
                 <select v-model="validation" class="wp-pg__select">
