@@ -1024,3 +1024,154 @@ describe("ContextWidget collapse stack mode", () => {
     expect(readCollapsed(wrapper)).toEqual([true, true, true]);
   });
 });
+
+// ── Phase 3a: drag-drop overhaul ──────────────────────────────────────────
+// Whole-card draggable, inline controls opt out, keyboard move-to-edge.
+
+describe("ContextWidget drag-drop overhaul", () => {
+  /** JSDOM doesn't provide a DataTransfer constructor; the handlers
+   *  only need `effectAllowed` + `setData` + `dropEffect`, so a plain
+   *  stub passes the dragstart / dragover paths cleanly. */
+  function makeDataTransfer() {
+    return {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: () => {},
+      getData: () => "",
+    };
+  }
+
+  function mountFour() {
+    const modules = [0, 1, 2, 3].map((i) => ({
+      id: `mod${i}aaaa`,
+      type: "fixed_values",
+      enabled: true,
+      meta: { name: `m${i}`, description: "", tags: [] },
+      entries: [{ variable_name: `v${i}`, value: "x" }],
+      payload: {},
+    }));
+    return mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9200,
+        initialJson: JSON.stringify({ version: 1, modules }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+  }
+
+  it("entire .wp-module is draggable", () => {
+    const wrapper = mountFour();
+    const cards = wrapper.findAll(".wp-module");
+    expect(cards).toHaveLength(4);
+    for (const c of cards) {
+      expect(c.attributes("draggable")).toBe("true");
+    }
+    wrapper.unmount();
+  });
+
+  it("inline controls opt out of dragging via draggable=false", () => {
+    const wrapper = mountFour();
+    expect(wrapper.find(".wp-collapse-btn").attributes("draggable")).toBe("false");
+    expect(wrapper.find(".wp-toggle").attributes("draggable")).toBe("false");
+    expect(wrapper.find(".wp-mod-actions").attributes("draggable")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it("Ctrl+Shift+ArrowDown moves focused module to the bottom", async () => {
+    const wrapper = mountFour();
+    const cards = wrapper.findAll(".wp-module");
+    // Trigger keydown on the first card; expect mod0 to land at the end.
+    await cards[0].trigger("keydown", { key: "ArrowDown", shiftKey: true, ctrlKey: true });
+    await flushPromises();
+
+    const ids = wrapper.findAll(".wp-module").map((c) => c.attributes("data-module-id"));
+    expect(ids).toEqual(["mod1aaaa", "mod2aaaa", "mod3aaaa", "mod0aaaa"]);
+    wrapper.unmount();
+  });
+
+  it("Ctrl+Shift+ArrowUp moves focused module to the top", async () => {
+    const wrapper = mountFour();
+    const cards = wrapper.findAll(".wp-module");
+    // Trigger keydown on the third card; expect mod2 to land at index 0.
+    await cards[2].trigger("keydown", { key: "ArrowUp", shiftKey: true, ctrlKey: true });
+    await flushPromises();
+
+    const ids = wrapper.findAll(".wp-module").map((c) => c.attributes("data-module-id"));
+    expect(ids).toEqual(["mod2aaaa", "mod0aaaa", "mod1aaaa", "mod3aaaa"]);
+    wrapper.unmount();
+  });
+
+  it("Cmd+Shift+ArrowDown also works (Mac modifier)", async () => {
+    const wrapper = mountFour();
+    const cards = wrapper.findAll(".wp-module");
+    await cards[0].trigger("keydown", { key: "ArrowDown", shiftKey: true, metaKey: true });
+    await flushPromises();
+
+    const ids = wrapper.findAll(".wp-module").map((c) => c.attributes("data-module-id"));
+    expect(ids).toEqual(["mod1aaaa", "mod2aaaa", "mod3aaaa", "mod0aaaa"]);
+    wrapper.unmount();
+  });
+
+  it("plain Shift+ArrowDown still moves by 1 (regression check)", async () => {
+    const wrapper = mountFour();
+    const cards = wrapper.findAll(".wp-module");
+    await cards[0].trigger("keydown", { key: "ArrowDown", shiftKey: true });
+    await flushPromises();
+
+    const ids = wrapper.findAll(".wp-module").map((c) => c.attributes("data-module-id"));
+    // mod0 swaps with mod1 only — does not land at the end.
+    expect(ids).toEqual(["mod1aaaa", "mod0aaaa", "mod2aaaa", "mod3aaaa"]);
+    wrapper.unmount();
+  });
+
+  it("dragover with clientY in top half marks card as drop-target--before", async () => {
+    const wrapper = mountFour();
+    const cards = wrapper.findAll(".wp-module");
+
+    // Stub getBoundingClientRect on the second card so the math has a
+    // measurable rect (JSDOM defaults to 0/0). Top half of a 200px-tall
+    // card centered at y=300 → y=200..300 means "before".
+    const targetEl = cards[1].element as HTMLElement;
+    targetEl.getBoundingClientRect = () => ({
+      top: 200, bottom: 400, left: 0, right: 100,
+      width: 100, height: 200, x: 0, y: 200, toJSON() { return this; },
+    });
+
+    // Initiate a drag from the first card so dragState is populated.
+    await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    // Hover with pointer in the TOP half of the second card (y=220).
+    await cards[1].trigger("dragover", { clientY: 220, dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    expect(cards[1].classes()).toContain("wp-drop-target");
+    expect(cards[1].classes()).toContain("wp-drop-target--before");
+    expect(cards[1].classes()).not.toContain("wp-drop-target--after");
+
+    await cards[0].trigger("dragend");
+    wrapper.unmount();
+  });
+
+  it("dragover with clientY in bottom half marks card as drop-target--after", async () => {
+    const wrapper = mountFour();
+    const cards = wrapper.findAll(".wp-module");
+
+    const targetEl = cards[1].element as HTMLElement;
+    targetEl.getBoundingClientRect = () => ({
+      top: 200, bottom: 400, left: 0, right: 100,
+      width: 100, height: 200, x: 0, y: 200, toJSON() { return this; },
+    });
+
+    await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    // BOTTOM half (y=380, well past the midpoint at y=300).
+    await cards[1].trigger("dragover", { clientY: 380, dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    expect(cards[1].classes()).toContain("wp-drop-target--after");
+    expect(cards[1].classes()).not.toContain("wp-drop-target--before");
+
+    await cards[0].trigger("dragend");
+    wrapper.unmount();
+  });
+});
