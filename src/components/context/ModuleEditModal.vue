@@ -214,10 +214,12 @@ function onConfirmDialogCancel(): void {
 }
 
 /**
- * "Reset overrides" — clears identity + pool overrides while preserving
- * runtime state (lock, internal). For wildcard the scope is:
- *   identity → variable_binding, meta.name (restored from
- *              meta.library_name if present)
+ * "Reset overrides" — clears pool overrides only. Identity (name +
+ * variable_binding) has its own per-field reset buttons in the
+ * Identity section, so the footer sweep deliberately leaves them
+ * alone. Runtime (lock, internal) is also preserved. For wildcard
+ * the scope is:
+ *   identity → KEPT (per-field reset owns this)
  *   pool     → enabled_options, option_weights, category_filter
  *   runtime  → locked_seed, internal · KEPT
  *   _ui      → KEPT (under-prefix scratch)
@@ -227,15 +229,19 @@ function onConfirmDialogCancel(): void {
  * since they don't separate identity / runtime concerns the same way.
  */
 const WILDCARD_RESET_FIELDS: readonly InstanceFieldKey[] = [
-  "variable_binding", "enabled_options", "option_weights", "category_filter",
+  "enabled_options", "option_weights", "category_filter",
 ] as const;
 
 function onClearAllOverrides(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
+  const isWildcard = draft.value.type === "wildcard";
+  const body = isWildcard
+    ? `Pool overrides (enabled options, weights, category filter) on "${moduleName}" will be cleared. Identity (name, binding) and runtime (lock, hide) are preserved — use the per-field reset buttons for those.`
+    : `All instance overrides on "${moduleName}" will be cleared.`;
   askConfirm({
     title: "Reset overrides?",
-    body: `All instance overrides on "${moduleName}" will be cleared. Lock state and Hide-from-prompt are preserved.`,
+    body,
     confirmLabel: "Reset",
     variant: "danger",
     onConfirm: doClearAllOverrides,
@@ -254,16 +260,11 @@ function doClearAllOverrides(): void {
     cleared[f as InstanceFieldKey] = null;
   }
 
-  // Wildcard reset also restores the user-edited name to its library
-  // default (denormalized at pick time as `meta.library_name`). Falls
-  // through to the current name when no library link exists.
-  const nextMeta = isWildcard && draft.value.meta?.library_name
-    ? { ...draft.value.meta, name: draft.value.meta.library_name }
-    : draft.value.meta;
-
+  // Identity (meta.name) is intentionally left alone — the
+  // IdentitySection has its own per-field reset button that owns
+  // name restoration. Footer sweep handles pool only.
   draft.value = {
     ...draft.value,
-    meta: nextMeta,
     instance: cleared as NonNullable<ModuleEntry["instance"]>,
   };
 }
