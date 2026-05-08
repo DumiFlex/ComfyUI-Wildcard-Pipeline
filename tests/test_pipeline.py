@@ -154,6 +154,44 @@ class TestPipelineRun:
         assert "secret" not in public_view
         assert public_view["style"] == "noir"
 
+    def test_trace_emits_seed_for_combine_and_fixed_values(self):
+        """The frontend `lastUsedSeedReader` consumes `module_seeds`
+        derived from `__wp_trace__[i].seed`. Pipeline must emit that
+        field for combine + fixed_values modules (not just wildcards)
+        so seed-lock parity works on those kinds.
+
+        Validates the kind-agnostic seed-snapshot pathway introduced
+        in the 2026-05-08 syntax-parity cycle.
+        """
+        from engine.modules import resolve_module  # noqa: F401  (registers handlers)
+
+        # Combine module (dict snapshot — pipeline accepts both dict and
+        # dataclass shapes). No locked_seed → effective = chain seed.
+        combine = {
+            "id": "cb1",
+            "type": "combine",
+            "enabled": True,
+            "payload": {"template": "hello", "output_var": "msg", "input_vars": []},
+            "instance": {},
+        }
+        # Fixed_values module with a locked_seed override.
+        fixed = {
+            "id": "fv1",
+            "type": "fixed_values",
+            "enabled": True,
+            "payload": {"values": [{"id": "v1", "name": "color", "value": "red"}]},
+            "instance": {"locked_seed": 4242},
+        }
+        ctx = PipelineEngine().run([combine, fixed], seed=99)
+        trace = ctx["__wp_trace__"]
+        assert len(trace) == 2
+        # Combine: unlocked → effective = chain seed = 99
+        assert trace[0]["id"] == "cb1"
+        assert trace[0]["seed"] == 99
+        # Fixed_values: locked → effective = locked_seed = 4242
+        assert trace[1]["id"] == "fv1"
+        assert trace[1]["seed"] == 4242
+
     # TODO(syntax-task-15): HANDLERS dict removed; pipeline now delegates to
     # dispatcher.resolve_module. Stub-handler injection via HANDLERS no longer works.
     @pytest.mark.skip(reason="awaits handler migration in tasks 15-17: HANDLERS dict removed")

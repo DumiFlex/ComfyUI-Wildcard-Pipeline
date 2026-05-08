@@ -68,16 +68,20 @@ export function create(node: ContextNode, inputName: string) {
       );
       // Per-module seed reader. For each module we snapshot the
       // seed it ACTUALLY rolled with on the last queue:
-      //   - locked wildcards → their `instance.locked_seed`
-      //   - unlocked wildcards → the chain seed (= the Context
-      //     node's `seed` widget value at the moment beforeQueued
-      //     fired, before control_after_generate rotated)
+      //   - locked module → its `instance.locked_seed`
+      //   - unlocked module → the chain seed (= the Context node's
+      //     `seed` widget value at the moment beforeQueued fired,
+      //     before control_after_generate rotated)
       //
-      // Lock-toggle defaults pull from this map so re-locking after
-      // a run captures the seed THIS specific wildcard used —
-      // matters when one wildcard was locked while others rolled
-      // with the chain seed in the same run. Falls through to a
-      // chain-level snapshot for callers without a module context.
+      // Kind-agnostic: the engine pipeline emits a `seed` field on
+      // every trace entry (engine/pipeline.py:181-193), and
+      // WP_Context's `module_seeds` UI payload derives the per-module
+      // map from those traces. So wildcard / combine / fixed_values
+      // modules all flow through the SAME path — there's no kind-
+      // gated branch here. Lock-toggle defaults pull from this map
+      // so re-locking after a run captures the seed THIS specific
+      // module used. Falls through to chain-level snapshot for
+      // callers without a module context.
       // Mirror the upstream-vars walker for wildcard uuids — needed so
       // the conflict scanner can validate constraint source/target
       // references against modules in the upstream chain. Same
