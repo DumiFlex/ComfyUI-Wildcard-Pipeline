@@ -12,6 +12,7 @@
 // can attach the runtime injection to a JS module. A bare CSS import
 // from main.ts emits a chunk with no JS owner and the plugin warns.
 import "../components/shared/a11y.css";
+import { pushToast } from "../components/shared/toast-store";
 
 export type A11yMode = "auto" | "on" | "off";
 
@@ -60,6 +61,40 @@ const state: { reduceMotion: A11yMode; contrast: A11yMode } = {
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
   return v === "on" || v === "off" || v === "auto" ? v : fallback;
+}
+
+// Toast feedback gate. ComfyUI fires onChange for stored values during
+// page-load registration; we don't want a toast every refresh. Boot
+// callers flip this true once the load-fire window has settled.
+let bootCompleted = false;
+
+export function markBootCompleted(): void {
+  bootCompleted = true;
+}
+
+/** Test-only: reset the boot gate so tests can isolate boot vs post-boot. */
+export function _resetBootForTesting(): void {
+  bootCompleted = false;
+}
+
+function systemMotionMatches(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+}
+
+function systemContrastMatches(): boolean {
+  return window.matchMedia?.("(prefers-contrast: more)")?.matches ?? false;
+}
+
+function describeMotion(mode: A11yMode): string {
+  if (mode === "on") return "Reduce motion: ON";
+  if (mode === "off") return "Reduce motion: OFF";
+  return `Reduce motion: AUTO (system: ${systemMotionMatches() ? "reduce" : "allow"})`;
+}
+
+function describeContrast(mode: A11yMode): string {
+  if (mode === "on") return "Contrast: HIGH";
+  if (mode === "off") return "Contrast: STANDARD";
+  return `Contrast: AUTO (system: ${systemContrastMatches() ? "high" : "standard"})`;
 }
 
 /**
@@ -166,10 +201,21 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       category: ["Wildcard Pipeline", "Accessibility", "Reduce motion"],
       // Use newVal directly — extensionManager.setting.get() can lag the
       // onChange fire by a tick, which delayed the marker swap until a
-      // page reload in the live UI.
+      // page reload in the live UI. Toast feedback is gated on
+      // `bootCompleted` so ComfyUI's load-fire (with the stored value)
+      // doesn't pop a toast every refresh, and uses singletonKey so
+      // rapid dropdown clicks replace the existing toast in place.
       onChange: (newVal) => {
-        state.reduceMotion = asMode(newVal, "auto");
+        const next = asMode(newVal, "auto");
+        const changed = next !== state.reduceMotion;
+        state.reduceMotion = next;
         syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeMotion(next), {
+            severity: "info",
+            singletonKey: "a11y-motion",
+          });
+        }
       },
     },
     {
@@ -183,8 +229,16 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         "Match system honors the OS prefers-contrast setting.",
       category: ["Wildcard Pipeline", "Accessibility", "Contrast"],
       onChange: (newVal) => {
-        state.contrast = asMode(newVal, "auto");
+        const next = asMode(newVal, "auto");
+        const changed = next !== state.contrast;
+        state.contrast = next;
         syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeContrast(next), {
+            severity: "info",
+            singletonKey: "a11y-contrast",
+          });
+        }
       },
     },
   ];

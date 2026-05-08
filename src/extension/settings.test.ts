@@ -9,7 +9,10 @@ import {
   watchA11ySystemPrefs,
   buildSettings,
   installDebugHelpers,
+  markBootCompleted,
+  _resetBootForTesting,
 } from "./settings";
+import { toasts } from "../components/shared/toast-store";
 
 const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
@@ -86,6 +89,8 @@ describe("a11y settings", () => {
   beforeEach(() => {
     originalMatchMedia = window.matchMedia;
     document.body.className = "";
+    toasts.value = [];
+    _resetBootForTesting();
   });
 
   afterEach(() => {
@@ -193,6 +198,94 @@ describe("a11y settings", () => {
 
     applyA11yClasses(makeApp());
     expect(() => watchA11ySystemPrefs()()).not.toThrow();
+  });
+
+  it("toast feedback is suppressed during boot window", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp("auto", "auto"));
+
+    // bootCompleted is false (reset in beforeEach). ComfyUI's load-fire
+    // onChange would replay the stored value here.
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_MOTION)?.onChange?.("on", "auto");
+    settings.find((s) => s.id === SETTING_CONTRAST)?.onChange?.("on", "auto");
+
+    expect(toasts.value).toHaveLength(0);
+  });
+
+  it("toast fires after markBootCompleted with descriptive message", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp("auto", "auto"));
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_MOTION)?.onChange?.("on", "auto");
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Reduce motion: ON");
+    expect(toasts.value[0].singletonKey).toBe("a11y-motion");
+  });
+
+  it("auto mode toast reports current system pref state", () => {
+    const fixture = makeMatchMedia({ motion: true, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp("on", "auto"));
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_MOTION)?.onChange?.("auto", "on");
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Reduce motion: AUTO (system: reduce)");
+  });
+
+  it("rapid toggling replaces toast in place via singletonKey", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp("auto", "auto"));
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    const motion = settings.find((s) => s.id === SETTING_MOTION);
+    motion?.onChange?.("on", "auto");
+    motion?.onChange?.("off", "on");
+    motion?.onChange?.("auto", "off");
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toContain("AUTO");
+    expect(toasts.value[0].singletonKey).toBe("a11y-motion");
+  });
+
+  it("no toast when onChange fires with the same value (no-op)", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp("on", "auto"));
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    // State is already "on" from applyA11yClasses; onChange("on") is a no-op.
+    settings.find((s) => s.id === SETTING_MOTION)?.onChange?.("on", "on");
+
+    expect(toasts.value).toHaveLength(0);
+  });
+
+  it("motion and contrast toasts coexist (different singletonKeys)", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyA11yClasses(makeApp("auto", "auto"));
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_MOTION)?.onChange?.("on", "auto");
+    settings.find((s) => s.id === SETTING_CONTRAST)?.onChange?.("on", "auto");
+
+    expect(toasts.value).toHaveLength(2);
+    expect(toasts.value.map((t) => t.singletonKey).sort()).toEqual([
+      "a11y-contrast",
+      "a11y-motion",
+    ]);
   });
 
   it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {

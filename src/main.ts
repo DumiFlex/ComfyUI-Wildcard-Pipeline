@@ -70,6 +70,11 @@ settingsMod.watchA11ySystemPrefs();
 // reduce-motion / high-contrast classes from the DevTools console
 // without touching OS-level settings.
 settingsMod.installDebugHelpers();
+// Defer marking boot complete by a short tick so ComfyUI's load-fire
+// onChange (which replays the stored value into our handlers) runs
+// while toast feedback is still suppressed. Without this, every page
+// load would pop a toast for whichever a11y mode is currently saved.
+setTimeout(() => settingsMod.markBootCompleted(), 100);
 
 // Detect ComfyUI frontend version BEFORE registerExtension so we can
 // pick the right topbar render path. ≥ 1.33.9 → declarative
