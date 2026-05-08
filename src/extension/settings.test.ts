@@ -6,11 +6,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   applyA11yClasses,
+  applyDisplayPrefs,
   watchA11ySystemPrefs,
   buildSettings,
   installDebugHelpers,
   markBootCompleted,
   _resetBootForTesting,
+  _resetDisplayStateForTesting,
 } from "./settings";
 import { toasts } from "../components/shared/toast-store";
 
@@ -18,6 +20,12 @@ const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
 const SETTING_MOTION = "wildcardPipeline.a11y.reduceMotion";
 const SETTING_CONTRAST = "wildcardPipeline.a11y.contrast";
+const SETTING_DENSITY = "wildcardPipeline.display.density";
+const SETTING_DECORATION = "wildcardPipeline.display.decoration";
+const SETTING_INDICATOR = "wildcardPipeline.display.indicatorStyle";
+const SETTING_BORDER = "wildcardPipeline.display.borderHighlight";
+const SETTING_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
+const SETTING_FOCUS = "wildcardPipeline.display.focusMode";
 
 interface FakeMQL {
   matches: boolean;
@@ -83,6 +91,35 @@ function makeApp(motion = "auto", contrast = "auto"): FakeApp {
   };
 }
 
+interface DisplayOverrides {
+  density?: string;
+  decoration?: string;
+  indicatorStyle?: string;
+  borderHighlight?: boolean;
+  collapsedByDefault?: boolean;
+  focusMode?: boolean;
+}
+
+function makeAppWithDisplay(overrides: DisplayOverrides = {}): FakeApp {
+  return {
+    extensionManager: {
+      setting: {
+        get: (id: string) => {
+          if (id === SETTING_MOTION) return "auto";
+          if (id === SETTING_CONTRAST) return "auto";
+          if (id === SETTING_DENSITY) return overrides.density ?? "comfortable";
+          if (id === SETTING_DECORATION) return overrides.decoration ?? "full";
+          if (id === SETTING_INDICATOR) return overrides.indicatorStyle ?? "both";
+          if (id === SETTING_BORDER) return overrides.borderHighlight ?? true;
+          if (id === SETTING_COLLAPSED) return overrides.collapsedByDefault ?? false;
+          if (id === SETTING_FOCUS) return overrides.focusMode ?? false;
+          return undefined;
+        },
+      },
+    },
+  };
+}
+
 describe("a11y settings", () => {
   let originalMatchMedia: typeof window.matchMedia;
 
@@ -91,6 +128,7 @@ describe("a11y settings", () => {
     document.body.className = "";
     toasts.value = [];
     _resetBootForTesting();
+    _resetDisplayStateForTesting();
   });
 
   afterEach(() => {
@@ -286,6 +324,53 @@ describe("a11y settings", () => {
       "a11y-contrast",
       "a11y-motion",
     ]);
+  });
+
+  // ── Display preferences — density combo ───────────────────────────
+
+  it("density boot — applies wp-density-comfortable body class by default", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    expect(document.body.classList.contains("wp-density-comfortable")).toBe(true);
+    expect(document.body.classList.contains("wp-density-compact")).toBe(false);
+    expect(document.body.classList.contains("wp-density-minimal")).toBe(false);
+  });
+
+  it("density boot — reads stored compact value", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ density: "compact" }));
+
+    expect(document.body.classList.contains("wp-density-compact")).toBe(true);
+    expect(document.body.classList.contains("wp-density-comfortable")).toBe(false);
+  });
+
+  it("density onChange — flips body class immediately", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_DENSITY)?.onChange?.("minimal", "comfortable");
+
+    expect(document.body.classList.contains("wp-density-minimal")).toBe(true);
+    expect(document.body.classList.contains("wp-density-comfortable")).toBe(false);
+  });
+
+  it("density toast — fires after boot with descriptive message", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_DENSITY)?.onChange?.("compact", "comfortable");
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Density: COMPACT");
+    expect(toasts.value[0].singletonKey).toBe("wp-density");
   });
 
   it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {

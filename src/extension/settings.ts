@@ -12,9 +12,11 @@
 // can attach the runtime injection to a JS module. A bare CSS import
 // from main.ts emits a chunk with no JS owner and the plugin warns.
 import "../components/shared/a11y.css";
+import "../components/shared/display-prefs.css";
 import { pushToast } from "../components/shared/toast-store";
 
 export type A11yMode = "auto" | "on" | "off";
+export type Density = "comfortable" | "compact" | "minimal";
 
 export interface ComfySetting {
   id: string;
@@ -29,6 +31,7 @@ export interface ComfySetting {
 
 const SETTING_ID_REDUCE_MOTION = "wildcardPipeline.a11y.reduceMotion";
 const SETTING_ID_HIGH_CONTRAST = "wildcardPipeline.a11y.contrast";
+const SETTING_ID_DENSITY = "wildcardPipeline.display.density";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -40,6 +43,12 @@ const CONTRAST_OPTIONS = [
   { text: "Match system (prefers-contrast)", value: "auto" },
   { text: "High contrast", value: "on" },
   { text: "Standard", value: "off" },
+];
+
+const DENSITY_OPTIONS = [
+  { text: "Comfortable (default)", value: "comfortable" },
+  { text: "Compact", value: "compact" },
+  { text: "Minimal", value: "minimal" },
 ];
 
 interface ExtensionManager {
@@ -54,13 +63,27 @@ interface AppLike {
 // extensionManager.setting.get() to reflect the new value (it can lag
 // the onChange fire by a tick, which made settings only "stick" after a
 // hard refresh in the live UI).
-const state: { reduceMotion: A11yMode; contrast: A11yMode } = {
+const state: {
+  reduceMotion: A11yMode;
+  contrast: A11yMode;
+  density: Density;
+} = {
   reduceMotion: "auto",
   contrast: "auto",
+  density: "comfortable",
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
   return v === "on" || v === "off" || v === "auto" ? v : fallback;
+}
+
+function asDensity(v: unknown, fallback: Density): Density {
+  return v === "comfortable" || v === "compact" || v === "minimal" ? v : fallback;
+}
+
+/** Test-only: reset display preferences state to defaults. */
+export function _resetDisplayStateForTesting(): void {
+  state.density = "comfortable";
 }
 
 // Toast feedback gate. ComfyUI fires onChange for stored values during
@@ -97,6 +120,10 @@ function describeContrast(mode: A11yMode): string {
   return `Contrast: AUTO (system: ${systemContrastMatches() ? "high" : "standard"})`;
 }
 
+function describeDensity(mode: Density): string {
+  return `Density: ${mode.toUpperCase()}`;
+}
+
 /**
  * Apply current state + matchMedia to the body marker classes. Pure read
  * of the in-memory `state` map — no async layer. CSS keys off the markers:
@@ -117,6 +144,11 @@ function syncMarkers(): void {
 
   document.body.classList.toggle("wp-a11y-no-motion", !!reduceMotion);
   document.body.classList.toggle("wp-a11y-high-contrast", !!highContrast);
+
+  // Display — density (exactly one density class on body at a time)
+  document.body.classList.toggle("wp-density-comfortable", state.density === "comfortable");
+  document.body.classList.toggle("wp-density-compact", state.density === "compact");
+  document.body.classList.toggle("wp-density-minimal", state.density === "minimal");
 }
 
 /**
@@ -127,6 +159,16 @@ function syncMarkers(): void {
 export function applyA11yClasses(app: AppLike): void {
   state.reduceMotion = asMode(app.extensionManager?.setting?.get(SETTING_ID_REDUCE_MOTION), "auto");
   state.contrast = asMode(app.extensionManager?.setting?.get(SETTING_ID_HIGH_CONTRAST), "auto");
+  syncMarkers();
+}
+
+/**
+ * Read display-preference settings from extensionManager (used for initial
+ * sync at boot) and re-apply markers. After this, `onChange` callbacks own
+ * state updates directly via their newVal arg.
+ */
+export function applyDisplayPrefs(app: AppLike): void {
+  state.density = asDensity(app.extensionManager?.setting?.get(SETTING_ID_DENSITY), "comfortable");
   syncMarkers();
 }
 
@@ -183,7 +225,11 @@ export function installDebugHelpers(): void {
       syncMarkers();
     },
     refresh: () => syncMarkers(),
-    state: () => ({ ...state }),
+    // Returns only the a11y subset of state — display-prefs state has its
+    // own debug surface introduced in the wpDebug namespace (see Task 10
+    // of the display-prefs cycle). Keeping a narrow signature here so
+    // callers don't accidentally see fields whose ownership shifted.
+    state: () => ({ reduceMotion: state.reduceMotion, contrast: state.contrast }),
   };
 }
 
@@ -237,6 +283,30 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeContrast(next), {
             severity: "info",
             singletonKey: "a11y-contrast",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_DENSITY,
+      name: "Density",
+      type: "combo",
+      options: DENSITY_OPTIONS,
+      defaultValue: "comfortable",
+      tooltip:
+        "Controls Wildcard Pipeline widget sizing. Comfortable preserves the " +
+        "spacious default; compact reduces padding and chip sizes; minimal is " +
+        "the tightest packing for power users.",
+      category: ["Wildcard Pipeline", "Display", "Density"],
+      onChange: (newVal) => {
+        const next = asDensity(newVal, "comfortable");
+        const changed = next !== state.density;
+        state.density = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeDensity(next), {
+            severity: "info",
+            singletonKey: "wp-density",
           });
         }
       },

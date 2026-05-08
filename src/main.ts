@@ -65,6 +65,7 @@ const settings = settingsMod.buildSettings(app);
 // stored value, so applyA11yClasses is mostly belt-and-suspenders for
 // the case where the extensionManager is ready before the load-fire.
 settingsMod.applyA11yClasses(app);
+settingsMod.applyDisplayPrefs(app);
 settingsMod.watchA11ySystemPrefs();
 // Dev-only: expose `wpDebugA11y` on window so contributors can flip
 // reduce-motion / high-contrast classes from the DevTools console

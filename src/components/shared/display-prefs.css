@@ -1,0 +1,26 @@
+/* Display preferences CSS — driven by ComfyUI settings (see
+ * src/extension/settings.ts). The `wp-density-*`, `wp-decor-*`,
+ * `wp-indicator-*`, `wp-border-highlight-*`, and `wp-focus-mode`
+ * markers are toggled on <body>; rules here scope overrides to our
+ * widgets so we don't mutate ComfyUI core or other extensions. */
+
+/* ── Density ────────────────────────────────────────────────────────
+ * Comfortable is the default and uses :root tokens declared in
+ * theme.css. Compact and minimal override the same tokens; components
+ * referencing them via var() pick up the new values automatically. */
+
+.wp-density-compact {
+  --wp-pad-row: 4px 6px;
+  --wp-row-gap: 4px;
+  --wp-chip-pad: 2px 4px;
+  --wp-chip-font: 8.5px;
+  --wp-mod-font: 11.5px;
+}
+
+.wp-density-minimal {
+  --wp-pad-row: 2px 5px;
+  --wp-row-gap: 2px;
+  --wp-chip-pad: 1px 4px;
+  --wp-chip-font: 8px;
+  --wp-mod-font: 11px;
+}
