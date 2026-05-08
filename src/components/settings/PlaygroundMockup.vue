@@ -98,6 +98,9 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="wildcard"
       >
         <div class="wp-module-header">
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
+          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -140,6 +143,9 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="fixed_values"
       >
         <div class="wp-module-header">
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
+          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -174,6 +180,9 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="combine"
       >
         <div class="wp-module-header">
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
+          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -208,6 +217,9 @@ function toggleCollapsed(key: ModuleKey): void {
         data-kind="wildcard"
       >
         <div class="wp-module-header">
+          <span class="wp-drag-handle" aria-hidden="true"
+            ><i class="pi pi-ellipsis-v" aria-hidden="true"></i
+          ></span>
           <button
             class="wp-collapse-btn"
             type="button"
@@ -326,6 +338,16 @@ function toggleCollapsed(key: ModuleKey): void {
   align-items: center;
   gap: 6px;
 }
+.wp-pg-mockup .wp-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wp-text-dim, var(--wp-text3));
+  width: 8px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.wp-pg-mockup .wp-drag-handle .pi { font-size: 11px; }
 .wp-pg-mockup .wp-collapse-btn {
   background: transparent;
   border: none;

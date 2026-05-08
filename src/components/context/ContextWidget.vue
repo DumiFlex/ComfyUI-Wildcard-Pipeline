@@ -1287,8 +1287,23 @@ function onDrop(ev: DragEvent, targetId: string | null) {
     ? { ...ds.module }
     : { ...ds.module, id: newModuleId() };
   const list = [...value.value.modules];
-  const insertIdx = targetId === null ? list.length : list.findIndex((m) => m.id === targetId);
-  list.splice(insertIdx < 0 ? list.length : insertIdx, 0, inserted);
+  // Honor the resolved drop position — pre-Phase-3a this branch
+  // always inserted at `targetIdx` so cross-node drops landed
+  // BEFORE the target regardless of whether the visual indicator
+  // showed "before" or "after". Mirror the same-node math: "after"
+  // → targetIdx + 1, "before" (or unresolved) → targetIdx.
+  let insertIdx: number;
+  if (targetId === null) {
+    insertIdx = list.length;
+  } else {
+    const targetIdx = list.findIndex((m) => m.id === targetId);
+    if (targetIdx < 0) {
+      insertIdx = list.length;
+    } else {
+      insertIdx = dropPos === "after" ? targetIdx + 1 : targetIdx;
+    }
+  }
+  list.splice(insertIdx, 0, inserted);
   value.value = { ...value.value, modules: list };
   dragState.value = { ...ds, consumedBy: props.nodeId };
 }
@@ -1412,10 +1427,20 @@ function onDrop(ev: DragEvent, targetId: string | null) {
         @keydown="(ev) => onCardKeydown(ev, m)"
       >
         <div class="wp-module-header">
-          <!-- Phase 3a removed the bars handle — the whole `.wp-module`
-               is `draggable="true"` and shows `cursor: grab` on hover,
-               so the icon was redundant chrome. Keyboard reorder still
-               works via Shift+ArrowUp/Down. -->
+          <!-- Visual drag affordance — narrow 3-dot icon. The whole
+               card is `draggable="true"` so users can grab anywhere,
+               but keeping a small icon as discovery cue + alignment
+               anchor reads cleaner than a header that starts straight
+               on the collapse caret. The handle inherits the card's
+               `cursor: grab` so hover still shows the hand cursor.
+               `pi-ellipsis-v` is narrower than the old `pi-bars`, so
+               net row width drops vs the original handle. -->
+          <span
+            class="wp-drag-handle"
+            aria-hidden="true"
+            title="Drag to reorder (entire row is grabbable)"
+          ><i class="pi pi-ellipsis-v" aria-hidden="true"></i></span>
+
           <button
             type="button"
             class="wp-collapse-btn"
@@ -2048,6 +2073,23 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-module.wp-drop-target--after::after  { bottom: -3px; }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
+
+/* Narrow 3-dot drag affordance. The card carries the actual draggable
+ * behavior + cursor — this span is purely visual. Subtle by default,
+ * brightens on row hover/focus so dense lists don't look noisy. */
+.wp-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wp-text3);
+  width: 8px;
+  flex-shrink: 0;
+  opacity: 0.45;
+  transition: opacity 0.15s, color 0.15s;
+}
+.wp-drag-handle .pi { font-size: 11px; }
+.wp-module:hover .wp-drag-handle,
+.wp-module:focus-within .wp-drag-handle { opacity: 1; color: var(--wp-text2); }
 
 .wp-collapse-btn {
   background: none;
