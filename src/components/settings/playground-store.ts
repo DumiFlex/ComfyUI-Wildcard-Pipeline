@@ -47,12 +47,20 @@ export type DisplayKey =
   | "collapsedByDefault"
   | "focusMode";
 
-function settingId(key: DisplayKey): string {
-  return `wildcardPipeline.display.${key}`;
+/** A11y setting key — last segment of the dotted ID. */
+export type A11yKey = "reduceMotion" | "contrast";
+
+export type SettingKey = DisplayKey | A11yKey;
+
+function settingId(key: SettingKey): string {
+  // A11y entries live under `.a11y.` namespace; display under `.display.`
+  const namespace =
+    key === "reduceMotion" || key === "contrast" ? "a11y" : "display";
+  return `wildcardPipeline.${namespace}.${key}`;
 }
 
-/** Read current stored value for a display setting (undefined if not set). */
-export function getSettingValue(key: DisplayKey): unknown {
+/** Read current stored value for a setting (undefined if not set). */
+export function getSettingValue(key: SettingKey): unknown {
   return appRef?.extensionManager?.setting?.get(settingId(key));
 }
 
@@ -65,7 +73,7 @@ export function getSettingValue(key: DisplayKey): unknown {
  * the running ComfyUI build is too old to expose `setting.set`
  * (added in v1.33+).
  */
-export function applySetting(key: DisplayKey, value: unknown): void {
+export function applySetting(key: SettingKey, value: unknown): void {
   appRef?.extensionManager?.setting?.set?.(settingId(key), value);
 }
 

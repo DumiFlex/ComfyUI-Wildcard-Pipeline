@@ -127,4 +127,43 @@ describe("playground-store", () => {
       expect(() => applySetting("focusMode", true)).not.toThrow();
     });
   });
+
+  describe("namespace routing", () => {
+    it("display keys go under wildcardPipeline.display.*", () => {
+      const { app, setSpy } = makeFakeApp();
+      setComfyApp(app as never);
+
+      applySetting("density", "compact");
+      applySetting("kindStyle", "icon");
+      applySetting("focusMode", true);
+
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.density", "compact");
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.kindStyle", "icon");
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.display.focusMode", true);
+    });
+
+    it("a11y keys (reduceMotion, contrast) go under wildcardPipeline.a11y.*", () => {
+      const { app, setSpy } = makeFakeApp();
+      setComfyApp(app as never);
+
+      applySetting("reduceMotion", "on");
+      applySetting("contrast", "on");
+
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.a11y.reduceMotion", "on");
+      expect(setSpy).toHaveBeenCalledWith("wildcardPipeline.a11y.contrast", "on");
+    });
+
+    it("getSettingValue routes a11y keys to the a11y namespace", () => {
+      const { app } = makeFakeApp({
+        "wildcardPipeline.a11y.reduceMotion": "on",
+        "wildcardPipeline.a11y.contrast": "off",
+        "wildcardPipeline.display.density": "compact",
+      });
+      setComfyApp(app as never);
+
+      expect(getSettingValue("reduceMotion")).toBe("on");
+      expect(getSettingValue("contrast")).toBe("off");
+      expect(getSettingValue("density")).toBe("compact");
+    });
+  });
 });

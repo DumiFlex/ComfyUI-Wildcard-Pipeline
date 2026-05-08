@@ -33,7 +33,7 @@ import {
   closePlayground,
   applySetting,
   getSettingValue,
-  type DisplayKey,
+  type SettingKey,
 } from "./playground-store";
 import PlaygroundMockup from "./PlaygroundMockup.vue";
 
@@ -41,6 +41,7 @@ type Density = "comfortable" | "compact" | "minimal";
 type Decoration = "full" | "minimal" | "off";
 type IndicatorStyle = "both" | "badge" | "dot";
 type KindStyle = "both" | "icon" | "chip";
+type A11yMode = "auto" | "on" | "off";
 
 function asString(v: unknown, fallback: string): string {
   return typeof v === "string" ? v : fallback;
@@ -82,6 +83,19 @@ const focusMode = computed<boolean>({
   set: (v) => applySetting("focusMode", v),
 });
 
+// A11y settings — combo tri-state (auto / on / off). Auto follows the
+// OS preference via matchMedia listeners (already wired in
+// settings.ts). Surfaced here so users can preview the effect on the
+// mockup without leaving the playground.
+const reduceMotion = computed<A11yMode>({
+  get: () => asString(getSettingValue("reduceMotion"), "auto") as A11yMode,
+  set: (v) => applySetting("reduceMotion", v),
+});
+const contrast = computed<A11yMode>({
+  get: () => asString(getSettingValue("contrast"), "auto") as A11yMode,
+  set: (v) => applySetting("contrast", v),
+});
+
 interface Defaults {
   density: Density;
   decoration: Decoration;
@@ -90,6 +104,8 @@ interface Defaults {
   borderHighlight: boolean;
   collapsedByDefault: boolean;
   focusMode: boolean;
+  reduceMotion: A11yMode;
+  contrast: A11yMode;
 }
 
 const defaults: Defaults = {
@@ -100,10 +116,12 @@ const defaults: Defaults = {
   borderHighlight: true,
   collapsedByDefault: false,
   focusMode: false,
+  reduceMotion: "auto",
+  contrast: "auto",
 };
 
 function onResetAll(): void {
-  for (const [key, value] of Object.entries(defaults) as [DisplayKey, unknown][]) {
+  for (const [key, value] of Object.entries(defaults) as [SettingKey, unknown][]) {
     applySetting(key, value);
   }
 }
@@ -253,6 +271,26 @@ onBeforeUnmount(() => {
                   :checked="focusMode"
                   @change="focusMode = ($event.target as HTMLInputElement).checked"
                 />
+              </label>
+            </fieldset>
+
+            <fieldset class="wp-pg__group">
+              <legend class="wp-pg__group-title">Accessibility</legend>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Reduce motion</span>
+                <select v-model="reduceMotion" class="wp-pg__select">
+                  <option value="auto">Match system</option>
+                  <option value="on">Always reduce</option>
+                  <option value="off">Always allow</option>
+                </select>
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Contrast</span>
+                <select v-model="contrast" class="wp-pg__select">
+                  <option value="auto">Match system</option>
+                  <option value="on">High contrast</option>
+                  <option value="off">Standard</option>
+                </select>
               </label>
             </fieldset>
           </section>
