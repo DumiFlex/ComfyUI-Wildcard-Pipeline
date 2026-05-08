@@ -373,6 +373,51 @@ describe("a11y settings", () => {
     expect(toasts.value[0].singletonKey).toBe("wp-density");
   });
 
+  // ── Display preferences — decoration combo ──────────────────────
+
+  it("decoration boot — applies wp-decor-full by default", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    expect(document.body.classList.contains("wp-decor-full")).toBe(true);
+  });
+
+  it("decoration boot — reads stored off value", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay({ decoration: "off" }));
+
+    expect(document.body.classList.contains("wp-decor-off")).toBe(true);
+    expect(document.body.classList.contains("wp-decor-full")).toBe(false);
+  });
+
+  it("decoration onChange — flips body class", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_DECORATION)?.onChange?.("minimal", "full");
+
+    expect(document.body.classList.contains("wp-decor-minimal")).toBe(true);
+    expect(document.body.classList.contains("wp-decor-full")).toBe(false);
+  });
+
+  it("decoration toast — fires with descriptive message", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    markBootCompleted();
+
+    const settings = buildSettings(makeApp());
+    settings.find((s) => s.id === SETTING_DECORATION)?.onChange?.("off", "full");
+
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].message).toBe("Decoration: OFF");
+    expect(toasts.value[0].singletonKey).toBe("wp-decoration");
+  });
+
   it("installDebugHelpers exposes window.wpDebugA11y in DEV mode", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;

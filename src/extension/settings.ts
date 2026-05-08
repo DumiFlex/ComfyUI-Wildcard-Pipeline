@@ -17,6 +17,7 @@ import { pushToast } from "../components/shared/toast-store";
 
 export type A11yMode = "auto" | "on" | "off";
 export type Density = "comfortable" | "compact" | "minimal";
+export type Decoration = "full" | "minimal" | "off";
 
 export interface ComfySetting {
   id: string;
@@ -32,6 +33,7 @@ export interface ComfySetting {
 const SETTING_ID_REDUCE_MOTION = "wildcardPipeline.a11y.reduceMotion";
 const SETTING_ID_HIGH_CONTRAST = "wildcardPipeline.a11y.contrast";
 const SETTING_ID_DENSITY = "wildcardPipeline.display.density";
+const SETTING_ID_DECORATION = "wildcardPipeline.display.decoration";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -51,6 +53,12 @@ const DENSITY_OPTIONS = [
   { text: "Minimal", value: "minimal" },
 ];
 
+const DECORATION_OPTIONS = [
+  { text: "Full (default)", value: "full" },
+  { text: "Minimal", value: "minimal" },
+  { text: "Off (flat)", value: "off" },
+];
+
 interface ExtensionManager {
   setting?: { get(id: string): unknown };
 }
@@ -67,10 +75,12 @@ const state: {
   reduceMotion: A11yMode;
   contrast: A11yMode;
   density: Density;
+  decoration: Decoration;
 } = {
   reduceMotion: "auto",
   contrast: "auto",
   density: "comfortable",
+  decoration: "full",
 };
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -81,9 +91,14 @@ function asDensity(v: unknown, fallback: Density): Density {
   return v === "comfortable" || v === "compact" || v === "minimal" ? v : fallback;
 }
 
+function asDecoration(v: unknown, fallback: Decoration): Decoration {
+  return v === "full" || v === "minimal" || v === "off" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
+  state.decoration = "full";
 }
 
 // Toast feedback gate. ComfyUI fires onChange for stored values during
@@ -124,6 +139,10 @@ function describeDensity(mode: Density): string {
   return `Density: ${mode.toUpperCase()}`;
 }
 
+function describeDecoration(mode: Decoration): string {
+  return `Decoration: ${mode.toUpperCase()}`;
+}
+
 /**
  * Apply current state + matchMedia to the body marker classes. Pure read
  * of the in-memory `state` map — no async layer. CSS keys off the markers:
@@ -149,6 +168,11 @@ function syncMarkers(): void {
   document.body.classList.toggle("wp-density-comfortable", state.density === "comfortable");
   document.body.classList.toggle("wp-density-compact", state.density === "compact");
   document.body.classList.toggle("wp-density-minimal", state.density === "minimal");
+
+  // Display — decoration
+  document.body.classList.toggle("wp-decor-full", state.decoration === "full");
+  document.body.classList.toggle("wp-decor-minimal", state.decoration === "minimal");
+  document.body.classList.toggle("wp-decor-off", state.decoration === "off");
 }
 
 /**
@@ -169,6 +193,7 @@ export function applyA11yClasses(app: AppLike): void {
  */
 export function applyDisplayPrefs(app: AppLike): void {
   state.density = asDensity(app.extensionManager?.setting?.get(SETTING_ID_DENSITY), "comfortable");
+  state.decoration = asDecoration(app.extensionManager?.setting?.get(SETTING_ID_DECORATION), "full");
   syncMarkers();
 }
 
@@ -307,6 +332,31 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
           pushToast(describeDensity(next), {
             severity: "info",
             singletonKey: "wp-density",
+          });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_DECORATION,
+      name: "Decoration",
+      type: "combo",
+      options: DECORATION_OPTIONS,
+      defaultValue: "full",
+      tooltip:
+        "Controls visual embellishment — gradients, shadows, brand gradients " +
+        "on modal headers. Full keeps all decoration; minimal drops gradients " +
+        "but keeps subtle shadows; off is flat (best for weak GPUs / remote " +
+        "desktops).",
+      category: ["Wildcard Pipeline", "Display", "Decoration"],
+      onChange: (newVal) => {
+        const next = asDecoration(newVal, "full");
+        const changed = next !== state.decoration;
+        state.decoration = next;
+        syncMarkers();
+        if (bootCompleted && changed) {
+          pushToast(describeDecoration(next), {
+            severity: "info",
+            singletonKey: "wp-decoration",
           });
         }
       },

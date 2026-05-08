@@ -24,3 +24,46 @@
   --wp-chip-font: 8px;
   --wp-mod-font: 11px;
 }
+
+/* ── Decoration ─────────────────────────────────────────────────────
+ * `full` is the default; minimal drops gradients but keeps subtle
+ * shadows; off is flat (best for weak GPUs / remote desktops).
+ * `:where()` keeps specificity at 0,1,0 so per-component rules without
+ * !important still win when a component legitimately wants an
+ * animation (e.g. a loading spinner). */
+
+.wp-decor-minimal :where(.wp-context, .wp-asm-helper, .wp-medit, .wp-picker, .wp-confirm, .wp-app) {
+  --wp-accent-glow: transparent;
+  --wp-brand-gradient: var(--wp-bg2);
+}
+
+.wp-decor-off :where(.wp-context, .wp-asm-helper, .wp-medit, .wp-picker, .wp-confirm, .wp-app) {
+  --wp-accent-glow: transparent;
+  --wp-brand-gradient: var(--wp-bg2);
+  --wp-violet-bg: transparent;
+  --wp-teal-bg: transparent;
+}
+
+.wp-decor-off :where(
+  .wp-module,
+  .wp-medit__btn,
+  .wp-confirm,
+  .wp-asm__rendered,
+  .wp-toast,
+  .wp-empty-hero,
+  .wp-recovery
+) {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.wp-decor-minimal :where(
+  .wp-module,
+  .wp-medit__btn,
+  .wp-confirm,
+  .wp-asm__rendered,
+  .wp-toast
+) {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: blur(2px) !important;
+}
