@@ -4,20 +4,40 @@
  * mutate ComfyUI core or other extensions. */
 
 /* ── Reduce motion ──────────────────────────────────────────────────── */
-.wp-a11y-no-motion .wp-context,
-.wp-a11y-no-motion .wp-context *,
-.wp-a11y-no-motion .wp-asm,
-.wp-a11y-no-motion .wp-asm *,
-.wp-a11y-no-motion .wp-toast-stack,
-.wp-a11y-no-motion .wp-toast-stack *,
-.wp-a11y-no-motion .wp-emptystate,
-.wp-a11y-no-motion .wp-emptystate *,
-.wp-a11y-no-motion .wp-medit,
-.wp-a11y-no-motion .wp-medit *,
-.wp-a11y-no-motion .wp-picker,
-.wp-a11y-no-motion .wp-picker * {
+/* Targets every WP container root (extension widgets + manager SPA shell)
+ * plus every descendant. The previous selector listed `.wp-asm` and
+ * `.wp-emptystate`, but neither matched: the actual root classes are
+ * `.wp-asm-helper` and the empty-state lives inside `.wp-context`. The
+ * surface here is the corrected, exhaustive list — keep it in sync when
+ * you add a new top-level WP component. `:where()` keeps specificity at
+ * 0,1,0 so component-level rules without !important still win when they
+ * legitimately animate (e.g. an indeterminate loading spinner that the
+ * user explicitly accepted). */
+.wp-a11y-no-motion :where(
+  .wp-context,
+  .wp-asm-helper,
+  .wp-debug,
+  .wp-medit,
+  .wp-picker,
+  .wp-toast-stack,
+  .wp-confirm-overlay,
+  .wp-ctxmenu,
+  .wp-app
+),
+.wp-a11y-no-motion :where(
+  .wp-context,
+  .wp-asm-helper,
+  .wp-debug,
+  .wp-medit,
+  .wp-picker,
+  .wp-toast-stack,
+  .wp-confirm-overlay,
+  .wp-ctxmenu,
+  .wp-app
+) * {
   /* Keep just enough duration that Vue's transitionend listeners still
-   * fire and cleanly tear down — instant 0ms can confuse them. */
+   * fire and cleanly tear down — instant 0ms can confuse them. Same
+   * thinking for animation-duration: keyframe-end events stay reachable. */
   transition-duration: 0.01ms !important;
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
