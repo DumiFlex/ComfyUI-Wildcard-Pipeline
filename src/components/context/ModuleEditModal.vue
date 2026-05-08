@@ -16,7 +16,6 @@ import {
 } from "./editors/_shell";
 import ModalTabStrip from "./editors/tabs/ModalTabStrip.vue";
 import LibraryRoundTripActions from "./editors/library/LibraryRoundTripActions.vue";
-import WildcardInstanceBody from "./editors/instance/WildcardInstanceBody.vue";
 import FixedValuesInstanceBody from "./editors/instance/FixedValuesInstanceBody.vue";
 import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
 import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
@@ -126,8 +125,10 @@ const kindBody = computed(() => {
 // Per-kind instance override body. Mirrors `kindBody` but for the
 // Instance tab — pipelines have no overrides and resolve to null.
 const instanceBody = computed(() => {
+  // wildcard never reaches here — the kind dispatcher in <template>
+  // short-circuits to <WildcardInstanceModal> before the v1 instanceBody
+  // dispatch runs. Other v1 kinds fall through this switch.
   switch (draft.value?.type) {
-    case "wildcard":     return WildcardInstanceBody;
     case "fixed_values": return FixedValuesInstanceBody;
     case "combine":      return CombineInstanceBody;
     case "derivation":   return DerivationInstanceBody;
