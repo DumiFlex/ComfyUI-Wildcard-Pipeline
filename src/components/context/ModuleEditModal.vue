@@ -16,7 +16,6 @@ import {
 } from "./editors/_shell";
 import ModalTabStrip from "./editors/tabs/ModalTabStrip.vue";
 import LibraryRoundTripActions from "./editors/library/LibraryRoundTripActions.vue";
-import FixedValuesInstanceBody from "./editors/instance/FixedValuesInstanceBody.vue";
 import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
 import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
 import ConstraintInstanceBody from "./editors/instance/ConstraintInstanceBody.vue";
@@ -131,7 +130,8 @@ const instanceBody = computed(() => {
   // short-circuits to <WildcardInstanceModal> before the v1 instanceBody
   // dispatch runs. Other v1 kinds fall through this switch.
   switch (draft.value?.type) {
-    case "fixed_values": return FixedValuesInstanceBody;
+    // fixed_values never reaches here — kind dispatcher routes it
+    // to FixedValuesInstanceModal before this v1 instanceBody dispatch.
     case "combine":      return CombineInstanceBody;
     case "derivation":   return DerivationInstanceBody;
     case "constraint":   return ConstraintInstanceBody;
