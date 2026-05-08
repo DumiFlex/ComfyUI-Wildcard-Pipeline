@@ -2153,16 +2153,14 @@ function onDrop(ev: DragEvent, targetId: string | null) {
  * Kept as a comment-only anchor here for grep discoverability. */
 
 /* ── Inline action cluster (lock + internal + remove) ───────────────────
- * Fades in on row hover; uses PrimeIcons via `pi` class (Task 9).
- * Replaces the old wp-card-toggle + wp-icon-btn / wp-delete pattern. */
+ * Always visible (was hover-revealed) — discoverability over chrome.
+ * Uses PrimeIcons via `pi` class (Task 9). Replaces the old
+ * wp-card-toggle + wp-icon-btn / wp-delete pattern. */
 .wp-mod-actions {
   display: flex;
   gap: 1px;
-  opacity: 0;
-  transition: opacity .12s ease;
   flex-shrink: 0;
 }
-.wp-module:hover .wp-mod-actions { opacity: 1; }
 .wp-btn--icon-sm {
   background: transparent;
   border: 1px solid transparent;

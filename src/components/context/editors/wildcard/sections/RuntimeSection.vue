@@ -232,7 +232,9 @@ function bumpSeed(direction: 1 | -1): void {
   border: 1px solid var(--wp-border);
   border-radius: 3px;
   height: 24px;
-  width: 130px;
+  /* Wide enough to show a full Number.MAX_SAFE_INTEGER (16 digits)
+   * plus the 14px spinner column without overflow. */
+  width: 200px;
   overflow: hidden;
 }
 .seed-input-wrap:focus-within {
