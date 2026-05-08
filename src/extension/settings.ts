@@ -69,10 +69,16 @@ function asMode(v: unknown, fallback: A11yMode): A11yMode {
  *   .wp-a11y-high-contrast { --wp-border: ...; }
  */
 function syncMarkers(): void {
+  // Double `?.` is intentional: `matchMedia?.(...)` short-circuits the call,
+  // but the subsequent `.matches` access still throws on undefined. Some
+  // embedded shells expose a partial DOM where `matchMedia` returns
+  // undefined or an object missing `.matches`; null-safe both hops.
   const reduceMotion = state.reduceMotion === "on"
-    || (state.reduceMotion === "auto" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+    || (state.reduceMotion === "auto"
+      && (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false));
   const highContrast = state.contrast === "on"
-    || (state.contrast === "auto" && window.matchMedia?.("(prefers-contrast: more)").matches);
+    || (state.contrast === "auto"
+      && (window.matchMedia?.("(prefers-contrast: more)")?.matches ?? false));
 
   document.body.classList.toggle("wp-a11y-no-motion", !!reduceMotion);
   document.body.classList.toggle("wp-a11y-high-contrast", !!highContrast);

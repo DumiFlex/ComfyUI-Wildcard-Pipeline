@@ -1,0 +1,192 @@
+// Tests for src/extension/settings.ts — verifies the four critical paths of
+// the ComfyUI a11y settings: boot state, live updates from system pref, the
+// explicit-override-beats-system rule, and matchMedia listener teardown
+// (the last is the kind of leak that surfaces only after HMR cycles).
+
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { applyA11yClasses, watchA11ySystemPrefs, buildSettings } from "./settings";
+
+const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+const CONTRAST_QUERY = "(prefers-contrast: more)";
+const SETTING_MOTION = "wildcardPipeline.a11y.reduceMotion";
+const SETTING_CONTRAST = "wildcardPipeline.a11y.contrast";
+
+interface FakeMQL {
+  matches: boolean;
+  media: string;
+  addEventListener: ReturnType<typeof vi.fn>;
+  removeEventListener: ReturnType<typeof vi.fn>;
+  _trigger: (newMatches: boolean) => void;
+}
+
+interface MatchMediaFixture {
+  factory: ReturnType<typeof vi.fn>;
+  mqs: Record<string, FakeMQL>;
+}
+
+/**
+ * Builds a controllable matchMedia mock. `_trigger` simulates an OS preference
+ * flip so we can verify the auto-mode listener path without poking real
+ * system settings.
+ */
+function makeMatchMedia(initial: { motion: boolean; contrast: boolean }): MatchMediaFixture {
+  const mqs: Record<string, FakeMQL> = {};
+  const factory = vi.fn((query: string): FakeMQL => {
+    if (mqs[query]) return mqs[query];
+    let listener: ((ev: { matches: boolean }) => void) | null = null;
+    const startMatches = query === MOTION_QUERY ? initial.motion
+      : query === CONTRAST_QUERY ? initial.contrast
+      : false;
+    const mql: FakeMQL = {
+      matches: startMatches,
+      media: query,
+      addEventListener: vi.fn((_event: string, cb: (ev: { matches: boolean }) => void) => {
+        listener = cb;
+      }),
+      removeEventListener: vi.fn(() => {
+        listener = null;
+      }),
+      _trigger: (newMatches: boolean) => {
+        mql.matches = newMatches;
+        listener?.({ matches: newMatches });
+      },
+    };
+    mqs[query] = mql;
+    return mql;
+  });
+  return { factory, mqs };
+}
+
+interface FakeApp {
+  extensionManager: { setting: { get: (id: string) => unknown } };
+}
+
+function makeApp(motion = "auto", contrast = "auto"): FakeApp {
+  return {
+    extensionManager: {
+      setting: {
+        get: (id: string) => {
+          if (id === SETTING_MOTION) return motion;
+          if (id === SETTING_CONTRAST) return contrast;
+          return undefined;
+        },
+      },
+    },
+  };
+}
+
+describe("a11y settings", () => {
+  let originalMatchMedia: typeof window.matchMedia;
+
+  beforeEach(() => {
+    originalMatchMedia = window.matchMedia;
+    document.body.className = "";
+  });
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+    document.body.className = "";
+  });
+
+  it("boot — applyA11yClasses reads explicit setting and flips body class", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+
+    applyA11yClasses(makeApp("on", "auto"));
+
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
+    expect(document.body.classList.contains("wp-a11y-high-contrast")).toBe(false);
+  });
+
+  it("boot + auto — picks up system pref via matchMedia", () => {
+    const fixture = makeMatchMedia({ motion: true, contrast: true });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+
+    applyA11yClasses(makeApp("auto", "auto"));
+
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
+    expect(document.body.classList.contains("wp-a11y-high-contrast")).toBe(true);
+  });
+
+  it("live update — auto mode flips marker when system pref change event fires", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+
+    applyA11yClasses(makeApp("auto", "auto"));
+    const teardown = watchA11ySystemPrefs();
+
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(false);
+
+    fixture.mqs[MOTION_QUERY]._trigger(true);
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
+
+    teardown();
+  });
+
+  it("explicit override wins over system pref", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+
+    // Start at auto, then user picks explicit "on" via the settings combo.
+    applyA11yClasses(makeApp("auto", "auto"));
+    const settings = buildSettings(makeApp());
+    const motionSetting = settings.find((s) => s.id === SETTING_MOTION);
+    motionSetting?.onChange?.("on", "auto");
+
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
+
+    // System pref is OFF — explicit "on" must persist regardless.
+    fixture.mqs[MOTION_QUERY]._trigger(false);
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(true);
+  });
+
+  it("explicit off wins over system pref", () => {
+    const fixture = makeMatchMedia({ motion: true, contrast: true });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+
+    applyA11yClasses(makeApp("auto", "auto"));
+    const settings = buildSettings(makeApp());
+    const contrastSetting = settings.find((s) => s.id === SETTING_CONTRAST);
+    contrastSetting?.onChange?.("off", "auto");
+
+    expect(document.body.classList.contains("wp-a11y-high-contrast")).toBe(false);
+
+    // System pref says "high contrast" but explicit off wins.
+    fixture.mqs[CONTRAST_QUERY]._trigger(true);
+    expect(document.body.classList.contains("wp-a11y-high-contrast")).toBe(false);
+  });
+
+  it("teardown — removes both matchMedia listeners (catches HMR leak)", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+
+    applyA11yClasses(makeApp());
+    const teardown = watchA11ySystemPrefs();
+
+    const motionMQ = fixture.mqs[MOTION_QUERY];
+    const contrastMQ = fixture.mqs[CONTRAST_QUERY];
+    expect(motionMQ.addEventListener).toHaveBeenCalledTimes(1);
+    expect(contrastMQ.addEventListener).toHaveBeenCalledTimes(1);
+
+    teardown();
+    expect(motionMQ.removeEventListener).toHaveBeenCalledTimes(1);
+    expect(contrastMQ.removeEventListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto mode + matchMedia undefined — degrades gracefully (no throw)", () => {
+    (window as unknown as { matchMedia: undefined }).matchMedia = undefined;
+
+    expect(() => applyA11yClasses(makeApp("auto", "auto"))).not.toThrow();
+    expect(document.body.classList.contains("wp-a11y-no-motion")).toBe(false);
+    expect(document.body.classList.contains("wp-a11y-high-contrast")).toBe(false);
+
+    expect(() => watchA11ySystemPrefs()()).not.toThrow();
+  });
+
+  it("auto mode + matchMedia returns object lacking addEventListener — watcher no-ops", () => {
+    window.matchMedia = vi.fn(() => ({ matches: false, media: "" })) as unknown as typeof window.matchMedia;
+
+    applyA11yClasses(makeApp());
+    expect(() => watchA11ySystemPrefs()()).not.toThrow();
+  });
+});
