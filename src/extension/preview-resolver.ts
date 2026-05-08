@@ -20,6 +20,7 @@
  * graph or reload to clear state.
  */
 import { ref } from "vue";
+import { recordCacheHit, recordCacheMiss } from "./perf-stats";
 
 export interface PreviewLookup {
   /** Display name from the library row. */
@@ -60,9 +61,19 @@ const RETRY_TTL_MS = 30_000;
  */
 export const cacheVersion = ref(0);
 
-/** Sync read — returns undefined if not yet fetched (or fetch failed). */
+/** Sync read — returns undefined if not yet fetched (or fetch failed).
+ *  Records cache hit/miss into perf-stats so the optional HUD can show
+ *  the live ratio. The ratio reflects PREVIEW lookups specifically;
+ *  rendering frequency dominates so a single dropped render after a
+ *  cache write moves the needle visibly. */
 export function lookup(uuid: string): PreviewLookup | undefined {
-  return cache.get(uuid);
+  const value = cache.get(uuid);
+  if (value !== undefined) {
+    recordCacheHit();
+  } else {
+    recordCacheMiss();
+  }
+  return value;
 }
 
 /**
