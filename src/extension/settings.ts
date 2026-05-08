@@ -21,10 +21,62 @@ export type Decoration = "full" | "minimal" | "off";
 export type IndicatorStyle = "both" | "badge" | "dot";
 export type KindStyle = "both" | "icon" | "chip";
 
+/**
+ * Setting widget types ComfyUI's settings panel can render natively.
+ *
+ * The CLI docs at docs.comfy.org/custom-nodes/js/javascript_settings list
+ * 8 (`boolean | text | number | slider | combo | color | image | hidden`)
+ * but the actual frontend type contract in
+ * `Comfy-Org/ComfyUI_frontend/src/platform/settings/types.ts` exposes 12
+ * string types plus a custom-renderer function. Documenting the full set
+ * here so contributors don't fight TypeScript errors when reaching for
+ * `radio` or the renderer escape hatch.
+ */
+export type ComfySettingInputType =
+  | "boolean"
+  | "text"
+  | "number"
+  | "slider"
+  | "combo"
+  | "color"
+  | "image"
+  | "hidden"
+  | "knob"
+  | "radio"
+  | "url"
+  | "backgroundImage";
+
+/**
+ * Function-typed setting renderer. ComfyUI calls it when the panel
+ * mounts and uses the returned `HTMLElement` as the entire input cell
+ * for that setting (replacing the native widget).
+ *
+ * Wire `setter(newValue)` from your widget's change handler — that's
+ * how the value persists to `extensionManager.setting`. `value` is the
+ * current stored value at render time. `attrs` is an optional bag of
+ * extra props ComfyUI may pass (rarely used; the rgthree + KJNodes
+ * extensions both ignore it).
+ *
+ * Must be synchronous — same constraint as `getCustomWidgets`. Don't
+ * return a Promise; ComfyUI won't await it.
+ *
+ * Reference patterns (verified working in ComfyUI v1.33+):
+ *   - rgthree-comfy: returns a `<tr>` containing a launcher button that
+ *     opens its own custom dialog (clean panel, all UI in dialog)
+ *   - ComfyUI-KJNodes: returns a raw `<button>` for one-shot actions
+ *     (e.g. "Convert all SetGet nodes")
+ */
+export type ComfySettingCustomRenderer = (
+  name: string,
+  setter: (value: unknown) => void,
+  value: unknown,
+  attrs?: Record<string, unknown>,
+) => HTMLElement;
+
 export interface ComfySetting {
   id: string;
   name: string;
-  type: "boolean" | "text" | "number" | "slider" | "combo" | "color" | "image" | "hidden";
+  type: ComfySettingInputType | ComfySettingCustomRenderer;
   defaultValue: unknown;
   tooltip?: string;
   options?: Array<{ text: string; value: string }>;

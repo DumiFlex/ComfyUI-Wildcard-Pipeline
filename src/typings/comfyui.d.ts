@@ -32,11 +32,41 @@ declare module "#comfyui/app" {
       loadedGraphNode?: (node: unknown, app: unknown) => Promise<void> | void;
       /** Badges shown in the "About" panel under our extension row. */
       aboutPageBadges?: Array<{ label: string; url: string; icon: string }>;
-      /** Entries in the ComfyUI Settings panel. */
+      /** Entries in the ComfyUI Settings panel.
+       *
+       * `type` accepts either a string from the 12-value union (the
+       * docs at docs.comfy.org list 8 — `knob`, `radio`, `url`,
+       * `backgroundImage` are documented only in the frontend type
+       * contract `Comfy-Org/ComfyUI_frontend/src/platform/settings/types.ts`)
+       * or a custom-renderer function that returns an HTMLElement.
+       *
+       * The function form replaces the entire input cell with whatever
+       * DOM you return. Wire `setter(value)` to persist changes. Used
+       * by rgthree-comfy (launcher button → custom dialog) and
+       * ComfyUI-KJNodes (one-shot action button) — patterns we can
+       * mirror for richer settings UI than the native types support. */
       settings?: Array<{
         id: string;
         name: string;
-        type: "boolean" | "text" | "number" | "slider" | "combo" | "color" | "image" | "hidden";
+        type:
+          | "boolean"
+          | "text"
+          | "number"
+          | "slider"
+          | "combo"
+          | "color"
+          | "image"
+          | "hidden"
+          | "knob"
+          | "radio"
+          | "url"
+          | "backgroundImage"
+          | ((
+              name: string,
+              setter: (value: unknown) => void,
+              value: unknown,
+              attrs?: Record<string, unknown>,
+            ) => HTMLElement);
         defaultValue: unknown;
         tooltip?: string;
         options?: Array<{ text: string; value: string }>;
