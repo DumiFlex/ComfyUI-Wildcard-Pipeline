@@ -196,8 +196,13 @@ export interface ModuleEntry {
   enabled: boolean;
   /** UI-only: persists collapsed state so cards stay collapsed across reload. */
   collapsed?: boolean;
-  /** Display metadata. `name` doubles as the card title. */
-  meta: { name: string; description?: string; tags?: string[] };
+  /** Display metadata. `name` doubles as the card title.
+   *  `library_name` is the original name set when the module was first
+   *  picked from the library — denormalized onto the snapshot so
+   *  "reset overrides" can restore the user-edited `name` to its
+   *  library default without having to re-fetch from the server.
+   *  Inline-created modules (no library link) leave it undefined. */
+  meta: { name: string; library_name?: string; description?: string; tags?: string[] };
   /**
    * Inline-edited `fixed_values` entries. Always present (default
    * `[]` for non-fixed_values kinds) so existing scan logic

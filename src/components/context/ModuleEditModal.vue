@@ -185,23 +185,49 @@ function onUpdate(patch: Record<string, unknown>): void {
 }
 
 /**
- * "Clear all overrides" footer button on the Instance tab. Confirms
- * with the user, then nulls every registry field for the current kind.
- * `_ui` is preserved (it's not in the registry, so it isn't touched).
+ * "Reset overrides" — clears identity + pool overrides while preserving
+ * runtime state (lock, internal). For wildcard the scope is:
+ *   identity → variable_binding, meta.name (restored from
+ *              meta.library_name if present)
+ *   pool     → enabled_options, option_weights, category_filter
+ *   runtime  → locked_seed, internal · KEPT
+ *   _ui      → KEPT (under-prefix scratch)
+ *
+ * For other v1 kinds (combine / fixed_values / derivation / constraint)
+ * the historical "clear all overrides" still nulls every registry field
+ * since they don't separate identity / runtime concerns the same way.
  */
+const WILDCARD_RESET_FIELDS: readonly InstanceFieldKey[] = [
+  "variable_binding", "enabled_options", "option_weights", "category_filter",
+] as const;
+
 function onClearAllOverrides(): void {
   if (!draft.value) return;
   const ok = window.confirm(
-    `Clear all instance overrides for "${draft.value.meta?.name || "this module"}"?`,
+    `Reset overrides on "${draft.value.meta?.name || "this module"}"?`,
   );
   if (!ok) return;
-  const fields = INSTANCE_FIELDS_PER_KIND[draft.value.type];
+
+  const isWildcard = draft.value.type === "wildcard";
+  const fields = isWildcard
+    ? WILDCARD_RESET_FIELDS
+    : INSTANCE_FIELDS_PER_KIND[draft.value.type];
+
   const cleared: Record<string, unknown> = { ...(draft.value.instance ?? {}) };
   for (const f of fields) {
     cleared[f as InstanceFieldKey] = null;
   }
+
+  // Wildcard reset also restores the user-edited name to its library
+  // default (denormalized at pick time as `meta.library_name`). Falls
+  // through to the current name when no library link exists.
+  const nextMeta = isWildcard && draft.value.meta?.library_name
+    ? { ...draft.value.meta, name: draft.value.meta.library_name }
+    : draft.value.meta;
+
   draft.value = {
     ...draft.value,
+    meta: nextMeta,
     instance: cleared as NonNullable<ModuleEntry["instance"]>,
   };
 }

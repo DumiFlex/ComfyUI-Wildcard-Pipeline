@@ -35,7 +35,7 @@ function onBindingInput(ev: Event): void {
         data-test="id-name"
         type="text"
         :value="nameValue"
-        :placeholder="module.meta?.name ?? 'module name'"
+        :placeholder="module.meta?.library_name ?? 'module name'"
         aria-label="Display name"
         @input="onNameInput"
       />

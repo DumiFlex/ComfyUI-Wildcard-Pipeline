@@ -120,4 +120,39 @@ describe("OptionRow", () => {
     });
     expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("true");
   });
+
+  it("up spinner button bumps weight by +0.1", async () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: {} },
+    });
+    await w.find('[data-test="opt-weight-up"]').trigger("click");
+    // Library weight = 1.0, +0.1 = 1.1
+    expect(w.emitted("weight")?.[0]).toEqual(["o1", 1.1]);
+  });
+
+  it("down spinner button bumps weight by -0.1", async () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { option_weights: { o1: 1.5 } } },
+    });
+    await w.find('[data-test="opt-weight-down"]').trigger("click");
+    expect(w.emitted("weight")?.[0]).toEqual(["o1", 1.4]);
+  });
+
+  it("down spinner clamps weight to 0 (no negative weights)", async () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { option_weights: { o1: 0 } } },
+    });
+    await w.find('[data-test="opt-weight-down"]').trigger("click");
+    expect(w.emitted("weight")?.[0]).toEqual(["o1", 0]);
+  });
+
+  it("spinner buttons disabled when option is unchecked", () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: { enabled_options: ["o2"] } },
+    });
+    const up = w.find<HTMLButtonElement>('[data-test="opt-weight-up"]').element;
+    const down = w.find<HTMLButtonElement>('[data-test="opt-weight-down"]').element;
+    expect(up.disabled).toBe(true);
+    expect(down.disabled).toBe(true);
+  });
 });

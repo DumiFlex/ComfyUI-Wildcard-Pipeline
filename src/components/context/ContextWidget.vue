@@ -552,6 +552,10 @@ function lookupSiblingName(uuid: string | null | undefined): string | null {
   void previewCacheVersion.value;
   const sib = value.value.modules.find((m) => m.id === uuid);
   if (sib) {
+    // Mirror the engine's precedence: per-instance override wins
+    // (`wildcard_handler.py:216`), payload default falls through.
+    const inst = sib.instance?.variable_binding;
+    if (typeof inst === "string" && inst.trim()) return inst.trim();
     const binding = (sib.payload as { var_binding?: string } | undefined)?.var_binding;
     if (typeof binding === "string" && binding.trim()) return binding.trim();
     const name = sib.meta?.name?.trim();
@@ -628,7 +632,12 @@ function summaryTokens(m: ModuleEntry): SummaryToken[] {
   const p = (m.payload ?? {}) as Record<string, unknown>;
   switch (m.type) {
     case "wildcard": {
-      const binding = (p.var_binding as string)?.trim();
+      // Card summary respects the per-instance binding override so a
+      // renamed wildcard reads as `$<override>` on the canvas. Engine
+      // applies the same precedence at run time.
+      const inst = m.instance?.variable_binding;
+      const payloadBinding = (p.var_binding as string | undefined)?.trim();
+      const binding = (typeof inst === "string" && inst.trim()) || payloadBinding;
       const opts = Array.isArray(p.options) ? p.options.length : 0;
       const head: SummaryToken = binding ? v(binding) : lit("wildcard");
       return opts
@@ -770,7 +779,7 @@ async function onLibraryPick(uuids: string[]) {
         id: uuid,
         type: entry.type as ModuleEntry["type"],
         enabled: true,
-        meta: { name: entry.name },
+        meta: { name: entry.name, library_name: entry.name },
         entries: entriesFromSnapshot(entry),
         payload: entry.payload,
         payload_hash: entry.payload_hash,
@@ -785,7 +794,7 @@ async function onLibraryPick(uuids: string[]) {
         id: uuid,
         type: entry.type as ModuleEntry["type"],
         enabled: true,
-        meta: { name: entry.name },
+        meta: { name: entry.name, library_name: entry.name },
         entries: entriesFromSnapshot(entry),
         payload: entry.payload,
         payload_hash: entry.payload_hash,

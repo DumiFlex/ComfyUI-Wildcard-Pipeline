@@ -81,4 +81,11 @@ describe("IdentitySection", () => {
     });
     expect(w.find<HTMLInputElement>('[data-test="id-name"]').element.value).toBe("Custom");
   });
+
+  it("name placeholder uses meta.library_name when present", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule({ meta: { name: "", library_name: "outfit (lib)" } }) },
+    });
+    expect(w.find<HTMLInputElement>('[data-test="id-name"]').element.placeholder).toBe("outfit (lib)");
+  });
 });
