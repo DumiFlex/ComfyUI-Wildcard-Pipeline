@@ -26,6 +26,7 @@ import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
 import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
+import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
 
 /**
  * Per-kind subtitle text shown under the modal title (mockup v5
@@ -482,6 +483,62 @@ async function doCombineSaveToLibrary(): Promise<void> {
   }
 }
 
+/**
+ * Derivation v2 round-trip handlers — siblings of the wildcard,
+ * fixed-values, and combine pairs. Same fetch / confirm / toast logic.
+ * Library editing of rule conditions / branches still routes to SPA;
+ * this just handles modal-level reset + save-to-library.
+ */
+function onDerivationResetClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Reset to library?",
+    body: `Discard ${moduleName}'s local rule-disable overrides and restore the library version.`,
+    confirmLabel: "Reset to library",
+    variant: "danger",
+    onConfirm: () => { void doDerivationReset(); },
+  });
+}
+
+async function doDerivationReset(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const refreshed = await refreshModule(draft.value);
+    onResetFromLibrary(refreshed);
+  } catch (err) {
+    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
+function onDerivationSaveToLibraryClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Save to library?",
+    body: `Push current rules + meta to library entry "${moduleName}".`,
+    confirmLabel: "Save to library",
+    onConfirm: () => { void doDerivationSaveToLibrary(); },
+  });
+}
+
+async function doDerivationSaveToLibrary(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json() as { new_hash: string };
+    setLibraryHash(draft.value.id, body.new_hash);
+    pushToast("Saved to library", { severity: "success" });
+  } catch (err) {
+    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
 function save() {
   if (!draft.value) return;
   const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
@@ -613,6 +670,22 @@ function cancel() {
       @cancel="cancel"
       @reset-from-library="onCombineResetClick"
       @save-to-library="onCombineSaveToLibraryClick"
+      @clear-all-overrides="onClearAllOverrides"
+    />
+
+    <!-- v2 derivation branch — single-pane tailored modal. Library
+         (rule conditions / branches / actions) stays in SPA; modal
+         exposes only display-name override + per-rule disable
+         toggles via instance.disabled_rule_ids. -->
+    <DerivationInstanceModal
+      v-else-if="draft && draft.type === 'derivation'"
+      :module="draft"
+      :is-drifted="isDrifted"
+      @update="onUpdate"
+      @save="save"
+      @cancel="cancel"
+      @reset-from-library="onDerivationResetClick"
+      @save-to-library="onDerivationSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
 

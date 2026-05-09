@@ -92,15 +92,15 @@ describe("ModuleEditModal — shell header", () => {
   beforeEach(() => _resetForTests());
 
   it("shows read-only name for non-fixed_values v1 kind", async () => {
-    // Wildcard + fixed_values + combine all go through v2 single-pane
-    // modals. Derivation still uses v1 .wp-medit shell.
+    // Wildcard + fixed_values + combine + derivation all go through v2
+    // single-pane modals. Constraint is the last v1 .wp-medit shell.
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     expect(wrapper.find(".wp-medit__name-readonly").exists()).toBe(true);
-    expect(wrapper.find(".wp-medit__name-readonly").text()).toContain("Mood");
+    expect(wrapper.find(".wp-medit__name-readonly").text()).toContain("Hair");
     expect(wrapper.find(".wp-medit__name-input").exists()).toBe(false);
   });
 
@@ -118,13 +118,13 @@ describe("ModuleEditModal — shell header", () => {
   it("shows kind label as a kind-chip in the header (non-fixed_values)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
-    // V3 replaced the `· derivation` plain text with `.wp-kind-chip`.
+    // V3 replaced the `· constraint` plain text with `.wp-kind-chip`.
     const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
     expect(chip.exists()).toBe(true);
-    expect(chip.text()).toContain("derivation");
+    expect(chip.text()).toContain("constraint");
   });
 
   it("renders nothing when module is null", async () => {
@@ -139,7 +139,7 @@ describe("ModuleEditModal — shell header", () => {
   it("renders nothing when not visible", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: false, module: makeDerivation() },
+      props: { visible: false, module: makeConstraint() },
     });
     await nextTick();
     expect(wrapper.find(".wp-medit").exists()).toBe(false);
@@ -173,13 +173,18 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
     expect(wrapper.find(".wp-medit").exists()).toBe(false);
   });
 
-  it("derivation → shows DerivationEditorBody (add-rule button rendered)", async () => {
+  // derivation → DerivationInstanceModal (v2 single-pane) — see
+  // src/components/context/editors/derivation/DerivationInstanceModal.test.ts.
+  // Removed from the v1 dispatcher set.
+
+  it("derivation → routes to v2 DerivationInstanceModal (no v1 .wp-medit shell)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeDerivation() },
     });
     await nextTick();
-    expect(wrapper.find("[data-test='dv-add-rule']").exists()).toBe(true);
+    expect(wrapper.find(".dvm").exists()).toBe(true);
+    expect(wrapper.find(".wp-medit").exists()).toBe(false);
   });
 
   it("constraint → shows ConstraintEditorBody (add-exception button rendered)", async () => {
@@ -198,7 +203,7 @@ describe("ModuleEditModal — footer / save / cancel", () => {
   it("Cancel emits close (v1 kind)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     await wrapper.find(".wp-medit__btn:not(.wp-medit__btn--primary)").trigger("click");
@@ -206,7 +211,7 @@ describe("ModuleEditModal — footer / save / cancel", () => {
   });
 
   it("Save emits save with the draft module (v1 kind)", async () => {
-    const mod = makeDerivation();
+    const mod = makeConstraint();
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: mod },
@@ -215,14 +220,14 @@ describe("ModuleEditModal — footer / save / cancel", () => {
     await wrapper.find(".wp-medit__btn--primary").trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     expect(saved).toBeDefined();
-    expect(saved.id).toBe("22222222");
-    expect(saved.type).toBe("derivation");
+    expect(saved.id).toBe("cccccccc");
+    expect(saved.type).toBe("constraint");
   });
 
   it("Ctrl+Enter triggers save (v1 kind)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     const ev = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true });
@@ -277,122 +282,14 @@ describe("ModuleEditModal — footer / save / cancel", () => {
 //   src/components/context/editors/combine/sections/RuntimeSection.test.ts
 //   src/components/context/editors/combine/CombineInstanceModal.test.ts
 
-describe("ModuleEditModal — derivation editor body", () => {
-  beforeEach(() => _resetForTests());
-
-  it("Add rule appends to payload.rules on save", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
-    });
-    await nextTick();
-    // starts with 0 rules; click Add rule
-    await wrapper.find("[data-test='dv-add-rule']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const rules = (saved.payload as { rules?: unknown[] } | undefined)?.rules ?? [];
-    expect(rules.length).toBe(1);
-  });
-
-  it("IF branch When-var input emits patchPayload with updated branches[0].condition.var", async () => {
-    const mod: ModuleEntry = {
-      id: "22222222", type: "derivation", enabled: true,
-      meta: { name: "Mood" }, entries: [],
-      payload: {
-        rules: [
-          {
-            id: "r1",
-            branches: [{ condition: { var: "", op: "equals", value: "" }, action: { target_var: "", mode: "replace", value: "" } }],
-          },
-        ],
-      },
-      payload_hash: "h",
-    };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod },
-    });
-    await nextTick();
-    // The condition.var input is aria-label "Condition variable for rule 1 branch 1"
-    const varInput = wrapper.find("[aria-label='Condition variable for rule 1 branch 1']");
-    expect(varInput.exists()).toBe(true);
-    (varInput.element as HTMLInputElement).value = "$mood";
-    await varInput.trigger("input");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const rules = (saved.payload as { rules: Array<{ branches: Array<{ condition: { var: string } }> }> }).rules;
-    expect(rules[0].branches[0].condition.var).toBe("$mood");
-  });
-
-  it("Add ELIF appends a second branch with default fields", async () => {
-    const mod: ModuleEntry = {
-      id: "22222222", type: "derivation", enabled: true,
-      meta: { name: "Mood" }, entries: [],
-      payload: {
-        rules: [
-          {
-            id: "r1",
-            branches: [{ condition: { var: "", op: "equals", value: "" }, action: { target_var: "", mode: "replace", value: "" } }],
-          },
-        ],
-      },
-      payload_hash: "h",
-    };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod },
-    });
-    await nextTick();
-    await wrapper.find("[data-test='dv-add-elif-0']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const rules = (saved.payload as { rules: Array<{ branches: unknown[] }> }).rules;
-    // Rule 0 now has 2 branches: IF + ELIF
-    expect(rules[0].branches.length).toBe(2);
-  });
-
-  it("Add ELSE toggles rule.else; Remove ELSE drops it", async () => {
-    const mod: ModuleEntry = {
-      id: "22222222", type: "derivation", enabled: true,
-      meta: { name: "Mood" }, entries: [],
-      payload: {
-        rules: [
-          {
-            id: "r1",
-            branches: [{ condition: { var: "", op: "equals", value: "" }, action: { target_var: "", mode: "replace", value: "" } }],
-          },
-        ],
-      },
-      payload_hash: "h",
-    };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod },
-    });
-    await nextTick();
-    // Add ELSE
-    await wrapper.find("[data-test='dv-add-else-0']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved1 = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const rules1 = (saved1.payload as { rules: Array<{ else?: unknown }> }).rules;
-    expect(rules1[0].else).toBeDefined();
-
-    // Remove ELSE
-    await wrapper.find("[data-test='dv-remove-else-0']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved2 = wrapper.emitted("save")?.[1][0] as ModuleEntry;
-    const rules2 = (saved2.payload as { rules: Array<{ else?: unknown }> }).rules;
-    expect(rules2[0].else).toBeUndefined();
-  });
-
-  it.todo("removing a rule reduces payload.rules.length by 1 — see Task 18");
-  it.todo("collapsing a rule hides its branches — see Task 18");
-});
+// ─ "ModuleEditModal — derivation editor body" describe block removed.
+// Derivation migrated to v2 single-pane modal in 2026-05-09 cycle. New
+// per-section coverage lives in:
+//   src/components/context/editors/derivation/sections/IdentitySection.test.ts
+//   src/components/context/editors/derivation/sections/RulesSection.test.ts
+//   src/components/context/editors/derivation/DerivationInstanceModal.test.ts
+// Library-level rule editing (add/remove rule, IF branches, ELIF, ELSE)
+// stays in SPA — modal exposes only per-rule disable toggle now.
 
 describe("ModuleEditModal — constraint editor body", () => {
   beforeEach(() => _resetForTests());
@@ -622,34 +519,17 @@ describe("ModuleEditModal — V2 two-line header", () => {
   beforeEach(() => _resetForTests());
 
   it("renders the .wp-medit__sub subtitle line for v1 kind", async () => {
+    // Constraint is the only remaining v1 kind after the 2026-05-09
+    // derivation migration. Pipeline has no instance fields and skips
+    // the modal shell entirely.
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     const sub = wrapper.find(".wp-medit__sub");
     expect(sub.exists()).toBe(true);
     expect(sub.text().length).toBeGreaterThan(0);
-  });
-
-  it("subtitle text varies per kind (derivation ≠ constraint)", async () => {
-    const dv = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
-    });
-    await nextTick();
-    const dvSub = dv.find(".wp-medit__sub").text();
-
-    const cn = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    const cnSub = cn.find(".wp-medit__sub").text();
-
-    expect(dvSub).not.toBe("");
-    expect(cnSub).not.toBe("");
-    expect(dvSub).not.toBe(cnSub);
   });
 });
 
@@ -659,22 +539,22 @@ describe("ModuleEditModal — V3 kind chip in header", () => {
   it("renders .wp-kind-chip in header for v1 kind", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
     expect(chip.exists()).toBe(true);
-    expect(chip.text()).toBe("derivation");
+    expect(chip.text()).toBe("constraint");
   });
 
   it("kind chip carries its kind-color modifier class", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
-    expect(chip.classes()).toContain("wp-kind-chip--derivation");
+    expect(chip.classes()).toContain("wp-kind-chip--constraint");
   });
 
   it("v2 fixed_values modal renders its own kind chip via FixedValuesInstanceModal", async () => {
@@ -699,7 +579,7 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
   it("renders tab strip with both tabs for v1 kinds where INSTANCE_TAB_VISIBLE is true", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
@@ -713,7 +593,7 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
       payload: {},
     };
     const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m },
+      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
@@ -722,34 +602,34 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
   it("smart default: opens Library tab when instance has no overrides", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: { ...makeDerivation(), instance: {} } },
+      props: { visible: true, module: { ...makeConstraint(), instance: {} }, siblingModules: [] },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-library"]').attributes("aria-selected")).toBe("true");
   });
 
   it("smart default: opens Instance tab when any registry field is non-null", async () => {
-    const m = { ...makeDerivation(), instance: { disabled_rule_ids: ["r1"] } };
+    const m = { ...makeConstraint(), instance: { disabled_exception_keys: ["e1"] } };
     const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m },
+      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-instance"]').attributes("aria-selected")).toBe("true");
   });
 
   it("orange dot appears on Instance tab when modified-state is true", async () => {
-    const m = { ...makeDerivation(), instance: { disabled_rule_ids: ["r1"] } };
+    const m = { ...makeConstraint(), instance: { disabled_exception_keys: ["e1"] } };
     const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m },
+      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-instance-dot"]').exists()).toBe(true);
   });
 
   it("modified-state ignores _ui namespace", async () => {
-    const m = { ...makeDerivation(), instance: { _ui: { last_locked_seed: 42 } } };
+    const m = { ...makeConstraint(), instance: { _ui: { last_locked_seed: 42 } } };
     const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m },
+      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
     });
     await nextTick();
     expect(wrapper.find('[data-test="tab-instance-dot"]').exists()).toBe(false);
@@ -758,7 +638,7 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
   it("Clear all overrides footer button exists on Instance tab", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: { ...makeDerivation(), instance: { disabled_rule_ids: ["r1"] } } },
+      props: { visible: true, module: { ...makeConstraint(), instance: { disabled_exception_keys: ["e1"] } }, siblingModules: [] },
     });
     await nextTick();
     // Instance tab is the smart default for this module
@@ -767,11 +647,11 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
 
   it("Clear all sets all registry fields to null on confirm", async () => {
     const m = {
-      ...makeDerivation(),
-      instance: { disabled_rule_ids: ["r1"] },
+      ...makeConstraint(),
+      instance: { disabled_exception_keys: ["e1"] },
     };
     const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m },
+      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
     });
     await nextTick();
     // Click the Clear-all button → ConfirmDialog opens (themed,
@@ -786,16 +666,16 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
     await nextTick();
     await wrapper.find(".wp-medit__btn--primary").trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(saved.instance?.disabled_rule_ids).toBeNull();
+    expect(saved.instance?.disabled_exception_keys).toBeNull();
   });
 
   it("Clear all does NOT clear when user cancels the confirm dialog", async () => {
     const m = {
-      ...makeDerivation(),
-      instance: { disabled_rule_ids: ["r1"] },
+      ...makeConstraint(),
+      instance: { disabled_exception_keys: ["e1"] },
     };
     const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m },
+      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
     });
     await nextTick();
     await wrapper.find('[data-test="clear-all-overrides"]').trigger("click");
@@ -805,7 +685,7 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
     await wrapper.find(".wp-medit__btn--primary").trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     // Cancelled → original override survives
-    expect(saved.instance?.disabled_rule_ids).toEqual(["r1"]);
+    expect(saved.instance?.disabled_exception_keys).toEqual(["e1"]);
   });
 });
 
@@ -825,17 +705,18 @@ describe("ModuleEditModal — wildcard v2 dispatcher", () => {
     expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
   });
 
-  it("renders v1 tab strip for kinds still on v1 (derivation, constraint)", async () => {
-    // Combine moved to v2 single-pane in 2026-05-08 cycle. Derivation
-    // + constraint still use the v1 tabbed shell until their migrations.
+  it("renders v1 tab strip for kinds still on v1 (constraint)", async () => {
+    // Derivation moved to v2 single-pane in 2026-05-09 cycle.
+    // Constraint is the last v1 kind.
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
-      props: { visible: true, module: makeDerivation() },
+      props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
     expect(wrapper.findComponent({ name: "WildcardInstanceModal" }).exists()).toBe(false);
     expect(wrapper.findComponent({ name: "FixedValuesInstanceModal" }).exists()).toBe(false);
     expect(wrapper.findComponent({ name: "CombineInstanceModal" }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: "DerivationInstanceModal" }).exists()).toBe(false);
     expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
   });
 
@@ -955,6 +836,37 @@ describe("ModuleEditModal — combine v2 dispatcher", () => {
     await wrapper.find('[data-test="cbm-save"]').trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     expect(saved.instance?.template_override).toBe("Hello $world");
+  });
+});
+
+// ── Derivation v2 dispatcher branch ────────────────────────────────────
+
+describe("ModuleEditModal — derivation v2 dispatcher", () => {
+  beforeEach(() => _resetForTests());
+
+  it("renders DerivationInstanceModal (no tab strip) for derivation kind", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeDerivation() },
+    });
+    await nextTick();
+    expect(wrapper.findComponent({ name: "DerivationInstanceModal" }).exists()).toBe(true);
+    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
+  });
+
+  it("forwards DerivationInstanceModal update event into draft mutation", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeDerivation() },
+    });
+    await nextTick();
+    const dvm = wrapper.findComponent({ name: "DerivationInstanceModal" });
+    dvm.vm.$emit("update", { instance: { disabled_rule_ids: ["r1"] } });
+    await nextTick();
+    await wrapper.find('[data-test="dvm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.disabled_rule_ids).toEqual(["r1"]);
   });
 });
 
