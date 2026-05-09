@@ -17,17 +17,15 @@ import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
-import { toIdentifier } from "../utils/slug";
 import { buildUuidToName } from "../utils/wildcardSyntax";
+import { collectLibraryVarHints } from "../utils/library-suggestions";
 import type {
-  CombinePayload,
   DerivationAction,
   DerivationBranch,
   DerivationElse,
   DerivationPayload,
   DerivationRule,
   ModuleHistoryEntry,
-  WildcardPayload,
 } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
@@ -45,35 +43,15 @@ const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
-// Suggestions for `$`-trigger autocomplete inside derivation action values
-// and condition values. Mirror the CombineEditor aggregation: wildcards
-// surface their `var_binding` (or name-derived identifier), fixed_values
-// surface each row's name, and combines surface their `output_var`. We
-// exclude the module currently being edited so the suggestion list reflects
-// only what is reachable upstream of this derivation.
-const varSuggestions = computed<string[]>(() => {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const m of moduleStore.items) {
-    if (props.id && m.id === props.id) continue;
-    if (m.type === "wildcard") {
-      const p = (m.payload ?? {}) as Partial<WildcardPayload>;
-      const b = (p.var_binding && p.var_binding.trim()) || toIdentifier(m.name);
-      if (b && !seen.has(b)) { seen.add(b); out.push(b); }
-    } else if (m.type === "fixed_values") {
-      const values = ((m.payload ?? {}) as { values?: { name?: string }[] }).values ?? [];
-      for (const row of values) {
-        const n = (row.name ?? "").replace(/^\$+/, "").trim();
-        if (n && !seen.has(n)) { seen.add(n); out.push(n); }
-      }
-    } else if (m.type === "combine") {
-      const p = (m.payload ?? {}) as Partial<CombinePayload>;
-      const o = (p.output_var ?? "").replace(/^\$+/, "").trim();
-      if (o && !seen.has(o)) { seen.add(o); out.push(o); }
-    }
-  }
-  return out.sort();
-});
+// Library var hints for the `$`-trigger autocomplete dropdown — pulls
+// from every wildcard / fixed_values / combine in the catalog except
+// the rule's own derivation. Extracted to `utils/library-suggestions.ts`
+// (2026-05-09 cycle) so combine + derivation + wildcard editors share
+// one walker. RichTextInput expects a string array, so we drop the
+// kind-tag here.
+const varSuggestions = computed<string[]>(
+  () => collectLibraryVarHints(moduleStore, props.id).map((h) => h.label),
+);
 
 // 8-hex UUID → wildcard var-name. Forwarded into every nested
 // DerivationRuleCard so stray `@{uuid}` tokens (pasted, copied from a

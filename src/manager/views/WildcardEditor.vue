@@ -24,6 +24,7 @@ import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
+import { collectLibraryWildcardRefs } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   CombinePayload,
@@ -60,21 +61,12 @@ const historyEntries = ref<ModuleHistoryEntry[]>([]);
 // popover surfaces the human display name (via `nameByUuid`) but
 // the inserted token is the bare 8-hex id. The id IS the uuid, so
 // no extraction step is needed.
-const wcSuggestions = computed<string[]>(() => {
-  const out: string[] = [];
-  for (const m of moduleStore.items) {
-    if (m.type !== "wildcard") continue;
-    if (props.id && m.id === props.id) continue;
-    out.push(m.id);
-  }
-  // Sort by display name so the popover orders alphabetically by what
-  // the user actually sees, not by UUID hex.
-  return out.sort((a, b) => {
-    const na = nameByUuid.value.get(a) ?? a;
-    const nb = nameByUuid.value.get(b) ?? b;
-    return na.localeCompare(nb);
-  });
-});
+//
+// Walker extracted to `utils/library-suggestions.ts` (2026-05-09 cycle)
+// so derivation editor + future SPA views inherit the same picker.
+const wcSuggestions = computed<string[]>(
+  () => collectLibraryWildcardRefs(moduleStore, props.id, nameByUuid.value),
+);
 
 // UUID → display-name map used by RichTextInput to render `@{uuid}`
 // chips and the `@`-trigger autocomplete popover with human labels.

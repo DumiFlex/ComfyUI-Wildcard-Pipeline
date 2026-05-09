@@ -23,11 +23,11 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 import { buildUuidToName } from "../utils/wildcardSyntax";
+import { collectLibraryVarHints, type VarHint } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   CombinePayload,
   ModuleHistoryEntry,
-  WildcardPayload,
 } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
@@ -62,30 +62,13 @@ function onOutputVarInput(value: string) {
   if (outputVarError.value) outputVarError.value = "";
 }
 
-interface VarHint { label: string; kind: "wildcard" | "fixed_values" | "combine" }
-const varHints = computed<VarHint[]>(() => {
-  const seen = new Set<string>();
-  const out: VarHint[] = [];
-  for (const m of moduleStore.items) {
-    if (props.id && m.id === props.id) continue;
-    if (m.type === "wildcard") {
-      const p = (m.payload ?? {}) as Partial<WildcardPayload>;
-      const b = (p.var_binding && p.var_binding.trim()) || toIdentifier(m.name);
-      if (b && !seen.has(b)) { seen.add(b); out.push({ label: b, kind: "wildcard" }); }
-    } else if (m.type === "fixed_values") {
-      const values = ((m.payload ?? {}) as { values?: { name?: string }[] }).values ?? [];
-      for (const row of values) {
-        const n = (row.name ?? "").replace(/^\$+/, "").trim();
-        if (n && !seen.has(n)) { seen.add(n); out.push({ label: n, kind: "fixed_values" }); }
-      }
-    } else if (m.type === "combine") {
-      const p = (m.payload ?? {}) as Partial<CombinePayload>;
-      const o = (p.output_var ?? "").replace(/^\$+/, "").trim();
-      if (o && !seen.has(o)) { seen.add(o); out.push({ label: o, kind: "combine" }); }
-    }
-  }
-  return out.sort((a, b) => a.label.localeCompare(b.label));
-});
+// Library var hints for the `$var` autocomplete dropdown — extracted
+// to `utils/library-suggestions.ts` (2026-05-09 cycle) so combine,
+// derivation, and wildcard editors share one walker. The kind tag on
+// each hint feeds the autocomplete row's color hash.
+const varHints = computed<VarHint[]>(
+  () => collectLibraryVarHints(moduleStore, props.id),
+);
 
 const varSuggestions = computed<string[]>(() => varHints.value.map((h) => h.label));
 // Surfaces `@{uuid}` chips with human var-names in template + preview.
