@@ -7,6 +7,10 @@ export interface SelectOption {
   label: string;
   /** Optional color dot shown before the label (e.g. category color). */
   dot?: string;
+  /** Optional native tooltip surfaced via `title` on the option row.
+   *  Used by derivation op dropdown to explain semantics — e.g.
+   *  "matches" shows "Python regex via re.search". */
+  title?: string;
 }
 
 interface Props {
@@ -230,6 +234,7 @@ function onKeydown(e: KeyboardEvent) {
           :aria-selected="opt.value === modelValue"
           :data-active="i === active ? 'true' : 'false'"
           :data-selected="opt.value === modelValue ? 'true' : 'false'"
+          :title="opt.title"
           @mousedown.prevent="pick(opt)"
           @mouseenter="active = i"
           @focusin="active = i"

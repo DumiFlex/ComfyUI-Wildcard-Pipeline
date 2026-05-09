@@ -32,7 +32,20 @@ export interface CombinePayload {
   input_vars: string[];
 }
 
-export type DerivationOp = "equals" | "not_equals" | "contains" | "matches";
+/** Derivation condition operators. The presence-check pair
+ *  (`exists`/`not_exists`/`is_set`/`is_unset`) was added in the
+ *  2026-05-09 cycle — `exists`/`not_exists` check key presence in
+ *  ctx, `is_set`/`is_unset` additionally require non-empty value.
+ *  Mirrors `engine/modules/derivation_handler.py:_VALID_OPS`. */
+export type DerivationOp =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "matches"
+  | "exists"
+  | "not_exists"
+  | "is_set"
+  | "is_unset";
 export type DerivationMode = "replace" | "append" | "prepend";
 
 export interface DerivationCondition {

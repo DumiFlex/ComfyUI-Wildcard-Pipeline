@@ -2,7 +2,6 @@
 import { computed, ref } from "vue";
 import Card from "./ui/Card.vue";
 import Button from "./ui/Button.vue";
-import Input from "./ui/Input.vue";
 import Select from "./ui/Select.vue";
 import Chip from "./ui/Chip.vue";
 import RichTextInput from "./RichTextInput.vue";
@@ -14,6 +13,13 @@ import type {
   DerivationOp,
   DerivationRule,
 } from "../api/types";
+import {
+  DERIVATION_OPS,
+  OP_LABELS,
+  OP_TOOLTIPS,
+  OP_PLACEHOLDERS,
+  VALUE_DISABLED_OPS,
+} from "../../components/context/editors/_shared/derivation-ops";
 
 interface Props {
   modelValue: DerivationRule;
@@ -40,18 +46,52 @@ const emit = defineEmits<{
   remove: [];
 }>();
 
-const OP_OPTIONS: Array<{ label: string; value: DerivationOp }> = [
-  { label: "equals", value: "equals" },
-  { label: "not equals", value: "not_equals" },
-  { label: "contains", value: "contains" },
-  { label: "matches (regex)", value: "matches" },
-];
+// Op options pulled from the shared registry so engine `_VALID_OPS` and
+// frontend dropdown stay in lockstep. Extending op list = single edit
+// in `_shared/derivation-ops.ts`.
+const OP_OPTIONS: Array<{ label: string; value: DerivationOp; title: string }> =
+  DERIVATION_OPS.map((op) => ({
+    label: OP_LABELS[op],
+    value: op,
+    title: OP_TOOLTIPS[op],
+  }));
 
 const MODE_OPTIONS: Array<{ label: string; value: DerivationMode }> = [
   { label: "Replace", value: "replace" },
   { label: "Append", value: "append" },
   { label: "Prepend", value: "prepend" },
 ];
+
+/** Whether the condition-value input should be disabled for this op.
+ *  Presence-check ops (`exists`/`not_exists`/`is_set`/`is_unset`) read
+ *  no value — engine ignores `condition.value` for these. UI grays
+ *  the field + sets `disabled` so users see at a glance that no value
+ *  is needed. Payload value persists on toggle so flipping back to
+ *  `equals` restores the user's typed value. */
+function isValueDisabled(op: DerivationOp): boolean {
+  return VALUE_DISABLED_OPS.has(op);
+}
+
+/** Operator-specific placeholder for the condition-value input —
+ *  `30` for equals, `^a.*z$` for matches, "no value needed" for
+ *  presence ops. From the shared registry so the example matches
+ *  the op's tooltip semantics. */
+function placeholderFor(op: DerivationOp): string {
+  return OP_PLACEHOLDERS[op] ?? "value";
+}
+
+/** Single-line hint shown below the action value input, listing the
+ *  inline-syntax tokens the engine resolves on derivation surface
+ *  (`resolve_text(action.value, surface="derivation")`). Keeps the
+ *  copy in one place so wording stays consistent across rule + ELSE
+ *  blocks. `@{uuid}` refs deliberately omitted — derivation surface
+ *  doesn't resolve them per the surface gate matrix. */
+const SUPPORTED_SYNTAX_HINT = "Supports $var · {a|b|c} · $$ · {N$$sep$$...}";
+
+/** Open a regex tester in a new tab when the user clicks the [?]
+ *  affordance next to a `matches`-op condition value. Python flavor
+ *  matches the engine's `re.search` impl. */
+const REGEX_HELP_URL = "https://regex101.com/?flavor=python";
 
 function blankAction(): DerivationAction {
   return { target_var: "", mode: "replace", value: "" };
@@ -210,72 +250,113 @@ const branchCount = computed(() => rule.value.branches.length);
           />
         </div>
 
-        <!-- Condition row -->
-        <div class="row">
-          <span class="row-label">When</span>
-          <div class="row-fields">
-            <Input
-              :model-value="branch.condition.var"
-              placeholder="$variable"
-              class="field-var"
+        <!-- Compact grid (Proposal B, 2026-05-09 cycle):
+             row 1 = WHEN var + op on a single line so the prose
+             reads "When $age equals". Row 2 = condition value below
+             with explicit "value" label. Same for THEN. Halves the
+             vertical space of the prior stacked layout. -->
+        <div class="dvr-grid">
+          <span class="dvr-label">When</span>
+          <div
+            class="dvr-var-wrap"
+            :data-test="`cond-var-wrap-${index}-${bi}`"
+          >
+            <span class="dvr-prefix">$</span>
+            <input
+              type="text"
+              class="dvr-var-input"
+              :value="branch.condition.var"
+              placeholder="variable"
               :aria-label="`Condition variable for rule ${ruleNumber} branch ${bi + 1}`"
-              @update:model-value="(v) => onConditionVar(bi, String(v ?? ''))"
+              :data-test="`cond-var-${index}-${bi}`"
+              @input="onConditionVar(bi, ($event.target as HTMLInputElement).value)"
             />
-            <Select
-              :model-value="branch.condition.op"
-              :options="OP_OPTIONS"
-              class="field-op"
-              :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
-              @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
-            />
-            <!-- RichTextInput so users get $-autocomplete on condition
-                 values (e.g. compare against `$mood` resolved upstream).
-                 surface=derivation gates @{} refs to muted styling — they
-                 don't resolve in derivation conditions per spec §2.7. -->
+          </div>
+          <span class="dvr-label">is</span>
+          <Select
+            :model-value="branch.condition.op"
+            :options="OP_OPTIONS"
+            class="dvr-op"
+            :data-test="`cond-op-${index}-${bi}`"
+            :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
+            @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
+          />
+        </div>
+        <div class="dvr-value-row">
+          <span class="dvr-label">value</span>
+          <div class="dvr-value-cell">
             <RichTextInput
               :model-value="branch.condition.value"
               surface="derivation"
               :var-suggestions="varSuggestions"
               :uuid-to-name="uuidToName"
-              placeholder="value"
-              class="field-value"
+              :placeholder="placeholderFor(branch.condition.op)"
+              :disabled="isValueDisabled(branch.condition.op)"
+              class="dvr-value-input"
+              :class="{ 'dvr-value-input--disabled': isValueDisabled(branch.condition.op) }"
               :aria-label="`Condition value for rule ${ruleNumber} branch ${bi + 1}`"
+              :data-test="`cond-value-${index}-${bi}`"
               @update:model-value="(v) => onConditionValue(bi, v)"
             />
+            <a
+              v-if="branch.condition.op === 'matches'"
+              class="dvr-regex-help"
+              :href="REGEX_HELP_URL"
+              target="_blank"
+              rel="noopener"
+              :data-test="`cond-regex-help-${index}-${bi}`"
+              aria-label="Regex help — opens regex101.com"
+              title="Python regex (re.search) — open regex101.com to test patterns"
+            >
+              <i class="pi pi-question-circle" aria-hidden="true" />
+            </a>
           </div>
         </div>
 
-        <!-- Action row -->
-        <div class="row">
-          <span class="row-label">Then</span>
-          <div class="row-fields">
-            <Input
-              :model-value="branch.action.target_var"
+        <!-- THEN var + mode on row 1, action value below. -->
+        <div class="dvr-grid dvr-grid--then">
+          <span class="dvr-label">Then</span>
+          <div
+            class="dvr-var-wrap"
+            :data-test="`act-var-wrap-${index}-${bi}`"
+          >
+            <span class="dvr-prefix">$</span>
+            <input
+              type="text"
+              class="dvr-var-input dvr-var-input--target"
+              :value="branch.action.target_var"
               placeholder="target_var"
-              class="field-var"
               :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}`"
-              @update:model-value="(v) => onActionTarget(bi, String(v ?? ''))"
-            />
-            <Select
-              :model-value="branch.action.mode"
-              :options="MODE_OPTIONS"
-              class="field-op"
-              :aria-label="`Action mode for rule ${ruleNumber} branch ${bi + 1}`"
-              @update:model-value="(v) => onActionMode(bi, v as DerivationMode)"
+              :data-test="`act-target-${index}-${bi}`"
+              @input="onActionTarget(bi, ($event.target as HTMLInputElement).value)"
             />
           </div>
+          <span class="dvr-label">action</span>
+          <Select
+            :model-value="branch.action.mode"
+            :options="MODE_OPTIONS"
+            class="dvr-op"
+            :data-test="`act-mode-${index}-${bi}`"
+            :aria-label="`Action mode for rule ${ruleNumber} branch ${bi + 1}`"
+            @update:model-value="(v) => onActionMode(bi, v as DerivationMode)"
+          />
         </div>
-        <div class="row">
-          <span class="row-label">Value</span>
+        <div class="dvr-value-row">
+          <span class="dvr-label">value</span>
           <RichTextInput
             :model-value="branch.action.value"
             surface="derivation"
             :var-suggestions="varSuggestions"
-            class="field-value-full"
+            :uuid-to-name="uuidToName"
+            class="dvr-value-input"
             placeholder="The new / appended / prepended value"
             :aria-label="`Action value for rule ${ruleNumber} branch ${bi + 1}`"
+            :data-test="`act-value-${index}-${bi}`"
             @update:model-value="(v) => onActionValue(bi, v)"
           />
+        </div>
+        <div class="dvr-hint" :data-test="`act-hint-${index}-${bi}`">
+          {{ SUPPORTED_SYNTAX_HINT }}
         </div>
       </div>
 
@@ -293,36 +374,46 @@ const branchCount = computed(() => rule.value.branches.length);
             @click="removeElse"
           />
         </div>
-        <div class="row">
-          <span class="row-label">Then</span>
-          <div class="row-fields">
-            <Input
-              :model-value="rule.else.action.target_var"
+        <div class="dvr-grid dvr-grid--then">
+          <span class="dvr-label">Then</span>
+          <div class="dvr-var-wrap" :data-test="`else-var-wrap-${index}`">
+            <span class="dvr-prefix">$</span>
+            <input
+              type="text"
+              class="dvr-var-input dvr-var-input--target"
+              :value="rule.else.action.target_var"
               placeholder="target_var"
-              class="field-var"
               :aria-label="`ELSE action target variable for rule ${ruleNumber}`"
-              @update:model-value="(v) => onElseTarget(String(v ?? ''))"
-            />
-            <Select
-              :model-value="rule.else.action.mode"
-              :options="MODE_OPTIONS"
-              class="field-op"
-              :aria-label="`ELSE action mode for rule ${ruleNumber}`"
-              @update:model-value="(v) => onElseMode(v as DerivationMode)"
+              :data-test="`else-target-${index}`"
+              @input="onElseTarget(($event.target as HTMLInputElement).value)"
             />
           </div>
+          <span class="dvr-label">action</span>
+          <Select
+            :model-value="rule.else.action.mode"
+            :options="MODE_OPTIONS"
+            class="dvr-op"
+            :data-test="`else-mode-${index}`"
+            :aria-label="`ELSE action mode for rule ${ruleNumber}`"
+            @update:model-value="(v) => onElseMode(v as DerivationMode)"
+          />
         </div>
-        <div class="row">
-          <span class="row-label">Value</span>
+        <div class="dvr-value-row">
+          <span class="dvr-label">value</span>
           <RichTextInput
             :model-value="rule.else.action.value"
             surface="derivation"
             :var-suggestions="varSuggestions"
-            class="field-value-full"
+            :uuid-to-name="uuidToName"
+            class="dvr-value-input"
             placeholder="The new / appended / prepended value"
             :aria-label="`ELSE action value for rule ${ruleNumber}`"
+            :data-test="`else-value-${index}`"
             @update:model-value="(v) => onElseValue(v)"
           />
+        </div>
+        <div class="dvr-hint" :data-test="`else-hint-${index}`">
+          {{ SUPPORTED_SYNTAX_HINT }}
         </div>
       </div>
     </div>
@@ -432,30 +523,129 @@ const branchCount = computed(() => rule.value.branches.length);
   color: var(--wp-warn, #f59e0b);
 }
 
-.row {
+/* Compact grid layout (Proposal B, 2026-05-09 cycle).
+ *
+ * Row 1 puts the var input and operator on a single row so the prose
+ * reads naturally: "When $age equals". Row 2 places the comparison
+ * value below with an explicit "value" label — previously the
+ * condition value had no label, leaving users guessing what the
+ * field meant. Same shape repeats for THEN target + action.
+ *
+ * Grid columns:
+ *   - 60px: row label ("When" / "Then" / "value")
+ *   - 1fr:  var-input wrap (or value input on row 2)
+ *   - 60px: in-line connective label ("is" / "action")
+ *   - 1fr:  op / mode select
+ */
+.dvr-grid {
   display: grid;
-  grid-template-columns: 56px 1fr;
-  gap: 8px;
-  align-items: start;
+  grid-template-columns: 60px 1fr 60px 1fr;
+  gap: 6px 8px;
+  align-items: center;
+  margin-bottom: 4px;
 }
-.row-label {
-  font-size: 11px;
-  color: var(--wp-text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 500;
-  padding-top: 6px;
+.dvr-grid--then {
+  margin-top: 10px;
 }
-.row-fields {
-  display: flex;
-  flex-wrap: wrap;
+.dvr-value-row {
+  display: grid;
+  grid-template-columns: 60px 1fr;
   gap: 8px;
   align-items: center;
+  margin-bottom: 4px;
 }
-.field-var { min-width: 160px; flex: 1 1 160px; }
-.field-op { min-width: 150px; }
-.field-value { flex: 1 1 200px; min-width: 200px; }
-.field-value-full { width: 100%; }
+.dvr-label {
+  font-size: 10px;
+  color: var(--wp-text-muted, #9ca3af);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  text-align: right;
+}
+/* `$` prefix wrapper — matches the fixed_values + identity-section idiom
+ * (see src/components/context/editors/wildcard/sections/IdentitySection.vue).
+ * The prefix sits in its own column with a divider; focus shifts the
+ * whole wrap's border to `--wp-accent`. */
+.dvr-var-wrap {
+  display: flex;
+  align-items: stretch;
+  background: var(--wp-bg-2, #161616);
+  border: 1px solid var(--wp-border, #3a3a3a);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.dvr-var-wrap:focus-within {
+  border-color: var(--wp-accent, #6366f1);
+}
+.dvr-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  background: var(--wp-bg-3, #2a2a2a);
+  color: var(--wp-text-muted, #9ca3af);
+  border-right: 1px solid var(--wp-border, #3a3a3a);
+  font: 11px var(--wp-font-mono, ui-monospace, monospace);
+}
+.dvr-var-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 6px 10px;
+  color: var(--wp-kind-derivation, #fbbf24);
+  font: 600 11px var(--wp-font-mono, ui-monospace, monospace);
+  min-width: 0;
+}
+.dvr-var-input:focus {
+  outline: none;
+}
+.dvr-var-input--target {
+  /* Target var color = green so condition (amber) and action (green)
+   * read distinctly even when both are mono-styled. */
+  color: var(--wp-success, #34d399);
+}
+.dvr-op {
+  /* Select dropdown trigger — let the existing Select styling handle
+   * the visual; just ensure it stretches into its grid column. */
+  min-width: 0;
+}
+.dvr-value-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dvr-value-input {
+  flex: 1;
+  min-width: 0;
+}
+.dvr-value-input--disabled {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+  pointer-events: none;
+}
+.dvr-regex-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--wp-text-muted, #9ca3af);
+  background: var(--wp-bg-3, #2a2a2a);
+  border: 1px solid var(--wp-border, #3a3a3a);
+  text-decoration: none;
+}
+.dvr-regex-help:hover {
+  color: var(--wp-accent, #6366f1);
+  border-color: color-mix(in oklab, var(--wp-accent, #6366f1) 40%, transparent);
+}
+.dvr-regex-help .pi { font-size: 11px; }
+.dvr-hint {
+  margin-top: 3px;
+  margin-left: 68px; /* align under the value input column */
+  font: 10px var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-muted, #9ca3af);
+  font-style: italic;
+}
 
 .addbar {
   display: flex;
