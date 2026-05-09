@@ -143,19 +143,19 @@ describe("DerivationRuleCard.vue", () => {
     expect(prefixes[0].text()).toBe("$");
   });
 
-  it("op dropdown lists all 8 ops including the 4 presence-check ops", () => {
+  it("op dropdown lists 6 visible ops (is_set/is_unset surfaced via tick mark)", () => {
+    // 2026-05-10 UX shift: dropdown only shows 4 compare ops + the 2
+    // presence-base ops. `is_set`/`is_unset` are hidden — the user
+    // surfaces them via a "must have value" tick checkbox shown next
+    // to `exists`/`not_exists`. Engine still accepts all 8 ops.
     const wrap = mountCard(makeRule(), 0);
-    const trigger = wrap.find('[data-test="cond-op-0-0"]');
-    // The trigger renders the current label (equals) — open the menu and
-    // count options. Select uses Teleport so options end up on body;
-    // checking the inline option list isn't possible without unmounting
-    // teleport. Instead inspect the underlying <Select>'s options prop.
-    const selectComp = trigger.findComponent({ name: "Select" });
+    const selectComp = wrap.find('[data-test="cond-op-0-0"]')
+      .findComponent({ name: "Select" });
     const opts = selectComp.props("options") as Array<{ value: string }>;
     const values = opts.map((o) => o.value);
     expect(values).toEqual([
       "equals", "not_equals", "contains", "matches",
-      "exists", "not_exists", "is_set", "is_unset",
+      "exists", "not_exists",
     ]);
   });
 
@@ -226,5 +226,114 @@ describe("DerivationRuleCard.vue", () => {
     expect(hint.exists()).toBe(true);
     expect(hint.text()).toContain("$var");
     expect(hint.text()).toContain("{a|b|c}");
+  });
+
+  // ── 2026-05-10 follow-up: tick mark replaces is_set/is_unset ops ──
+
+  it("'must have value' tick is hidden for compare ops", () => {
+    const wrap = mountCard(makeRule(), 0);  // op = "equals"
+    expect(wrap.find('[data-test="cond-must-have-value-0-0"]').exists()).toBe(false);
+  });
+
+  it("'must have value' tick renders for exists op (unchecked)", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "exists", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    const tick = wrap.find<HTMLInputElement>(
+      '[data-test="cond-must-have-value-input-0-0"]',
+    );
+    expect(tick.exists()).toBe(true);
+    expect(tick.element.checked).toBe(false);
+  });
+
+  it("'must have value' tick is checked when saved op is is_set", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "is_set", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    const tick = wrap.find<HTMLInputElement>(
+      '[data-test="cond-must-have-value-input-0-0"]',
+    );
+    expect(tick.element.checked).toBe(true);
+  });
+
+  it("dropdown displays 'exists' (not 'is_set') when saved op is is_set", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "is_set", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    // Select gets the displayed op — `is_set` collapses to `exists`.
+    const selectComp = wrap.find('[data-test="cond-op-0-0"]')
+      .findComponent({ name: "Select" });
+    expect(selectComp.props("modelValue")).toBe("exists");
+  });
+
+  it("toggling tick on (op=exists) emits op=is_set", async () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "exists", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    await wrap.find('[data-test="cond-must-have-value-input-0-0"]').trigger("change");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events.length).toBe(1);
+    const next = events[0][0] as DerivationRule;
+    expect(next.branches[0].condition.op).toBe("is_set");
+  });
+
+  it("toggling tick off (op=is_unset) emits op=not_exists", async () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "is_unset", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    await wrap.find('[data-test="cond-must-have-value-input-0-0"]').trigger("change");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events.length).toBe(1);
+    const next = events[0][0] as DerivationRule;
+    expect(next.branches[0].condition.op).toBe("not_exists");
+  });
+
+  // ── 2026-05-10 follow-up: datalist autocomplete on var inputs ───
+
+  it("WHEN var input has list= attribute pointing at the rule's datalist", () => {
+    const wrap = mountCard(makeRule(), 7);
+    const varInput = wrap.find('[data-test="cond-var-7-0"]');
+    expect(varInput.attributes("list")).toBe("dvr-vars-7");
+  });
+
+  it("THEN target_var input has list= attribute pointing at the rule's datalist", () => {
+    const wrap = mountCard(makeRule(), 7);
+    const targetInput = wrap.find('[data-test="act-target-7-0"]');
+    expect(targetInput.attributes("list")).toBe("dvr-vars-7");
+  });
+
+  it("datalist renders one option per varSuggestion entry", () => {
+    const wrap = mount(DerivationRuleCard, {
+      props: {
+        modelValue: makeRule(),
+        index: 0,
+        varSuggestions: ["age", "color", "mood"],
+      },
+    });
+    const datalist = wrap.find("datalist");
+    expect(datalist.attributes("id")).toBe("dvr-vars-0");
+    const opts = datalist.findAll("option");
+    expect(opts).toHaveLength(3);
+    expect(opts.map((o) => o.attributes("value"))).toEqual(["age", "color", "mood"]);
   });
 });

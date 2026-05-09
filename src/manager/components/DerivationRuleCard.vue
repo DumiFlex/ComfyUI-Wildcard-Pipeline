@@ -46,15 +46,61 @@ const emit = defineEmits<{
   remove: [];
 }>();
 
-// Op options pulled from the shared registry so engine `_VALID_OPS` and
-// frontend dropdown stay in lockstep. Extending op list = single edit
-// in `_shared/derivation-ops.ts`.
+// Op dropdown lists 6 ops — the 4 compare ops plus the two presence-
+// base ops. `is_set`/`is_unset` are intentionally hidden from the
+// dropdown: they're surfaced via the "must have value" tick box next
+// to `exists`/`not_exists` instead. Engine still accepts all 8 ops;
+// the UI just remaps presence + tick → `is_set` / `is_unset` on save
+// (and reverse-maps on load via `displayedOp` below). User feedback
+// on 2026-05-10: "is set" reads as redundant when "exists" + tick
+// captures the same intent more cleanly.
+const VISIBLE_OPS = DERIVATION_OPS.filter(
+  (op) => op !== "is_set" && op !== "is_unset",
+);
 const OP_OPTIONS: Array<{ label: string; value: DerivationOp; title: string }> =
-  DERIVATION_OPS.map((op) => ({
+  VISIBLE_OPS.map((op) => ({
     label: OP_LABELS[op],
     value: op,
     title: OP_TOOLTIPS[op],
   }));
+
+/** UI-displayed base op for the dropdown: collapses `is_set` →
+ *  `exists`, `is_unset` → `not_exists` so the dropdown only ever
+ *  shows the 6 visible ops. The "must have value" tick state is
+ *  derived from the saved op (see `requiresValue`). */
+function displayedOp(op: DerivationOp): DerivationOp {
+  if (op === "is_set") return "exists";
+  if (op === "is_unset") return "not_exists";
+  return op;
+}
+
+/** Whether the saved op is the "must have value" variant of a
+ *  presence-base op. Drives the tick checkbox state. */
+function requiresValue(op: DerivationOp): boolean {
+  return op === "is_set" || op === "is_unset";
+}
+
+/** Toggle the "must have value" tick — maps the displayed base op
+ *  to its strict-value counterpart and back:
+ *    exists       ↔ is_set
+ *    not_exists   ↔ is_unset
+ *  Engine sees the new op directly, so payload reflects intent. */
+function toggleRequiresValue(currentOp: DerivationOp): DerivationOp {
+  switch (currentOp) {
+    case "exists": return "is_set";
+    case "is_set": return "exists";
+    case "not_exists": return "is_unset";
+    case "is_unset": return "not_exists";
+    default: return currentOp; // Non-presence ops can't have the tick
+  }
+}
+
+/** Whether the displayed base op is a presence-check (and thus the
+ *  tick checkbox should render). Compare ops never get the tick. */
+function isPresenceOp(op: DerivationOp): boolean {
+  const base = displayedOp(op);
+  return base === "exists" || base === "not_exists";
+}
 
 const MODE_OPTIONS: Array<{ label: string; value: DerivationMode }> = [
   { label: "Replace", value: "replace" },
@@ -267,20 +313,39 @@ const branchCount = computed(() => rule.value.branches.length);
               class="dvr-var-input"
               :value="branch.condition.var"
               placeholder="variable"
+              :list="`dvr-vars-${index}`"
               :aria-label="`Condition variable for rule ${ruleNumber} branch ${bi + 1}`"
               :data-test="`cond-var-${index}-${bi}`"
               @input="onConditionVar(bi, ($event.target as HTMLInputElement).value)"
             />
           </div>
           <span class="dvr-label">is</span>
-          <Select
-            :model-value="branch.condition.op"
-            :options="OP_OPTIONS"
-            class="dvr-op"
-            :data-test="`cond-op-${index}-${bi}`"
-            :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
-            @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
-          />
+          <div class="dvr-op-cell">
+            <Select
+              :model-value="displayedOp(branch.condition.op)"
+              :options="OP_OPTIONS"
+              class="dvr-op"
+              :data-test="`cond-op-${index}-${bi}`"
+              :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
+              @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
+            />
+            <label
+              v-if="isPresenceOp(branch.condition.op)"
+              class="dvr-tick"
+              :data-test="`cond-must-have-value-${index}-${bi}`"
+              :title="branch.condition.op === 'exists' || branch.condition.op === 'is_set'
+                ? 'Tick: variable must have a non-empty value (engine maps to is_set)'
+                : 'Tick: variable must be absent OR empty (engine maps to is_unset)'"
+            >
+              <input
+                type="checkbox"
+                :checked="requiresValue(branch.condition.op)"
+                :data-test="`cond-must-have-value-input-${index}-${bi}`"
+                @change="onConditionOp(bi, toggleRequiresValue(branch.condition.op))"
+              />
+              <span class="dvr-tick__label">must have value</span>
+            </label>
+          </div>
         </div>
         <div class="dvr-value-row">
           <span class="dvr-label">value</span>
@@ -326,6 +391,7 @@ const branchCount = computed(() => rule.value.branches.length);
               class="dvr-var-input dvr-var-input--target"
               :value="branch.action.target_var"
               placeholder="target_var"
+              :list="`dvr-vars-${index}`"
               :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}`"
               :data-test="`act-target-${index}-${bi}`"
               @input="onActionTarget(bi, ($event.target as HTMLInputElement).value)"
@@ -383,6 +449,7 @@ const branchCount = computed(() => rule.value.branches.length);
               class="dvr-var-input dvr-var-input--target"
               :value="rule.else.action.target_var"
               placeholder="target_var"
+              :list="`dvr-vars-${index}`"
               :aria-label="`ELSE action target variable for rule ${ruleNumber}`"
               :data-test="`else-target-${index}`"
               @input="onElseTarget(($event.target as HTMLInputElement).value)"
@@ -437,6 +504,16 @@ const branchCount = computed(() => rule.value.branches.length);
         @click="addElse"
       >Add else</Button>
     </div>
+
+    <!-- Datalist powering the native autocomplete on WHEN/THEN var
+         inputs (via `list=` attribute). One per rule so the option
+         list stays scoped to this card; varSuggestions is the same
+         catalog the action.value RichTextInput pulls from. Native
+         datalist gives prefix-match dropdown without custom dropdown
+         machinery — minimal CSS surface, browser-default popup. -->
+    <datalist :id="`dvr-vars-${index}`">
+      <option v-for="name in varSuggestions" :key="name" :value="name" />
+    </datalist>
   </Card>
 </template>
 
@@ -608,6 +685,33 @@ const branchCount = computed(() => rule.value.branches.length);
    * the visual; just ensure it stretches into its grid column. */
   min-width: 0;
 }
+.dvr-op-cell {
+  /* Wraps the op Select + the optional "must have value" tick so they
+   * share one grid column. Tick only renders for presence ops and
+   * collapses below the Select on tight widths. */
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dvr-tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 10px var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-muted, #9ca3af);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.dvr-tick input[type="checkbox"] {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--wp-accent, #6366f1);
+  cursor: pointer;
+}
+.dvr-tick__label { line-height: 1; }
 .dvr-value-cell {
   display: flex;
   align-items: center;
