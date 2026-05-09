@@ -39,6 +39,11 @@ const props = withDefaults(defineProps<{
   nodeId: number;
   initialJson: string;
   upstreamVars: string[];
+  /** Resolved upstream-var snapshot — `$name → resolved string` map.
+   *  Drives the combine modal's live-preview pane so users see the
+   *  template with vars substituted (e.g. `red portrait` instead of
+   *  `$style portrait`) at edit time. Optional for headless mounts. */
+  upstreamResolved?: Record<string, string>;
   /** Wildcard module uuids reachable upstream of this node. Used by
    *  the constraint-ordering scanner to validate constraint
    *  source/target references — sources in the upstream chain are
@@ -1753,6 +1758,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
       :visible="editingModule !== null"
       :module="editingModule"
       :upstream-vars="upstreamVars"
+      :upstream-resolved="upstreamResolved"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"
       :last-used-seed-reader="lastUsedSeedReader"

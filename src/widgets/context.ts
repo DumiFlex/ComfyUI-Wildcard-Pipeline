@@ -7,6 +7,7 @@ import {
 import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectDownstreamWildcardUuids,
+  collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
   findRootGraph,
@@ -14,6 +15,17 @@ import {
   type LiteNodeLike,
 } from "../extension/graph";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
+
+/** Shallow-equal map comparator for `reactiveFromGraph` so the
+ *  upstream-resolved snapshot only triggers a re-render when its
+ *  contents actually change (not just object identity). */
+function stringMapEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+  if (a === b) return true;
+  const ak = Object.keys(a);
+  if (ak.length !== Object.keys(b).length) return false;
+  for (const k of ak) if (a[k] !== b[k]) return false;
+  return true;
+}
 
 const ContextWidget = defineAsyncComponent(() => import("../components/context/ContextWidget.vue"));
 
@@ -115,6 +127,26 @@ export function create(node: ContextNode, inputName: string) {
         stringArrayEqual,
       );
 
+      // Per-name resolved snapshot — drives the combine modal's
+      // live-preview pane so the user sees `red portrait` instead of
+      // `$style portrait` while editing. Same walker the assembler
+      // preview uses, so the modal preview matches the canvas
+      // assembler text. Static fallback only — when an API-backed
+      // resolution is available it'd shadow this; for now this is
+      // the same map AssemblerHelper renders before its async
+      // /wp/api/preview/resolve roll settles.
+      const upstreamResolved = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectUpstreamResolved(rootGraph, node);
+        },
+        stringMapEqual,
+      );
+
       // Litegraph mode poll — when the user mutes (mode 2) or bypasses
       // (mode 4) a Context node, the body of the DOM widget should
       // visually dim so the muted state is obvious. Litegraph dims the
@@ -143,6 +175,7 @@ export function create(node: ContextNode, inputName: string) {
         nodeId: node.id,
         initialJson: currentJson.value,
         upstreamVars: upstreamVars.value,
+        upstreamResolved: upstreamResolved.value,
         upstreamWildcardUuids: upstreamUuids.value,
         downstreamWildcardUuids: downstreamUuids.value,
         nodeMode: nodeMode.value,

@@ -59,6 +59,9 @@ const props = defineProps<{
   module: ModuleEntry | null;
   /** Variable names defined upstream — used for autocomplete + validity checks. */
   upstreamVars?: string[];
+  /** Resolved upstream `$name → value` map. Combine modal uses this
+   *  to render a live preview pane with vars substituted. */
+  upstreamResolved?: Record<string, string>;
   /** Variable names defined by OTHER modules in the same node. */
   siblingVars?: string[];
   /** Other modules in the same WP_Context node — used by the constraint
@@ -603,6 +606,7 @@ function cancel() {
       :module="draft"
       :is-drifted="isDrifted"
       :upstream-vars="upstreamVars"
+      :upstream-resolved="upstreamResolved"
       :sibling-vars="siblingVars"
       @update="onUpdate"
       @save="save"

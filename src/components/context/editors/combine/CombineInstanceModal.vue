@@ -25,11 +25,19 @@ const props = withDefaults(
      *  insert-var dropdown so users don't have to remember which
      *  bindings they can reach from this module. */
     upstreamVars?: string[];
+    /** Resolved upstream-var snapshot — drives the TemplateSection's
+     *  live preview pane with substituted values. */
+    upstreamResolved?: Record<string, string>;
     /** Sibling var names produced by other modules in this same Context
      *  node. Combined with upstreamVars to populate the dropdown. */
     siblingVars?: string[];
   }>(),
-  { isDrifted: false, upstreamVars: () => [], siblingVars: () => [] },
+  {
+    isDrifted: false,
+    upstreamVars: () => [],
+    upstreamResolved: () => ({}),
+    siblingVars: () => [],
+  },
 );
 
 const emit = defineEmits<{
@@ -90,6 +98,7 @@ function onSpaClick(): void {
     <TemplateSection
       :module="module"
       :upstream-vars="upstreamVars"
+      :upstream-resolved="upstreamResolved"
       :sibling-vars="siblingVars"
       @update="onUpdate"
     />

@@ -192,4 +192,79 @@ describe("combine TemplateSection", () => {
       expect(names).toEqual(["$alpha", "$mango", "$zebra"]);
     });
   });
+
+  // ── Live-preview pane (upstream-resolved) ───────────────────────
+
+  it("live preview pane hidden when no upstreamResolved provided", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "$style portrait" },
+        }),
+      },
+    });
+    expect(w.find('[data-test="tpl-preview-resolved"]').exists()).toBe(false);
+  });
+
+  it("live preview pane hidden when template has no resolvable $var", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "no vars here" },
+        }),
+        upstreamResolved: { color: "red" },
+      },
+    });
+    expect(w.find('[data-test="tpl-preview-resolved"]').exists()).toBe(false);
+  });
+
+  it("live preview substitutes $var with resolved value", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "a $color $shape" },
+        }),
+        upstreamResolved: { color: "red", shape: "circle" },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.exists()).toBe(true);
+    expect(pane.text()).toBe("a red circle");
+    expect(pane.findAll(".tpl-tok--var-resolved")).toHaveLength(2);
+  });
+
+  it("live preview flags unresolved vars with --var-unresolved class", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "$known $unknown" },
+        }),
+        upstreamResolved: { known: "hi" },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.exists()).toBe(true);
+    expect(pane.find(".tpl-tok--var-resolved").text()).toBe("hi");
+    const unresolved = pane.find(".tpl-tok--var-unresolved");
+    expect(unresolved.exists()).toBe(true);
+    expect(unresolved.text()).toBe("$unknown");
+  });
+
+  it("live preview leaves alternations + repeats raw (need RNG to resolve)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            output_var: "out",
+            template: "{red|blue} $color",
+          },
+        }),
+        upstreamResolved: { color: "shiny" },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.exists()).toBe(true);
+    // Alt stays raw, $color resolves.
+    expect(pane.text()).toBe("{red|blue} shiny");
+  });
 });

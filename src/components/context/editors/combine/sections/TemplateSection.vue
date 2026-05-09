@@ -22,10 +22,16 @@ const props = withDefaults(
     /** Vars produced upstream of this Context node — surfaced in the
      *  insert-var dropdown so users don't have to remember names. */
     upstreamVars?: string[];
+    /** Resolved upstream `$name → value` map. Drives the live-preview
+     *  pane below the syntax preview: when set, the template renders
+     *  with `$var` substitutions visible at edit time so users see the
+     *  same string the assembler will read. Empty map = preview pane
+     *  hidden (nothing to substitute). */
+    upstreamResolved?: Record<string, string>;
     /** Vars produced by other modules in the SAME Context node. */
     siblingVars?: string[];
   }>(),
-  { upstreamVars: () => [], siblingVars: () => [] },
+  { upstreamVars: () => [], upstreamResolved: () => ({}), siblingVars: () => [] },
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
@@ -71,6 +77,66 @@ const templateOverridden = computed(() => {
 // renders with the error class.
 const previewTokens = computed<PreviewToken[]>(() =>
   tokenize(templateValue.value, "combine"),
+);
+
+// Live-preview tokens — same token stream, but valid VAR tokens get
+// substituted with their resolved value from the upstream map. Drives
+// a second preview pane shown below the syntax preview when at least
+// one VAR resolves. Mirrors engine semantics: unknown $var renders as
+// literal `$name`, escapes resolve to literal `$` / `@`, alternations
+// stay raw (would need RNG to resolve — out of scope for static
+// preview). The result is the closest static approximation of what
+// the assembler will read at runtime, so users can spot upstream-name
+// typos before queue time.
+interface ResolvedToken {
+  text: string;
+  /** Source kind so the renderer can color-code: `var-resolved` paints
+   *  with the upstream var's color hash, `var-unresolved` flags red,
+   *  literal stays default. */
+  kind: "literal" | "var-resolved" | "var-unresolved";
+  varName?: string;
+}
+const resolvedTokens = computed<ResolvedToken[]>(() => {
+  const tokens: ResolvedToken[] = [];
+  const map = props.upstreamResolved;
+  for (const tok of previewTokens.value) {
+    switch (tok.kind) {
+      case "var": {
+        if (tok.invalid || !tok.varName) {
+          tokens.push({ text: tok.raw, kind: "var-unresolved", varName: tok.varName });
+          break;
+        }
+        const value = map[tok.varName];
+        if (typeof value === "string") {
+          tokens.push({ text: value, kind: "var-resolved", varName: tok.varName });
+        } else {
+          tokens.push({ text: tok.raw, kind: "var-unresolved", varName: tok.varName });
+        }
+        break;
+      }
+      case "escape":
+        tokens.push({ text: tok.literal ?? "", kind: "literal" });
+        break;
+      case "ref":
+      case "alt":
+      case "repeat":
+        // Leave as raw — these need RNG / chain resolution.
+        tokens.push({ text: tok.raw, kind: "literal" });
+        break;
+      case "text":
+      default:
+        tokens.push({ text: tok.raw, kind: "literal" });
+        break;
+    }
+  }
+  return tokens;
+});
+
+/** Show the live-preview pane only when the template references at
+ *  least one upstream-resolvable var. No vars = nothing to substitute,
+ *  pane stays hidden so the section doesn't grow unnecessarily. */
+const hasResolvableVar = computed(() =>
+  resolvedTokens.value.some((t) => t.kind === "var-resolved"),
 );
 
 // Detected variables = VAR tokens (deduped, library order preserved).
@@ -254,6 +320,26 @@ function toggleVarMenu(): void {
         <span v-else-if="tok.kind === 'escape'" class="tpl-tok--escape">{{ tok.raw }}</span>
       </template>
     </div>
+
+    <template v-if="hasResolvableVar">
+      <div class="tpl__preview-label tpl__preview-label--resolved">RESOLVED</div>
+      <div class="tpl__preview tpl__preview--resolved" data-test="tpl-preview-resolved">
+        <template v-for="(tok, i) in resolvedTokens" :key="i">
+          <span v-if="tok.kind === 'literal'" class="tpl-tok--text">{{ tok.text }}</span>
+          <span
+            v-else-if="tok.kind === 'var-resolved'"
+            class="tpl-tok--var-resolved"
+            :class="varColorClass(tok.varName ?? '')"
+            :title="`$${tok.varName}`"
+          >{{ tok.text }}</span>
+          <span
+            v-else
+            class="tpl-tok--var-unresolved"
+            :title="`$${tok.varName} not found upstream`"
+          >{{ tok.text }}</span>
+        </template>
+      </div>
+    </template>
 
     <div class="tpl__stored" data-test="tpl-stored-as">
       <span class="tpl__stored-arrow">→ stored as</span>
@@ -456,6 +542,32 @@ function toggleVarMenu(): void {
 }
 .tpl-tok--escape {
   color: var(--wp-text-dim, var(--wp-text3));
+}
+/* Live-preview pane variants. `--var-resolved` paints with the var's
+ * hash color (same as detected pills) so users trace each substituted
+ * chunk back to its source. `--var-unresolved` warns: the template
+ * references a var the chain doesn't produce → assembler will see
+ * literal `$name`. */
+.tpl-tok--var-resolved {
+  font-weight: 600;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+.tpl-tok--var-unresolved {
+  color: var(--wp-status-modified, #f59e0b);
+  text-decoration: underline dashed;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+.tpl__preview-label--resolved {
+  margin-top: 8px;
+  color: var(--wp-accent);
+}
+.tpl__preview--resolved {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--wp-accent) 35%, var(--wp-border));
+  background: color-mix(in srgb, var(--wp-accent) 6%, var(--wp-bg-deep, var(--wp-bg)));
 }
 
 .tpl__stored {
