@@ -21,8 +21,15 @@ const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
     isDrifted?: boolean;
+    /** Upstream var names from chain — fed into TemplateSection's
+     *  insert-var dropdown so users don't have to remember which
+     *  bindings they can reach from this module. */
+    upstreamVars?: string[];
+    /** Sibling var names produced by other modules in this same Context
+     *  node. Combined with upstreamVars to populate the dropdown. */
+    siblingVars?: string[];
   }>(),
-  { isDrifted: false },
+  { isDrifted: false, upstreamVars: () => [], siblingVars: () => [] },
 );
 
 const emit = defineEmits<{
@@ -75,7 +82,12 @@ function onSpaClick(): void {
     </header>
 
     <IdentitySection :module="module" @update="onUpdate" />
-    <TemplateSection :module="module" @update="onUpdate" />
+    <TemplateSection
+      :module="module"
+      :upstream-vars="upstreamVars"
+      :sibling-vars="siblingVars"
+      @update="onUpdate"
+    />
     <RuntimeSection :module="module" @update="onUpdate" />
 
     <footer class="cbm__foot">

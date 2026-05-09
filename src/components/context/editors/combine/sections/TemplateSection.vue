@@ -10,14 +10,37 @@
  * because combine doesn't recurse into nested wildcards (refs only
  * resolve from wildcard surface — RefOutOfSurfaceError at engine).
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
 
-const props = defineProps<{ module: ModuleEntry }>();
+const props = withDefaults(
+  defineProps<{
+    module: ModuleEntry;
+    /** Vars produced upstream of this Context node — surfaced in the
+     *  insert-var dropdown so users don't have to remember names. */
+    upstreamVars?: string[];
+    /** Vars produced by other modules in the SAME Context node. */
+    siblingVars?: string[];
+  }>(),
+  { upstreamVars: () => [], siblingVars: () => [] },
+);
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
+
+const taRef = ref<HTMLTextAreaElement | null>(null);
+const showVarMenu = ref(false);
+
+/** Combined upstream + sibling vars, deduped, alpha-sorted. Drives
+ *  both the validity-coloring on detected pills and the insert-var
+ *  dropdown. */
+const availableVars = computed<string[]>(() => {
+  const set = new Set<string>();
+  for (const n of props.upstreamVars) if (n) set.add(n);
+  for (const n of props.siblingVars) if (n) set.add(n);
+  return [...set].sort();
+});
 
 const payload = computed(() => (props.module.payload ?? {}) as {
   template?: string;
@@ -93,6 +116,38 @@ function onTemplateInput(ev: Event): void {
 function onResetTemplate(): void {
   emit("update", patchInstance(props.module, "template_override", null));
 }
+
+/** Insert `$varname` at the textarea's current caret position. Falls
+ *  back to appending when no element ref / focus state. Closes the
+ *  dropdown after each pick so it acts like a real autocomplete. */
+function insertVar(name: string): void {
+  const ta = taRef.value;
+  const insertion = `$${name}`;
+  const current = templateValue.value;
+  let next: string;
+  if (ta && typeof ta.selectionStart === "number") {
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd ?? start;
+    next = current.slice(0, start) + insertion + current.slice(end);
+    // Persist override + restore caret after the inserted token so
+    // typing continues smoothly. Vue re-renders synchronously after
+    // the emit; the setSelectionRange call below runs after that.
+    const caret = start + insertion.length;
+    queueMicrotask(() => {
+      ta.focus();
+      ta.setSelectionRange(caret, caret);
+    });
+  } else {
+    next = current + insertion;
+  }
+  showVarMenu.value = false;
+  const collapsed = next === libraryTemplate.value ? null : next;
+  emit("update", patchInstance(props.module, "template_override", collapsed));
+}
+
+function toggleVarMenu(): void {
+  showVarMenu.value = !showVarMenu.value;
+}
 </script>
 
 <template>
@@ -100,18 +155,51 @@ function onResetTemplate(): void {
     <div class="tpl__head">
       <span class="tpl__label">Template</span>
       <span class="tpl__hint">$name refs · $$ for literal $ · {a|b|c} inline choice</span>
-      <button
-        v-if="templateOverridden"
-        type="button"
-        class="tpl__reset"
-        data-test="tpl-reset"
-        title="Restore template to library default"
-        aria-label="Reset template to library default"
-        @click="onResetTemplate"
-      ><i class="pi pi-replay" aria-hidden="true" /></button>
+      <div class="tpl__head-actions">
+        <div class="tpl__menu-wrap">
+          <button
+            v-if="availableVars.length > 0"
+            type="button"
+            class="tpl__menu-btn"
+            data-test="tpl-insert-var"
+            :title="`Insert $var (${availableVars.length} available)`"
+            aria-label="Insert variable"
+            :aria-expanded="showVarMenu"
+            @click="toggleVarMenu"
+          ><i class="pi pi-plus" aria-hidden="true" /> $var</button>
+          <div
+            v-if="showVarMenu"
+            class="tpl__menu"
+            data-test="tpl-var-menu"
+            role="listbox"
+          >
+            <button
+              v-for="name in availableVars"
+              :key="name"
+              type="button"
+              class="tpl__menu-item"
+              :class="varColorClass(name)"
+              :data-test="`tpl-var-item-${name}`"
+              role="option"
+              :aria-selected="false"
+              @click="insertVar(name)"
+            >${{ name }}</button>
+          </div>
+        </div>
+        <button
+          v-if="templateOverridden"
+          type="button"
+          class="tpl__reset"
+          data-test="tpl-reset"
+          title="Restore template to library default"
+          aria-label="Reset template to library default"
+          @click="onResetTemplate"
+        ><i class="pi pi-replay" aria-hidden="true" /></button>
+      </div>
     </div>
 
     <textarea
+      ref="taRef"
       class="tpl__input"
       :class="{ 'tpl__input--mod': templateOverridden }"
       data-test="tpl-textarea"
@@ -200,8 +288,61 @@ function onResetTemplate(): void {
   color: var(--wp-text-dim, var(--wp-text3));
   letter-spacing: 0;
 }
-.tpl__reset {
+.tpl__head-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tpl__menu-wrap { position: relative; }
+.tpl__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font: 600 10px var(--wp-font-mono);
+  cursor: pointer;
+}
+.tpl__menu-btn:hover {
+  border-color: var(--wp-accent);
+  color: var(--wp-accent-text, var(--wp-text));
+}
+.tpl__menu-btn .pi { font-size: 9px; }
+.tpl__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 20;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tpl__menu-item {
+  text-align: left;
+  padding: 4px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  font: 600 11px var(--wp-font-mono);
+  cursor: pointer;
+  color: var(--wp-text);
+}
+.tpl__menu-item:hover {
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+}
+.tpl__reset {
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -142,4 +142,54 @@ describe("combine TemplateSection", () => {
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.template_override).toBeNull();
   });
+
+  // ── Insert-var dropdown ─────────────────────────────────────────
+
+  it("insert-var button hidden when no upstream/sibling vars", () => {
+    const w = mount(TemplateSection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="tpl-insert-var"]').exists()).toBe(false);
+  });
+
+  it("insert-var button visible when upstream vars present, opens menu on click", async () => {
+    const w = mount(TemplateSection, {
+      props: { module: makeModule(), upstreamVars: ["color", "shape"] },
+    });
+    expect(w.find('[data-test="tpl-insert-var"]').exists()).toBe(true);
+    expect(w.find('[data-test="tpl-var-menu"]').exists()).toBe(false);
+    await w.find('[data-test="tpl-insert-var"]').trigger("click");
+    expect(w.find('[data-test="tpl-var-menu"]').exists()).toBe(true);
+    expect(w.findAll('[data-test^="tpl-var-item-"]')).toHaveLength(2);
+  });
+
+  it("clicking a var menu item appends $name to template + emits override", async () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "" },
+        }),
+        upstreamVars: ["mood"],
+      },
+    });
+    await w.find('[data-test="tpl-insert-var"]').trigger("click");
+    await w.find('[data-test="tpl-var-item-mood"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.template_override).toBe("$mood");
+  });
+
+  it("dedupes upstream + sibling vars and sorts alphabetically", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule(),
+        upstreamVars: ["zebra", "alpha"],
+        siblingVars: ["alpha", "mango"],
+      },
+    });
+    void w.find('[data-test="tpl-insert-var"]').trigger("click");
+    return w.vm.$nextTick().then(() => {
+      const items = w.findAll('[data-test^="tpl-var-item-"]');
+      const names = items.map((i) => i.text());
+      expect(names).toEqual(["$alpha", "$mango", "$zebra"]);
+    });
+  });
 });

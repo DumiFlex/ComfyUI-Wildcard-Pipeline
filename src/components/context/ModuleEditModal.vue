@@ -600,6 +600,8 @@ function cancel() {
       v-else-if="draft && draft.type === 'combine'"
       :module="draft"
       :is-drifted="isDrifted"
+      :upstream-vars="upstreamVars"
+      :sibling-vars="siblingVars"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"

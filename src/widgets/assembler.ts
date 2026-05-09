@@ -79,6 +79,8 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "pinned_option_id",
   "locked_seed",
   "internal",
+  // combine v2 (2026-05-08 syntax-parity cycle):
+  "template_override",
   // fixed_values:
   "values_overrides",
   // Tier 2:
