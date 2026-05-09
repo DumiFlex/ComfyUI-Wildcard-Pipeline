@@ -183,4 +183,36 @@ describe("IdentitySection", () => {
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.variable_binding).toBeNull();
   });
+
+  // ── Sibling-name collision warning ─────────────────────────────────
+
+  it("no collision warning by default", () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="id-binding-collision"]').exists()).toBe(false);
+  });
+
+  it("warns when effective binding matches a sibling var", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule(), siblingVars: ["outfit"] },
+    });
+    expect(w.find('[data-test="id-binding-collision"]').classes()).toContain("id__collision--warn");
+  });
+
+  it("informs (not warns) when shadowing an upstream var", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule(), upstreamVars: ["outfit"] },
+    });
+    expect(w.find('[data-test="id-binding-collision"]').classes()).toContain("id__collision--info");
+  });
+
+  it("sibling collision overrides upstream when both match", () => {
+    const w = mount(IdentitySection, {
+      props: {
+        module: makeModule(),
+        siblingVars: ["outfit"],
+        upstreamVars: ["outfit"],
+      },
+    });
+    expect(w.find('[data-test="id-binding-collision"]').classes()).toContain("id__collision--warn");
+  });
 });

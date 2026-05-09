@@ -8,8 +8,13 @@ const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
     isDrifted?: boolean;
+    /** Names produced upstream of this Context node. Drives the
+     *  IdentitySection collision warning. */
+    upstreamVars?: string[];
+    /** Names produced by other modules in the SAME Context node. */
+    siblingVars?: string[];
   }>(),
-  { isDrifted: false },
+  { isDrifted: false, upstreamVars: () => [], siblingVars: () => [] },
 );
 
 const emit = defineEmits<{
@@ -61,7 +66,12 @@ function onSpaClick(): void {
       </button>
     </header>
 
-    <IdentitySection :module="module" @update="onUpdate" />
+    <IdentitySection
+      :module="module"
+      :upstream-vars="upstreamVars"
+      :sibling-vars="siblingVars"
+      @update="onUpdate"
+    />
     <PoolSection :module="module" @update="onUpdate" />
     <RuntimeSection :module="module" @update="onUpdate" />
 

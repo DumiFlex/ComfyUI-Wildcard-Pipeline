@@ -3,7 +3,18 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 
-const props = defineProps<{ module: ModuleEntry }>();
+const props = withDefaults(
+  defineProps<{
+    module: ModuleEntry;
+    /** Names produced upstream of this Context node. Drives the
+     *  binding-collision warning so users see the conflict at edit
+     *  time rather than via the canvas badge after save. */
+    upstreamVars?: string[];
+    /** Names produced by other modules in the SAME Context node. */
+    siblingVars?: string[];
+  }>(),
+  { upstreamVars: () => [], siblingVars: () => [] },
+);
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
 const libraryBinding = computed(
@@ -28,6 +39,40 @@ const nameOverridden = computed(() =>
 const bindingOverridden = computed(() =>
   bindingValue.value !== "" && bindingValue.value !== libraryBinding.value,
 );
+
+/** Effective binding the engine will write — override when set, else
+ *  library default. Drives the collision check so users see the
+ *  conflict whether they typed a name OR left the library default
+ *  that happens to match a sibling. */
+const effectiveBinding = computed(() => {
+  const stripped = bindingValue.value.replace(/^\$+/, "").trim();
+  if (stripped) return stripped;
+  return libraryBinding.value.replace(/^\$+/, "").trim();
+});
+
+/** Surface a collision when this module's effective binding matches a
+ *  name produced upstream OR by a sibling in the same Context node.
+ *  Last-write-wins at runtime, so the binding still resolves — but
+ *  the user is almost certainly looking at a bug. */
+const collidesWith = computed<"upstream" | "sibling" | null>(() => {
+  const name = effectiveBinding.value;
+  if (!name) return null;
+  if (props.siblingVars.includes(name)) return "sibling";
+  if (props.upstreamVars.includes(name)) return "upstream";
+  return null;
+});
+
+const collisionMessage = computed(() => {
+  if (collidesWith.value === "sibling") {
+    return `$${effectiveBinding.value} is already produced by another module in this Context. ` +
+           "At runtime, last-write-wins — pick a unique name.";
+  }
+  if (collidesWith.value === "upstream") {
+    return `$${effectiveBinding.value} is already produced upstream. This module will ` +
+           "overwrite it for downstream modules.";
+  }
+  return "";
+});
 
 function onNameInput(ev: Event): void {
   const next = (ev.target as HTMLInputElement).value;
@@ -96,7 +141,11 @@ function onResetBinding(): void {
       <div class="id__input-row">
         <div
           class="id__input-wrap"
-          :class="{ 'id__input-wrap--mod': bindingOverridden }"
+          :class="{
+            'id__input-wrap--mod': bindingOverridden,
+            'id__input-wrap--collision-warn': collidesWith === 'sibling',
+            'id__input-wrap--collision-info': collidesWith === 'upstream',
+          }"
         >
           <span class="id__input-prefix" data-test="id-binding-prefix">$</span>
           <input
@@ -120,6 +169,25 @@ function onResetBinding(): void {
           @click="onResetBinding"
         ><i class="pi pi-replay" aria-hidden="true" /></button>
       </div>
+    </div>
+    <div
+      v-if="collidesWith !== null"
+      class="id__collision"
+      :class="{
+        'id__collision--warn': collidesWith === 'sibling',
+        'id__collision--info': collidesWith === 'upstream',
+      }"
+      data-test="id-binding-collision"
+      role="status"
+    >
+      <i
+        :class="[
+          'pi',
+          collidesWith === 'sibling' ? 'pi-exclamation-triangle' : 'pi-info-circle',
+        ]"
+        aria-hidden="true"
+      />
+      {{ collisionMessage }}
     </div>
   </section>
 </template>
@@ -226,4 +294,34 @@ function onResetBinding(): void {
   padding: 5px 8px;
 }
 .id__input--prefixed:focus { outline: none; }
+
+/* Binding-collision visual: warn (sibling-same-node) is loud, info
+ * (upstream-shadow) is muted. Tinted border outranks the `--mod`
+ * accent so users see the collision before the modified-indicator. */
+.id__input-wrap--collision-warn {
+  border-color: var(--wp-status-modified, #f59e0b);
+}
+.id__input-wrap--collision-info {
+  border-color: var(--wp-accent);
+}
+.id__collision {
+  margin-top: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 5px 8px;
+  font: 10px/1.4 var(--wp-font-sans);
+  border-radius: 3px;
+}
+.id__collision--warn {
+  color: var(--wp-status-modified, #f59e0b);
+  background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-status-modified, #f59e0b) 35%, transparent);
+}
+.id__collision--info {
+  color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-accent) 35%, transparent);
+}
+.id__collision .pi { font-size: 11px; margin-top: 1px; flex-shrink: 0; }
 </style>

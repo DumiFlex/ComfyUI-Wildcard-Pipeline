@@ -81,7 +81,12 @@ function onSpaClick(): void {
       ><i class="pi pi-times" aria-hidden="true" /></button>
     </header>
 
-    <IdentitySection :module="module" @update="onUpdate" />
+    <IdentitySection
+      :module="module"
+      :upstream-vars="upstreamVars"
+      :sibling-vars="siblingVars"
+      @update="onUpdate"
+    />
     <TemplateSection
       :module="module"
       :upstream-vars="upstreamVars"

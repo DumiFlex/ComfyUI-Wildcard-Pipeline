@@ -104,4 +104,57 @@ describe("combine IdentitySection", () => {
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.variable_binding).toBeNull();
   });
+
+  // ── Sibling-name collision warning ─────────────────────────────────
+
+  it("no collision warning by default (no upstream/sibling vars)", () => {
+    const w = mount(IdentitySection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="id-binding-collision"]').exists()).toBe(false);
+  });
+
+  it("warns when effective binding matches a sibling var", () => {
+    // Library default `final_prompt` already produced by another module
+    // in this Context. Most likely a bug — surface it before save.
+    const w = mount(IdentitySection, {
+      props: { module: makeModule(), siblingVars: ["final_prompt"] },
+    });
+    const warn = w.find('[data-test="id-binding-collision"]');
+    expect(warn.exists()).toBe(true);
+    expect(warn.classes()).toContain("id__collision--warn");
+    expect(warn.text()).toContain("final_prompt");
+  });
+
+  it("informs (not warns) when effective binding shadows an upstream var", () => {
+    const w = mount(IdentitySection, {
+      props: { module: makeModule(), upstreamVars: ["final_prompt"] },
+    });
+    const info = w.find('[data-test="id-binding-collision"]');
+    expect(info.exists()).toBe(true);
+    expect(info.classes()).toContain("id__collision--info");
+  });
+
+  it("override binding triggers collision check against override value", async () => {
+    const w = mount(IdentitySection, {
+      props: {
+        module: makeModule({ instance: { variable_binding: "header_text" } }),
+        siblingVars: ["header_text"],
+      },
+    });
+    expect(w.find('[data-test="id-binding-collision"]').exists()).toBe(true);
+  });
+
+  it("sibling collision wins over upstream when both match", () => {
+    // Sibling = same Context node = real bug (last-write-wins). Upstream
+    // = explicit shadow of an earlier binding. Sibling severity higher.
+    const w = mount(IdentitySection, {
+      props: {
+        module: makeModule(),
+        siblingVars: ["final_prompt"],
+        upstreamVars: ["final_prompt"],
+      },
+    });
+    const warn = w.find('[data-test="id-binding-collision"]');
+    expect(warn.classes()).toContain("id__collision--warn");
+    expect(warn.classes()).not.toContain("id__collision--info");
+  });
 });
