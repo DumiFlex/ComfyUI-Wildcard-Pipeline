@@ -113,14 +113,56 @@ const editingModule = computed<ModuleEntry | null>(() =>
 // Variable names defined in OTHER modules of this same node — used by the
 // edit modal's autocomplete + per-entry validity. Exclude the module being
 // edited so its own (in-flight) names don't echo back as suggestions.
+//
+// Each kind contributes via its own producer field:
+//   - fixed_values  → entries[].variable_name (UI mirror) + payload.values[].name
+//                     and instance.values_overrides[].name
+//   - wildcard      → instance.variable_binding ?? payload.var_binding
+//   - combine       → instance.variable_binding ?? payload.output_var
+//   - derivation    → payload.rules[].branches[].action.target_var
+//                     and payload.rules[].else.action.target_var
+// Combine + wildcard have no entries; without this kind-aware fallback the
+// modal's insert-var dropdown would render empty for chains where the only
+// vars come from binding-producer modules.
 const siblingNodeVars = computed<string[]>(() => {
   const names = new Set<string>();
+  function add(name: string | undefined | null): void {
+    const trimmed = (name ?? "").replace(/^\$+/, "").trim();
+    if (trimmed) names.add(trimmed);
+  }
   for (const m of value.value.modules) {
     if (m.id === editingId.value) continue;
     if (!m.enabled) continue;
-    for (const e of m.entries) {
-      const n = e.variable_name.trim();
-      if (n) names.add(n);
+    for (const e of m.entries) add(e.variable_name);
+    const inst = (m.instance ?? {}) as {
+      variable_binding?: string | null;
+      values_overrides?: Array<{ name?: string }>;
+    };
+    const p = (m.payload ?? {}) as {
+      var_binding?: string;
+      output_var?: string;
+      values?: Array<{ name?: string }>;
+      rules?: Array<{
+        branches?: Array<{ action?: { target_var?: string } }>;
+        else?: { action?: { target_var?: string } };
+      }>;
+    };
+    if (m.type === "wildcard") {
+      add(inst.variable_binding ?? p.var_binding);
+    } else if (m.type === "combine") {
+      add(inst.variable_binding ?? p.output_var);
+    } else if (m.type === "fixed_values") {
+      const overrides = inst.values_overrides;
+      if (Array.isArray(overrides) && overrides.length > 0) {
+        for (const v of overrides) add(v.name);
+      } else {
+        for (const v of p.values ?? []) add(v.name);
+      }
+    } else if (m.type === "derivation") {
+      for (const rule of p.rules ?? []) {
+        for (const br of rule.branches ?? []) add(br.action?.target_var);
+        add(rule.else?.action?.target_var);
+      }
     }
   }
   return [...names];
