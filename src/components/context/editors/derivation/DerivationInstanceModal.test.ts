@@ -1,0 +1,91 @@
+// DerivationInstanceModal — single-pane v2 shell. Mirrors
+// WildcardInstanceModal + CombineInstanceModal + FixedValuesInstanceModal
+// structure: brand-gradient header, sections, footer with SPA link +
+// reset overrides + drift kebab + cancel/save. Header icon: pi-arrow-right-arrow-left
+// (same icon picker.ts uses for derivation kind).
+
+import { describe, it, expect } from "vitest";
+import { mount } from "@vue/test-utils";
+import DerivationInstanceModal from "./DerivationInstanceModal.vue";
+import type { ModuleEntry } from "../../../../widgets/_shared";
+
+function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
+  return {
+    id: "dv012345",
+    type: "derivation",
+    enabled: true,
+    meta: { name: "mood-rules" },
+    entries: [],
+    payload: {
+      rules: [{
+        id: "r1",
+        branches: [{
+          condition: { var: "color", op: "equals", value: "red" },
+          action: { target_var: "mood", mode: "replace", value: "warm" },
+        }],
+      }],
+    },
+    instance: {},
+    payload_hash: "h",
+    ...overrides,
+  };
+}
+
+describe("DerivationInstanceModal", () => {
+  it("renders pi-arrow-right-arrow-left icon in header", () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    expect(w.find(".dvm__head-icon.pi.pi-arrow-right-arrow-left").exists()).toBe(true);
+  });
+
+  it("renders 'derivation' chip + module name", () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    expect(w.find('[data-test="dvm-name"]').text()).toBe("mood-rules");
+    expect(w.find('[data-test="dvm-chip"]').text().toLowerCase()).toBe("derivation");
+  });
+
+  it("renders Identity + Rules sections", () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    expect(w.findComponent({ name: "IdentitySection" }).exists()).toBe(true);
+    expect(w.findComponent({ name: "RulesSection" }).exists()).toBe(true);
+  });
+
+  it("forwards section update events upward", async () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    const rules = w.findComponent({ name: "RulesSection" });
+    rules.vm.$emit("update", { instance: { disabled_rule_ids: ["r1"] } });
+    await w.vm.$nextTick();
+    const updates = w.emitted("update")!;
+    expect((updates[0][0] as Partial<ModuleEntry>).instance?.disabled_rule_ids).toEqual(["r1"]);
+  });
+
+  it("SPA link points at /wp/derivations/<id>/edit", () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    const link = w.find<HTMLAnchorElement>('[data-test="dvm-spa-link"]').element;
+    expect(link.getAttribute("href")).toBe("/wp/derivations/dv012345/edit");
+  });
+
+  it("Save + Cancel emit correct events", async () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    await w.find('[data-test="dvm-save"]').trigger("click");
+    expect(w.emitted("save")).toBeTruthy();
+    await w.find('[data-test="dvm-cancel"]').trigger("click");
+    expect(w.emitted("cancel")).toBeTruthy();
+  });
+
+  it("kebab hidden when not drifted, visible when drifted", () => {
+    const off = mount(DerivationInstanceModal, {
+      props: { module: makeModule(), isDrifted: false },
+    });
+    expect(off.find('[data-test="dvm-kebab"]').exists()).toBe(false);
+    const on = mount(DerivationInstanceModal, {
+      props: { module: makeModule(), isDrifted: true },
+    });
+    expect(on.find('[data-test="dvm-kebab"]').exists()).toBe(true);
+  });
+
+  it("Reset overrides emits clear-all-overrides", async () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    await w.find('[data-test="dvm-clear-all"]').trigger("click");
+    expect(w.emitted("clear-all-overrides")).toBeTruthy();
+  });
+});
