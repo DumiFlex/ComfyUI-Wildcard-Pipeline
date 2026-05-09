@@ -19,7 +19,16 @@ from engine.modules import build_resolve_ctx
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
-_VALID_OPS = {"equals", "not_equals", "contains", "matches"}
+_VALID_OPS = {
+    "equals", "not_equals", "contains", "matches",
+    # Presence-check ops added in 2026-05-09 cycle. `exists`/`not_exists`
+    # check key presence in ctx regardless of value (empty string still
+    # counts as present); `is_set`/`is_unset` additionally require the
+    # value to be non-empty. Both pairs ship so users can pick the
+    # semantics they need — wildcards can pick options with empty
+    # values, leaving keys present-but-empty.
+    "exists", "not_exists", "is_set", "is_unset",
+}
 _VALID_MODES = {"replace", "append", "prepend"}
 
 
@@ -44,6 +53,40 @@ def _ctx_get(ctx: Any, name: str) -> str:
     return ""
 
 
+def _ctx_has(ctx: Any, name: str) -> bool:
+    """Whether `name` is a known key in `ctx`, regardless of value.
+
+    Mirrors `_ctx_get`'s indirection chain (callable getter →
+    `__contains__` / dict lookup) but returns bool. Required so the
+    `exists` / `not_exists` ops can distinguish "key absent" from
+    "key present but value is empty string" — `_ctx_get` collapses
+    both into `""`. Used only by presence-check ops; non-presence
+    ops continue to read through `_ctx_get`.
+    """
+    if ctx is None:
+        return False
+    # Engine ctx is a dict in tests + at runtime; check `__contains__`
+    # before falling back to a getter probe so we get the cheap path.
+    try:
+        return name in ctx  # type: ignore[operator]
+    except Exception:
+        pass
+    getter = getattr(ctx, "get", None)
+    if callable(getter):
+        # Use a sentinel default so a "missing" key can be told apart
+        # from a key whose value is `None` or `""`.
+        sentinel = object()
+        try:
+            value = getter(name, sentinel)
+        except TypeError:
+            try:
+                value = getter(name)
+            except Exception:
+                return False
+        return value is not sentinel
+    return False
+
+
 def _ctx_set(ctx: Any, name: str, value: str) -> None:
     if ctx is None:
         return
@@ -61,6 +104,18 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
     var = condition.get("var", "")
     op = condition.get("op", "")
     value = condition.get("value", "")
+    # Presence-check ops short-circuit before reading the value — they
+    # only care about key presence (and, for is_set/is_unset, whether
+    # the stored value is non-empty). The `value` field is ignored by
+    # these ops; the SPA disables the value input when one is selected.
+    if op == "exists":
+        return _ctx_has(ctx, var)
+    if op == "not_exists":
+        return not _ctx_has(ctx, var)
+    if op == "is_set":
+        return _ctx_has(ctx, var) and _ctx_get(ctx, var) != ""
+    if op == "is_unset":
+        return not _ctx_has(ctx, var) or _ctx_get(ctx, var) == ""
     actual = _ctx_get(ctx, var)
     if op == "equals":
         return actual == value
