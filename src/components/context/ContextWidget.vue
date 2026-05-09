@@ -478,6 +478,19 @@ function isModified(m: ModuleEntry): boolean {
   return false;
 }
 
+/** Kinds whose engine handler honors `instance.locked_seed`. Wildcard
+ *  pins option pick; combine pins `{a|b|c}` template resolution;
+ *  fixed_values pins per-value alternation. Other kinds (derivation,
+ *  constraint, pipeline) ignore the field — engine doesn't read it.
+ *  Inline lock action gates on this set so the icon only appears
+ *  where it actually does something. */
+const SEED_LOCKABLE_KINDS: ReadonlySet<string> = new Set([
+  "wildcard", "combine", "fixed_values",
+]);
+function isSeedLockable(m: ModuleEntry): boolean {
+  return SEED_LOCKABLE_KINDS.has(m.type);
+}
+
 function isLocked(m: ModuleEntry): boolean {
   return typeof m.instance?.locked_seed === "number";
 }
@@ -1575,11 +1588,13 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
           <!-- Inline action cluster — lock + internal + remove.
                Fades in on row hover via .wp-mod-actions opacity
-               transition. Lock + internal only on wildcard kind
-               (engine ignores them elsewhere). -->
+               transition. Lock surfaces on every kind whose engine
+               handler honors `locked_seed` (SEED_LOCKABLE_KINDS):
+               wildcard pins option pick, combine pins template {a|b|c}
+               resolution, fixed_values pins per-value alternation. -->
           <div class="wp-mod-actions" draggable="false">
             <button
-              v-if="m.type === 'wildcard'"
+              v-if="isSeedLockable(m)"
               type="button"
               class="wp-btn wp-btn--icon-sm"
               :class="{ 'is-locked': isLocked(m) }"

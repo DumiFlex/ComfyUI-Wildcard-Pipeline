@@ -683,15 +683,34 @@ describe("ContextWidget inline actions", () => {
     expect(wrapper.find('[data-test="row-action-remove"]').find("i.pi.pi-trash").exists()).toBe(true);
   });
 
-  it("hides lock for non-wildcard rows but keeps internal for binding-producers", () => {
-    // Lock is wildcard-only (RNG seed). Internal applies to any kind
-    // that emits bindings — wildcard, fixed_values, combine, derivation.
+  it("renders lock + internal icons for fixed_values rows (seed-lockable)", () => {
+    // Post-2026-05-08 syntax-parity cycle: fixed_values resolves
+    // `{a|b|c}` per value + honors `locked_seed`. Inline lock icon
+    // surfaces same as wildcard.
     const wrapper = mountWithModules([
       { id: "def67890", type: "fixed_values", enabled: true },
     ]);
-    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="row-action-remove"]').exists()).toBe(true);
+  });
+
+  it("renders lock + internal icons for combine rows (seed-lockable)", () => {
+    // Combine resolves inline `{a|b|c}` in its template + honors
+    // `locked_seed` for that resolution.
+    const wrapper = mountWithModules([
+      { id: "cb123456", type: "combine", enabled: true },
+    ]);
+    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(true);
+  });
+
+  it("hides lock for derivation kind (engine ignores locked_seed)", () => {
+    const wrapper = mountWithModules([
+      { id: "dv123456", type: "derivation", enabled: true },
+    ]);
+    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(true);
   });
 
   it("hides both lock and internal for constraint kind (no bindings produced)", () => {
