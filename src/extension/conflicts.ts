@@ -1,20 +1,28 @@
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
 
-/** Resolve a wildcard's effective var-binding name. Mirrors the engine
- *  precedence in `wildcard_handler.py`: per-instance override
- *  (`instance.variable_binding`) wins when set to a non-empty string,
- *  otherwise fall back to the library-snapshot default
- *  (`payload.var_binding`). Empty string and null both mean "use
- *  library default" per the `_shared.ts` instance-shape contract.
- *  Returns "" for non-wildcard kinds. Single source of truth so any
- *  surface that needs the effective binding stays in lockstep with the
- *  override layer. */
+/** Resolve a module's effective var-binding name. Mirrors engine
+ *  precedence: per-instance override (`instance.variable_binding`)
+ *  wins when set to a non-empty string, otherwise fall back to the
+ *  library default — `payload.var_binding` for wildcard,
+ *  `payload.output_var` for combine. Empty string and null both mean
+ *  "use library default" per the `_shared.ts` instance-shape contract.
+ *  Returns "" for kinds that don't produce a single binding. Single
+ *  source of truth so any surface that needs the effective binding
+ *  stays in lockstep with the override layer. */
 function bindingNameOf(m: ModuleEntry): string {
-  if (m.type !== "wildcard") return "";
-  const overrideName = m.instance?.variable_binding;
-  if (typeof overrideName === "string" && overrideName.length > 0) return overrideName;
-  const payloadName = (m.payload as { var_binding?: string } | undefined)?.var_binding;
-  return typeof payloadName === "string" ? payloadName : "";
+  if (m.type === "wildcard") {
+    const overrideName = m.instance?.variable_binding;
+    if (typeof overrideName === "string" && overrideName.length > 0) return overrideName;
+    const payloadName = (m.payload as { var_binding?: string } | undefined)?.var_binding;
+    return typeof payloadName === "string" ? payloadName : "";
+  }
+  if (m.type === "combine") {
+    const overrideName = m.instance?.variable_binding;
+    if (typeof overrideName === "string" && overrideName.length > 0) return overrideName;
+    const payloadName = (m.payload as { output_var?: string } | undefined)?.output_var;
+    return typeof payloadName === "string" ? payloadName : "";
+  }
+  return "";
 }
 
 /** Same kind-aware writes-extraction `extension/graph.ts:moduleWrites` uses.
@@ -62,7 +70,10 @@ function writesOf(m: ModuleEntry): string[] {
     const b = bindingNameOf(m).replace(/^\$/, "").trim();
     if (b) out.push(b);
   } else if (m.type === "combine") {
-    const o = (p.output_var as string | undefined)?.replace(/^\$/, "").trim();
+    // Honor `instance.variable_binding` override before
+    // `payload.output_var` — engine reads override first
+    // (combine_handler.py:60-65 via shared bindingNameOf precedence).
+    const o = bindingNameOf(m).replace(/^\$/, "").trim();
     if (o) out.push(o);
   } else if (m.type === "derivation") {
     // Dedup within a single derivation module: a rule that targets the
@@ -180,6 +191,12 @@ function templateVarsIn(template: string): string[] {
  *  Extend the union here if a future kind grows a template-style field. */
 function templatesOf(m: ModuleEntry): string[] {
   if (m.type === "combine") {
+    // v2 modal writes `instance.template_override` — honor that first
+    // so the conflict scanner reflects the user's edits immediately.
+    // Empty string / null collapses back to the library template.
+    const inst = (m.instance ?? {}) as { template_override?: string | null };
+    const override = inst.template_override;
+    if (typeof override === "string" && override !== "") return [override];
     const tpl = (m.payload as { template?: string } | undefined)?.template;
     return typeof tpl === "string" ? [tpl] : [];
   }

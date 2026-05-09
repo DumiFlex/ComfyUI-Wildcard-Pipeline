@@ -245,3 +245,37 @@ def test_combine_unlocked_uses_chain_seed():
     ctx_a = _make_seedctx(seed=11111)
     out_a = CombineHandler.resolve(payload, {}, ctx_a)
     assert out_a["pick"] in {"a", "b", "c", "d", "e", "f", "g", "h"}
+
+
+def test_combine_variable_binding_override_rebinds_output():
+    """instance.variable_binding rebinds the produced var (mirrors
+    wildcard precedence). Engine writes to the override name, not
+    payload.output_var, so downstream consumers reading $renamed
+    pick up the value."""
+    payload = {
+        "template": "hello",
+        "output_var": "lib_out",
+        "input_vars": [],
+    }
+    instance = {"variable_binding": "renamed"}
+    out = CombineHandler.resolve(payload, instance, _make_seedctx(0))
+    assert out == {"renamed": "hello"}
+
+
+def test_combine_variable_binding_strips_leading_dollar():
+    """User can write `$foo` or `foo` in the modal — both bind to `foo`."""
+    payload = {"template": "x", "output_var": "lib_out", "input_vars": []}
+    out = CombineHandler.resolve(payload, {"variable_binding": "$foo"}, _make_seedctx(0))
+    assert out == {"foo": "x"}
+
+
+def test_combine_empty_variable_binding_falls_back_to_payload():
+    """Empty / whitespace / None variable_binding → engine reads
+    payload.output_var. Mirrors the modal's collapse-to-null UX."""
+    payload = {"template": "x", "output_var": "lib_out", "input_vars": []}
+    out_empty = CombineHandler.resolve(payload, {"variable_binding": ""}, _make_seedctx(0))
+    out_none = CombineHandler.resolve(payload, {"variable_binding": None}, _make_seedctx(0))
+    out_ws = CombineHandler.resolve(payload, {"variable_binding": "   "}, _make_seedctx(0))
+    assert out_empty == {"lib_out": "x"}
+    assert out_none == {"lib_out": "x"}
+    assert out_ws == {"lib_out": "x"}

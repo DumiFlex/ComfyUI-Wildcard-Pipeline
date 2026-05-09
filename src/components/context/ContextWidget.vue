@@ -684,7 +684,12 @@ function summaryTokens(m: ModuleEntry): SummaryToken[] {
         : [head];
     }
     case "combine": {
-      const out = (p.output_var as string)?.trim();
+      // Same per-instance precedence as wildcard: rebinding via the v2
+      // modal (`instance.variable_binding`) renders as `$<override>` on
+      // the card so the canvas reads match the engine output.
+      const inst = m.instance?.variable_binding;
+      const payloadOut = (p.output_var as string | undefined)?.trim();
+      const out = (typeof inst === "string" && inst.trim()) || payloadOut;
       return out ? [lit("→ "), v(out)] : [lit("template")];
     }
     case "derivation": {

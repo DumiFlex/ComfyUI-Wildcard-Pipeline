@@ -63,7 +63,15 @@ class CombineHandler(ModuleHandler):
         # values_overrides use.
         override = instance.get("template_override")
         template: str = override if isinstance(override, str) else payload["template"]
-        output_var: str = payload["output_var"]
+        # instance.variable_binding rebinds the produced var (mirrors
+        # wildcard precedence). Empty string / non-string falls back to
+        # payload.output_var. Strip leading `$` so callers can write
+        # either `$foo` or `foo` in the modal.
+        binding_override = instance.get("variable_binding")
+        if isinstance(binding_override, str) and binding_override.strip():
+            output_var: str = binding_override.lstrip("$").strip()
+        else:
+            output_var = payload["output_var"]
 
         # Effective seed selection (mirrors WildcardHandler):
         #   - locked_seed when present  → reproducible per-instance

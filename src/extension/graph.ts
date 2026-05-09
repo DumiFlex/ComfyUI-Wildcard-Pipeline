@@ -597,8 +597,23 @@ function writeBindings(
     return;
   }
   if (m.type === "combine") {
-    const out = (p.output_var as string | undefined)?.replace(/^\$/, "").trim();
-    const tmpl = String(p.template ?? "");
+    // Honor v2 instance overrides — engine reads
+    // `instance.template_override` first (combine_handler.py:64) and
+    // `instance.variable_binding` rebinds the output (mirroring
+    // wildcard's identity section). Static preview must match so
+    // downstream assemblers see the post-edit shape immediately
+    // instead of waiting for a queue round-trip.
+    const inst = (m.instance ?? {}) as {
+      template_override?: string | null;
+      variable_binding?: string | null;
+    };
+    const libBinding = (p.output_var as string | undefined)?.replace(/^\$/, "").trim();
+    const overrideBinding = (inst.variable_binding ?? "").replace(/^\$/, "").trim();
+    const out = overrideBinding || libBinding;
+    const tmpl =
+      typeof inst.template_override === "string" && inst.template_override !== ""
+        ? inst.template_override
+        : String(p.template ?? "");
     if (out) ctx[out] = expandValue(tmpl, ctx, catalog, 0);
     return;
   }

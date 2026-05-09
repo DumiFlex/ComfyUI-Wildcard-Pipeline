@@ -495,3 +495,102 @@ describe("collectUpstreamResolved nested @{uuid} fallback", () => {
     expect(collectUpstreamResolved(graph, asm)).toEqual({ outfit: "@{fc9af551} jeans" });
   });
 });
+
+// ── Combine v2 instance overrides — preview must reflect modal edits ──
+
+describe("collectUpstreamResolved — combine instance overrides", () => {
+  beforeEach(() => _resetForTests());
+
+  function ctxWithCombine(opts: {
+    template: string;
+    output_var: string;
+    template_override?: string | null;
+    variable_binding?: string | null;
+    upstream?: { binding: string; options: Array<{ value: string }> };
+  }): { ctx: LiteNodeLike; asm: LiteNodeLike; graph: LiteGraphLike } {
+    const upstreamMods = opts.upstream
+      ? [{
+          id: "src00001",
+          type: "wildcard" as const,
+          enabled: true,
+          meta: { name: "" },
+          entries: [],
+          payload: { var_binding: opts.upstream.binding, options: opts.upstream.options },
+        }]
+      : [];
+    const combineMod: Record<string, unknown> = {
+      id: "cb000001",
+      type: "combine",
+      enabled: true,
+      meta: { name: "" },
+      entries: [],
+      payload: { template: opts.template, output_var: opts.output_var },
+    };
+    const inst: Record<string, unknown> = {};
+    if (opts.template_override !== undefined) inst.template_override = opts.template_override;
+    if (opts.variable_binding !== undefined) inst.variable_binding = opts.variable_binding;
+    if (Object.keys(inst).length > 0) combineMod.instance = inst;
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "modules",
+        value: JSON.stringify({ version: 1, modules: [...upstreamMods, combineMod] }),
+      }],
+    };
+    const asm: LiteNodeLike = {
+      id: 2,
+      type: "WP_PromptAssembler",
+      inputs: [{ name: "context", link: 100 }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    return { ctx, asm, graph };
+  }
+
+  it("uses payload.template when no instance.template_override set", () => {
+    const { graph, asm } = ctxWithCombine({
+      template: "lib template",
+      output_var: "out",
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ out: "lib template" });
+  });
+
+  it("honors instance.template_override over payload.template", () => {
+    const { graph, asm } = ctxWithCombine({
+      template: "lib template",
+      output_var: "out",
+      template_override: "user override",
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({ out: "user override" });
+  });
+
+  it("honors instance.variable_binding rebinding the output", () => {
+    const { graph, asm } = ctxWithCombine({
+      template: "x",
+      output_var: "lib_out",
+      variable_binding: "renamed",
+    });
+    const result = collectUpstreamResolved(graph, asm);
+    expect(result.renamed).toBe("x");
+    expect(result.lib_out).toBeUndefined();
+  });
+
+  it("expands $vars in template_override against upstream ctx", () => {
+    const { graph, asm } = ctxWithCombine({
+      template: "lib has $color",
+      output_var: "out",
+      template_override: "override has $color",
+      upstream: { binding: "$color", options: [{ value: "red" }] },
+    });
+    expect(collectUpstreamResolved(graph, asm)).toEqual({
+      color: "red",
+      out: "override has red",
+    });
+  });
+});
