@@ -315,6 +315,64 @@ export function collectUpstreamResolved(
 }
 
 /**
+ * Resolved-var snapshot from the perspective of a SPECIFIC module
+ * inside `node`. Includes:
+ *   - everything `collectUpstreamResolved(rootGraph, node)` returns
+ *     (chain modules upstream of `node`)
+ *   - bindings produced by other modules in `node` itself, simulated
+ *     in array order (last-write-wins matches engine pipeline)
+ *   - excludes the module whose id matches `excludeModuleId`, so the
+ *     module being edited doesn't read its own (about-to-be-written)
+ *     binding back into its template preview.
+ *
+ * Drives the combine modal's live-preview pane: a combine can
+ * reference any var produced upstream OR by an earlier sibling in the
+ * same Context node. Static preview must reflect both. The chain
+ * walker alone (`collectUpstreamResolved`) misses sibling bindings
+ * because it stops at `node` — fine for the assembler downstream of
+ * `node` (which only sees the public socket payload), wrong for a
+ * module IN `node` reaching across to a sibling.
+ */
+export function collectLocalResolvedForModule(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+  excludeModuleId?: string,
+): Record<string, string> {
+  // Step 1: pull upstream-only resolution as the base ctx.
+  const ctx = collectUpstreamResolved(rootGraph, node);
+
+  // Step 2: walk this node's own modules in declaration order so
+  // earlier siblings write before later ones. Excluded module is
+  // skipped — this is the module being edited; reading its own
+  // about-to-be-emitted binding would surface stale state.
+  if (isSkippedMode(node)) return ctx;
+
+  const v = parseWidgetJson<ContextWidgetValue>(
+    widgetValue(node, "modules"),
+    { version: 1, modules: [] },
+  );
+
+  // Build a wildcard catalog over THIS node so refs in option values
+  // (`@{uuid}`) resolve when wildcard siblings get simulated. Mirrors
+  // `resolveChainStatic`'s catalog construction. Cross-node refs are
+  // already in `ctx` from the upstream walk, but local catalog
+  // entries need to be discoverable by `expandValue` here.
+  const catalog = new Map<string, MinimalWildcard>();
+  for (const m of v.modules) {
+    if (m.type !== "wildcard" || !m.payload) continue;
+    catalog.set(m.id, m.payload as MinimalWildcard);
+  }
+
+  for (const m of v.modules) {
+    if (excludeModuleId && m.id === excludeModuleId) continue;
+    if (!m.enabled) continue;
+    writeBindings(ctx, m, catalog);
+  }
+
+  return ctx;
+}
+
+/**
  * Variable names known upstream of `node`. Thin alias over
  * {@link collectUpstreamResolved} for call sites (subgraph badge,
  * autocompletes) that only need the keys.

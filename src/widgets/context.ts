@@ -7,6 +7,7 @@ import {
 import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectDownstreamWildcardUuids,
+  collectLocalResolvedForModule,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
@@ -160,6 +161,21 @@ export function create(node: ContextNode, inputName: string) {
         Object.is,
       );
 
+      /** Resolved-var map from THIS module's perspective — includes
+       *  upstream-chain bindings AND sibling bindings produced
+       *  earlier in the same node, while excluding the asking module
+       *  itself (so it doesn't read its own about-to-be-emitted
+       *  binding). Drives the combine modal's live-preview pane.
+       *  Function (vs static prop) because the answer depends on
+       *  which module the modal is currently editing. */
+      function localResolvedReader(moduleId?: string): Record<string, string> {
+        const startGraph =
+          (node as unknown as { graph?: LiteGraphLike }).graph
+          ?? (app.graph as unknown as LiteGraphLike);
+        const rootGraph = findRootGraph(startGraph);
+        return collectLocalResolvedForModule(rootGraph, node, moduleId);
+      }
+
       function lastUsedSeedReader(moduleId?: string): number | null {
         const perModule = (node as unknown as {
           __wp_last_used_per_module__?: Record<string, number>;
@@ -176,6 +192,7 @@ export function create(node: ContextNode, inputName: string) {
         initialJson: currentJson.value,
         upstreamVars: upstreamVars.value,
         upstreamResolved: upstreamResolved.value,
+        localResolvedReader,
         upstreamWildcardUuids: upstreamUuids.value,
         downstreamWildcardUuids: downstreamUuids.value,
         nodeMode: nodeMode.value,

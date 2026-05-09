@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   collectDownstreamWildcardUuids,
+  collectLocalResolvedForModule,
   collectUpstreamResolved,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
@@ -592,5 +593,114 @@ describe("collectUpstreamResolved — combine instance overrides", () => {
       color: "red",
       out: "override has red",
     });
+  });
+});
+
+// ── collectLocalResolvedForModule — sibling visibility for combine
+//    modal live preview. Must include siblings in the same node so
+//    `$style` resolves when typed into a combine template that lives
+//    alongside a wildcard binding `$style`.
+
+describe("collectLocalResolvedForModule", () => {
+  beforeEach(() => _resetForTests());
+
+  function singleNode(modules: unknown[]): { ctx: LiteNodeLike; graph: LiteGraphLike } {
+    const ctx: LiteNodeLike = {
+      id: 1,
+      type: "WP_Context",
+      inputs: [{ name: "upstream", link: null }],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "modules",
+        value: JSON.stringify({ version: 1, modules }),
+      }],
+    };
+    const graph: LiteGraphLike = {
+      _nodes: [ctx],
+      links: {},
+      getNodeById: (id) => (id === 1 ? ctx : null),
+    };
+    return { ctx, graph };
+  }
+
+  it("includes sibling wildcard binding when no upstream chain", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { var_binding: "$style", options: [{ id: "o1", value: "moody" }] },
+      },
+      {
+        id: "cb000001", type: "combine", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { template: "$style portrait", output_var: "result" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx, "cb000001");
+    expect(result.style).toBe("moody");
+    // editing module excluded — its own binding doesn't surface
+    expect(result.result).toBeUndefined();
+  });
+
+  it("excludes the editing module's own binding", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "cb000001", type: "combine", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { template: "x", output_var: "self" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx, "cb000001");
+    expect(result.self).toBeUndefined();
+  });
+
+  it("includes editing module's binding when no excludeId provided", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "cb000001", type: "combine", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { template: "x", output_var: "self" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    expect(result.self).toBe("x");
+  });
+
+  it("respects sibling fixed_values bindings", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "fv000001", type: "fixed_values", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: {
+          values: [
+            { id: "v1", name: "preset", value: "default" },
+          ],
+        },
+      },
+      {
+        id: "cb000001", type: "combine", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { template: "use $preset", output_var: "out" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx, "cb000001");
+    expect(result.preset).toBe("default");
+  });
+
+  it("skips disabled siblings", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: false,
+        meta: { name: "" }, entries: [],
+        payload: { var_binding: "$style", options: [{ id: "o1", value: "moody" }] },
+      },
+      {
+        id: "cb000001", type: "combine", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { template: "$style", output_var: "out" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx, "cb000001");
+    expect(result.style).toBeUndefined();
   });
 });

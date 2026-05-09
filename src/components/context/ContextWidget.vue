@@ -44,6 +44,12 @@ const props = withDefaults(defineProps<{
    *  template with vars substituted (e.g. `red portrait` instead of
    *  `$style portrait`) at edit time. Optional for headless mounts. */
   upstreamResolved?: Record<string, string>;
+  /** Per-module resolved reader — given a moduleId, returns the map of
+   *  vars visible from that module's perspective (upstream chain +
+   *  earlier siblings, excluding the module itself). Modal uses this
+   *  for the combine live preview because static `upstreamResolved`
+   *  alone misses sibling bindings produced in the same node. */
+  localResolvedReader?: (moduleId?: string) => Record<string, string>;
   /** Wildcard module uuids reachable upstream of this node. Used by
    *  the constraint-ordering scanner to validate constraint
    *  source/target references — sources in the upstream chain are
@@ -114,6 +120,19 @@ const editingId = ref<string | null>(null);
 const editingModule = computed<ModuleEntry | null>(() =>
   value.value.modules.find((m) => m.id === editingId.value) ?? null,
 );
+
+/** Live-preview source of truth for the modal: combines upstream-chain
+ *  bindings + sibling bindings produced in this same node (minus the
+ *  module being edited). Falls back to the static `upstreamResolved`
+ *  prop when the per-module reader isn't wired (legacy mounts /
+ *  headless tests). Recomputed on every editingId change so the
+ *  preview pane reflects the right perspective. */
+const resolvedForEditing = computed<Record<string, string>>(() => {
+  if (props.localResolvedReader && editingId.value) {
+    return props.localResolvedReader(editingId.value);
+  }
+  return props.upstreamResolved ?? {};
+});
 
 // Variable names defined in OTHER modules of this same node — used by the
 // edit modal's autocomplete + per-entry validity. Exclude the module being
@@ -1758,7 +1777,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
       :visible="editingModule !== null"
       :module="editingModule"
       :upstream-vars="upstreamVars"
-      :upstream-resolved="upstreamResolved"
+      :upstream-resolved="resolvedForEditing"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"
       :last-used-seed-reader="lastUsedSeedReader"
