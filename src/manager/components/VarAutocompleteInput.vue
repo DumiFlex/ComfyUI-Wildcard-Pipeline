@@ -106,10 +106,19 @@ function closePopup(): void {
 function onInput(ev: Event): void {
   const next = (ev.target as HTMLInputElement).value;
   emit("update:modelValue", next);
-  // Reposition on every input — input width may shift slightly as
-  // text grows past placeholder rendering.
-  if (open.value) void nextTick(positionPopup);
   active.value = 0;
+  // Reopen popup whenever the user types — covers two cases:
+  //   1. User pressed Enter to select a suggestion (which closes the
+  //      popup) and then keeps typing to refine. Without this, the
+  //      dropdown stays closed forever after one Enter.
+  //   2. User pressed Escape to dismiss the popup and starts typing
+  //      again expecting suggestions to reappear.
+  // Reposition when already open so the popup tracks the input as
+  // text width shifts past placeholder rendering.
+  if (props.suggestions.length > 0) {
+    if (!open.value) openPopup();
+    else void nextTick(positionPopup);
+  }
 }
 
 function onFocus(): void {
