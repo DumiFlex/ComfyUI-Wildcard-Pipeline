@@ -129,4 +129,67 @@ describe("DebugViewer", () => {
     const keyCell = wrapper.find(".wp-dbg-pick-key");
     expect(keyCell.text()).toBe("$ffeeddcc");
   });
+
+  it("Trace tab fans out multi-write modules into one row per binding", async () => {
+    const multi = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "fixedmod1",
+          type: "fixed_values",
+          status: "ok",
+          writes: [
+            { variable: "alpha", value: "v1" },
+            { variable: "beta", value: "v2" },
+            { variable: "gamma", value: "v3" },
+          ],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: multi } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const rows = wrapper.findAll(".wp-dbg-trace-row").filter(
+      (r) => !r.classes("wp-dbg-trace-row--head"),
+    );
+    expect(rows.length).toBe(3);
+    const labels = wrapper.findAll(".wp-dbg-trace-label").map((el) => el.text());
+    expect(labels).toEqual(["$alpha", "$beta", "$gamma"]);
+  });
+
+  it("Trace tab applies kind-chip color class per module type", async () => {
+    const mixed = JSON.stringify({
+      __wp_trace__: [
+        { id: "w1", type: "wildcard",     status: "ok", writes: [{ variable: "a", value: "x" }] },
+        { id: "f1", type: "fixed_values", status: "ok", writes: [{ variable: "b", value: "y" }] },
+        { id: "c1", type: "combine",      status: "ok", writes: [{ variable: "c", value: "z" }] },
+        { id: "d1", type: "derivation",   status: "ok", writes: [{ variable: "d", value: "w" }] },
+        { id: "k1", type: "constraint",   status: "ok", writes: [] },
+        { node: "WP_ContextInjector", binding: "inj1", type: "str", status: "ok" },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: mixed } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const types = wrapper.findAll(".wp-dbg-trace-type");
+    expect(types[0].classes()).toContain("wp-kind-chip--wildcard");
+    expect(types[1].classes()).toContain("wp-kind-chip--fixed");
+    expect(types[2].classes()).toContain("wp-kind-chip--combine");
+    expect(types[3].classes()).toContain("wp-kind-chip--derivation");
+    expect(types[4].classes()).toContain("wp-kind-chip--constraint");
+    // Injector trace's `type` field is "str" (from injector_node.py),
+    // doesn't map to a known kind — falls back to unknown variant.
+    expect(types[5].classes()).toContain("wp-kind-chip--unknown");
+  });
+
+  it("Trace row for module with no bindings still surfaces (constraint-style)", async () => {
+    const constraintSnap = JSON.stringify({
+      __wp_trace__: [
+        { id: "constraintabc", type: "constraint", status: "ok", writes: [] },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: constraintSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const labels = wrapper.findAll(".wp-dbg-trace-label");
+    expect(labels.length).toBe(1);
+    // Falls back to short-uuid label since no binding to display.
+    expect(labels[0].text()).toBe("$constrai");
+  });
 });

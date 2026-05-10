@@ -133,16 +133,35 @@ const traceEntriesRaw = computed<TraceEntry[]>(() => {
 });
 
 interface TraceRow {
-  id: string;                   // raw module_id (kept for `key` / debugging)
-  shortId: string;              // first 6 chars of `id` for the table cell
-  label: string;                // friendly label — variable name when available, else short id
+  /** Stable React-key — `<module_id>:<binding>:<index>`. Same module
+   *  may emit several rows when it writes multiple bindings (one row
+   *  per write), so module_id alone isn't unique. */
+  key: string;
+  /** Raw module_id, kept for the row-tooltip + debugging. */
+  id: string;
+  /** Friendly variable-first label — `$variable_name` when available,
+   *  `$<short-uuid>` when a module ran but produced no bindings (e.g.
+   *  a constraint-only module that only registers cross-cell rules). */
+  label: string;
+  /** Module type (`wildcard`, `fixed_values`, `combine`, ...). */
   type: string;
+  /** Display alias for the type chip — `fixed_values` reads as
+   *  `fixed` in the kind tokens (matches the rest of the app). */
+  typeLabel: string;
+  /** CSS class for the colored type chip — `wp-kind-chip--<kind>` so
+   *  the type column reads with the same color family as the module
+   *  rows in ContextWidget / ModulePickerModal / AssemblerHelper. */
+  kindClass: string;
+  /** Status bucket — drives pill color. */
   status: "ok" | "skipped" | "error" | "unknown";
+  /** Status label shown inside the pill (lowercase, terse). */
   statusLabel: string;
-  binding: string;
-  value: string;                // formatted string of writes[0].value (or empty)
-  seed: string;                 // last-6-digit slice of the seed for compactness
+  /** Formatted picked / written value. */
+  value: string;
+  /** Last-6-digit slice of the seed for compactness. */
+  seed: string;
   errorMessage: string | null;
+  /** True when this write replaced an existing upstream value. */
   overwrite: boolean;
 }
 
@@ -175,15 +194,34 @@ function statusLabelOf(raw: string | undefined, hasError: boolean): string {
   return raw || "ok";
 }
 
+/** Map raw engine type to the kind-token alias used by
+ *  `wp-kind-chip--<alias>` rules in theme.css. `fixed_values` is
+ *  aliased to `fixed` because the token system pre-dates the
+ *  underscore form. Injector + unknown types fall back to the
+ *  pipeline / accent color (no dedicated token). */
+function kindAlias(type: string): { label: string; cls: string } {
+  switch (type) {
+    case "wildcard":     return { label: "wildcard",   cls: "wp-kind-chip--wildcard" };
+    case "fixed_values": return { label: "fixed",      cls: "wp-kind-chip--fixed" };
+    case "combine":      return { label: "combine",    cls: "wp-kind-chip--combine" };
+    case "derivation":   return { label: "derivation", cls: "wp-kind-chip--derivation" };
+    case "constraint":   return { label: "constraint", cls: "wp-kind-chip--constraint" };
+    case "pipeline":     return { label: "pipeline",   cls: "wp-kind-chip--pipeline" };
+    default:             return { label: type || "—",  cls: "wp-kind-chip--unknown" };
+  }
+}
+
 /** Trace rows — projection of the raw engine + injector trace into a
- *  table-friendly shape. Pulls `writes[0].variable` for the binding
- *  column (engine modules) or falls back to `entry.binding` (injector
- *  trace). Shortens module-ids + seeds so the table reads at a glance. */
+ *  table-friendly shape. **Multi-write modules expand into multiple
+ *  rows** — a single fixed_values module that writes 3 bindings
+ *  produces 3 trace rows, one per binding, sharing module-id / type /
+ *  seed metadata. Modules with no writes (e.g. constraint-only) get
+ *  one row keyed by short-uuid. Injector trace (`{node, binding,
+ *  type}` shape) becomes one row each. */
 const traceRows = computed<TraceRow[]>(() => {
-  return traceEntriesRaw.value.map((t): TraceRow => {
+  const rows: TraceRow[] = [];
+  for (const t of traceEntriesRaw.value) {
     const id = typeof t.id === "string" ? t.id : "";
-    const firstWrite = Array.isArray(t.writes) ? t.writes[0] : undefined;
-    const variable = firstWrite?.variable || t.binding || "";
     const hasError = !!t.error;
     const errMsg =
       hasError && typeof t.error === "object" && t.error !== null && "message" in t.error
@@ -191,20 +229,58 @@ const traceRows = computed<TraceRow[]>(() => {
         : hasError && typeof t.error === "string"
           ? t.error
           : null;
-    return {
+    const kind = kindAlias(t.type || "");
+    const baseRow = {
       id,
-      shortId: id ? id.slice(0, 6) : "—",
-      label: variable ? `$${variable}` : (id ? id.slice(0, 8) : "—"),
       type: t.type || "—",
+      typeLabel: kind.label,
+      kindClass: kind.cls,
       status: categorizeStatus(t.status, hasError),
       statusLabel: statusLabelOf(t.status, hasError),
-      binding: variable,
-      value: firstWrite ? formatValue(firstWrite.value) : "",
       seed: shortenSeed(t.seed),
       errorMessage: errMsg,
-      overwrite: !!firstWrite?.overwrite,
     };
-  });
+
+    const writes = Array.isArray(t.writes) ? t.writes : [];
+    if (writes.length > 0) {
+      // Engine trace path — fan out one row per binding written so
+      // multi-binding modules (a fixed_values block declaring 3
+      // variables) show all three.
+      writes.forEach((w, i) => {
+        rows.push({
+          ...baseRow,
+          key: `${id || t.type || "row"}:${w.variable || "anon"}:${i}`,
+          label: w.variable ? `$${w.variable}` : (id ? `$${id.slice(0, 8)}` : "—"),
+          value: formatValue(w.value),
+          overwrite: !!w.overwrite,
+        });
+      });
+    } else if (t.binding) {
+      // Injector trace path — `{node, binding, type, internal}`.
+      // No `value` to surface here (injector writes whatever the
+      // upstream socket emitted; users see the value in the Snapshot
+      // tab, not duplicated in trace).
+      rows.push({
+        ...baseRow,
+        key: `${id || t.node || "row"}:${t.binding}`,
+        label: `$${t.binding}`,
+        value: "",
+        overwrite: false,
+      });
+    } else {
+      // Module ran but produced no bindings (constraint-only,
+      // wildcard with no `variable_binding`, etc). Keep the row for
+      // status visibility.
+      rows.push({
+        ...baseRow,
+        key: id || t.type || `row-${rows.length}`,
+        label: id ? `$${id.slice(0, 8)}` : "—",
+        value: "",
+        overwrite: false,
+      });
+    }
+  }
+  return rows;
 });
 
 interface PickRow {
@@ -351,8 +427,8 @@ function downloadJson(): void {
           <span class="wp-dbg-trace-seed">seed</span>
         </div>
         <div
-          v-for="(row, i) in traceRows"
-          :key="i"
+          v-for="row in traceRows"
+          :key="row.key"
           class="wp-dbg-trace-row"
           :class="`wp-dbg-trace-row--${row.status}`"
           :title="row.id ? `module ${row.id}` : ''"
@@ -361,7 +437,15 @@ function downloadJson(): void {
             {{ row.label }}
             <span v-if="row.overwrite" class="wp-dbg-trace-flag" title="Overwrote upstream value">↻</span>
           </span>
-          <span class="wp-dbg-trace-type">{{ row.type }}</span>
+          <!-- Type chip uses the same `wp-kind-chip--<kind>` token as
+               the row icons in ContextWidget / ModulePickerModal /
+               AssemblerHelper, so the user reads the trace in the
+               same color family they already know from picking +
+               assembling. -->
+          <span
+            class="wp-dbg-trace-type wp-kind-chip"
+            :class="row.kindClass"
+          >{{ row.typeLabel }}</span>
           <span
             class="wp-dbg-trace-pill"
             :class="`wp-dbg-trace-pill--${row.status}`"
@@ -596,9 +680,23 @@ function downloadJson(): void {
   color: var(--wp-warn);
   cursor: help;
 }
+/* Type cell is also a `wp-kind-chip` (from theme.css) — the chip
+ * provides the colored background + text. Override font size +
+ * uppercase here so the chip reads as a tight inline tag. Fallback
+ * `--unknown` variant for non-engine traces (injector) tints with
+ * the accent color. */
 .wp-dbg-trace-type {
+  font: 600 9px/1 var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 6px;
+  border-radius: 3px;
+  text-align: center;
+  justify-self: start;
+}
+.wp-dbg-trace-type.wp-kind-chip--unknown {
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
-  font-size: 10px;
 }
 /* Status pill — green/red/grey background tint matching --wp-green /
  * --wp-red / --wp-text3, so a quick eye-sweep down the column groups
