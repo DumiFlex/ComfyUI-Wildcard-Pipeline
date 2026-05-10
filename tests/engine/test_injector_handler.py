@@ -81,3 +81,25 @@ def test_primitives_pass_through_unchanged():
     assert out.values[0].context["as_float"] == 7.5
     assert out.values[0].context["as_bool"] is True
     assert out.values[0].context["as_str"] == "text"
+
+
+def test_invalid_binding_chars_skipped_with_warning():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "has spaces")]})
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="value")
+    assert out.values[0].context == {}
+    warnings = out.values[0].debug.get("__wp_warnings__", [])
+    assert any(w.get("type") == "injector_invalid_binding" for w in warnings)
+
+
+def test_reserved_binding_skipped_with_warning():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "_meta")]})
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="value")
+    assert out.values[0].context == {}
+    warnings = out.values[0].debug.get("__wp_warnings__", [])
+    assert any(w.get("type") == "injector_reserved_binding" for w in warnings)
+
+
+def test_valid_bindings_with_underscore_inside_pass():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "my_var")]})
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="ok")
+    assert out.values[0].context["my_var"] == "ok"

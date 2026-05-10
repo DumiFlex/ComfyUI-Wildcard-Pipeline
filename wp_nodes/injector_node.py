@@ -6,11 +6,14 @@ Spec: docs/superpowers/specs/2026-05-10-context-injector-design.md
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from wp_nodes.types import InjectorRowsInput, PipelineContext
+
+_BINDING_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
 
 
 class WPContextInjector(io.ComfyNode):
@@ -65,6 +68,7 @@ class WPContextInjector(io.ComfyNode):
         except json.JSONDecodeError:
             parsed = {"version": 1, "rows": []}
 
+        warnings: list[dict] = []
         rows_list = parsed.get("rows", []) if isinstance(parsed, dict) else []
         for row in rows_list:
             if not isinstance(row, dict):
@@ -74,21 +78,41 @@ class WPContextInjector(io.ComfyNode):
             binding = row.get("binding", "")
             if not isinstance(binding, str) or not binding.strip():
                 continue
+            stripped = binding.strip()
+            if stripped.startswith("_"):
+                warnings.append({
+                    "type": "injector_reserved_binding",
+                    "binding": stripped,
+                    "row_uid": row.get("_uid"),
+                })
+                continue
+            if not _BINDING_RE.match(stripped):
+                warnings.append({
+                    "type": "injector_invalid_binding",
+                    "binding": stripped,
+                    "row_uid": row.get("_uid"),
+                })
+                continue
             slot_name = row.get("slot_name", "")
             if not isinstance(slot_name, str) or slot_name not in slot_values:
                 continue
             value = slot_values[slot_name]
             if isinstance(value, bool):
-                ctx[binding.strip()] = value
+                ctx[stripped] = value
             elif isinstance(value, (str, int, float)):
-                ctx[binding.strip()] = value
+                ctx[stripped] = value
             else:
-                ctx[binding.strip()] = str(value)
+                ctx[stripped] = str(value)
+
+        debug = dict(upstream_debug)
+        if warnings:
+            existing = debug.get("__wp_warnings__", [])
+            debug["__wp_warnings__"] = list(existing) + warnings
 
         return io.NodeOutput(
             PipelineContext.Type(
                 context=ctx,
-                debug=dict(upstream_debug),
+                debug=debug,
                 internals=dict(upstream_internals),
             )
         )
