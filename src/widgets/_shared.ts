@@ -488,6 +488,36 @@ export function emptyContextValue(): ContextWidgetValue {
   return { version: 1, modules: [] };
 }
 
+/** Per-row state for the WP_ContextInjector widget. Mirrors
+ *  ContextWidgetValue's shape (version + flat array) so the same
+ *  parseWidgetJsonWithRecovery + serializeWidgetJson helpers work
+ *  unchanged. */
+export interface InjectorRowsValue {
+  version: 1;
+  rows: InjectorRow[];
+}
+
+export interface InjectorRow {
+  /** Stable per-row UID for v-for keying. Independent of slot reorder. */
+  _uid: string;
+  /** ComfyUI input slot name this row binds to (e.g. "input_0").
+   *  Engine reads slot by NAME, not index, so reordering rows in the
+   *  widget doesn't break value lookup at execute time. */
+  slot_name: string;
+  /** Variable name written to ctx. Empty = unset; row renders with
+   *  warn-color placeholder until user types a name. */
+  binding: string;
+  /** Toggle off skips the ctx write that run. */
+  enabled: boolean;
+  /** True = mark binding for assembler chip strip skip (still writes
+   *  to ctx, just hidden from the chip strip UI). */
+  internal: boolean;
+}
+
+export function emptyInjectorRowsValue(): InjectorRowsValue {
+  return { version: 1, rows: [] };
+}
+
 export function newModuleId(): string {
   // spec §3.2 — 8-char hex
   const bytes = new Uint8Array(4);
