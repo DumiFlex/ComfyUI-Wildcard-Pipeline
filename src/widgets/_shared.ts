@@ -173,6 +173,61 @@ export interface ContextWidgetValue {
    * `@{uuid}` ref resolution.
    */
   modules: ModuleEntry[];
+  /**
+   * Library-tracked groupings wrapping a contiguous range of
+   * `modules[]`. The engine ignores this field entirely — bundle
+   * metadata is presentation-only. ContextWidget renders a colored
+   * frame around `[start_idx..end_idx]` for each entry.
+   *
+   * Bundles are intentionally **snapshot packages**: when a bundle
+   * is inserted, the library entry's child snapshots get spliced
+   * into `modules[]` as ordinary modules (with `bundle_origin`
+   * stamped) and one entry is added here. Library updates to the
+   * snapshotted children do NOT propagate into existing
+   * `BundleInstance`s — drift detection is per-child via the
+   * existing per-kind logic.
+   *
+   * Optional in workflow JSON for backward compat — when missing,
+   * `parseWidgetJsonWithRecovery` defaults this to `[]` so old
+   * workflows load unchanged. Marked optional at the TS level too
+   * so inline literal fallbacks (`{version:1, modules:[]}` scattered
+   * across the codebase) don't have to be updated en masse — consumers
+   * read with `value.bundles ?? []`.
+   */
+  bundles?: BundleInstance[];
+}
+
+/** A bundle instance pinned to one Context node. Stable across
+ *  workflow save/load. Range integrity is the ContextWidget's
+ *  responsibility — drag-in/drag-out of children adjusts
+ *  start_idx/end_idx; dropping the last child dissolves the
+ *  bundle (frame disappears, library entry preserved). */
+export interface BundleInstance {
+  /** Per-Context stable UID, used as Vue `:key` + cross-reference
+   *  target for child `bundle_origin` fields. Separate from
+   *  `library_id` since the same library entry can be inserted
+   *  multiple times into one Context. 12-char hex (matches
+   *  `newRowUid()` pattern used by module `_uid`). */
+  _uid: string;
+  /** Pointer to the bundle library entry. May fail to resolve if
+   *  the entry was deleted from the library — surfaces as a
+   *  missing-state on the bundle header. */
+  library_id: string;
+  /** Indices over `ContextWidgetValue.modules[]`, both inclusive.
+   *  `end_idx < start_idx` is invalid — drop the BundleInstance
+   *  entirely when the last child leaves the range. */
+  start_idx: number;
+  end_idx: number;
+  /** When false, every module inside `[start_idx..end_idx]` gets
+   *  `enabled: false` cascaded at engine-write time. */
+  enabled: boolean;
+  /** When true, ContextWidget renders only the bundle header row
+   *  and hides children. */
+  collapsed: boolean;
+  /** Library payload_hash at insert time. Used to detect when the
+   *  bundle library entry has been updated since this instance was
+   *  inserted — informational only, not a conflict. */
+  inserted_at_hash: string;
 }
 
 /** Module kind discriminator. Same six kinds the SPA library carries. */
@@ -471,6 +526,13 @@ export function parseWidgetJsonWithRecovery<T>(raw: string, fallback: T): ParseR
       // Migrate legacy instance.last_locked_seed to instance._ui.last_locked_seed
       const parsedRecord = parsed as Record<string, unknown>;
       migrateLegacyLastLockedSeed(parsedRecord.modules);
+      // Backfill `bundles: []` so older workflows (saved before the
+      // bundle system shipped) match the new ContextWidgetValue
+      // shape. ContextWidget code consumes `value.bundles` directly;
+      // without this default it would crash on `value.bundles.map`.
+      if (parsedRecord.bundles === undefined) {
+        parsedRecord.bundles = [];
+      }
       return { value: parsed as T, error: null, raw };
     }
     return { value: fallback, error: `Expected an object, got ${typeof parsed}.`, raw };
@@ -485,7 +547,23 @@ export function serializeWidgetJson(value: unknown): string {
 }
 
 export function emptyContextValue(): ContextWidgetValue {
-  return { version: 1, modules: [] };
+  return { version: 1, modules: [], bundles: [] };
+}
+
+/** Generates a per-Context bundle instance with a fresh 12-char hex
+ *  `_uid` + sane defaults. Caller fills in `start_idx` / `end_idx`
+ *  after splicing children into `modules[]` + sets
+ *  `inserted_at_hash` from the library entry's `payload_hash`. */
+export function emptyBundleInstance(library_id: string): BundleInstance {
+  return {
+    _uid: newRowUid(),
+    library_id,
+    start_idx: 0,
+    end_idx: 0,
+    enabled: true,
+    collapsed: false,
+    inserted_at_hash: "",
+  };
 }
 
 /** Per-row state for the WP_ContextInjector widget. Mirrors
