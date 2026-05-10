@@ -58,6 +58,14 @@ function onResetClick(): void {
 function onEscape(): void {
   emit("close");
 }
+
+const FACTOR_STEP = 0.1;
+function bump(dir: 1 | -1): void {
+  const cur = Number(inputValue.value);
+  const base = Number.isFinite(cur) ? cur : props.libraryFactor;
+  const next = Math.max(0, Math.round((base + dir * FACTOR_STEP) * 10) / 10);
+  inputValue.value = String(next);
+}
 </script>
 
 <template>
@@ -65,18 +73,42 @@ function onEscape(): void {
     <div class="cfp__head">{{ label }}</div>
     <label class="cfp__row">
       <span class="cfp__field-label">Factor</span>
-      <input
-        type="number"
-        step="0.1"
-        min="0"
-        class="cfp__input"
-        data-test="cfp-input"
-        aria-label="Factor"
-        :value="inputValue"
-        @input="onInput"
-        @keydown.enter.prevent="onCommit"
-        @keydown.escape.prevent="onEscape"
-      />
+      <span class="cfp__input-wrap" @wheel.stop>
+        <input
+          type="number"
+          step="0.1"
+          min="0"
+          class="cfp__input"
+          data-test="cfp-input"
+          aria-label="Factor"
+          :value="inputValue"
+          @input="onInput"
+          @keydown.enter.prevent="onCommit"
+          @keydown.escape.prevent="onEscape"
+        />
+        <span class="cfp__spin">
+          <button
+            type="button"
+            class="cfp__spin-btn"
+            tabindex="-1"
+            data-test="cfp-up"
+            aria-label="Increase factor"
+            @click="bump(1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
+          </svg></button>
+          <button
+            type="button"
+            class="cfp__spin-btn"
+            tabindex="-1"
+            data-test="cfp-down"
+            aria-label="Decrease factor"
+            @click="bump(-1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
+          </svg></button>
+        </span>
+      </span>
     </label>
     <div class="cfp__hint" data-test="cfp-library-hint">
       library: {{ libraryFactor }}
@@ -121,17 +153,59 @@ function onEscape(): void {
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.cfp__input {
+.cfp__input-wrap {
+  display: inline-flex;
+  align-items: stretch;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  padding: 4px 6px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-  width: 100%;
-  box-sizing: border-box;
+  height: 24px;
+  overflow: hidden;
 }
-.cfp__input:focus { border-color: var(--wp-accent); outline: none; }
+.cfp__input-wrap:focus-within { border-color: var(--wp-accent); }
+.cfp__input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 0 6px;
+  font: 11px var(--wp-font-mono);
+  color: var(--wp-text-muted, var(--wp-text2));
+  text-align: right;
+  width: 100%;
+  min-width: 0;
+  -moz-appearance: textfield;
+}
+.cfp__input::-webkit-outer-spin-button,
+.cfp__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.cfp__input:focus { outline: none; color: var(--wp-text); }
+.cfp__spin {
+  display: flex;
+  flex-direction: column;
+  width: 14px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--wp-border);
+  background: var(--wp-bg);
+}
+.cfp__spin-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  line-height: 0;
+}
+.cfp__spin-btn + .cfp__spin-btn {
+  border-top: 1px solid var(--wp-border);
+}
+.cfp__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99, 102, 241, 0.10); }
 .cfp__hint {
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));

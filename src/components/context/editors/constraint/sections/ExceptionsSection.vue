@@ -170,6 +170,31 @@ function onAddExtra(): void {
   ];
   emit("update", patchInstance(props.module, "extra_exceptions", next));
 }
+
+// Spinner step — match wildcard OptionRow.WEIGHT_STEP. Round to 1
+// decimal so 1.0 ± 0.1 doesn't drift to floating-point noise.
+const FACTOR_STEP = 0.1;
+
+function bumpLibFactor(exc: LibraryException, dir: 1 | -1): void {
+  const next = Math.max(0, Math.round((effectiveFactor(exc) + dir * FACTOR_STEP) * 10) / 10);
+  const key = libKey(exc);
+  const map = { ...factorOverrides.value };
+  if (next === exc.factor) {
+    delete map[key];
+  } else {
+    map[key] = next;
+  }
+  emit("update", patchInstance(props.module, "exception_factor_overrides",
+    Object.keys(map).length > 0 ? map : null,
+  ));
+}
+
+function bumpExtraFactor(idx: number, dir: 1 | -1): void {
+  const exc = extras.value[idx];
+  if (!exc) return;
+  const next = Math.max(0, Math.round((exc.factor + dir * FACTOR_STEP) * 10) / 10);
+  onExtraFieldChange(idx, "factor", next);
+}
 </script>
 
 <template>
@@ -192,17 +217,42 @@ function onAddExtra(): void {
         :data-test="`ex-mode-${i}`"
         @click="onLibModeCycle(exc)"
       >{{ effectiveMode(exc) }}</button>
-      <input
+      <span
         v-if="effectiveMode(exc) === 'boost' || effectiveMode(exc) === 'reduce'"
-        type="number"
-        step="0.1"
-        min="0"
-        class="ex__factor-input"
-        :data-test="`ex-factor-${i}`"
-        aria-label="Exception factor"
-        :value="effectiveFactor(exc)"
-        @change="(ev) => onLibFactorChange(exc, ev)"
-      />
+        class="ex__factor-wrap"
+        @wheel.stop
+      >
+        <input
+          type="number"
+          step="0.1"
+          min="0"
+          class="ex__factor-input"
+          :data-test="`ex-factor-${i}`"
+          aria-label="Exception factor"
+          :value="effectiveFactor(exc)"
+          @change="(ev) => onLibFactorChange(exc, ev)"
+        />
+        <span class="ex__spin">
+          <button
+            type="button"
+            class="ex__spin-btn"
+            tabindex="-1"
+            :aria-label="`Increase factor for ${excSrc(exc)} → ${excTgt(exc)}`"
+            @click="bumpLibFactor(exc, 1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
+          </svg></button>
+          <button
+            type="button"
+            class="ex__spin-btn"
+            tabindex="-1"
+            :aria-label="`Decrease factor for ${excSrc(exc)} → ${excTgt(exc)}`"
+            @click="bumpLibFactor(exc, -1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
+          </svg></button>
+        </span>
+      </span>
     </div>
 
     <div v-for="(exc, i) in extras" :key="`extra-${i}`" class="ex__row ex__row--extra" :data-test="`ex-extra-${i}`">
@@ -230,16 +280,41 @@ function onAddExtra(): void {
         :class="`ex__mode-chip--${exc.mode}`"
         @click="onExtraModeCycle(i)"
       >{{ exc.mode }}</button>
-      <input
+      <span
         v-if="exc.mode === 'boost' || exc.mode === 'reduce'"
-        type="number"
-        step="0.1"
-        min="0"
-        class="ex__factor-input"
-        aria-label="Extra factor"
-        :value="exc.factor"
-        @change="(ev) => onExtraFieldChange(i, 'factor', Number((ev.target as HTMLInputElement).value) || 1)"
-      />
+        class="ex__factor-wrap"
+        @wheel.stop
+      >
+        <input
+          type="number"
+          step="0.1"
+          min="0"
+          class="ex__factor-input"
+          aria-label="Extra factor"
+          :value="exc.factor"
+          @change="(ev) => onExtraFieldChange(i, 'factor', Number((ev.target as HTMLInputElement).value) || 1)"
+        />
+        <span class="ex__spin">
+          <button
+            type="button"
+            class="ex__spin-btn"
+            tabindex="-1"
+            aria-label="Increase extra factor"
+            @click="bumpExtraFactor(i, 1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
+          </svg></button>
+          <button
+            type="button"
+            class="ex__spin-btn"
+            tabindex="-1"
+            aria-label="Decrease extra factor"
+            @click="bumpExtraFactor(i, -1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
+            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
+          </svg></button>
+        </span>
+      </span>
       <button
         type="button"
         class="ex__trash"
@@ -301,15 +376,60 @@ function onAddExtra(): void {
 .ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
 .ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
 .ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
-.ex__factor-input {
-  width: 50px;
-  background: var(--wp-bg-deep, var(--wp-bg));
+.ex__factor-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--wp-bg);
   border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-  padding: 2px 4px;
-  font: 11px var(--wp-font-mono);
-  border-radius: 3px;
+  border-radius: 2px;
+  width: 64px;
+  height: 22px;
+  overflow: hidden;
 }
+.ex__factor-wrap:focus-within { border-color: var(--wp-accent); }
+.ex__factor-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 0 6px;
+  font: 10px var(--wp-font-mono);
+  color: var(--wp-text-muted, var(--wp-text2));
+  text-align: right;
+  width: 100%;
+  min-width: 0;
+  -moz-appearance: textfield;
+}
+.ex__factor-input::-webkit-outer-spin-button,
+.ex__factor-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.ex__factor-input:focus { outline: none; color: var(--wp-text); }
+.ex__spin {
+  display: flex;
+  flex-direction: column;
+  width: 14px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--wp-border);
+  background: var(--wp-bg-deep, var(--wp-bg));
+}
+.ex__spin-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  line-height: 0;
+}
+.ex__spin-btn + .ex__spin-btn {
+  border-top: 1px solid var(--wp-border);
+}
+.ex__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99, 102, 241, 0.10); }
 .ex__extra-badge {
   font: 600 8px var(--wp-font-sans);
   text-transform: uppercase;

@@ -25,11 +25,19 @@ type Mode = "allow" | "exclude" | "boost" | "reduce";
 
 interface Cell { mode: Mode; factor: number }
 
-const props = defineProps<{
-  module: ModuleEntry;
-  sourceSubs: readonly string[];
-  targetSubs: readonly string[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    module: ModuleEntry;
+    sourceSubs: readonly string[];
+    targetSubs: readonly string[];
+    /** Display name of the source/target wildcards — shown in the
+     *  matrix corner so users know which wildcards the rules govern.
+     *  Falls back to "source"/"target" when not provided. */
+    sourceName?: string;
+    targetName?: string;
+  }>(),
+  { sourceName: "", targetName: "" },
+);
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
 const matrix = computed<Record<string, Record<string, Cell>>>(() => {
@@ -181,7 +189,11 @@ function onResetFactor(src: string, tgt: string): void {
     <table class="mx__table">
       <thead>
         <tr>
-          <th class="mx__corner"></th>
+          <th class="mx__corner" data-test="mx-corner">
+            <span class="mx__corner-src">{{ sourceName || "source" }} ↓</span>
+            <span class="mx__corner-divider">/</span>
+            <span class="mx__corner-tgt">{{ targetName || "target" }} →</span>
+          </th>
           <th v-for="t in targetSubs" :key="t" class="mx__th">{{ t }}</th>
         </tr>
       </thead>
@@ -211,7 +223,13 @@ function onResetFactor(src: string, tgt: string): void {
                 aria-label="Edit factor"
                 @click="(ev) => onCogClick(s, t, ev)"
               ><i class="pi pi-cog" aria-hidden="true" /></button>
-              <div v-if="isPopoverOpen(s, t)" class="mx__popover">
+              <div
+                v-if="isPopoverOpen(s, t)"
+                class="mx__popover"
+                @click.stop
+                @wheel.stop
+                @keydown.stop
+              >
                 <CellFactorPopover
                   :library-factor="libCell(s, t)?.factor ?? 1"
                   :override-factor="cellFactorOverrides[encodeKey([s, t])] ?? null"
@@ -257,9 +275,19 @@ function onResetFactor(src: string, tgt: string): void {
 }
 .mx__th--row { text-align: right; }
 .mx__corner {
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--wp-bg);
+  border: 1px solid var(--wp-border);
+  font: 9px var(--wp-font-mono);
+  color: var(--wp-text-dim, var(--wp-text3));
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+  padding: 4px 8px;
+  text-align: left;
 }
+.mx__corner-src { color: var(--wp-text-muted, var(--wp-text2)); font-weight: 600; }
+.mx__corner-tgt { color: var(--wp-text-muted, var(--wp-text2)); font-weight: 600; }
+.mx__corner-divider { margin: 0 4px; color: var(--wp-text-dim, var(--wp-text3)); }
 .mx__td { border: 1px solid var(--wp-border); padding: 0; position: relative; }
 .mx__cell {
   display: flex; align-items: center; justify-content: center;

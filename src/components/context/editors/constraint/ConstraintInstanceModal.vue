@@ -55,11 +55,24 @@ interface WildcardPayload {
   options?: Array<{ value?: string }>;
 }
 
-function findWildcard(id: string | null | undefined): WildcardPayload | null {
+function findWildcardModule(id: string | null | undefined): ModuleEntry | null {
   if (!id) return null;
   const m = props.siblingModules.find((x) => x.id === id);
   if (!m || m.type !== "wildcard") return null;
-  return (m.payload ?? {}) as WildcardPayload;
+  return m;
+}
+
+function findWildcard(id: string | null | undefined): WildcardPayload | null {
+  const m = findWildcardModule(id);
+  return m ? ((m.payload ?? {}) as WildcardPayload) : null;
+}
+
+function wildcardName(id: string | null | undefined): string {
+  const m = findWildcardModule(id);
+  // Prefer meta.name; fall back to short id (last 8 chars) so users
+  // still see *something* identifying the wildcard when not in context.
+  if (m?.meta?.name) return m.meta.name;
+  return id ? `…${id.slice(-8)}` : "";
 }
 
 interface ConstraintPayload {
@@ -128,6 +141,15 @@ const targetValues = computed<string[]>(() => {
   return Array.from(set);
 });
 
+const sourceName = computed(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return wildcardName(pl.source_wildcard_id);
+});
+const targetName = computed(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return wildcardName(pl.target_wildcard_id);
+});
+
 function onUpdate(patch: Partial<ModuleEntry>): void {
   emit("update", patch);
 }
@@ -163,6 +185,8 @@ function onSpaClick(): void {
       :module="module"
       :source-subs="sourceSubs"
       :target-subs="targetSubs"
+      :source-name="sourceName"
+      :target-name="targetName"
       @update="onUpdate"
     />
     <ExceptionsSection
