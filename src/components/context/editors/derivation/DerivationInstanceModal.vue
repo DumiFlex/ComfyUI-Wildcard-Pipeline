@@ -2,19 +2,21 @@
 /**
  * DerivationInstanceModal — single-pane v2 modal for derivation
  * modules. Library-defining edits (rule conditions, branches,
- * actions) live in the SPA. Modal exposes only:
- *   - Display name (`meta.name`) overrideable per instance
- *   - Per-rule enable toggle (`instance.disabled_rule_ids`)
+ * actions) live in the SPA. Modal exposes per-instance overrides:
+ *   - Display name (`meta.name`)
+ *   - Per-rule + per-branch disable toggles
+ *   - Action.value + condition.value overrides per branch
+ *   - Rule reorder via drag-and-drop
+ *   - Lock seed + Hide-from-prompt (Runtime section)
  *
- * No Runtime section: derivation handler currently doesn't honor
- * `locked_seed`, and `internal` flagging is more naturally managed at
- * the SPA library entry. If those land later, add a RuntimeSection
- * mirroring combine's pattern.
+ * Section order matches all shipped v2 modals: Header → Identity →
+ * Rules (kind-specific) → Runtime → Footer.
  */
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import RulesSection from "./sections/RulesSection.vue";
+import RuntimeSection from "./sections/RuntimeSection.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -72,6 +74,7 @@ function onSpaClick(): void {
 
     <IdentitySection :module="module" @update="onUpdate" />
     <RulesSection :module="module" @update="onUpdate" />
+    <RuntimeSection :module="module" @update="onUpdate" />
 
     <footer class="dvm__foot">
       <a

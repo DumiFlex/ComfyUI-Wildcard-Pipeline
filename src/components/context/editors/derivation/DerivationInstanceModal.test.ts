@@ -43,10 +43,21 @@ describe("DerivationInstanceModal", () => {
     expect(w.find('[data-test="dvm-chip"]').text().toLowerCase()).toBe("derivation");
   });
 
-  it("renders Identity + Rules sections", () => {
+  it("renders Identity + Rules + Runtime sections", () => {
     const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
     expect(w.findComponent({ name: "IdentitySection" }).exists()).toBe(true);
     expect(w.findComponent({ name: "RulesSection" }).exists()).toBe(true);
+    // Runtime added in 2026-05-10 tier-D expansion (Lock seed + Hide).
+    expect(w.findComponent({ name: "RuntimeSection" }).exists()).toBe(true);
+  });
+
+  it("RuntimeSection updates bubble through to update event", async () => {
+    const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
+    const runtime = w.findComponent({ name: "RuntimeSection" });
+    runtime.vm.$emit("update", { instance: { locked_seed: 4242 } });
+    await w.vm.$nextTick();
+    const updates = w.emitted("update")!;
+    expect((updates[0][0] as Partial<ModuleEntry>).instance?.locked_seed).toBe(4242);
   });
 
   it("forwards section update events upward", async () => {
