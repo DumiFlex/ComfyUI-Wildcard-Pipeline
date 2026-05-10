@@ -22,10 +22,10 @@ def _load_root_init():
     return module
 
 
-def test_entrypoint_exposes_three_node_classes():
+def test_entrypoint_exposes_all_node_classes():
     ext = _load_root_init()
     extension = asyncio.run(ext.comfy_entrypoint())
     node_list = asyncio.run(extension.get_node_list())
 
     ids = sorted(cls.define_schema().node_id for cls in node_list)
-    assert ids == ["WP_Context", "WP_Debug", "WP_PromptAssembler"]
+    assert ids == ["WP_Context", "WP_ContextInjector", "WP_Debug", "WP_PromptAssembler"]

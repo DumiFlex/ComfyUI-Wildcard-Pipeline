@@ -100,6 +100,46 @@ class _IOType:
 
 Int = _IOType("INT")
 String = _IOType("STRING")
+AnyType = _IOType("*")
+
+
+# ---------------------------------------------------------- Autogrow stub ---
+
+
+@dataclass
+class _AutogrowTemplatePrefix:
+    """Minimal stand-in for ``io.Autogrow.TemplatePrefix``. Tests only
+    care that schema-construction succeeds; behavior is unused since
+    the stub never actually expands sockets."""
+
+    input: Any
+    prefix: str
+    min: int = 0
+    max: int = 10
+
+
+class _Autogrow:
+    """Minimal stand-in for ``io.Autogrow``. Provides ``Input`` +
+    ``TemplatePrefix`` factories."""
+
+    TemplatePrefix = _AutogrowTemplatePrefix
+
+    @staticmethod
+    def Input(
+        id: str,
+        template: Any = None,
+        display_name: str | None = None,
+        optional: bool = False,
+        tooltip: str | None = None,
+        lazy: bool | None = None,
+        extra_dict: dict[str, Any] | None = None,
+    ) -> _Slot:
+        return _Slot(
+            kind="input",
+            type_name="COMFY_AUTOGROW_V3",
+            name=id,
+            optional=optional,
+        )
 
 
 def Custom(type_name: str) -> _IOType:
@@ -211,6 +251,8 @@ class _IONamespace:
     NodeOutput = NodeOutput
     Int = Int
     String = String
+    AnyType = AnyType
+    Autogrow = _Autogrow
     Custom = staticmethod(Custom)
     WidgetInput = WidgetInput
     _io: "_IOInternal"
