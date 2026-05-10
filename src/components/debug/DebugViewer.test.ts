@@ -234,7 +234,7 @@ describe("DebugViewer", () => {
     expect(seedBtn.attributes("title")).toBe("Click to copy seed");
   });
 
-  it("Picks tab resolves @{uuid} refs in value to @{$varname}", async () => {
+  it("Picks tab renders @{uuid} refs as @varname chips", async () => {
     const refSnap = JSON.stringify({
       __wp_picks__: {
         backdrop1: {
@@ -259,11 +259,17 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: refSnap } });
     await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
-    const valCell = wrapper.find(".wp-dbg-pick-val");
-    expect(valCell.text()).toBe("minimal interior with @{$fabric} accents");
+    // The ref renders as a styled `@fabric` chip, not raw `@{$fabric}` text.
+    const refChips = wrapper.findAll(".wp-dbg-pick-val .wp-dbg-ref");
+    expect(refChips.length).toBe(1);
+    expect(refChips[0].text()).toBe("@fabric");
+    expect(refChips[0].classes()).not.toContain("wp-dbg-ref--unknown");
+    // Surrounding plain text still present in the cell.
+    expect(wrapper.find(".wp-dbg-pick-val").text()).toContain("minimal interior with");
+    expect(wrapper.find(".wp-dbg-pick-val").text()).toContain("accents");
   });
 
-  it("Picks tab leaves unknown @{uuid} refs unchanged", async () => {
+  it("Picks tab unknown @{uuid} refs render with the unknown chip variant", async () => {
     const orphanRefSnap = JSON.stringify({
       __wp_picks__: {
         m1: { value: "see @{deadbeef} stuff" },
@@ -279,8 +285,11 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: orphanRefSnap } });
     await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
-    const valCell = wrapper.find(".wp-dbg-pick-val");
-    expect(valCell.text()).toBe("see @{deadbeef} stuff");
+    const refChip = wrapper.find(".wp-dbg-pick-val .wp-dbg-ref");
+    expect(refChip.exists()).toBe(true);
+    expect(refChip.classes()).toContain("wp-dbg-ref--unknown");
+    // Unknown ref shows the short uuid prefixed with `@` (no `{}`).
+    expect(refChip.text()).toBe("@deadbeef");
   });
 
   it("Disabled module row shows declared $binding label, not short-uuid", async () => {
@@ -452,10 +461,10 @@ describe("DebugViewer", () => {
     expect(labels[labels.length - 1]).toContain("$color → $shape");
   });
 
-  it("Warnings tab resolves @{uuid} refs in message text", async () => {
+  it("Warnings tab renders @{uuid} refs in message as @varname chips", async () => {
     // Cycle-detected warnings include the cycle path as `Cycle:
-    // @{a} → @{b} → @{a}` — the same `@{uuid}` → `@{$varname}`
-    // rewrite that picks-tab values get should apply here.
+    // @{a} → @{b} → @{a}` — refs render as styled `@cycle_a` chips
+    // so the user reads the cycle path in user-language.
     const cycleSnap = JSON.stringify({
       __wp_trace__: [
         {
@@ -483,13 +492,18 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: cycleSnap } });
     await wrapper.findAll(".wp-dbg-tab")[3].trigger("click");
-    const msg = wrapper.find(".wp-dbg-warn-msg");
-    expect(msg.text()).toBe("Cycle: @{$cycle_a} → @{$cycle_b} → @{$cycle_a}");
+    const refChips = wrapper.findAll(".wp-dbg-warn-msg .wp-dbg-ref");
+    // Three chips — cycle_a appears twice, cycle_b once.
+    expect(refChips.length).toBe(3);
+    expect(refChips.map((c) => c.text())).toEqual(["@cycle_a", "@cycle_b", "@cycle_a"]);
+    // Surrounding "Cycle:" + arrows still present.
+    expect(wrapper.find(".wp-dbg-warn-msg").text()).toContain("Cycle:");
+    expect(wrapper.find(".wp-dbg-warn-msg").text()).toContain("→");
   });
 
   it("Picks tab @{uuid} resolution uses binding fallback for disabled refs", async () => {
     // A pick value referencing a disabled wildcard via @{uuid} should
-    // still resolve to @{$varname} via the binding-only fallback.
+    // still resolve to a `@varname` chip via the binding-only fallback.
     const snap = JSON.stringify({
       __wp_picks__: {
         m1: { value: "see @{deadbeef} bits" },
@@ -513,7 +527,9 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
     await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
-    const valCell = wrapper.find(".wp-dbg-pick-val");
-    expect(valCell.text()).toBe("see @{$fabric} bits");
+    const refChip = wrapper.find(".wp-dbg-pick-val .wp-dbg-ref");
+    expect(refChip.exists()).toBe(true);
+    expect(refChip.text()).toBe("@fabric");
+    expect(refChip.classes()).not.toContain("wp-dbg-ref--unknown");
   });
 });

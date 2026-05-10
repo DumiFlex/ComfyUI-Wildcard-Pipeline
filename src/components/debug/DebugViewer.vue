@@ -122,8 +122,12 @@ interface TraceEntry {
 
 interface WarningEntry {
   type?: string;
-  binding?: string;
-  message?: string;
+  /** Binding label rendered before the message — also tokenized for
+   *  embedded `@{uuid}` refs (rare but possible). */
+  bindingSegments?: RefSegment[];
+  /** Message body as tokenized segments so embedded `@{uuid}` refs
+   *  render as colored chips instead of raw text inside the message. */
+  messageSegments?: RefSegment[];
   severity?: "info" | "warning" | "error";
 }
 
@@ -376,9 +380,10 @@ interface PickRow {
   /** `$varname` for display, falls back to `$<short-uuid>` when the
    *  trace doesn't carry a variable name for this module. */
   label: string;
-  /** The picked option's `value` field (the actual string the user
-   *  cares about — usually the prompt fragment that got rolled). */
-  value: string;
+  /** The picked option's `value` field as tokenized segments — text
+   *  fragments + `@uuid` ref chips. Template renders each segment
+   *  with its own styling so refs read as distinct entities. */
+  valueSegments: RefSegment[];
   /** Sub-category tag — shown as a small chip. Empty = no sub-cat. */
   subCategory: string;
   /** Raw uuid — kept around so power-users can still see which module
@@ -386,25 +391,52 @@ interface PickRow {
   rawId: string;
 }
 
-/** Replace `@{<8-hex-uuid>}` references inside a pick value with
- *  `@{$variable_name}` using the trace lookup. The picks tab stores
- *  the raw option string before resolution — `"minimal interior with
- *  @{a361dbdc} accents"` — which means the user sees opaque uuids
- *  unless we re-write them in user-language. Falls back to the raw
- *  `@{uuid}` for unknown ids (defensive — older snapshots, refs to
- *  modules that didn't run, etc). */
-function resolveRefsToVarNames(text: string, idMap: Record<string, string>): string {
-  return text.replace(/@\{([0-9a-f]{6,16})\}/gi, (whole, uuid: string) => {
-    const v = idMap[uuid];
-    return v ? `@{$${v}}` : whole;
-  });
+/** A `@{uuid}` reference broken into tokenized segments — plain text
+ *  fragments around each ref, plus a `ref` segment per match that
+ *  carries the resolved (or fallback) variable name. The template
+ *  renders `text` as a normal span and `ref` as a colored chip so
+ *  the reference reads as a distinct entity, not a plain string.
+ *  Unresolved refs (no matching trace entry) keep the short-uuid
+ *  form prefixed with `@` so the user knows it's a ref. */
+interface RefSegment {
+  kind: "text" | "ref" | "ref-unknown";
+  text: string;
+  /** Full uuid — present on `ref` / `ref-unknown` segments for
+   *  tooltips. */
+  uuid?: string;
+}
+
+function tokenizeRefs(text: string, idMap: Record<string, string>): RefSegment[] {
+  if (!text) return [];
+  const segments: RefSegment[] = [];
+  const re = /@\{([0-9a-f]{6,16})\}/gi;
+  let lastIdx = 0;
+  for (const m of text.matchAll(re)) {
+    const idx = m.index ?? 0;
+    if (idx > lastIdx) {
+      segments.push({ kind: "text", text: text.slice(lastIdx, idx) });
+    }
+    const uuid = m[1];
+    const varName = idMap[uuid];
+    if (varName) {
+      segments.push({ kind: "ref", text: `@${varName}`, uuid });
+    } else {
+      segments.push({ kind: "ref-unknown", text: `@${uuid.slice(0, 8)}`, uuid });
+    }
+    lastIdx = idx + m[0].length;
+  }
+  if (lastIdx < text.length) {
+    segments.push({ kind: "text", text: text.slice(lastIdx) });
+  }
+  return segments;
 }
 
 /** Picks tab — re-key raw `__wp_picks__[module_id]` map into a list of
  *  `$variable_name → value` rows. Splits the option dict's `value` /
  *  `sub_category` into separate columns so the user reads "what got
  *  picked" without parsing JSON. Nested `@{uuid}` refs in the value
- *  string get resolved to `@{$varname}` via the same trace lookup. */
+ *  string get tokenized into ref-chip segments so they render as
+ *  styled `@varname` chips, not raw text. */
 const pickRows = computed<PickRow[]>(() => {
   const idMap = moduleIdToVar.value;
   return Object.entries(picks.value).map(([rawId, opt]): PickRow => {
@@ -419,7 +451,7 @@ const pickRows = computed<PickRow[]>(() => {
     } else {
       value = formatValue(opt);
     }
-    return { label, value: resolveRefsToVarNames(value, idMap), subCategory, rawId };
+    return { label, valueSegments: tokenizeRefs(value, idMap), subCategory, rawId };
   });
 });
 
@@ -429,19 +461,21 @@ const traceCount = computed(() => traceRows.value.length);
  *  rendering can pull severity / message reliably. Defaults severity
  *  to "warning" when the engine didn't tag one. Warning messages
  *  (e.g. cycle-detected paths like `Cycle: @{d9cb9f0f} → @{8c299ebd}
- *  → @{d9cb9f0f}`) get the same `@{uuid}` → `@{$varname}` rewrite as
- *  pick values, so the user reads cycle paths in user-language. */
+ *  → @{d9cb9f0f}`) get tokenized so embedded `@{uuid}` refs render
+ *  as colored chips: `Cycle: @cycle_a → @cycle_b → @cycle_a`. */
 const warningEntries = computed<WarningEntry[]>(() => {
   const idMap = moduleIdToVar.value;
-  return warnings.value.map((w) => {
-    if (!w || typeof w !== "object") return { type: "unknown", message: String(w) };
+  return warnings.value.map((w): WarningEntry => {
+    if (!w || typeof w !== "object") {
+      return { type: "unknown", messageSegments: [{ kind: "text", text: String(w) }] };
+    }
     const o = w as Record<string, unknown>;
-    const rawMsg = typeof o.message === "string" ? o.message : undefined;
-    const rawBinding = typeof o.binding === "string" ? o.binding : undefined;
+    const rawMsg = typeof o.message === "string" ? o.message : "";
+    const rawBinding = typeof o.binding === "string" ? o.binding : "";
     return {
       type: typeof o.type === "string" ? o.type : "unknown",
-      binding: rawBinding ? resolveRefsToVarNames(rawBinding, idMap) : undefined,
-      message: rawMsg ? resolveRefsToVarNames(rawMsg, idMap) : undefined,
+      bindingSegments: rawBinding ? tokenizeRefs(rawBinding, idMap) : undefined,
+      messageSegments: rawMsg ? tokenizeRefs(rawMsg, idMap) : undefined,
       severity: (o.severity === "info" || o.severity === "warning" || o.severity === "error")
         ? o.severity
         : "warning",
@@ -631,7 +665,21 @@ function downloadJson(): void {
           :title="`module ${row.rawId}`"
         >
           <span class="wp-dbg-pick-key">{{ row.label }}</span>
-          <span class="wp-dbg-pick-val">{{ row.value }}</span>
+          <span class="wp-dbg-pick-val">
+            <template v-for="(seg, i) in row.valueSegments" :key="i">
+              <span
+                v-if="seg.kind === 'ref'"
+                class="wp-dbg-ref"
+                :title="`@{${seg.uuid}} — wildcard reference`"
+              >{{ seg.text }}</span>
+              <span
+                v-else-if="seg.kind === 'ref-unknown'"
+                class="wp-dbg-ref wp-dbg-ref--unknown"
+                :title="`@{${seg.uuid}} — module not in trace`"
+              >{{ seg.text }}</span>
+              <template v-else>{{ seg.text }}</template>
+            </template>
+          </span>
           <span
             v-if="row.subCategory"
             class="wp-dbg-pick-cat"
@@ -653,8 +701,36 @@ function downloadJson(): void {
         >
           <span class="wp-dbg-warn-dot" :class="`wp-dbg-warn-dot--${w.severity}`" aria-hidden="true"></span>
           <span class="wp-dbg-warn-type">{{ w.type }}</span>
-          <span v-if="w.binding" class="wp-dbg-warn-binding">${{ w.binding }}</span>
-          <span v-if="w.message" class="wp-dbg-warn-msg">{{ w.message }}</span>
+          <span v-if="w.bindingSegments?.length" class="wp-dbg-warn-binding">
+            <template v-for="(seg, i) in w.bindingSegments" :key="i">
+              <span
+                v-if="seg.kind === 'ref'"
+                class="wp-dbg-ref"
+                :title="`@{${seg.uuid}} — wildcard reference`"
+              >{{ seg.text }}</span>
+              <span
+                v-else-if="seg.kind === 'ref-unknown'"
+                class="wp-dbg-ref wp-dbg-ref--unknown"
+                :title="`@{${seg.uuid}} — module not in trace`"
+              >{{ seg.text }}</span>
+              <template v-else>${{ seg.text }}</template>
+            </template>
+          </span>
+          <span v-if="w.messageSegments?.length" class="wp-dbg-warn-msg">
+            <template v-for="(seg, i) in w.messageSegments" :key="i">
+              <span
+                v-if="seg.kind === 'ref'"
+                class="wp-dbg-ref"
+                :title="`@{${seg.uuid}} — wildcard reference`"
+              >{{ seg.text }}</span>
+              <span
+                v-else-if="seg.kind === 'ref-unknown'"
+                class="wp-dbg-ref wp-dbg-ref--unknown"
+                :title="`@{${seg.uuid}} — module not in trace`"
+              >{{ seg.text }}</span>
+              <template v-else>{{ seg.text }}</template>
+            </template>
+          </span>
         </div>
       </div>
       <p v-else class="wp-debug__empty">No warnings — all good.</p>
@@ -1019,6 +1095,28 @@ function downloadJson(): void {
   background: color-mix(in srgb, var(--wp-violet, var(--wp-accent)) 18%, transparent);
   color: var(--wp-violet, var(--wp-accent));
   flex-shrink: 0;
+}
+
+/* Inline `@varname` reference chip — wraps wildcard refs that
+ * originated as `@{uuid}` in the engine's text output. Used inside
+ * picks values + warning messages so refs render as distinct entities
+ * from surrounding plain text instead of blending in.
+ *   - default `--ref` variant (resolved): accent tint
+ *   - `--unknown` variant (no matching trace entry): warn tint
+ * The user can still hover for the full uuid via the `title` tooltip
+ * on each chip. */
+.wp-dbg-ref {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--wp-accent) 16%, transparent);
+  color: var(--wp-accent);
+  font-weight: 600;
+  cursor: help;
+}
+.wp-dbg-ref--unknown {
+  background: color-mix(in srgb, var(--wp-warn) 16%, transparent);
+  color: var(--wp-warn);
 }
 
 /* Warnings — severity dot + type + binding + message. Same color
