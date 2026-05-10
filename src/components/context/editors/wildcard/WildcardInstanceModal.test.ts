@@ -78,18 +78,18 @@ describe("WildcardInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("does NOT render kebab menu when module is not drifted", () => {
-    const w = mount(WildcardInstanceModal, {
+  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
+    const tracked = mount(WildcardInstanceModal, {
       props: { module: makeModule(), isDrifted: false },
     });
-    expect(w.find('[data-test="wcm-kebab"]').exists()).toBe(false);
+    expect(tracked.find('[data-test="wcm-kebab"]').exists()).toBe(true);
   });
 
-  it("renders kebab menu when module is drifted", () => {
+  it("kebab hidden for inline-created (no payload_hash)", () => {
     const w = mount(WildcardInstanceModal, {
-      props: { module: makeModule(), isDrifted: true },
+      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
     });
-    expect(w.find('[data-test="wcm-kebab"]').exists()).toBe(true);
+    expect(w.find('[data-test="wcm-kebab"]').exists()).toBe(false);
   });
 
   it("Reset overrides button emits clear-all-overrides event", async () => {

@@ -101,7 +101,7 @@ function onSpaClick(): void {
       <span class="wcm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
-      <div v-if="isDrifted" class="wcm__kebab" data-test="wcm-kebab">
+      <div v-if="module.payload_hash" class="wcm__kebab" data-test="wcm-kebab">
         <button
           type="button"
           class="wcm__btn"

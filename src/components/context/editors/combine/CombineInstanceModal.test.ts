@@ -61,18 +61,18 @@ describe("CombineInstanceModal", () => {
     expect(link.getAttribute("href")).toBe("/wp/combines/ab12cd34/edit");
   });
 
-  it("does NOT render kebab when not drifted", () => {
-    const w = mount(CombineInstanceModal, {
+  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
+    const tracked = mount(CombineInstanceModal, {
       props: { module: makeModule(), isDrifted: false },
     });
-    expect(w.find('[data-test="cbm-kebab"]').exists()).toBe(false);
+    expect(tracked.find('[data-test="cbm-kebab"]').exists()).toBe(true);
   });
 
-  it("renders kebab when drifted", () => {
+  it("kebab hidden for inline-created (no payload_hash)", () => {
     const w = mount(CombineInstanceModal, {
-      props: { module: makeModule(), isDrifted: true },
+      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
     });
-    expect(w.find('[data-test="cbm-kebab"]').exists()).toBe(true);
+    expect(w.find('[data-test="cbm-kebab"]').exists()).toBe(false);
   });
 
   it("Save + Cancel buttons emit the right events", async () => {

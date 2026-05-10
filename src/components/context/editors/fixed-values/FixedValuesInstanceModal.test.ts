@@ -72,15 +72,14 @@ describe("FixedValuesInstanceModal", () => {
     expect(w.find('[data-test="fvm-kebab"]').exists()).toBe(false);
   });
 
-  it("kebab visible only when isDrifted=true (and library-tracked)", () => {
-    const drifted = mount(FixedValuesInstanceModal, {
-      props: { module: makeModule(), isDrifted: true },
-    });
-    expect(drifted.find('[data-test="fvm-kebab"]').exists()).toBe(true);
-
-    const clean = mount(FixedValuesInstanceModal, {
+  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
+    const tracked = mount(FixedValuesInstanceModal, {
       props: { module: makeModule(), isDrifted: false },
     });
-    expect(clean.find('[data-test="fvm-kebab"]').exists()).toBe(false);
+    expect(tracked.find('[data-test="fvm-kebab"]').exists()).toBe(true);
+    const inline = mount(FixedValuesInstanceModal, {
+      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
+    });
+    expect(inline.find('[data-test="fvm-kebab"]').exists()).toBe(false);
   });
 });

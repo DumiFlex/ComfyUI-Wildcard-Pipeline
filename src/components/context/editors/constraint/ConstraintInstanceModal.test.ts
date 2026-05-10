@@ -78,15 +78,19 @@ describe("ConstraintInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("kebab hidden when not drifted, visible when drifted", () => {
-    const off = mount(ConstraintInstanceModal, {
+  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
+    // Phase B: kebab gates on `isLibraryTracked` only — Save-to-library
+    // is the entry point for sibling-aware fork detection, which needs
+    // to fire on user edits even without external library drift. Hidden
+    // only for inline-created modules (no payload_hash).
+    const tracked = mount(ConstraintInstanceModal, {
       props: { module: makeModule(), isDrifted: false },
     });
-    expect(off.find('[data-test="cnm-kebab"]').exists()).toBe(false);
-    const on = mount(ConstraintInstanceModal, {
-      props: { module: makeModule(), isDrifted: true },
+    expect(tracked.find('[data-test="cnm-kebab"]').exists()).toBe(true);
+    const inline = mount(ConstraintInstanceModal, {
+      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
     });
-    expect(on.find('[data-test="cnm-kebab"]').exists()).toBe(true);
+    expect(inline.find('[data-test="cnm-kebab"]').exists()).toBe(false);
   });
 
   it("Reset overrides emits clear-all-overrides", async () => {

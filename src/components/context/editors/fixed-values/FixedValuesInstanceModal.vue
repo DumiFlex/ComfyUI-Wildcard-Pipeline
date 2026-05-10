@@ -90,7 +90,7 @@ function onSpaClick(): void {
       <span class="fvm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
-      <div v-if="isDrifted && isLibraryTracked" class="fvm__kebab" data-test="fvm-kebab">
+      <div v-if="isLibraryTracked" class="fvm__kebab" data-test="fvm-kebab">
         <button
           type="button"
           class="fvm__btn"

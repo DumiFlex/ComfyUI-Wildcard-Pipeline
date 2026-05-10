@@ -83,15 +83,15 @@ describe("DerivationInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("kebab hidden when not drifted, visible when drifted", () => {
-    const off = mount(DerivationInstanceModal, {
+  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
+    const tracked = mount(DerivationInstanceModal, {
       props: { module: makeModule(), isDrifted: false },
     });
-    expect(off.find('[data-test="dvm-kebab"]').exists()).toBe(false);
-    const on = mount(DerivationInstanceModal, {
-      props: { module: makeModule(), isDrifted: true },
+    expect(tracked.find('[data-test="dvm-kebab"]').exists()).toBe(true);
+    const inline = mount(DerivationInstanceModal, {
+      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
     });
-    expect(on.find('[data-test="dvm-kebab"]').exists()).toBe(true);
+    expect(inline.find('[data-test="dvm-kebab"]').exists()).toBe(false);
   });
 
   it("Reset overrides emits clear-all-overrides", async () => {

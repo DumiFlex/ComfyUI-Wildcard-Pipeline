@@ -223,7 +223,7 @@ function onSpaClick(): void {
       <span class="cnm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
-      <div v-if="isDrifted && isLibraryTracked" class="cnm__kebab" data-test="cnm-kebab">
+      <div v-if="isLibraryTracked" class="cnm__kebab" data-test="cnm-kebab">
         <button
           type="button"
           class="cnm__btn"
