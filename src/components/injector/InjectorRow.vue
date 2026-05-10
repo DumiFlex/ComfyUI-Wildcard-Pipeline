@@ -36,6 +36,9 @@ function onBindingInput(ev: Event): void {
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
+      'wp-conflict-info': conflictSeverity === 'info',
+      'wp-conflict-warning': conflictSeverity === 'warning',
+      'wp-conflict-error': conflictSeverity === 'error',
     }"
   >
     <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'">
@@ -132,10 +135,20 @@ function onBindingInput(ev: Event): void {
     var(--wp-bg2) 8px
   );
 }
-/* Conflict surfaces via inline dot + badge cluster
- * (`.wp-conflict-dot--*` / `.wp-conflict-badge--*` from ContextWidget)
- * — no row-level tint. Keeps injector row visually consistent with
- * Context module rows when both are flagged. */
+/* Conflict border tint — mirrors `.wp-module.wp-conflict-*` from
+ * ContextWidget. Severity-colored left border (4px) gives the row a
+ * glance-affordance for the conflict state without flooding the
+ * background. Cascade order matches the module pattern: info < warn
+ * < error so a more severe conflict overrides a less severe one. */
+.wp-inj-row.wp-conflict-info {
+  border-left: 4px solid var(--wp-accent);
+}
+.wp-inj-row.wp-conflict-warning {
+  border-left: 4px solid var(--wp-amber);
+}
+.wp-inj-row.wp-conflict-error {
+  border-left: 4px solid var(--wp-red);
+}
 
 .wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .wp-inj-toggle input {
