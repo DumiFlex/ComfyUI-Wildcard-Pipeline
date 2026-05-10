@@ -36,7 +36,16 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "internal",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.constraint).toEqual([
-      "disabled_exception_keys", "disabled_matrix_cells",
+      // Tier-D modal expansion (2026-05-10): per-cell + per-exception
+      // mode/factor overrides + extras. Existing v1 disable lists
+      // preserved at the front of the array.
+      "disabled_exception_keys",
+      "disabled_matrix_cells",
+      "cell_mode_overrides",
+      "cell_factor_overrides",
+      "exception_mode_overrides",
+      "exception_factor_overrides",
+      "extra_exceptions",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.pipeline).toEqual([]);
   });

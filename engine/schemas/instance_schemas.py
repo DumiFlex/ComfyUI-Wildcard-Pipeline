@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 InstanceFieldType = Literal[
     "string", "list[string]", "dict[string,number]", "dict[string,dict]",
+    "dict[string,string]",
     "boolean", "number", "list[dict]",
 ]
 
@@ -69,8 +70,22 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "internal": "boolean",
     },
     "constraint": {
-        "disabled_exception_keys": "list[string]",
-        "disabled_matrix_cells": "list[string]",
+        "disabled_exception_keys":     "list[string]",
+        "disabled_matrix_cells":       "list[string]",
+        # Tier-D modal expansion (2026-05-10 cycle):
+        #   - cell_mode_overrides / cell_factor_overrides: per-cell
+        #     value overrides keyed by encode_key([src_subcat, tgt_subcat]).
+        #     Sparse — only override keys present in the dict.
+        #   - exception_mode_overrides / exception_factor_overrides:
+        #     same shape, keyed by encode_key([source_value, target_value]).
+        #   - extra_exceptions: instance-only exception list, appended
+        #     to the library exceptions in resolve. Never written back
+        #     to library.
+        "cell_mode_overrides":         "dict[string,string]",
+        "cell_factor_overrides":       "dict[string,number]",
+        "exception_mode_overrides":    "dict[string,string]",
+        "exception_factor_overrides":  "dict[string,number]",
+        "extra_exceptions":            "list[dict]",
     },
     # pipeline: no instance fields (scoped out)
 }
@@ -98,6 +113,12 @@ def _matches_type(value: Any, spec: InstanceFieldType) -> bool:
             isinstance(value, dict)
             and all(isinstance(k, str) for k in value.keys())
             and all(isinstance(v, dict) for v in value.values())
+        )
+    if spec == "dict[string,string]":
+        return (
+            isinstance(value, dict)
+            and all(isinstance(k, str) for k in value.keys())
+            and all(isinstance(v, str) for v in value.values())
         )
     return False
 

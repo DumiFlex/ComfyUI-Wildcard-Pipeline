@@ -360,6 +360,41 @@ export interface ModuleEntry {
      */
     disabled_matrix_cells?: string[] | null;
     /**
+     * Per-instance per-cell mode override. Keys via
+     * `encodeKey([src_subcat, tgt_subcat])`. Sparse — only keys
+     * with overrides present. Engine reads override before payload
+     * value at resolve time.
+     */
+    cell_mode_overrides?: Record<string, "allow" | "exclude" | "boost" | "reduce"> | null;
+    /**
+     * Per-instance per-cell factor override. Same keying as
+     * `cell_mode_overrides`. Numbers >= 0; engine rejects negatives
+     * with the same message shape as payload validation.
+     */
+    cell_factor_overrides?: Record<string, number> | null;
+    /**
+     * Per-instance per-exception mode override. Keys via
+     * `encodeKey([source_value, target_value])`. Sparse — same
+     * semantics as cell overrides but for the exceptions list.
+     */
+    exception_mode_overrides?: Record<string, "allow" | "exclude" | "boost" | "reduce"> | null;
+    /**
+     * Per-instance per-exception factor override. Same keying as
+     * `exception_mode_overrides`.
+     */
+    exception_factor_overrides?: Record<string, number> | null;
+    /**
+     * Instance-only additional exceptions. Appended to the library
+     * exceptions at resolve. Never written back to library — these
+     * live entirely in the instance.
+     */
+    extra_exceptions?: Array<{
+      source_value: string;
+      target_value: string;
+      mode: "allow" | "exclude" | "boost" | "reduce";
+      factor: number;
+    }> | null;
+    /**
      * UI-scratch namespace. Single-underscore prefix signals "not engine
      * input"; engine handlers ignore the entire `_ui` subtree. Persisted
      * across workflow save/load but excluded from drift hash and engine

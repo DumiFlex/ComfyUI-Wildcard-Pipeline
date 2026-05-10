@@ -25,7 +25,13 @@ export type InstanceFieldKey =
   | "action_value_overrides"
   | "condition_value_overrides"
   | "rule_order_override"
-  | "disabled_exception_keys" | "disabled_matrix_cells";
+  | "disabled_exception_keys" | "disabled_matrix_cells"
+  // Constraint tier-D modal expansion (2026-05-10 cycle)
+  | "cell_mode_overrides"
+  | "cell_factor_overrides"
+  | "exception_mode_overrides"
+  | "exception_factor_overrides"
+  | "extra_exceptions";
 
 /** Single source of truth for which instance fields each kind exposes.
  *  Drives:
@@ -58,7 +64,19 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     "locked_seed",
     "internal",
   ],
-  constraint: ["disabled_exception_keys", "disabled_matrix_cells"],
+  constraint: [
+    // Existing v1 disable lists (preserved):
+    "disabled_exception_keys",
+    "disabled_matrix_cells",
+    // Tier-D modal expansion (2026-05-10):
+    //   - cell + exception overrides keyed via encodeKey of (src, tgt)
+    //   - extra_exceptions: instance-only addition, never library-bound
+    "cell_mode_overrides",
+    "cell_factor_overrides",
+    "exception_mode_overrides",
+    "exception_factor_overrides",
+    "extra_exceptions",
+  ],
   pipeline: [],
 };
 
