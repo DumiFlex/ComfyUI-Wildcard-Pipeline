@@ -62,19 +62,32 @@ function libCell(src: string, tgt: string): Cell | null {
   return cell ? { mode: cell.mode, factor: cell.factor } : null;
 }
 
+/**
+ * Effective mode for a cell. Override wins over lib (engine reads
+ * override before payload). For cells with neither (empty + no
+ * override), returns null — caller treats null as "implicit allow"
+ * for cycling math but renders as empty visually.
+ */
 function effectiveMode(src: string, tgt: string): Mode | "disabled" | null {
   const key = encodeKey([src, tgt]);
   if (disabledCells.value.has(key)) return "disabled";
+  const override = cellModeOverrides.value[key];
+  if (override) return override;
   const lib = libCell(src, tgt);
-  if (!lib) return null;
-  return cellModeOverrides.value[key] ?? lib.mode;
+  return lib ? lib.mode : null;
 }
 
-function effectiveFactor(src: string, tgt: string): number | null {
-  const lib = libCell(src, tgt);
-  if (!lib) return null;
+/**
+ * Effective factor — override wins over lib. For empty cells without
+ * a factor override, returns 1 (engine's implicit identity factor)
+ * so the boost/reduce display + popover have a sensible baseline.
+ */
+function effectiveFactor(src: string, tgt: string): number {
   const key = encodeKey([src, tgt]);
-  return cellFactorOverrides.value[key] ?? lib.factor;
+  const override = cellFactorOverrides.value[key];
+  if (override !== undefined) return override;
+  const lib = libCell(src, tgt);
+  return lib ? lib.factor : 1;
 }
 
 function isOverridden(src: string, tgt: string): boolean {
@@ -85,7 +98,12 @@ function isOverridden(src: string, tgt: string): boolean {
 function cellClass(src: string, tgt: string): string[] {
   const classes = ["mx__cell"];
   const lib = libCell(src, tgt);
-  if (!lib) {
+  const key = encodeKey([src, tgt]);
+  const hasOverride = key in cellModeOverrides.value
+    || key in cellFactorOverrides.value
+    || disabledCells.value.has(key);
+  // Empty + no override = truly neutral — gray it out.
+  if (!lib && !hasOverride) {
     classes.push("mx__cell--empty");
     return classes;
   }
@@ -106,10 +124,14 @@ const CYCLE: Record<Mode | "disabled", Mode | "disabled"> = {
 
 function onCellClick(src: string, tgt: string): void {
   const lib = libCell(src, tgt);
-  if (!lib) return;
   const key = encodeKey([src, tgt]);
   const current = effectiveMode(src, tgt) ?? "allow";
   const next = CYCLE[current];
+  // Implicit default for empty cells = "allow" (engine treats absent
+  // matrix cells as no constraint = passthrough). Cycling onto the
+  // default drops the override so empty cells return to truly-neutral
+  // after one full cycle, mirroring filled-cell reset-on-cycle-back.
+  const defaultMode: Mode = lib ? lib.mode : "allow";
 
   // Build the next instance patch in two phases: handle disabled set,
   // then handle mode override map. Factor override is preserved
@@ -130,7 +152,7 @@ function onCellClick(src: string, tgt: string): void {
   // Mode override update (only when next is a real mode, not "disabled")
   if (next !== "disabled") {
     const map = { ...cellModeOverrides.value };
-    if (next === lib.mode) {
+    if (next === defaultMode) {
       delete map[key];
     } else {
       map[key] = next as Mode;
@@ -235,12 +257,11 @@ function onResetFactor(src: string, tgt: string): void {
             <div
               :class="cellClass(s, t)"
               :data-test="`mx-cell-${s}-${t}`"
-              :role="libCell(s, t) ? 'button' : undefined"
-              :tabindex="libCell(s, t) ? 0 : undefined"
-              :aria-disabled="libCell(s, t) ? undefined : 'true'"
-              @click="libCell(s, t) ? onCellClick(s, t) : null"
-              @keydown.enter.prevent="libCell(s, t) ? onCellClick(s, t) : null"
-              @keydown.space.prevent="libCell(s, t) ? onCellClick(s, t) : null"
+              role="button"
+              tabindex="0"
+              @click="onCellClick(s, t)"
+              @keydown.enter.prevent="onCellClick(s, t)"
+              @keydown.space.prevent="onCellClick(s, t)"
             >
               <span class="mx__mode-label">{{ effectiveMode(s, t) }}</span>
               <span
@@ -351,7 +372,8 @@ function onResetFactor(src: string, tgt: string): void {
   outline: 1px dashed var(--wp-status-modified, #fb923c);
   outline-offset: -1px;
 }
-.mx__cell--empty { cursor: default; opacity: 0.4; }
+.mx__cell--empty { opacity: 0.4; }
+.mx__cell--empty:hover { opacity: 0.7; }
 .mx__factor { font-family: var(--wp-font-mono); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mx__cog {
   background: transparent;

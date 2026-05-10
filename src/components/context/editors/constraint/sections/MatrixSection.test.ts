@@ -168,9 +168,10 @@ describe("constraint MatrixSection", () => {
     expect(w.emitted("update")).toBeFalsy();
   });
 
-  it("empty cell (no library rule) is non-interactive — no role/tabindex/click", async () => {
-    // Sparse matrix: only red×cotton has a library rule. The other 3
-    // cells are "neutral" — no library rule, should not be cyclable.
+  it("empty cell (no library rule) cycles on click — implicit allow → exclude override", async () => {
+    // Sparse matrix: only red×cotton has a library rule. Empty cells
+    // start with effective mode "allow" (implicit), first click sets
+    // override to "exclude" (matching filled-cell cycle behavior).
     const sparse = makeModule({
       payload: {
         source_wildcard_id: "wc_color",
@@ -184,10 +185,33 @@ describe("constraint MatrixSection", () => {
     });
     const empty = w.find('[data-test="mx-cell-blue-silk"]');
     expect(empty.classes()).toContain("mx__cell--empty");
-    expect(empty.attributes("role")).toBeUndefined();
-    expect(empty.attributes("tabindex")).toBeUndefined();
-    expect(empty.attributes("aria-disabled")).toBe("true");
+    expect(empty.attributes("role")).toBe("button");
+    expect(empty.attributes("tabindex")).toBe("0");
     await empty.trigger("click");
-    expect(w.emitted("update")).toBeFalsy();
+    const updates = w.emitted("update")!;
+    const patch = updates[0][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.cell_mode_overrides).toEqual({ '["blue","silk"]': "exclude" });
+  });
+
+  it("empty cell cycling onto 'allow' (implicit default) clears the override", async () => {
+    const sparse = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        matrix: { red: { cotton: { mode: "allow", factor: 1.0 } } },
+        exceptions: [],
+      },
+      // Empty cell already overridden to "disabled" — next click cycles
+      // to "allow" which equals the implicit default → drop override.
+      instance: { disabled_matrix_cells: ['["blue","silk"]'] },
+    });
+    const w = mount(MatrixSection, {
+      props: { module: sparse, sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
+    });
+    await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.disabled_matrix_cells).toBeNull();
+    expect(patch.instance?.cell_mode_overrides ?? null).toBeNull();
   });
 });

@@ -604,9 +604,12 @@ function isModified(m: ModuleEntry): boolean {
       if (nonEmptyArr(inst.category_filter)) return true;
       return false;
     case "fixed_values":
-      // Library-tracked: `values_overrides` non-empty = user edited entries.
+      // Library-tracked: `values_overrides` non-empty = user edited entries,
+      // OR `enabled_options` set means user toggled row enable/disable.
       // Inline-created (no payload_hash) never light up — no library anchor.
-      return nonEmptyArr((inst as { values_overrides?: unknown }).values_overrides);
+      if (nonEmptyArr((inst as { values_overrides?: unknown }).values_overrides)) return true;
+      if (Array.isArray(inst.enabled_options)) return true;
+      return false;
     case "combine":
       // Template override + variable_binding override (binding lives on
       // identity but is per-instance so counts as a diff vs library).
@@ -740,6 +743,9 @@ function modifiedTooltip(m: ModuleEntry): string {
       const overrides = (inst as { values_overrides?: unknown[] }).values_overrides;
       if (Array.isArray(overrides) && overrides.length > 0) {
         bits.push(`${overrides.length} value override(s)`);
+      }
+      if (Array.isArray(inst.enabled_options)) {
+        bits.push(`${inst.enabled_options.length} row(s) enabled`);
       }
       break;
     }
