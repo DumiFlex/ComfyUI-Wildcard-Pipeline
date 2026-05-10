@@ -227,8 +227,8 @@
               :data-testid="`picker-row-${row.id}`"
               :data-test="`picker-row-${row.id}`"
               :disabled="!isPickable(row)"
-              :title="isPickable(row) ? (isAlreadyAdded(row.id) ? 'Already added to this Context.' : '') : 'Module has no payload — cannot embed.'"
-              @click="isAlreadyAdded(row.id) ? undefined : onRowClick(row)"
+              :title="isPickable(row) ? (isAlreadyAdded(row.id) ? 'Already in this Context. Click to add as sibling — binding will be auto-suffixed.' : '') : 'Module has no payload — cannot embed.'"
+              @click="isPickable(row) && onRowClick(row)"
             >
               <span
                 class="wp-picker__check"

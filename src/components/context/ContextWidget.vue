@@ -894,14 +894,20 @@ async function onLibraryPick(uuids: string[]) {
     const startDisabled = getNewModuleDisabled();
 
     // Append picks first (in input order) so user-picked rows land
-    // before any transitive deps in the resulting card list.
+    // before any transitive deps in the resulting card list. Phase B
+    // (2026-05-10): when the picked uuid already exists in this Context,
+    // add as a SIBLING (same uuid) with an auto-suffixed per-instance
+    // binding so $foo + $foo_2 don't collide as duplicate-variable
+    // conflicts. Pre-Phase-B silently skipped already-added uuids.
     const seenInBundle = new Set<string>();
+    const existingBindings = collectInContextBindings(value.value.modules);
     for (const uuid of incomingOrder) {
-      if (existingIds.has(uuid) || seenInBundle.has(uuid)) continue;
+      if (seenInBundle.has(uuid)) continue;
       const entry = snaps[uuid];
       if (!entry) continue;
       seenInBundle.add(uuid);
-      newEntries.push({
+      const isSibling = existingIds.has(uuid);
+      const newEntry: ModuleEntry = {
         id: uuid,
         type: entry.type as ModuleEntry["type"],
         enabled: !startDisabled,
@@ -910,7 +916,19 @@ async function onLibraryPick(uuids: string[]) {
         payload: entry.payload,
         payload_hash: entry.payload_hash,
         collapsed: startCollapsed,
-      });
+      };
+      if (isSibling) {
+        const baseBinding = extractPrimaryBinding(newEntry);
+        if (baseBinding) {
+          const suffixed = nextBindingSuffix(baseBinding, existingBindings);
+          newEntry.instance = {
+            ...(newEntry.instance ?? {}),
+            variable_binding: suffixed,
+          };
+          existingBindings.add(suffixed);
+        }
+      }
+      newEntries.push(newEntry);
     }
     // Then any transitive deps the walker pulled in but that weren't
     // in the explicit pickOrder.
