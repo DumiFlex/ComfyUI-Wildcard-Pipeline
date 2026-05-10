@@ -487,20 +487,23 @@ async function copyToClipboard(): Promise<void> {
   try { await navigator.clipboard.writeText(bodyText.value); } catch { /* permission denied */ }
 }
 
-/** Tracks the last copied seed so the cell can flash a brief "copied"
- *  hint without needing a global toast — fits inside the cell's title
- *  attribute via a watched ref. Cleared after 1.2s. */
-const copiedSeed = ref<string | null>(null);
+/** Tracks the last copied row's stable key so the cell can flash a
+ *  brief "copied" hint without needing a global toast. Keyed by
+ *  `row.key` (not by seed value) so chains where many modules share
+ *  the same seed only flash the row the user actually clicked —
+ *  pre-fix using `seed` as the key meant every row sharing that
+ *  seed lit up simultaneously. Cleared after 1.2s. */
+const copiedSeedKey = ref<string | null>(null);
 let copiedSeedTimer: number | null = null;
 
-async function copySeed(seed: string, ev: MouseEvent): Promise<void> {
+async function copySeed(seed: string, rowKey: string, ev: MouseEvent): Promise<void> {
   if (!seed) return;
   ev.stopPropagation();
   try {
     await navigator.clipboard.writeText(seed);
-    copiedSeed.value = seed;
+    copiedSeedKey.value = rowKey;
     if (copiedSeedTimer != null) window.clearTimeout(copiedSeedTimer);
-    copiedSeedTimer = window.setTimeout(() => { copiedSeed.value = null; }, 1200);
+    copiedSeedTimer = window.setTimeout(() => { copiedSeedKey.value = null; }, 1200);
   } catch { /* clipboard permission denied — silent */ }
 }
 
@@ -641,10 +644,10 @@ function downloadJson(): void {
             v-if="row.seed"
             type="button"
             class="wp-dbg-trace-seed wp-dbg-trace-seed--clickable"
-            :class="{ 'is-copied': copiedSeed === row.seed }"
-            :title="copiedSeed === row.seed ? 'Copied!' : 'Click to copy seed'"
-            @click="(ev) => copySeed(row.seed, ev)"
-          >{{ copiedSeed === row.seed ? "✓ copied" : row.seed }}</button>
+            :class="{ 'is-copied': copiedSeedKey === row.key }"
+            :title="copiedSeedKey === row.key ? 'Copied!' : 'Click to copy seed'"
+            @click="(ev) => copySeed(row.seed, row.key, ev)"
+          >{{ copiedSeedKey === row.key ? "✓ copied" : row.seed }}</button>
           <span v-else class="wp-dbg-trace-seed"></span>
         </div>
       </div>

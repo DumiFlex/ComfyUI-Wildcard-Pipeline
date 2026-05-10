@@ -402,6 +402,76 @@ describe("DebugViewer", () => {
     expect(labels[2]).toContain("$color → $shape");
   });
 
+  it("Disabled module with locked_seed still shows the locked seed value", async () => {
+    // Pre-fix the engine only stamped `seed: effective_seed` on
+    // ok-status rows — disabled rows had no seed even when
+    // `instance.locked_seed` was set. Now the static-meta extractor
+    // surfaces `seed: locked_value` for any row with a numeric
+    // `locked_seed`.
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          enabled: false,
+          status: "skipped_disabled",
+          binding: "color",
+          writes: [],
+          seed_locked: true,
+          seed: 99999,
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const seedBtn = wrapper.find(".wp-dbg-trace-seed--clickable");
+    expect(seedBtn.exists()).toBe(true);
+    expect(seedBtn.text()).toBe("99999");
+    // Lock icon also present since `seed_locked: true`.
+    expect(wrapper.find(".wp-dbg-trace-label .pi-lock").exists()).toBe(true);
+  });
+
+  it("Copy state isolated to the clicked row even when seeds are shared", async () => {
+    // Two ok-status rows sharing the same chain seed — clicking the
+    // first one's seed button shouldn't make the second one show
+    // "✓ copied" simultaneously.
+    const sharedSeedSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          status: "ok",
+          seed: 4242,
+          writes: [{ variable: "a", value: "x" }],
+        },
+        {
+          id: "m2",
+          type: "wildcard",
+          status: "ok",
+          seed: 4242,
+          writes: [{ variable: "b", value: "y" }],
+        },
+      ],
+    });
+    // Stub the clipboard API since jsdom doesn't ship one.
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async () => undefined },
+      writable: true,
+      configurable: true,
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: sharedSeedSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const seedBtns = wrapper.findAll(".wp-dbg-trace-seed--clickable");
+    expect(seedBtns.length).toBe(2);
+    await seedBtns[0].trigger("click");
+    // Wait a tick for the clipboard promise + ref update.
+    await new Promise((r) => setTimeout(r, 10));
+    // Only the clicked row gets `is-copied`, the second row still
+    // reads "4242".
+    expect(seedBtns[0].classes()).toContain("is-copied");
+    expect(seedBtns[1].classes()).not.toContain("is-copied");
+  });
+
   it("Constraint with unknown source/target falls back to short-uuid form", async () => {
     const constraintSnap = JSON.stringify({
       __wp_trace__: [

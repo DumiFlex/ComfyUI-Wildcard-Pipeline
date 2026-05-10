@@ -97,6 +97,54 @@ class TestWPContextExecute:
         assert result.context == {}
         assert result.debug["__wp_trace__"] == []
 
+    def test_disabled_module_trace_carries_binding_and_locked_seed(self):
+        # Disabled module trace entry should carry the declared binding
+        # + locked_seed value so the debug viewer can render
+        # `$varname (disabled)` with the seed instead of falling back
+        # to a `$<short-uuid>` label with no seed cell.
+        payload = json.dumps({
+            "version": 1,
+            "modules": [{
+                "id": "fv1",
+                "type": "fixed_values",
+                "enabled": False,
+                "entries": [
+                    {"variable_name": "color", "value": "red"},
+                    {"variable_name": "shape", "value": "circle"},
+                ],
+                "instance": {"locked_seed": 99999, "internal": True},
+            }],
+        })
+        out = WPContext.execute(seed=42, modules=payload, upstream=None)
+        result = out.values[0]
+        trace = result.debug["__wp_trace__"]
+        assert len(trace) == 1
+        entry = trace[0]
+        assert entry["status"] == "skipped_disabled"
+        assert entry["bindings"] == ["color", "shape"]
+        assert entry["seed_locked"] is True
+        assert entry["seed"] == 99999
+        assert entry["internal"] is True
+
+    def test_ok_module_trace_carries_binding_and_internal_flags(self):
+        payload = json.dumps({
+            "version": 1,
+            "modules": [{
+                "id": "fv1",
+                "type": "fixed_values",
+                "entries": [{"variable_name": "color", "value": "red"}],
+                "instance": {"internal": True},
+            }],
+        })
+        out = WPContext.execute(seed=42, modules=payload, upstream=None)
+        result = out.values[0]
+        trace = result.debug["__wp_trace__"]
+        entry = trace[0]
+        assert entry["status"] == "ok"
+        assert entry["internal"] is True
+        assert entry["seed_locked"] is False
+        assert entry["seed"] == 42  # chain seed (no locked_seed)
+
     def test_downstream_overwrite_flows(self):
         first = WPContext.execute(
             seed=1,

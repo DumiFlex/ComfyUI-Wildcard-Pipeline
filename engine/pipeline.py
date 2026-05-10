@@ -60,10 +60,19 @@ def _extract_static_meta(
     inst = inst if isinstance(inst, dict) else {}
     payload = payload if isinstance(payload, dict) else {}
 
+    locked_seed = inst.get("locked_seed")
+    is_locked = isinstance(locked_seed, (int, float))
     meta: dict[str, Any] = {
         "internal": bool(inst.get("internal", False)),
-        "seed_locked": isinstance(inst.get("locked_seed"), (int, float)),
+        "seed_locked": is_locked,
     }
+    # When the module declares a locked_seed, surface the value in the
+    # trace row regardless of execution status. Pre-fix only ok-status
+    # rows got `seed: effective_seed` set; disabled / errored rows had
+    # no seed, so the user couldn't see what seed a locked-but-disabled
+    # module would have used.
+    if is_locked:
+        meta["seed"] = int(locked_seed)
 
     if m_type == "fixed_values":
         # fixed_values declares its variables in `entries` (or
