@@ -1,11 +1,16 @@
-// Constraint MatrixSection — sub_cat × sub_cat grid with 5-state cell
-// cycle (allow→exclude→boost→reduce→disabled→allow) on click. Cog
-// icon visible only on boost/reduce cells (factor matters there);
-// click cog → CellFactorPopover anchored to cell.
+// Constraint MatrixSection — sub_cat × sub_cat grid with 4-state cell
+// cycle (allow→exclude→boost→reduce→allow) on click. Cog icon visible
+// only on boost/reduce cells (factor matters there); click cog →
+// CellFactorPopover anchored to cell.
+//
+// "disabled" state was dropped — engine treats `mode: allow`, missing
+// matrix entry, AND `disabled_matrix_cells` membership all as runtime
+// passthrough. Three states for one effective behavior was redundant;
+// `allow` IS the neutral baseline. Engine still reads
+// disabled_matrix_cells for old workflows; UI just never writes it.
 //
 // Override marker: orange dashed border on cell when mode OR factor
-// differs from library. Disabled state renders with diagonal stripe
-// pattern, distinct from "exclude" solid red.
+// differs from library.
 
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
@@ -73,17 +78,44 @@ describe("constraint MatrixSection", () => {
     expect(patch.instance?.cell_mode_overrides).toEqual({ '["red","silk"]': "reduce" });
   });
 
-  it("clicking reduce cell cycles to disabled (writes disabled_matrix_cells)", async () => {
+  it("clicking reduce cell cycles back to allow (4-state, drops override on lib match)", async () => {
+    // blue×silk has lib.mode = "reduce". Cycling: reduce → allow.
+    // Allow != lib.mode (reduce), so override is set to "allow".
     const w = mount(MatrixSection, {
       props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
     });
     await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
     const updates = w.emitted("update")!;
     const patch = updates[0][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.disabled_matrix_cells).toEqual(['["blue","silk"]']);
+    expect(patch.instance?.cell_mode_overrides).toEqual({ '["blue","silk"]': "allow" });
+    // No disabled_matrix_cells write — UI doesn't use that field anymore.
+    expect(patch.instance?.disabled_matrix_cells ?? null).toBeNull();
   });
 
-  it("clicking disabled cell cycles back to allow (removes from disabled_matrix_cells)", async () => {
+  it("clicking allow cell with reduce lib drops override after full cycle", async () => {
+    // Lib mode = "reduce". User cycled through allow → exclude → boost
+    // → reduce already; the "reduce" override matches lib so it should
+    // be deleted.
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule({
+          instance: { cell_mode_overrides: { '["blue","silk"]': "boost" } },
+        }),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+      },
+    });
+    await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const patch = updates[0][0] as Partial<ModuleEntry>;
+    // boost → reduce, reduce matches lib → drop override entirely.
+    expect(patch.instance?.cell_mode_overrides ?? null).toBeNull();
+  });
+
+  it("legacy disabled cell cycles forward to allow + clears disabled_matrix_cells entry", async () => {
+    // Forward-compat: workflows saved with disabled_matrix_cells should
+    // migrate cleanly when user clicks the cell. New cycle starts at
+    // "allow" (engine-equivalent to disabled = passthrough).
     const w = mount(MatrixSection, {
       props: {
         module: makeModule({
@@ -96,14 +128,15 @@ describe("constraint MatrixSection", () => {
     await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    const post = patch.instance?.disabled_matrix_cells;
-    expect(post == null || post.length === 0).toBe(true);
+    expect(patch.instance?.disabled_matrix_cells ?? null).toBeNull();
+    // Cycle from "allow" baseline → "exclude" override.
+    expect(patch.instance?.cell_mode_overrides).toEqual({ '["red","cotton"]': "exclude" });
   });
 
-  it("disabling a reduce cell preserves its cell_factor_overrides", async () => {
-    // User has set reduce ×0.3 override, then clicks → cycles to disabled.
-    // Factor override must persist through the disable so cycling back
-    // restores the user's tweak.
+  it("cycling preserves cell_factor_overrides across mode transitions", async () => {
+    // User set reduce ×0.3 override; clicking cycles reduce → allow.
+    // Factor override persists so a later cycle back to boost/reduce
+    // restores the user's tweak instead of resetting to library.
     const w = mount(MatrixSection, {
       props: {
         module: makeModule({
@@ -119,7 +152,6 @@ describe("constraint MatrixSection", () => {
     await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
     const updates = w.emitted("update")!;
     const patch = updates[0][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.disabled_matrix_cells).toContain('["blue","silk"]');
     expect(patch.instance?.cell_factor_overrides).toEqual({ '["blue","silk"]': 0.3 });
   });
 
@@ -193,7 +225,9 @@ describe("constraint MatrixSection", () => {
     expect(patch.instance?.cell_mode_overrides).toEqual({ '["blue","silk"]': "exclude" });
   });
 
-  it("empty cell cycling onto 'allow' (implicit default) clears the override", async () => {
+  it("empty cell cycling exclude → boost → reduce → allow drops override", async () => {
+    // Cycle covers all 4 states + lands back on "allow" which equals
+    // the implicit default for empty cells → override deleted.
     const sparse = makeModule({
       payload: {
         source_wildcard_id: "wc_color",
@@ -201,9 +235,7 @@ describe("constraint MatrixSection", () => {
         matrix: { red: { cotton: { mode: "allow", factor: 1.0 } } },
         exceptions: [],
       },
-      // Empty cell already overridden to "disabled" — next click cycles
-      // to "allow" which equals the implicit default → drop override.
-      instance: { disabled_matrix_cells: ['["blue","silk"]'] },
+      instance: { cell_mode_overrides: { '["blue","silk"]': "reduce" } },
     });
     const w = mount(MatrixSection, {
       props: { module: sparse, sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
@@ -211,7 +243,7 @@ describe("constraint MatrixSection", () => {
     await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.disabled_matrix_cells).toBeNull();
+    // reduce → allow, allow == implicit default → drop override.
     expect(patch.instance?.cell_mode_overrides ?? null).toBeNull();
   });
 });

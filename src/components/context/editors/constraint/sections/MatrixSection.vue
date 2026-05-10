@@ -114,51 +114,56 @@ function cellClass(src: string, tgt: string): string[] {
   return classes;
 }
 
-const CYCLE: Record<Mode | "disabled", Mode | "disabled"> = {
+/**
+ * 4-state cycle. "disabled" was dropped on user feedback — engine
+ * treats `mode: allow`, missing matrix entry, AND
+ * `disabled_matrix_cells` membership all as runtime passthrough, so
+ * three states for the same effective behavior was redundant. `allow`
+ * IS the neutral baseline. Engine still reads
+ * `disabled_matrix_cells` for backward compat with workflows saved
+ * before this simplification — UI just never writes there now.
+ */
+const CYCLE: Record<Mode, Mode> = {
   allow: "exclude",
   exclude: "boost",
   boost: "reduce",
-  reduce: "disabled",
-  disabled: "allow",
+  reduce: "allow",
 };
 
 function onCellClick(src: string, tgt: string): void {
   const lib = libCell(src, tgt);
   const key = encodeKey([src, tgt]);
-  const current = effectiveMode(src, tgt) ?? "allow";
+  // effectiveMode may return "disabled" for legacy workflows that
+  // saved that state. Treat it as the cycle's first real state for
+  // forward progress — clicking a legacy-disabled cell starts the
+  // cycle from "allow", which is consistent with engine behavior
+  // (disabled = passthrough = allow).
+  const raw = effectiveMode(src, tgt);
+  const current: Mode = raw === "disabled" || raw === null ? "allow" : raw;
   const next = CYCLE[current];
   // Implicit default for empty cells = "allow" (engine treats absent
-  // matrix cells as no constraint = passthrough). Cycling onto the
-  // default drops the override so empty cells return to truly-neutral
-  // after one full cycle, mirroring filled-cell reset-on-cycle-back.
+  // matrix cells as no constraint). Cycling onto the default drops
+  // the override so empty cells return to truly-neutral after one
+  // full cycle, mirroring filled-cell reset-on-cycle-back.
   const defaultMode: Mode = lib ? lib.mode : "allow";
 
-  // Build the next instance patch in two phases: handle disabled set,
-  // then handle mode override map. Factor override is preserved
-  // throughout (intentional — user keeps tweaks across disable toggles).
   const inst: Record<string, unknown> = { ...(instance.value ?? {}) };
 
-  // Disabled set update
-  if (next === "disabled") {
-    const set = new Set(instance.value.disabled_matrix_cells ?? []);
-    set.add(key);
-    inst.disabled_matrix_cells = Array.from(set);
-  } else if (current === "disabled") {
+  // Forward-compat cleanup: if this cell was in a legacy disabled set,
+  // remove it as part of moving into the new 4-state cycle.
+  if (raw === "disabled") {
     const set = new Set(instance.value.disabled_matrix_cells ?? []);
     set.delete(key);
     inst.disabled_matrix_cells = set.size === 0 ? null : Array.from(set);
   }
 
-  // Mode override update (only when next is a real mode, not "disabled")
-  if (next !== "disabled") {
-    const map = { ...cellModeOverrides.value };
-    if (next === defaultMode) {
-      delete map[key];
-    } else {
-      map[key] = next as Mode;
-    }
-    inst.cell_mode_overrides = Object.keys(map).length > 0 ? map : null;
+  const map = { ...cellModeOverrides.value };
+  if (next === defaultMode) {
+    delete map[key];
+  } else {
+    map[key] = next;
   }
+  inst.cell_mode_overrides = Object.keys(map).length > 0 ? map : null;
 
   emit("update", { instance: inst as ModuleEntry["instance"] });
 }
@@ -376,13 +381,22 @@ function onResetFactor(src: string, tgt: string): void {
 .mx__cell--empty:hover { opacity: 0.7; }
 .mx__factor { font-family: var(--wp-font-mono); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mx__cog {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 0;
   color: var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
-  padding: 1px 2px;
-  font-size: 10px;
-  opacity: 0.55;
+  padding: 0;
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.45;
 }
 .mx__cog:hover { opacity: 1; color: var(--wp-accent-text, var(--wp-text)); }
 .mx__popover {
