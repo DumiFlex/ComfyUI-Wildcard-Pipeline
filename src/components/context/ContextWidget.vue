@@ -504,15 +504,22 @@ async function saveToLibrary(m: ModuleEntry) {
 /** Per-card refresh — replace one drifted entry with the live snapshot.
  *  Errors surface as toasts; a 404 (deleted between poll and refresh)
  *  is treated as missing-from-library because the next poll tick will
- *  flip the dot from drift → missing. */
-async function refreshOne(m: ModuleEntry): Promise<void> {
+ *  flip the dot from drift → missing.
+ *
+ *  Phase B (2026-05-10): takes the row's array index (siblings share
+ *  `m.id`, so id-keyed `.map()` overwrote every sibling with one merged
+ *  copy → all rows lost their per-instance state + `_uid`, breaking
+ *  TransitionGroup keying).
+ */
+async function refreshOne(idx: number): Promise<void> {
+  const m = value.value.modules[idx];
+  if (!m) return;
   try {
     const merged = await refreshModule(m);
-    // Use map-replace (immutable) to match the rest of the file's mutation
-    // idiom + guarantee the deep watcher fires regardless of how Vue's
-    // reactive proxy treats indexed array assignment.
-    if (!value.value.modules.some((x) => x.id === merged.id)) return;
-    value.value.modules = value.value.modules.map((x) => x.id === merged.id ? merged : x);
+    if (value.value.modules[idx] !== m) return;  // row shifted while loading
+    const next = [...value.value.modules];
+    next[idx] = merged;
+    value.value.modules = next;
     pushToast(`Refreshed "${merged.meta.name || merged.type}".`, { severity: "success" });
     await forceRefreshHashes();
   } catch (err) {
@@ -525,16 +532,34 @@ async function refreshOne(m: ModuleEntry): Promise<void> {
   }
 }
 
-/** Bulk — refresh every drifted entry in one batched fetch. */
+/** Bulk — refresh every drifted entry in one batched fetch.
+ *  Phase B: when N siblings share a uuid, refreshMany returns N merged
+ *  entries in input order. Apply them BACK by index, preserving each row's
+ *  position + its own `_uid` (mergeRefresh already pins the source row's
+ *  instance/_uid). FIFO queue per uuid keeps the parallel-array
+ *  invariant when merge-output skips failed uuids. */
 async function refreshAllDrifted(): Promise<void> {
-  const drifted = value.value.modules.filter(isDrifted);
-  if (drifted.length === 0) return;
-  const result = await refreshMany(drifted);
+  const driftedIdx: number[] = [];
+  value.value.modules.forEach((m, i) => { if (isDrifted(m)) driftedIdx.push(i); });
+  if (driftedIdx.length === 0) return;
+
+  const driftedRows = driftedIdx.map((i) => value.value.modules[i]);
+  const result = await refreshMany(driftedRows);
 
   if (result.refreshed.length > 0) {
-    // Apply all merges in one mutation so Vue's deep watcher fires once.
-    const byId = new Map(result.refreshed.map((r) => [r.id, r]));
-    value.value.modules = value.value.modules.map((m) => byId.get(m.id) ?? m);
+    const queueByUuid = new Map<string, ModuleEntry[]>();
+    for (const r of result.refreshed) {
+      const q = queueByUuid.get(r.id) ?? [];
+      q.push(r);
+      queueByUuid.set(r.id, q);
+    }
+    const next = [...value.value.modules];
+    for (const i of driftedIdx) {
+      const m = next[i];
+      const merged = queueByUuid.get(m.id)?.shift();
+      if (merged) next[i] = merged;
+    }
+    value.value.modules = next;
     await forceRefreshHashes();
   }
 
@@ -542,7 +567,7 @@ async function refreshAllDrifted(): Promise<void> {
     pushToast(`Refreshed all ${result.refreshed.length}.`, { severity: "success" });
   } else {
     pushToast(
-      `Refreshed ${result.refreshed.length} of ${drifted.length}; ${result.failed.length} stayed drifted.`,
+      `Refreshed ${result.refreshed.length} of ${driftedRows.length}; ${result.failed.length} stayed drifted.`,
       { severity: "warning" },
     );
   }
@@ -1337,7 +1362,7 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
     items.push({
       label: "Refresh from library",
       icon: "pi-refresh",
-      onSelect: () => { void refreshOne(m); },
+      onSelect: () => { void refreshOne(idx); },
       divider: true,
     });
   }

@@ -129,6 +129,11 @@ export async function refreshMany(modules: ModuleEntry[]): Promise<RefreshResult
  * pin every widget-side field so user overrides + UI state survive. The
  * pin list MUST cover every widget-only ModuleEntry field — adding a new
  * widget field elsewhere requires extending this function.
+ *
+ * Phase B (2026-05-10): `_uid` must be preserved or v-for keying in
+ * ContextWidget falls back to `${id}|${idx}` and TransitionGroup re-keys
+ * every row on refresh, firing leave/enter animations on rows that didn't
+ * actually move.
  */
 export function mergeRefresh(m: ModuleEntry, live: SnapshotEntry): ModuleEntry {
   return {
@@ -145,6 +150,7 @@ export function mergeRefresh(m: ModuleEntry, live: SnapshotEntry): ModuleEntry {
     entries: m.entries,
     instance: m.instance,
     collapsed: m.collapsed,
+    _uid: m._uid,
   };
 }
 
