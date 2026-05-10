@@ -564,8 +564,32 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
   const ctx: Record<string, string> = {};
   for (let i = chain.length - 1; i >= 0; i--) {
     const n = chain[i];
-    if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
+    if (n.type === "WP_ContextInjector") {
+      // Injector writes ctx[binding] = <upstream value> at runtime.
+      // Static walker doesn't have the live value, so stub with the
+      // binding name itself so the chip strip + upstream-vars sees
+      // the binding exists. Internal-flagged rows still emit the key
+      // (it's in ctx for downstream consumers) but get stripped from
+      // the public map below — same path WP_Context modules use.
+      const inj = parseWidgetJson<{
+        version: 1;
+        rows?: Array<{
+          binding?: string;
+          enabled?: boolean;
+          internal?: boolean;
+        }>;
+      }>(widgetValue(n, "rows"), { version: 1, rows: [] });
+      for (const row of inj.rows ?? []) {
+        if (row.enabled !== true) continue;
+        const binding = (row.binding ?? "").trim();
+        if (!binding) continue;
+        ctx[binding] = `$${binding}`;
+        if (row.internal === true) internalKeys.add(binding);
+      }
+      continue;
+    }
+    if (n.type !== "WP_Context") continue;
     const v = parseWidgetJson<ContextWidgetValue>(
       widgetValue(n, "modules"),
       { version: 1, modules: [] },
