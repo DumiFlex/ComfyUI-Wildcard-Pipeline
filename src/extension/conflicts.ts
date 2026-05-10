@@ -1,4 +1,4 @@
-import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
+import type { ContextWidgetValue, InjectorRowsValue, ModuleEntry } from "../widgets/_shared";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -140,7 +140,8 @@ export type ConflictType =
   | "constraint_source_in_downstream"
   | "constraint_target_before_self"
   | "constraint_target_in_upstream"
-  | "constraint_target_missing";
+  | "constraint_target_missing"
+  | "injector_input_disconnected";
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
   moduleId: string;
@@ -164,7 +165,56 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_target_in_upstream") return "target already picked upstream";
   if (type === "constraint_target_missing") return "target missing";
   if (type === "constraint_source_in_downstream") return "source in downstream";
+  if (type === "injector_input_disconnected") return "no link";
   return type;
+}
+
+/** Scan an injector node's rows for missing connections + duplicate
+ *  bindings. Mirrors `scanConflicts` semantics but operates on the
+ *  injector's flatter shape (no kind dispatch). `connectedSlots` is
+ *  the set of input slot names with a live wire — passed in by the
+ *  caller since this module doesn't have direct graph access. */
+export function scanInjectorConflicts(
+  value: InjectorRowsValue,
+  connectedSlots: string[],
+): Conflict[] {
+  const connected = new Set(connectedSlots);
+  const written = new Set<string>();
+  const out: Conflict[] = [];
+
+  for (const row of value.rows) {
+    if (!row.enabled) continue;
+    const binding = row.binding.trim();
+    if (!binding) {
+      out.push({
+        moduleId: row._uid,
+        variable: row.slot_name,
+        type: "injector_input_disconnected",
+        severity: "warning",
+      });
+      continue;
+    }
+    if (!connected.has(row.slot_name)) {
+      out.push({
+        moduleId: row._uid,
+        variable: binding,
+        type: "injector_input_disconnected",
+        severity: "warning",
+      });
+      continue;
+    }
+    if (written.has(binding)) {
+      out.push({
+        moduleId: row._uid,
+        variable: binding,
+        type: "duplicate_variable",
+        severity: "warning",
+      });
+    } else {
+      written.add(binding);
+    }
+  }
+  return out;
 }
 
 /** Token regex matching `$ident` references but NOT `$$` literal escapes.

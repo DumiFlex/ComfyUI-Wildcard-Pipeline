@@ -1,6 +1,62 @@
 import { describe, it, expect } from "vitest";
-import { scanConflicts } from "./conflicts";
-import type { ContextWidgetValue } from "../widgets/_shared";
+import { scanConflicts, scanInjectorConflicts } from "./conflicts";
+import type { ContextWidgetValue, InjectorRowsValue } from "../widgets/_shared";
+
+function injRow(over: Partial<InjectorRowsValue["rows"][number]> = {}): InjectorRowsValue["rows"][number] {
+  return {
+    _uid: "uid",
+    slot_name: "input_0",
+    binding: "x",
+    enabled: true,
+    internal: false,
+    ...over,
+  };
+}
+
+describe("scanInjectorConflicts", () => {
+  it("flags row with empty binding as injector_input_disconnected", () => {
+    const value: InjectorRowsValue = {
+      version: 1,
+      rows: [injRow({ binding: "" })],
+    };
+    const out = scanInjectorConflicts(value, []);
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("injector_input_disconnected");
+  });
+
+  it("flags row whose slot_name is not in the connectedSlots list", () => {
+    const value: InjectorRowsValue = {
+      version: 1,
+      rows: [injRow({ slot_name: "input_2", binding: "x" })],
+    };
+    const out = scanInjectorConflicts(value, ["input_0", "input_1"]);
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("injector_input_disconnected");
+  });
+
+  it("flags duplicate bindings as duplicate_variable across enabled injector rows", () => {
+    const value: InjectorRowsValue = {
+      version: 1,
+      rows: [
+        injRow({ _uid: "a", slot_name: "input_0", binding: "foo" }),
+        injRow({ _uid: "b", slot_name: "input_1", binding: "foo" }),
+      ],
+    };
+    const out = scanInjectorConflicts(value, ["input_0", "input_1"]);
+    expect(out.find((c) => c.type === "duplicate_variable")?.variable).toBe("foo");
+  });
+
+  it("returns empty list when all rows are well-formed and unique", () => {
+    const value: InjectorRowsValue = {
+      version: 1,
+      rows: [
+        injRow({ _uid: "a", slot_name: "input_0", binding: "alpha" }),
+        injRow({ _uid: "b", slot_name: "input_1", binding: "beta" }),
+      ],
+    };
+    expect(scanInjectorConflicts(value, ["input_0", "input_1"])).toEqual([]);
+  });
+});
 
 const mod = (id: string, vars: string[]): ContextWidgetValue["modules"][number] => ({
   id, type: "fixed_values", enabled: true, meta: { name: "" },
