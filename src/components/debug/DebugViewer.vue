@@ -568,21 +568,19 @@ function downloadJson(): void {
             <span v-if="row.overwrite" class="wp-dbg-trace-flag" title="Overwrote upstream value">↻</span>
             <!-- Internal flag — `instance.internal` was set, every
                  binding the module wrote is engine-only (stripped
-                 from public ctx). Eye-slash glyph reads as
-                 "hidden / private" — semantically right for "this
-                 binding doesn't appear in the public ctx payload".
-                 Was previously pi-lock, but lock semantically belongs
-                 to "pinned/locked seed" so the icons were swapped. -->
+                 from public ctx). Globe icon mirrors ContextWidget's
+                 internal-toggle button (`row-action-internal`) so the
+                 same glyph means the same thing across the app. -->
             <i
               v-if="row.internal"
-              class="wp-dbg-trace-flag pi pi-eye-slash"
+              class="wp-dbg-trace-flag pi pi-globe"
               title="Internal — binding hidden from public ctx"
               aria-hidden="true"
             ></i>
             <!-- Seed-lock flag — module rolled with `instance.locked_seed`
-                 instead of inheriting the chain seed. Lock glyph
-                 ("this seed is locked / pinned") matches the seed-lock
-                 toggle in ContextWidget. -->
+                 instead of inheriting the chain seed. Lock icon
+                 mirrors ContextWidget's seed-lock toggle button
+                 (`row-action-lock`) — same glyph, same meaning. -->
             <i
               v-if="row.seedLocked"
               class="wp-dbg-trace-flag pi pi-lock"
@@ -883,16 +881,16 @@ function downloadJson(): void {
   font-size: 9px;
   margin-left: 2px;
 }
-/* Internal (eye-slash) → accent — same color the rest of the app uses
- * for "this is engine-internal" cues. */
-.wp-dbg-trace-label .pi-eye-slash {
+/* Internal (globe) → accent — same color ContextWidget's
+ * `row-action-internal` button gets when active (`.is-active` class
+ * resolves to `--wp-accent-text`). */
+.wp-dbg-trace-label .pi-globe {
   color: var(--wp-accent);
 }
-/* Locked seed (lock) → amber — same warm tone the chain-seed UI uses
- * for the lock toggle, so the user reads "this seed is pinned" at a
- * glance. */
+/* Locked seed (lock) → warn (amber) — matches ContextWidget's
+ * `.wp-btn--icon-sm.is-locked` color for the seed-lock toggle. */
 .wp-dbg-trace-label .pi-lock {
-  color: var(--wp-amber);
+  color: var(--wp-warn);
 }
 /* Type cell is also a `wp-kind-chip` (from theme.css) — the chip
  * provides the colored background + text. Override font size +

@@ -323,7 +323,7 @@ describe("DebugViewer", () => {
     expect(labels).toEqual(["$color", "$shape", "$size"]);
   });
 
-  it("Internal flag renders pi-eye-slash icon next to the label", async () => {
+  it("Internal flag renders pi-globe icon next to the label", async () => {
     const intSnap = JSON.stringify({
       __wp_trace__: [
         {
@@ -337,10 +337,9 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: intSnap } });
     await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
-    // Eye-slash (hidden / private) reads as "engine-only binding" —
-    // semantically distinct from lock (pinned seed). Was pi-lock
-    // pre-fix but the icons were swapped between internal + seed-lock.
-    expect(wrapper.find(".wp-dbg-trace-label .pi-eye-slash").exists()).toBe(true);
+    // Globe icon mirrors ContextWidget's `row-action-internal` button
+    // — same glyph means the same thing across the app.
+    expect(wrapper.find(".wp-dbg-trace-label .pi-globe").exists()).toBe(true);
   });
 
   it("Locked seed renders pi-lock icon next to the label", async () => {
