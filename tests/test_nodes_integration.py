@@ -67,6 +67,9 @@ def test_debug_node_snapshots_downstream_context():
     out = WPDebug.execute(context=upstream, viewer=None)
     snapshot = json.loads(out.ui["wp_debug_snapshot"][0])
 
-    assert snapshot["context"] == {"style": "photoreal"}
-    assert snapshot["debug"]["node_seed"] == 7
-    assert len(snapshot["debug"]["trace"]) == 1
+    # Flat snapshot shape — user vars at the top, engine internals
+    # under `__wp_*` keys ready for the per-tab readers in
+    # `DebugViewer.vue`.
+    assert snapshot["style"] == "photoreal"
+    assert snapshot["__wp_node_seed__"] == 7
+    assert len(snapshot["__wp_trace__"]) == 1

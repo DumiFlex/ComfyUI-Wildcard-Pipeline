@@ -268,18 +268,29 @@ def build_payload(
     """Construct the socket-boundary payload. Strips internals from
     `context`, but carries the cross-node-internal subset on the
     dedicated `internals` field so the next node's execute can merge
-    them back into its ctx before running its own pipeline."""
+    them back into its ctx before running its own pipeline.
+
+    Trace + warnings accumulate across the chain in `debug.__wp_trace__` /
+    `debug.__wp_warnings__` (cumulative-merge pattern matching the
+    injector node) so a terminal WPDebug at the chain tail sees every
+    module + injector contribution, not just the immediate upstream's.
+    """
     internals = {
         key: ctx[key]
         for key in _CROSS_NODE_INTERNAL_KEYS
         if key in ctx
     }
+    upstream_trace = upstream_debug.get("__wp_trace__", [])
+    upstream_warnings = upstream_debug.get("__wp_warnings__", [])
+    this_trace = ctx.get("__wp_trace__", [])
+    this_warnings = ctx.get("__wp_warnings__", [])
     return ContextPayload(
         context=strip_internals(ctx),
         debug={
             "upstream": upstream_debug,
             "node_seed": seed,
-            "trace": ctx.get("__wp_trace__", []),
+            "__wp_trace__": list(upstream_trace) + list(this_trace),
+            "__wp_warnings__": list(upstream_warnings) + list(this_warnings),
         },
         internals=internals,
     )

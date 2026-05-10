@@ -37,9 +37,15 @@ class TestWPDebugExecute:
         return json.loads(snapshot_list[0])
 
     def test_emits_ui_payload(self):
+        # User-facing variables sit at top level of the snapshot.
+        # Engine internals (`__wp_*`) are also top-level so the
+        # frontend's per-tab readers (snapshot/trace/picks/warnings)
+        # can pull them directly. `node_seed` is surfaced as
+        # `__wp_node_seed__` so the snapshot tab's `__`-prefix filter
+        # hides it (matching trace/picks/warnings).
         payload = ContextPayload(
             context={"style": "photo"},
-            debug={"node_seed": 42, "trace": []},
+            debug={"node_seed": 42, "__wp_trace__": [], "__wp_warnings__": []},
         )
         out = WPDebug.execute(context=payload, viewer=None)
 
@@ -47,9 +53,27 @@ class TestWPDebugExecute:
         assert "wp_debug_snapshot" in out.ui
         snapshot = self._parse_snapshot(out)
         assert snapshot == {
-            "context": {"style": "photo"},
-            "debug": {"node_seed": 42, "trace": []},
+            "style": "photo",
+            "__wp_node_seed__": 42,
         }
+
+    def test_trace_warnings_picks_surface_at_top_level(self):
+        payload = ContextPayload(
+            context={"style": "photo"},
+            debug={
+                "node_seed": 7,
+                "__wp_trace__": [{"id": "abc", "type": "wildcard"}],
+                "__wp_warnings__": [{"type": "duplicate_variable"}],
+            },
+            internals={"__wp_picks__": {"abc": {"value": "v1"}}},
+        )
+        out = WPDebug.execute(context=payload, viewer=None)
+        snapshot = self._parse_snapshot(out)
+        assert snapshot["style"] == "photo"
+        assert snapshot["__wp_trace__"] == [{"id": "abc", "type": "wildcard"}]
+        assert snapshot["__wp_warnings__"] == [{"type": "duplicate_variable"}]
+        assert snapshot["__wp_picks__"] == {"abc": {"value": "v1"}}
+        assert snapshot["__wp_node_seed__"] == 7
 
     def test_complex_values_serialized_via_str(self):
         class Weird:
@@ -61,10 +85,10 @@ class TestWPDebugExecute:
         )
         out = WPDebug.execute(context=payload, viewer=None)
         snapshot = self._parse_snapshot(out)
-        assert snapshot["context"]["obj"] == "weird"
+        assert snapshot["obj"] == "weird"
 
     def test_empty_context(self):
         payload = ContextPayload()
         out = WPDebug.execute(context=payload, viewer=None)
         snapshot = self._parse_snapshot(out)
-        assert snapshot == {"context": {}, "debug": {}}
+        assert snapshot == {}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { highlightJson } from "./highlight";
 
 const props = withDefaults(
   defineProps<{
@@ -73,6 +74,61 @@ const bodyText = computed(() => {
   }
 });
 
+/** Pre-tokenized HTML for the snapshot/trace JSON view. Wraps keys /
+ *  strings / numbers / booleans in semantic spans the stylesheet
+ *  paints with semantic colors. */
+const bodyHtml = computed(() => {
+  if (!bodyText.value) return "";
+  return highlightJson(bodyText.value);
+});
+
+interface TraceEntry {
+  id?: string;
+  type?: string;
+  node?: string;
+  status?: string;
+  binding?: string;
+  internal?: boolean;
+  error?: string | null;
+  seed?: number;
+}
+
+interface WarningEntry {
+  type?: string;
+  binding?: string;
+  message?: string;
+  severity?: "info" | "warning" | "error";
+}
+
+/** Trace entries rendered as a table — flatter than raw JSON for
+ *  scanning what each module + injector did. Includes both engine
+ *  trace (Context modules) and graph-side trace (injector). */
+const traceEntries = computed<TraceEntry[]>(() => {
+  const trace = parsed.value?.__wp_trace__;
+  return Array.isArray(trace) ? (trace as TraceEntry[]) : [];
+});
+
+/** Picks rendered as a flat var → value list. */
+const pickEntries = computed<Array<[string, unknown]>>(() => Object.entries(picks.value));
+
+/** Typed warnings list — coerce loose dicts into a known shape so
+ *  rendering can pull severity / message reliably. Defaults severity
+ *  to "warning" when the engine didn't tag one. */
+const warningEntries = computed<WarningEntry[]>(() => {
+  return warnings.value.map((w) => {
+    if (!w || typeof w !== "object") return { type: "unknown", message: String(w) };
+    const o = w as Record<string, unknown>;
+    return {
+      type: typeof o.type === "string" ? o.type : "unknown",
+      binding: typeof o.binding === "string" ? o.binding : undefined,
+      message: typeof o.message === "string" ? o.message : undefined,
+      severity: (o.severity === "info" || o.severity === "warning" || o.severity === "error")
+        ? o.severity
+        : "warning",
+    };
+  });
+});
+
 async function copyToClipboard(): Promise<void> {
   try { await navigator.clipboard.writeText(bodyText.value); } catch { /* permission denied */ }
 }
@@ -132,8 +188,80 @@ function downloadJson(): void {
       </div>
     </div>
 
-    <pre v-if="parsed" class="wp-dbg-pre">{{ bodyText }}</pre>
-    <p v-else class="wp-debug__empty">Run the graph to capture a snapshot.</p>
+    <!-- Snapshot / Trace tabs use raw highlighted JSON since both
+         can hold deeply nested structures. Picks + warnings get
+         dedicated table-style renders since their shape is fixed. -->
+    <pre
+      v-if="parsed && (activeTab === 'snapshot')"
+      class="wp-dbg-pre"
+      v-html="bodyHtml"
+    ></pre>
+
+    <!-- Trace — table with id / type / status / binding / seed. Falls
+         back to raw highlighted JSON when entries are an unfamiliar
+         shape (older runs / engine changes). -->
+    <div v-else-if="parsed && activeTab === 'trace'" class="wp-dbg-pane">
+      <div v-if="traceEntries.length > 0" class="wp-dbg-trace">
+        <div class="wp-dbg-trace-row wp-dbg-trace-row--head">
+          <span>node / id</span>
+          <span>type</span>
+          <span>status</span>
+          <span>binding</span>
+          <span class="wp-dbg-trace-seed">seed</span>
+        </div>
+        <div
+          v-for="(entry, i) in traceEntries"
+          :key="i"
+          class="wp-dbg-trace-row"
+          :class="{ 'wp-dbg-trace-row--err': entry.status === 'error' || entry.error }"
+        >
+          <span class="wp-dbg-trace-id">{{ entry.id || entry.node || "—" }}</span>
+          <span class="wp-dbg-trace-type">{{ entry.type || "—" }}</span>
+          <span class="wp-dbg-trace-status">{{ entry.status || (entry.error ? "error" : "ok") }}</span>
+          <span class="wp-dbg-trace-binding">{{ entry.binding || "—" }}</span>
+          <span class="wp-dbg-trace-seed">{{ entry.seed ?? "" }}</span>
+        </div>
+      </div>
+      <p v-else class="wp-debug__empty">No trace entries yet.</p>
+    </div>
+
+    <!-- Picks — variable → resolved value table. Each row colored by
+         var-hash so the same var renders the same hue across debug
+         + assembler. -->
+    <div v-else-if="parsed && activeTab === 'picks'" class="wp-dbg-pane">
+      <div v-if="pickEntries.length > 0" class="wp-dbg-picks">
+        <div
+          v-for="[key, val] in pickEntries"
+          :key="key"
+          class="wp-dbg-pick-row"
+        >
+          <span class="wp-dbg-pick-key">${{ key }}</span>
+          <span class="wp-dbg-pick-val">{{ typeof val === "string" ? val : JSON.stringify(val) }}</span>
+        </div>
+      </div>
+      <p v-else class="wp-debug__empty">No picks captured this run.</p>
+    </div>
+
+    <!-- Warnings — severity dot + text per row. Same color tokens as
+         conflict scanner so warnings here read as the same family. -->
+    <div v-else-if="parsed && activeTab === 'warnings'" class="wp-dbg-pane">
+      <div v-if="warningEntries.length > 0" class="wp-dbg-warnings">
+        <div
+          v-for="(w, i) in warningEntries"
+          :key="i"
+          class="wp-dbg-warn-row"
+          :class="`wp-dbg-warn-row--${w.severity}`"
+        >
+          <span class="wp-dbg-warn-dot" :class="`wp-dbg-warn-dot--${w.severity}`" aria-hidden="true"></span>
+          <span class="wp-dbg-warn-type">{{ w.type }}</span>
+          <span v-if="w.binding" class="wp-dbg-warn-binding">${{ w.binding }}</span>
+          <span v-if="w.message" class="wp-dbg-warn-msg">{{ w.message }}</span>
+        </div>
+      </div>
+      <p v-else class="wp-debug__empty">No warnings — all good.</p>
+    </div>
+
+    <p v-if="!parsed" class="wp-debug__empty">Run the graph to capture a snapshot.</p>
   </div>
 </template>
 
@@ -239,4 +367,163 @@ function downloadJson(): void {
   text-align: center;
   margin: auto 0;
 }
+
+/* Pane — shared container for trace/picks/warnings tab bodies. Same
+ * frame as `.wp-dbg-pre` so the panel doesn't reflow when switching
+ * tabs. Uses overflow auto so long lists scroll inside the frame. */
+.wp-dbg-pane {
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  padding: 6px;
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Trace — 5-col table (id / type / status / binding / seed). Header
+ * row gets a slightly stronger border-bottom + dim color so columns
+ * read as columns at a glance. Density-aware: padding + gap pulled
+ * from --wp-pad-row / --wp-row-gap so the table tightens up alongside
+ * Context module rows when user picks compact/minimal density. */
+.wp-dbg-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wp-dbg-trace-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.7fr 1.2fr 0.5fr;
+  gap: var(--wp-row-gap, 8px);
+  padding: var(--wp-pad-row, 4px 6px);
+  font: 500 10px/1.4 var(--wp-font-mono, monospace);
+  color: var(--wp-text);
+  border-radius: var(--wp-radius-sm);
+  align-items: baseline;
+}
+.wp-dbg-trace-row--head {
+  font: 600 9px/1 var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-dim, var(--wp-text3));
+  border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+}
+.wp-dbg-trace-row:not(.wp-dbg-trace-row--head):nth-child(odd) {
+  background: color-mix(in srgb, var(--wp-bg2) 50%, transparent);
+}
+.wp-dbg-trace-row--err {
+  background: color-mix(in srgb, var(--wp-red) 14%, transparent) !important;
+  border-left: 2px solid var(--wp-red);
+  padding-left: 4px;
+}
+.wp-dbg-trace-id      { color: var(--wp-text); }
+.wp-dbg-trace-type    { color: var(--wp-accent); }
+.wp-dbg-trace-status  { color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-dbg-trace-binding { color: var(--wp-amber); }
+.wp-dbg-trace-seed    {
+  color: var(--wp-text-dim, var(--wp-text3));
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Picks — flat var → value list. Mono key + value, key tinted with
+ * accent so the `$name` reads as a variable handle. */
+.wp-dbg-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wp-dbg-pick-row {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: var(--wp-row-gap, 10px);
+  padding: var(--wp-pad-row, 4px 6px);
+  font: 500 11px/1.4 var(--wp-font-mono, monospace);
+  border-radius: var(--wp-radius-sm);
+  align-items: baseline;
+}
+.wp-dbg-pick-row:nth-child(odd) {
+  background: color-mix(in srgb, var(--wp-bg2) 50%, transparent);
+}
+.wp-dbg-pick-key {
+  color: var(--wp-accent);
+  font-weight: 600;
+}
+.wp-dbg-pick-val {
+  color: var(--wp-text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Warnings — severity dot + type + binding + message. Same color
+ * tokens as conflict scanner so warnings here read as the same
+ * design family. Border-left strip in severity color visually
+ * groups same-severity rows when scrolling. */
+.wp-dbg-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wp-dbg-warn-row {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: var(--wp-row-gap, 8px);
+  padding: var(--wp-pad-row, 5px 8px);
+  font: 500 11px/1.4 var(--wp-font-sans);
+  border-radius: var(--wp-radius-sm);
+  align-items: center;
+  border-left: 2px solid transparent;
+}
+.wp-dbg-warn-row--info    { border-left-color: var(--wp-accent); background: color-mix(in srgb, var(--wp-accent) 7%, transparent); }
+.wp-dbg-warn-row--warning { border-left-color: var(--wp-amber);  background: color-mix(in srgb, var(--wp-amber)  7%, transparent); }
+.wp-dbg-warn-row--error   { border-left-color: var(--wp-red);    background: color-mix(in srgb, var(--wp-red)    7%, transparent); }
+.wp-dbg-warn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+.wp-dbg-warn-dot--info {
+  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
+  border-color: var(--wp-accent);
+}
+.wp-dbg-warn-dot--warning {
+  background:   color-mix(in oklab, var(--wp-amber) 14%, transparent);
+  border-color: var(--wp-amber);
+}
+.wp-dbg-warn-dot--error {
+  background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
+  border-color: var(--wp-red);
+}
+.wp-dbg-warn-type {
+  font: 600 9px/1 var(--wp-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wp-text-muted, var(--wp-text2));
+  padding: 2px 5px;
+  border-radius: 2px;
+  background: var(--wp-bg2);
+}
+.wp-dbg-warn-binding {
+  font: 600 11px/1 var(--wp-font-mono);
+  color: var(--wp-amber);
+}
+.wp-dbg-warn-msg {
+  color: var(--wp-text);
+  word-break: break-word;
+}
+
+/* JSON syntax highlight — spans emitted by `highlightJson` inside the
+ * `v-html` <pre>. Use :deep() so scoped styles pierce into raw HTML
+ * (the spans are not template-rendered, so the data-v-* attribute
+ * the scoped compiler relies on is missing). */
+.wp-debug :deep(.wp-jh-k) { color: var(--wp-accent); }
+.wp-debug :deep(.wp-jh-s) { color: var(--wp-amber); }
+.wp-debug :deep(.wp-jh-n) { color: var(--wp-green); }
+.wp-debug :deep(.wp-jh-b) { color: var(--wp-violet, #b48aff); font-weight: 600; }
+.wp-debug :deep(.wp-jh-p) { color: var(--wp-text-dim, var(--wp-text3)); }
 </style>

@@ -70,18 +70,37 @@ class TestBuildPayload:
         ctx = {"style": "photo", "__wp_trace__": [{"id": "m1"}]}
         payload = build_payload(ctx, upstream_debug={}, seed=42)
         assert payload.debug["node_seed"] == 42
-        assert payload.debug["trace"] == [{"id": "m1"}]
+        assert payload.debug["__wp_trace__"] == [{"id": "m1"}]
 
     def test_upstream_debug_preserved(self):
-        ctx = {"__wp_trace__": []}
+        # `upstream` mirror is kept verbatim for any caller that wants
+        # the raw upstream blob; `__wp_trace__` accumulates across the
+        # chain so a terminal Debug node sees every contribution.
+        ctx = {"__wp_trace__": [{"id": "this"}]}
         payload = build_payload(
-            ctx, upstream_debug={"node_seed": 1, "trace": [{"id": "prev"}]}, seed=2
+            ctx,
+            upstream_debug={"node_seed": 1, "__wp_trace__": [{"id": "prev"}]},
+            seed=2,
         )
         assert payload.debug["upstream"] == {
             "node_seed": 1,
-            "trace": [{"id": "prev"}],
+            "__wp_trace__": [{"id": "prev"}],
         }
+        assert payload.debug["__wp_trace__"] == [{"id": "prev"}, {"id": "this"}]
+
+    def test_warnings_accumulate_across_chain(self):
+        ctx = {"__wp_warnings__": [{"type": "missing_target", "ref": "x"}]}
+        payload = build_payload(
+            ctx,
+            upstream_debug={"__wp_warnings__": [{"type": "shadow"}]},
+            seed=0,
+        )
+        assert payload.debug["__wp_warnings__"] == [
+            {"type": "shadow"},
+            {"type": "missing_target", "ref": "x"},
+        ]
 
     def test_missing_trace_defaults_to_empty_list(self):
         payload = build_payload({}, upstream_debug={}, seed=0)
-        assert payload.debug["trace"] == []
+        assert payload.debug["__wp_trace__"] == []
+        assert payload.debug["__wp_warnings__"] == []

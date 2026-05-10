@@ -54,13 +54,13 @@ class TestWPContextExecute:
         assert isinstance(result, ContextPayload)
         assert result.context == {"style": "photo"}
         assert result.debug["node_seed"] == 0
-        assert len(result.debug["trace"]) == 1
+        assert len(result.debug["__wp_trace__"]) == 1
         assert result.debug["upstream"] == {}
 
     def test_with_upstream_inherits_vars(self):
         upstream = ContextPayload(
             context={"subject": "knight"},
-            debug={"node_seed": 7, "trace": [{"id": "up"}]},
+            debug={"node_seed": 7, "__wp_trace__": [{"id": "up"}]},
         )
         payload = self._modules_json([
             {"variable_name": "style", "value": "painted"},
@@ -72,9 +72,12 @@ class TestWPContextExecute:
         assert result.debug["node_seed"] == 42
         assert result.debug["upstream"] == {
             "node_seed": 7,
-            "trace": [{"id": "up"}],
+            "__wp_trace__": [{"id": "up"}],
         }
-        assert [entry["id"] for entry in result.debug["trace"]] == ["m1"]
+        # Trace accumulates across the chain: upstream entry first,
+        # then this node's module entries.
+        ids = [entry["id"] for entry in result.debug["__wp_trace__"]]
+        assert ids == ["up", "m1"]
 
     def test_empty_modules_still_emits_payload(self):
         out = WPContext.execute(
@@ -84,7 +87,7 @@ class TestWPContextExecute:
         )
         result = out.values[0]
         assert result.context == {}
-        assert result.debug["trace"] == []
+        assert result.debug["__wp_trace__"] == []
 
     def test_malformed_modules_runs_empty(self):
         # deserialize_node_input is robust: malformed JSON returns ([], {}, [])
@@ -92,7 +95,7 @@ class TestWPContextExecute:
         out = WPContext.execute(seed=0, modules="{not json", upstream=None)
         result = out.values[0]
         assert result.context == {}
-        assert result.debug["trace"] == []
+        assert result.debug["__wp_trace__"] == []
 
     def test_downstream_overwrite_flows(self):
         first = WPContext.execute(
