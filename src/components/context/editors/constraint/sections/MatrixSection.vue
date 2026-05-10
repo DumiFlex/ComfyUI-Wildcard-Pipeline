@@ -158,12 +158,21 @@ function closePopover(): void {
   popoverFor.value = null;
 }
 
-// Outside-click + Escape close. Popover wrapper has `@click.stop` so
-// clicks INSIDE never reach this document handler — any click that
-// bubbles up to document while popover is open = click outside the
-// popover (cell, footer, sibling section, anywhere in the modal).
-function onDocClick(): void {
-  if (popoverFor.value !== null) closePopover();
+// Outside-click + Escape close. Uses capture phase so we see the
+// event BEFORE Vue's @click.stop modifiers have a chance to swallow
+// it — relying on bubble-phase + stopPropagation produced false
+// negatives in cross-Context modal teleport scenarios. Explicit
+// `closest()` check excludes:
+//   - clicks inside the popover (input, ↺ reset, × close button)
+//   - clicks on the cog button that *opens* the popover
+// Anything else closes the popover.
+function onDocPointerDown(ev: MouseEvent): void {
+  if (popoverFor.value === null) return;
+  const target = ev.target as HTMLElement | null;
+  if (!target) return;
+  if (target.closest(".mx__popover")) return;
+  if (target.closest('[data-test^="mx-cog-"]')) return;
+  closePopover();
 }
 function onDocKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Escape" && popoverFor.value !== null) {
@@ -172,11 +181,11 @@ function onDocKeydown(ev: KeyboardEvent): void {
   }
 }
 onMounted(() => {
-  document.addEventListener("click", onDocClick);
+  document.addEventListener("mousedown", onDocPointerDown, true);
   document.addEventListener("keydown", onDocKeydown);
 });
 onBeforeUnmount(() => {
-  document.removeEventListener("click", onDocClick);
+  document.removeEventListener("mousedown", onDocPointerDown, true);
   document.removeEventListener("keydown", onDocKeydown);
 });
 
