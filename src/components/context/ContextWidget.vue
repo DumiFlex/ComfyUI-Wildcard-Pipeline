@@ -1170,9 +1170,27 @@ function openEditModal(id: string) {
   editingId.value = id;
 }
 
-function saveEditedModule(updated: ModuleEntry) {
-  const list = value.value.modules.map((m) => m.id === updated.id ? updated : m);
+function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
+  // Phase B: when modal forks (Save-to-library w/ siblings > 1), the
+  // draft's id swaps to the new uuid; `_originalId` carries the old id
+  // so we can find the row to replace in `value.modules`. Strip the
+  // marker before persisting + flash the forked row briefly.
+  const lookupId = updated._originalId ?? updated.id;
+  const cleaned: ModuleEntry = { ...updated };
+  delete (cleaned as { _originalId?: string })._originalId;
+  const list = value.value.modules.map((m) => m.id === lookupId ? cleaned : m);
   value.value = { ...value.value, modules: list };
+  if (updated._originalId && updated._originalId !== updated.id) {
+    nextTick(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-module-id="${updated.id}"]`,
+      );
+      if (el) {
+        el.classList.add("wp-module--flash");
+        setTimeout(() => el.classList.remove("wp-module--flash"), 1500);
+      }
+    });
+  }
   editingId.value = null;
 }
 

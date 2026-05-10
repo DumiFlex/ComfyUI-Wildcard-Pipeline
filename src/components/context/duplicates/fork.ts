@@ -17,7 +17,7 @@ export interface ForkInput {
   id: string;
   type: string;
   meta: { name?: string; [k: string]: unknown };
-  payload: Record<string, unknown> | undefined;
+  payload?: Record<string, unknown>;
 }
 export interface ForkResult {
   newId: string;

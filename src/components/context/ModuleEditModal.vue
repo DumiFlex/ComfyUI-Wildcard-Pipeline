@@ -20,6 +20,9 @@ import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
 import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
 import { pruneStaleInstanceRefs } from "./editors/instance/prune";
 import { hashes, refreshModule, setLibraryHash } from "./drift-store";
+import { workflowSiblingCount } from "./duplicates/sibling-count";
+import { forkModule } from "./duplicates/fork";
+import { app } from "#comfyui/app";
 import { pushToast } from "../shared/toast-store";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
@@ -363,9 +366,67 @@ async function doWildcardReset(): Promise<void> {
   }
 }
 
+/**
+ * Phase B (2026-05-10): Save-to-library auto-fork shared helpers.
+ * When the draft's uuid has > 1 instances anywhere in the workflow,
+ * save creates a NEW library entry instead of overwriting the shared
+ * one. The forked row gets a fresh uuid + " (copy)" name; other
+ * instances stay on the original entry.
+ */
+async function fetchExistingLibraryNames(): Promise<Set<string>> {
+  try {
+    const res = await fetch("/wp/api/modules");
+    if (!res.ok) return new Set();
+    const body = await res.json() as Array<{ name?: string }>;
+    return new Set(body.map((m) => m.name ?? "").filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+async function doFork(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const existingNames = await fetchExistingLibraryNames();
+    const { newId, newHash, suffixedName } = await forkModule(draft.value, existingNames);
+    // Stamp `_originalId` so saveEditedModule can swap the row by old
+    // id (otherwise the .map() reconciliation can't find it).
+    (draft.value as ModuleEntry & { _originalId?: string })._originalId = draft.value.id;
+    draft.value.id = newId;
+    draft.value.payload_hash = newHash;
+    draft.value.meta = { ...draft.value.meta, name: suffixedName };
+    setLibraryHash(newId, newHash);
+    pushToast(`Saved as new library entry "${suffixedName}"`, { severity: "success" });
+    save();
+  } catch (err) {
+    pushToast(`Fork failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
+function siblingCount(): number {
+  if (!draft.value) return 0;
+  return workflowSiblingCount(draft.value.id, app.graph as never);
+}
+
+function buildForkBody(moduleName: string, count: number): string {
+  return `${moduleName} is used ${count} times in this workflow. ` +
+    `Saving creates a new library entry "${moduleName} (copy)". ` +
+    `The other ${count - 1} instance${count - 1 === 1 ? "" : "s"} stay on the original entry.`;
+}
+
 function onWildcardSaveToLibraryClick(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
+  const count = siblingCount();
+  if (count > 1) {
+    askConfirm({
+      title: "Save creates a new library entry",
+      body: buildForkBody(moduleName, count),
+      confirmLabel: "Continue — save as fork",
+      onConfirm: () => { void doFork(); },
+    });
+    return;
+  }
   askConfirm({
     title: "Save to library?",
     body: `Push current changes to library entry "${moduleName}". Other workflows referencing this module will see the new version on their next open.`,
@@ -421,6 +482,16 @@ async function doFixedValuesReset(): Promise<void> {
 function onFixedValuesSaveToLibraryClick(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
+  const count = siblingCount();
+  if (count > 1) {
+    askConfirm({
+      title: "Save creates a new library entry",
+      body: buildForkBody(moduleName, count),
+      confirmLabel: "Continue — save as fork",
+      onConfirm: () => { void doFork(); },
+    });
+    return;
+  }
   askConfirm({
     title: "Save to library?",
     body: `Push current values to library entry "${moduleName}". Other workflows referencing this module will see the new version on their next open.`,
@@ -477,6 +548,16 @@ async function doCombineReset(): Promise<void> {
 function onCombineSaveToLibraryClick(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
+  const count = siblingCount();
+  if (count > 1) {
+    askConfirm({
+      title: "Save creates a new library entry",
+      body: buildForkBody(moduleName, count),
+      confirmLabel: "Continue — save as fork",
+      onConfirm: () => { void doFork(); },
+    });
+    return;
+  }
   askConfirm({
     title: "Save to library?",
     body: `Push current template + binding to library entry "${moduleName}".`,
@@ -533,6 +614,16 @@ async function doDerivationReset(): Promise<void> {
 function onDerivationSaveToLibraryClick(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
+  const count = siblingCount();
+  if (count > 1) {
+    askConfirm({
+      title: "Save creates a new library entry",
+      body: buildForkBody(moduleName, count),
+      confirmLabel: "Continue — save as fork",
+      onConfirm: () => { void doFork(); },
+    });
+    return;
+  }
   askConfirm({
     title: "Save to library?",
     body: `Push current rules + meta to library entry "${moduleName}".`,
@@ -587,6 +678,16 @@ async function doConstraintReset(): Promise<void> {
 function onConstraintSaveToLibraryClick(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
+  const count = siblingCount();
+  if (count > 1) {
+    askConfirm({
+      title: "Save creates a new library entry",
+      body: buildForkBody(moduleName, count),
+      confirmLabel: "Continue — save as fork",
+      onConfirm: () => { void doFork(); },
+    });
+    return;
+  }
   askConfirm({
     title: "Save to library?",
     body: `Push current changes to library entry "${moduleName}". Other workflows referencing this constraint will see the new version on their next open.`,
