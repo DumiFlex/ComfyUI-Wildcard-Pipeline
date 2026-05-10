@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 InstanceFieldType = Literal[
-    "string", "list[string]", "dict[string,number]", "boolean", "number", "list[dict]"
+    "string", "list[string]", "dict[string,number]", "dict[string,dict]",
+    "boolean", "number", "list[dict]",
 ]
 
 INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
@@ -49,6 +50,23 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
     },
     "derivation": {
         "disabled_rule_ids": "list[string]",
+        # Tier-D modal expansion (2026-05-10 cycle):
+        #   - disabled_branch_keys: list of "{rule_id}:{branch_idx}" or
+        #     "{rule_id}:else" entries the engine skips during evaluation
+        #   - action_value_overrides / condition_value_overrides:
+        #     per-rule per-branch value swaps (engine reads override
+        #     before payload value)
+        #   - rule_order_override: list of rule_ids in evaluation order
+        #   - locked_seed + internal: standard runtime fields the
+        #     pipeline already honored on other kinds; surfaced here so
+        #     RESET_FIELDS_PER_KIND + INSTANCE_FIELDS_PER_KIND keep
+        #     parity with what the modal writes.
+        "disabled_branch_keys": "list[string]",
+        "action_value_overrides": "dict[string,dict]",
+        "condition_value_overrides": "dict[string,dict]",
+        "rule_order_override": "list[string]",
+        "locked_seed": "number",
+        "internal": "boolean",
     },
     "constraint": {
         "disabled_exception_keys": "list[string]",
@@ -74,6 +92,12 @@ def _matches_type(value: Any, spec: InstanceFieldType) -> bool:
             isinstance(value, dict)
             and all(isinstance(k, str) for k in value.keys())
             and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value.values())
+        )
+    if spec == "dict[string,dict]":
+        return (
+            isinstance(value, dict)
+            and all(isinstance(k, str) for k in value.keys())
+            and all(isinstance(v, dict) for v in value.values())
         )
     return False
 

@@ -23,7 +23,18 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       //   - internal (existing hide-from-prompt toggle)
       "template_override", "variable_binding", "locked_seed", "internal",
     ]);
-    expect(INSTANCE_FIELDS_PER_KIND.derivation).toEqual(["disabled_rule_ids"]);
+    expect(INSTANCE_FIELDS_PER_KIND.derivation).toEqual([
+      // Tier-D modal expansion (2026-05-10): per-rule + per-branch
+      // overrides + value overrides + reorder + runtime fields. Reset
+      // preserves locked_seed + internal (wildcard-style split).
+      "disabled_rule_ids",
+      "disabled_branch_keys",
+      "action_value_overrides",
+      "condition_value_overrides",
+      "rule_order_override",
+      "locked_seed",
+      "internal",
+    ]);
     expect(INSTANCE_FIELDS_PER_KIND.constraint).toEqual([
       "disabled_exception_keys", "disabled_matrix_cells",
     ]);

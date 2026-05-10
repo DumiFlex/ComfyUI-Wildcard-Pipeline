@@ -320,6 +320,35 @@ export interface ModuleEntry {
      */
     disabled_rule_ids?: string[] | null;
     /**
+     * Per-instance disable list for derivation BRANCHES inside a rule.
+     * Each entry is `"{rule_id}:{branch_idx}"` for ELIF or
+     * `"{rule_id}:else"` for ELSE. IF (branch_idx=0) is never listed —
+     * disabling IF would be redundant with `disabled_rule_ids`.
+     * Engine reads in `derivation_handler.py` per the 2026-05-10 cycle.
+     */
+    disabled_branch_keys?: string[] | null;
+    /**
+     * Per-instance action.value overrides for derivation branches.
+     * Shape: `{ [rule_id]: { [branch_idx_or_"else"]: value } }`.
+     * Engine reads override before payload value at resolve time.
+     * Null/absent = all action values come from library payload.
+     */
+    action_value_overrides?: Record<string, Record<string, string>> | null;
+    /**
+     * Per-instance condition.value overrides for derivation branches.
+     * Shape: `{ [rule_id]: { [branch_idx]: value } }`. Only IF + ELIF
+     * branches (ELSE has no condition). Engine reads override before
+     * payload value at compare time.
+     */
+    condition_value_overrides?: Record<string, Record<string, string>> | null;
+    /**
+     * Per-instance rule reorder list for derivation. Engine evaluates
+     * rules in this order; missing rule_ids fall through at the end in
+     * library order. Library `payload.rules` order untouched. Drag-to-
+     * reorder UI emits a fresh list on every drop.
+     */
+    rule_order_override?: string[] | null;
+    /**
      * Per-instance disable list for constraint exceptions. Composite key
      * via `encodeKey([source, target])` — JSON 2-string-array, stable
      * across reorder. Null/absent = all exceptions active.
