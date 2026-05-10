@@ -1419,9 +1419,19 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   if (value.value.modules.some((m) => m.id === ds.module.id)) {
     const dupName = ds.module.meta?.name?.trim() || ds.module.type;
     pushToast(
-      `"${dupName}" is already in this node — modules can't be duplicated within a single WP_Context.`,
-      { severity: "warning" },
+      `"${dupName}" is already in this node. Use right-click → Duplicate to add another instance.`,
+      { severity: "error" },
     );
+    // Phase B: 200ms shake on the existing row so the user sees what
+    // was rejected. Pre-Phase-B the visual feedback was just the toast;
+    // the row stayed silent, which felt like the drop disappeared.
+    const existingEl = document.querySelector<HTMLElement>(
+      `[data-module-id="${ds.module.id}"]`,
+    );
+    if (existingEl) {
+      existingEl.classList.add("wp-module--shake");
+      setTimeout(() => existingEl.classList.remove("wp-module--shake"), 220);
+    }
     sameNodeDropHandled = true;
     return;
   }
@@ -2236,6 +2246,33 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 }
 .wp-module.wp-drop-target--before::before { top: -3px; }
 .wp-module.wp-drop-target--after::after  { bottom: -3px; }
+
+/* Phase B: drop-rejection shake — 200ms ±4px ease-in-out fired when
+ * a cross-node drop targets a Context that already has the source
+ * module's uuid. Paired with an error toast suggesting right-click →
+ * Duplicate. Pre-Phase-B feedback was toast-only and felt silent. */
+@keyframes wp-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+.wp-module--shake { animation: wp-shake 200ms ease-in-out; }
+
+/* Phase B: post-fork flash — green outline + glow on the row that
+ * just received a new uuid via Save-to-library fork. Fades out over
+ * 1.5s. The class is added by `saveEditedModule` after the modal
+ * emits a draft whose `_originalId` differs from `id`, then auto-
+ * removed via setTimeout. */
+@keyframes wp-flash {
+  0% { box-shadow: 0 0 0 2px var(--wp-kind-combine), 0 0 14px rgba(52, 211, 153, 0.4); }
+  100% { box-shadow: none; }
+}
+.wp-module--flash {
+  animation: wp-flash 1500ms ease-out;
+  border-color: var(--wp-kind-combine);
+}
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 

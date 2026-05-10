@@ -14,8 +14,11 @@ const jsonIdx = args.indexOf("--json");
 const jsonPath = jsonIdx >= 0 ? args[jsonIdx + 1] : null;
 
 // Budgets (gzipped bytes) — tune only with explicit review
+// 2026-05-10: total bumped 250 → 256 KB to fit Phase B duplicate/fork
+// system (per-kind save-to-library fork handlers + supporting helpers
+// + flash/shake CSS). Cycle was explicitly scoped + approved.
 const ENTRY_LIMIT = 30 * 1024;      // 30 KB
-const TOTAL_LIMIT = 250 * 1024;     // 250 KB
+const TOTAL_LIMIT = 256 * 1024;     // 256 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
