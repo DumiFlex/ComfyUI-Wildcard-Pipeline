@@ -1,17 +1,30 @@
 <script setup lang="ts">
 /**
- * Derivation RulesSection — per-rule enable toggle + read-only summary.
+ * Derivation RulesSection — accordion + branch-table per the
+ * 2026-05-10 tier-D modal expansion. Each rule renders as a
+ * collapsible card; expanded body shows IF/ELIF/ELSE rows with
+ * per-branch enable + condition.value override + action.value
+ * override columns.
  *
- * Library-defining edits (rule conditions, branches, actions) live in
- * the SPA. This modal exposes only the per-instance overrides users
- * might want at queue time: which rules to skip via
- * `instance.disabled_rule_ids`. Rule definitions render read-only —
- * the user sees what each rule does (condition, target, branches,
- * else) and can toggle the whole rule off, but can't restructure it
- * here. Same precedence pattern wildcard's PoolSection (toggle
- * options on/off) and fixed_values' ValuesSection use.
+ * Library editing (rule structure: var/op/target/mode + add/remove
+ * rules + add/remove branches) lives in the SPA. Modal exposes only
+ * runtime overrides:
+ *
+ *   - `disabled_rule_ids` — whole-rule on/off (existing)
+ *   - `disabled_branch_keys` — silence ELIF/ELSE without disabling
+ *     the rule. Encoded `"{rule_id}:{branch_idx}"` for ELIF or
+ *     `"{rule_id}:else"` for ELSE. IF (branch_idx=0) NEVER appears
+ *     in the list — disabling IF would be redundant with the per-
+ *     rule toggle, so the UI doesn't render the checkbox for IF
+ *     rows and the engine ignores `r:0` entries defensively.
+ *   - `action_value_overrides` — per-rule per-branch action.value
+ *     swaps. Engine reads override before payload value at resolve
+ *     time. Empty string drops the entry; empty rule_id key
+ *     collapses; empty top-level dict collapses to null.
+ *   - `condition_value_overrides` — same shape, but for IF + ELIF
+ *     conditions only (ELSE has no condition).
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
@@ -33,37 +46,153 @@ const rules = computed<DerivationRule[]>(() => {
   return Array.isArray(p.rules) ? p.rules : [];
 });
 
-const disabledIds = computed<Set<string>>(() => {
-  const ids = props.module.instance?.disabled_rule_ids;
+const instance = computed(() => props.module.instance ?? {});
+
+// ── Disabled rules (whole-rule toggle) ─────────────────────────────
+
+const disabledRuleIds = computed<Set<string>>(() => {
+  const ids = instance.value.disabled_rule_ids;
   return new Set(Array.isArray(ids) ? ids : []);
 });
 
-function isEnabled(rule: DerivationRule): boolean {
-  return !disabledIds.value.has(rule.id);
+function isRuleEnabled(rule: DerivationRule): boolean {
+  return !disabledRuleIds.value.has(rule.id);
 }
 
 function toggleRule(rule: DerivationRule): void {
-  const next = new Set(disabledIds.value);
-  if (next.has(rule.id)) {
-    next.delete(rule.id);
-  } else {
-    next.add(rule.id);
-  }
-  // Collapse to null when no rules disabled — same precedence pattern
-  // wildcard's enabled_options uses (null = library default).
+  const next = new Set(disabledRuleIds.value);
+  if (next.has(rule.id)) next.delete(rule.id);
+  else next.add(rule.id);
   const value = next.size === 0 ? null : Array.from(next);
   emit("update", patchInstance(props.module, "disabled_rule_ids", value));
 }
 
-/** Pretty-print operator for the summary line. Mirrors the SPA editor's
- *  OP_OPTIONS labels — "not_equals" becomes "!=" so the inline summary
- *  stays single-line on tight layouts. */
+// ── Disabled branch keys (per-branch toggle) ───────────────────────
+
+const disabledBranchKeys = computed<Set<string>>(() => {
+  const keys = instance.value.disabled_branch_keys;
+  return new Set(Array.isArray(keys) ? keys : []);
+});
+
+function branchKey(ruleId: string, branchIdx: number | "else"): string {
+  return `${ruleId}:${branchIdx}`;
+}
+
+function isBranchEnabled(ruleId: string, branchIdx: number | "else"): boolean {
+  return !disabledBranchKeys.value.has(branchKey(ruleId, branchIdx));
+}
+
+function toggleBranch(ruleId: string, branchIdx: number | "else"): void {
+  const next = new Set(disabledBranchKeys.value);
+  const key = branchKey(ruleId, branchIdx);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  const value = next.size === 0 ? null : Array.from(next);
+  emit("update", patchInstance(props.module, "disabled_branch_keys", value));
+}
+
+// ── Value overrides (action + condition) ───────────────────────────
+
+type OverrideMap = Record<string, Record<string, string>>;
+
+function readOverrideMap(field: "action_value_overrides" | "condition_value_overrides"): OverrideMap {
+  const v = instance.value[field];
+  return v && typeof v === "object" ? (v as OverrideMap) : {};
+}
+
+function getOverride(
+  field: "action_value_overrides" | "condition_value_overrides",
+  ruleId: string,
+  key: string,
+): string {
+  const map = readOverrideMap(field);
+  return map[ruleId]?.[key] ?? "";
+}
+
+/** Patch helper — sets `map[ruleId][key] = value` (or deletes the
+ *  entry when value is empty). Collapses empty rule_id sub-objects
+ *  and finally collapses an empty top-level map to null so the
+ *  modified-state computed never lights up over an empty shell. */
+function setOverride(
+  field: "action_value_overrides" | "condition_value_overrides",
+  ruleId: string,
+  key: string,
+  value: string,
+): void {
+  const current = readOverrideMap(field);
+  // Deep-clone the rule's submap so the proxy comparison in the
+  // ModuleEditModal save reconciliation sees a fresh object.
+  const next: OverrideMap = { ...current };
+  const sub: Record<string, string> = { ...(next[ruleId] ?? {}) };
+  if (value === "") {
+    delete sub[key];
+  } else {
+    sub[key] = value;
+  }
+  if (Object.keys(sub).length === 0) {
+    delete next[ruleId];
+  } else {
+    next[ruleId] = sub;
+  }
+  const collapsed = Object.keys(next).length === 0 ? null : next;
+  emit("update", patchInstance(props.module, field, collapsed));
+}
+
+function onActionOverrideInput(ruleId: string, key: string, ev: Event): void {
+  const value = (ev.target as HTMLInputElement).value;
+  setOverride("action_value_overrides", ruleId, key, value);
+}
+
+function onCondOverrideInput(ruleId: string, key: string, ev: Event): void {
+  const value = (ev.target as HTMLInputElement).value;
+  setOverride("condition_value_overrides", ruleId, key, value);
+}
+
+// ── Mod-count chip ─────────────────────────────────────────────────
+
+function modCount(rule: DerivationRule): number {
+  const ruleId = rule.id;
+  let count = 0;
+  // Disabled branches that belong to this rule.
+  for (const k of disabledBranchKeys.value) {
+    if (k.startsWith(`${ruleId}:`)) count += 1;
+  }
+  // Action value overrides on this rule.
+  const aMap = readOverrideMap("action_value_overrides")[ruleId];
+  if (aMap) count += Object.keys(aMap).length;
+  // Condition value overrides on this rule.
+  const cMap = readOverrideMap("condition_value_overrides")[ruleId];
+  if (cMap) count += Object.keys(cMap).length;
+  return count;
+}
+
+// ── Accordion state ────────────────────────────────────────────────
+
+const expandedRules = ref<Set<string>>(new Set());
+
+function isExpanded(ruleId: string): boolean {
+  return expandedRules.value.has(ruleId);
+}
+
+function toggleExpand(ruleId: string): void {
+  const next = new Set(expandedRules.value);
+  if (next.has(ruleId)) next.delete(ruleId);
+  else next.add(ruleId);
+  expandedRules.value = next;
+}
+
+// ── Display helpers (read-only summary tokens) ─────────────────────
+
 function opSymbol(op: string | undefined): string {
   switch (op) {
     case "equals": return "=";
     case "not_equals": return "≠";
     case "contains": return "contains";
     case "matches": return "matches";
+    case "exists": return "exists";
+    case "not_exists": return "absent";
+    case "is_set": return "is set";
+    case "is_unset": return "is unset";
     default: return op ?? "";
   }
 }
@@ -73,6 +202,13 @@ function modeLabel(mode: string | undefined): string {
   if (mode === "prepend") return "=+";
   return "=";
 }
+
+/** Whether the op needs a value field at all (presence-check ops
+ *  ignore condition.value). Drives the cond-override input being
+ *  rendered or skipped per branch. */
+function opUsesValue(op: string | undefined): boolean {
+  return op !== "exists" && op !== "not_exists" && op !== "is_set" && op !== "is_unset";
+}
 </script>
 
 <template>
@@ -80,7 +216,7 @@ function modeLabel(mode: string | undefined): string {
     <div class="rules__head">
       <span class="rules__label">Rules</span>
       <span class="rules__hint" data-test="rules-spa-hint">
-        Toggle rules on/off · edit rule logic in SPA
+        Click a rule to expand · toggle branches · override values · edit logic in SPA
       </span>
     </div>
 
@@ -92,50 +228,209 @@ function modeLabel(mode: string | undefined): string {
       <div
         v-for="rule in rules"
         :key="rule.id"
-        class="rule-row"
-        :class="{ 'rule-row--off': !isEnabled(rule) }"
-        :data-test="`rule-row-${rule.id}`"
+        class="rule-card"
+        :class="{
+          'rule-card--off': !isRuleEnabled(rule),
+          'rule-card--open': isExpanded(rule.id),
+        }"
+        :data-test="`rule-card-${rule.id}`"
       >
+        <!-- Head row -->
         <button
           type="button"
-          class="rule-row__toggle"
-          :class="{ 'rule-row__toggle--on': isEnabled(rule) }"
-          :data-test="`rule-toggle-${rule.id}`"
-          role="switch"
-          :aria-checked="isEnabled(rule)"
-          :aria-label="isEnabled(rule) ? `Disable rule ${rule.id}` : `Enable rule ${rule.id}`"
-          @click="toggleRule(rule)"
+          class="rule-head"
+          :data-test="`rule-head-${rule.id}`"
+          :aria-expanded="isExpanded(rule.id)"
+          @click="toggleExpand(rule.id)"
         >
-          <i :class="['pi', isEnabled(rule) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
+          <i
+            :class="['pi', isExpanded(rule.id) ? 'pi-chevron-down' : 'pi-chevron-right']"
+            class="rule-head__caret"
+            aria-hidden="true"
+          />
+          <span
+            class="rule-head__toggle"
+            :class="{ 'rule-head__toggle--on': isRuleEnabled(rule) }"
+            :data-test="`rule-toggle-${rule.id}`"
+            role="switch"
+            :aria-checked="isRuleEnabled(rule)"
+            :aria-label="isRuleEnabled(rule) ? `Disable rule ${rule.id}` : `Enable rule ${rule.id}`"
+            @click.stop="toggleRule(rule)"
+          >
+            <i :class="['pi', isRuleEnabled(rule) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
+          </span>
+
+          <span class="rule-head__num">Rule {{ rule.id }}</span>
+
+          <span class="rule-head__summary" :data-test="`rule-summary-${rule.id}`">
+            <template v-if="rule.branches && rule.branches.length > 0">
+              <span
+                v-if="rule.branches[0].condition?.var"
+                :class="['rule-tok-var', varColorClass(rule.branches[0].condition.var)]"
+              >${{ rule.branches[0].condition.var }}</span>
+              <span class="rule-tok-op">{{ opSymbol(rule.branches[0].condition?.op) }}</span>
+              <span
+                v-if="opUsesValue(rule.branches[0].condition?.op)"
+                class="rule-tok-val"
+              >{{ rule.branches[0].condition?.value || "?" }}</span>
+              <span class="rule-tok-arrow">→</span>
+              <span
+                v-if="rule.branches[0].action?.target_var"
+                :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
+              >${{ rule.branches[0].action.target_var }}</span>
+              <span class="rule-tok-op">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
+              <span class="rule-tok-val">{{ rule.branches[0].action?.value || "?" }}</span>
+            </template>
+          </span>
+
+          <span
+            v-if="modCount(rule) > 0"
+            class="rule-head__chip rule-head__chip--mod"
+            :data-test="`rule-mod-count-${rule.id}`"
+          >{{ modCount(rule) }} mod{{ modCount(rule) === 1 ? "" : "s" }}</span>
+
+          <!-- Drag handle placeholder — actual drag-to-reorder lands
+               in a follow-up commit. Kept in markup so screenshots
+               + layout stay stable. -->
+          <span class="rule-head__drag" aria-hidden="true">⋮⋮</span>
         </button>
 
-        <div class="rule-row__summary" :data-test="`rule-summary-${rule.id}`">
-          <template v-if="rule.branches && rule.branches.length > 0">
-            <span
-              v-if="rule.branches[0].condition?.var"
-              :class="['rule-tok-var', varColorClass(rule.branches[0].condition.var)]"
-            >${{ rule.branches[0].condition.var }}</span>
-            <span class="rule-tok-op">{{ opSymbol(rule.branches[0].condition?.op) }}</span>
-            <span class="rule-tok-val">{{ rule.branches[0].condition?.value || "?" }}</span>
-            <span class="rule-tok-arrow">→</span>
-            <span
-              v-if="rule.branches[0].action?.target_var"
-              :class="['rule-tok-var', varColorClass(rule.branches[0].action.target_var)]"
-            >${{ rule.branches[0].action.target_var }}</span>
-            <span class="rule-tok-op">{{ modeLabel(rule.branches[0].action?.mode) }}</span>
-            <span class="rule-tok-val">{{ rule.branches[0].action?.value || "?" }}</span>
+        <!-- Expanded body — branch table -->
+        <div
+          v-if="isExpanded(rule.id)"
+          class="rule-body"
+          :data-test="`rule-body-${rule.id}`"
+        >
+          <div class="branch-table">
+            <div class="branch-row branch-row--head">
+              <span class="branch-cell branch-cell--head">on</span>
+              <span class="branch-cell branch-cell--head">tag</span>
+              <span class="branch-cell branch-cell--head">summary</span>
+              <span class="branch-cell branch-cell--head">condition override</span>
+              <span class="branch-cell branch-cell--head">action override</span>
+            </div>
 
-            <span
-              v-if="rule.branches.length > 1"
-              class="rule-row__chip"
-              :data-test="`rule-elif-count-${rule.id}`"
-            >+{{ rule.branches.length - 1 }} elif</span>
-          </template>
-          <span
-            v-if="rule.else"
-            class="rule-row__chip rule-row__chip--else"
-            :data-test="`rule-else-${rule.id}`"
-          >else</span>
+            <!-- IF + ELIF branch rows -->
+            <div
+              v-for="(branch, bi) in rule.branches"
+              :key="bi"
+              class="branch-row"
+              :class="{
+                'branch-row--off': bi !== 0 && !isBranchEnabled(rule.id, bi),
+              }"
+              :data-test="`branch-row-${rule.id}-${bi}`"
+            >
+              <span class="branch-cell branch-cell--toggle">
+                <!-- IF (bi=0) gets no checkbox — disabling IF would be
+                     redundant with the per-rule toggle. Placeholder
+                     keeps the column aligned. -->
+                <span
+                  v-if="bi !== 0"
+                  class="branch-toggle"
+                  :class="{ 'branch-toggle--on': isBranchEnabled(rule.id, bi) }"
+                  :data-test="`branch-toggle-${rule.id}-${bi}`"
+                  role="switch"
+                  :aria-checked="isBranchEnabled(rule.id, bi)"
+                  :aria-label="isBranchEnabled(rule.id, bi) ? `Disable branch ${bi}` : `Enable branch ${bi}`"
+                  @click="toggleBranch(rule.id, bi)"
+                >
+                  <i :class="['pi', isBranchEnabled(rule.id, bi) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
+                </span>
+              </span>
+              <span class="branch-cell branch-cell--tag" :data-kind="bi === 0 ? 'if' : 'elif'">
+                {{ bi === 0 ? "IF" : "ELIF" }}
+              </span>
+              <span class="branch-cell branch-cell--summary">
+                <span
+                  v-if="branch.condition?.var"
+                  :class="['rule-tok-var', varColorClass(branch.condition.var)]"
+                >${{ branch.condition.var }}</span>
+                <span class="rule-tok-op">{{ opSymbol(branch.condition?.op) }}</span>
+                <span
+                  v-if="opUsesValue(branch.condition?.op)"
+                  class="rule-tok-val"
+                >{{ branch.condition?.value || "?" }}</span>
+                <span class="rule-tok-arrow">→</span>
+                <span
+                  v-if="branch.action?.target_var"
+                  :class="['rule-tok-var', varColorClass(branch.action.target_var)]"
+                >${{ branch.action.target_var }}</span>
+                <span class="rule-tok-op">{{ modeLabel(branch.action?.mode) }}</span>
+                <span class="rule-tok-val">{{ branch.action?.value || "?" }}</span>
+              </span>
+              <span class="branch-cell branch-cell--cond-override">
+                <input
+                  v-if="opUsesValue(branch.condition?.op)"
+                  type="text"
+                  class="branch-override-input"
+                  :class="{ 'branch-override-input--mod': getOverride('condition_value_overrides', rule.id, String(bi)) !== '' }"
+                  :value="getOverride('condition_value_overrides', rule.id, String(bi))"
+                  :placeholder="branch.condition?.value || ''"
+                  :data-test="`cond-override-${rule.id}-${bi}`"
+                  :aria-label="`Condition value override for rule ${rule.id} branch ${bi}`"
+                  @input="(ev) => onCondOverrideInput(rule.id, String(bi), ev)"
+                />
+              </span>
+              <span class="branch-cell branch-cell--action-override">
+                <input
+                  type="text"
+                  class="branch-override-input"
+                  :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, String(bi)) !== '' }"
+                  :value="getOverride('action_value_overrides', rule.id, String(bi))"
+                  :placeholder="branch.action?.value || ''"
+                  :data-test="`action-override-${rule.id}-${bi}`"
+                  :aria-label="`Action value override for rule ${rule.id} branch ${bi}`"
+                  @input="(ev) => onActionOverrideInput(rule.id, String(bi), ev)"
+                />
+              </span>
+            </div>
+
+            <!-- ELSE row (when present) -->
+            <div
+              v-if="rule.else"
+              class="branch-row"
+              :class="{ 'branch-row--off': !isBranchEnabled(rule.id, 'else') }"
+              :data-test="`branch-row-${rule.id}-else`"
+            >
+              <span class="branch-cell branch-cell--toggle">
+                <span
+                  class="branch-toggle"
+                  :class="{ 'branch-toggle--on': isBranchEnabled(rule.id, 'else') }"
+                  :data-test="`branch-toggle-${rule.id}-else`"
+                  role="switch"
+                  :aria-checked="isBranchEnabled(rule.id, 'else')"
+                  :aria-label="isBranchEnabled(rule.id, 'else') ? 'Disable ELSE branch' : 'Enable ELSE branch'"
+                  @click="toggleBranch(rule.id, 'else')"
+                >
+                  <i :class="['pi', isBranchEnabled(rule.id, 'else') ? 'pi-check' : 'pi-times']" aria-hidden="true" />
+                </span>
+              </span>
+              <span class="branch-cell branch-cell--tag" data-kind="else">ELSE</span>
+              <span class="branch-cell branch-cell--summary">
+                <span class="rule-tok-arrow">→</span>
+                <span
+                  v-if="rule.else.action?.target_var"
+                  :class="['rule-tok-var', varColorClass(rule.else.action.target_var)]"
+                >${{ rule.else.action.target_var }}</span>
+                <span class="rule-tok-op">{{ modeLabel(rule.else.action?.mode) }}</span>
+                <span class="rule-tok-val">{{ rule.else.action?.value || "?" }}</span>
+              </span>
+              <!-- ELSE has no condition → no condition override cell -->
+              <span class="branch-cell branch-cell--cond-override"></span>
+              <span class="branch-cell branch-cell--action-override">
+                <input
+                  type="text"
+                  class="branch-override-input"
+                  :class="{ 'branch-override-input--mod': getOverride('action_value_overrides', rule.id, 'else') !== '' }"
+                  :value="getOverride('action_value_overrides', rule.id, 'else')"
+                  :placeholder="rule.else.action?.value || ''"
+                  :data-test="`action-override-${rule.id}-else`"
+                  :aria-label="`ELSE action value override for rule ${rule.id}`"
+                  @input="(ev) => onActionOverrideInput(rule.id, 'else', ev)"
+                />
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -176,24 +471,39 @@ function modeLabel(mode: string | undefined): string {
 .rules__list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
-.rule-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+
+/* Rule card */
+.rule-card {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  font: 11px var(--wp-font-mono);
+  overflow: hidden;
+}
+.rule-card--off { opacity: 0.55; }
+
+/* Head — single-row clickable bar */
+.rule-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--wp-bg2);
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
   color: var(--wp-text);
 }
-.rule-row--off {
-  opacity: 0.55;
+.rule-card--open .rule-head { border-bottom: 1px solid var(--wp-border); }
+.rule-head:hover { background: var(--wp-bg3); }
+.rule-head__caret {
+  font-size: 10px;
+  color: var(--wp-text-dim, var(--wp-text3));
 }
-.rule-row--off .rule-row__summary { text-decoration: line-through; }
-.rule-row__toggle {
+.rule-head__toggle {
   width: 18px;
   height: 18px;
   display: inline-flex;
@@ -206,20 +516,155 @@ function modeLabel(mode: string | undefined): string {
   cursor: pointer;
   flex-shrink: 0;
 }
-.rule-row__toggle--on {
+.rule-head__toggle--on {
   background: var(--wp-accent);
   border-color: var(--wp-accent);
   color: white;
 }
-.rule-row__toggle .pi { font-size: 9px; }
-.rule-row__summary {
+.rule-head__toggle .pi { font-size: 9px; }
+.rule-head__num {
+  font: 600 10px var(--wp-font-sans);
+  color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 12%, transparent);
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.rule-head__summary {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: 1;
   min-width: 0;
+  font: 11px var(--wp-font-mono);
   flex-wrap: wrap;
 }
+.rule-card--off .rule-head__summary { text-decoration: line-through; }
+.rule-head__chip {
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--wp-bg);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text-muted, var(--wp-text2));
+}
+.rule-head__chip--mod {
+  color: var(--wp-status-modified, #f59e0b);
+  border-color: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 35%, transparent);
+  background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 10%, transparent);
+}
+.rule-head__drag {
+  color: var(--wp-text-dim, var(--wp-text3));
+  font-size: 11px;
+  cursor: grab;
+  padding: 0 2px;
+}
+
+/* Body — branch table */
+.rule-body {
+  padding: 8px 10px;
+  background: var(--wp-bg-deep, var(--wp-bg));
+}
+.branch-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.branch-row {
+  display: grid;
+  grid-template-columns: 28px 38px 1fr 1fr 1fr;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  font: 11px var(--wp-font-mono);
+  border-bottom: 1px dashed var(--wp-border-soft, var(--wp-border));
+}
+.branch-row:last-child { border-bottom: 0; }
+.branch-row--head {
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-text-dim, var(--wp-text3));
+  border-bottom: 1px solid var(--wp-border);
+  margin-bottom: 2px;
+  padding-bottom: 4px;
+}
+.branch-row--off {
+  opacity: 0.5;
+}
+.branch-row--off .branch-cell--summary { text-decoration: line-through; }
+.branch-cell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.branch-cell--summary {
+  flex-wrap: wrap;
+}
+.branch-cell--head {
+  color: var(--wp-text-dim, var(--wp-text3));
+  font-weight: 600;
+}
+.branch-cell--toggle { justify-content: center; }
+.branch-cell--tag {
+  justify-content: flex-start;
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.branch-cell--tag[data-kind="if"] { color: var(--wp-kind-derivation, #fbbf24); }
+.branch-cell--tag[data-kind="elif"] { color: var(--wp-info, #60a5fa); }
+.branch-cell--tag[data-kind="else"] { color: var(--wp-warn, var(--wp-status-modified, #f59e0b)); }
+
+.branch-toggle {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wp-border);
+  border-radius: 2px;
+  background: var(--wp-bg);
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.branch-toggle--on {
+  background: var(--wp-accent);
+  border-color: var(--wp-accent);
+  color: white;
+}
+.branch-toggle .pi { font-size: 8px; }
+
+.branch-override-input {
+  width: 100%;
+  background: var(--wp-bg2);
+  border: 1px dashed var(--wp-border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font: 10px var(--wp-font-mono);
+  color: var(--wp-text);
+  min-width: 0;
+}
+.branch-override-input:focus {
+  border-color: var(--wp-accent);
+  outline: none;
+}
+.branch-override-input--mod {
+  border-style: solid;
+  border-color: var(--wp-accent);
+  color: var(--wp-accent-text, var(--wp-text));
+  background: color-mix(in srgb, var(--wp-accent) 6%, var(--wp-bg2));
+}
+.branch-override-input::placeholder {
+  color: var(--wp-text-dim, var(--wp-text3));
+  opacity: 0.6;
+}
+
+/* Token coloring (re-used from prior list rendering) */
 .rule-tok-var { font-weight: 600; }
 .rule-tok-op {
   color: var(--wp-text-dim, var(--wp-text3));
@@ -235,20 +680,5 @@ function modeLabel(mode: string | undefined): string {
 .rule-tok-arrow {
   color: var(--wp-text-dim, var(--wp-text3));
   margin: 0 2px;
-}
-.rule-row__chip {
-  font: 600 9px var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 1px 5px;
-  border-radius: 999px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  margin-left: 4px;
-}
-.rule-row__chip--else {
-  color: var(--wp-accent);
-  border-color: color-mix(in srgb, var(--wp-accent) 35%, transparent);
 }
 </style>

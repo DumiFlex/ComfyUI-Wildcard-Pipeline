@@ -1,6 +1,11 @@
-// Derivation RulesSection — per-rule enable toggle + read-only
-// summary of condition/branches. Library editing happens in SPA;
-// modal exposes only `instance.disabled_rule_ids` overrides.
+// Derivation RulesSection — accordion + branch table per the
+// 2026-05-10 tier-D modal expansion. Each rule renders as a card with
+// expandable body; body shows IF/ELIF/ELSE rows with per-branch
+// disable + condition.value override + action.value override.
+//
+// Library editing (rule structure) stays SPA. Modal exposes only
+// per-instance overrides — no add-rule / remove-rule / edit-condition-op
+// / edit-mode UI here.
 
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
@@ -28,7 +33,21 @@ function makeRule(over: Partial<DerivationRule> = {}): DerivationRule {
   };
 }
 
-function makeModule(rules: DerivationRule[], instance: ModuleEntry["instance"] = {}): ModuleEntry {
+function multiRule(): DerivationRule {
+  return {
+    id: "r1",
+    branches: [
+      { condition: { var: "color", op: "equals", value: "red" }, action: { target_var: "mood", mode: "replace", value: "warm" } },
+      { condition: { var: "color", op: "equals", value: "blue" }, action: { target_var: "mood", mode: "replace", value: "cool" } },
+    ],
+    else: { action: { target_var: "mood", mode: "replace", value: "neutral" } },
+  };
+}
+
+function makeModule(
+  rules: DerivationRule[],
+  instance: ModuleEntry["instance"] = {},
+): ModuleEntry {
   return {
     id: "dv012345",
     type: "derivation",
@@ -40,12 +59,19 @@ function makeModule(rules: DerivationRule[], instance: ModuleEntry["instance"] =
   };
 }
 
-describe("derivation RulesSection", () => {
-  it("renders one row per rule", () => {
+function lastPatch(w: ReturnType<typeof mount>): Partial<ModuleEntry> {
+  const updates = w.emitted("update")! as unknown[][];
+  return updates[updates.length - 1][0] as Partial<ModuleEntry>;
+}
+
+describe("derivation RulesSection (tier-D accordion + branch table)", () => {
+  // ── Existing baseline behaviour kept under the redesign ──────────
+
+  it("renders one card per rule", () => {
     const w = mount(RulesSection, {
       props: { module: makeModule([makeRule({ id: "r1" }), makeRule({ id: "r2" })]) },
     });
-    expect(w.findAll('[data-test^="rule-row-"]')).toHaveLength(2);
+    expect(w.findAll('[data-test^="rule-card-"]')).toHaveLength(2);
   });
 
   it("empty state when no rules", () => {
@@ -53,49 +79,7 @@ describe("derivation RulesSection", () => {
     expect(w.find('[data-test="rules-empty"]').exists()).toBe(true);
   });
 
-  it("renders SPA hint pointing user to library editor for rule edits", () => {
-    const w = mount(RulesSection, { props: { module: makeModule([makeRule()]) } });
-    expect(w.find('[data-test="rules-spa-hint"]').exists()).toBe(true);
-  });
-
-  it("each row has an enable toggle reflecting disabled_rule_ids", () => {
-    const w = mount(RulesSection, {
-      props: {
-        module: makeModule(
-          [makeRule({ id: "r1" }), makeRule({ id: "r2" })],
-          { disabled_rule_ids: ["r2"] },
-        ),
-      },
-    });
-    const r1 = w.find<HTMLInputElement>('[data-test="rule-toggle-r1"]').element;
-    const r2 = w.find<HTMLInputElement>('[data-test="rule-toggle-r2"]').element;
-    expect(r1.getAttribute("aria-checked")).toBe("true");
-    expect(r2.getAttribute("aria-checked")).toBe("false");
-  });
-
-  it("toggling rule off emits disabled_rule_ids = [id]", async () => {
-    const w = mount(RulesSection, {
-      props: { module: makeModule([makeRule({ id: "r1" })]) },
-    });
-    await w.find('[data-test="rule-toggle-r1"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.disabled_rule_ids).toEqual(["r1"]);
-  });
-
-  it("toggling rule back on collapses disabled_rule_ids to null when empty", async () => {
-    const w = mount(RulesSection, {
-      props: {
-        module: makeModule([makeRule({ id: "r1" })], { disabled_rule_ids: ["r1"] }),
-      },
-    });
-    await w.find('[data-test="rule-toggle-r1"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.disabled_rule_ids).toBeNull();
-  });
-
-  it("rule summary includes condition var + op + value + target", () => {
+  it("rule head includes summary built from first branch", () => {
     const w = mount(RulesSection, {
       props: { module: makeModule([makeRule({ id: "r1" })]) },
     });
@@ -105,31 +89,202 @@ describe("derivation RulesSection", () => {
     expect(summary).toContain("$mood");
   });
 
-  it("rule with multi-branch shows '+N elif' chip", () => {
+  it("rule toggle reflects + flips disabled_rule_ids", async () => {
     const w = mount(RulesSection, {
-      props: {
-        module: makeModule([makeRule({
-          id: "r1",
-          branches: [
-            { condition: { var: "x", op: "equals", value: "1" }, action: { target_var: "y", mode: "replace", value: "a" } },
-            { condition: { var: "x", op: "equals", value: "2" }, action: { target_var: "y", mode: "replace", value: "b" } },
-            { condition: { var: "x", op: "equals", value: "3" }, action: { target_var: "y", mode: "replace", value: "c" } },
-          ],
-        })]),
-      },
+      props: { module: makeModule([makeRule({ id: "r1" })]) },
     });
-    expect(w.find('[data-test="rule-elif-count-r1"]').text()).toContain("2");
+    await w.find('[data-test="rule-toggle-r1"]').trigger("click");
+    expect(lastPatch(w).instance?.disabled_rule_ids).toEqual(["r1"]);
   });
 
-  it("rule with else clause shows 'else' indicator", () => {
+  // ── Accordion behaviour ──────────────────────────────────────────
+
+  it("rule body is collapsed by default", () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    expect(w.find('[data-test="rule-body-r1"]').exists()).toBe(false);
+  });
+
+  it("clicking rule head expands the body", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    expect(w.find('[data-test="rule-body-r1"]').exists()).toBe(true);
+  });
+
+  // ── Branch table ─────────────────────────────────────────────────
+
+  it("expanded body shows IF + ELIF + ELSE rows for a multi-branch rule", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    expect(w.find('[data-test="branch-row-r1-0"]').exists()).toBe(true);  // IF
+    expect(w.find('[data-test="branch-row-r1-1"]').exists()).toBe(true);  // ELIF
+    expect(w.find('[data-test="branch-row-r1-else"]').exists()).toBe(true);  // ELSE
+  });
+
+  it("IF row has NO branch toggle checkbox (always-on, never disable-able)", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    expect(w.find('[data-test="branch-toggle-r1-0"]').exists()).toBe(false);
+  });
+
+  it("ELIF and ELSE rows both have branch toggle checkboxes", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    expect(w.find('[data-test="branch-toggle-r1-1"]').exists()).toBe(true);
+    expect(w.find('[data-test="branch-toggle-r1-else"]').exists()).toBe(true);
+  });
+
+  it("toggling ELIF off emits disabled_branch_keys with 'r1:1' entry", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await w.find('[data-test="branch-toggle-r1-1"]').trigger("click");
+    expect(lastPatch(w).instance?.disabled_branch_keys).toEqual(["r1:1"]);
+  });
+
+  it("toggling ELSE off emits disabled_branch_keys with 'r1:else' entry", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await w.find('[data-test="branch-toggle-r1-else"]').trigger("click");
+    expect(lastPatch(w).instance?.disabled_branch_keys).toEqual(["r1:else"]);
+  });
+
+  it("toggling a disabled branch back on removes it from disabled_branch_keys", async () => {
     const w = mount(RulesSection, {
       props: {
-        module: makeModule([makeRule({
-          id: "r1",
-          else: { action: { target_var: "mood", mode: "replace", value: "neutral" } },
-        })]),
+        module: makeModule([multiRule()], {
+          disabled_branch_keys: ["r1:1", "r1:else"],
+        }),
       },
     });
-    expect(w.find('[data-test="rule-else-r1"]').exists()).toBe(true);
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await w.find('[data-test="branch-toggle-r1-1"]').trigger("click");
+    expect(lastPatch(w).instance?.disabled_branch_keys).toEqual(["r1:else"]);
+  });
+
+  it("toggling last disabled branch back on collapses to null", async () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([multiRule()], { disabled_branch_keys: ["r1:1"] }),
+      },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    await w.find('[data-test="branch-toggle-r1-1"]').trigger("click");
+    expect(lastPatch(w).instance?.disabled_branch_keys).toBeNull();
+  });
+
+  // ── Action.value override ────────────────────────────────────────
+
+  it("each branch has an action.value override input", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    expect(w.find('[data-test="action-override-r1-0"]').exists()).toBe(true);
+    expect(w.find('[data-test="action-override-r1-1"]').exists()).toBe(true);
+    expect(w.find('[data-test="action-override-r1-else"]').exists()).toBe(true);
+  });
+
+  it("typing into IF action override emits action_value_overrides patch", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    const input = w.find<HTMLInputElement>('[data-test="action-override-r1-0"]');
+    input.element.value = "fiery";
+    await input.trigger("input");
+    const patch = lastPatch(w);
+    expect(patch.instance?.action_value_overrides).toEqual({
+      r1: { "0": "fiery" },
+    });
+  });
+
+  it("ELSE action override uses 'else' branch_key", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    const input = w.find<HTMLInputElement>('[data-test="action-override-r1-else"]');
+    input.element.value = "blank";
+    await input.trigger("input");
+    expect(lastPatch(w).instance?.action_value_overrides).toEqual({
+      r1: { else: "blank" },
+    });
+  });
+
+  it("clearing action override emits patch that drops the entry", async () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([multiRule()], {
+          action_value_overrides: { r1: { "0": "fiery" } },
+        }),
+      },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    const input = w.find<HTMLInputElement>('[data-test="action-override-r1-0"]');
+    input.element.value = "";
+    await input.trigger("input");
+    expect(lastPatch(w).instance?.action_value_overrides).toBeNull();
+  });
+
+  // ── Condition.value override ─────────────────────────────────────
+
+  it("IF + ELIF rows have condition.value override input; ELSE does NOT", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    expect(w.find('[data-test="cond-override-r1-0"]').exists()).toBe(true);
+    expect(w.find('[data-test="cond-override-r1-1"]').exists()).toBe(true);
+    expect(w.find('[data-test="cond-override-r1-else"]').exists()).toBe(false);
+  });
+
+  it("typing into IF condition override emits condition_value_overrides patch", async () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    await w.find('[data-test="rule-head-r1"]').trigger("click");
+    const input = w.find<HTMLInputElement>('[data-test="cond-override-r1-0"]');
+    input.element.value = "purple";
+    await input.trigger("input");
+    expect(lastPatch(w).instance?.condition_value_overrides).toEqual({
+      r1: { "0": "purple" },
+    });
+  });
+
+  // ── Mod-count chip ───────────────────────────────────────────────
+
+  it("mod-count chip hidden when no overrides on rule", () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([multiRule()]) },
+    });
+    expect(w.find('[data-test="rule-mod-count-r1"]').exists()).toBe(false);
+  });
+
+  it("mod-count chip shows total override count for the rule", () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([multiRule()], {
+          action_value_overrides: { r1: { "0": "fiery" } },
+          condition_value_overrides: { r1: { "0": "purple" } },
+          disabled_branch_keys: ["r1:1"],
+        }),
+      },
+    });
+    const chip = w.find('[data-test="rule-mod-count-r1"]');
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain("3");
   });
 });
