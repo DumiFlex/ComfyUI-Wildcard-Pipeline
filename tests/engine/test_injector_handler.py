@@ -13,3 +13,71 @@ def test_empty_rows_forwards_upstream_ctx():
     upstream = ContextPayload(context={"existing": "value"}, debug={}, internals={})
     out = WPContextInjector.execute(rows=_empty_rows(), upstream=upstream)
     assert out.values[0].context == {"existing": "value"}
+
+
+def _row(slot_name: str, binding: str, enabled: bool = True, internal: bool = False) -> dict:
+    return {
+        "_uid": f"uid_{slot_name}",
+        "slot_name": slot_name,
+        "binding": binding,
+        "enabled": enabled,
+        "internal": internal,
+    }
+
+
+def test_enabled_named_connected_row_writes_to_ctx():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "seed_phrase")]})
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="hello world")
+    assert out.values[0].context["seed_phrase"] == "hello world"
+
+
+def test_disabled_row_skipped():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row("input_0", "seed_phrase", enabled=False)],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="ignored")
+    assert "seed_phrase" not in out.values[0].context
+
+
+def test_empty_binding_row_skipped():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "")]})
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="ignored")
+    assert out.values[0].context == {}
+
+
+def test_disconnected_slot_skipped():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "seed_phrase")]})
+    out = WPContextInjector.execute(rows=rows, upstream=None)
+    assert "seed_phrase" not in out.values[0].context
+
+
+def test_non_primitive_value_stringified():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "obj")]})
+
+    class Foo:
+        def __repr__(self) -> str:
+            return "<Foo instance>"
+
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0=Foo())
+    assert out.values[0].context["obj"] == "<Foo instance>"
+
+
+def test_primitives_pass_through_unchanged():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_0", "as_int"),
+            _row("input_1", "as_float"),
+            _row("input_2", "as_bool"),
+            _row("input_3", "as_str"),
+        ],
+    })
+    out = WPContextInjector.execute(
+        rows=rows, upstream=None,
+        input_0=42, input_1=7.5, input_2=True, input_3="text",
+    )
+    assert out.values[0].context["as_int"] == 42
+    assert out.values[0].context["as_float"] == 7.5
+    assert out.values[0].context["as_bool"] is True
+    assert out.values[0].context["as_str"] == "text"

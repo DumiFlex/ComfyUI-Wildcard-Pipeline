@@ -65,9 +65,25 @@ class WPContextInjector(io.ComfyNode):
         except json.JSONDecodeError:
             parsed = {"version": 1, "rows": []}
 
-        # TODO Task 3 — write enabled rows to ctx. For now the skeleton
-        # forwards untouched so the empty-rows test passes.
-        _ = parsed  # silence unused-var lint until Task 3
+        rows_list = parsed.get("rows", []) if isinstance(parsed, dict) else []
+        for row in rows_list:
+            if not isinstance(row, dict):
+                continue
+            if not row.get("enabled", False):
+                continue
+            binding = row.get("binding", "")
+            if not isinstance(binding, str) or not binding.strip():
+                continue
+            slot_name = row.get("slot_name", "")
+            if not isinstance(slot_name, str) or slot_name not in slot_values:
+                continue
+            value = slot_values[slot_name]
+            if isinstance(value, bool):
+                ctx[binding.strip()] = value
+            elif isinstance(value, (str, int, float)):
+                ctx[binding.strip()] = value
+            else:
+                ctx[binding.strip()] = str(value)
 
         return io.NodeOutput(
             PipelineContext.Type(
