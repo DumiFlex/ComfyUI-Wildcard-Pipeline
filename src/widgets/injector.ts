@@ -16,8 +16,20 @@ const InjectorWidget = defineAsyncComponent(
   () => import("../components/injector/InjectorWidget.vue"),
 );
 
+type InjectorInput = {
+  name?: string;
+  type?: string;
+  link?: number | null;
+  label?: string;
+};
+
 type InjectorNode = LiteNodeLike & MountTargetNode & {
-  inputs?: Array<{ name?: string; type?: string; link?: number | null; label?: string } | null | undefined>;
+  inputs?: Array<InjectorInput | null | undefined>;
+  /** litegraph methods for direct socket manipulation. */
+  removeInput?: (slot: number) => void;
+  setSize?: (size: [number, number]) => void;
+  size?: [number, number];
+  computeSize?: () => [number, number];
 };
 
 /**
@@ -115,6 +127,61 @@ export function create(node: InjectorNode, inputName: string) {
     },
   });
   attachThemeDetector(host.widget.element, app);
+
+  // V3 Autogrow declares all `max` dynamic slots statically — they
+  // appear in the socket list whether connected or not, and disconnect
+  // doesn't free them. To get the conventional grow-on-connect /
+  // shrink-on-disconnect UX (one trailing "+ new input" placeholder),
+  // walk `node.inputs` after every connection change and call
+  // litegraph's `removeInput` to drop unused trailing `input_*` slots.
+  // Keeps exactly one trailing empty slot so the user has somewhere
+  // to drop the next wire.
+  function normalizeSlots(): void {
+    const inputs = node.inputs ?? [];
+    if (!node.removeInput) return;
+    // Find indices of all `input_*` slots and classify connected vs empty.
+    type SlotInfo = { idx: number; connected: boolean };
+    const dynamicSlots: SlotInfo[] = [];
+    for (let i = 0; i < inputs.length; i++) {
+      const inp = inputs[i];
+      if (!inp) continue;
+      const slot = injectorSlotName(inp);
+      if (!slot) continue;
+      dynamicSlots.push({ idx: i, connected: inp.link != null });
+    }
+    // Walk slots in REVERSE so removing earlier ones doesn't shift
+    // indices we still need. Keep all connected slots; keep exactly
+    // one trailing empty as the "+ new input" affordance; drop the
+    // rest.
+    let trailingEmptyKept = false;
+    for (let k = dynamicSlots.length - 1; k >= 0; k--) {
+      const s = dynamicSlots[k];
+      if (s.connected) continue;
+      if (!trailingEmptyKept) {
+        trailingEmptyKept = true;
+        continue;
+      }
+      node.removeInput(s.idx);
+    }
+  }
+
+  // Hook node.onConnectionsChange. The reactive poll inside the widget
+  // handles row state; this hook handles the SOCKET layout (separate
+  // concern — the graph node's input array, not the widget JSON).
+  const origOnConnectionsChange = (node as { onConnectionsChange?: (...args: unknown[]) => void })
+    .onConnectionsChange;
+  (node as { onConnectionsChange?: (...args: unknown[]) => void }).onConnectionsChange =
+    function (...args: unknown[]) {
+      origOnConnectionsChange?.apply(this, args);
+      // Defer to next tick — litegraph hasn't fully settled the
+      // inputs array when the event fires. requestAnimationFrame is
+      // enough; setTimeout(0) also works.
+      requestAnimationFrame(() => normalizeSlots());
+    };
+
+  // Initial pass for nodes loaded from a saved workflow that may
+  // have stale empty slots from the previous Autogrow declaration.
+  requestAnimationFrame(() => normalizeSlots());
 
   return host;
 }
