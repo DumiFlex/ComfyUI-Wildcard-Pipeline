@@ -631,16 +631,22 @@ type StubModule = {
   enabled: boolean;
   payload?: Record<string, unknown>;
   instance?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  payload_hash?: string;
+  collapsed?: boolean;
+  entries?: Array<{ variable_name: string; value: string }>;
 };
 function mountWithModules(stubs: StubModule[]) {
   const modules = stubs.map((s) => ({
     id: s.id,
     type: s.type,
     enabled: s.enabled,
-    meta: { name: `mod-${s.id}`, description: "", tags: [] },
-    entries: [],
+    meta: s.meta ?? { name: `mod-${s.id}`, description: "", tags: [] },
+    entries: s.entries ?? [],
     payload: s.payload ?? {},
     ...(s.instance !== undefined ? { instance: s.instance } : {}),
+    ...(s.payload_hash !== undefined ? { payload_hash: s.payload_hash } : {}),
+    ...(s.collapsed !== undefined ? { collapsed: s.collapsed } : {}),
   }));
   const initialJson = JSON.stringify({ version: 1, modules });
   return mount(ContextWidget, {
@@ -1229,6 +1235,63 @@ describe("ContextWidget drag-drop overhaul", () => {
     expect(cards[1].classes()).not.toContain("wp-drop-target--before");
 
     await cards[0].trigger("dragend");
+    wrapper.unmount();
+  });
+});
+
+// ── Phase B: duplicate keeps uuid + auto-suffixes binding ──────────────
+//
+// Right-click → Duplicate now creates a SIBLING (same uuid) instead of
+// a fork-without-library. Per-instance binding gets auto-suffixed so
+// $foo and $foo_2 don't collide as duplicate-variable conflicts. The
+// Ctrl+D keyboard shortcut on a focused module row routes through the
+// same `duplicateModule` function as the right-click menu, giving us a
+// stable handle for tests.
+
+describe("ContextWidget — Phase B: duplicate keeps uuid + auto-suffixes binding", () => {
+  it("wildcard duplicate keeps uuid + payload_hash + auto-suffixes binding via instance", async () => {
+    const wrapper = mountWithModules([
+      {
+        id: "wcAAA111",
+        type: "wildcard",
+        enabled: true,
+        meta: { name: "hair_style", library_name: "hair_style" },
+        payload: { options: [], var_binding: "hair_style" },
+        payload_hash: "h_lib",
+      },
+    ]);
+    // Focus the row, then send Ctrl+D — wired in onCardKeydown to call
+    // duplicateModule(id) directly. Avoids brittle context-menu finds.
+    const row = wrapper.find('[data-module-id="wcAAA111"]');
+    await row.trigger("keydown", { key: "d", ctrlKey: true });
+    await wrapper.vm.$nextTick();
+
+    const cards = wrapper.findAll("[data-module-id]");
+    expect(cards.length).toBe(2);
+    // Same uuid (NOT a new one).
+    expect(cards[0].attributes("data-module-id")).toBe("wcAAA111");
+    expect(cards[1].attributes("data-module-id")).toBe("wcAAA111");
+    wrapper.unmount();
+  });
+
+  it("derivation duplicate keeps uuid (no binding to suffix)", async () => {
+    const wrapper = mountWithModules([
+      {
+        id: "dvCCC333",
+        type: "derivation",
+        enabled: true,
+        meta: { name: "rules" },
+        payload: { rules: [] },
+        payload_hash: "h_dv",
+      },
+    ]);
+    const row = wrapper.find('[data-module-id="dvCCC333"]');
+    await row.trigger("keydown", { key: "d", ctrlKey: true });
+    await wrapper.vm.$nextTick();
+
+    const cards = wrapper.findAll("[data-module-id]");
+    expect(cards.length).toBe(2);
+    expect(cards[1].attributes("data-module-id")).toBe("dvCCC333");
     wrapper.unmount();
   });
 });

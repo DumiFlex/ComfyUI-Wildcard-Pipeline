@@ -21,6 +21,7 @@ import ModulePickerModal from "./ModulePickerModal.vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
+import { nextBindingSuffix } from "./duplicates/binding-suffix";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
 import { KIND_TITLE } from "./editors/_shell";
@@ -997,30 +998,72 @@ function duplicateModule(id: string) {
   const list = [...value.value.modules];
   const i = list.findIndex((m) => m.id === id);
   if (i < 0) return;
-  // JSON round-trip is Proxy-safe at every depth (toRaw only unwraps the
-  // immediate object — nested Proxies in m.entries still throw structuredClone).
+  // Phase B (2026-05-10 cycle): keep uuid + payload_hash. Duplicate is
+  // a SIBLING — same library definition, second instance. Per-instance
+  // binding gets auto-suffixed so $foo + $foo_2 don't collide as
+  // duplicate-variable conflicts on the canvas. Pre-Phase-B behavior
+  // (new uuid + strip hash + " (copy)" name) is now the FORK path,
+  // triggered explicitly via Save-to-library when siblings > 1.
   const copy: ModuleEntry = JSON.parse(JSON.stringify(list[i]));
-  copy.id = newModuleId();
-  copy.meta = { ...copy.meta, name: `${copy.meta.name} (copy)` };
-  // Strip `payload_hash` so the duplicate is treated as a local-only
-  // module (no library tie). Otherwise the missing-from-library
-  // indicator would light up immediately even though the duplicate
-  // was never expected to exist in the library — it's a fresh local
-  // clone, semantically equivalent to inline-creating a new module.
-  // The original library row stays linked through the ORIGINAL entry.
-  delete copy.payload_hash;
+  const baseBinding = extractPrimaryBinding(copy);
+  if (baseBinding) {
+    const taken = collectInContextBindings(list);
+    const next = nextBindingSuffix(baseBinding, taken);
+    copy.instance = {
+      ...(copy.instance ?? {}),
+      variable_binding: next,
+    };
+  }
   list.splice(i + 1, 0, copy);
   value.value = { ...value.value, modules: list };
-  pushToast(`Duplicated “${list[i].meta.name?.trim() || "module"}”`, {
+  pushToast(`Duplicated "${list[i].meta.name?.trim() || "module"}" as sibling`, {
     severity: "success",
     lifeMs: 3000,
     action: {
       label: "Undo",
       onSelect: () => {
-        value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== copy.id) };
+        // Splice the most recently added sibling at position i+1 — can't
+        // filter by id since the original shares it.
+        const cur = [...value.value.modules];
+        cur.splice(i + 1, 1);
+        value.value = { ...value.value, modules: cur };
       },
     },
   });
+}
+
+/** Returns the kind-specific primary binding name (without `$`),
+ *  honoring instance overrides. Null when the kind has no single
+ *  primary binding (derivation, constraint, fixed_values). */
+function extractPrimaryBinding(m: ModuleEntry): string | null {
+  const inst = m.instance?.variable_binding;
+  if (typeof inst === "string" && inst.trim()) return inst.trim();
+  const p = (m.payload ?? {}) as Record<string, unknown>;
+  if (m.type === "wildcard") {
+    const b = p.var_binding;
+    return typeof b === "string" && b.trim() ? b.trim() : null;
+  }
+  if (m.type === "combine") {
+    const b = p.output_var;
+    return typeof b === "string" && b.trim() ? b.trim() : null;
+  }
+  return null;
+}
+
+/** Collect every binding currently in use within this Context's
+ *  modules — used to seed the auto-suffix collision set. */
+function collectInContextBindings(modules: readonly ModuleEntry[]): Set<string> {
+  const out = new Set<string>();
+  for (const m of modules) {
+    const b = extractPrimaryBinding(m);
+    if (b) out.add(b);
+    if (m.type === "fixed_values") {
+      for (const e of m.entries ?? []) {
+        if (e.variable_name?.trim()) out.add(e.variable_name.trim());
+      }
+    }
+  }
+  return out;
 }
 
 function moveToEdge(id: string, edge: "top" | "bottom") {
