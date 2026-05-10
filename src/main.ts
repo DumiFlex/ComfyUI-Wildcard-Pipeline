@@ -11,6 +11,7 @@ const [
   ctxMod,
   dbgMod,
   asmMod,
+  injMod,
   graphEventsMod,
   ToastModule,
   graphMod,
@@ -25,6 +26,7 @@ const [
   import("./widgets/context"),
   import("./widgets/debug"),
   import("./widgets/assembler"),
+  import("./widgets/injector"),
   import("./extension/graph-events"),
   import("./components/shared/Toast.vue"),
   import("./extension/graph"),
@@ -65,6 +67,7 @@ playgroundStoreMod.setComfyApp(app);
 // `mountHelper` makes TS pick the right shape without explicit casts.
 type ContextCreateNode = Parameters<typeof ctxMod.create>[0];
 type DebugCreateNode = Parameters<typeof dbgMod.create>[0];
+type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type AssemblerHelperNode = Parameters<typeof asmMod.mountHelper>[0];
 
 interface NodeData { name: string }
@@ -152,6 +155,8 @@ app.registerExtension({
         ctxMod.create(node, inputName),
       WP_DEBUG_VIEWER: (node: DebugCreateNode, inputName: string) =>
         dbgMod.create(node, inputName),
+      WP_INJECTOR_ROWS: (node: InjectorCreateNode, inputName: string) =>
+        injMod.create(node, inputName),
     };
   },
 
