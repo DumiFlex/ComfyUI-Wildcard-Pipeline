@@ -173,28 +173,38 @@ function onBindingInput(ev: Event): void {
   color: var(--wp-warn);
 }
 
-.wp-inj-actions { display: flex; gap: 4px; }
+/* Mirrors ContextWidget's `.wp-btn--icon-sm` so the injector's
+ * action cluster reads as part of the same family — transparent
+ * border by default, hover-reveals border + bg, accent-tint when
+ * active. */
+.wp-inj-actions { display: flex; gap: 1px; flex-shrink: 0; }
 .wp-inj-action {
   background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  color: var(--wp-text-muted, var(--wp-text2));
+  border: 1px solid transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
+  font: 500 11px/1 var(--wp-font-sans);
+  padding: 3px;
+  border-radius: var(--wp-radius, 4px);
   cursor: pointer;
   width: 20px;
   height: 20px;
-  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
+.wp-inj-action:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-border-soft, var(--wp-border2));
+  color: var(--wp-text);
+}
+.wp-inj-action .pi { font-size: 11px; }
 .wp-inj-action.is-active {
-  color: var(--wp-accent);
-  border-color: var(--wp-accent);
+  color: var(--wp-accent-text, var(--wp-accent));
   background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
 }
 .wp-inj-action--danger:hover {
   color: var(--wp-danger);
-  border-color: var(--wp-danger);
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
 }
 </style>

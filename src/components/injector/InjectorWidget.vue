@@ -86,19 +86,24 @@ function addRow(slotName: string): void {
   persist();
 }
 
-// Reconcile rows array against the polled `connectedSlots` prop. Adds
-// rows for newly-connected slots; rows for severed connections stay
-// (per design — user trashes manually so binding intent isn't lost).
+// Reconcile rows array against the polled `connectedSlots` prop.
+// Adds rows for newly-connected slots; auto-removes rows whose slots
+// have been severed. (Earlier design kept severed rows with a warn
+// badge; user feedback flipped it to auto-cleanup since the row is
+// useless without a wire and re-creating it is just re-connecting.)
 watch(
   () => props.connectedSlots,
   (next) => {
+    const connectedSet = new Set(next);
     const known = new Set(value.value.rows.map((r) => r.slot_name));
     const toAdd = next.filter((slot) => !known.has(slot));
-    if (toAdd.length === 0) return;
+    const survivors = value.value.rows.filter((r) => connectedSet.has(r.slot_name));
+    const removed = survivors.length !== value.value.rows.length;
+    if (toAdd.length === 0 && !removed) return;
     value.value = {
       ...value.value,
       rows: [
-        ...value.value.rows,
+        ...survivors,
         ...toAdd.map((slot) => ({
           _uid: newRowUid(),
           slot_name: slot,
