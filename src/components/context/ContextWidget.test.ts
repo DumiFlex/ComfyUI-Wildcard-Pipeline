@@ -654,26 +654,48 @@ function mountWithModules(stubs: StubModule[]) {
   });
 }
 
-// ── Sibling badge ───────────────────────────────────────────────────────────
+// ── Sibling badge (Phase B: lives in summary line, not header) ────────────
+//
+// Phase A shipped the badge in the header always-visible. Phase B
+// (2026-05-10) moves it into the summary line so collapsed siblings
+// stack cleanly without chrome bloat. Expanding any row reveals the
+// chip alongside the binding via summaryTokens.
 
-describe("ContextWidget sibling badge", () => {
-  it("renders #N of M badge when uuid duplicated in same Context", () => {
+describe("ContextWidget sibling badge — summary line", () => {
+  it("renders #N of M chip in summary when expanded + uuid count > 1", () => {
     const wrapper = mountWithModules([
-      { id: "abc12345", type: "wildcard", enabled: true },
-      { id: "abc12345", type: "wildcard", enabled: true },
+      { id: "abc12345", type: "wildcard", enabled: true, collapsed: false },
+      { id: "abc12345", type: "wildcard", enabled: true, collapsed: false },
     ]);
-    const badges = wrapper.findAll(".wp-mod-badge--sibling");
-    expect(badges).toHaveLength(2);
-    expect(badges[0].text()).toMatch(/#1\s*of\s*2/);
-    expect(badges[1].text()).toMatch(/#2\s*of\s*2/);
-    expect(badges[0].attributes("title")).toBe("used 2 times in this Context");
+    const chips = wrapper.findAll('[data-test="sibling-chip"]');
+    expect(chips).toHaveLength(2);
+    expect(chips[0].text()).toMatch(/#1\s*of\s*2/);
+    expect(chips[1].text()).toMatch(/#2\s*of\s*2/);
+    expect(chips[0].attributes("title")).toBe("used 2 times in this Context");
   });
 
-  it("does NOT render sibling badge when uuid appears once", () => {
+  it("hides sibling chip when collapsed (no summary line rendered)", () => {
     const wrapper = mountWithModules([
-      { id: "abc12345", type: "wildcard", enabled: true },
+      { id: "abc12345", type: "wildcard", enabled: true, collapsed: true },
+      { id: "abc12345", type: "wildcard", enabled: true, collapsed: true },
     ]);
-    expect(wrapper.find(".wp-mod-badge--sibling").exists()).toBe(false);
+    expect(wrapper.findAll('[data-test="sibling-chip"]').length).toBe(0);
+  });
+
+  it("does NOT render sibling chip when uuid appears once", () => {
+    const wrapper = mountWithModules([
+      { id: "abc12345", type: "wildcard", enabled: true, collapsed: false },
+    ]);
+    expect(wrapper.find('[data-test="sibling-chip"]').exists()).toBe(false);
+  });
+
+  it("does NOT render sibling badge in the header (moved to summary)", () => {
+    const wrapper = mountWithModules([
+      { id: "shared03", type: "wildcard", enabled: true, collapsed: false },
+      { id: "shared03", type: "wildcard", enabled: true, collapsed: false },
+    ]);
+    const headerBadges = wrapper.findAll(".wp-module-header .wp-mod-badge--sibling");
+    expect(headerBadges.length).toBe(0);
   });
 });
 

@@ -1627,14 +1627,11 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             {{ m.meta.name || "(unnamed)" }}
           </span>
 
-          <!-- Sibling badge — shown when the same uuid appears more
-               than once in this Context (Phase A: count only; Phase B
-               will wire auto-fork). -->
-          <span
-            v-if="siblingInfo(m)"
-            class="wp-mod-badge wp-mod-badge--sibling"
-            :title="`used ${siblingInfo(m)!.total} times in this Context`"
-          >#{{ siblingInfo(m)!.index }} of {{ siblingInfo(m)!.total }}</span>
+          <!-- Sibling badge moved to the .wp-summary line below
+               (Phase B 2026-05-10) so collapsed sibling rows stay
+               clean. Status badges (mod/drift/missing) stay in the
+               header — those are module-health signals that warrant
+               glance-visibility regardless of collapse state. -->
 
           <!-- Status-dots cluster — read-only indicators grouped so
                the eye reads them as a single "module health" glance.
@@ -1742,10 +1739,18 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
         <Transition name="wp-collapse">
           <div v-if="!isCollapsed(m)" class="wp-summary" :title="summaryFor(m)">
-            <template v-for="(tok, i) in summaryTokens(m)" :key="i"><span
-              v-if="tok.kind === 'var'"
-              :class="['var-tok', varColorClass(tok.varName)]"
-            >{{ tok.text }}</span><template v-else>{{ tok.text }}</template></template>
+            <span class="wp-summary__main">
+              <template v-for="(tok, i) in summaryTokens(m)" :key="i"><span
+                v-if="tok.kind === 'var'"
+                :class="['var-tok', varColorClass(tok.varName)]"
+              >{{ tok.text }}</span><template v-else>{{ tok.text }}</template></template>
+            </span>
+            <span
+              v-if="siblingInfo(m)"
+              class="wp-summary__sibling"
+              data-test="sibling-chip"
+              :title="`used ${siblingInfo(m)!.total} times in this Context`"
+            >#{{ siblingInfo(m)!.index }} of {{ siblingInfo(m)!.total }}</span>
           </div>
         </Transition>
       </div>
@@ -2542,10 +2547,27 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
   padding: 2px 4px 2px 36px;  /* align under the module name (past handle/collapse/toggle/icon) */
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wp-summary__main {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  width: 100%;
+  min-width: 0;
+}
+.wp-summary__sibling {
+  font-family: var(--wp-font-mono);
+  font-size: 9px;
+  color: var(--wp-text2);
+  background: color-mix(in srgb, var(--wp-text3) 22%, transparent);
+  padding: 2px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  cursor: help;
 }
 /* Var tokens inside the summary — re-use the same kind-color hashing
  * as the assembler chip strip + combine preview so the eye reads
