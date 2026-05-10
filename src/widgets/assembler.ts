@@ -41,8 +41,13 @@ interface UpstreamSnapshot {
 function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
   if (a.template !== b.template) return false;
   if (a.chainKey !== b.chainKey) return false;
-  // No need to compare `chain` / `fallbackResolved` — `chainKey` is a
-  // hash of the chain payload, equal hash ⇒ equal everything else.
+  // Injector bindings live in `fallbackResolved` only — the API
+  // resolver only knows WP_Context modules, so `chainKey` misses
+  // changes to injector rows. Diff the resolved map keys + values so
+  // injector binding/enabled/internal edits trigger a re-render.
+  const ak = Object.keys(a.fallbackResolved);
+  if (ak.length !== Object.keys(b.fallbackResolved).length) return false;
+  for (const k of ak) if (a.fallbackResolved[k] !== b.fallbackResolved[k]) return false;
   return true;
 }
 

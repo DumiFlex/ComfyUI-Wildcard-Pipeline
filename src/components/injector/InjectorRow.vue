@@ -9,6 +9,12 @@ const props = defineProps<{
   /** True when the underlying ComfyUI socket has a live wire. False
    *  while the row exists but the connection has been severed. */
   isConnected?: boolean;
+  /** True when conflict scanner flagged this row (e.g. duplicate
+   *  binding, missing connection). Drives the warn-color row tint
+   *  and surfaces the conflict label as a hover tooltip. */
+  hasConflict?: boolean;
+  /** Hover-tooltip text for the conflict (e.g. "duplicate"). */
+  conflictLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -27,7 +33,12 @@ function onBindingInput(ev: Event): void {
 <template>
   <div
     class="wp-inj-row"
-    :class="{ 'wp-inj-row--disconnected': props.isConnected === false }"
+    :class="{
+      'wp-inj-row--disconnected': props.isConnected === false,
+      'wp-inj-row--disabled': !row.enabled,
+      'wp-inj-row--conflict': props.hasConflict === true,
+    }"
+    :title="props.conflictLabel || undefined"
   >
     <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'">
       <input
@@ -102,6 +113,26 @@ function onBindingInput(ev: Event): void {
 .wp-inj-row--disconnected {
   border-left: 2px dashed var(--wp-warn);
   background: color-mix(in srgb, var(--wp-warn) 4%, transparent);
+}
+/* Disabled — mirrors `.wp-module.wp-disabled` from ContextWidget:
+ * 55% opacity + diagonal stripe so the row reads as off without
+ * disappearing entirely. */
+.wp-inj-row--disabled {
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--wp-bg3),
+    var(--wp-bg3) 6px,
+    var(--wp-bg2) 6px,
+    var(--wp-bg2) 8px
+  );
+}
+/* Conflict — warn-color border + faint tint so duplicate /
+ * disconnected bindings surface visually. Row title carries the
+ * conflict label for hover-tooltip context. */
+.wp-inj-row--conflict {
+  border-left: 2px solid var(--wp-warn);
+  background: color-mix(in srgb, var(--wp-warn) 6%, transparent);
 }
 
 .wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }

@@ -8,6 +8,7 @@ import {
   type InjectorRow,
   type InjectorRowsValue,
 } from "../../widgets/_shared";
+import { labelFor, scanInjectorConflicts } from "../../extension/conflicts";
 import InjectorRowComp from "./InjectorRow.vue";
 
 const props = withDefaults(
@@ -47,6 +48,23 @@ const connectedSet = computed(() => new Set(props.connectedSlots));
 function isConnected(slotName: string): boolean {
   return connectedSet.value.has(slotName);
 }
+
+/** Per-row conflict map keyed by `_uid`. Recomputes from row state
+ *  + connection set; warn-class + tooltip surface in InjectorRow. */
+const conflictByUid = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {};
+  const conflicts = scanInjectorConflicts(value.value, props.connectedSlots ?? []);
+  for (const c of conflicts) {
+    out[c.moduleId] = labelFor(c.type);
+  }
+  return out;
+});
+
+/** Collapse toggle — hides the rows list. Mirrors the per-module
+ *  collapse pattern from ContextWidget where collapsing a row hides
+ *  its summary. Persists in widget JSON via the same persist() so
+ *  reload restores collapsed state. */
+const collapsed = ref<boolean>(false);
 
 function persist(): void {
   emit("change", serializeWidgetJson(value.value));
@@ -124,6 +142,14 @@ defineExpose({ addRow, removeRow });
 <template>
   <div class="wp-inj-widget">
     <div class="wp-inj-toolbar">
+      <button
+        type="button"
+        class="wp-inj-collapse-btn"
+        :title="collapsed ? 'Expand rows' : 'Collapse rows'"
+        :aria-label="collapsed ? 'Expand injector rows' : 'Collapse injector rows'"
+        data-test="inj-toolbar-collapse"
+        @click="collapsed = !collapsed"
+      ><i :class="['pi', collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
       <span data-test="inj-toolbar-label" class="wp-inj-toolbar-label">
         injected variables
       </span>
@@ -132,13 +158,15 @@ defineExpose({ addRow, removeRow });
       </span>
     </div>
 
-    <div class="wp-inj-list">
+    <div v-if="!collapsed" class="wp-inj-list">
       <InjectorRowComp
         v-for="row in value.rows"
         :key="row._uid"
         :row="row"
         :is-connected="isConnected(row.slot_name)"
         :value-type="slotTypes[row.slot_name]"
+        :has-conflict="conflictByUid[row._uid] !== undefined"
+        :conflict-label="conflictByUid[row._uid]"
         @update="(patch) => updateRow(row._uid, patch)"
         @remove="(uid: string) => removeRow(uid)"
       />
@@ -176,6 +204,18 @@ defineExpose({ addRow, removeRow });
   letter-spacing: 0.12em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
+.wp-inj-collapse-btn {
+  background: transparent;
+  border: none;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.wp-inj-collapse-btn:hover { color: var(--wp-text); }
 .wp-inj-toolbar-label { flex: 0 0 auto; }
 .wp-inj-toolbar-count {
   background: var(--wp-bg3);
