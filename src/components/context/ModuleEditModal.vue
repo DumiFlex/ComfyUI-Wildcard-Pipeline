@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
-import type { ModuleEntry } from "../../widgets/_shared";
+import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
 import WildcardEditorBody from "./editors/WildcardEditorBody.vue";
 import FixedValuesEditorBody from "./editors/FixedValuesEditorBody.vue";
 import CombineEditorBody from "./editors/CombineEditorBody.vue";
@@ -220,31 +220,45 @@ function onConfirmDialogCancel(): void {
 }
 
 /**
- * "Reset overrides" — clears pool overrides only. Identity (name +
- * variable_binding) has its own per-field reset buttons in the
- * Identity section, so the footer sweep deliberately leaves them
- * alone. Runtime (lock, internal) is also preserved. For wildcard
- * the scope is:
- *   identity → KEPT (per-field reset owns this)
- *   pool     → enabled_options, option_weights, category_filter
- *   runtime  → locked_seed, internal · KEPT
- *   _ui      → KEPT (under-prefix scratch)
+ * "Reset overrides" — clears the kind-specific override fields only.
+ * Identity (name + variable_binding) has its own per-field reset
+ * buttons in the Identity section, so the footer sweep deliberately
+ * leaves them alone. Runtime (lock, internal) is also preserved
+ * across all v2 kinds — runtime is orthogonal to the rule/pool/value
+ * overrides users typically reach for "Reset" to clear.
  *
- * For other v1 kinds (combine / fixed_values / derivation / constraint)
- * the historical "clear all overrides" still nulls every registry field
- * since they don't separate identity / runtime concerns the same way.
+ *   identity → KEPT (per-field reset owns this)
+ *   kind-specific → CLEARED per the registry below
+ *   runtime → KEPT (locked_seed, internal)
+ *   _ui → KEPT (under-prefix scratch)
+ *
+ * Registry replaces the prior wildcard-only `WILDCARD_RESET_FIELDS`
+ * + the all-or-nothing `isWildcard` branch. All v2 kinds now follow
+ * the wildcard pattern. Constraint stays "everything cleared" since
+ * it's still on v1 and doesn't separate runtime from overrides.
  */
-const WILDCARD_RESET_FIELDS: readonly InstanceFieldKey[] = [
-  "enabled_options", "option_weights", "category_filter",
-] as const;
+const RESET_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]> = {
+  wildcard: ["enabled_options", "option_weights", "category_filter"],
+  fixed_values: ["values_overrides", "enabled_options"],
+  combine: ["template_override", "variable_binding"],
+  derivation: [
+    "disabled_rule_ids",
+    "disabled_branch_keys",
+    "action_value_overrides",
+    "condition_value_overrides",
+    "rule_order_override",
+  ],
+  constraint: ["disabled_exception_keys", "disabled_matrix_cells"],
+  pipeline: [],
+};
 
 function onClearAllOverrides(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
-  const isWildcard = draft.value.type === "wildcard";
-  const body = isWildcard
-    ? `Pool overrides (enabled options, weights, category filter) on "${moduleName}" will be cleared. Identity (name, binding) and runtime (lock, hide) are preserved — use the per-field reset buttons for those.`
-    : `All instance overrides on "${moduleName}" will be cleared.`;
+  const body =
+    `Override fields on "${moduleName}" will be cleared. Identity ` +
+    "(name, binding) and runtime (lock, hide) are preserved — use the " +
+    "per-field reset buttons for those.";
   askConfirm({
     title: "Reset overrides?",
     body,
@@ -256,10 +270,7 @@ function onClearAllOverrides(): void {
 
 function doClearAllOverrides(): void {
   if (!draft.value) return;
-  const isWildcard = draft.value.type === "wildcard";
-  const fields = isWildcard
-    ? WILDCARD_RESET_FIELDS
-    : INSTANCE_FIELDS_PER_KIND[draft.value.type];
+  const fields = RESET_FIELDS_PER_KIND[draft.value.type];
 
   const cleared: Record<string, unknown> = { ...(draft.value.instance ?? {}) };
   for (const f of fields) {

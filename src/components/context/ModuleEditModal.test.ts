@@ -689,6 +689,103 @@ describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
   });
 });
 
+// ── Unified Reset registry (2026-05-10 cycle) ───────────────────────────
+// All v2 kinds (wildcard / combine / fixed_values / derivation) now
+// follow the wildcard pattern: Reset clears kind-specific overrides
+// only and PRESERVES Identity (`meta.name`) + Runtime
+// (`locked_seed`, `internal`).
+
+describe("ModuleEditModal — Reset preserves Identity + Runtime across all v2 kinds", () => {
+  beforeEach(() => _resetForTests());
+
+  async function clearOverridesViaModal(wrapper: ReturnType<typeof mount>): Promise<void> {
+    await wrapper.find('[data-test="clear-all-overrides"], [data-test="wcm-clear-all"], [data-test="cbm-clear-all"], [data-test="fvm-clear-all"], [data-test="dvm-clear-all"]').trigger("click");
+    await nextTick();
+    const confirmBtn = wrapper.find('[data-test="confirm-confirm"]');
+    if (confirmBtn.exists()) await confirmBtn.trigger("click");
+    await nextTick();
+  }
+
+  it("combine Reset clears template_override but preserves locked_seed + internal", async () => {
+    const m: ModuleEntry = {
+      ...makeCombine(),
+      instance: {
+        template_override: "$x",
+        locked_seed: 4242,
+        internal: true,
+      },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: m, siblingModules: [] },
+    });
+    await nextTick();
+    await clearOverridesViaModal(wrapper);
+    await wrapper.find('[data-test="cbm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.template_override).toBeNull();
+    // Runtime preserved
+    expect(saved.instance?.locked_seed).toBe(4242);
+    expect(saved.instance?.internal).toBe(true);
+  });
+
+  it("fixed_values Reset clears values_overrides but preserves locked_seed + internal", async () => {
+    const m: ModuleEntry = {
+      ...makeFixedValues(),
+      instance: {
+        values_overrides: [{ id: "v1", name: "lens", value: "50mm" }],
+        locked_seed: 99,
+        internal: true,
+      },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: m, siblingModules: [] },
+    });
+    await nextTick();
+    await clearOverridesViaModal(wrapper);
+    await wrapper.find('[data-test="fvm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    // fixed_values save reconciliation deletes the override key entirely
+    // when it matches library — null OR undefined both mean "no override".
+    expect(saved.instance?.values_overrides ?? null).toBeNull();
+    expect(saved.instance?.locked_seed).toBe(99);
+    expect(saved.instance?.internal).toBe(true);
+  });
+
+  it("derivation Reset clears rule-group fields but preserves locked_seed + internal", async () => {
+    const m: ModuleEntry = {
+      ...makeDerivation(),
+      instance: {
+        disabled_rule_ids: ["r1"],
+        disabled_branch_keys: ["r1:1"],
+        action_value_overrides: { r1: { "0": "fiery" } },
+        condition_value_overrides: { r1: { "0": "purple" } },
+        rule_order_override: ["r2", "r1"],
+        locked_seed: 4242,
+        internal: true,
+      },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: m, siblingModules: [] },
+    });
+    await nextTick();
+    await clearOverridesViaModal(wrapper);
+    await wrapper.find('[data-test="dvm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    // Rule-group cleared
+    expect(saved.instance?.disabled_rule_ids).toBeNull();
+    expect(saved.instance?.disabled_branch_keys).toBeNull();
+    expect(saved.instance?.action_value_overrides).toBeNull();
+    expect(saved.instance?.condition_value_overrides).toBeNull();
+    expect(saved.instance?.rule_order_override).toBeNull();
+    // Runtime preserved
+    expect(saved.instance?.locked_seed).toBe(4242);
+    expect(saved.instance?.internal).toBe(true);
+  });
+});
+
 // ── Wildcard v2 dispatcher branch ─────────────────────────────────────────
 
 describe("ModuleEditModal — wildcard v2 dispatcher", () => {
