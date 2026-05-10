@@ -37,6 +37,7 @@ class Schema:
     not_idempotent: bool = False
     is_experimental: bool = False
     is_deprecated: bool = False
+    accept_all_inputs: bool = False
 
 
 # ------------------------------------------------------------ NodeOutput ---

@@ -26,24 +26,36 @@ type InjectorInput = {
 type InjectorNode = LiteNodeLike & MountTargetNode & {
   inputs?: Array<InjectorInput | null | undefined>;
   /** litegraph methods for direct socket manipulation. */
+  addInput?: (name: string, type: string, extraInfo?: Record<string, unknown>) => InjectorInput;
   removeInput?: (slot: number) => void;
-  setSize?: (size: [number, number]) => void;
-  size?: [number, number];
-  computeSize?: () => [number, number];
 };
 
 /**
- * V3 Autogrow inputs are namespaced with the parent input id — `name`
- * is e.g. `inputs.input_0`. The trailing segment (`input_0`) is the
- * stable slot id and matches what the engine receives after the
- * namespace strip in `injector_node.execute`. `label` is NOT used
- * since ComfyUI lets the user rename labels (right-click → Rename),
- * which would break our row-to-slot mapping.
+ * Slot id used by the row JSON. Sockets we add directly via
+ * `node.addInput("input_0", "*")` use bare `input_N` names — no
+ * namespace prefix from V3 Autogrow. Workflows saved during the
+ * Autogrow phase (`inputs.input_0`) still parse since we strip the
+ * namespace.
  */
 function injectorSlotName(inp: { name?: string }): string | null {
   if (typeof inp.name !== "string") return null;
   const tail = inp.name.split(".").pop() ?? "";
   return tail.startsWith("input_") ? tail : null;
+}
+
+/** Next available `input_N` name not currently on the node. */
+function nextInputName(inputs: Array<InjectorInput | null | undefined>): string {
+  const used = new Set<string>();
+  for (const inp of inputs) {
+    if (!inp) continue;
+    const slot = injectorSlotName(inp);
+    if (slot) used.add(slot);
+  }
+  for (let i = 0; i < 100; i++) {
+    const name = `input_${i}`;
+    if (!used.has(name)) return name;
+  }
+  return `input_${inputs.length}`;  // fallback — should never hit
 }
 
 export function create(node: InjectorNode, inputName: string) {
@@ -128,59 +140,57 @@ export function create(node: InjectorNode, inputName: string) {
   });
   attachThemeDetector(host.widget.element, app);
 
-  // V3 Autogrow declares all `max` dynamic slots statically — they
-  // appear in the socket list whether connected or not, and disconnect
-  // doesn't free them. To get the conventional grow-on-connect /
-  // shrink-on-disconnect UX (one trailing "+ new input" placeholder),
-  // walk `node.inputs` after every connection change and call
-  // litegraph's `removeInput` to drop unused trailing `input_*` slots.
-  // Keeps exactly one trailing empty slot so the user has somewhere
-  // to drop the next wire.
+  // Manual socket management. The schema declares NO dynamic inputs
+  // (V3 Autogrow doesn't shrink on disconnect, so we drop it). We
+  // maintain ONE trailing empty `input_N` slot at all times — when
+  // the user wires it up, we add a fresh empty one; when they
+  // disconnect any non-trailing slot, we remove it. Engine-side,
+  // `accept_all_inputs=True` lets the node receive arbitrary kwargs.
   function normalizeSlots(): void {
     const inputs = node.inputs ?? [];
-    if (!node.removeInput) return;
-    // Find indices of all `input_*` slots and classify connected vs empty.
-    type SlotInfo = { idx: number; connected: boolean };
+    if (!node.addInput || !node.removeInput) return;
+    type SlotInfo = { idx: number; connected: boolean; name: string };
     const dynamicSlots: SlotInfo[] = [];
     for (let i = 0; i < inputs.length; i++) {
       const inp = inputs[i];
       if (!inp) continue;
       const slot = injectorSlotName(inp);
       if (!slot) continue;
-      dynamicSlots.push({ idx: i, connected: inp.link != null });
+      dynamicSlots.push({ idx: i, connected: inp.link != null, name: slot });
     }
-    // Walk slots in REVERSE so removing earlier ones doesn't shift
-    // indices we still need. Keep all connected slots; keep exactly
-    // one trailing empty as the "+ new input" affordance; drop the
-    // rest.
-    let trailingEmptyKept = false;
+    // Drop empty slots — we'll add exactly one trailing back below.
+    // Walk in reverse so index removal doesn't shift higher entries.
     for (let k = dynamicSlots.length - 1; k >= 0; k--) {
       const s = dynamicSlots[k];
-      if (s.connected) continue;
-      if (!trailingEmptyKept) {
-        trailingEmptyKept = true;
-        continue;
-      }
-      node.removeInput(s.idx);
+      if (!s.connected) node.removeInput(s.idx);
+    }
+    // Ensure exactly one trailing empty slot exists. Re-read inputs
+    // since removeInput mutated the array.
+    const after = node.inputs ?? [];
+    const hasEmpty = after.some((inp) => {
+      if (!inp) return false;
+      if (!injectorSlotName(inp)) return false;
+      return inp.link == null;
+    });
+    if (!hasEmpty) {
+      const name = nextInputName(after);
+      node.addInput(name, "*");
     }
   }
 
-  // Hook node.onConnectionsChange. The reactive poll inside the widget
-  // handles row state; this hook handles the SOCKET layout (separate
-  // concern — the graph node's input array, not the widget JSON).
   const origOnConnectionsChange = (node as { onConnectionsChange?: (...args: unknown[]) => void })
     .onConnectionsChange;
   (node as { onConnectionsChange?: (...args: unknown[]) => void }).onConnectionsChange =
     function (...args: unknown[]) {
       origOnConnectionsChange?.apply(this, args);
       // Defer to next tick — litegraph hasn't fully settled the
-      // inputs array when the event fires. requestAnimationFrame is
-      // enough; setTimeout(0) also works.
+      // inputs array when the event fires.
       requestAnimationFrame(() => normalizeSlots());
     };
 
-  // Initial pass for nodes loaded from a saved workflow that may
-  // have stale empty slots from the previous Autogrow declaration.
+  // Initial pass: ensures fresh nodes get a trailing empty slot, and
+  // workflows saved with the old V3 Autogrow shape get reduced to
+  // connected + 1.
   requestAnimationFrame(() => normalizeSlots());
 
   return host;
