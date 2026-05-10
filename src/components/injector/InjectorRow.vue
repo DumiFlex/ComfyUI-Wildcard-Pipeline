@@ -9,17 +9,17 @@ const props = defineProps<{
   /** True when the underlying ComfyUI socket has a live wire. False
    *  while the row exists but the connection has been severed. */
   isConnected?: boolean;
-  /** True when conflict scanner flagged this row (e.g. duplicate
-   *  binding, missing connection). Drives the warn-color row tint
-   *  and surfaces the conflict label as a hover tooltip. */
-  hasConflict?: boolean;
-  /** Hover-tooltip text for the conflict (e.g. "duplicate"). */
+  /** Conflict severity — drives dot + badge color (info/warning/error).
+   *  Mirrors `wp-conflict-dot--*` / `wp-conflict-badge--*` from
+   *  ContextWidget so injector + context rows share one design family. */
+  conflictSeverity?: "info" | "warning" | "error";
+  /** Short label rendered inside the conflict badge (e.g. "duplicate",
+   *  "no link", "overrides upstream"). */
   conflictLabel?: string;
 }>();
 
 const emit = defineEmits<{
   (e: "update", patch: Partial<InjectorRow>): void;
-  (e: "remove", uid: string): void;
 }>();
 
 const isEmpty = computed(() => !props.row.binding.trim());
@@ -36,9 +36,7 @@ function onBindingInput(ev: Event): void {
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
-      'wp-inj-row--conflict': props.hasConflict === true,
     }"
-    :title="props.conflictLabel || undefined"
   >
     <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'">
       <input
@@ -76,10 +74,19 @@ function onBindingInput(ev: Event): void {
           data-test="inj-row-type"
         >{{ valueType }}</span>
         <span
-          v-if="props.isConnected === false"
-          data-test="inj-row-nolink"
-          class="wp-inj-nolink-badge"
-        >no link</span>
+          v-if="conflictSeverity"
+          class="wp-conflict-dot"
+          :class="`wp-conflict-dot--${conflictSeverity}`"
+          :title="conflictLabel"
+          aria-hidden="true"
+        ></span>
+        <span
+          v-if="conflictSeverity && conflictLabel"
+          class="wp-conflict-badge"
+          :class="`wp-conflict-badge--${conflictSeverity}`"
+          :title="conflictLabel"
+          data-test="inj-row-conflict"
+        >{{ conflictLabel }}</span>
       </div>
     </div>
 
@@ -92,13 +99,6 @@ function onBindingInput(ev: Event): void {
         :title="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
         @click="emit('update', { internal: !row.internal })"
       ><i class="pi pi-globe" aria-hidden="true" /></button>
-      <button
-        type="button"
-        class="wp-inj-action wp-inj-action--danger"
-        data-test="inj-row-trash"
-        title="Remove input"
-        @click="emit('remove', row._uid)"
-      ><i class="pi pi-trash" aria-hidden="true" /></button>
     </div>
   </div>
 </template>
@@ -132,13 +132,10 @@ function onBindingInput(ev: Event): void {
     var(--wp-bg2) 8px
   );
 }
-/* Conflict — warn-color border + faint tint so duplicate /
- * disconnected bindings surface visually. Row title carries the
- * conflict label for hover-tooltip context. */
-.wp-inj-row--conflict {
-  border-left: 2px solid var(--wp-warn);
-  background: color-mix(in srgb, var(--wp-warn) 6%, transparent);
-}
+/* Conflict surfaces via inline dot + badge cluster
+ * (`.wp-conflict-dot--*` / `.wp-conflict-badge--*` from ContextWidget)
+ * — no row-level tint. Keeps injector row visually consistent with
+ * Context module rows when both are flagged. */
 
 .wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .wp-inj-toggle input {
@@ -214,13 +211,53 @@ function onBindingInput(ev: Event): void {
 .wp-inj-type-chip--float  { background: color-mix(in srgb, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
 .wp-inj-type-chip--boolean{ background: color-mix(in srgb, var(--wp-var-5) 22%, transparent); color: var(--wp-var-5); }
 
-.wp-inj-nolink-badge {
-  font: 600 8px var(--wp-font-sans);
-  padding: 1px 5px;
-  border-radius: 6px;
-  letter-spacing: 0.06em;
-  background: color-mix(in srgb, var(--wp-warn) 14%, transparent);
-  color: var(--wp-warn);
+/* Conflict dot + badge — copy of `.wp-conflict-dot--*` /
+ * `.wp-conflict-badge--*` from ContextWidget so the cluster reads as
+ * the same design family across both nodes. Severity tokens
+ * `--info` / `--warning` / `--error` resolve to accent / amber / red. */
+.wp-conflict-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: help;
+  border: 1px solid transparent;
+}
+.wp-conflict-dot--info {
+  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
+  border-color: var(--wp-accent);
+}
+.wp-conflict-dot--warning {
+  background:   color-mix(in oklab, var(--wp-amber) 14%, transparent);
+  border-color: var(--wp-amber);
+}
+.wp-conflict-dot--error {
+  background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
+  border-color: var(--wp-red);
+}
+.wp-conflict-badge {
+  font-family: var(--wp-font-sans, sans-serif);
+  font-weight: 600;
+  font-size: 9px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  cursor: help;
+}
+.wp-conflict-badge--info {
+  background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
+}
+.wp-conflict-badge--warning {
+  background: color-mix(in oklab, var(--wp-amber) 18%, transparent);
+  color: var(--wp-amber);
+}
+.wp-conflict-badge--error {
+  background: color-mix(in oklab, var(--wp-red) 18%, transparent);
+  color: var(--wp-red);
 }
 
 /* Mirrors ContextWidget's `.wp-btn--icon-sm` so the injector's

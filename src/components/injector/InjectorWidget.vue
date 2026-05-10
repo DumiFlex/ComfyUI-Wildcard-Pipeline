@@ -55,15 +55,27 @@ function isConnected(slotName: string): boolean {
 
 /** Per-row conflict map keyed by `_uid`. Recomputes from row state
  *  + connection set; warn-class + tooltip surface in InjectorRow. */
-const conflictByUid = computed<Record<string, string>>(() => {
-  const out: Record<string, string> = {};
+interface RowConflict {
+  severity: "info" | "warning" | "error";
+  label: string;
+}
+
+/** Per-row conflict info keyed by `_uid`. Picks highest severity if a
+ *  row has multiple conflicts (warning > info; error reserved for
+ *  future). Drives the `wp-conflict-dot--*` + `wp-conflict-badge--*`
+ *  cluster in each row, matching ContextWidget's pattern. */
+const conflictByUid = computed<Record<string, RowConflict>>(() => {
+  const out: Record<string, RowConflict> = {};
   const conflicts = scanInjectorConflicts(
     value.value,
     props.connectedSlots ?? [],
     props.upstreamVars ?? [],
   );
+  const rank: Record<RowConflict["severity"], number> = { info: 0, warning: 1, error: 2 };
   for (const c of conflicts) {
-    out[c.moduleId] = labelFor(c.type);
+    const next: RowConflict = { severity: c.severity, label: labelFor(c.type) };
+    const prev = out[c.moduleId];
+    if (!prev || rank[next.severity] > rank[prev.severity]) out[c.moduleId] = next;
   }
   return out;
 });
@@ -173,10 +185,9 @@ defineExpose({ addRow, removeRow });
         :row="row"
         :is-connected="isConnected(row.slot_name)"
         :value-type="slotTypes[row.slot_name]"
-        :has-conflict="conflictByUid[row._uid] !== undefined"
-        :conflict-label="conflictByUid[row._uid]"
+        :conflict-severity="conflictByUid[row._uid]?.severity"
+        :conflict-label="conflictByUid[row._uid]?.label"
         @update="(patch) => updateRow(row._uid, patch)"
-        @remove="(uid: string) => removeRow(uid)"
       />
       <div
         v-if="value.rows.length === 0"

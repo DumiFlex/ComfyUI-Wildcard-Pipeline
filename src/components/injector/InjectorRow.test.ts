@@ -62,7 +62,7 @@ describe("InjectorRow — enabled checkbox", () => {
   });
 });
 
-describe("InjectorRow — internal flag + trash", () => {
+describe("InjectorRow — internal flag", () => {
   it("internal-flag button inactive class when row.internal is false", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ internal: false }) } });
     expect(w.find('[data-test="inj-row-internal"]').classes()).not.toContain("is-active");
@@ -80,12 +80,43 @@ describe("InjectorRow — internal flag + trash", () => {
     expect(last.internal).toBe(true);
   });
 
-  it("clicking trash emits remove with row uid", async () => {
+  it("does not render a trash button — disconnect auto-removes rows", () => {
     const w = mount(InjectorRow, { props: { row: makeRow() } });
-    await w.find('[data-test="inj-row-trash"]').trigger("click");
-    const removed = w.emitted("remove")!;
-    expect(removed).toHaveLength(1);
-    expect(removed[0][0]).toBe("uid_test");
+    expect(w.find('[data-test="inj-row-trash"]').exists()).toBe(false);
+  });
+});
+
+describe("InjectorRow — conflict cluster", () => {
+  it("renders conflict dot + badge with severity class", () => {
+    const w = mount(InjectorRow, {
+      props: {
+        row: makeRow(),
+        conflictSeverity: "info" as const,
+        conflictLabel: "overrides upstream",
+      },
+    });
+    const badge = w.find('[data-test="inj-row-conflict"]');
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toBe("overrides upstream");
+    expect(badge.classes()).toContain("wp-conflict-badge--info");
+    expect(w.find(".wp-conflict-dot.wp-conflict-dot--info").exists()).toBe(true);
+  });
+
+  it("warning severity uses amber tokens", () => {
+    const w = mount(InjectorRow, {
+      props: {
+        row: makeRow(),
+        conflictSeverity: "warning" as const,
+        conflictLabel: "duplicate",
+      },
+    });
+    expect(w.find(".wp-conflict-badge--warning").exists()).toBe(true);
+  });
+
+  it("no conflict cluster when severity unset", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow() } });
+    expect(w.find('[data-test="inj-row-conflict"]').exists()).toBe(false);
+    expect(w.find(".wp-conflict-dot").exists()).toBe(false);
   });
 });
 
@@ -97,17 +128,18 @@ describe("InjectorRow — disconnected variant", () => {
     expect(w.find('.wp-inj-row').classes()).toContain("wp-inj-row--disconnected");
   });
 
-  it("renders 'no link' badge when isConnected is false", () => {
+  it("disconnected rows surface as conflict cluster (no separate nolink badge)", () => {
+    // The standalone `no link` badge moved into the unified conflict
+    // cluster — `injector_input_disconnected` is now a warning-severity
+    // conflict surfaced via the dot+badge cluster like the rest.
     const w = mount(InjectorRow, {
-      props: { row: makeRow(), isConnected: false },
+      props: {
+        row: makeRow(),
+        isConnected: false,
+        conflictSeverity: "warning" as const,
+        conflictLabel: "no link",
+      },
     });
-    expect(w.find('[data-test="inj-row-nolink"]').exists()).toBe(true);
-  });
-
-  it("hides 'no link' badge when isConnected is true", () => {
-    const w = mount(InjectorRow, {
-      props: { row: makeRow(), isConnected: true },
-    });
-    expect(w.find('[data-test="inj-row-nolink"]').exists()).toBe(false);
+    expect(w.find('[data-test="inj-row-conflict"]').text()).toBe("no link");
   });
 });
