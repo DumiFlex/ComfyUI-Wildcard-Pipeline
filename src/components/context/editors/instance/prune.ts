@@ -126,6 +126,29 @@ export function pruneStaleInstanceRefs(
         out.disabled_exception_keys = after.length > 0 ? after : null;
       }
     }
+
+    // Tier-D override maps — drop entries whose key isn't in current
+    // payload. extra_exceptions are instance-owned and NEVER pruned.
+    function pruneRecord<V>(
+      field: "cell_mode_overrides" | "cell_factor_overrides"
+        | "exception_mode_overrides" | "exception_factor_overrides",
+      validKeys: Set<string>,
+    ): void {
+      const map = out[field] as Record<string, V> | null | undefined;
+      if (!map || typeof map !== "object") return;
+      const next: Record<string, V> = {};
+      for (const [k, v] of Object.entries(map)) {
+        if (validKeys.has(k)) next[k] = v as V;
+        else warnings.push(`${field}: dropped stale key '${k}'`);
+      }
+      (out as Record<string, unknown>)[field] =
+        Object.keys(next).length > 0 ? next : null;
+    }
+
+    pruneRecord<string>("cell_mode_overrides", matrixKeys);
+    pruneRecord<number>("cell_factor_overrides", matrixKeys);
+    pruneRecord<string>("exception_mode_overrides", exceptionKeys);
+    pruneRecord<number>("exception_factor_overrides", exceptionKeys);
   }
 
   return { instance: out, warnings };

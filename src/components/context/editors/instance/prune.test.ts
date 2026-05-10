@@ -83,3 +83,75 @@ describe("pruneStaleInstanceRefs — constraint", () => {
     expect(result.warnings.length).toBe(1);
   });
 });
+
+describe("pruneStaleInstanceRefs — constraint tier-D overrides", () => {
+  const newPayload = {
+    matrix: {
+      s1: { t1: { mode: "allow", factor: 1 }, t2: { mode: "boost", factor: 2 } },
+    },
+    exceptions: [
+      { source_value: "red", target_value: "blue", mode: "allow", factor: 1 },
+    ],
+  };
+
+  it("drops stale cell_mode_overrides keys", () => {
+    const inst = {
+      cell_mode_overrides: {
+        '["s1","t1"]': "exclude" as const,
+        '["ghost","ghost"]': "boost" as const,
+      },
+    };
+    const result = pruneStaleInstanceRefs(inst, newPayload, "constraint");
+    expect(result.instance?.cell_mode_overrides).toEqual({ '["s1","t1"]': "exclude" });
+    expect(result.warnings.length).toBe(1);
+  });
+
+  it("drops stale cell_factor_overrides keys", () => {
+    const inst = {
+      cell_factor_overrides: { '["s1","t1"]': 3, '["ghost","ghost"]': 5 },
+    };
+    const result = pruneStaleInstanceRefs(inst, newPayload, "constraint");
+    expect(result.instance?.cell_factor_overrides).toEqual({ '["s1","t1"]': 3 });
+    expect(result.warnings.length).toBe(1);
+  });
+
+  it("drops stale exception_mode_overrides keys", () => {
+    const inst = {
+      exception_mode_overrides: {
+        '["red","blue"]': "boost" as const,
+        '["x","y"]': "allow" as const,
+      },
+    };
+    const result = pruneStaleInstanceRefs(inst, newPayload, "constraint");
+    expect(result.instance?.exception_mode_overrides).toEqual({ '["red","blue"]': "boost" });
+    expect(result.warnings.length).toBe(1);
+  });
+
+  it("drops stale exception_factor_overrides keys", () => {
+    const inst = {
+      exception_factor_overrides: { '["red","blue"]': 2, '["x","y"]': 4 },
+    };
+    const result = pruneStaleInstanceRefs(inst, newPayload, "constraint");
+    expect(result.instance?.exception_factor_overrides).toEqual({ '["red","blue"]': 2 });
+    expect(result.warnings.length).toBe(1);
+  });
+
+  it("never prunes extra_exceptions (instance-owned by definition)", () => {
+    const inst = {
+      extra_exceptions: [
+        { source_value: "fake", target_value: "phantom", mode: "exclude" as const, factor: 1 },
+      ],
+    };
+    const result = pruneStaleInstanceRefs(inst, newPayload, "constraint");
+    expect(result.instance?.extra_exceptions).toHaveLength(1);
+    expect(result.warnings.length).toBe(0);
+  });
+
+  it("collapses fully-stale override maps to null", () => {
+    const inst = {
+      cell_mode_overrides: { '["ghost","ghost"]': "exclude" as const },
+    };
+    const result = pruneStaleInstanceRefs(inst, newPayload, "constraint");
+    expect(result.instance?.cell_mode_overrides).toBeNull();
+  });
+});
