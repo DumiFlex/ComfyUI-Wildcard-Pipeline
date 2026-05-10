@@ -18,7 +18,6 @@ import ModalTabStrip from "./editors/tabs/ModalTabStrip.vue";
 import LibraryRoundTripActions from "./editors/library/LibraryRoundTripActions.vue";
 import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
 import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
-import ConstraintInstanceBody from "./editors/instance/ConstraintInstanceBody.vue";
 import { pruneStaleInstanceRefs } from "./editors/instance/prune";
 import { hashes, refreshModule, setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
@@ -27,6 +26,7 @@ import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue"
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
 import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
+import ConstraintInstanceModal from "./editors/constraint/ConstraintInstanceModal.vue";
 
 /**
  * Per-kind subtitle text shown under the modal title (mockup v5
@@ -135,11 +135,11 @@ const instanceBody = computed(() => {
   // short-circuits to <WildcardInstanceModal> before the v1 instanceBody
   // dispatch runs. Other v1 kinds fall through this switch.
   switch (draft.value?.type) {
-    // fixed_values never reaches here — kind dispatcher routes it
-    // to FixedValuesInstanceModal before this v1 instanceBody dispatch.
+    // fixed_values, combine, derivation, constraint never reach here —
+    // each kind's dispatcher routes it to its v2 modal before this
+    // v1 instanceBody dispatch.
     case "combine":      return CombineInstanceBody;
     case "derivation":   return DerivationInstanceBody;
-    case "constraint":   return ConstraintInstanceBody;
     default:             return null;
   }
 });
@@ -248,7 +248,15 @@ const RESET_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]
     "condition_value_overrides",
     "rule_order_override",
   ],
-  constraint: ["disabled_exception_keys", "disabled_matrix_cells"],
+  constraint: [
+    "disabled_exception_keys",
+    "disabled_matrix_cells",
+    "cell_mode_overrides",
+    "cell_factor_overrides",
+    "exception_mode_overrides",
+    "exception_factor_overrides",
+    "extra_exceptions",
+  ],
   pipeline: [],
 };
 
@@ -550,6 +558,60 @@ async function doDerivationSaveToLibrary(): Promise<void> {
   }
 }
 
+/**
+ * Constraint v2 round-trip handlers — siblings of derivation pair.
+ * Same fetch / confirm / toast logic, just framed for constraint.
+ */
+function onConstraintResetClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Reset to library?",
+    body: `Discard ${moduleName}'s local edits and restore the library version. Stale matrix-cell + exception overrides will be pruned.`,
+    confirmLabel: "Reset to library",
+    variant: "danger",
+    onConfirm: () => { void doConstraintReset(); },
+  });
+}
+
+async function doConstraintReset(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const refreshed = await refreshModule(draft.value);
+    onResetFromLibrary(refreshed);
+  } catch (err) {
+    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
+function onConstraintSaveToLibraryClick(): void {
+  if (!draft.value) return;
+  const moduleName = draft.value.meta?.name || "this module";
+  askConfirm({
+    title: "Save to library?",
+    body: `Push current changes to library entry "${moduleName}". Other workflows referencing this constraint will see the new version on their next open.`,
+    confirmLabel: "Save to library",
+    onConfirm: () => { void doConstraintSaveToLibrary(); },
+  });
+}
+
+async function doConstraintSaveToLibrary(): Promise<void> {
+  if (!draft.value) return;
+  try {
+    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json() as { new_hash: string };
+    setLibraryHash(draft.value.id, body.new_hash);
+    pushToast("Saved to library", { severity: "success" });
+  } catch (err) {
+    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
+  }
+}
+
 function save() {
   if (!draft.value) return;
   const next = JSON.parse(JSON.stringify(draft.value)) as ModuleEntry;
@@ -697,6 +759,24 @@ function cancel() {
       @cancel="cancel"
       @reset-from-library="onDerivationResetClick"
       @save-to-library="onDerivationSaveToLibraryClick"
+      @clear-all-overrides="onClearAllOverrides"
+    />
+
+    <!-- v2 constraint branch — single-pane tailored modal. Library
+         (matrix shape, source/target wildcard pair, exception authoring)
+         stays in SPA; modal exposes only display-name + per-cell + per-
+         exception overrides + extras. NO Runtime section (constraint
+         produces no $vars + engine doesn't read locked_seed for it). -->
+    <ConstraintInstanceModal
+      v-else-if="draft && draft.type === 'constraint'"
+      :module="draft"
+      :is-drifted="isDrifted"
+      :sibling-modules="siblingModules"
+      @update="onUpdate"
+      @save="save"
+      @cancel="cancel"
+      @reset-from-library="onConstraintResetClick"
+      @save-to-library="onConstraintSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -91,18 +91,10 @@ function makeConstraint(): ModuleEntry {
 describe("ModuleEditModal — shell header", () => {
   beforeEach(() => _resetForTests());
 
-  it("shows read-only name for non-fixed_values v1 kind", async () => {
-    // Wildcard + fixed_values + combine + derivation all go through v2
-    // single-pane modals. Constraint is the last v1 .wp-medit shell.
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    expect(wrapper.find(".wp-medit__name-readonly").exists()).toBe(true);
-    expect(wrapper.find(".wp-medit__name-readonly").text()).toContain("Hair");
-    expect(wrapper.find(".wp-medit__name-input").exists()).toBe(false);
-  });
+  // v1 .wp-medit shell tests removed in 2026-05-10 cycle — every kind
+  // (wildcard / fixed_values / combine / derivation / constraint) now
+  // routes to its own v2 single-pane modal. Per-modal header coverage
+  // lives in each kind's *.InstanceModal.test.ts.
 
   it("fixed_values kind goes through v2 modal (no v1 .wp-medit shell)", async () => {
     const wrapper = mount(ModuleEditModal, {
@@ -113,18 +105,6 @@ describe("ModuleEditModal — shell header", () => {
     // v2 dispatch — name editing happens in IdentitySection now.
     expect(wrapper.findComponent({ name: "FixedValuesInstanceModal" }).exists()).toBe(true);
     expect(wrapper.find('[data-test="id-name"]').exists()).toBe(true);
-  });
-
-  it("shows kind label as a kind-chip in the header (non-fixed_values)", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    // V3 replaced the `· constraint` plain text with `.wp-kind-chip`.
-    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
-    expect(chip.exists()).toBe(true);
-    expect(chip.text()).toContain("constraint");
   });
 
   it("renders nothing when module is null", async () => {
@@ -187,54 +167,31 @@ describe("ModuleEditModal — kind dispatcher (scaffold placeholders)", () => {
     expect(wrapper.find(".wp-medit").exists()).toBe(false);
   });
 
-  it("constraint → shows ConstraintEditorBody (add-exception button rendered)", async () => {
+
+  // ─ "constraint → ConstraintEditorBody" test removed.
+  // Constraint migrated to v2 single-pane modal in 2026-05-10 cycle.
+  // See: src/components/context/editors/constraint/ConstraintInstanceModal.test.ts
+  // for header / sections / footer / drift kebab coverage.
+
+  it("constraint → routes to v2 ConstraintInstanceModal (no v1 .wp-medit shell)", async () => {
     const wrapper = mount(ModuleEditModal, {
       ...mountOpts,
       props: { visible: true, module: makeConstraint() },
     });
     await nextTick();
-    expect(wrapper.find("[data-test='cn-add-exception']").exists()).toBe(true);
+    expect(wrapper.find(".cnm").exists()).toBe(true);
+    expect(wrapper.find(".wp-medit").exists()).toBe(false);
   });
 });
 
 describe("ModuleEditModal — footer / save / cancel", () => {
   beforeEach(() => _resetForTests());
 
-  it("Cancel emits close (v1 kind)", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    await wrapper.find(".wp-medit__btn:not(.wp-medit__btn--primary)").trigger("click");
-    expect(wrapper.emitted("close")).toBeTruthy();
-  });
-
-  it("Save emits save with the draft module (v1 kind)", async () => {
-    const mod = makeConstraint();
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod },
-    });
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(saved).toBeDefined();
-    expect(saved.id).toBe("cccccccc");
-    expect(saved.type).toBe("constraint");
-  });
-
-  it("Ctrl+Enter triggers save (v1 kind)", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    const ev = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true });
-    window.dispatchEvent(ev);
-    await nextTick();
-    expect(wrapper.emitted("save")).toBeTruthy();
-  });
+  // v1 .wp-medit shell footer tests removed in 2026-05-10 cycle.
+  // Per-kind modal Save/Cancel coverage lives in each kind's
+  // *.InstanceModal.test.ts (data-test="<prefix>-save" / "cancel").
+  // Ctrl+Enter shortcut still wired in the shell-level keydown
+  // handler — covered indirectly by per-kind save event tests.
 
   it("save with fixed_values (inline, no payload_hash) writes payload.values via v2 reconciliation", async () => {
     const inline: ModuleEntry = {
@@ -291,271 +248,27 @@ describe("ModuleEditModal — footer / save / cancel", () => {
 // Library-level rule editing (add/remove rule, IF branches, ELIF, ELSE)
 // stays in SPA — modal exposes only per-rule disable toggle now.
 
-describe("ModuleEditModal — constraint editor body", () => {
-  beforeEach(() => _resetForTests());
-
-  it("source wildcard field is FIRST in the wildcards pair (source-first ordering)", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    // After the X-cross alignment fix, labels are direct grid children
-    // with `grid-area: src-label / tgt-label` instead of being wrapped in
-    // `<label class="wp-field">`. The source-first invariant is the same:
-    // first label-text is "Source wildcard", second is "Target wildcard".
-    const labels = wrapper.findAll(".wp-cn-pair .wp-field-label");
-    expect(labels.length).toBeGreaterThanOrEqual(2);
-    expect(labels[0].text()).toContain("Source wildcard");
-    expect(labels[1].text()).toContain("Target wildcard");
-  });
-
-  it("source uuid input emits patchPayload({ source_wildcard_id, matrix: {} })", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    const input = wrapper.find("[data-test='cn-source']");
-    expect(input.exists()).toBe(true);
-    (input.element as HTMLInputElement).value = "eeeeeeee";
-    await input.trigger("input");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(
-      (saved.payload as { source_wildcard_id?: string }).source_wildcard_id,
-    ).toBe("eeeeeeee");
-    expect((saved.payload as { matrix?: unknown }).matrix).toEqual({});
-  });
-
-  it("target uuid input emits patchPayload({ target_wildcard_id, matrix: {} })", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    const input = wrapper.find("[data-test='cn-target']");
-    expect(input.exists()).toBe(true);
-    (input.element as HTMLInputElement).value = "ffffffff";
-    await input.trigger("input");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(
-      (saved.payload as { target_wildcard_id?: string }).target_wildcard_id,
-    ).toBe("ffffffff");
-    expect((saved.payload as { matrix?: unknown }).matrix).toEqual({});
-  });
-
-  it("Add exception appends to payload.exceptions on save", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    // starts with 0 exceptions
-    await wrapper.find("[data-test='cn-add-exception']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const excs = (saved.payload as { exceptions?: unknown[] } | undefined)?.exceptions ?? [];
-    expect(excs.length).toBe(1);
-  });
-
-  it("empty source/target shows matrix-empty hint, not the table", async () => {
-    const mod: ModuleEntry = {
-      ...makeConstraint(),
-      payload: { source_wildcard_id: null, target_wildcard_id: null, matrix: {}, exceptions: [] },
-    };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod },
-    });
-    await nextTick();
-    expect(wrapper.find("[data-test='cn-matrix-empty']").exists()).toBe(true);
-    expect(wrapper.find("[data-test='cn-matrix']").exists()).toBe(false);
-  });
-
-  it.todo("resolves source/target via siblingModules + reports matrix dims + exceptions count — see Task 19");
-
-  it("matrix cell renders cog icon for factor tuning (per spec)", async () => {
-    const mod: ModuleEntry = {
-      ...makeConstraint(),
-      payload: {
-        source_wildcard_id: "src-uuid",
-        target_wildcard_id: "tgt-uuid",
-        matrix: {},
-        exceptions: [],
-      },
-    };
-    const siblings: ModuleEntry[] = [
-      {
-        id: "src-uuid",
-        type: "wildcard",
-        enabled: true,
-        meta: { name: "src" },
-        entries: [],
-        payload: { sub_categories: ["a"] },
-        payload_hash: "h",
-      },
-      {
-        id: "tgt-uuid",
-        type: "wildcard",
-        enabled: true,
-        meta: { name: "tgt" },
-        entries: [],
-        payload: { sub_categories: ["b"] },
-        payload_hash: "h",
-      },
-    ];
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod, siblingModules: siblings },
-    });
-    await nextTick();
-    expect(wrapper.find("[data-test='cn-matrix']").exists()).toBe(true);
-    const cog = wrapper.find("[data-test='cn-cell-cog-a-b']");
-    expect(cog.exists()).toBe(true);
-    expect(cog.find("i.pi-cog").exists()).toBe(true);
-  });
-
-  it("cog click triggers factor prompt + setCell on valid number", async () => {
-    const mod: ModuleEntry = {
-      ...makeConstraint(),
-      payload: {
-        source_wildcard_id: "src-uuid",
-        target_wildcard_id: "tgt-uuid",
-        matrix: { a: { b: { mode: "boost", factor: 1 } } },
-        exceptions: [],
-      },
-    };
-    const siblings: ModuleEntry[] = [
-      {
-        id: "src-uuid",
-        type: "wildcard",
-        enabled: true,
-        meta: { name: "src" },
-        entries: [],
-        payload: { sub_categories: ["a"] },
-        payload_hash: "h",
-      },
-      {
-        id: "tgt-uuid",
-        type: "wildcard",
-        enabled: true,
-        meta: { name: "tgt" },
-        entries: [],
-        payload: { sub_categories: ["b"] },
-        payload_hash: "h",
-      },
-    ];
-    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("2.5");
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod, siblingModules: siblings },
-    });
-    await nextTick();
-    await wrapper.find("[data-test='cn-cell-cog-a-b']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const matrix = (saved.payload as { matrix?: Record<string, Record<string, { factor?: number }>> })
-      .matrix;
-    expect(matrix?.a?.b?.factor).toBe(2.5);
-    promptSpy.mockRestore();
-  });
-
-  it("cog cancel (prompt returns null) leaves factor unchanged", async () => {
-    const mod: ModuleEntry = {
-      ...makeConstraint(),
-      payload: {
-        source_wildcard_id: "src-uuid",
-        target_wildcard_id: "tgt-uuid",
-        matrix: { a: { b: { mode: "boost", factor: 3 } } },
-        exceptions: [],
-      },
-    };
-    const siblings: ModuleEntry[] = [
-      {
-        id: "src-uuid",
-        type: "wildcard",
-        enabled: true,
-        meta: { name: "src" },
-        entries: [],
-        payload: { sub_categories: ["a"] },
-        payload_hash: "h",
-      },
-      {
-        id: "tgt-uuid",
-        type: "wildcard",
-        enabled: true,
-        meta: { name: "tgt" },
-        entries: [],
-        payload: { sub_categories: ["b"] },
-        payload_hash: "h",
-      },
-    ];
-    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue(null);
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: mod, siblingModules: siblings },
-    });
-    await nextTick();
-    await wrapper.find("[data-test='cn-cell-cog-a-b']").trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    const matrix = (saved.payload as { matrix?: Record<string, Record<string, { factor?: number }>> })
-      .matrix;
-    expect(matrix?.a?.b?.factor).toBe(3);
-    promptSpy.mockRestore();
-  });
-});
+// ─ "ModuleEditModal — constraint editor body" describe block removed.
+// Constraint migrated to v2 single-pane modal in 2026-05-10 cycle. New
+// per-section coverage lives in:
+//   src/components/context/editors/constraint/sections/IdentitySection.test.ts
+//   src/components/context/editors/constraint/sections/MatrixSection.test.ts
+//   src/components/context/editors/constraint/sections/ExceptionsSection.test.ts
+//   src/components/context/editors/constraint/CellFactorPopover.test.ts
+//   src/components/context/editors/constraint/ConstraintInstanceModal.test.ts
+// Library-level matrix authoring (source/target picker, cell mode/factor
+// authoring, exceptions add/remove) stays in SPA — modal exposes only
+// per-cell + per-exception runtime overrides + extras.
 
 // ── V2 + V3: two-line modal header (mockup v5 lines 1039-1040, 1180, 1260, 1317, 1436) ─
 
-describe("ModuleEditModal — V2 two-line header", () => {
-  beforeEach(() => _resetForTests());
-
-  it("renders the .wp-medit__sub subtitle line for v1 kind", async () => {
-    // Constraint is the only remaining v1 kind after the 2026-05-09
-    // derivation migration. Pipeline has no instance fields and skips
-    // the modal shell entirely.
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    const sub = wrapper.find(".wp-medit__sub");
-    expect(sub.exists()).toBe(true);
-    expect(sub.text().length).toBeGreaterThan(0);
-  });
-});
+// V2 two-line header + V3 kind chip v1-shell tests removed in
+// 2026-05-10 cycle — every kind now has its own v2 modal with header
+// / sub / chip wired internally. Per-modal coverage lives in each
+// kind's *.InstanceModal.test.ts.
 
 describe("ModuleEditModal — V3 kind chip in header", () => {
   beforeEach(() => _resetForTests());
-
-  it("renders .wp-kind-chip in header for v1 kind", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
-    expect(chip.exists()).toBe(true);
-    expect(chip.text()).toBe("constraint");
-  });
-
-  it("kind chip carries its kind-color modifier class", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    const chip = wrapper.find(".wp-medit__head .wp-kind-chip");
-    expect(chip.classes()).toContain("wp-kind-chip--constraint");
-  });
 
   it("v2 fixed_values modal renders its own kind chip via FixedValuesInstanceModal", async () => {
     const wrapper = mount(ModuleEditModal, {
@@ -571,129 +284,13 @@ describe("ModuleEditModal — V3 kind chip in header", () => {
   });
 });
 
-// ── Task 25: tab strip + dispatcher ────────────────────────────────────────
+// Tab strip + dispatcher (v1 kinds) tests removed in 2026-05-10
+// cycle — every kind now routes to its v2 single-pane modal which
+// has no tab strip. Modified-state + clear-all-overrides behaviors
+// covered per-kind in *.InstanceModal.test.ts; cross-kind Reset
+// behavior covered by the "Reset preserves Identity + Runtime"
+// describe block below.
 
-describe("ModuleEditModal — tab strip + dispatcher (v1 kinds)", () => {
-  beforeEach(() => _resetForTests());
-
-  it("renders tab strip with both tabs for v1 kinds where INSTANCE_TAB_VISIBLE is true", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
-    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(true);
-  });
-
-  it("hides Instance tab for pipeline kind", async () => {
-    const m: ModuleEntry = {
-      id: "ppppppp1", type: "pipeline", enabled: true,
-      meta: { name: "p" }, entries: [],
-      payload: {},
-    };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
-    });
-    await nextTick();
-    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
-  });
-
-  it("smart default: opens Library tab when instance has no overrides", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: { ...makeConstraint(), instance: {} }, siblingModules: [] },
-    });
-    await nextTick();
-    expect(wrapper.find('[data-test="tab-library"]').attributes("aria-selected")).toBe("true");
-  });
-
-  it("smart default: opens Instance tab when any registry field is non-null", async () => {
-    const m = { ...makeConstraint(), instance: { disabled_exception_keys: ["e1"] } };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
-    });
-    await nextTick();
-    expect(wrapper.find('[data-test="tab-instance"]').attributes("aria-selected")).toBe("true");
-  });
-
-  it("orange dot appears on Instance tab when modified-state is true", async () => {
-    const m = { ...makeConstraint(), instance: { disabled_exception_keys: ["e1"] } };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
-    });
-    await nextTick();
-    expect(wrapper.find('[data-test="tab-instance-dot"]').exists()).toBe(true);
-  });
-
-  it("modified-state ignores _ui namespace", async () => {
-    const m = { ...makeConstraint(), instance: { _ui: { last_locked_seed: 42 } } };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
-    });
-    await nextTick();
-    expect(wrapper.find('[data-test="tab-instance-dot"]').exists()).toBe(false);
-  });
-
-  it("Clear all overrides footer button exists on Instance tab", async () => {
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: { ...makeConstraint(), instance: { disabled_exception_keys: ["e1"] } }, siblingModules: [] },
-    });
-    await nextTick();
-    // Instance tab is the smart default for this module
-    expect(wrapper.find('[data-test="clear-all-overrides"]').exists()).toBe(true);
-  });
-
-  it("Clear all sets all registry fields to null on confirm", async () => {
-    const m = {
-      ...makeConstraint(),
-      instance: { disabled_exception_keys: ["e1"] },
-    };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
-    });
-    await nextTick();
-    // Click the Clear-all button → ConfirmDialog opens (themed,
-    // replaces window.confirm). Click the dialog's Confirm button to
-    // approve, then save the modal and assert the cleared field.
-    // Teleport stub keeps the dialog inside the wrapper DOM in tests.
-    await wrapper.find('[data-test="clear-all-overrides"]').trigger("click");
-    await nextTick();
-    const confirmBtn = wrapper.find('[data-test="confirm-confirm"]');
-    expect(confirmBtn.exists()).toBe(true);
-    await confirmBtn.trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    expect(saved.instance?.disabled_exception_keys).toBeNull();
-  });
-
-  it("Clear all does NOT clear when user cancels the confirm dialog", async () => {
-    const m = {
-      ...makeConstraint(),
-      instance: { disabled_exception_keys: ["e1"] },
-    };
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts, props: { visible: true, module: m, siblingModules: [] },
-    });
-    await nextTick();
-    await wrapper.find('[data-test="clear-all-overrides"]').trigger("click");
-    await nextTick();
-    await wrapper.find('[data-test="confirm-cancel"]').trigger("click");
-    await nextTick();
-    await wrapper.find(".wp-medit__btn--primary").trigger("click");
-    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
-    // Cancelled → original override survives
-    expect(saved.instance?.disabled_exception_keys).toEqual(["e1"]);
-  });
-});
-
-// ── Unified Reset registry (2026-05-10 cycle) ───────────────────────────
-// All v2 kinds (wildcard / combine / fixed_values / derivation) now
-// follow the wildcard pattern: Reset clears kind-specific overrides
-// only and PRESERVES Identity (`meta.name`) + Runtime
-// (`locked_seed`, `internal`).
 
 describe("ModuleEditModal — Reset preserves Identity + Runtime across all v2 kinds", () => {
   beforeEach(() => _resetForTests());
@@ -802,20 +399,10 @@ describe("ModuleEditModal — wildcard v2 dispatcher", () => {
     expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
   });
 
-  it("renders v1 tab strip for kinds still on v1 (constraint)", async () => {
-    // Derivation moved to v2 single-pane in 2026-05-09 cycle.
-    // Constraint is the last v1 kind.
-    const wrapper = mount(ModuleEditModal, {
-      ...mountOpts,
-      props: { visible: true, module: makeConstraint() },
-    });
-    await nextTick();
-    expect(wrapper.findComponent({ name: "WildcardInstanceModal" }).exists()).toBe(false);
-    expect(wrapper.findComponent({ name: "FixedValuesInstanceModal" }).exists()).toBe(false);
-    expect(wrapper.findComponent({ name: "CombineInstanceModal" }).exists()).toBe(false);
-    expect(wrapper.findComponent({ name: "DerivationInstanceModal" }).exists()).toBe(false);
-    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(true);
-  });
+  // ─ "renders v1 tab strip for kinds still on v1 (constraint)" test removed.
+  // Constraint migrated to v2 single-pane modal in 2026-05-10 cycle.
+  // Cross-kind v2 routing now covered by per-kind dispatcher describe
+  // blocks below.
 
   it("forwards WildcardInstanceModal update event into draft mutation", async () => {
     const wrapper = mount(ModuleEditModal, {
@@ -964,6 +551,73 @@ describe("ModuleEditModal — derivation v2 dispatcher", () => {
     await wrapper.find('[data-test="dvm-save"]').trigger("click");
     const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
     expect(saved.instance?.disabled_rule_ids).toEqual(["r1"]);
+  });
+});
+
+// ── Constraint v2 dispatcher branch ────────────────────────────────────
+
+describe("ModuleEditModal — constraint v2 dispatcher", () => {
+  beforeEach(() => _resetForTests());
+
+  it("renders ConstraintInstanceModal (no tab strip) for constraint kind", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint() },
+    });
+    await nextTick();
+    expect(wrapper.findComponent({ name: "ConstraintInstanceModal" }).exists()).toBe(true);
+    expect(wrapper.find('[data-test="tab-library"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="tab-instance"]').exists()).toBe(false);
+  });
+
+  it("forwards ConstraintInstanceModal update event into draft mutation", async () => {
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: makeConstraint() },
+    });
+    await nextTick();
+    const cnm = wrapper.findComponent({ name: "ConstraintInstanceModal" });
+    cnm.vm.$emit("update", {
+      instance: { cell_mode_overrides: { '["a","b"]': "exclude" } },
+    });
+    await nextTick();
+    await wrapper.find('[data-test="cnm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.cell_mode_overrides).toEqual({ '["a","b"]': "exclude" });
+  });
+
+  it("Reset overrides clears all override fields, preserves Identity", async () => {
+    const m = {
+      ...makeConstraint(),
+      meta: { ...makeConstraint().meta, name: "color-rules" },
+      instance: {
+        disabled_matrix_cells: ['["a","b"]'],
+        cell_mode_overrides: { '["a","b"]': "exclude" as const },
+        cell_factor_overrides: { '["a","b"]': 5 },
+        exception_mode_overrides: { '["x","y"]': "boost" as const },
+        extra_exceptions: [{ source_value: "p", target_value: "q", mode: "allow" as const, factor: 1 }],
+      },
+    };
+    const wrapper = mount(ModuleEditModal, {
+      ...mountOpts,
+      props: { visible: true, module: m, siblingModules: [] },
+    });
+    await nextTick();
+    await wrapper.find('[data-test="cnm-clear-all"]').trigger("click");
+    await nextTick();
+    const confirmBtn = wrapper.find('[data-test="confirm-confirm"]');
+    if (confirmBtn.exists()) await confirmBtn.trigger("click");
+    await nextTick();
+    await wrapper.find('[data-test="cnm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    // All override fields cleared
+    expect(saved.instance?.disabled_matrix_cells).toBeNull();
+    expect(saved.instance?.cell_mode_overrides).toBeNull();
+    expect(saved.instance?.cell_factor_overrides).toBeNull();
+    expect(saved.instance?.exception_mode_overrides).toBeNull();
+    expect(saved.instance?.extra_exceptions).toBeNull();
+    // Identity preserved
+    expect(saved.meta?.name).toBe("color-rules");
   });
 });
 
