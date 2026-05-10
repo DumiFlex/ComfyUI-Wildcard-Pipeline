@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.modules._keys import encode_key
+from engine.modules._keys import decode_key, encode_key
 from engine.modules.dispatcher import ModuleHandler
 
 _VALID_MODES = {"allow", "exclude", "boost", "reduce"}
@@ -204,10 +204,16 @@ class ConstraintHandler(ModuleHandler):
         # ── Matrix: filter then override ─────────────────────────────
         raw_matrix = payload.get("matrix", {})
         matrix: dict[str, Any] = {}
+        # Track which (src, tgt) pairs the library iteration covered so
+        # the second pass below only touches keys that have NO library
+        # rule. Without this guard, instance-only overrides would
+        # double-apply on top of the library merge already done here.
+        covered_keys: set[str] = set()
         for src, row in raw_matrix.items():
             kept: dict[str, Any] = {}
             for tgt, cell in row.items():
                 key = encode_key([src, tgt])
+                covered_keys.add(key)
                 if key in disabled_cells:
                     continue
                 # Apply override on a copy — payload cells are shared
@@ -236,6 +242,44 @@ class ConstraintHandler(ModuleHandler):
                 kept[tgt] = merged
             if kept:
                 matrix[src] = kept
+
+        # ── Empty-cell instance overrides — keys present in
+        # cell_mode_overrides / cell_factor_overrides but absent from
+        # the library matrix. Implicit baseline is mode "allow" + factor
+        # 1.0; whichever side(s) the user set populate the rest.
+        # Keys in disabled_cells skip — equivalent to "no rule" runtime.
+        instance_only_keys = (
+            set(cell_mode_overrides) | set(cell_factor_overrides)
+        ) - covered_keys
+        for key in instance_only_keys:
+            if key in disabled_cells:
+                continue
+            try:
+                parts = decode_key(key)
+            except ValueError:
+                continue
+            if len(parts) != 2:
+                continue
+            src, tgt = parts[0], parts[1]
+            mode = cell_mode_overrides.get(key, "allow")
+            if mode not in _VALID_MODES:
+                raise ValueError(
+                    f"constraint cell_mode_overrides[{key!r}] must be one of "
+                    f"{sorted(_VALID_MODES)}"
+                )
+            factor_raw = cell_factor_overrides.get(key, 1.0)
+            if not isinstance(factor_raw, (int, float)) or isinstance(factor_raw, bool):
+                raise ValueError(
+                    f"constraint cell_factor_overrides[{key!r}] must be a number"
+                )
+            if float(factor_raw) < 0:
+                raise ValueError(
+                    f"constraint cell_factor_overrides[{key!r}] must not be negative"
+                )
+            matrix.setdefault(src, {})[tgt] = {
+                "mode": mode,
+                "factor": float(factor_raw),
+            }
 
         # ── Exceptions: filter, override, then append extras ─────────
         raw_excs = payload.get("exceptions", [])

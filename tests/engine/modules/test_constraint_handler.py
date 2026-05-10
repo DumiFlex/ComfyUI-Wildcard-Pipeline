@@ -264,14 +264,58 @@ def test_resolve_cell_overrides_skipped_when_cell_disabled():
     assert "casual" not in bucket[0]["matrix"]["kimono"]
 
 
-def test_resolve_cell_override_for_unknown_key_silently_ignored():
+def test_resolve_cell_override_for_unknown_key_creates_new_matrix_entry():
+    """Phase B: per-instance authoring — overrides for keys absent from
+    the library matrix populate a new entry. Implicit baseline is mode
+    "allow" + factor 1.0; the override fills whichever side(s) the user
+    set. Keeps original library cells untouched."""
     payload = _payload_with_two_cells()
-    instance = {"cell_mode_overrides": {'["ghost","ghost"]': "exclude"}}
+    instance = {"cell_mode_overrides": {'["ghost","spectre"]': "exclude"}}
     ctx: dict = {}
     ConstraintHandler.resolve(payload, instance, ctx)
     bucket = ctx["__wp_constraints__"]
-    # Unknown key has no effect; original cells unchanged.
-    assert bucket[0]["matrix"]["kimono"]["casual"]["mode"] == "boost"
+    matrix = bucket[0]["matrix"]
+    # New entry created from override; default factor 1.0.
+    assert matrix["ghost"]["spectre"]["mode"] == "exclude"
+    assert matrix["ghost"]["spectre"]["factor"] == 1.0
+    # Original cells unchanged.
+    assert matrix["kimono"]["casual"]["mode"] == "boost"
+
+
+def test_resolve_factor_override_alone_for_empty_cell_uses_allow_default():
+    """Factor-only override on an empty cell defaults mode to 'allow'."""
+    payload = _payload_with_two_cells()
+    instance = {"cell_factor_overrides": {'["ghost","spectre"]': 2.5}}
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    matrix = ctx["__wp_constraints__"][0]["matrix"]
+    assert matrix["ghost"]["spectre"]["mode"] == "allow"
+    assert matrix["ghost"]["spectre"]["factor"] == 2.5
+
+
+def test_resolve_disabled_set_skips_empty_cell_overrides():
+    """Disabled set wins over instance-only overrides — the cell is
+    omitted from the resolved matrix entirely."""
+    payload = _payload_with_two_cells()
+    instance = {
+        "disabled_matrix_cells": ['["ghost","spectre"]'],
+        "cell_mode_overrides": {'["ghost","spectre"]': "exclude"},
+    }
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    matrix = ctx["__wp_constraints__"][0]["matrix"]
+    assert "ghost" not in matrix
+
+
+def test_resolve_malformed_key_in_cell_overrides_skipped_silently():
+    """Defensive guard: bogus key (not a 2-string-array JSON) is
+    skipped, not raised. Library cells continue resolving."""
+    payload = _payload_with_two_cells()
+    instance = {"cell_mode_overrides": {"not-a-json-key": "exclude"}}
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    matrix = ctx["__wp_constraints__"][0]["matrix"]
+    assert matrix["kimono"]["casual"]["mode"] == "boost"
 
 
 def test_resolve_applies_exception_overrides():
