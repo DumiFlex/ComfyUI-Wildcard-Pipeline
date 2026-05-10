@@ -31,7 +31,27 @@ def test_migrate_records_version(tmp_path):
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
     # ``engine/db/migrations_sql``.
-    assert current_version(conn) == 4
+    assert current_version(conn) == 5
+    conn.close()
+
+
+def test_migrate_creates_bundles_table_with_expected_columns(tmp_path):
+    """Migration 005 adds the bundles library table."""
+    conn = get_connection(tmp_path / "b.db")
+    migrate(conn)
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table';"
+        ).fetchall()
+    }
+    assert "bundles" in tables
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(bundles);")}
+    assert cols == {
+        "id", "name", "description", "color", "category_id",
+        "tags", "is_favorite", "children", "payload_hash",
+        "version", "created_at", "updated_at",
+    }
     conn.close()
 
 
@@ -199,9 +219,13 @@ def test_004_rewrites_constraint_source_target_cross_refs(tmp_path):
 
 def test_004_is_idempotent(tmp_path):
     """Running 004 twice (via re-running migrate on an already-migrated
-    DB) must not error or re-mangle ids."""
+    DB) must not error or re-mangle ids.
+
+    Version assertion uses the head migration number — keep in sync
+    when new migrations land.
+    """
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 4
+    assert current_version(conn) == 5
     conn.close()
