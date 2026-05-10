@@ -32,13 +32,20 @@ class WPContextInjector(io.ComfyNode):
             inputs=[
                 PipelineContext.Input("upstream", optional=True),
                 InjectorRowsInput.Input("rows", socketless=True),
+                # max=10 caps the visible socket list. V3 Autogrow
+                # preallocates all `max` slots at schema construction
+                # (see comfy_api/latest/_io.py:997) — they're declared
+                # as optional but ComfyUI renders them all, and
+                # disconnect doesn't free the slot. Capping low keeps
+                # the node visually bounded; bumping later is a one-
+                # line change if real-world use needs more.
                 io.Autogrow.Input(
                     "inputs",
                     template=io.Autogrow.TemplatePrefix(
                         io.AnyType.Input("value"),
                         prefix="input_",
                         min=0,
-                        max=100,
+                        max=10,
                     ),
                     optional=True,
                 ),

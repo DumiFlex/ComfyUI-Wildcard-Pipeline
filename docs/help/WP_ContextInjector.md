@@ -36,6 +36,13 @@ row to clear.
 - No drift detection — there's no "library version" to drift from.
 - No SPA editor — bindings are graph-only.
 
+## Limits
+
+Currently capped at **10 input sockets** per injector node. V3
+Autogrow preallocates the slot list at schema time, so all 10 sockets
+show even when unconnected. If you need more, chain a second injector
+node downstream (each one passes its `context` output forward).
+
 ## Notes
 
 Non-primitive values (CONDITIONING / LATENT / IMAGE tensors) get
