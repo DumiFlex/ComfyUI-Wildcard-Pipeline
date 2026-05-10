@@ -275,6 +275,15 @@ export function scanConflicts(
   // node collisions emit `shadows_upstream` (info), same-kind emits
   // `duplicate_variable` (warning).
   const firstWriterKind = new Map<string, ModuleEntry["type"]>();
+  // Phase B (2026-05-10): also track the first writer's `module.id`
+  // (library uuid). When a later writer shares the same id, the two
+  // are SIBLINGS — same library definition instantiated twice. Phase B
+  // auto-suffixes bindings for wildcard/combine, but kinds with no
+  // single primary binding (fixed_values entries, derivation rules)
+  // still emit the same names. That's intentional last-write-wins
+  // sibling behavior, NOT a config bug — skip the duplicate_variable
+  // warning when the duplicate writer is a sibling.
+  const firstWriterId = new Map<string, string>();
   const out: Conflict[] = [];
   for (let i = 0; i < value.modules.length; i++) {
     const m = value.modules[i];
@@ -311,7 +320,14 @@ export function scanConflicts(
         out.push({ moduleId: m.id, variable: name, type: "shadows_upstream", severity: "info" });
       } else if (written.has(name)) {
         const prevKind = firstWriterKind.get(name);
-        if (prevKind && prevKind !== m.type) {
+        const prevId = firstWriterId.get(name);
+        if (prevId === m.id) {
+          // Sibling writer — same library uuid instantiated twice.
+          // Intentional last-write-wins (like alternate rolls of the
+          // same wildcard). Emit info-level shadows so the user sees
+          // the layering without the false-alarm duplicate warning.
+          out.push({ moduleId: m.id, variable: name, type: "shadows_upstream", severity: "info" });
+        } else if (prevKind && prevKind !== m.type) {
           // Cross-kind same-node override — e.g. wildcard `$test`
           // after fixed_values `$test`. Last-write-wins by design;
           // surface as info so the user sees the layering without
@@ -326,6 +342,7 @@ export function scanConflicts(
       } else {
         written.add(name);
         firstWriterKind.set(name, m.type);
+        firstWriterId.set(name, m.id);
       }
     }
 
