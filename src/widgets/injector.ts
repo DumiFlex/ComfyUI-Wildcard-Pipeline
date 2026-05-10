@@ -1,4 +1,4 @@
-import { defineAsyncComponent, h, ref, type Component, type ComponentPublicInstance } from "vue";
+import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import {
   createDomWidgetHost,
@@ -9,6 +9,7 @@ import {
   type MountTargetNode,
 } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
+import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import type { LiteNodeLike } from "../extension/graph";
 
 const InjectorWidget = defineAsyncComponent(
@@ -16,35 +17,71 @@ const InjectorWidget = defineAsyncComponent(
 );
 
 type InjectorNode = LiteNodeLike & MountTargetNode & {
-  onConnectionsChange?: (
-    type: number,
-    slotIndex: number,
-    isConnected: boolean,
-    link: unknown,
-    slotInfo: { name?: string },
-  ) => void;
-  inputs?: Array<{ name?: string; link?: number | null } | null | undefined>;
+  inputs?: Array<{ name?: string; link?: number | null; type?: string } | null | undefined>;
 };
-
-interface InjectorWidgetExposed {
-  addRow: (slotName: string) => void;
-  removeRow: (uid: string) => void;
-}
 
 export function create(node: InjectorNode, inputName: string) {
   const initial = serializeWidgetJson(
     parseWidgetJson<InjectorRowsValue>("", emptyInjectorRowsValue()),
   );
   const currentJson = ref(initial);
-  const widgetRef = ref<(ComponentPublicInstance & InjectorWidgetExposed) | null>(null);
+
+  // Poll-based slot reconciliation. The `onConnectionsChange` callback
+  // doesn't fire reliably for V3 Autogrow dynamic inputs (verified
+  // empirically — wires drop in but no event), so mirror the
+  // ContextWidget pattern: walk node.inputs on a poll/event tick and
+  // emit the current set of connected `input_*` slot names. The widget
+  // watches this prop + reconciles its rows array.
+  const connectedSlots = reactiveFromGraph(
+    node as unknown as Parameters<typeof reactiveFromGraph>[0],
+    () => {
+      const out: string[] = [];
+      const inputs = node.inputs ?? [];
+      for (const inp of inputs) {
+        if (!inp || typeof inp.name !== "string") continue;
+        if (!inp.name.startsWith("input_")) continue;
+        if (inp.link == null) continue;
+        out.push(inp.name);
+      }
+      return out;
+    },
+    stringArrayEqual,
+  );
+
+  // Per-slot type label (STRING / INT / FLOAT / BOOLEAN / *) — read
+  // from the input's `type` field (set by ComfyUI when the connection
+  // resolves). Drives the row's type chip.
+  const slotTypes = reactiveFromGraph(
+    node as unknown as Parameters<typeof reactiveFromGraph>[0],
+    () => {
+      const out: Record<string, string> = {};
+      const inputs = node.inputs ?? [];
+      for (const inp of inputs) {
+        if (!inp || typeof inp.name !== "string") continue;
+        if (!inp.name.startsWith("input_")) continue;
+        if (inp.link == null) continue;
+        if (typeof inp.type === "string" && inp.type !== "*") {
+          out[inp.name] = inp.type;
+        }
+      }
+      return out;
+    },
+    (a, b) => {
+      const ak = Object.keys(a);
+      if (ak.length !== Object.keys(b).length) return false;
+      for (const k of ak) if (a[k] !== b[k]) return false;
+      return true;
+    },
+  );
 
   const wrapper: Component = {
     setup() {
       return () =>
         h(InjectorWidget, {
-          ref: widgetRef,
           nodeId: node.id,
           initialJson: currentJson.value,
+          connectedSlots: connectedSlots.value,
+          slotTypes: slotTypes.value,
           onChange: (json: string) => host.setValue(json),
         });
     },
@@ -59,22 +96,6 @@ export function create(node: InjectorNode, inputName: string) {
     },
   });
   attachThemeDetector(host.widget.element, app);
-
-  // Listen for ComfyUI socket events. ComfyUI calls
-  // onConnectionsChange(type, slotIndex, isConnected, link, slotInfo)
-  // where type 1 = input, type 2 = output. We only care about inputs.
-  const TYPE_INPUT = 1;
-  const origOnConnectionsChange = node.onConnectionsChange?.bind(node);
-  node.onConnectionsChange = function (type, slotIndex, isConnected, link, slotInfo) {
-    origOnConnectionsChange?.(type, slotIndex, isConnected, link, slotInfo);
-    if (type !== TYPE_INPUT) return;
-    if (!isConnected) return; // disconnect → row stays (handled inside widget)
-    const slotName = slotInfo?.name ?? node.inputs?.[slotIndex]?.name;
-    // The static `upstream` + `rows` sockets always exist; only add a
-    // row when the connected slot is one of the dynamic `input_*`.
-    if (typeof slotName !== "string" || !slotName.startsWith("input_")) return;
-    widgetRef.value?.addRow(slotName);
-  };
 
   return host;
 }

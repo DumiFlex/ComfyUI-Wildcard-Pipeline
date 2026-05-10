@@ -10,10 +10,18 @@ import {
 } from "../../widgets/_shared";
 import InjectorRowComp from "./InjectorRow.vue";
 
-const props = defineProps<{
-  nodeId: number;
-  initialJson: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    nodeId: number;
+    initialJson: string;
+    /** Names of `input_*` socket slots with a live wire on the node.
+     *  Polled from the outer mount glue and reconciled into rows. */
+    connectedSlots?: string[];
+    /** Per-slot type label — `STRING` / `INT` / `FLOAT` / `BOOLEAN`. */
+    slotTypes?: Record<string, string>;
+  }>(),
+  { connectedSlots: () => [], slotTypes: () => ({}) },
+);
 
 const emit = defineEmits<{
   (e: "change", json: string): void;
@@ -33,6 +41,12 @@ watch(
 const enabledCount = computed(
   () => value.value.rows.filter((r) => r.enabled).length,
 );
+
+const connectedSet = computed(() => new Set(props.connectedSlots));
+
+function isConnected(slotName: string): boolean {
+  return connectedSet.value.has(slotName);
+}
 
 function persist(): void {
   emit("change", serializeWidgetJson(value.value));
@@ -72,6 +86,33 @@ function addRow(slotName: string): void {
   persist();
 }
 
+// Reconcile rows array against the polled `connectedSlots` prop. Adds
+// rows for newly-connected slots; rows for severed connections stay
+// (per design — user trashes manually so binding intent isn't lost).
+watch(
+  () => props.connectedSlots,
+  (next) => {
+    const known = new Set(value.value.rows.map((r) => r.slot_name));
+    const toAdd = next.filter((slot) => !known.has(slot));
+    if (toAdd.length === 0) return;
+    value.value = {
+      ...value.value,
+      rows: [
+        ...value.value.rows,
+        ...toAdd.map((slot) => ({
+          _uid: newRowUid(),
+          slot_name: slot,
+          binding: "",
+          enabled: true,
+          internal: false,
+        })),
+      ],
+    };
+    persist();
+  },
+  { immediate: true },
+);
+
 defineExpose({ addRow, removeRow });
 </script>
 
@@ -91,6 +132,8 @@ defineExpose({ addRow, removeRow });
         v-for="row in value.rows"
         :key="row._uid"
         :row="row"
+        :is-connected="isConnected(row.slot_name)"
+        :value-type="slotTypes[row.slot_name]"
         @update="(patch) => updateRow(row._uid, patch)"
         @remove="(uid: string) => removeRow(uid)"
       />
