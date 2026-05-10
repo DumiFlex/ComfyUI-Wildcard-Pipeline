@@ -572,6 +572,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
       // the binding exists. Internal-flagged rows still emit the key
       // (it's in ctx for downstream consumers) but get stripped from
       // the public map below — same path WP_Context modules use.
+      const raw = widgetValue(n, "rows");
       const inj = parseWidgetJson<{
         version: 1;
         rows?: Array<{
@@ -579,7 +580,12 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
           enabled?: boolean;
           internal?: boolean;
         }>;
-      }>(widgetValue(n, "rows"), { version: 1, rows: [] });
+      }>(raw, { version: 1, rows: [] });
+      const dbg = (window as unknown as { __wp_inj_walker_log__?: boolean }).__wp_inj_walker_log__;
+      if (dbg) {
+        // eslint-disable-next-line no-console
+        console.log("[wp-inj-walker]", n.id, "raw widget value:", raw, "parsed rows:", inj.rows);
+      }
       for (const row of inj.rows ?? []) {
         if (row.enabled !== true) continue;
         const binding = (row.binding ?? "").trim();

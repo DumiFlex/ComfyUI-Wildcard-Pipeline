@@ -250,7 +250,18 @@ export function mountHelper(node: AssemblerNode) {
         // "3-different-previews" flicker on lock toggles. Fallback
         // only renders when we've never had an API response (first
         // mount before /wp/api/preview/resolve has settled).
-        const fresh = apiResolved.value ?? snapshot.value.fallbackResolved;
+        // INJECTOR LAYERING: the API-side resolver only knows about
+        // WP_Context modules — injector bindings live in the static
+        // fallback only. Merge fallback ON TOP so injector keys
+        // (which API would never produce) survive when API returns.
+        // Fallback values for non-injector keys are static stubs
+        // (option[0]); API beats those, so we want API-precedence on
+        // overlap. JS object spread is right-to-left, so put fallback
+        // first then API: injector keys (only in fallback) flow
+        // through; overlapping keys take API's value.
+        const fallback = snapshot.value.fallbackResolved;
+        const api = apiResolved.value;
+        const fresh = api ? { ...fallback, ...api } : fallback;
         const template = snapshot.value.template;
 
         // Compute new-layout props ----------------------------------------
