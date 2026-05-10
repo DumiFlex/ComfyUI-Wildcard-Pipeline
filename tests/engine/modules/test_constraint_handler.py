@@ -210,3 +210,124 @@ def test_constraint_resolve_empty_disable_lists_unchanged_output():
     meta = ctx["__wp_constraints__"][0]
     assert meta["matrix"] == payload["matrix"]
     assert meta["exceptions"] == payload["exceptions"]
+
+
+# ── Tier-D override fields (2026-05-10 modal expansion) ─────────────
+
+
+def _payload_with_two_cells():
+    return {
+        "source_wildcard_id": "wc_outfit",
+        "target_wildcard_id": "wc_pose",
+        "matrix": {
+            "kimono": {
+                "casual": {"mode": "boost", "factor": 2.0},
+                "formal": {"mode": "allow", "factor": 1.0},
+            },
+        },
+        "exceptions": [
+            {"source_value": "red", "target_value": "black", "mode": "exclude", "factor": 1.0},
+        ],
+    }
+
+
+def test_resolve_applies_cell_mode_override():
+    payload = _payload_with_two_cells()
+    instance = {"cell_mode_overrides": {'["kimono","casual"]': "exclude"}}
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    bucket = ctx["__wp_constraints__"]
+    assert bucket[0]["matrix"]["kimono"]["casual"]["mode"] == "exclude"
+    # Factor untouched.
+    assert bucket[0]["matrix"]["kimono"]["casual"]["factor"] == 2.0
+
+
+def test_resolve_applies_cell_factor_override():
+    payload = _payload_with_two_cells()
+    instance = {"cell_factor_overrides": {'["kimono","casual"]': 5.0}}
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    bucket = ctx["__wp_constraints__"]
+    assert bucket[0]["matrix"]["kimono"]["casual"]["factor"] == 5.0
+    assert bucket[0]["matrix"]["kimono"]["casual"]["mode"] == "boost"
+
+
+def test_resolve_cell_overrides_skipped_when_cell_disabled():
+    payload = _payload_with_two_cells()
+    instance = {
+        "disabled_matrix_cells": ['["kimono","casual"]'],
+        "cell_mode_overrides": {'["kimono","casual"]': "exclude"},
+    }
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    bucket = ctx["__wp_constraints__"]
+    assert "casual" not in bucket[0]["matrix"]["kimono"]
+
+
+def test_resolve_cell_override_for_unknown_key_silently_ignored():
+    payload = _payload_with_two_cells()
+    instance = {"cell_mode_overrides": {'["ghost","ghost"]': "exclude"}}
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    bucket = ctx["__wp_constraints__"]
+    # Unknown key has no effect; original cells unchanged.
+    assert bucket[0]["matrix"]["kimono"]["casual"]["mode"] == "boost"
+
+
+def test_resolve_applies_exception_overrides():
+    payload = _payload_with_two_cells()
+    instance = {
+        "exception_mode_overrides": {'["red","black"]': "boost"},
+        "exception_factor_overrides": {'["red","black"]': 3.0},
+    }
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    exc = ctx["__wp_constraints__"][0]["exceptions"][0]
+    assert exc["mode"] == "boost"
+    assert exc["factor"] == 3.0
+
+
+def test_resolve_appends_extra_exceptions():
+    payload = _payload_with_two_cells()
+    instance = {
+        "extra_exceptions": [
+            {"source_value": "blue", "target_value": "green", "mode": "boost", "factor": 2.5},
+        ],
+    }
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    exceptions = ctx["__wp_constraints__"][0]["exceptions"]
+    assert len(exceptions) == 2
+    extra = exceptions[-1]
+    assert extra["source_value"] == "blue"
+    assert extra["mode"] == "boost"
+
+
+def test_resolve_extra_exception_with_invalid_mode_rejected():
+    payload = _payload_with_two_cells()
+    instance = {
+        "extra_exceptions": [
+            {"source_value": "blue", "target_value": "green", "mode": "weird", "factor": 1.0},
+        ],
+    }
+    with pytest.raises(ValueError, match="mode"):
+        ConstraintHandler.resolve(payload, instance, {})
+
+
+def test_resolve_extra_exception_with_negative_factor_rejected():
+    payload = _payload_with_two_cells()
+    instance = {
+        "extra_exceptions": [
+            {"source_value": "blue", "target_value": "green", "mode": "boost", "factor": -1.0},
+        ],
+    }
+    with pytest.raises(ValueError, match="factor"):
+        ConstraintHandler.resolve(payload, instance, {})
+
+
+def test_resolve_cell_factor_zero_accepted():
+    payload = _payload_with_two_cells()
+    instance = {"cell_factor_overrides": {'["kimono","casual"]': 0.0}}
+    ctx: dict = {}
+    ConstraintHandler.resolve(payload, instance, ctx)
+    assert ctx["__wp_constraints__"][0]["matrix"]["kimono"]["casual"]["factor"] == 0.0

@@ -194,31 +194,112 @@ class ConstraintHandler(ModuleHandler):
         disabled_cells = set(instance.get("disabled_matrix_cells") or [])
         disabled_excs = set(instance.get("disabled_exception_keys") or [])
 
-        raw_matrix = payload.get("matrix", {})
-        if disabled_cells:
-            matrix: dict[str, Any] = {}
-            for src, row in raw_matrix.items():
-                kept = {
-                    tgt: cell
-                    for tgt, cell in row.items()
-                    if encode_key([src, tgt]) not in disabled_cells
-                }
-                if kept:
-                    matrix[src] = kept
-        else:
-            matrix = raw_matrix
+        # Tier-D override maps (sparse — only set keys override library).
+        cell_mode_overrides = instance.get("cell_mode_overrides") or {}
+        cell_factor_overrides = instance.get("cell_factor_overrides") or {}
+        exception_mode_overrides = instance.get("exception_mode_overrides") or {}
+        exception_factor_overrides = instance.get("exception_factor_overrides") or {}
+        extra_exceptions = instance.get("extra_exceptions") or []
 
+        # ── Matrix: filter then override ─────────────────────────────
+        raw_matrix = payload.get("matrix", {})
+        matrix: dict[str, Any] = {}
+        for src, row in raw_matrix.items():
+            kept: dict[str, Any] = {}
+            for tgt, cell in row.items():
+                key = encode_key([src, tgt])
+                if key in disabled_cells:
+                    continue
+                # Apply override on a copy — payload cells are shared
+                # references; mutating them would leak into the library
+                # value across resolves.
+                merged = dict(cell)
+                if key in cell_mode_overrides:
+                    mode = cell_mode_overrides[key]
+                    if mode not in _VALID_MODES:
+                        raise ValueError(
+                            f"constraint cell_mode_overrides[{key!r}] must be one of "
+                            f"{sorted(_VALID_MODES)}"
+                        )
+                    merged["mode"] = mode
+                if key in cell_factor_overrides:
+                    factor = cell_factor_overrides[key]
+                    if not isinstance(factor, (int, float)) or isinstance(factor, bool):
+                        raise ValueError(
+                            f"constraint cell_factor_overrides[{key!r}] must be a number"
+                        )
+                    if float(factor) < 0:
+                        raise ValueError(
+                            f"constraint cell_factor_overrides[{key!r}] must not be negative"
+                        )
+                    merged["factor"] = float(factor)
+                kept[tgt] = merged
+            if kept:
+                matrix[src] = kept
+
+        # ── Exceptions: filter, override, then append extras ─────────
         raw_excs = payload.get("exceptions", [])
-        if disabled_excs:
-            exceptions = [
-                e for e in raw_excs
-                if encode_key([
-                    e.get("source_value") or e.get("source", ""),
-                    e.get("target_value") or e.get("target", ""),
-                ]) not in disabled_excs
-            ]
-        else:
-            exceptions = raw_excs
+        exceptions: list[dict[str, Any]] = []
+        for exc in raw_excs:
+            key = encode_key([
+                exc.get("source_value") or exc.get("source", ""),
+                exc.get("target_value") or exc.get("target", ""),
+            ])
+            if key in disabled_excs:
+                continue
+            merged = dict(exc)
+            if key in exception_mode_overrides:
+                mode = exception_mode_overrides[key]
+                if mode not in _VALID_MODES:
+                    raise ValueError(
+                        f"constraint exception_mode_overrides[{key!r}] must be one of "
+                        f"{sorted(_VALID_MODES)}"
+                    )
+                merged["mode"] = mode
+            if key in exception_factor_overrides:
+                factor = exception_factor_overrides[key]
+                if not isinstance(factor, (int, float)) or isinstance(factor, bool):
+                    raise ValueError(
+                        f"constraint exception_factor_overrides[{key!r}] must be a number"
+                    )
+                if float(factor) < 0:
+                    raise ValueError(
+                        f"constraint exception_factor_overrides[{key!r}] must not be negative"
+                    )
+                merged["factor"] = float(factor)
+            exceptions.append(merged)
+
+        # Validate + append instance-only extras. Same shape as library
+        # exceptions; rejected with same error message style. NOT
+        # written back to library — lives entirely in the instance.
+        for i, exc in enumerate(extra_exceptions):
+            if not isinstance(exc, dict):
+                raise ValueError(
+                    f"constraint extra_exceptions[{i}] must be an object"
+                )
+            for key_legacy, _key_tier2 in (("source", "source_value"), ("target", "target_value")):
+                v = exc.get(key_legacy) or exc.get(_key_tier2)
+                if not isinstance(v, str) or not v:
+                    raise ValueError(
+                        f"constraint extra_exceptions[{i}].{key_legacy} must be a "
+                        f"non-empty string"
+                    )
+            mode = exc.get("mode")
+            if mode not in _VALID_MODES:
+                raise ValueError(
+                    f"constraint extra_exceptions[{i}].mode must be one of "
+                    f"{sorted(_VALID_MODES)}"
+                )
+            factor = exc.get("factor")
+            if not isinstance(factor, (int, float)) or isinstance(factor, bool):
+                raise ValueError(
+                    f"constraint extra_exceptions[{i}].factor must be a number"
+                )
+            if float(factor) < 0:
+                raise ValueError(
+                    f"constraint extra_exceptions[{i}].factor must not be negative"
+                )
+            exceptions.append(dict(exc))
 
         meta = {
             "source_wildcard_id": payload["source_wildcard_id"],
