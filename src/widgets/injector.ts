@@ -48,6 +48,12 @@ export function create(node: InjectorNode, inputName: string) {
             if (inp.link == null) continue;
             out.push(inp.name);
           }
+          // Diagnostic — flip on by setting `window.__wp_inj_log__ = true`.
+          const dbg = (window as unknown as { __wp_inj_log__?: boolean }).__wp_inj_log__;
+          if (dbg) {
+            // eslint-disable-next-line no-console
+            console.log("[wp-inj]", node.id, "connected:", out, "raw inputs:", inputs);
+          }
           return out;
         },
         stringArrayEqual,
