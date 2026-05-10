@@ -4,10 +4,6 @@ import { nextTick } from "vue";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { _resetForTests } from "../../extension/preview-resolver";
-import { INSTANCE_TAB_VISIBLE } from "./editors/_shell";
-
-// Reference-only — keeps imports stable for the new tab-strip section.
-void INSTANCE_TAB_VISIBLE;
 
 // ModalShell uses <Teleport to="body">. VTU's `find` only walks the
 // component's own subtree, so disable teleport globally for these tests

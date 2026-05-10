@@ -1,4 +1,3 @@
-import { kindIcon } from "../../shared/kind-icons";
 import type { ModuleEntryKind } from "../../../widgets/_shared";
 
 export type ModuleKind = ModuleEntryKind;
@@ -10,10 +9,6 @@ export const KIND_TITLE: Record<string, string> = {
   derivation: "derivation",
   constraint: "constraint",
 };
-
-export function kindHeaderIcon(kind: string): string {
-  return kindIcon(kind);
-}
 
 export type InstanceFieldKey =
   | "variable_binding" | "enabled_options" | "option_weights" | "category_filter"
@@ -35,7 +30,6 @@ export type InstanceFieldKey =
 
 /** Single source of truth for which instance fields each kind exposes.
  *  Drives:
- *   - Tab visibility (INSTANCE_TAB_VISIBLE)
  *   - Modified-state computed (count populated entries from this list)
  *   - "Clear all overrides" button (iterate this list to null each)
  *   - Future validators / drift detection
@@ -79,8 +73,3 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
   ],
   pipeline: [],
 };
-
-export const INSTANCE_TAB_VISIBLE: Record<ModuleEntryKind, boolean> =
-  Object.fromEntries(
-    Object.entries(INSTANCE_FIELDS_PER_KIND).map(([k, v]) => [k, v.length > 0]),
-  ) as Record<ModuleEntryKind, boolean>;

@@ -2,24 +2,11 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
-import WildcardEditorBody from "./editors/WildcardEditorBody.vue";
-import FixedValuesEditorBody from "./editors/FixedValuesEditorBody.vue";
-import CombineEditorBody from "./editors/CombineEditorBody.vue";
-import DerivationEditorBody from "./editors/DerivationEditorBody.vue";
-import ConstraintEditorBody from "./editors/ConstraintEditorBody.vue";
 import {
-  KIND_TITLE,
-  kindHeaderIcon,
   INSTANCE_FIELDS_PER_KIND,
-  INSTANCE_TAB_VISIBLE,
   type InstanceFieldKey,
 } from "./editors/_shell";
-import ModalTabStrip from "./editors/tabs/ModalTabStrip.vue";
-import LibraryRoundTripActions from "./editors/library/LibraryRoundTripActions.vue";
-import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
-import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
-import { pruneStaleInstanceRefs } from "./editors/instance/prune";
-import { hashes, setLibraryHash } from "./drift-store";
+import { setLibraryHash } from "./drift-store";
 import { workflowSiblingCount } from "./duplicates/sibling-count";
 import { forkModule } from "./duplicates/fork";
 import { app } from "#comfyui/app";
@@ -30,32 +17,6 @@ import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstance
 import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
 import ConstraintInstanceModal from "./editors/constraint/ConstraintInstanceModal.vue";
-
-/**
- * Per-kind subtitle text shown under the modal title (mockup v5
- * lines 1040, 1180, 1260, 1317, 1436). Phase A keeps these as
- * static taglines describing the kind's behaviour at a glance —
- * library timestamps + content hashes are deferred to the Phase B
- * library-integration pass. Falls back to an empty string for
- * unknown kinds so the subtitle slot collapses cleanly.
- */
-/**
- * Normalize a module type into the slug used by the
- * `--wp-kind-{slug}` palette tokens. Engine stores `fixed_values`
- * but the colour token is `--wp-kind-fixed`, so the kind chip
- * needs the same alias map ContextWidget uses.
- */
-function kindChipModifier(kind: string): string {
-  return kind === "fixed_values" ? "fixed" : kind;
-}
-
-const KIND_SUBTITLE: Record<string, string> = {
-  wildcard:    "Library entry · weighted options resolved per pick",
-  fixed_values:"Pinned $var → value pairs · no resolution",
-  combine:     "Template interpolates $vars into a single string · stored at output binding",
-  derivation:  "Rules independent · per-rule branches IF/ELIF/ELSE — first match wins",
-  constraint:  "Source pick → modifies target option weights · matrix + per-value exceptions",
-};
 
 
 const props = defineProps<{
@@ -93,15 +54,9 @@ const emit = defineEmits<{
 // via JSON round-trip (Proxy-safe at every depth, unlike structuredClone).
 const draft = ref<ModuleEntry | null>(null);
 
-// Active tab — Library shows the existing kind-body editors (snapshot
-// state), Instance shows per-kind override editors. Smart-defaulted when
-// a draft loads via `pickInitialTab()`.
-const activeTab = ref<"library" | "instance">("library");
-
 watch(() => props.visible, (v) => {
   if (v && props.module) {
     draft.value = JSON.parse(JSON.stringify(props.module));
-    activeTab.value = pickInitialTab();
     window.addEventListener("keydown", onKeydown);
   } else {
     window.removeEventListener("keydown", onKeydown);
@@ -119,41 +74,6 @@ function onKeydown(ev: KeyboardEvent) {
   }
 }
 
-// Dispatch to per-kind body component.
-const kindBody = computed(() => {
-  switch (draft.value?.type) {
-    case "wildcard":     return WildcardEditorBody;
-    case "fixed_values": return FixedValuesEditorBody;
-    case "combine":      return CombineEditorBody;
-    case "derivation":   return DerivationEditorBody;
-    case "constraint":   return ConstraintEditorBody;
-    default:             return null;
-  }
-});
-
-// Per-kind instance override body. Mirrors `kindBody` but for the
-// Instance tab — pipelines have no overrides and resolve to null.
-const instanceBody = computed(() => {
-  // wildcard never reaches here — the kind dispatcher in <template>
-  // short-circuits to <WildcardInstanceModal> before the v1 instanceBody
-  // dispatch runs. Other v1 kinds fall through this switch.
-  switch (draft.value?.type) {
-    // fixed_values, combine, derivation, constraint never reach here —
-    // each kind's dispatcher routes it to its v2 modal before this
-    // v1 instanceBody dispatch.
-    case "combine":      return CombineInstanceBody;
-    case "derivation":   return DerivationInstanceBody;
-    default:             return null;
-  }
-});
-
-// Tab strip is suppressed for kinds with no instance overrides (today
-// only `pipeline`). Driven by the registry in `_shell.ts` so adding a
-// new kind needs only one source of truth.
-const hasInstanceTab = computed(() =>
-  draft.value ? INSTANCE_TAB_VISIBLE[draft.value.type] : false,
-);
-
 // Modified-state — true when ANY registry field on `instance` is
 // non-null. The `_ui` namespace is excluded by virtue of not appearing
 // in `INSTANCE_FIELDS_PER_KIND`, so toggling Lock off (which leaves a
@@ -165,29 +85,6 @@ const instanceModified = computed(() => {
   if (!inst) return false;
   return fields.some((f) => (inst as Record<string, unknown>)[f] != null);
 });
-
-const isLibraryTracked = computed(() => !!draft.value?.payload_hash);
-const isDrifted = computed(() => {
-  if (!draft.value || !draft.value.payload_hash) return false;
-  const live = hashes.value?.[draft.value.id];
-  return live != null && live !== draft.value.payload_hash;
-});
-
-/**
- * Smart default for the active tab on draft load. If the kind has no
- * Instance tab → Library. Otherwise: Instance when any registry field
- * is non-null, Library when none are. Spec §6.3.
- */
-function pickInitialTab(): "library" | "instance" {
-  if (!draft.value) return "library";
-  if (!INSTANCE_TAB_VISIBLE[draft.value.type]) return "library";
-  const fields = INSTANCE_FIELDS_PER_KIND[draft.value.type];
-  const inst = draft.value.instance;
-  if (!inst) return "library";
-  return fields.some((f) => (inst as Record<string, unknown>)[f] != null)
-    ? "instance"
-    : "library";
-}
 
 function onUpdate(patch: Record<string, unknown>): void {
   if (!draft.value) return;
@@ -308,31 +205,6 @@ function doClearAllOverrides(): void {
     ...draft.value,
     entries: nextEntries,
     instance: cleared as NonNullable<ModuleEntry["instance"]>,
-  };
-}
-
-/**
- * "Reset to library" — replaces draft.payload + payload_hash with the
- * refreshed library snapshot, then prunes any instance refs that no
- * longer match the new payload (e.g. dropped option ids). Surfaces a
- * toast summarising whether stale overrides got removed.
- */
-function onResetFromLibrary(refreshed: ModuleEntry): void {
-  if (!draft.value) return;
-  const pruned = pruneStaleInstanceRefs(
-    draft.value.instance, refreshed.payload, refreshed.type,
-  );
-  if (pruned.warnings.length > 0) {
-    pushToast(
-      `Reset complete. ${pruned.warnings.length} stale override(s) removed.`,
-      { severity: "warning" },
-    );
-  } else {
-    pushToast("Reset from library", { severity: "success" });
-  }
-  draft.value = {
-    ...refreshed,
-    instance: pruned.instance,
   };
 }
 
@@ -666,7 +538,6 @@ function cancel() {
     <WildcardInstanceModal
       v-if="draft && draft.type === 'wildcard'"
       :module="draft"
-      :is-drifted="isDrifted"
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
@@ -681,7 +552,6 @@ function cancel() {
     <FixedValuesInstanceModal
       v-else-if="draft && draft.type === 'fixed_values'"
       :module="draft"
-      :is-drifted="isDrifted"
       :is-modified="instanceModified"
       @update="onUpdate"
       @save="save"
@@ -696,7 +566,6 @@ function cancel() {
     <CombineInstanceModal
       v-else-if="draft && draft.type === 'combine'"
       :module="draft"
-      :is-drifted="isDrifted"
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
       :upstream-resolved="upstreamResolved"
@@ -715,7 +584,6 @@ function cancel() {
     <DerivationInstanceModal
       v-else-if="draft && draft.type === 'derivation'"
       :module="draft"
-      :is-drifted="isDrifted"
       :is-modified="instanceModified"
       @update="onUpdate"
       @save="save"
@@ -732,7 +600,6 @@ function cancel() {
     <ConstraintInstanceModal
       v-else-if="draft && draft.type === 'constraint'"
       :module="draft"
-      :is-drifted="isDrifted"
       :is-modified="instanceModified"
       :sibling-modules="siblingModules"
       @update="onUpdate"
@@ -742,127 +609,6 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     />
 
-    <!-- v1 tabbed branch — non-v2 kinds keep the existing
-         Library/Instance tab structure until each kind is migrated to
-         its own v2 single-pane modal. -->
-    <div v-else-if="draft" class="wp-medit">
-      <header class="wp-medit__head">
-        <i
-          :class="[kindHeaderIcon(draft.type), 'wp-medit__head-icon', `type-${draft.type}`]"
-          aria-hidden="true"
-        ></i>
-
-        <!-- Title block — V2 (mockup v5 lines 1039-1040, 1180, 1260,
-             1317, 1436). Stacks the name row over a kind-specific
-             subtitle so the modal reads as a real header instead of
-             a single-line title. Subtitle text comes from the
-             KIND_SUBTITLE static map; library timestamps + content
-             hashes will land in Phase B's library-integration pass. -->
-        <div class="wp-medit__title-block">
-          <!-- Title row holds the name (editable for fixed_values,
-               read-only for snapshot kinds) PLUS the kind chip
-               (V3, mockup v5 line 1039) — chip is the canonical
-               "this kind" cue across the row, picker, and editor.
-               Reuses the same `.wp-kind-chip` styling defined in
-               ContextWidget. -->
-          <div class="wp-medit__title-row">
-            <input
-              v-if="draft.type === 'fixed_values'"
-              v-model="draft.meta.name"
-              class="wp-medit__name-input"
-              placeholder="module name"
-              spellcheck="false"
-            />
-            <span v-else class="wp-medit__name-readonly">
-              {{ draft.meta.name || draft.type }}
-            </span>
-            <span
-              class="wp-kind-chip"
-              :class="`wp-kind-chip--${kindChipModifier(draft.type)}`"
-            >{{ KIND_TITLE[draft.type] ?? draft.type }}</span>
-          </div>
-
-          <div v-if="KIND_SUBTITLE[draft.type]" class="wp-medit__sub">
-            {{ KIND_SUBTITLE[draft.type] }}
-          </div>
-        </div>
-
-        <button type="button" class="wp-medit__close" aria-label="Close" @click="cancel">
-          <i class="pi pi-times" aria-hidden="true"></i>
-        </button>
-      </header>
-
-      <ModalTabStrip
-        v-model="activeTab"
-        :has-instance-tab="hasInstanceTab"
-        :instance-modified="instanceModified"
-      />
-
-      <div class="wp-medit__body">
-        <!-- Library tab — existing kind-body editors. -->
-        <template v-if="activeTab === 'library'">
-          <component
-            :is="kindBody"
-            v-if="kindBody"
-            :module="draft"
-            :upstream-vars="upstreamVars"
-            :sibling-vars="siblingVars"
-            :sibling-modules="siblingModules"
-            :last-used-seed-reader="lastUsedSeedReader"
-            @update="onUpdate"
-          />
-          <section v-else class="wp-medit__section">
-            <label class="wp-medit__section-label">SNAPSHOT</label>
-            <p class="wp-medit__hint-line">
-              <strong>{{ draft.type }}</strong> kind has no library editor yet.
-              Edit the library row in the SPA to change behaviour.
-            </p>
-          </section>
-        </template>
-        <!-- Instance tab — per-kind override editors. -->
-        <template v-else>
-          <component
-            :is="instanceBody"
-            v-if="instanceBody"
-            :module="draft"
-            :sibling-modules="siblingModules"
-            @update="onUpdate"
-          />
-        </template>
-      </div>
-
-      <footer class="wp-medit__foot">
-        <!-- Library tab footer: round-trip actions (Open in SPA / Reset / Save). -->
-        <template v-if="activeTab === 'library'">
-          <LibraryRoundTripActions
-            :module="draft"
-            :is-library-tracked="isLibraryTracked"
-            :is-drifted="isDrifted"
-            @reset-from-library="onResetFromLibrary"
-            @saved-to-library="() => {}"
-          />
-        </template>
-        <!-- Instance tab footer: clear-all-overrides shortcut. -->
-        <template v-else>
-          <button
-            v-if="instanceModified"
-            type="button"
-            class="wp-medit__btn"
-            data-test="clear-all-overrides"
-            @click="onClearAllOverrides"
-          >
-            <i class="pi pi-replay" aria-hidden="true"></i>
-            Clear all overrides
-          </button>
-          <span v-else></span>
-        </template>
-        <span class="wp-medit__hint">Esc to cancel · Ctrl+Enter to save</span>
-        <div class="wp-medit__buttons">
-          <button type="button" class="wp-medit__btn" @click="cancel">Cancel</button>
-          <button type="button" class="wp-medit__btn wp-medit__btn--primary" @click="save">Save</button>
-        </div>
-      </footer>
-    </div>
   </ModalShell>
 
   <!-- Themed confirm dialog — replaces window.confirm() for any
@@ -885,190 +631,9 @@ function cancel() {
 </style>
 
 <style scoped>
-.wp-medit, .wp-medit * { box-sizing: border-box; }
-.wp-medit {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  /* Width bumped from 540px to 820px after Instance tab landed —
-   * sections like option-weights tables, constraint matrix grids, and
-   * disabled-rules lists all benefit from more horizontal room without
-   * forcing horizontal scroll inside the body. Clamps to 100% on
-   * narrow viewports via the max-width below. */
-  width: 820px;
-  max-width: 100%;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 12px;
-}
-
-.wp-medit__head {
-  display: flex;
-  /* Top-align so the kind icon tracks the name line, not the
-   * vertical center of the (taller) name + subtitle stack. */
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--wp-border);
-  background: var(--wp-brand-gradient);
-  position: relative;
-}
-.wp-medit__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(35, 35, 35, 0.85);
-  pointer-events: none;
-}
-.wp-medit__head > * { position: relative; z-index: 1; }
-.wp-medit__head-icon {
-  font-size: 14px;
-  color: var(--wp-text2);
-  flex-shrink: 0;
-  /* Nudge down so the icon visually centers with the 13px name
-   * line rather than sitting flush with its top edge. */
-  padding-top: 4px;
-}
-/* Kind-specific colors mirror the kind-borders on ContextWidget rows so
- * the modal header reads the same kind-identity at a glance. */
-.wp-medit__head-icon.type-wildcard    { color: var(--wp-kind-wildcard); }
-.wp-medit__head-icon.type-fixed_values { color: var(--wp-kind-fixed, var(--wp-rose)); }
-.wp-medit__head-icon.type-combine     { color: var(--wp-kind-combine); }
-.wp-medit__head-icon.type-derivation  { color: var(--wp-kind-derivation); }
-.wp-medit__head-icon.type-constraint  { color: var(--wp-kind-constraint); }
-.wp-medit__head-icon.type-pipeline    { color: var(--wp-kind-pipeline); }
-.wp-medit__name-input {
-  flex: 1;
-  /* Inset shaded background — `--wp-input-shade` flips per theme so
-   * the input doesn't look like a black bar on the near-white
-   * light-theme modal head. */
-  background: var(--wp-input-shade, rgba(0, 0, 0, 0.25));
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 4px 8px;
-  min-width: 0;
-}
-.wp-medit__name-input:focus { outline: none; border-color: var(--wp-accent); }
-/* V2 — title block stacks the name row over the kind subtitle so
- * the modal header reads as a real two-line title (mockup v5 lines
- * 1039-1040). Flexes to fill the space between the kind icon on
- * the left and the close button on the right. */
-.wp-medit__title-block {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.wp-medit__sub {
-  font: 11px/1.35 var(--wp-font-sans, sans-serif);
-  color: var(--wp-text3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Tiny top margin pulls the subtitle off the name baseline so
-   * the two lines don't read as one wrapped sentence. */
-  margin-top: 2px;
-}
-
-.wp-medit__close {
-  background: none;
-  border: none;
-  color: var(--wp-text3);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 4px 6px;
-}
-.wp-medit__close:hover { color: var(--wp-text); }
-
-.wp-medit__body {
-  padding: 12px 14px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.wp-medit__section { display: flex; flex-direction: column; gap: 6px; }
-.wp-medit__section-label {
-  font-size: 9px;
-  font-family: var(--wp-font-mono, monospace);
-  color: var(--wp-text3);
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-.wp-medit__hint-line {
-  font-size: 11px;
-  color: var(--wp-text3);
-  margin: 0 0 2px;
-}
-
-/* V3 — name + kind chip share a flex row inside the title block.
- * Name takes only its content width (no flex grow) so the chip
- * sits FLUSH next to the name instead of being shoved to the far
- * right of the row by a flex-fill name span. The title-block's
- * own `flex: 1` already carves out the right-hand space for the
- * close button, so nothing here needs to push it. */
-.wp-medit__title-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-/* Read-only name header for snapshot kinds (non-fixed_values). */
-.wp-medit__name-readonly {
-  flex: 0 1 auto;
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 4px 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wp-medit__foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px;
-  border-top: 1px solid var(--wp-border);
-  gap: 12px;
-}
-.wp-medit__hint {
-  font-size: 10px;
-  color: var(--wp-text3);
-  font-family: var(--wp-font-mono, monospace);
-}
-.wp-medit__buttons { display: flex; gap: 8px; }
-.wp-medit__btn {
-  background: var(--wp-bg3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 12px;
-  padding: 5px 14px;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
-}
-.wp-medit__btn:hover { border-color: var(--wp-border2); }
-.wp-medit__btn--primary {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: #fff;
-  font-weight: 600;
-}
-.wp-medit__btn--primary:hover { background: var(--wp-accent2); border-color: var(--wp-accent2); }
+/* All styling now lives in the per-kind v2 modal components
+ * (WildcardInstanceModal, FixedValuesInstanceModal, etc.). The
+ * `.wp-medit` chrome was the v1 tabbed shell — removed alongside
+ * the v1 dispatch in the 2026-05-10 cleanup. */
 </style>
+
