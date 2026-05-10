@@ -546,12 +546,14 @@ function isModified(m: ModuleEntry): boolean {
 
 /** Kinds whose engine handler honors `instance.locked_seed`. Wildcard
  *  pins option pick; combine pins `{a|b|c}` template resolution;
- *  fixed_values pins per-value alternation. Other kinds (derivation,
- *  constraint, pipeline) ignore the field — engine doesn't read it.
+ *  fixed_values pins per-value alternation; derivation pins inline
+ *  syntax resolution inside `action.value` (`{a|b|c}` + nested
+ *  wildcards) — see derivation_handler.resolve. Other kinds
+ *  (constraint, pipeline) ignore the field — engine doesn't read it.
  *  Inline lock action gates on this set so the icon only appears
  *  where it actually does something. */
 const SEED_LOCKABLE_KINDS: ReadonlySet<string> = new Set([
-  "wildcard", "combine", "fixed_values",
+  "wildcard", "combine", "fixed_values", "derivation",
 ]);
 function isSeedLockable(m: ModuleEntry): boolean {
   return SEED_LOCKABLE_KINDS.has(m.type);

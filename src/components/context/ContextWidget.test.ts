@@ -705,11 +705,14 @@ describe("ContextWidget inline actions", () => {
     expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(true);
   });
 
-  it("hides lock for derivation kind (engine ignores locked_seed)", () => {
+  it("renders lock + internal icons for derivation rows (seed-lockable)", () => {
+    // Derivation honors `locked_seed` since the 2026-05-10 expansion:
+    // pins inline syntax resolution (`{a|b|c}` / nested wildcards)
+    // inside `action.value`. Mirrors combine/fixed_values gating.
     const wrapper = mountWithModules([
       { id: "dv123456", type: "derivation", enabled: true },
     ]);
-    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="row-action-lock"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(true);
   });
 
