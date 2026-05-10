@@ -83,15 +83,25 @@ describe("DerivationInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
-    const tracked = mount(DerivationInstanceModal, {
-      props: { module: makeModule(), isDrifted: false },
+  it("Save to library hidden when not modified (no point pushing unchanged payload)", () => {
+    const w = mount(DerivationInstanceModal, {
+      props: { module: makeModule(), isDrifted: false, isModified: false },
     });
-    expect(tracked.find('[data-test="dvm-kebab"]').exists()).toBe(true);
-    const inline = mount(DerivationInstanceModal, {
-      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
+    expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(false);
+  });
+
+  it("Save to library visible when library-tracked + modified", () => {
+    const w = mount(DerivationInstanceModal, {
+      props: { module: makeModule(), isDrifted: false, isModified: true },
     });
-    expect(inline.find('[data-test="dvm-kebab"]').exists()).toBe(false);
+    expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(true);
+  });
+
+  it("Save to library hidden for inline-created (no payload_hash) even if modified", () => {
+    const w = mount(DerivationInstanceModal, {
+      props: { module: makeModule({ payload_hash: undefined }), isModified: true },
+    });
+    expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(false);
   });
 
   it("Reset overrides emits clear-all-overrides", async () => {

@@ -61,18 +61,25 @@ describe("CombineInstanceModal", () => {
     expect(link.getAttribute("href")).toBe("/wp/combines/ab12cd34/edit");
   });
 
-  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
-    const tracked = mount(CombineInstanceModal, {
-      props: { module: makeModule(), isDrifted: false },
+  it("Save to library hidden when not modified (no point pushing unchanged payload)", () => {
+    const w = mount(CombineInstanceModal, {
+      props: { module: makeModule(), isDrifted: false, isModified: false },
     });
-    expect(tracked.find('[data-test="cbm-kebab"]').exists()).toBe(true);
+    expect(w.find('[data-test="cbm-save-lib"]').exists()).toBe(false);
   });
 
-  it("kebab hidden for inline-created (no payload_hash)", () => {
+  it("Save to library visible when library-tracked + modified", () => {
     const w = mount(CombineInstanceModal, {
-      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
+      props: { module: makeModule(), isDrifted: false, isModified: true },
     });
-    expect(w.find('[data-test="cbm-kebab"]').exists()).toBe(false);
+    expect(w.find('[data-test="cbm-save-lib"]').exists()).toBe(true);
+  });
+
+  it("Save to library hidden for inline-created (no payload_hash) even if modified", () => {
+    const w = mount(CombineInstanceModal, {
+      props: { module: makeModule({ payload_hash: undefined }), isModified: true },
+    });
+    expect(w.find('[data-test="cbm-save-lib"]').exists()).toBe(false);
   });
 
   it("Save + Cancel buttons emit the right events", async () => {

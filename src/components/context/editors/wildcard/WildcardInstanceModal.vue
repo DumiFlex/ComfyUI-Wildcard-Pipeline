@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import PoolSection from "./sections/PoolSection.vue";
@@ -8,13 +9,16 @@ const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
     isDrifted?: boolean;
+    /** True when draft has unsaved instance edits. Gates "Save to library"
+     *  visibility — pushing an unmodified payload back is a no-op. */
+    isModified?: boolean;
     /** Names produced upstream of this Context node. Drives the
      *  IdentitySection collision warning. */
     upstreamVars?: string[];
     /** Names produced by other modules in the SAME Context node. */
     siblingVars?: string[];
   }>(),
-  { isDrifted: false, upstreamVars: () => [], siblingVars: () => [] },
+  { isDrifted: false, isModified: false, upstreamVars: () => [], siblingVars: () => [] },
 );
 
 const emit = defineEmits<{
@@ -22,10 +26,13 @@ const emit = defineEmits<{
   "save": [];
   "cancel": [];
   "open-spa": [];
-  "reset-from-library": [];
   "save-to-library": [];
   "clear-all-overrides": [];
 }>();
+
+const canSaveToLibrary = computed(
+  () => Boolean(props.module.payload_hash) && props.isModified,
+);
 
 function spaUrl(): string {
   // SPA base is `/wp/` (see `src/manager/router/index.ts:44`),
@@ -101,24 +108,15 @@ function onSpaClick(): void {
       <span class="wcm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
-      <div v-if="module.payload_hash" class="wcm__kebab" data-test="wcm-kebab">
-        <button
-          type="button"
-          class="wcm__btn"
-          data-test="wcm-reset"
-          @click="emit('reset-from-library')"
-        >
-          Reset to library
-        </button>
-        <button
-          type="button"
-          class="wcm__btn"
-          data-test="wcm-save-lib"
-          @click="emit('save-to-library')"
-        >
-          Save to library
-        </button>
-      </div>
+      <button
+        v-if="canSaveToLibrary"
+        type="button"
+        class="wcm__btn"
+        data-test="wcm-save-lib"
+        @click="emit('save-to-library')"
+      >
+        Save to library
+      </button>
       <button type="button" class="wcm__btn" data-test="wcm-cancel" @click="emit('cancel')">
         Cancel
       </button>
@@ -236,10 +234,6 @@ function onSpaClick(): void {
   padding: 1px 4px;
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
-}
-.wcm__kebab {
-  display: inline-flex;
-  gap: 6px;
 }
 .wcm__btn {
   padding: 5px 12px;

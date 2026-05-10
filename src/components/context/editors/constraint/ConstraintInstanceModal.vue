@@ -26,12 +26,15 @@ const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
     isDrifted?: boolean;
+    /** True when draft has unsaved instance edits. Gates "Save to library"
+     *  visibility — pushing an unmodified payload back is a no-op. */
+    isModified?: boolean;
     /** Sibling modules in the same WP_Context — used to populate
      *  matrix axes (sub_categories) + extra-exception autocomplete
      *  (option values). Optional; falls back to empty axes. */
     siblingModules?: ModuleEntry[];
   }>(),
-  { isDrifted: false, siblingModules: () => [] },
+  { isDrifted: false, isModified: false, siblingModules: () => [] },
 );
 
 const emit = defineEmits<{
@@ -39,12 +42,12 @@ const emit = defineEmits<{
   "save": [];
   "cancel": [];
   "open-spa": [];
-  "reset-from-library": [];
   "save-to-library": [];
   "clear-all-overrides": [];
 }>();
 
 const isLibraryTracked = computed(() => Boolean(props.module.payload_hash));
+const canSaveToLibrary = computed(() => isLibraryTracked.value && props.isModified);
 
 function spaUrl(): string {
   return `/wp/constraints/${props.module.id}/edit`;
@@ -223,20 +226,13 @@ function onSpaClick(): void {
       <span class="cnm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
-      <div v-if="isLibraryTracked" class="cnm__kebab" data-test="cnm-kebab">
-        <button
-          type="button"
-          class="cnm__btn"
-          data-test="cnm-reset"
-          @click="emit('reset-from-library')"
-        >Reset to library</button>
-        <button
-          type="button"
-          class="cnm__btn"
-          data-test="cnm-save-lib"
-          @click="emit('save-to-library')"
-        >Save to library</button>
-      </div>
+      <button
+        v-if="canSaveToLibrary"
+        type="button"
+        class="cnm__btn"
+        data-test="cnm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</button>
       <button type="button" class="cnm__btn" data-test="cnm-cancel" @click="emit('cancel')">Cancel</button>
       <button type="button" class="cnm__btn cnm__btn--primary" data-test="cnm-save" @click="emit('save')">Save</button>
     </footer>
@@ -335,7 +331,6 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.cnm__kebab { display: inline-flex; gap: 6px; }
 .cnm__btn {
   padding: 5px 12px;
   border: 1px solid var(--wp-border);

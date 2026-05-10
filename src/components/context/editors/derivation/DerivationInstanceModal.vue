@@ -22,8 +22,11 @@ const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
     isDrifted?: boolean;
+    /** True when draft has unsaved instance edits. Gates "Save to library"
+     *  visibility — pushing an unmodified payload back is a no-op. */
+    isModified?: boolean;
   }>(),
-  { isDrifted: false },
+  { isDrifted: false, isModified: false },
 );
 
 const emit = defineEmits<{
@@ -31,12 +34,12 @@ const emit = defineEmits<{
   "save": [];
   "cancel": [];
   "open-spa": [];
-  "reset-from-library": [];
   "save-to-library": [];
   "clear-all-overrides": [];
 }>();
 
 const isLibraryTracked = computed(() => Boolean(props.module.payload_hash));
+const canSaveToLibrary = computed(() => isLibraryTracked.value && props.isModified);
 
 function spaUrl(): string {
   return `/wp/derivations/${props.module.id}/edit`;
@@ -102,20 +105,13 @@ function onSpaClick(): void {
       <span class="dvm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
-      <div v-if="isLibraryTracked" class="dvm__kebab" data-test="dvm-kebab">
-        <button
-          type="button"
-          class="dvm__btn"
-          data-test="dvm-reset"
-          @click="emit('reset-from-library')"
-        >Reset to library</button>
-        <button
-          type="button"
-          class="dvm__btn"
-          data-test="dvm-save-lib"
-          @click="emit('save-to-library')"
-        >Save to library</button>
-      </div>
+      <button
+        v-if="canSaveToLibrary"
+        type="button"
+        class="dvm__btn"
+        data-test="dvm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</button>
       <button type="button" class="dvm__btn" data-test="dvm-cancel" @click="emit('cancel')">Cancel</button>
       <button type="button" class="dvm__btn dvm__btn--primary" data-test="dvm-save" @click="emit('save')">Save</button>
     </footer>
@@ -214,7 +210,6 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.dvm__kebab { display: inline-flex; gap: 6px; }
 .dvm__btn {
   padding: 5px 12px;
   border: 1px solid var(--wp-border);

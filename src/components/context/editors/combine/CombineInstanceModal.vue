@@ -21,6 +21,9 @@ const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
     isDrifted?: boolean;
+    /** True when draft has unsaved instance edits. Gates "Save to library"
+     *  visibility — pushing an unmodified payload back is a no-op. */
+    isModified?: boolean;
     /** Upstream var names from chain — fed into TemplateSection's
      *  insert-var dropdown so users don't have to remember which
      *  bindings they can reach from this module. */
@@ -34,6 +37,7 @@ const props = withDefaults(
   }>(),
   {
     isDrifted: false,
+    isModified: false,
     upstreamVars: () => [],
     upstreamResolved: () => ({}),
     siblingVars: () => [],
@@ -45,12 +49,12 @@ const emit = defineEmits<{
   "save": [];
   "cancel": [];
   "open-spa": [];
-  "reset-from-library": [];
   "save-to-library": [];
   "clear-all-overrides": [];
 }>();
 
 const isLibraryTracked = computed(() => Boolean(props.module.payload_hash));
+const canSaveToLibrary = computed(() => isLibraryTracked.value && props.isModified);
 
 function spaUrl(): string {
   // SPA base is `/wp/`. Combine library editor lives at
@@ -130,20 +134,13 @@ function onSpaClick(): void {
       <span class="cbm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
-      <div v-if="isLibraryTracked" class="cbm__kebab" data-test="cbm-kebab">
-        <button
-          type="button"
-          class="cbm__btn"
-          data-test="cbm-reset"
-          @click="emit('reset-from-library')"
-        >Reset to library</button>
-        <button
-          type="button"
-          class="cbm__btn"
-          data-test="cbm-save-lib"
-          @click="emit('save-to-library')"
-        >Save to library</button>
-      </div>
+      <button
+        v-if="canSaveToLibrary"
+        type="button"
+        class="cbm__btn"
+        data-test="cbm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</button>
       <button type="button" class="cbm__btn" data-test="cbm-cancel" @click="emit('cancel')">Cancel</button>
       <button type="button" class="cbm__btn cbm__btn--primary" data-test="cbm-save" @click="emit('save')">Save</button>
     </footer>
@@ -242,7 +239,6 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.cbm__kebab { display: inline-flex; gap: 6px; }
 .cbm__btn {
   padding: 5px 12px;
   border: 1px solid var(--wp-border);

@@ -78,19 +78,27 @@ describe("ConstraintInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
-    // Phase B: kebab gates on `isLibraryTracked` only — Save-to-library
-    // is the entry point for sibling-aware fork detection, which needs
-    // to fire on user edits even without external library drift. Hidden
-    // only for inline-created modules (no payload_hash).
-    const tracked = mount(ConstraintInstanceModal, {
-      props: { module: makeModule(), isDrifted: false },
+  it("Save to library hidden when not modified (no point pushing unchanged payload)", () => {
+    // Save-to-library only matters when the draft has unsaved instance
+    // edits. Pushing a clean payload back is a no-op — hide the button.
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: makeModule(), isDrifted: false, isModified: false },
     });
-    expect(tracked.find('[data-test="cnm-kebab"]').exists()).toBe(true);
-    const inline = mount(ConstraintInstanceModal, {
-      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
+    expect(w.find('[data-test="cnm-save-lib"]').exists()).toBe(false);
+  });
+
+  it("Save to library visible when library-tracked + modified", () => {
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: makeModule(), isDrifted: false, isModified: true },
     });
-    expect(inline.find('[data-test="cnm-kebab"]').exists()).toBe(false);
+    expect(w.find('[data-test="cnm-save-lib"]').exists()).toBe(true);
+  });
+
+  it("Save to library hidden for inline-created (no payload_hash) even if modified", () => {
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: makeModule({ payload_hash: undefined }), isModified: true },
+    });
+    expect(w.find('[data-test="cnm-save-lib"]').exists()).toBe(false);
   });
 
   it("Reset overrides emits clear-all-overrides", async () => {

@@ -19,7 +19,7 @@ import LibraryRoundTripActions from "./editors/library/LibraryRoundTripActions.v
 import CombineInstanceBody from "./editors/instance/CombineInstanceBody.vue";
 import DerivationInstanceBody from "./editors/instance/DerivationInstanceBody.vue";
 import { pruneStaleInstanceRefs } from "./editors/instance/prune";
-import { hashes, refreshModule, setLibraryHash } from "./drift-store";
+import { hashes, setLibraryHash } from "./drift-store";
 import { workflowSiblingCount } from "./duplicates/sibling-count";
 import { forkModule } from "./duplicates/fork";
 import { app } from "#comfyui/app";
@@ -337,36 +337,6 @@ function onResetFromLibrary(refreshed: ModuleEntry): void {
 }
 
 /**
- * Wildcard v2 round-trip handlers — bridge `WildcardInstanceModal`
- * kebab-menu events to the same fetch / confirm / toast logic that
- * `LibraryRoundTripActions` runs for v1 kinds. Inline here (vs reusing
- * the v1 component) so the wildcard branch stays self-contained;
- * later phases will fold this into a shared helper once all kinds
- * migrate to v2.
- */
-function onWildcardResetClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  askConfirm({
-    title: "Reset to library?",
-    body: `Discard ${moduleName}'s local edits and restore the library version. Stale option overrides will be pruned.`,
-    confirmLabel: "Reset to library",
-    variant: "danger",
-    onConfirm: () => { void doWildcardReset(); },
-  });
-}
-
-async function doWildcardReset(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const refreshed = await refreshModule(draft.value);
-    onResetFromLibrary(refreshed);
-  } catch (err) {
-    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
-/**
  * Phase B (2026-05-10): Save-to-library auto-fork shared helpers.
  * When the draft's uuid has > 1 instances anywhere in the workflow,
  * save creates a NEW library entry instead of overwriting the shared
@@ -452,33 +422,6 @@ async function doWildcardSaveToLibrary(): Promise<void> {
   }
 }
 
-/**
- * Fixed-values v2 round-trip handlers — siblings of the wildcard
- * pair. Same fetch / confirm / toast logic, just framed for the
- * fixed_values kind.
- */
-function onFixedValuesResetClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  askConfirm({
-    title: "Reset to library?",
-    body: `Discard ${moduleName}'s local edits and restore the library version. Stale row overrides will be pruned.`,
-    confirmLabel: "Reset to library",
-    variant: "danger",
-    onConfirm: () => { void doFixedValuesReset(); },
-  });
-}
-
-async function doFixedValuesReset(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const refreshed = await refreshModule(draft.value);
-    onResetFromLibrary(refreshed);
-  } catch (err) {
-    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
 function onFixedValuesSaveToLibraryClick(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
@@ -514,34 +457,6 @@ async function doFixedValuesSaveToLibrary(): Promise<void> {
     pushToast("Saved to library", { severity: "success" });
   } catch (err) {
     pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
-/**
- * Combine v2 round-trip handlers — siblings of the wildcard +
- * fixed-values pairs. Same fetch / confirm / toast logic, framed for
- * the combine kind. Library "edit" still routes to the SPA; this just
- * handles the modal-level reset + save-to-library round-trip.
- */
-function onCombineResetClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  askConfirm({
-    title: "Reset to library?",
-    body: `Discard ${moduleName}'s local edits and restore the library template + binding.`,
-    confirmLabel: "Reset to library",
-    variant: "danger",
-    onConfirm: () => { void doCombineReset(); },
-  });
-}
-
-async function doCombineReset(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const refreshed = await refreshModule(draft.value);
-    onResetFromLibrary(refreshed);
-  } catch (err) {
-    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
   }
 }
 
@@ -583,34 +498,6 @@ async function doCombineSaveToLibrary(): Promise<void> {
   }
 }
 
-/**
- * Derivation v2 round-trip handlers — siblings of the wildcard,
- * fixed-values, and combine pairs. Same fetch / confirm / toast logic.
- * Library editing of rule conditions / branches still routes to SPA;
- * this just handles modal-level reset + save-to-library.
- */
-function onDerivationResetClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  askConfirm({
-    title: "Reset to library?",
-    body: `Discard ${moduleName}'s local rule-disable overrides and restore the library version.`,
-    confirmLabel: "Reset to library",
-    variant: "danger",
-    onConfirm: () => { void doDerivationReset(); },
-  });
-}
-
-async function doDerivationReset(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const refreshed = await refreshModule(draft.value);
-    onResetFromLibrary(refreshed);
-  } catch (err) {
-    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
 function onDerivationSaveToLibraryClick(): void {
   if (!draft.value) return;
   const moduleName = draft.value.meta?.name || "this module";
@@ -646,32 +533,6 @@ async function doDerivationSaveToLibrary(): Promise<void> {
     pushToast("Saved to library", { severity: "success" });
   } catch (err) {
     pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
-/**
- * Constraint v2 round-trip handlers — siblings of derivation pair.
- * Same fetch / confirm / toast logic, just framed for constraint.
- */
-function onConstraintResetClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  askConfirm({
-    title: "Reset to library?",
-    body: `Discard ${moduleName}'s local edits and restore the library version. Stale matrix-cell + exception overrides will be pruned.`,
-    confirmLabel: "Reset to library",
-    variant: "danger",
-    onConfirm: () => { void doConstraintReset(); },
-  });
-}
-
-async function doConstraintReset(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const refreshed = await refreshModule(draft.value);
-    onResetFromLibrary(refreshed);
-  } catch (err) {
-    pushToast(`Reset failed: ${(err as Error).message}`, { severity: "error" });
   }
 }
 
@@ -806,12 +667,12 @@ function cancel() {
       v-if="draft && draft.type === 'wildcard'"
       :module="draft"
       :is-drifted="isDrifted"
+      :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @reset-from-library="onWildcardResetClick"
       @save-to-library="onWildcardSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
@@ -821,10 +682,10 @@ function cancel() {
       v-else-if="draft && draft.type === 'fixed_values'"
       :module="draft"
       :is-drifted="isDrifted"
+      :is-modified="instanceModified"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @reset-from-library="onFixedValuesResetClick"
       @save-to-library="onFixedValuesSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
@@ -836,13 +697,13 @@ function cancel() {
       v-else-if="draft && draft.type === 'combine'"
       :module="draft"
       :is-drifted="isDrifted"
+      :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
       :upstream-resolved="upstreamResolved"
       :sibling-vars="siblingVars"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @reset-from-library="onCombineResetClick"
       @save-to-library="onCombineSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
@@ -855,10 +716,10 @@ function cancel() {
       v-else-if="draft && draft.type === 'derivation'"
       :module="draft"
       :is-drifted="isDrifted"
+      :is-modified="instanceModified"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @reset-from-library="onDerivationResetClick"
       @save-to-library="onDerivationSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
@@ -872,11 +733,11 @@ function cancel() {
       v-else-if="draft && draft.type === 'constraint'"
       :module="draft"
       :is-drifted="isDrifted"
+      :is-modified="instanceModified"
       :sibling-modules="siblingModules"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @reset-from-library="onConstraintResetClick"
       @save-to-library="onConstraintSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />

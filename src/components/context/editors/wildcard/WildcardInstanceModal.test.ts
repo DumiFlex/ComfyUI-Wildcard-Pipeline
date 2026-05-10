@@ -78,18 +78,25 @@ describe("WildcardInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("kebab visible whenever module is library-tracked (regardless of drift)", () => {
-    const tracked = mount(WildcardInstanceModal, {
-      props: { module: makeModule(), isDrifted: false },
+  it("Save to library hidden when not modified (no point pushing unchanged payload)", () => {
+    const w = mount(WildcardInstanceModal, {
+      props: { module: makeModule(), isDrifted: false, isModified: false },
     });
-    expect(tracked.find('[data-test="wcm-kebab"]').exists()).toBe(true);
+    expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(false);
   });
 
-  it("kebab hidden for inline-created (no payload_hash)", () => {
+  it("Save to library visible when library-tracked + modified", () => {
     const w = mount(WildcardInstanceModal, {
-      props: { module: makeModule({ payload_hash: undefined }), isDrifted: false },
+      props: { module: makeModule(), isDrifted: false, isModified: true },
     });
-    expect(w.find('[data-test="wcm-kebab"]').exists()).toBe(false);
+    expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(true);
+  });
+
+  it("Save to library hidden for inline-created (no payload_hash) even if modified", () => {
+    const w = mount(WildcardInstanceModal, {
+      props: { module: makeModule({ payload_hash: undefined }), isModified: true },
+    });
+    expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(false);
   });
 
   it("Reset overrides button emits clear-all-overrides event", async () => {
