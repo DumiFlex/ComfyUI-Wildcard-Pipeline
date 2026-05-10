@@ -192,4 +192,94 @@ describe("DebugViewer", () => {
     // Falls back to short-uuid label since no binding to display.
     expect(labels[0].text()).toBe("$constrai");
   });
+
+  it("Trace seed cell renders the full seed (no truncation)", async () => {
+    const fullSeedSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "abc12345",
+          type: "wildcard",
+          status: "ok",
+          seed: 4932922958855935,
+          writes: [{ variable: "x", value: "v" }],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: fullSeedSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    // The clickable variant is the data row (header row uses a plain
+    // `<span>` for the column label, not a button).
+    const seedCell = wrapper.find(".wp-dbg-trace-seed--clickable");
+    expect(seedCell.text()).toBe("4932922958855935");
+    expect(seedCell.text()).not.toContain("…");
+  });
+
+  it("Trace seed cell renders as a clickable button with copy title", async () => {
+    const fullSeedSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "abc12345",
+          type: "wildcard",
+          status: "ok",
+          seed: 12345,
+          writes: [{ variable: "x", value: "v" }],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: fullSeedSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const seedBtn = wrapper.find(".wp-dbg-trace-seed--clickable");
+    expect(seedBtn.exists()).toBe(true);
+    expect(seedBtn.element.tagName).toBe("BUTTON");
+    expect(seedBtn.attributes("title")).toBe("Click to copy seed");
+  });
+
+  it("Picks tab resolves @{uuid} refs in value to @{$varname}", async () => {
+    const refSnap = JSON.stringify({
+      __wp_picks__: {
+        backdrop1: {
+          value: "minimal interior with @{a361dbdc} accents",
+          sub_category: "indoor",
+        },
+      },
+      __wp_trace__: [
+        {
+          id: "backdrop1",
+          type: "wildcard",
+          status: "ok",
+          writes: [{ variable: "backdrop", value: "minimal interior with linen accents" }],
+        },
+        {
+          id: "a361dbdc",
+          type: "wildcard",
+          status: "ok",
+          writes: [{ variable: "fabric", value: "linen" }],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: refSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
+    const valCell = wrapper.find(".wp-dbg-pick-val");
+    expect(valCell.text()).toBe("minimal interior with @{$fabric} accents");
+  });
+
+  it("Picks tab leaves unknown @{uuid} refs unchanged", async () => {
+    const orphanRefSnap = JSON.stringify({
+      __wp_picks__: {
+        m1: { value: "see @{deadbeef} stuff" },
+      },
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          status: "ok",
+          writes: [{ variable: "x", value: "see @{deadbeef} stuff" }],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: orphanRefSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
+    const valCell = wrapper.find(".wp-dbg-pick-val");
+    expect(valCell.text()).toBe("see @{deadbeef} stuff");
+  });
 });

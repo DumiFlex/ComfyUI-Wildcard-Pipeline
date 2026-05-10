@@ -158,19 +158,17 @@ interface TraceRow {
   statusLabel: string;
   /** Formatted picked / written value. */
   value: string;
-  /** Last-6-digit slice of the seed for compactness. */
+  /** Full seed as string — rendered in full so the user can read /
+   *  copy the actual number, not a "…841064" truncation. */
   seed: string;
   errorMessage: string | null;
   /** True when this write replaced an existing upstream value. */
   overwrite: boolean;
 }
 
-function shortenSeed(seed: number | undefined): string {
+function formatSeed(seed: number | undefined): string {
   if (typeof seed !== "number" || !Number.isFinite(seed)) return "";
-  // Last 6 digits — keeps the seed identifiable at a glance without
-  // hogging table real estate for the full 18-digit number.
-  const s = String(seed);
-  return s.length <= 6 ? s : "…" + s.slice(-6);
+  return String(seed);
 }
 
 function formatValue(v: unknown): string {
@@ -237,7 +235,7 @@ const traceRows = computed<TraceRow[]>(() => {
       kindClass: kind.cls,
       status: categorizeStatus(t.status, hasError),
       statusLabel: statusLabelOf(t.status, hasError),
-      seed: shortenSeed(t.seed),
+      seed: formatSeed(t.seed),
       errorMessage: errMsg,
     };
 
@@ -297,10 +295,25 @@ interface PickRow {
   rawId: string;
 }
 
+/** Replace `@{<8-hex-uuid>}` references inside a pick value with
+ *  `@{$variable_name}` using the trace lookup. The picks tab stores
+ *  the raw option string before resolution — `"minimal interior with
+ *  @{a361dbdc} accents"` — which means the user sees opaque uuids
+ *  unless we re-write them in user-language. Falls back to the raw
+ *  `@{uuid}` for unknown ids (defensive — older snapshots, refs to
+ *  modules that didn't run, etc). */
+function resolveRefsToVarNames(text: string, idMap: Record<string, string>): string {
+  return text.replace(/@\{([0-9a-f]{6,16})\}/gi, (whole, uuid: string) => {
+    const v = idMap[uuid];
+    return v ? `@{$${v}}` : whole;
+  });
+}
+
 /** Picks tab — re-key raw `__wp_picks__[module_id]` map into a list of
  *  `$variable_name → value` rows. Splits the option dict's `value` /
  *  `sub_category` into separate columns so the user reads "what got
- *  picked" without parsing JSON. */
+ *  picked" without parsing JSON. Nested `@{uuid}` refs in the value
+ *  string get resolved to `@{$varname}` via the same trace lookup. */
 const pickRows = computed<PickRow[]>(() => {
   const idMap = moduleIdToVar.value;
   return Object.entries(picks.value).map(([rawId, opt]): PickRow => {
@@ -315,7 +328,7 @@ const pickRows = computed<PickRow[]>(() => {
     } else {
       value = formatValue(opt);
     }
-    return { label, value, subCategory, rawId };
+    return { label, value: resolveRefsToVarNames(value, idMap), subCategory, rawId };
   });
 });
 
@@ -341,6 +354,23 @@ const warningEntries = computed<WarningEntry[]>(() => {
 
 async function copyToClipboard(): Promise<void> {
   try { await navigator.clipboard.writeText(bodyText.value); } catch { /* permission denied */ }
+}
+
+/** Tracks the last copied seed so the cell can flash a brief "copied"
+ *  hint without needing a global toast — fits inside the cell's title
+ *  attribute via a watched ref. Cleared after 1.2s. */
+const copiedSeed = ref<string | null>(null);
+let copiedSeedTimer: number | null = null;
+
+async function copySeed(seed: string, ev: MouseEvent): Promise<void> {
+  if (!seed) return;
+  ev.stopPropagation();
+  try {
+    await navigator.clipboard.writeText(seed);
+    copiedSeed.value = seed;
+    if (copiedSeedTimer != null) window.clearTimeout(copiedSeedTimer);
+    copiedSeedTimer = window.setTimeout(() => { copiedSeed.value = null; }, 1200);
+  } catch { /* clipboard permission denied — silent */ }
 }
 
 function downloadJson(): void {
@@ -452,7 +482,15 @@ function downloadJson(): void {
             :title="row.errorMessage || row.statusLabel"
           >{{ row.statusLabel }}</span>
           <span class="wp-dbg-trace-value" :title="row.value">{{ row.value || "—" }}</span>
-          <span class="wp-dbg-trace-seed">{{ row.seed }}</span>
+          <button
+            v-if="row.seed"
+            type="button"
+            class="wp-dbg-trace-seed wp-dbg-trace-seed--clickable"
+            :class="{ 'is-copied': copiedSeed === row.seed }"
+            :title="copiedSeed === row.seed ? 'Copied!' : 'Click to copy seed'"
+            @click="(ev) => copySeed(row.seed, ev)"
+          >{{ copiedSeed === row.seed ? "✓ copied" : row.seed }}</button>
+          <span v-else class="wp-dbg-trace-seed"></span>
         </div>
       </div>
       <p v-else class="wp-debug__empty">No modules ran yet — try executing the graph.</p>
@@ -637,7 +675,9 @@ function downloadJson(): void {
 }
 .wp-dbg-trace-row {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) 80px 80px minmax(120px, 2fr) 70px;
+  /* Seed column widened from 70 → 170px so 18-digit seeds render in
+   * full without ellipsis. Tabular-nums lines them up vertically. */
+  grid-template-columns: minmax(110px, 1fr) 80px 80px minmax(120px, 2fr) 170px;
   gap: var(--wp-row-gap, 10px);
   padding: var(--wp-pad-row, 5px 8px);
   font: 500 11px/1.4 var(--wp-font-mono, monospace);
@@ -733,11 +773,38 @@ function downloadJson(): void {
   white-space: nowrap;
   font-size: 10px;
 }
-.wp-dbg-trace-seed    {
+.wp-dbg-trace-seed {
   color: var(--wp-text-dim, var(--wp-text3));
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
+  font: 500 10px/1.4 var(--wp-font-mono, monospace);
+}
+/* Clickable seed cell — borderless button with hover affordance.
+ * Uses `--wp-bg2` background only on hover so the table stays clean
+ * when not interacting. Shows "✓ copied" inside the cell for 1.2s
+ * after click, with a green tint to confirm the clipboard write. */
+.wp-dbg-trace-seed--clickable {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  text-align: right;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.wp-dbg-trace-seed--clickable:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-border-soft, var(--wp-border));
+  color: var(--wp-text);
+}
+.wp-dbg-trace-seed--clickable.is-copied {
+  background: color-mix(in srgb, var(--wp-green) 18%, transparent);
+  border-color: color-mix(in srgb, var(--wp-green) 40%, transparent);
+  color: var(--wp-green);
+}
+.wp-dbg-trace-seed--clickable:focus-visible {
+  outline: 2px solid var(--wp-accent);
+  outline-offset: 1px;
 }
 
 /* Picks — `$varname` → value table with optional sub-category chip.
