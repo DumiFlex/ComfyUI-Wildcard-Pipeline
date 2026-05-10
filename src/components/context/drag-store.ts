@@ -10,6 +10,9 @@ export interface DragPayload {
   module: ModuleEntry;
   /** Set by the receiving node on cross-node drop so source can clean up. */
   consumedBy?: number;
+  /** Phase B: source row's array index — sibling rows share `module.id`,
+   *  so id alone can't disambiguate which instance is being dragged. */
+  sourceIdx?: number;
 }
 
 export const dragState = ref<DragPayload | null>(null);

@@ -99,7 +99,10 @@ const props = withDefaults(defineProps<{
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
-const dragOverId = ref<string | null>(null);
+// Phase B: drag-over highlight by INDEX rather than id — sibling rows
+// share `m.id`, so id-based highlight would light up every sibling
+// when the user drags over any one of them.
+const dragOverIdx = ref<number | null>(null);
 const dragOverEnd = ref(false);
 /**
  * Phase 3a — drop position relative to `dragOverId`. The card-level
@@ -117,20 +120,25 @@ const ctxMenu = ref<{ visible: boolean; x: number; y: number; items: ContextMenu
   items: [],
 });
 
-const editingId = ref<string | null>(null);
+// Phase B: track the currently-edited module by INDEX, not id —
+// sibling rows share `m.id`, so a id-keyed editing state would open
+// (and save into) the FIRST sibling regardless of which one the user
+// double-clicked. Indexing into `value.modules` directly disambiguates.
+const editingIdx = ref<number | null>(null);
 const editingModule = computed<ModuleEntry | null>(() =>
-  value.value.modules.find((m) => m.id === editingId.value) ?? null,
+  editingIdx.value != null ? (value.value.modules[editingIdx.value] ?? null) : null,
 );
 
 /** Live-preview source of truth for the modal: combines upstream-chain
  *  bindings + sibling bindings produced in this same node (minus the
  *  module being edited). Falls back to the static `upstreamResolved`
  *  prop when the per-module reader isn't wired (legacy mounts /
- *  headless tests). Recomputed on every editingId change so the
+ *  headless tests). Recomputed on every editingIdx change so the
  *  preview pane reflects the right perspective. */
 const resolvedForEditing = computed<Record<string, string>>(() => {
-  if (props.localResolvedReader && editingId.value) {
-    return props.localResolvedReader(editingId.value);
+  const m = editingModule.value;
+  if (props.localResolvedReader && m) {
+    return props.localResolvedReader(m.id);
   }
   return props.upstreamResolved ?? {};
 });
@@ -155,9 +163,14 @@ const siblingNodeVars = computed<string[]>(() => {
     const trimmed = (name ?? "").replace(/^\$+/, "").trim();
     if (trimmed) names.add(trimmed);
   }
-  for (const m of value.value.modules) {
-    if (m.id === editingId.value) continue;
+  const editingM = editingModule.value;
+  for (let mi = 0; mi < value.value.modules.length; mi++) {
+    const m = value.value.modules[mi];
+    if (mi === editingIdx.value) continue;
     if (!m.enabled) continue;
+    // Defensive: also skip if same object (shouldn't happen but Vue
+    // proxies can confuse identity equals).
+    void editingM;
     for (const e of m.entries) add(e.variable_name);
     const inst = (m.instance ?? {}) as {
       variable_binding?: string | null;
@@ -194,8 +207,8 @@ const siblingNodeVars = computed<string[]>(() => {
 });
 
 function clearDragHover() {
-  if (dragOverId.value === null && !dragOverEnd.value && dragOverPos.value === null) return;
-  dragOverId.value = null;
+  if (dragOverIdx.value === null && !dragOverEnd.value && dragOverPos.value === null) return;
+  dragOverIdx.value = null;
   dragOverEnd.value = false;
   dragOverPos.value = null;
 }
@@ -580,7 +593,9 @@ function isInternal(m: ModuleEntry): boolean {
  *    2. `_ui.last_locked_seed` — cold-start fallback when no queue
  *       has happened yet this session.
  *    3. 0 (final default). */
-function toggleLockOnCard(m: ModuleEntry) {
+function toggleLockOnCard(idx: number) {
+  const m = value.value.modules[idx];
+  if (!m) return;
   const inst = m.instance ?? {};
   let nextInst: NonNullable<ModuleEntry["instance"]>;
   if (typeof inst.locked_seed === "number") {
@@ -597,15 +612,19 @@ function toggleLockOnCard(m: ModuleEntry) {
     }
     nextInst = { ...inst, locked_seed: fallback, _ui: { ...inst._ui, last_locked_seed: fallback } };
   }
-  value.value = {
-    ...value.value,
-    modules: value.value.modules.map((x) => x.id === m.id ? { ...x, instance: nextInst } : x),
-  };
+  // Phase B: index-based mutation — sibling rows share `m.id`, so a
+  // map-by-id pass would toggle every sibling at once. Indexing into
+  // the array hits the specific instance the user clicked.
+  const list = [...value.value.modules];
+  list[idx] = { ...m, instance: nextInst };
+  value.value = { ...value.value, modules: list };
 }
 
 /** In-card internal toggle. Drops the field on toggle-off so the
  *  persisted JSON stays minimal (matches the modal). */
-function toggleInternalOnCard(m: ModuleEntry) {
+function toggleInternalOnCard(idx: number) {
+  const m = value.value.modules[idx];
+  if (!m) return;
   const inst = m.instance ?? {};
   let nextInst: NonNullable<ModuleEntry["instance"]>;
   if (inst.internal) {
@@ -615,10 +634,9 @@ function toggleInternalOnCard(m: ModuleEntry) {
   } else {
     nextInst = { ...inst, internal: true };
   }
-  value.value = {
-    ...value.value,
-    modules: value.value.modules.map((x) => x.id === m.id ? { ...x, instance: nextInst } : x),
-  };
+  const list = [...value.value.modules];
+  list[idx] = { ...m, instance: nextInst };
+  value.value = { ...value.value, modules: list };
 }
 
 /** Tooltip listing what's been overridden on the module — surfaced
@@ -987,15 +1005,18 @@ async function onLibraryPick(uuids: string[]) {
   }
 }
 
-function removeModule(id: string) {
+function removeModule(idx: number) {
   // Soft-delete: capture position + module, drop a toast with Undo. Undo
-  // splices it back at its original index. After 5s the toast auto-dismisses
-  // and the deletion is permanent.
-  const idx = value.value.modules.findIndex((m) => m.id === id);
-  if (idx < 0) return;
+  // splices it back at its original index. Phase B: removes by index so
+  // sibling rows (same uuid, multiple instances) only delete the
+  // specific row the user clicked. Pre-Phase-B `filter(m => m.id !== id)`
+  // would have removed every sibling at once.
+  if (idx < 0 || idx >= value.value.modules.length) return;
   const removed = value.value.modules[idx];
   const moduleLabel = removed.meta.name?.trim() || "module";
-  value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== id) };
+  const next = [...value.value.modules];
+  next.splice(idx, 1);
+  value.value = { ...value.value, modules: next };
   pushToast(`Removed “${moduleLabel}”`, {
     severity: "info",
     action: {
@@ -1009,10 +1030,10 @@ function removeModule(id: string) {
   });
 }
 
-function duplicateModule(id: string) {
+function duplicateModule(idx: number) {
+  if (idx < 0 || idx >= value.value.modules.length) return;
   const list = [...value.value.modules];
-  const i = list.findIndex((m) => m.id === id);
-  if (i < 0) return;
+  const i = idx;
   // Phase B: duplicate is a SIBLING — same uuid + payload_hash, only
   // the per-instance binding gets auto-suffixed. FORK (new uuid + new
   // library row) lives on Save-to-library when siblings > 1.
@@ -1078,42 +1099,39 @@ function collectInContextBindings(modules: readonly ModuleEntry[]): Set<string> 
   return out;
 }
 
-function moveToEdge(id: string, edge: "top" | "bottom") {
+function moveToEdge(idx: number, edge: "top" | "bottom") {
   const list = [...value.value.modules];
-  const i = list.findIndex((m) => m.id === id);
-  if (i < 0) return;
-  const [m] = list.splice(i, 1);
+  if (idx < 0 || idx >= list.length) return;
+  const [m] = list.splice(idx, 1);
   if (edge === "top") list.unshift(m);
   else list.push(m);
   value.value = { ...value.value, modules: list };
   // Vue reorders the DOM by detach+reattach; focus is dropped.
-  // Refocus the moved card so the keyboard user can keep navigating
-  // (mirrors `moveModule`'s post-swap focus restoration).
+  // Refocus the moved card by its new position.
+  const newIdx = edge === "top" ? 0 : list.length - 1;
   nextTick(() => {
-    const el = document.querySelector<HTMLElement>(`.wp-module[data-module-id="${id}"]`);
+    const el = document.querySelector<HTMLElement>(`.wp-module[data-module-idx="${newIdx}"]`);
     el?.focus();
   });
 }
 
-function toggleEnabled(id: string) {
-  const list = value.value.modules.map((m) => m.id !== id ? m : { ...m, enabled: !m.enabled });
+function toggleEnabled(idx: number) {
+  if (idx < 0 || idx >= value.value.modules.length) return;
+  const list = [...value.value.modules];
+  list[idx] = { ...list[idx], enabled: !list[idx].enabled };
   value.value = { ...value.value, modules: list };
 }
 
-function toggleCollapsed(id: string) {
-  const target = value.value.modules.find((m) => m.id === id);
+function toggleCollapsed(idx: number) {
+  const target = value.value.modules[idx];
   if (!target) return;
-  // currently collapsed (true | undefined-treated-as-expanded) → about to expand
+  // Phase B: index-keyed so sibling rows (same uuid) collapse
+  // independently. Pre-Phase-B map-by-id flipped every sibling at once.
   const willExpand = target.collapsed === true;
-
-  // Accordion mode: when the user expands a module, collapse every other
-  // module so only one body is visible at a time. Collapsing a module
-  // never auto-expands siblings (allows 0 expanded). Bulk actions
-  // (expandAll / collapseAll) bypass this — they're intentional overrides.
   const accordion = getCollapseMode() === "accordion" && willExpand;
 
-  const list = value.value.modules.map((m) => {
-    if (m.id === id) return { ...m, collapsed: !m.collapsed };
+  const list = value.value.modules.map((m, i) => {
+    if (i === idx) return { ...m, collapsed: !m.collapsed };
     if (accordion) return { ...m, collapsed: true };
     return m;
   });
@@ -1166,24 +1184,31 @@ function openSpaLibrary(): void {
  * library row is not touched. Major payload edits (option weights,
  * ref bindings, derivation rules, …) live in the SPA editor.
  */
-function openEditModal(id: string) {
-  editingId.value = id;
+function openEditModal(idx: number) {
+  if (idx < 0 || idx >= value.value.modules.length) return;
+  editingIdx.value = idx;
 }
 
 function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
-  // Phase B: when modal forks (Save-to-library w/ siblings > 1), the
-  // draft's id swaps to the new uuid; `_originalId` carries the old id
-  // so we can find the row to replace in `value.modules`. Strip the
-  // marker before persisting + flash the forked row briefly.
-  const lookupId = updated._originalId ?? updated.id;
+  // Phase B: index-based replacement — sibling rows share `m.id`, so
+  // mapping `m.id === updated.id` would clobber every sibling at once.
+  // We use `editingIdx` captured at modal-open to target the specific
+  // row. `_originalId` survives from the fork path (id changed during
+  // save) to drive the post-fork green flash.
+  const targetIdx = editingIdx.value;
+  if (targetIdx == null || targetIdx < 0 || targetIdx >= value.value.modules.length) {
+    editingIdx.value = null;
+    return;
+  }
   const cleaned: ModuleEntry = { ...updated };
   delete (cleaned as { _originalId?: string })._originalId;
-  const list = value.value.modules.map((m) => m.id === lookupId ? cleaned : m);
+  const list = [...value.value.modules];
+  list[targetIdx] = cleaned;
   value.value = { ...value.value, modules: list };
   if (updated._originalId && updated._originalId !== updated.id) {
     nextTick(() => {
       const el = document.querySelector<HTMLElement>(
-        `[data-module-id="${updated.id}"]`,
+        `[data-module-idx="${targetIdx}"]`,
       );
       if (el) {
         el.classList.add("wp-module--flash");
@@ -1191,82 +1216,82 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
       }
     });
   }
-  editingId.value = null;
+  editingIdx.value = null;
 }
 
-function onCardKeydown(ev: KeyboardEvent, m: ModuleEntry) {
+function onCardKeydown(ev: KeyboardEvent, m: ModuleEntry, idx: number) {
   // Don't intercept keys when focus is inside an input/textarea inside the
   // card (none today, but defense in depth for future inline controls).
   const target = ev.target as HTMLElement;
   if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+  void m; // module ref retained for future kind-aware shortcuts
 
   // Ctrl/Cmd+D — duplicate focused module
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "d") {
     ev.preventDefault();
-    duplicateModule(m.id);
+    duplicateModule(idx);
     return;
   }
 
   // Ctrl/Cmd+Shift+ArrowUp / ArrowDown — jump to edge of list.
-  // Checked FIRST so the modifier-rich case wins over the plain
-  // Shift+Arrow handler below (otherwise Shift+Arrow would handle
-  // it first and we'd never reach this branch).
   if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key === "ArrowUp") {
     ev.preventDefault();
-    moveToEdge(m.id, "top");
+    moveToEdge(idx, "top");
     return;
   }
   if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key === "ArrowDown") {
     ev.preventDefault();
-    moveToEdge(m.id, "bottom");
+    moveToEdge(idx, "bottom");
     return;
   }
 
   // Shift+ArrowUp / Shift+ArrowDown — reorder ±1
   if (ev.shiftKey && ev.key === "ArrowUp") {
     ev.preventDefault();
-    moveModule(m.id, -1);
+    moveModule(idx, -1);
     return;
   }
   if (ev.shiftKey && ev.key === "ArrowDown") {
     ev.preventDefault();
-    moveModule(m.id, 1);
+    moveModule(idx, 1);
     return;
   }
 
   // Enter — open edit modal (matches the context menu's primary action)
   if (ev.key === "Enter") {
     ev.preventDefault();
-    openEditModal(m.id);
+    openEditModal(idx);
     return;
   }
 
   // Delete — remove module
   if (ev.key === "Delete") {
     ev.preventDefault();
-    removeModule(m.id);
+    removeModule(idx);
     return;
   }
 }
 
-function moveModule(id: string, dir: -1 | 1) {
+function moveModule(idx: number, dir: -1 | 1) {
   const list = [...value.value.modules];
-  const i = list.findIndex((m) => m.id === id);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= list.length) return;
-  [list[i], list[j]] = [list[j], list[i]];
+  const j = idx + dir;
+  if (idx < 0 || idx >= list.length || j < 0 || j >= list.length) return;
+  [list[idx], list[j]] = [list[j], list[idx]];
   value.value = { ...value.value, modules: list };
   // Vue reorders the DOM by detach+reattach even with :key; focus is dropped.
-  // Refocus the moved card after the patch flushes.
+  // Refocus the moved card by its new idx (composite key includes idx).
   nextTick(() => {
-    const el = document.querySelector<HTMLElement>(`.wp-module[data-module-id="${id}"]`);
+    const el = document.querySelector<HTMLElement>(`.wp-module[data-module-idx="${j}"]`);
     el?.focus();
   });
 }
 
-function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
+function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
+  // Phase B: caller passes the row's array index (from v-for) so we
+  // operate on the specific sibling rather than the first findIndex
+  // match — siblings share `m.id`.
   const list = value.value.modules;
-  const i = list.findIndex((x) => x.id === m.id);
+  const i = idx;
   const estW = 180;
   const estH = 220;
   const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
@@ -1277,7 +1302,7 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
   // are intentionally excluded; they're already authoritative on the
   // workflow side).
   const items: ContextMenuItem[] = [
-    { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(m.id) },
+    { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(idx) },
   ];
   // Refresh + Save are mutually exclusive in normal use (a module is
   // either drifted OR missing OR clean), so hiding the inactive entry
@@ -1300,19 +1325,25 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry) {
     });
   }
   items.push(
-    { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(m.id) },
-    { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-caret-down" : "pi-caret-right", onSelect: () => toggleCollapsed(m.id) },
-    { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(m.id), divider: true },
-    { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(m.id, "top") },
-    { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(m.id, "bottom") },
-    { label: "Remove", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(m.id) },
+    { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(idx) },
+    { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-caret-down" : "pi-caret-right", onSelect: () => toggleCollapsed(idx) },
+    { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(idx), divider: true },
+    { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(idx, "top") },
+    { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(idx, "bottom") },
+    { label: "Remove", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(idx) },
   );
   ctxMenu.value = { visible: true, x: Math.max(8, x), y: Math.max(8, y), items };
 }
 
 // ── Drag-and-drop ───────────────────────────────────────────────────────
-function onDragStart(ev: DragEvent, mod: ModuleEntry) {
-  dragState.value = { sourceNodeId: props.nodeId, module: JSON.parse(JSON.stringify(mod)) };
+function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
+  // Phase B: stamp the source index on dragState so the same-node drop
+  // path can find the EXACT row to splice (siblings share `mod.id`).
+  dragState.value = {
+    sourceNodeId: props.nodeId,
+    module: JSON.parse(JSON.stringify(mod)),
+    sourceIdx: idx,
+  };
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = "move";
     ev.dataTransfer.setData("text/plain", mod.id);
@@ -1323,30 +1354,38 @@ function onDragEnd() {
   const ds = dragState.value;
   if (ds && ds.sourceNodeId === props.nodeId && !sameNodeDropHandled) {
     if (ds.consumedBy != null && ds.consumedBy !== props.nodeId) {
-      value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+      // Cross-node consumption — remove the source row by recorded
+      // index (sourceIdx). Falls back to filter-by-id only if sourceIdx
+      // isn't available (legacy drag state).
+      const srcIdx = (ds as { sourceIdx?: number }).sourceIdx;
+      if (typeof srcIdx === "number" && srcIdx >= 0 && srcIdx < value.value.modules.length) {
+        const list = [...value.value.modules];
+        list.splice(srcIdx, 1);
+        value.value = { ...value.value, modules: list };
+      } else {
+        value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+      }
     }
   }
   dragState.value = null;
   sameNodeDropHandled = false;
-  dragOverId.value = null;
+  dragOverIdx.value = null;
   dragOverEnd.value = false;
   dragOverPos.value = null;
 }
 
 let sameNodeDropHandled = false;
 
-function onDragEnter(ev: DragEvent, targetId: string | null) {
+function onDragEnter(ev: DragEvent, targetIdx: number | null) {
   if (!dragState.value) return;
   ev.preventDefault();
-  if (targetId === null) {
-    dragOverId.value = null;
+  if (targetIdx === null) {
+    dragOverIdx.value = null;
     dragOverEnd.value = true;
     dragOverPos.value = null;
   } else {
-    dragOverId.value = targetId;
+    dragOverIdx.value = targetIdx;
     dragOverEnd.value = false;
-    // dragOverPos seeded by the first onDragOver tick once the
-    // pointer's Y is measurable; stays null on enter alone.
   }
 }
 
@@ -1363,7 +1402,7 @@ function onDragOver(ev: DragEvent) {
  * bottom half → "after" (drop below). Cheap math: read the card's
  * bounding rect once per move event.
  */
-function onCardDragOver(ev: DragEvent, targetId: string) {
+function onCardDragOver(ev: DragEvent, targetIdx: number) {
   if (!dragState.value) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
@@ -1371,7 +1410,7 @@ function onCardDragOver(ev: DragEvent, targetId: string) {
   const rect = card.getBoundingClientRect();
   const midY = rect.top + rect.height / 2;
   const next = ev.clientY < midY ? "before" : "after";
-  if (dragOverId.value !== targetId) dragOverId.value = targetId;
+  if (dragOverIdx.value !== targetIdx) dragOverIdx.value = targetIdx;
   if (dragOverEnd.value) dragOverEnd.value = false;
   if (dragOverPos.value !== next) dragOverPos.value = next;
 }
@@ -1383,7 +1422,7 @@ function onContainerLeave(ev: DragEvent) {
   clearDragHover();
 }
 
-function onDrop(ev: DragEvent, targetId: string | null) {
+function onDrop(ev: DragEvent, targetIdx: number | null) {
   ev.preventDefault();
   ev.stopPropagation();
   const ds = dragState.value;
@@ -1391,28 +1430,30 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   // Snapshot the resolved drop position before clearing the hover state
   // — we need it to decide whether to insert before or after the target.
   const dropPos = dragOverPos.value;
-  dragOverId.value = null;
+  dragOverIdx.value = null;
   dragOverEnd.value = false;
   dragOverPos.value = null;
 
   if (ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
-    const fromIdx = list.findIndex((m) => m.id === ds.module.id);
+    // Phase B: use the recorded sourceIdx (set at onDragStart) so we
+    // splice the EXACT row the user dragged — siblings share `m.id`,
+    // so a findIndex(m.id === …) lookup would always pick the first
+    // sibling regardless of which one was actually dragged.
+    const srcIdx = (ds as { sourceIdx?: number }).sourceIdx;
+    const fromIdx = typeof srcIdx === "number" && srcIdx >= 0 && srcIdx < list.length
+      ? srcIdx
+      : list.findIndex((m) => m.id === ds.module.id);
     if (fromIdx < 0) return;
     list.splice(fromIdx, 1);
     let insertIdx: number;
-    if (targetId === null) {
+    if (targetIdx === null) {
       insertIdx = list.length;
     } else {
-      const targetIdx = list.findIndex((m) => m.id === targetId);
-      if (targetIdx < 0) {
-        insertIdx = list.length;
-      } else {
-        // "before" → land at targetIdx; "after" → targetIdx + 1.
-        // Default to "before" if the position never resolved (drag
-        // ended without a measurable dragover, e.g. keyboard drop).
-        insertIdx = dropPos === "after" ? targetIdx + 1 : targetIdx;
-      }
+      // After splice the target's idx may shift if it was after fromIdx.
+      const adjusted = targetIdx > fromIdx ? targetIdx - 1 : targetIdx;
+      // "before" → land at targetIdx; "after" → targetIdx + 1.
+      insertIdx = dropPos === "after" ? adjusted + 1 : adjusted;
     }
     list.splice(insertIdx, 0, ds.module);
     value.value = { ...value.value, modules: list };
@@ -1462,15 +1503,12 @@ function onDrop(ev: DragEvent, targetId: string | null) {
   // showed "before" or "after". Mirror the same-node math: "after"
   // → targetIdx + 1, "before" (or unresolved) → targetIdx.
   let insertIdx: number;
-  if (targetId === null) {
+  if (targetIdx === null) {
+    insertIdx = list.length;
+  } else if (targetIdx < 0 || targetIdx >= list.length) {
     insertIdx = list.length;
   } else {
-    const targetIdx = list.findIndex((m) => m.id === targetId);
-    if (targetIdx < 0) {
-      insertIdx = list.length;
-    } else {
-      insertIdx = dropPos === "after" ? targetIdx + 1 : targetIdx;
-    }
+    insertIdx = dropPos === "after" ? targetIdx + 1 : targetIdx;
   }
   list.splice(insertIdx, 0, inserted);
   value.value = { ...value.value, modules: list };
@@ -1565,9 +1603,10 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 
         <TransitionGroup name="wp-list" tag="div" class="wp-modules">
       <div
-        v-for="m in value.modules"
-        :key="m.id"
+        v-for="(m, idx) in value.modules"
+        :key="`${m.id}|${idx}`"
         :data-module-id="m.id"
+        :data-module-idx="idx"
         :data-kind="m.type"
         class="wp-module"
         tabindex="0"
@@ -1580,20 +1619,20 @@ function onDrop(ev: DragEvent, targetId: string | null) {
           'wp-state-modified': isModified(m),
           'wp-state-drift': isDrifted(m),
           'wp-state-missing': isMissingFromLibrary(m),
-          'wp-drop-target': dragOverId === m.id,
-          'wp-drop-target--before': dragOverId === m.id && dragOverPos === 'before',
-          'wp-drop-target--after': dragOverId === m.id && dragOverPos === 'after',
+          'wp-drop-target': dragOverIdx === idx,
+          'wp-drop-target--before': dragOverIdx === idx && dragOverPos === 'before',
+          'wp-drop-target--after': dragOverIdx === idx && dragOverPos === 'after',
           'wp-mod--mod': isModified(m),
           'wp-mod--drift': isDrifted(m),
           'wp-mod--err': isMissingFromLibrary(m),
         }"
-        @dragstart="(ev) => onDragStart(ev, m)"
+        @dragstart="(ev) => onDragStart(ev, m, idx)"
         @dragend="onDragEnd"
-        @dragenter="(ev) => onDragEnter(ev, m.id)"
-        @dragover="(ev) => onCardDragOver(ev, m.id)"
-        @drop="(ev) => onDrop(ev, m.id)"
-        @contextmenu.stop.prevent="(ev) => openContextMenu(ev, m)"
-        @keydown="(ev) => onCardKeydown(ev, m)"
+        @dragenter="(ev) => onDragEnter(ev, idx)"
+        @dragover="(ev) => onCardDragOver(ev, idx)"
+        @drop="(ev) => onDrop(ev, idx)"
+        @contextmenu.stop.prevent="(ev) => openContextMenu(ev, m, idx)"
+        @keydown="(ev) => onCardKeydown(ev, m, idx)"
       >
         <div class="wp-module-header">
           <!-- 6-dot drag affordance (2 columns × 3 rows) — standard
@@ -1631,7 +1670,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
             class="wp-collapse-btn"
             draggable="false"
             :title="isCollapsed(m) ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed(m.id)"
+            @click="toggleCollapsed(idx)"
           ><i :class="['pi', isCollapsed(m) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
 
           <label class="wp-toggle" draggable="false" :title="m.enabled ? 'Disable' : 'Enable'">
@@ -1639,7 +1678,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               type="checkbox"
               :checked="m.enabled"
               :aria-label="`enable ${m.meta.name}`"
-              @change="toggleEnabled(m.id)"
+              @change="toggleEnabled(idx)"
             />
             <span class="wp-toggle-mark"></span>
           </label>
@@ -1754,7 +1793,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               data-test="row-action-lock"
               :title="isLocked(m) ? `Locked seed: ${m.instance?.locked_seed}. Click to unlock.` : 'Lock seed'"
               :aria-label="isLocked(m) ? 'Unlock seed' : 'Lock seed'"
-              @click.stop="toggleLockOnCard(m)"
+              @click.stop="toggleLockOnCard(idx)"
             ><i class="pi pi-lock" /></button>
             <button
               v-if="m.type === 'wildcard' || m.type === 'fixed_values' || m.type === 'combine' || m.type === 'derivation'"
@@ -1764,7 +1803,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               data-test="row-action-internal"
               :title="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
               :aria-label="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
-              @click.stop="toggleInternalOnCard(m)"
+              @click.stop="toggleInternalOnCard(idx)"
             ><i class="pi pi-globe" /></button>
             <button
               type="button"
@@ -1772,7 +1811,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
               data-test="row-action-remove"
               title="Remove"
               aria-label="Remove module"
-              @click.stop="removeModule(m.id)"
+              @click.stop="removeModule(idx)"
             ><i class="pi pi-trash" /></button>
           </div>
         </div>
@@ -1872,7 +1911,7 @@ function onDrop(ev: DragEvent, targetId: string | null) {
       :sibling-modules="value.modules"
       :last-used-seed-reader="lastUsedSeedReader"
       @save="saveEditedModule"
-      @close="editingId = null"
+      @close="editingIdx = null"
     />
 
     <ContextMenu
