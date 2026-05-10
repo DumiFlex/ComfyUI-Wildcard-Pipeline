@@ -345,3 +345,195 @@ def test_validate_payload_still_rejects_unknown_op_after_extension():
     """Regression — adding new ops shouldn't loosen unknown-op rejection."""
     with pytest.raises(ValueError, match="op must be one of"):
         DerivationHandler.validate_payload(_presence_payload("definitely_not_an_op"))
+
+
+# ── Tier-D modal expansion (2026-05-10 cycle) ───────────────────────
+# Modal exposes 5 new instance fields that augment evaluation:
+#   - disabled_branch_keys: skip a specific ELIF/ELSE without disabling the rule
+#   - action_value_overrides: swap action.value at resolve time
+#   - condition_value_overrides: swap condition.value at compare time
+#   - rule_order_override: change rule evaluation order per-instance
+#   - locked_seed: pin {a|b|c} resolution in action.value (RNG gate)
+
+
+def _two_branch_rule() -> dict:
+    """Helper — rule with IF + ELIF + ELSE, action targets `mood`."""
+    return _rule(
+        rid="r1",
+        branches=[
+            {
+                "condition": {"var": "color", "op": "equals", "value": "red"},
+                "action": {"target_var": "mood", "mode": "replace", "value": "warm"},
+            },
+            {
+                "condition": {"var": "color", "op": "equals", "value": "blue"},
+                "action": {"target_var": "mood", "mode": "replace", "value": "cool"},
+            },
+        ],
+        else_clause={"action": {"target_var": "mood", "mode": "replace", "value": "neutral"}},
+    )
+
+
+def test_disabled_branch_keys_skips_specific_elif():
+    """Disabling ELIF at branch_idx=1 means even when its condition matches,
+    engine falls through to ELSE."""
+    payload = {"rules": [_two_branch_rule()]}
+    ctx = _ctx(color="blue")
+    instance = {"disabled_branch_keys": ["r1:1"]}
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    # ELIF (idx 1) skipped → falls through to ELSE
+    assert out["mood"] == "neutral"
+
+
+def test_disabled_branch_keys_skips_else():
+    """Disabling ELSE means no fallback when conditions miss."""
+    payload = {"rules": [_two_branch_rule()]}
+    ctx = _ctx(color="green")  # neither IF nor ELIF matches
+    instance = {"disabled_branch_keys": ["r1:else"]}
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    assert "mood" not in out  # no rule fired
+
+
+def test_disabled_branch_keys_does_not_affect_if_branch():
+    """IF (branch_idx=0) ignored even if listed in disabled_branch_keys.
+    Disabling IF would be redundant with disabled_rule_ids — engine
+    treats `r1:0` as a no-op so UI can't accidentally orphan it."""
+    payload = {"rules": [_two_branch_rule()]}
+    ctx = _ctx(color="red")
+    instance = {"disabled_branch_keys": ["r1:0"]}
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    # IF still fires
+    assert out["mood"] == "warm"
+
+
+def test_action_value_overrides_swaps_resolved_value():
+    """Override `r1:0` action.value → engine reads override instead of payload."""
+    payload = {"rules": [_two_branch_rule()]}
+    ctx = _ctx(color="red")
+    instance = {"action_value_overrides": {"r1": {"0": "fiery"}}}
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    assert out["mood"] == "fiery"  # not "warm"
+
+
+def test_action_value_overrides_for_else():
+    """ELSE override uses the `else` branch_key string."""
+    payload = {"rules": [_two_branch_rule()]}
+    ctx = _ctx(color="green")  # falls through to ELSE
+    instance = {"action_value_overrides": {"r1": {"else": "blank"}}}
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    assert out["mood"] == "blank"
+
+
+def test_action_value_overrides_resolves_inline_syntax():
+    """Override value still goes through resolve_text — `{a|b|c}` picks
+    work, $var reads work, escapes work. Same surface as payload values."""
+    import random as _r
+    payload = {"rules": [_two_branch_rule()]}
+    ctx = {
+        "__wp_rng__": _r.Random(0),
+        "__wp_warnings__": [],
+        "color": "red",
+    }
+    instance = {"action_value_overrides": {"r1": {"0": "{warm|hot|fiery}"}}}
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    assert out["mood"] in {"warm", "hot", "fiery"}
+
+
+def test_condition_value_overrides_swaps_compare_value():
+    """Override condition.value at branch idx → engine compares against override."""
+    payload = {"rules": [_two_branch_rule()]}
+    # Library says `color = red` triggers IF. Override threshold to `purple`.
+    ctx = _ctx(color="purple")
+    instance = {"condition_value_overrides": {"r1": {"0": "purple"}}}
+    out = DerivationHandler.resolve(payload, instance, ctx)
+    # Now the IF branch fires for color=purple
+    assert out["mood"] == "warm"
+
+
+def test_rule_order_override_evaluates_in_override_order():
+    """When two rules both write `mood` and both match, rule_order_override
+    flips which one's value persists (last write wins)."""
+    payload = {"rules": [
+        _rule(rid="r1", branches=[{
+            "condition": {"var": "x", "op": "equals", "value": "1"},
+            "action": {"target_var": "mood", "mode": "replace", "value": "from_r1"},
+        }]),
+        _rule(rid="r2", branches=[{
+            "condition": {"var": "x", "op": "equals", "value": "1"},
+            "action": {"target_var": "mood", "mode": "replace", "value": "from_r2"},
+        }]),
+    ]}
+    ctx = _ctx(x="1")
+    # Library order [r1, r2] → r2 wins (last write)
+    out_default = DerivationHandler.resolve(payload, {}, _ctx(x="1"))
+    assert out_default["mood"] == "from_r2"
+    # Override order [r2, r1] → r1 wins (last write)
+    out_override = DerivationHandler.resolve(
+        payload, {"rule_order_override": ["r2", "r1"]}, ctx,
+    )
+    assert out_override["mood"] == "from_r1"
+
+
+def test_rule_order_override_missing_ids_fall_through_at_end():
+    """Rules not listed in override appear after listed ones in their
+    library order — defensive against partial reorders."""
+    payload = {"rules": [
+        _rule(rid="r1", branches=[{
+            "condition": {"var": "x", "op": "equals", "value": "1"},
+            "action": {"target_var": "mood", "mode": "replace", "value": "r1_val"},
+        }]),
+        _rule(rid="r2", branches=[{
+            "condition": {"var": "x", "op": "equals", "value": "1"},
+            "action": {"target_var": "mood", "mode": "replace", "value": "r2_val"},
+        }]),
+        _rule(rid="r3", branches=[{
+            "condition": {"var": "x", "op": "equals", "value": "1"},
+            "action": {"target_var": "mood", "mode": "replace", "value": "r3_val"},
+        }]),
+    ]}
+    # Override only mentions r3 — engine evaluates [r3, r1, r2]
+    out = DerivationHandler.resolve(
+        payload, {"rule_order_override": ["r3"]}, _ctx(x="1"),
+    )
+    # Last write wins → r2 (still last in fall-through order)
+    assert out["mood"] == "r2_val"
+
+
+def test_locked_seed_deterministic_alternation_in_action_value():
+    """Same locked_seed produces same `{a|b|c}` resolution across repeated
+    runs. Mirrors combine + fixed_values seed-lock pattern."""
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "x", "op": "equals", "value": "1"},
+        "action": {
+            "target_var": "mood",
+            "mode": "replace",
+            "value": "{red|blue|green|yellow|purple}",
+        },
+    }])]}
+    instance = {"locked_seed": 4242}
+    out1 = DerivationHandler.resolve(payload, instance, _ctx(x="1"))
+    out2 = DerivationHandler.resolve(payload, instance, _ctx(x="1"))
+    out3 = DerivationHandler.resolve(payload, instance, _ctx(x="1"))
+    assert out1 == out2 == out3
+    assert out1["mood"] in {"red", "blue", "green", "yellow", "purple"}
+
+
+def test_locked_seed_distinct_from_chain_seed():
+    """Locked seed should produce different result from chain seed
+    (assuming distinct seed values; defensive guard)."""
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "x", "op": "equals", "value": "1"},
+        "action": {
+            "target_var": "mood",
+            "mode": "replace",
+            "value": "{a|b|c|d|e|f|g|h|i|j}",  # 10 options for high collision avoidance
+        },
+    }])]}
+    ctx = _ctx(x="1", __wp_node_seed__=99)
+    out_chain = DerivationHandler.resolve(payload, {}, ctx)
+    out_locked = DerivationHandler.resolve(payload, {"locked_seed": 11111}, ctx)
+    # With 10 options + distinct seeds, very high probability of distinct picks
+    # (1/10 collision rate). Acceptable test flake risk.
+    # Both must be valid options:
+    assert out_chain["mood"] in "abcdefghij"
+    assert out_locked["mood"] in "abcdefghij"

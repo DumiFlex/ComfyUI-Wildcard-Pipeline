@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 from engine.modules import build_resolve_ctx
+from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
@@ -236,29 +237,102 @@ class DerivationHandler(ModuleHandler):
         ctx: Any,
     ) -> dict[str, str]:
         cls.validate_payload(payload)
-        resolve_ctx = build_resolve_ctx(ctx, surface="derivation")
+
+        # Effective seed selection — same pattern wildcard / combine /
+        # fixed_values use. Locked seed pins {a|b|c} resolution in
+        # action.value across runs; without lock the chain seed
+        # propagates per-queue. Falls back to the host ctx's RNG when
+        # the ctx wasn't built with `__wp_rng__` (legacy callers).
+        if isinstance(ctx, dict) and "__wp_rng__" in ctx:
+            chain_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
+            locked_seed = instance.get("locked_seed")
+            effective_seed = (
+                int(locked_seed) if isinstance(locked_seed, (int, float))
+                else chain_seed
+            )
+            module_id = str(ctx.get("__wp_module_id__") or "derivation")
+            rng = derive_module_rng(effective_seed, module_id)
+            ctx_local = {**ctx, "__wp_rng__": rng}
+            resolve_ctx = build_resolve_ctx(ctx_local, surface="derivation")
+        else:
+            resolve_ctx = build_resolve_ctx(ctx, surface="derivation")
+
+        # Tier-D instance overrides (2026-05-10 cycle).
+        disabled_rule_ids = set(instance.get("disabled_rule_ids") or [])
+        disabled_branch_keys = set(instance.get("disabled_branch_keys") or [])
+        action_overrides = instance.get("action_value_overrides") or {}
+        cond_overrides = instance.get("condition_value_overrides") or {}
+
+        # Per-instance rule reorder — sort by rule_order_override list.
+        # IDs not in the override fall through in their original library
+        # order at the end (defensive against partial reorders).
+        rules = list(payload.get("rules", []))
+        order = instance.get("rule_order_override")
+        if isinstance(order, list) and order:
+            ordering = {rid: i for i, rid in enumerate(order)}
+            tail = len(order)
+            rules.sort(
+                key=lambda r: ordering.get(r.get("id"), tail + 1),
+            )
+
         out: dict[str, str] = {}
 
-        # Tier 2 instance filter — skip rules whose id is disabled.
-        disabled_rule_ids = set(instance.get("disabled_rule_ids") or [])
-
-        for rule in payload.get("rules", []):
-            if rule.get("id") in disabled_rule_ids:
+        for rule in rules:
+            rule_id = rule.get("id", "")
+            if rule_id in disabled_rule_ids:
                 continue
+
             applied = False
-            for branch in rule.get("branches", []):
-                if _match_condition(branch.get("condition", {}), ctx):
-                    pair = _apply_action(branch.get("action", {}), ctx, resolve_ctx)
+            for bi, branch in enumerate(rule.get("branches", [])):
+                # Branch-level disable — `r1:1` etc. IF (bi=0) ignored
+                # even when listed because disabling IF == disabling rule
+                # (the per-rule toggle handles that case cleanly).
+                if bi != 0 and f"{rule_id}:{bi}" in disabled_branch_keys:
+                    continue
+
+                # Condition-value override per branch index.
+                cond = branch.get("condition", {})
+                cond_override = (
+                    cond_overrides.get(rule_id, {}).get(str(bi))
+                    if isinstance(cond_overrides.get(rule_id), dict)
+                    else None
+                )
+                if isinstance(cond_override, str):
+                    cond = {**cond, "value": cond_override}
+
+                if _match_condition(cond, ctx):
+                    # Action-value override per branch index.
+                    action = branch.get("action", {})
+                    action_override = (
+                        action_overrides.get(rule_id, {}).get(str(bi))
+                        if isinstance(action_overrides.get(rule_id), dict)
+                        else None
+                    )
+                    if isinstance(action_override, str):
+                        action = {**action, "value": action_override}
+
+                    pair = _apply_action(action, ctx, resolve_ctx)
                     if pair is not None:
                         out[pair[0]] = pair[1]
                     applied = True
                     break
+
             if not applied:
+                # ELSE skip when listed in disabled_branch_keys.
+                if f"{rule_id}:else" in disabled_branch_keys:
+                    continue
                 else_clause = rule.get("else")
                 if isinstance(else_clause, dict):
-                    pair = _apply_action(
-                        else_clause.get("action", {}), ctx, resolve_ctx
+                    action = else_clause.get("action", {})
+                    # ELSE action-value override under `else` key.
+                    action_override = (
+                        action_overrides.get(rule_id, {}).get("else")
+                        if isinstance(action_overrides.get(rule_id), dict)
+                        else None
                     )
+                    if isinstance(action_override, str):
+                        action = {**action, "value": action_override}
+                    pair = _apply_action(action, ctx, resolve_ctx)
                     if pair is not None:
                         out[pair[0]] = pair[1]
         return out
