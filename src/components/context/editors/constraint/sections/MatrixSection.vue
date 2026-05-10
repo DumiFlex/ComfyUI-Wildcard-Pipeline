@@ -15,7 +15,7 @@
  * Override marker (orange dashed border) appears when cell mode OR
  * factor differs from library value.
  */
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
@@ -157,6 +157,28 @@ function onCogClick(src: string, tgt: string, ev: Event): void {
 function closePopover(): void {
   popoverFor.value = null;
 }
+
+// Outside-click + Escape close. Popover wrapper has `@click.stop` so
+// clicks INSIDE never reach this document handler — any click that
+// bubbles up to document while popover is open = click outside the
+// popover (cell, footer, sibling section, anywhere in the modal).
+function onDocClick(): void {
+  if (popoverFor.value !== null) closePopover();
+}
+function onDocKeydown(ev: KeyboardEvent): void {
+  if (ev.key === "Escape" && popoverFor.value !== null) {
+    ev.preventDefault();
+    closePopover();
+  }
+}
+onMounted(() => {
+  document.addEventListener("click", onDocClick);
+  document.addEventListener("keydown", onDocKeydown);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("click", onDocClick);
+  document.removeEventListener("keydown", onDocKeydown);
+});
 
 function onCommitFactor(src: string, tgt: string, factor: number): void {
   const lib = libCell(src, tgt);

@@ -70,7 +70,16 @@ function bump(dir: 1 | -1): void {
 
 <template>
   <div class="cfp" role="dialog" :aria-label="`Edit factor for ${label}`">
-    <div class="cfp__head">{{ label }}</div>
+    <div class="cfp__head">
+      <span class="cfp__head-label">{{ label }}</span>
+      <button
+        type="button"
+        class="cfp__close"
+        data-test="cfp-close"
+        aria-label="Close factor editor"
+        @click="onEscape"
+      ><i class="pi pi-times" aria-hidden="true" /></button>
+    </div>
     <label class="cfp__row">
       <span class="cfp__field-label">Factor</span>
       <span class="cfp__input-wrap" @wheel.stop>
@@ -138,10 +147,26 @@ function bump(dir: 1 | -1): void {
   color: var(--wp-text);
 }
 .cfp__head {
-  font: 600 10px var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 8px;
 }
+.cfp__head-label {
+  flex: 1;
+  font: 600 10px var(--wp-font-mono);
+  color: var(--wp-text-muted, var(--wp-text2));
+}
+.cfp__close {
+  background: transparent;
+  border: 0;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 10px;
+  line-height: 1;
+}
+.cfp__close:hover { color: var(--wp-accent-text, var(--wp-text)); }
 .cfp__row {
   display: grid;
   grid-template-columns: 50px 1fr;
