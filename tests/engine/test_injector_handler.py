@@ -103,3 +103,38 @@ def test_valid_bindings_with_underscore_inside_pass():
     rows = json.dumps({"version": 1, "rows": [_row("input_0", "my_var")]})
     out = WPContextInjector.execute(rows=rows, upstream=None, input_0="ok")
     assert out.values[0].context["my_var"] == "ok"
+
+
+def test_internal_flag_appends_to_internal_keys_set():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row("input_0", "cfg", internal=True)],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0=7.5)
+    assert out.values[0].context["cfg"] == 7.5
+    keys = out.values[0].context.get("__wp_internal_keys__", [])
+    assert "cfg" in keys
+
+
+def test_non_internal_row_does_not_pollute_internal_keys():
+    rows = json.dumps({"version": 1, "rows": [_row("input_0", "public_var")]})
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x")
+    keys = out.values[0].context.get("__wp_internal_keys__", [])
+    assert "public_var" not in keys
+
+
+def test_each_written_row_emits_trace_entry():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_0", "a"),
+            _row("input_1", "b", internal=True),
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x", input_1="y")
+    trace = out.values[0].debug.get("__wp_trace__", [])
+    inj = [t for t in trace if t.get("node") == "WP_ContextInjector"]
+    assert len(inj) == 2
+    bindings = sorted(t.get("binding") for t in inj)
+    assert bindings == ["a", "b"]
+    assert any(t.get("internal") is True for t in inj)

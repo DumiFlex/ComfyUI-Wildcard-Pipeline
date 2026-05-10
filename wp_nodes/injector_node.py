@@ -69,6 +69,14 @@ class WPContextInjector(io.ComfyNode):
             parsed = {"version": 1, "rows": []}
 
         warnings: list[dict] = []
+        traces: list[dict] = []
+        internal_keys: set[str] = set()
+        existing_internal = upstream_ctx.get("__wp_internal_keys__")
+        if isinstance(existing_internal, list):
+            internal_keys.update(existing_internal)
+        elif isinstance(existing_internal, set):
+            internal_keys.update(existing_internal)
+
         rows_list = parsed.get("rows", []) if isinstance(parsed, dict) else []
         for row in rows_list:
             if not isinstance(row, dict):
@@ -98,16 +106,31 @@ class WPContextInjector(io.ComfyNode):
                 continue
             value = slot_values[slot_name]
             if isinstance(value, bool):
-                ctx[stripped] = value
+                stored: Any = value
             elif isinstance(value, (str, int, float)):
-                ctx[stripped] = value
+                stored = value
             else:
-                ctx[stripped] = str(value)
+                stored = str(value)
+            ctx[stripped] = stored
+            if row.get("internal", False):
+                internal_keys.add(stripped)
+            traces.append({
+                "node": "WP_ContextInjector",
+                "binding": stripped,
+                "internal": bool(row.get("internal", False)),
+                "type": type(value).__name__,
+            })
+
+        if internal_keys:
+            ctx["__wp_internal_keys__"] = sorted(internal_keys)
 
         debug = dict(upstream_debug)
+        if traces:
+            existing_trace = debug.get("__wp_trace__", [])
+            debug["__wp_trace__"] = list(existing_trace) + traces
         if warnings:
-            existing = debug.get("__wp_warnings__", [])
-            debug["__wp_warnings__"] = list(existing) + warnings
+            existing_warn = debug.get("__wp_warnings__", [])
+            debug["__wp_warnings__"] = list(existing_warn) + warnings
 
         return io.NodeOutput(
             PipelineContext.Type(
