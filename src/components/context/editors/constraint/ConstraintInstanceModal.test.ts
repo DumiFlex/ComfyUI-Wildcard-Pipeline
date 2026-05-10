@@ -94,4 +94,74 @@ describe("ConstraintInstanceModal", () => {
     await w.find('[data-test="cnm-clear-all"]').trigger("click");
     expect(w.emitted("clear-all-overrides")).toBeTruthy();
   });
+
+  // ── Axis fallback when sibling wildcards aren't in this Context ──
+  // Library-defining matrix data is meaningful for editing even when
+  // the source/target wildcards live in a different Context. Modal
+  // must derive axes from existing payload matrix keys so the grid
+  // renders all saved cells. Same pattern for exception autocomplete.
+
+  it("renders matrix axes from payload keys when source wildcard not in siblings", () => {
+    const m = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        matrix: {
+          red: { cotton: { mode: "allow", factor: 1 }, silk: { mode: "boost", factor: 2 } },
+          blue: { cotton: { mode: "allow", factor: 1 } },
+        },
+        exceptions: [],
+      },
+    });
+    // No sibling wildcards passed — modal must fall back to matrix keys.
+    const w = mount(ConstraintInstanceModal, { props: { module: m, siblingModules: [] } });
+    const matrixSection = w.findComponent({ name: "MatrixSection" });
+    expect(matrixSection.props("sourceSubs")).toEqual(["red", "blue"]);
+    expect(matrixSection.props("targetSubs").sort()).toEqual(["cotton", "silk"]);
+  });
+
+  it("prefers live wildcard sub_categories over matrix keys when sibling present", () => {
+    const m = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        matrix: {
+          red: { cotton: { mode: "allow", factor: 1 } },
+        },
+        exceptions: [],
+      },
+    });
+    const sourceWildcard: ModuleEntry = {
+      id: "wc_color",
+      type: "wildcard",
+      enabled: true,
+      meta: { name: "color" },
+      entries: [],
+      payload: { sub_categories: ["red", "blue", "silver"], options: [] },
+    };
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: m, siblingModules: [sourceWildcard] },
+    });
+    const matrixSection = w.findComponent({ name: "MatrixSection" });
+    // Live subs include subcats not yet in matrix; modal surfaces them.
+    expect(matrixSection.props("sourceSubs")).toEqual(["red", "blue", "silver"]);
+  });
+
+  it("falls back to exception values for autocomplete when wildcards absent", () => {
+    const m = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        matrix: {},
+        exceptions: [
+          { source_value: "red", target_value: "black", mode: "exclude", factor: 1 },
+          { source_value: "blue", target_value: "green", mode: "boost", factor: 2 },
+        ],
+      },
+    });
+    const w = mount(ConstraintInstanceModal, { props: { module: m, siblingModules: [] } });
+    const exSection = w.findComponent({ name: "ExceptionsSection" });
+    expect(exSection.props("sourceValues").sort()).toEqual(["blue", "red"]);
+    expect(exSection.props("targetValues").sort()).toEqual(["black", "green"]);
+  });
 });

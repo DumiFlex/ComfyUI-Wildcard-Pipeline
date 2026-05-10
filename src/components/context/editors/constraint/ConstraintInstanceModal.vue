@@ -62,28 +62,70 @@ function findWildcard(id: string | null | undefined): WildcardPayload | null {
   return (m.payload ?? {}) as WildcardPayload;
 }
 
+interface ConstraintPayload {
+  source_wildcard_id?: string;
+  target_wildcard_id?: string;
+  matrix?: Record<string, Record<string, unknown>>;
+  exceptions?: Array<{ source_value?: string; target_value?: string; source?: string; target?: string }>;
+}
+
+/**
+ * Matrix axes — prefer live sub_categories from the source/target
+ * wildcards (most current), fall back to keys present in the payload
+ * matrix when the wildcards aren't loaded in this Context. Otherwise
+ * the modal renders an empty grid for any cross-Context constraint
+ * even though the saved matrix data is still meaningful for editing.
+ */
 const sourceSubs = computed<string[]>(() => {
-  const pl = (props.module.payload ?? {}) as { source_wildcard_id?: string };
-  return findWildcard(pl.source_wildcard_id)?.sub_categories ?? [];
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  const live = findWildcard(pl.source_wildcard_id)?.sub_categories;
+  if (live && live.length > 0) return live;
+  return Object.keys(pl.matrix ?? {});
 });
 
 const targetSubs = computed<string[]>(() => {
-  const pl = (props.module.payload ?? {}) as { target_wildcard_id?: string };
-  return findWildcard(pl.target_wildcard_id)?.sub_categories ?? [];
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  const live = findWildcard(pl.target_wildcard_id)?.sub_categories;
+  if (live && live.length > 0) return live;
+  const set = new Set<string>();
+  for (const row of Object.values(pl.matrix ?? {})) {
+    for (const k of Object.keys(row ?? {})) set.add(k);
+  }
+  return Array.from(set);
 });
 
+/**
+ * Extra-exception autocomplete suggestions — prefer live wildcard
+ * option values, fall back to the union of source/target values
+ * already present in library exceptions so cross-Context constraints
+ * still get useful suggestions.
+ */
 const sourceValues = computed<string[]>(() => {
-  const pl = (props.module.payload ?? {}) as { source_wildcard_id?: string };
-  return (findWildcard(pl.source_wildcard_id)?.options ?? [])
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  const live = (findWildcard(pl.source_wildcard_id)?.options ?? [])
     .map((o) => o.value ?? "")
     .filter(Boolean);
+  if (live.length > 0) return live;
+  const set = new Set<string>();
+  for (const e of pl.exceptions ?? []) {
+    const v = e.source_value ?? e.source ?? "";
+    if (v) set.add(v);
+  }
+  return Array.from(set);
 });
 
 const targetValues = computed<string[]>(() => {
-  const pl = (props.module.payload ?? {}) as { target_wildcard_id?: string };
-  return (findWildcard(pl.target_wildcard_id)?.options ?? [])
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  const live = (findWildcard(pl.target_wildcard_id)?.options ?? [])
     .map((o) => o.value ?? "")
     .filter(Boolean);
+  if (live.length > 0) return live;
+  const set = new Set<string>();
+  for (const e of pl.exceptions ?? []) {
+    const v = e.target_value ?? e.target ?? "";
+    if (v) set.add(v);
+  }
+  return Array.from(set);
 });
 
 function onUpdate(patch: Partial<ModuleEntry>): void {
