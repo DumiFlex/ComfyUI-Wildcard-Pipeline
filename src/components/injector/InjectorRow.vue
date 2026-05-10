@@ -53,6 +53,11 @@ function onBindingInput(ev: Event): void {
 
     <div class="wp-inj-main">
       <div class="wp-inj-binding-line">
+        <span
+          class="wp-inj-slot-tag"
+          :title="`Bound to socket ${row.slot_name}`"
+          data-test="inj-row-slot"
+        >{{ row.slot_name }}</span>
         <input
           type="text"
           class="wp-inj-row-binding"
@@ -162,6 +167,20 @@ function onBindingInput(ev: Event): void {
 
 .wp-inj-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wp-inj-binding-line { display: flex; align-items: center; gap: 8px; }
+/* Slot-name tag — shows which input socket (input_0, input_1, …)
+ * the row is bound to, so the user can correlate row order with the
+ * socket pin order on the node body. Mono font + dim color so it
+ * reads as a positional label, not data. */
+.wp-inj-slot-tag {
+  font: 600 9px var(--wp-font-mono);
+  color: var(--wp-text-dim, var(--wp-text3));
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border-soft, var(--wp-border));
+  border-radius: 3px;
+  padding: 1px 5px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
 .wp-inj-row-binding {
   flex: 1;
   background: var(--wp-input-shade);
