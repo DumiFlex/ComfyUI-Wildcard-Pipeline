@@ -150,6 +150,57 @@ describe("constraint ExceptionsSection", () => {
     expect(patch.instance?.extra_exceptions?.[0].source_value).toBe("c");
   });
 
+  it("renders legacy-shape exceptions with `source`/`target` fields (engine accepts both)", () => {
+    // Engine accepts BOTH legacy (`source`/`target`) and tier 2
+    // (`source_value`/`target_value`) — see constraint_handler.py:154.
+    // UI must mirror the fallback so older saved constraints render.
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            source_wildcard_id: "wc_color",
+            target_wildcard_id: "wc_fabric",
+            matrix: {},
+            // Legacy shape — bare `source`/`target`, no `_value` suffix.
+            exceptions: [
+              { source: "red", target: "black", mode: "exclude", factor: 1.0 },
+            ],
+          },
+        }),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+      },
+    });
+    const row = w.find('[data-test="ex-row-0"]');
+    expect(row.exists()).toBe(true);
+    expect(row.text()).toContain("red");
+    expect(row.text()).toContain("black");
+  });
+
+  it("legacy-shape exception checkbox toggle keys correctly into disabled_exception_keys", async () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            source_wildcard_id: "wc_color",
+            target_wildcard_id: "wc_fabric",
+            matrix: {},
+            exceptions: [
+              { source: "red", target: "black", mode: "exclude", factor: 1.0 },
+            ],
+          },
+        }),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+      },
+    });
+    await w.find('[data-test="ex-cb-0"]').setValue(true);
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    // Key uses legacy values via fallback chain.
+    expect(patch.instance?.disabled_exception_keys).toEqual(['["red","black"]']);
+  });
+
   it("extra row source/target use VarAutocompleteInput", () => {
     const w = mount(ExceptionsSection, {
       props: {

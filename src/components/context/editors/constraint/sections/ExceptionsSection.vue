@@ -21,11 +21,39 @@ import VarAutocompleteInput from "../../../../../manager/components/VarAutocompl
 
 type Mode = "allow" | "exclude" | "boost" | "reduce";
 
-interface Exception {
+/**
+ * Engine accepts BOTH legacy (`source` / `target`) and tier 2
+ * (`source_value` / `target_value`) library exception shapes — see
+ * `engine/modules/constraint_handler.py:154`. UI must mirror the
+ * fallback chain so exceptions authored against either shape render
+ * correctly + key consistently into instance override maps.
+ *
+ * Extras are always written by us as tier 2, so they use a stricter
+ * shape (matches engine `extra_exceptions` validator).
+ */
+interface LibraryException {
+  source_value?: string;
+  target_value?: string;
+  source?: string;
+  target?: string;
+  mode: Mode;
+  factor: number;
+}
+
+interface ExtraException {
   source_value: string;
   target_value: string;
   mode: Mode;
   factor: number;
+}
+
+function excSrc(exc: LibraryException | ExtraException): string {
+  const v = exc as LibraryException;
+  return v.source_value ?? v.source ?? "";
+}
+function excTgt(exc: LibraryException | ExtraException): string {
+  const v = exc as LibraryException;
+  return v.target_value ?? v.target ?? "";
 }
 
 const props = defineProps<{
@@ -35,8 +63,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
-const libraryExceptions = computed<Exception[]>(() => {
-  const p = (props.module.payload ?? {}) as { exceptions?: Exception[] };
+const libraryExceptions = computed<LibraryException[]>(() => {
+  const p = (props.module.payload ?? {}) as { exceptions?: LibraryException[] };
   return p.exceptions ?? [];
 });
 
@@ -51,19 +79,19 @@ const modeOverrides = computed<Record<string, Mode>>(
 const factorOverrides = computed<Record<string, number>>(
   () => (instance.value.exception_factor_overrides as Record<string, number> | null) ?? {},
 );
-const extras = computed<Exception[]>(
-  () => (instance.value.extra_exceptions as Exception[] | null) ?? [],
+const extras = computed<ExtraException[]>(
+  () => (instance.value.extra_exceptions as ExtraException[] | null) ?? [],
 );
 
-function libKey(exc: Exception): string {
-  return encodeKey([exc.source_value, exc.target_value]);
+function libKey(exc: LibraryException): string {
+  return encodeKey([excSrc(exc), excTgt(exc)]);
 }
 
-function effectiveMode(exc: Exception): Mode {
+function effectiveMode(exc: LibraryException): Mode {
   return modeOverrides.value[libKey(exc)] ?? exc.mode;
 }
 
-function effectiveFactor(exc: Exception): number {
+function effectiveFactor(exc: LibraryException): number {
   return factorOverrides.value[libKey(exc)] ?? exc.factor;
 }
 
@@ -74,7 +102,7 @@ const MODE_CYCLE: Record<Mode, Mode> = {
   reduce: "allow",
 };
 
-function onLibCheckboxChange(exc: Exception, checked: boolean): void {
+function onLibCheckboxChange(exc: LibraryException, checked: boolean): void {
   const key = libKey(exc);
   const set = new Set(instance.value.disabled_exception_keys ?? []);
   if (checked) set.add(key);
@@ -84,7 +112,7 @@ function onLibCheckboxChange(exc: Exception, checked: boolean): void {
   ));
 }
 
-function onLibModeCycle(exc: Exception): void {
+function onLibModeCycle(exc: LibraryException): void {
   const key = libKey(exc);
   const next = MODE_CYCLE[effectiveMode(exc)];
   const map = { ...modeOverrides.value };
@@ -98,7 +126,7 @@ function onLibModeCycle(exc: Exception): void {
   ));
 }
 
-function onLibFactorChange(exc: Exception, ev: Event): void {
+function onLibFactorChange(exc: LibraryException, ev: Event): void {
   const value = Number((ev.target as HTMLInputElement).value);
   if (!Number.isFinite(value) || value < 0) return;
   const key = libKey(exc);
@@ -115,7 +143,7 @@ function onLibFactorChange(exc: Exception, ev: Event): void {
 
 // ── Extras ─────────────────────────────────────────────────────────
 
-function onExtraFieldChange(idx: number, field: keyof Exception, value: string | number): void {
+function onExtraFieldChange(idx: number, field: keyof ExtraException, value: string | number): void {
   const next = extras.value.map((e, i) => (i === idx ? { ...e, [field]: value } : e));
   emit("update", patchInstance(props.module, "extra_exceptions",
     next.length > 0 ? next : null,
@@ -136,7 +164,7 @@ function onExtraTrash(idx: number): void {
 }
 
 function onAddExtra(): void {
-  const next: Exception[] = [
+  const next: ExtraException[] = [
     ...extras.value,
     { source_value: "", target_value: "", mode: "allow", factor: 1 },
   ];
@@ -156,7 +184,7 @@ function onAddExtra(): void {
         :checked="disabledKeys.has(libKey(exc))"
         @change="(ev) => onLibCheckboxChange(exc, (ev.target as HTMLInputElement).checked)"
       />
-      <span class="ex__pair">{{ exc.source_value }} → {{ exc.target_value }}</span>
+      <span class="ex__pair">{{ excSrc(exc) }} → {{ excTgt(exc) }}</span>
       <button
         type="button"
         class="ex__mode-chip"
@@ -180,7 +208,7 @@ function onAddExtra(): void {
     <div v-for="(exc, i) in extras" :key="`extra-${i}`" class="ex__row ex__row--extra" :data-test="`ex-extra-${i}`">
       <span class="ex__extra-badge" data-test="ex-extra-badge">extra</span>
       <VarAutocompleteInput
-        :model-value="exc.source_value"
+        :model-value="excSrc(exc)"
         :suggestions="[...sourceValues]"
         :data-test="`ex-extra-src-${i}`"
         placeholder="source"
@@ -189,7 +217,7 @@ function onAddExtra(): void {
       />
       <span class="ex__arrow">→</span>
       <VarAutocompleteInput
-        :model-value="exc.target_value"
+        :model-value="excTgt(exc)"
         :suggestions="[...targetValues]"
         :data-test="`ex-extra-tgt-${i}`"
         placeholder="target"
