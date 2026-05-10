@@ -102,11 +102,18 @@ const MODE_CYCLE: Record<Mode, Mode> = {
   reduce: "allow",
 };
 
+/**
+ * Checkbox semantic: checked = enabled (active). Empty
+ * `disabled_exception_keys` after Reset overrides → all checked.
+ * Engine still reads the disabled set; UI just inverts polarity to
+ * match the convention every other enable/disable toggle in the app
+ * uses (wildcard option enabled, fixed_values row enabled, …).
+ */
 function onLibCheckboxChange(exc: LibraryException, checked: boolean): void {
   const key = libKey(exc);
   const set = new Set(instance.value.disabled_exception_keys ?? []);
-  if (checked) set.add(key);
-  else set.delete(key);
+  if (checked) set.delete(key);
+  else set.add(key);
   emit("update", patchInstance(props.module, "disabled_exception_keys",
     set.size === 0 ? null : Array.from(set),
   ));
@@ -205,8 +212,8 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       <input
         type="checkbox"
         :data-test="`ex-cb-${i}`"
-        aria-label="Disable this exception"
-        :checked="disabledKeys.has(libKey(exc))"
+        aria-label="Enable this exception"
+        :checked="!disabledKeys.has(libKey(exc))"
         @change="(ev) => onLibCheckboxChange(exc, (ev.target as HTMLInputElement).checked)"
       />
       <span class="ex__pair">{{ excSrc(exc) }} → {{ excTgt(exc) }}</span>

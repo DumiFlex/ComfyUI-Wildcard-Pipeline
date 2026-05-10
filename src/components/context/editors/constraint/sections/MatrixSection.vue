@@ -235,11 +235,12 @@ function onResetFactor(src: string, tgt: string): void {
             <div
               :class="cellClass(s, t)"
               :data-test="`mx-cell-${s}-${t}`"
-              role="button"
-              tabindex="0"
-              @click="onCellClick(s, t)"
-              @keydown.enter.prevent="onCellClick(s, t)"
-              @keydown.space.prevent="onCellClick(s, t)"
+              :role="libCell(s, t) ? 'button' : undefined"
+              :tabindex="libCell(s, t) ? 0 : undefined"
+              :aria-disabled="libCell(s, t) ? undefined : 'true'"
+              @click="libCell(s, t) ? onCellClick(s, t) : null"
+              @keydown.enter.prevent="libCell(s, t) ? onCellClick(s, t) : null"
+              @keydown.space.prevent="libCell(s, t) ? onCellClick(s, t) : null"
             >
               <span class="mx__mode-label">{{ effectiveMode(s, t) }}</span>
               <span

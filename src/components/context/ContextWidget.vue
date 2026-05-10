@@ -576,30 +576,62 @@ async function refreshAllDrifted(): Promise<void> {
 /** Surfaced as a computed for the bulk-button visibility + label. */
 const driftedCount = computed(() => value.value.modules.filter(isDrifted).length);
 
+/** Non-empty array helper — null/undefined/empty all read as "no override". */
+function nonEmptyArr(v: unknown): boolean {
+  return Array.isArray(v) && v.length > 0;
+}
+
+/** Non-empty object helper — null/undefined/{} all read as "no override". */
+function nonEmptyObj(v: unknown): boolean {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    && Object.keys(v as Record<string, unknown>).length > 0;
+}
+
 function isModified(m: ModuleEntry): boolean {
   // Lock + internal have their own dedicated header buttons, so
   // double-counting them in the "modified" dot is just visual
   // noise. The modified indicator is reserved for state that
-  // diverges from the library snapshot:
-  //   - wildcard: option-pool overrides (subset / weights / pinned /
-  //     category filter) — anything that changes WHICH option a roll
-  //     picks.
-  //   - fixed_values (library-tracked): `values_overrides` non-empty
-  //     means the user edited the entries; library `payload.values`
-  //     is still the immutable anchor. Inline-created fixed_values
-  //     never light up — they have no library state to diverge from.
+  // diverges from the library snapshot.
   const inst = m.instance;
   if (!inst) return false;
-  if (m.type === "fixed_values") {
-    const overrides = (inst as { values_overrides?: unknown }).values_overrides;
-    return Array.isArray(overrides) && overrides.length > 0;
+  switch (m.type) {
+    case "wildcard":
+      // Pool overrides — anything that changes WHICH option a roll picks.
+      if (nonEmptyArr(inst.enabled_options)) return true;
+      if (nonEmptyObj(inst.option_weights)) return true;
+      if (inst.mode && inst.mode !== "random") return true;
+      if (inst.pinned_option_id) return true;
+      if (nonEmptyArr(inst.category_filter)) return true;
+      return false;
+    case "fixed_values":
+      // Library-tracked: `values_overrides` non-empty = user edited entries.
+      // Inline-created (no payload_hash) never light up — no library anchor.
+      return nonEmptyArr((inst as { values_overrides?: unknown }).values_overrides);
+    case "combine":
+      // Template override + variable_binding override (binding lives on
+      // identity but is per-instance so counts as a diff vs library).
+      if (typeof inst.template_override === "string" && inst.template_override.length > 0) return true;
+      if (typeof inst.variable_binding === "string" && inst.variable_binding.length > 0) return true;
+      return false;
+    case "derivation":
+      if (nonEmptyArr(inst.disabled_rule_ids)) return true;
+      if (nonEmptyArr(inst.disabled_branch_keys)) return true;
+      if (nonEmptyObj(inst.action_value_overrides)) return true;
+      if (nonEmptyObj(inst.condition_value_overrides)) return true;
+      if (nonEmptyArr(inst.rule_order_override)) return true;
+      return false;
+    case "constraint":
+      if (nonEmptyArr(inst.disabled_exception_keys)) return true;
+      if (nonEmptyArr(inst.disabled_matrix_cells)) return true;
+      if (nonEmptyObj(inst.cell_mode_overrides)) return true;
+      if (nonEmptyObj(inst.cell_factor_overrides)) return true;
+      if (nonEmptyObj(inst.exception_mode_overrides)) return true;
+      if (nonEmptyObj(inst.exception_factor_overrides)) return true;
+      if (nonEmptyArr(inst.extra_exceptions)) return true;
+      return false;
+    default:
+      return false;
   }
-  if (Array.isArray(inst.enabled_options)) return true;
-  if (inst.option_weights && Object.keys(inst.option_weights).length > 0) return true;
-  if (inst.mode && inst.mode !== "random") return true;
-  if (inst.pinned_option_id) return true;
-  if (Array.isArray(inst.category_filter) && inst.category_filter.length > 0) return true;
-  return false;
 }
 
 /** Kinds whose engine handler honors `instance.locked_seed`. Wildcard
@@ -684,22 +716,62 @@ function toggleInternalOnCard(idx: number) {
 }
 
 /** Tooltip listing what's been overridden on the module — surfaced
- *  on hover of the modified-indicator dot. Order matches the modal's
- *  field layout for visual consistency. */
+ *  on hover of the modified-indicator dot. Order matches each kind's
+ *  modal section layout for visual consistency. */
 function modifiedTooltip(m: ModuleEntry): string {
   const inst = m.instance;
   if (!inst) return "";
   const bits: string[] = [];
-  if (inst.mode === "pinned") bits.push("pinned");
-  else if (inst.mode === "subcategory") bits.push("subset");
-  if (Array.isArray(inst.category_filter) && inst.category_filter.length > 0) {
-    bits.push(`cats: ${inst.category_filter.join(", ")}`);
-  }
-  if (Array.isArray(inst.enabled_options)) {
-    bits.push(`${inst.enabled_options.length} option(s) enabled`);
-  }
-  if (inst.option_weights && Object.keys(inst.option_weights).length > 0) {
-    bits.push(`${Object.keys(inst.option_weights).length} weight override(s)`);
+  switch (m.type) {
+    case "wildcard":
+      if (inst.mode === "pinned") bits.push("pinned");
+      else if (inst.mode === "subcategory") bits.push("subset");
+      if (nonEmptyArr(inst.category_filter)) {
+        bits.push(`cats: ${(inst.category_filter as string[]).join(", ")}`);
+      }
+      if (Array.isArray(inst.enabled_options)) {
+        bits.push(`${inst.enabled_options.length} option(s) enabled`);
+      }
+      if (nonEmptyObj(inst.option_weights)) {
+        bits.push(`${Object.keys(inst.option_weights as Record<string, unknown>).length} weight override(s)`);
+      }
+      break;
+    case "fixed_values": {
+      const overrides = (inst as { values_overrides?: unknown[] }).values_overrides;
+      if (Array.isArray(overrides) && overrides.length > 0) {
+        bits.push(`${overrides.length} value override(s)`);
+      }
+      break;
+    }
+    case "combine":
+      if (typeof inst.template_override === "string" && inst.template_override.length > 0) {
+        bits.push("template override");
+      }
+      if (typeof inst.variable_binding === "string" && inst.variable_binding.length > 0) {
+        bits.push(`binding: ${inst.variable_binding}`);
+      }
+      break;
+    case "derivation":
+      if (nonEmptyArr(inst.disabled_rule_ids)) bits.push(`${(inst.disabled_rule_ids as string[]).length} rule(s) disabled`);
+      if (nonEmptyArr(inst.disabled_branch_keys)) bits.push(`${(inst.disabled_branch_keys as string[]).length} branch(es) disabled`);
+      if (nonEmptyObj(inst.action_value_overrides)) bits.push("action overrides");
+      if (nonEmptyObj(inst.condition_value_overrides)) bits.push("condition overrides");
+      if (nonEmptyArr(inst.rule_order_override)) bits.push("reordered");
+      break;
+    case "constraint": {
+      const cellOverrides =
+        (nonEmptyObj(inst.cell_mode_overrides) ? Object.keys(inst.cell_mode_overrides as object).length : 0)
+        + (nonEmptyObj(inst.cell_factor_overrides) ? Object.keys(inst.cell_factor_overrides as object).length : 0);
+      if (cellOverrides > 0) bits.push(`${cellOverrides} cell override(s)`);
+      if (nonEmptyArr(inst.disabled_matrix_cells)) bits.push(`${(inst.disabled_matrix_cells as string[]).length} cell(s) disabled`);
+      if (nonEmptyArr(inst.disabled_exception_keys)) bits.push(`${(inst.disabled_exception_keys as string[]).length} exception(s) disabled`);
+      const excOverrides =
+        (nonEmptyObj(inst.exception_mode_overrides) ? Object.keys(inst.exception_mode_overrides as object).length : 0)
+        + (nonEmptyObj(inst.exception_factor_overrides) ? Object.keys(inst.exception_factor_overrides as object).length : 0);
+      if (excOverrides > 0) bits.push(`${excOverrides} exception override(s)`);
+      if (nonEmptyArr(inst.extra_exceptions)) bits.push(`${(inst.extra_exceptions as unknown[]).length} extra exception(s)`);
+      break;
+    }
   }
   return bits.length > 0 ? `Modified: ${bits.join(" · ")}` : "Modified";
 }

@@ -41,14 +41,32 @@ describe("constraint ExceptionsSection", () => {
     expect(w.find('[data-test="ex-row-1"]').exists()).toBe(true);
   });
 
-  it("checkbox toggles disabled_exception_keys membership", async () => {
+  it("checkbox unchecked → adds key to disabled_exception_keys (enabled-by-default polarity)", async () => {
     const w = mount(ExceptionsSection, {
       props: { module: makeModule(), sourceValues: SOURCE_VALUES, targetValues: TARGET_VALUES },
+    });
+    // Default state: no disabled keys → checkbox renders checked.
+    // Unchecking it tells the engine to disable this exception.
+    await w.find('[data-test="ex-cb-0"]').setValue(false);
+    const updates = w.emitted("update")!;
+    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
+    expect(patch.instance?.disabled_exception_keys).toEqual(['["red","black"]']);
+  });
+
+  it("checkbox checked again → removes key from disabled_exception_keys", async () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: makeModule({
+          instance: { disabled_exception_keys: ['["red","black"]'] },
+        }),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+      },
     });
     await w.find('[data-test="ex-cb-0"]').setValue(true);
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.disabled_exception_keys).toEqual(['["red","black"]']);
+    expect(patch.instance?.disabled_exception_keys).toBeNull();
   });
 
   it("mode chip click cycles 4 modes (no disabled)", async () => {
@@ -177,7 +195,7 @@ describe("constraint ExceptionsSection", () => {
     expect(row.text()).toContain("black");
   });
 
-  it("legacy-shape exception checkbox toggle keys correctly into disabled_exception_keys", async () => {
+  it("legacy-shape exception unchecking keys correctly into disabled_exception_keys", async () => {
     const w = mount(ExceptionsSection, {
       props: {
         module: makeModule({
@@ -194,7 +212,8 @@ describe("constraint ExceptionsSection", () => {
         targetValues: TARGET_VALUES,
       },
     });
-    await w.find('[data-test="ex-cb-0"]').setValue(true);
+    // Inverted polarity: enabled-by-default means we uncheck to disable.
+    await w.find('[data-test="ex-cb-0"]').setValue(false);
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     // Key uses legacy values via fallback chain.

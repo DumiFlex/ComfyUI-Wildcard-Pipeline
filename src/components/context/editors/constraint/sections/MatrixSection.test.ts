@@ -167,4 +167,27 @@ describe("constraint MatrixSection", () => {
     // Cog click did NOT cycle the cell.
     expect(w.emitted("update")).toBeFalsy();
   });
+
+  it("empty cell (no library rule) is non-interactive — no role/tabindex/click", async () => {
+    // Sparse matrix: only red×cotton has a library rule. The other 3
+    // cells are "neutral" — no library rule, should not be cyclable.
+    const sparse = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        matrix: { red: { cotton: { mode: "allow", factor: 1.0 } } },
+        exceptions: [],
+      },
+    });
+    const w = mount(MatrixSection, {
+      props: { module: sparse, sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
+    });
+    const empty = w.find('[data-test="mx-cell-blue-silk"]');
+    expect(empty.classes()).toContain("mx__cell--empty");
+    expect(empty.attributes("role")).toBeUndefined();
+    expect(empty.attributes("tabindex")).toBeUndefined();
+    expect(empty.attributes("aria-disabled")).toBe("true");
+    await empty.trigger("click");
+    expect(w.emitted("update")).toBeFalsy();
+  });
 });
