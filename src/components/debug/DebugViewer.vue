@@ -129,17 +129,37 @@ interface WarningEntry {
 
 /** A `module_id → variable_name` lookup built from the trace. Used to
  *  re-key the raw `__wp_picks__` map (which is keyed by uuid) into a
- *  human-readable `$variable_name` view in the Picks tab. Falls back
- *  to the uuid when no trace entry mentions that module — defensive
- *  for older snapshots / unusual graph shapes. */
+ *  human-readable `$variable_name` view in the Picks tab. Also drives
+ *  constraint-row labels (`$src → $tgt` cross-references via uuid).
+ *
+ *  Three lookup layers, tried in order:
+ *    1. `writes[0].variable` — engine-trace shape, ok-status rows.
+ *    2. `binding` — single-value field stamped by the pipeline on
+ *       every trace entry (ok / disabled / error / unknown-type),
+ *       so disabled / errored modules still resolve their label.
+ *       Also covers the injector trace shape.
+ *    3. `bindings[0]` — multi-binding fallback for disabled
+ *       fixed_values modules where `binding` is not set but
+ *       `bindings: string[]` lists every declared variable.
+ *
+ *  Falls back to uuid form when no layer matches — defensive for
+ *  older snapshots, modules that ran in a different Context node not
+ *  visible to this debug snapshot, etc. */
 const moduleIdToVar = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {};
   for (const t of traceEntriesRaw.value) {
     const id = typeof t.id === "string" ? t.id : "";
+    if (!id) continue;
     const firstWrite = Array.isArray(t.writes) ? t.writes[0] : undefined;
-    if (id && firstWrite && typeof firstWrite.variable === "string") {
-      map[id] = firstWrite.variable;
-    }
+    const fromWrite = firstWrite && typeof firstWrite.variable === "string"
+      ? firstWrite.variable
+      : "";
+    const fromBinding = typeof t.binding === "string" ? t.binding : "";
+    const fromBindings = Array.isArray(t.bindings) && typeof t.bindings[0] === "string"
+      ? t.bindings[0]
+      : "";
+    const name = fromWrite || fromBinding || fromBindings;
+    if (name) map[id] = name;
   }
   return map;
 });

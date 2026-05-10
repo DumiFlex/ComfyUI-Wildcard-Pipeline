@@ -407,4 +407,74 @@ describe("DebugViewer", () => {
     const label = wrapper.find(".wp-dbg-trace-label");
     expect(label.text()).toContain("$deadbeef → $cafebabe");
   });
+
+  it("Constraint resolves $src→$tgt via binding-only trace entries (disabled wildcards)", async () => {
+    // The lookup must also resolve wildcards whose trace entry only
+    // has `binding` (no `writes[]`) — happens when the wildcard is
+    // disabled, errored, or skipped before the writes loop.
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        // Source wildcard is DISABLED — only `binding` stamped, no writes.
+        {
+          id: "src1",
+          type: "wildcard",
+          enabled: false,
+          status: "skipped_disabled",
+          binding: "color",
+          writes: [],
+        },
+        // Target wildcard ran ok — has both binding + writes.
+        {
+          id: "tgt1",
+          type: "wildcard",
+          status: "ok",
+          binding: "shape",
+          writes: [{ variable: "shape", value: "circle" }],
+        },
+        {
+          id: "k1",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "src1",
+          constraint_target: "tgt1",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const labels = wrapper.findAll(".wp-dbg-trace-label").map((l) => l.text());
+    // Last row is the constraint — both ends resolve to $varnames.
+    expect(labels[labels.length - 1]).toContain("$color → $shape");
+  });
+
+  it("Picks tab @{uuid} resolution uses binding fallback for disabled refs", async () => {
+    // A pick value referencing a disabled wildcard via @{uuid} should
+    // still resolve to @{$varname} via the binding-only fallback.
+    const snap = JSON.stringify({
+      __wp_picks__: {
+        m1: { value: "see @{deadbeef} bits" },
+      },
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          status: "ok",
+          writes: [{ variable: "out", value: "see @{deadbeef} bits" }],
+        },
+        {
+          id: "deadbeef",
+          type: "wildcard",
+          enabled: false,
+          status: "skipped_disabled",
+          binding: "fabric",
+          writes: [],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
+    const valCell = wrapper.find(".wp-dbg-pick-val");
+    expect(valCell.text()).toBe("see @{$fabric} bits");
+  });
 });
