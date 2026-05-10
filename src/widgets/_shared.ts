@@ -192,6 +192,17 @@ export interface ModuleEntry {
    * a library row to point at yet.
    */
   id: string;
+  /**
+   * Per-instance stable UI key, used as Vue `:key` for the row. Phase B
+   * (2026-05-10): siblings share `m.id` (same library uuid, multiple
+   * instances), so id alone can't disambiguate v-for entries. The
+   * composite `${id}|${idx}` would change on every reorder/insert and
+   * break TransitionGroup move animations. `_uid` is stamped at module-
+   * creation time and survives across reorders. Optional in the type so
+   * legacy workflows without it still parse; ContextWidget backfills on
+   * load via `ensureRowUids()`.
+   */
+  _uid?: string;
   type: ModuleEntryKind;
   enabled: boolean;
   /** UI-only: persists collapsed state so cards stay collapsed across reload. */
@@ -480,6 +491,15 @@ export function emptyContextValue(): ContextWidgetValue {
 export function newModuleId(): string {
   // spec §3.2 — 8-char hex
   const bytes = new Uint8Array(4);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Generate a fresh `_uid` for a new module instance — stable per-row
+ *  Vue v-for key when siblings share `m.id`. 12-char hex; collision
+ *  probability across a single workflow is negligible. */
+export function newRowUid(): string {
+  const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }

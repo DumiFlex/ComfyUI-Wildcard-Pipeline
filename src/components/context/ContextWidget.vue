@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import {
   parseWidgetJsonWithRecovery, serializeWidgetJson,
-  emptyContextValue, newModuleId,
+  emptyContextValue, newModuleId, newRowUid,
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
 import { scanConflicts, labelFor as conflictLabelFor, type Conflict } from "../../extension/conflicts";
@@ -232,7 +232,25 @@ watch(dragState, (v) => { if (v === null) clearDragHover(); });
 // JSON instead of silently swallowing it. parseWidgetJson stays exported for
 // the debug/assembler widgets which don't need recovery semantics.
 const initialParse = parseWidgetJsonWithRecovery(props.initialJson, emptyContextValue());
+ensureRowUids(initialParse.value.modules);
 const value = ref<ContextWidgetValue>(initialParse.value);
+
+/** Stamp `_uid` on any module missing one. Phase B: each row needs a
+ *  per-instance stable Vue v-for key that survives reorders + inserts —
+ *  siblings share `m.id` (library uuid), so id alone isn't unique, and
+ *  composite `${id}|${idx}` would change for every row when the array
+ *  shifts (breaks TransitionGroup move animations). Backfill in-place
+ *  on initial load + after re-parse so existing workflow JSON works. */
+function ensureRowUids(modules: ModuleEntry[]): boolean {
+  let mutated = false;
+  for (const m of modules) {
+    if (!m._uid) {
+      m._uid = newRowUid();
+      mutated = true;
+    }
+  }
+  return mutated;
+}
 const parseError = ref<string | null>(initialParse.error);
 const parseRaw = ref<string>(initialParse.raw);
 const showRaw = ref(false);
@@ -286,6 +304,7 @@ watch(() => props.initialJson, (raw) => {
   // Reuse the recovery-aware parser so a workflow loaded with corrupt JSON
   // surfaces the same panel as a node that was already corrupt at mount.
   const next = parseWidgetJsonWithRecovery(raw, emptyContextValue());
+  ensureRowUids(next.value.modules);
   parseError.value = next.error;
   parseRaw.value = next.raw;
   if (serializeWidgetJson(next.value) === serializeWidgetJson(value.value)) return;
@@ -924,6 +943,7 @@ async function onLibraryPick(uuids: string[]) {
       const isSibling = existingIds.has(uuid);
       const newEntry: ModuleEntry = {
         id: uuid,
+        _uid: newRowUid(),
         type: entry.type as ModuleEntry["type"],
         enabled: !startDisabled,
         meta: { name: entry.name, library_name: entry.name },
@@ -1038,6 +1058,11 @@ function duplicateModule(idx: number) {
   // the per-instance binding gets auto-suffixed. FORK (new uuid + new
   // library row) lives on Save-to-library when siblings > 1.
   const copy: ModuleEntry = JSON.parse(JSON.stringify(list[i]));
+  // Stamp a fresh `_uid` so the new row has a stable, unique Vue key
+  // that DOESN'T collide with the source sibling's `_uid`. Without
+  // this, both rows would share the source's `_uid` after JSON-clone
+  // and Vue's v-for would warn about duplicate keys.
+  copy._uid = newRowUid();
   const baseBinding = extractPrimaryBinding(copy);
   if (baseBinding) {
     const taken = collectInContextBindings(list);
@@ -1494,8 +1519,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   const isLibraryBacked = ds.module.type !== "fixed_values"
     || (ds.module.payload !== undefined && Object.keys(ds.module.payload ?? {}).length > 0);
   const inserted: ModuleEntry = isLibraryBacked
-    ? { ...ds.module }
-    : { ...ds.module, id: newModuleId() };
+    ? { ...ds.module, _uid: newRowUid() }
+    : { ...ds.module, id: newModuleId(), _uid: newRowUid() };
   const list = [...value.value.modules];
   // Honor the resolved drop position — pre-Phase-3a this branch
   // always inserted at `targetIdx` so cross-node drops landed
@@ -1604,7 +1629,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
         <TransitionGroup name="wp-list" tag="div" class="wp-modules">
       <div
         v-for="(m, idx) in value.modules"
-        :key="`${m.id}|${idx}`"
+        :key="m._uid ?? `${m.id}|${idx}`"
         :data-module-id="m.id"
         :data-module-idx="idx"
         :data-kind="m.type"
