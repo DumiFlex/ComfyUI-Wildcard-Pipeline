@@ -113,8 +113,12 @@ function onBindingInput(ev: Event): void {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  /* Density-aware: `--wp-pad-row` + `--wp-row-gap` are overridden by
+   * `.wp-density-{compact,minimal}` body classes (display-prefs.css)
+   * so the row tightens up alongside Context module rows when the
+   * user picks a denser layout. */
+  gap: var(--wp-row-gap, 10px);
+  padding: var(--wp-pad-row, 8px 10px);
   /* Full 1px transparent border so conflict severity rules can paint
    * the FULL frame of the row by overriding `border-color` only —
    * mirrors `.wp-module.wp-conflict-*` from ContextWidget. Bottom-only

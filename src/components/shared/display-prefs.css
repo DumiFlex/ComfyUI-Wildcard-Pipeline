@@ -32,12 +32,12 @@
  * !important still win when a component legitimately wants an
  * animation (e.g. a loading spinner). */
 
-.wp-decor-minimal :where(.wp-context, .wp-asm-helper, .wp-medit, .wp-picker, .wp-confirm, .wp-app) {
+.wp-decor-minimal :where(.wp-context, .wp-asm-helper, .wp-medit, .wp-picker, .wp-confirm, .wp-app, .wp-inj-widget, .wp-debug) {
   --wp-accent-glow: transparent;
   --wp-brand-gradient: var(--wp-bg2);
 }
 
-.wp-decor-off :where(.wp-context, .wp-asm-helper, .wp-medit, .wp-picker, .wp-confirm, .wp-app) {
+.wp-decor-off :where(.wp-context, .wp-asm-helper, .wp-medit, .wp-picker, .wp-confirm, .wp-app, .wp-inj-widget, .wp-debug) {
   --wp-accent-glow: transparent;
   --wp-brand-gradient: var(--wp-bg2);
   --wp-violet-bg: transparent;
@@ -176,6 +176,14 @@
   border-bottom-color: var(--wp-border) !important;
 }
 
+/* Injector rows have no kind-stripe to preserve, so flatten the
+ * whole frame back to the soft separator color when border-highlight
+ * is off. Mirrors the intent of the `.wp-module` rule above. */
+.wp-border-highlight-off .wp-inj-row {
+  border-color: transparent !important;
+  border-bottom-color: var(--wp-border-soft, var(--wp-border)) !important;
+}
+
 /* ── Focus mode ─────────────────────────────────────────────────────
  * When on, hovering a module dims its siblings — useful for focusing
  * on one card in a long module list.
@@ -189,6 +197,12 @@
  * instant snap rather than a fade. */
 
 .wp-focus-mode .wp-modules:has(.wp-module:hover) .wp-module:not(:hover) {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+/* Same focus-mode dim for injector row siblings. */
+.wp-focus-mode .wp-inj-list:has(.wp-inj-row:hover) .wp-inj-row:not(:hover) {
   opacity: 0.55;
   transition: opacity 120ms ease;
 }
