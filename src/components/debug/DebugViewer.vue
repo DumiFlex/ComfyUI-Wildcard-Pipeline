@@ -701,21 +701,35 @@ function downloadJson(): void {
   gap: 4px;
   padding-bottom: 4px;
 }
+/* Toolbar icon button — mirrors ContextWidget's `.wp-btn--icon-sm`
+ * style family (transparent default, hover reveals border + bg) so
+ * the debug toolbar reads as part of the same design family as the
+ * row-level action clusters in module + injector rows. Slightly
+ * larger (24×24 vs 20×20) since toolbar lives in its own bar with
+ * room to breathe. Padding bumped 4px→5px so the icon glyph has more
+ * breathing room — matches the visual weight of `.wp-btn--icon-sm`'s
+ * 20×20+3px combo at this scale. */
 .wp-btn--icon {
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border-soft);
-  color: var(--wp-text);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
   font: 500 11px/1 var(--wp-font-sans);
-  padding: 4px 5px;
-  border-radius: var(--wp-radius);
+  padding: 5px;
+  border-radius: var(--wp-radius, 4px);
   cursor: pointer;
   width: 24px;
   height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.wp-btn--icon:hover { background: var(--wp-bg-2); }
+.wp-btn--icon:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-border-soft, var(--wp-border2));
+  color: var(--wp-text);
+}
+.wp-btn--icon .pi { font-size: 12px; }
 .wp-dbg-pre {
   background: var(--wp-bg-deep, var(--wp-bg));
   color: var(--wp-text);
