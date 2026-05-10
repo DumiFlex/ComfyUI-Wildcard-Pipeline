@@ -282,4 +282,129 @@ describe("DebugViewer", () => {
     const valCell = wrapper.find(".wp-dbg-pick-val");
     expect(valCell.text()).toBe("see @{deadbeef} stuff");
   });
+
+  it("Disabled module row shows declared $binding label, not short-uuid", async () => {
+    const disabledSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "b0219910",
+          type: "wildcard",
+          enabled: false,
+          status: "skipped_disabled",
+          binding: "backdrop",
+          writes: [],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: disabledSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const labels = wrapper.findAll(".wp-dbg-trace-label");
+    expect(labels[0].text()).toContain("$backdrop");
+    // Row tagged with disabled class for dim + stripe.
+    expect(wrapper.find(".wp-dbg-trace-row--disabled").exists()).toBe(true);
+  });
+
+  it("Disabled fixed_values surfaces every declared binding as its own row", async () => {
+    const disabledMulti = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "fv1",
+          type: "fixed_values",
+          enabled: false,
+          status: "skipped_disabled",
+          bindings: ["color", "shape", "size"],
+          writes: [],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: disabledMulti } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const labels = wrapper.findAll(".wp-dbg-trace-label").map((l) => l.text());
+    expect(labels).toEqual(["$color", "$shape", "$size"]);
+  });
+
+  it("Internal flag renders pi-lock icon next to the label", async () => {
+    const intSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          status: "ok",
+          internal: true,
+          writes: [{ variable: "scratch", value: "v" }],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: intSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    expect(wrapper.find(".wp-dbg-trace-label .pi-lock").exists()).toBe(true);
+  });
+
+  it("Locked seed renders pi-bookmark-fill icon next to the label", async () => {
+    const lockedSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          status: "ok",
+          seed_locked: true,
+          seed: 1234,
+          writes: [{ variable: "x", value: "v" }],
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: lockedSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    expect(wrapper.find(".wp-dbg-trace-label .pi-bookmark-fill").exists()).toBe(true);
+  });
+
+  it("Constraint row labels as $source → $target via trace lookup", async () => {
+    const constraintSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "src1",
+          type: "wildcard",
+          status: "ok",
+          writes: [{ variable: "color", value: "red" }],
+        },
+        {
+          id: "tgt1",
+          type: "wildcard",
+          status: "ok",
+          writes: [{ variable: "shape", value: "circle" }],
+        },
+        {
+          id: "k1",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "src1",
+          constraint_target: "tgt1",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: constraintSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const labels = wrapper.findAll(".wp-dbg-trace-label").map((l) => l.text());
+    expect(labels[2]).toContain("$color → $shape");
+  });
+
+  it("Constraint with unknown source/target falls back to short-uuid form", async () => {
+    const constraintSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "k1",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "deadbeef1",
+          constraint_target: "cafebabe2",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: constraintSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const label = wrapper.find(".wp-dbg-trace-label");
+    expect(label.text()).toContain("$deadbeef → $cafebabe");
+  });
 });

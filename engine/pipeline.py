@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import random
+from typing import Any
 
 from engine.context import Context
 from engine.modules import Module
@@ -17,6 +18,86 @@ from engine.modules.dispatcher import UnknownModuleType, resolve_module
 from engine.modules.snapshot import coerce_legacy_module
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_static_meta(
+    module_raw: Any,
+) -> dict[str, Any]:
+    """Pull metadata fields out of a module dict/dataclass that the
+    debug viewer surfaces independently of execution success.
+
+    Returns a dict that may contain:
+      - ``binding`` — the variable a single-binding module declares
+        (``wildcard``/``combine``/``derivation``). Empty for
+        ``constraint`` (no binding) and ``fixed_values`` (multi-binding
+        — entries listed via ``writes`` after run instead).
+      - ``bindings`` — list of variable names a multi-binding module
+        declares (``fixed_values``). Used when the module is disabled
+        / errors before writes get populated.
+      - ``internal`` — bool, true when ``instance.internal`` is set;
+        every binding the module would produce is engine-only.
+      - ``seed_locked`` — bool, true when ``instance.locked_seed`` is
+        a number; the module rolls with that seed not the chain seed.
+      - ``constraint_source`` / ``constraint_target`` — the source +
+        target wildcard uuids on a ``constraint`` payload, so the
+        debug viewer can label the row as `$src → $tgt`.
+
+    Robust to malformed shapes — every read is type-checked, every
+    failure path returns an empty dict so the trace path doesn't
+    crash on a bad workflow JSON.
+    """
+    if isinstance(module_raw, dict):
+        m_type = module_raw.get("type", "") or ""
+        inst = module_raw.get("instance", {})
+        payload = module_raw.get("payload", {})
+        entries = module_raw.get("entries", [])
+    else:
+        m_type = getattr(module_raw, "type", "") or ""
+        inst = getattr(module_raw, "instance", {})
+        payload = getattr(module_raw, "payload", {})
+        entries = getattr(module_raw, "entries", [])
+
+    inst = inst if isinstance(inst, dict) else {}
+    payload = payload if isinstance(payload, dict) else {}
+
+    meta: dict[str, Any] = {
+        "internal": bool(inst.get("internal", False)),
+        "seed_locked": isinstance(inst.get("locked_seed"), (int, float)),
+    }
+
+    if m_type == "fixed_values":
+        # fixed_values declares its variables in `entries` (or
+        # `payload.values` for the unified-list shape used by the SPA).
+        # Either way, surface every variable name so the disabled
+        # trace row can show *what* would have been written.
+        seen: list[str] = []
+        for source in (entries, payload.get("entries"), payload.get("values")):
+            if not isinstance(source, list):
+                continue
+            for e in source:
+                if isinstance(e, dict):
+                    name = e.get("variable_name") or e.get("name")
+                    if isinstance(name, str) and name and name not in seen:
+                        seen.append(name)
+        if seen:
+            meta["bindings"] = seen
+    elif m_type == "constraint":
+        src = payload.get("source_wildcard_id")
+        tgt = payload.get("target_wildcard_id")
+        if isinstance(src, str) and src:
+            meta["constraint_source"] = src
+        if isinstance(tgt, str) and tgt:
+            meta["constraint_target"] = tgt
+    else:
+        # Single-binding modules — wildcard / combine / derivation /
+        # pipeline. Read both `instance.variable_binding` (preferred,
+        # picker writes there) and `payload.var_binding` (legacy /
+        # library default).
+        b = inst.get("variable_binding") or payload.get("var_binding") or ""
+        if isinstance(b, str) and b:
+            meta["binding"] = b
+
+    return meta
 
 
 class PipelineEngine:
@@ -48,6 +129,11 @@ class PipelineEngine:
                 _module_enabled = getattr(module, "enabled", True)
 
             if not _module_enabled:
+                # Disabled modules don't run — but the trace row still
+                # surfaces what the module would have written, so the
+                # debug viewer can label it `$varname (disabled)`
+                # instead of falling back to an opaque short-uuid.
+                meta = _extract_static_meta(module)
                 ctx["__wp_trace__"].append({
                     "id": _module_id,
                     "type": _module_type_raw,
@@ -55,6 +141,7 @@ class PipelineEngine:
                     "status": "skipped_disabled",
                     "writes": [],
                     "error": None,
+                    **meta,
                 })
                 continue
 
@@ -84,6 +171,7 @@ class PipelineEngine:
                 logger.warning(
                     "Failed to coerce module %r at index %s: %s", module, index, e
                 )
+                meta = _extract_static_meta(module)
                 ctx["__wp_trace__"].append({
                     "id": _module_id,
                     "type": module_type,
@@ -91,6 +179,7 @@ class PipelineEngine:
                     "status": "failed",
                     "writes": [],
                     "error": {"type": type(e).__name__, "message": str(e)},
+                    **meta,
                 })
                 continue
 
@@ -101,6 +190,7 @@ class PipelineEngine:
             # Cleared in the finally below so a stale id doesn't leak
             # into the next iteration's resolve call.
             ctx["__wp_current_module_id__"] = _module_id
+            meta = _extract_static_meta(module)
             try:
                 bindings = resolve_module(snapshot, ctx)
             except UnknownModuleType:
@@ -116,6 +206,7 @@ class PipelineEngine:
                     "status": "skipped_unknown_type",
                     "writes": [],
                     "error": None,
+                    **meta,
                 })
                 continue
             except Exception as e:
@@ -145,6 +236,7 @@ class PipelineEngine:
                     "status": "failed",
                     "writes": [],
                     "error": {"type": type(e).__name__, "message": str(e)},
+                    **meta,
                 })
                 continue
 
@@ -191,6 +283,7 @@ class PipelineEngine:
                 "writes": writes,
                 "error": None,
                 "seed": effective_seed,
+                **meta,
             })
 
         # Drop the active-module marker so it doesn't leak into the

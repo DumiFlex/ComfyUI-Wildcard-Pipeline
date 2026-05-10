@@ -94,9 +94,28 @@ interface TraceEntry {
   type?: string;
   node?: string;
   status?: string;
-  binding?: string;             // injector-trace shape
-  writes?: TraceWrite[];        // engine-trace shape
+  /** Injector-trace shape: a single `binding` field with the variable
+   *  the row writes. Engine modules use the same field for their
+   *  declared `instance.variable_binding` even when disabled / errored
+   *  (so the trace row can label the binding without writes[]). */
+  binding?: string;
+  /** Multi-binding declared bindings — fixed_values modules surface
+   *  every variable they would have written. Used when the module is
+   *  disabled / errors before writes is populated. */
+  bindings?: string[];
+  /** Engine-trace shape — one entry per binding the module wrote. */
+  writes?: TraceWrite[];
+  /** True when `instance.internal` is set — every binding the module
+   *  wrote is engine-only (stripped from public ctx payload). */
   internal?: boolean;
+  /** True when `instance.locked_seed` is a number — the module rolled
+   *  with a pinned seed instead of inheriting the chain seed. */
+  seed_locked?: boolean;
+  /** Constraint trace adds the source + target wildcard uuids so the
+   *  debug viewer can label the row as `$src → $tgt` instead of an
+   *  opaque `$<short-uuid>`. */
+  constraint_source?: string;
+  constraint_target?: string;
   error?: string | { type?: string; message?: string } | null;
   seed?: number;
 }
@@ -164,6 +183,17 @@ interface TraceRow {
   errorMessage: string | null;
   /** True when this write replaced an existing upstream value. */
   overwrite: boolean;
+  /** True when the module was marked `instance.internal`. Drives the
+   *  small lock-icon next to the variable label so users see at a
+   *  glance that this binding is engine-only. */
+  internal: boolean;
+  /** True when the module had `instance.locked_seed` set — the seed
+   *  cell renders with a pin glyph + tooltip explaining the run used
+   *  a pinned seed not the chain seed. */
+  seedLocked: boolean;
+  /** True when the module was disabled — the row dims + the value
+   *  cell shows `(disabled)` instead of a written value. */
+  disabled: boolean;
 }
 
 function formatSeed(seed: number | undefined): string {
@@ -214,10 +244,13 @@ function kindAlias(type: string): { label: string; cls: string } {
  *  rows** — a single fixed_values module that writes 3 bindings
  *  produces 3 trace rows, one per binding, sharing module-id / type /
  *  seed metadata. Modules with no writes (e.g. constraint-only) get
- *  one row keyed by short-uuid. Injector trace (`{node, binding,
- *  type}` shape) becomes one row each. */
+ *  one row labelled with the constraint's source→target binding so
+ *  the user reads the relationship instead of an opaque short-uuid.
+ *  Disabled modules surface their declared binding(s) so the row
+ *  reads as `$varname (disabled)` rather than `$<short-uuid>`. */
 const traceRows = computed<TraceRow[]>(() => {
   const rows: TraceRow[] = [];
+  const idMap = moduleIdToVar.value;
   for (const t of traceEntriesRaw.value) {
     const id = typeof t.id === "string" ? t.id : "";
     const hasError = !!t.error;
@@ -228,6 +261,9 @@ const traceRows = computed<TraceRow[]>(() => {
           ? t.error
           : null;
     const kind = kindAlias(t.type || "");
+    const isDisabled = t.status === "skipped_disabled";
+    const isInternal = !!t.internal;
+    const isSeedLocked = !!t.seed_locked;
     const baseRow = {
       id,
       type: t.type || "—",
@@ -237,6 +273,9 @@ const traceRows = computed<TraceRow[]>(() => {
       statusLabel: statusLabelOf(t.status, hasError),
       seed: formatSeed(t.seed),
       errorMessage: errMsg,
+      internal: isInternal,
+      seedLocked: isSeedLocked,
+      disabled: isDisabled,
     };
 
     const writes = Array.isArray(t.writes) ? t.writes : [];
@@ -253,27 +292,59 @@ const traceRows = computed<TraceRow[]>(() => {
           overwrite: !!w.overwrite,
         });
       });
+    } else if (Array.isArray(t.bindings) && t.bindings.length > 0) {
+      // Disabled multi-binding module (fixed_values) — surface every
+      // declared binding as its own row so the user sees what would
+      // have been written. Value cell shows `(disabled)` so the
+      // status is unmistakable.
+      t.bindings.forEach((b, i) => {
+        rows.push({
+          ...baseRow,
+          key: `${id || t.type || "row"}:${b}:${i}`,
+          label: `$${b}`,
+          value: "(disabled)",
+          overwrite: false,
+        });
+      });
     } else if (t.binding) {
-      // Injector trace path — `{node, binding, type, internal}`.
-      // No `value` to surface here (injector writes whatever the
-      // upstream socket emitted; users see the value in the Snapshot
-      // tab, not duplicated in trace).
+      // Single-binding module (engine-side disabled / errored, or
+      // injector trace `{node, binding, type, internal}`). Engine
+      // disabled rows surface the declared binding here; injector
+      // rows surface the binding the row writes. Either way: prefix
+      // with `$` and let the value cell carry the (disabled) hint.
       rows.push({
         ...baseRow,
         key: `${id || t.node || "row"}:${t.binding}`,
         label: `$${t.binding}`,
-        value: "",
+        value: isDisabled ? "(disabled)" : "",
+        overwrite: false,
+      });
+    } else if (t.constraint_source && t.constraint_target) {
+      // Constraint trace — no binding to write, but the source +
+      // target wildcard uuids let us label the row as `$src → $tgt`
+      // when both can be resolved to variable names. Falls back to
+      // short-uuid form when a referenced wildcard didn't roll (no
+      // trace entry for it).
+      const srcVar = idMap[t.constraint_source];
+      const tgtVar = idMap[t.constraint_target];
+      const srcLabel = srcVar ? `$${srcVar}` : `$${t.constraint_source.slice(0, 8)}`;
+      const tgtLabel = tgtVar ? `$${tgtVar}` : `$${t.constraint_target.slice(0, 8)}`;
+      rows.push({
+        ...baseRow,
+        key: id || `constraint-${rows.length}`,
+        label: `${srcLabel} → ${tgtLabel}`,
+        value: isDisabled ? "(disabled)" : "",
         overwrite: false,
       });
     } else {
-      // Module ran but produced no bindings (constraint-only,
-      // wildcard with no `variable_binding`, etc). Keep the row for
-      // status visibility.
+      // Module ran but produced no bindings AND no metadata to
+      // disambiguate. Last-resort short-uuid label so the row stays
+      // visible for status visibility.
       rows.push({
         ...baseRow,
         key: id || t.type || `row-${rows.length}`,
         label: id ? `$${id.slice(0, 8)}` : "—",
-        value: "",
+        value: isDisabled ? "(disabled)" : "",
         overwrite: false,
       });
     }
@@ -460,12 +531,34 @@ function downloadJson(): void {
           v-for="row in traceRows"
           :key="row.key"
           class="wp-dbg-trace-row"
-          :class="`wp-dbg-trace-row--${row.status}`"
+          :class="[
+            `wp-dbg-trace-row--${row.status}`,
+            { 'wp-dbg-trace-row--disabled': row.disabled },
+          ]"
           :title="row.id ? `module ${row.id}` : ''"
         >
           <span class="wp-dbg-trace-label">
             {{ row.label }}
             <span v-if="row.overwrite" class="wp-dbg-trace-flag" title="Overwrote upstream value">↻</span>
+            <!-- Internal flag — `instance.internal` was set, every
+                 binding the module wrote is engine-only (stripped
+                 from public ctx). Lock glyph is the same icon used in
+                 ContextWidget's internal toggle. -->
+            <i
+              v-if="row.internal"
+              class="wp-dbg-trace-flag pi pi-lock"
+              title="Internal — binding hidden from public ctx"
+              aria-hidden="true"
+            ></i>
+            <!-- Seed-lock flag — module rolled with `instance.locked_seed`
+                 instead of inheriting the chain seed. Pin glyph signals
+                 "this seed is pinned" to match the lock-toggle UI. -->
+            <i
+              v-if="row.seedLocked"
+              class="wp-dbg-trace-flag pi pi-bookmark-fill"
+              title="Locked seed — module rolled with a pinned seed"
+              aria-hidden="true"
+            ></i>
           </span>
           <!-- Type chip uses the same `wp-kind-chip--<kind>` token as
                the row icons in ContextWidget / ModulePickerModal /
@@ -705,6 +798,24 @@ function downloadJson(): void {
   padding-left: 6px;
 }
 .wp-dbg-trace-row--skipped { opacity: 0.6; }
+/* Disabled module — same dim as `--skipped` (it IS a skip variant)
+ * but with a diagonal stripe pattern matching ContextWidget's
+ * `.wp-module--disabled` so the user instantly recognises the row as
+ * the module they manually toggled off. */
+.wp-dbg-trace-row--disabled {
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--wp-bg3),
+    var(--wp-bg3) 6px,
+    var(--wp-bg2) 6px,
+    var(--wp-bg2) 8px
+  );
+}
+.wp-dbg-trace-row--disabled .wp-dbg-trace-value {
+  font-style: italic;
+  color: var(--wp-text-dim, var(--wp-text3));
+}
 .wp-dbg-trace-label {
   color: var(--wp-amber);
   font-weight: 600;
@@ -719,6 +830,20 @@ function downloadJson(): void {
   font-size: 10px;
   color: var(--wp-warn);
   cursor: help;
+}
+/* PrimeIcon flags — share the warn color but icons need their own
+ * font-size since `pi pi-*` pulls from the icon font, not the row's
+ * mono font. Slight letter-spacing breather so they don't crowd the
+ * variable label. */
+.wp-dbg-trace-label .pi {
+  font-size: 9px;
+  margin-left: 2px;
+}
+.wp-dbg-trace-label .pi-lock {
+  color: var(--wp-accent);
+}
+.wp-dbg-trace-label .pi-bookmark-fill {
+  color: var(--wp-amber);
 }
 /* Type cell is also a `wp-kind-chip` (from theme.css) — the chip
  * provides the colored background + text. Override font size +
