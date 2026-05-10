@@ -4,6 +4,7 @@ import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectUpstreamChain,
+  collectUpstreamInjectorBindings,
   collectUpstreamResolved,
   findRootGraph,
   type LiteGraphLike,
@@ -35,6 +36,12 @@ interface UpstreamSnapshot {
   /** Sync fallback: client-side option-[0] resolution. Shown until
    *  the API resolves OR when the API is unreachable. */
   fallbackResolved: Record<string, string>;
+  /** Bindings contributed by upstream WP_ContextInjector nodes. The
+   *  preview API doesn't simulate injectors — these keys must come
+   *  from the static fallback even when api results are available,
+   *  otherwise injector overrides silently render the SHADOWED
+   *  upstream value. */
+  injectorKeys: string[];
   template: string;
 }
 
@@ -48,6 +55,10 @@ function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
   const ak = Object.keys(a.fallbackResolved);
   if (ak.length !== Object.keys(b.fallbackResolved).length) return false;
   for (const k of ak) if (a.fallbackResolved[k] !== b.fallbackResolved[k]) return false;
+  if (a.injectorKeys.length !== b.injectorKeys.length) return false;
+  for (let i = 0; i < a.injectorKeys.length; i++) {
+    if (a.injectorKeys[i] !== b.injectorKeys[i]) return false;
+  }
   return true;
 }
 
@@ -185,6 +196,7 @@ export function mountHelper(node: AssemblerNode) {
             chainKey: hashChain(chain),
             chain,
             fallbackResolved: collectUpstreamResolved(g, node),
+            injectorKeys: collectUpstreamInjectorBindings(g, node),
             template: templateOf(node),
           };
         },
@@ -257,16 +269,28 @@ export function mountHelper(node: AssemblerNode) {
         // mount before /wp/api/preview/resolve has settled).
         // INJECTOR LAYERING: the API-side resolver only knows about
         // WP_Context modules — injector bindings live in the static
-        // fallback only. Merge fallback ON TOP so injector keys
-        // (which API would never produce) survive when API returns.
-        // Fallback values for non-injector keys are static stubs
-        // (option[0]); API beats those, so we want API-precedence on
-        // overlap. JS object spread is right-to-left, so put fallback
-        // first then API: injector keys (only in fallback) flow
-        // through; overlapping keys take API's value.
+        // fallback only. Two-pass merge:
+        //   1. Start with fallback (has injector keys + Context stubs)
+        //   2. Overlay api on top (better Context values)
+        //   3. Re-overlay fallback values for INJECTOR-CONTRIBUTED
+        //      keys (`$<binding>` placeholder) — at runtime the
+        //      injector overwrites whatever Context wrote, so the
+        //      preview must reflect that ordering. Without this
+        //      override, an upstream Context "test" would render its
+        //      resolved value even when a downstream injector wires
+        //      "test" to a different upstream value.
         const fallback = snapshot.value.fallbackResolved;
         const api = apiResolved.value;
-        const fresh = api ? { ...fallback, ...api } : fallback;
+        const injectorKeys = snapshot.value.injectorKeys;
+        let fresh: Record<string, string>;
+        if (api) {
+          fresh = { ...fallback, ...api };
+          for (const k of injectorKeys) {
+            if (k in fallback) fresh[k] = fallback[k];
+          }
+        } else {
+          fresh = fallback;
+        }
         const template = snapshot.value.template;
 
         // Compute new-layout props ----------------------------------------

@@ -10,7 +10,12 @@ import {
 } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
-import type { LiteNodeLike } from "../extension/graph";
+import {
+  collectUpstreamVariables,
+  findRootGraph,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "../extension/graph";
 
 const InjectorWidget = defineAsyncComponent(
   () => import("../components/injector/InjectorWidget.vue"),
@@ -119,12 +124,28 @@ export function create(node: InjectorNode, inputName: string) {
         },
       );
 
+      // Variables produced by anything upstream of this injector. Used
+      // by the conflict scanner to flag bindings that shadow upstream
+      // Context output (`shadows_upstream`, info-level).
+      const upstreamVars = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectUpstreamVariables(rootGraph, node);
+        },
+        stringArrayEqual,
+      );
+
       return () =>
         h(InjectorWidget, {
           nodeId: node.id,
           initialJson: currentJson.value,
           connectedSlots: connectedSlots.value,
           slotTypes: slotTypes.value,
+          upstreamVars: upstreamVars.value,
           onChange: (json: string) => host.setValue(json),
         });
     },

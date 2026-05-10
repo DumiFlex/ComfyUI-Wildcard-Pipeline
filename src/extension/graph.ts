@@ -382,6 +382,43 @@ export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNod
 }
 
 /**
+ * Variable bindings contributed by every `WP_ContextInjector` upstream
+ * of `node`. Used by the assembler so the in-template preview shows
+ * the injector's `$binding` placeholder for keys an injector
+ * overwrites at runtime — otherwise apiResolved (which only knows
+ * WP_Context modules) would surface the SHADOWED upstream value.
+ */
+export function collectUpstreamInjectorBindings(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): string[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  const out = new Set<string>();
+  for (const n of chain) {
+    if (n.type !== "WP_ContextInjector") continue;
+    if (isSkippedMode(n)) continue;
+    const inj = parseWidgetJson<{
+      version: 1;
+      rows?: Array<{ binding?: string; enabled?: boolean }>;
+    }>(widgetValue(n, "rows"), { version: 1, rows: [] });
+    for (const row of inj.rows ?? []) {
+      if (row.enabled !== true) continue;
+      const binding = (row.binding ?? "").trim();
+      if (binding) out.add(binding);
+    }
+  }
+  return [...out];
+}
+
+/**
  * Walk upstream from `node` and return the set of every wildcard
  * module's uuid (8-hex `id`) reachable in the chain. Used by the
  * conflict scanner to validate constraint references — a constraint

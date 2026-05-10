@@ -170,15 +170,19 @@ export function labelFor(type: ConflictType): string {
 }
 
 /** Scan an injector node's rows for missing connections + duplicate
- *  bindings. Mirrors `scanConflicts` semantics but operates on the
- *  injector's flatter shape (no kind dispatch). `connectedSlots` is
- *  the set of input slot names with a live wire — passed in by the
- *  caller since this module doesn't have direct graph access. */
+ *  bindings + shadows-upstream. Mirrors `scanConflicts` semantics
+ *  but operates on the injector's flatter shape. `connectedSlots`
+ *  is the set of input slot names with a live wire. `upstreamVars`
+ *  is the set of `$var` names produced by anything upstream of THIS
+ *  injector — used to flag bindings that overwrite an upstream
+ *  Context module's output (`shadows_upstream`, info-level). */
 export function scanInjectorConflicts(
   value: InjectorRowsValue,
   connectedSlots: string[],
+  upstreamVars: string[] = [],
 ): Conflict[] {
   const connected = new Set(connectedSlots);
+  const upstream = new Set(upstreamVars);
   const written = new Set<string>();
   const out: Conflict[] = [];
 
@@ -212,6 +216,17 @@ export function scanInjectorConflicts(
       });
     } else {
       written.add(binding);
+      if (upstream.has(binding)) {
+        // Injector binding shadows an upstream Context module's
+        // output — info-level since last-write-wins is the
+        // intentional semantic, but the user should see the layering.
+        out.push({
+          moduleId: row._uid,
+          variable: binding,
+          type: "shadows_upstream",
+          severity: "info",
+        });
+      }
     }
   }
   return out;

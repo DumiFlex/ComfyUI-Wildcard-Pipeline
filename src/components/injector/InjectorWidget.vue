@@ -20,8 +20,12 @@ const props = withDefaults(
     connectedSlots?: string[];
     /** Per-slot type label — `STRING` / `INT` / `FLOAT` / `BOOLEAN`. */
     slotTypes?: Record<string, string>;
+    /** Variables produced by anything upstream of this injector. Used
+     *  by the conflict scanner to flag shadows_upstream when an
+     *  injector binding overrides an upstream Context output. */
+    upstreamVars?: string[];
   }>(),
-  { connectedSlots: () => [], slotTypes: () => ({}) },
+  { connectedSlots: () => [], slotTypes: () => ({}), upstreamVars: () => [] },
 );
 
 const emit = defineEmits<{
@@ -53,7 +57,11 @@ function isConnected(slotName: string): boolean {
  *  + connection set; warn-class + tooltip surface in InjectorRow. */
 const conflictByUid = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {};
-  const conflicts = scanInjectorConflicts(value.value, props.connectedSlots ?? []);
+  const conflicts = scanInjectorConflicts(
+    value.value,
+    props.connectedSlots ?? [],
+    props.upstreamVars ?? [],
+  );
   for (const c of conflicts) {
     out[c.moduleId] = labelFor(c.type);
   }
