@@ -287,4 +287,66 @@ describe("derivation RulesSection (tier-D accordion + branch table)", () => {
     expect(chip.exists()).toBe(true);
     expect(chip.text()).toContain("3");
   });
+
+  // ── Drag-to-reorder ─────────────────────────────────────────────
+
+  it("drag handle is rendered on each rule head", () => {
+    const w = mount(RulesSection, {
+      props: { module: makeModule([makeRule({ id: "r1" }), makeRule({ id: "r2" })]) },
+    });
+    expect(w.find('[data-test="rule-drag-r1"]').exists()).toBe(true);
+    expect(w.find('[data-test="rule-drag-r2"]').exists()).toBe(true);
+  });
+
+  it("dropping rule r2 onto r1 emits rule_order_override = ['r2', 'r1']", async () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([
+          makeRule({ id: "r1" }),
+          makeRule({ id: "r2" }),
+          makeRule({ id: "r3" }),
+        ]),
+      },
+    });
+    // Simulate dragstart on r2's handle, then drop on r1's card.
+    await w.find('[data-test="rule-drag-r2"]').trigger("dragstart");
+    await w.find('[data-test="rule-card-r1"]').trigger("dragover");
+    await w.find('[data-test="rule-card-r1"]').trigger("drop");
+    expect(lastPatch(w).instance?.rule_order_override).toEqual(["r2", "r1", "r3"]);
+  });
+
+  it("dropping rule onto itself or back into library order collapses override to null", async () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule(
+          [makeRule({ id: "r1" }), makeRule({ id: "r2" })],
+          { rule_order_override: ["r2", "r1"] },
+        ),
+      },
+    });
+    // Drop r2 onto r1 — moving r2 to position 0 BEFORE r1 means
+    // r1 ends up at index 1 → order becomes [r2, r1] which is the
+    // current state. Force back to library order via swap r1→r2:
+    await w.find('[data-test="rule-drag-r1"]').trigger("dragstart");
+    await w.find('[data-test="rule-card-r2"]').trigger("dragover");
+    await w.find('[data-test="rule-card-r2"]').trigger("drop");
+    // New order [r1, r2] = library order → collapse override to null.
+    expect(lastPatch(w).instance?.rule_order_override).toBeNull();
+  });
+
+  it("rule card receives drop-target class while another rule is being dragged over it", async () => {
+    const w = mount(RulesSection, {
+      props: {
+        module: makeModule([
+          makeRule({ id: "r1" }),
+          makeRule({ id: "r2" }),
+        ]),
+      },
+    });
+    await w.find('[data-test="rule-drag-r2"]').trigger("dragstart");
+    await w.find('[data-test="rule-card-r1"]').trigger("dragover");
+    expect(w.find('[data-test="rule-card-r1"]').classes()).toContain(
+      "rule-card--drop-target",
+    );
+  });
 });

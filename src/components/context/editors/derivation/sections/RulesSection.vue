@@ -181,6 +181,99 @@ function toggleExpand(ruleId: string): void {
   expandedRules.value = next;
 }
 
+// ── Drag-to-reorder rules (instance-only override) ────────────────
+
+const draggingRuleId = ref<string | null>(null);
+const dragOverRuleId = ref<string | null>(null);
+
+/** Effective rule order — instance override when set, else library
+ *  payload order. Used as the base for drop-to-reorder math so the
+ *  next emit reflects what the user actually sees on screen. */
+function effectiveRuleOrder(): string[] {
+  const override = instance.value.rule_order_override;
+  if (Array.isArray(override) && override.length > 0) {
+    // Append any rule_ids missing from the override (library tail).
+    const seen = new Set(override);
+    const tail = rules.value.map((r) => r.id).filter((id) => !seen.has(id));
+    return [...override, ...tail];
+  }
+  return rules.value.map((r) => r.id);
+}
+
+/** Library-order array — used as the "no override" baseline. When the
+ *  drop result equals this, we collapse rule_order_override to null
+ *  so the modified-state computed doesn't light up unnecessarily. */
+function libraryRuleOrder(): string[] {
+  return rules.value.map((r) => r.id);
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function onRuleDragStart(ruleId: string, ev: DragEvent): void {
+  draggingRuleId.value = ruleId;
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = "move";
+    // Set some payload so Firefox actually fires drag events.
+    ev.dataTransfer.setData("text/plain", ruleId);
+  }
+}
+
+function onRuleDragOver(ruleId: string, ev: DragEvent): void {
+  if (!draggingRuleId.value) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  if (dragOverRuleId.value !== ruleId) dragOverRuleId.value = ruleId;
+}
+
+function onRuleDragLeave(ruleId: string): void {
+  if (dragOverRuleId.value === ruleId) dragOverRuleId.value = null;
+}
+
+function onRuleDragEnd(): void {
+  draggingRuleId.value = null;
+  dragOverRuleId.value = null;
+}
+
+function onRuleDrop(targetId: string, ev: DragEvent): void {
+  ev.preventDefault();
+  const sourceId = draggingRuleId.value;
+  draggingRuleId.value = null;
+  dragOverRuleId.value = null;
+  if (!sourceId || sourceId === targetId) return;
+
+  const order = effectiveRuleOrder();
+  const sourceIdx = order.indexOf(sourceId);
+  const targetIdx = order.indexOf(targetId);
+  if (sourceIdx < 0 || targetIdx < 0) return;
+
+  // Move source BEFORE target — drop indicator visually sits on
+  // target, source slides into target's old slot, target shifts down.
+  const next = order.slice();
+  next.splice(sourceIdx, 1);
+  // After removal, target's index may have shifted by 1 if source
+  // was earlier in the list.
+  const insertIdx = sourceIdx < targetIdx ? targetIdx - 1 : targetIdx;
+  next.splice(insertIdx, 0, sourceId);
+
+  // Collapse to null when the new order matches library order — keeps
+  // modified-state honest.
+  const collapsed = arraysEqual(next, libraryRuleOrder()) ? null : next;
+  emit("update", patchInstance(props.module, "rule_order_override", collapsed));
+}
+
+/** Rules sorted by effective order so the v-for renders in the
+ *  override sequence. Library payload is read-only; we only swap the
+ *  visual order. */
+const orderedRules = computed<DerivationRule[]>(() => {
+  const order = effectiveRuleOrder();
+  const byId = new Map(rules.value.map((r) => [r.id, r]));
+  return order.map((id) => byId.get(id)).filter((r): r is DerivationRule => r !== undefined);
+});
+
 // ── Display helpers (read-only summary tokens) ─────────────────────
 
 function opSymbol(op: string | undefined): string {
@@ -226,14 +319,20 @@ function opUsesValue(op: string | undefined): boolean {
 
     <div v-else class="rules__list">
       <div
-        v-for="rule in rules"
+        v-for="rule in orderedRules"
         :key="rule.id"
         class="rule-card"
         :class="{
           'rule-card--off': !isRuleEnabled(rule),
           'rule-card--open': isExpanded(rule.id),
+          'rule-card--dragging': draggingRuleId === rule.id,
+          'rule-card--drop-target': dragOverRuleId === rule.id && draggingRuleId !== null && draggingRuleId !== rule.id,
         }"
         :data-test="`rule-card-${rule.id}`"
+        @dragover="(ev) => onRuleDragOver(rule.id, ev)"
+        @dragleave="() => onRuleDragLeave(rule.id)"
+        @drop="(ev) => onRuleDrop(rule.id, ev)"
+        @dragend="onRuleDragEnd"
       >
         <!-- Head row -->
         <button
@@ -289,10 +388,18 @@ function opUsesValue(op: string | undefined): boolean {
             :data-test="`rule-mod-count-${rule.id}`"
           >{{ modCount(rule) }} mod{{ modCount(rule) === 1 ? "" : "s" }}</span>
 
-          <!-- Drag handle placeholder — actual drag-to-reorder lands
-               in a follow-up commit. Kept in markup so screenshots
-               + layout stay stable. -->
-          <span class="rule-head__drag" aria-hidden="true">⋮⋮</span>
+          <!-- Drag handle — `draggable` lives on the handle (not the
+               whole card) so users only initiate reorder from this
+               grip. Drop targets are the entire rule cards (handled
+               via @dragover/@drop on the parent div). -->
+          <span
+            class="rule-head__drag"
+            :data-test="`rule-drag-${rule.id}`"
+            draggable="true"
+            aria-label="Drag to reorder rule"
+            @dragstart="(ev) => onRuleDragStart(rule.id, ev)"
+            @click.stop
+          >⋮⋮</span>
         </button>
 
         <!-- Expanded body — branch table -->
@@ -482,6 +589,12 @@ function opUsesValue(op: string | undefined): boolean {
   overflow: hidden;
 }
 .rule-card--off { opacity: 0.55; }
+.rule-card--dragging { opacity: 0.5; }
+.rule-card--drop-target {
+  /* Visual cue that dropping here will insert the dragged rule
+   * BEFORE this card. Border-top accent matches drag-handle color. */
+  border-top: 2px solid var(--wp-accent);
+}
 
 /* Head — single-row clickable bar */
 .rule-head {
