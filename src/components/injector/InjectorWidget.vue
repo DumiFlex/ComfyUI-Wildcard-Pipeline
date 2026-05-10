@@ -24,9 +24,15 @@ const props = withDefaults(
      *  by the conflict scanner to flag shadows_upstream when an
      *  injector binding overrides an upstream Context output. */
     upstreamVars?: string[];
+    /** Litegraph node mode — 0=ALWAYS, 2=NEVER (mute), 4=BYPASS.
+     *  Drives the dim overlay so muted/bypassed state reads at a
+     *  glance, matching ContextWidget's pattern. */
+    nodeMode?: number;
   }>(),
-  { connectedSlots: () => [], slotTypes: () => ({}), upstreamVars: () => [] },
+  { connectedSlots: () => [], slotTypes: () => ({}), upstreamVars: () => [], nodeMode: 0 },
 );
+
+const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
 const emit = defineEmits<{
   (e: "change", json: string): void;
@@ -160,7 +166,7 @@ defineExpose({ addRow, removeRow });
 </script>
 
 <template>
-  <div class="wp-inj-widget">
+  <div class="wp-inj-widget" :class="{ 'wp-inj-widget--skipped': isSkipped }">
     <div class="wp-inj-toolbar">
       <button
         type="button"
@@ -210,7 +216,13 @@ defineExpose({ addRow, removeRow });
   font-family: var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
+  transition: opacity 120ms ease;
 }
+/* Mute (mode 2) / bypass (mode 4) — dim entire widget body so the
+ * muted state mirrors litegraph's title/border dimming. Pointer-events
+ * stay on so the user can still edit binding names while the node
+ * is paused; engine-side ComfyUI skips execute() outright. */
+.wp-inj-widget--skipped { opacity: 0.45; }
 .wp-inj-toolbar {
   display: flex;
   align-items: center;

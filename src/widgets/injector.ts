@@ -139,6 +139,16 @@ export function create(node: InjectorNode, inputName: string) {
         stringArrayEqual,
       );
 
+      // Mode tracking for mute (2) / bypass (4) — drives a dim
+      // overlay on the widget body so the muted state is visually
+      // obvious. reactiveFromGraph hooks node.mode via property
+      // descriptor for instant updates (no 400ms poll lag).
+      const nodeMode = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => (node as unknown as { mode?: number }).mode ?? 0,
+        Object.is,
+      );
+
       return () =>
         h(InjectorWidget, {
           nodeId: node.id,
@@ -146,6 +156,7 @@ export function create(node: InjectorNode, inputName: string) {
           connectedSlots: connectedSlots.value,
           slotTypes: slotTypes.value,
           upstreamVars: upstreamVars.value,
+          nodeMode: nodeMode.value,
           onChange: (json: string) => host.setValue(json),
         });
     },

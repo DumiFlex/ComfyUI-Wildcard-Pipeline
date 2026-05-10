@@ -21,6 +21,41 @@ export { notifyGraphLoaded } from "./graph-events";
  */
 export interface ConnectableNode {
   onConnectionsChange?: (...args: unknown[]) => void;
+  mode?: number;
+}
+
+/** Marker so we install the mode-property intercept exactly once per
+ *  node, even when multiple `reactiveFromGraph` calls share the same
+ *  node (assembler + context widget + injector all do). The set of
+ *  pending refresh callbacks lives on the node itself; the intercept
+ *  fans out to all of them. */
+const MODE_INTERCEPT = Symbol("wp-mode-intercept");
+interface ModeInterceptedNode {
+  [MODE_INTERCEPT]?: { value: number; subs: Set<() => void> };
+}
+
+/** Install (or reuse) a property-descriptor intercept on `node.mode`
+ *  so writes from ComfyUI's mute/bypass shortcuts fire `cb` SYNCHRONOUSLY
+ *  instead of waiting for the next 400ms poll. Pattern lifted from
+ *  ComfyUI-Lora-Manager (web/comfyui/lora_loader.js:123). */
+function watchNodeMode(node: ConnectableNode, cb: () => void): () => void {
+  const target = node as ConnectableNode & ModeInterceptedNode;
+  let slot = target[MODE_INTERCEPT];
+  if (!slot) {
+    slot = { value: typeof target.mode === "number" ? target.mode : 0, subs: new Set() };
+    target[MODE_INTERCEPT] = slot;
+    Object.defineProperty(target, "mode", {
+      configurable: true,
+      get() { return slot!.value; },
+      set(next: number) {
+        const prev = slot!.value;
+        slot!.value = next;
+        if (prev !== next) for (const s of slot!.subs) s();
+      },
+    });
+  }
+  slot.subs.add(cb);
+  return () => { slot!.subs.delete(cb); };
 }
 
 export function reactiveFromGraph<T>(
@@ -42,6 +77,12 @@ export function reactiveFromGraph<T>(
     refresh();
   };
 
+  // Mode-change intercept — instant detection of mute/bypass toggles
+  // (ComfyUI assigns `node.mode = 2|4` directly, no event fires).
+  // Without this, every consumer waits the 400ms poll cycle to dim
+  // its UI / re-walk the chain after the user keys M/Ctrl-M.
+  const unwatchMode = watchNodeMode(node, refresh);
+
   // Polling fallback for upstream-chain edits that don't fire on this node.
   const interval = window.setInterval(refresh, pollMs);
 
@@ -60,6 +101,7 @@ export function reactiveFromGraph<T>(
   onScopeDispose(() => {
     window.clearInterval(interval);
     unsubscribe();
+    unwatchMode();
     node.onConnectionsChange = orig;
   });
 
