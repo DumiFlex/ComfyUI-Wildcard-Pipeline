@@ -893,12 +893,9 @@ async function onLibraryPick(uuids: string[]) {
     const startCollapsed = getCollapseMode() === "accordion" ? true : getCollapsedByDefault();
     const startDisabled = getNewModuleDisabled();
 
-    // Append picks first (in input order) so user-picked rows land
-    // before any transitive deps in the resulting card list. Phase B
-    // (2026-05-10): when the picked uuid already exists in this Context,
-    // add as a SIBLING (same uuid) with an auto-suffixed per-instance
-    // binding so $foo + $foo_2 don't collide as duplicate-variable
-    // conflicts. Pre-Phase-B silently skipped already-added uuids.
+    // Append picks first (in input order). Phase B: same-uuid picks
+    // become siblings with an auto-suffixed binding (pre-B silently
+    // skipped them).
     const seenInBundle = new Set<string>();
     const existingBindings = collectInContextBindings(value.value.modules);
     for (const uuid of incomingOrder) {
@@ -1016,12 +1013,9 @@ function duplicateModule(id: string) {
   const list = [...value.value.modules];
   const i = list.findIndex((m) => m.id === id);
   if (i < 0) return;
-  // Phase B (2026-05-10 cycle): keep uuid + payload_hash. Duplicate is
-  // a SIBLING — same library definition, second instance. Per-instance
-  // binding gets auto-suffixed so $foo + $foo_2 don't collide as
-  // duplicate-variable conflicts on the canvas. Pre-Phase-B behavior
-  // (new uuid + strip hash + " (copy)" name) is now the FORK path,
-  // triggered explicitly via Save-to-library when siblings > 1.
+  // Phase B: duplicate is a SIBLING — same uuid + payload_hash, only
+  // the per-instance binding gets auto-suffixed. FORK (new uuid + new
+  // library row) lives on Save-to-library when siblings > 1.
   const copy: ModuleEntry = JSON.parse(JSON.stringify(list[i]));
   const baseBinding = extractPrimaryBinding(copy);
   if (baseBinding) {
@@ -2247,32 +2241,20 @@ function onDrop(ev: DragEvent, targetId: string | null) {
 .wp-module.wp-drop-target--before::before { top: -3px; }
 .wp-module.wp-drop-target--after::after  { bottom: -3px; }
 
-/* Phase B: drop-rejection shake — 200ms ±4px ease-in-out fired when
- * a cross-node drop targets a Context that already has the source
- * module's uuid. Paired with an error toast suggesting right-click →
- * Duplicate. Pre-Phase-B feedback was toast-only and felt silent. */
+/* Phase B: drop-rejection shake (200ms) + post-fork flash (1.5s). */
 @keyframes wp-shake {
-  0%, 100% { transform: translateX(0); }
+  0%,100% { transform: translateX(0); }
   20% { transform: translateX(-4px); }
   40% { transform: translateX(4px); }
   60% { transform: translateX(-3px); }
   80% { transform: translateX(2px); }
 }
-.wp-module--shake { animation: wp-shake 200ms ease-in-out; }
-
-/* Phase B: post-fork flash — green outline + glow on the row that
- * just received a new uuid via Save-to-library fork. Fades out over
- * 1.5s. The class is added by `saveEditedModule` after the modal
- * emits a draft whose `_originalId` differs from `id`, then auto-
- * removed via setTimeout. */
 @keyframes wp-flash {
-  0% { box-shadow: 0 0 0 2px var(--wp-kind-combine), 0 0 14px rgba(52, 211, 153, 0.4); }
+  0% { box-shadow: 0 0 0 2px var(--wp-kind-combine), 0 0 14px rgba(52,211,153,0.4); }
   100% { box-shadow: none; }
 }
-.wp-module--flash {
-  animation: wp-flash 1500ms ease-out;
-  border-color: var(--wp-kind-combine);
-}
+.wp-module--shake { animation: wp-shake 200ms ease-in-out; }
+.wp-module--flash { animation: wp-flash 1500ms ease-out; border-color: var(--wp-kind-combine); }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
