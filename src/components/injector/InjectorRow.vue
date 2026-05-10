@@ -115,9 +115,15 @@ function onBindingInput(ev: Event): void {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
+  /* Full 1px transparent border so conflict severity rules can paint
+   * the FULL frame of the row by overriding `border-color` only —
+   * mirrors `.wp-module.wp-conflict-*` from ContextWidget. Bottom-only
+   * separator handled by adjacent-sibling rule below. */
+  border: 1px solid transparent;
+  border-radius: var(--wp-radius-sm);
+  border-bottom-color: var(--wp-border-soft, var(--wp-border));
 }
-.wp-inj-row:last-child { border-bottom: 0; }
+.wp-inj-row:last-child { border-bottom-color: transparent; }
 .wp-inj-row--disconnected {
   border-left: 2px dashed var(--wp-warn);
   background: color-mix(in srgb, var(--wp-warn) 4%, transparent);
@@ -135,22 +141,15 @@ function onBindingInput(ev: Event): void {
     var(--wp-bg2) 8px
   );
 }
-/* Conflict border + subtle bg — mirrors `.wp-module.wp-conflict-*`
- * from ContextWidget but with a touch more visual presence (small
- * bg tint at 5%) so the highlight reads at canvas zoom. Severity
- * cascade: info < warn < error. */
-.wp-inj-row.wp-conflict-info {
-  border-left: 4px solid var(--wp-accent);
-  background: color-mix(in srgb, var(--wp-accent) 5%, transparent);
-}
-.wp-inj-row.wp-conflict-warning {
-  border-left: 4px solid var(--wp-amber);
-  background: color-mix(in srgb, var(--wp-amber) 5%, transparent);
-}
-.wp-inj-row.wp-conflict-error {
-  border-left: 4px solid var(--wp-red);
-  background: color-mix(in srgb, var(--wp-red) 5%, transparent);
-}
+/* Conflict frame — mirrors `.wp-module.wp-conflict-*` from
+ * ContextWidget exactly: 1px full border in severity color around
+ * the row, no bg tint (the colored frame alone reads at canvas
+ * zoom). Overrides the transparent default border declared above
+ * by changing `border-color` only — keeps the row's hit-box width
+ * + height consistent across conflict states. */
+.wp-inj-row.wp-conflict-info    { border-color: var(--wp-accent); }
+.wp-inj-row.wp-conflict-warning { border-color: var(--wp-amber); }
+.wp-inj-row.wp-conflict-error   { border-color: var(--wp-red); }
 
 .wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .wp-inj-toggle input {
