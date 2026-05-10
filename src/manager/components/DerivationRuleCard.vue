@@ -302,7 +302,10 @@ const branchCount = computed(() => rule.value.branches.length);
              reads "When $age equals". Row 2 = condition value below
              with explicit "value" label. Same for THEN. Halves the
              vertical space of the prior stacked layout. -->
-        <div class="dvr-grid">
+        <div
+          class="dvr-grid"
+          :class="{ 'dvr-grid--has-tick': isPresenceOp(branch.condition.op) }"
+        >
           <span class="dvr-label">When</span>
           <div
             class="dvr-var-wrap"
@@ -674,15 +677,20 @@ const branchCount = computed(() => rule.value.branches.length);
   min-width: 0;
 }
 .dvr-op-cell {
-  /* Wraps the op Select + the optional "must have value" tick so they
-   * share one grid column. Tick only renders for presence ops and
-   * collapses below the Select on tight widths. */
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  /* Wraps the op Select + the optional "must have value" tick. The
+   * tick is absolute-positioned below the Select so its presence
+   * doesn't change the grid row height — toggling on/off used to
+   * push the VALUE row up/down because the cell grew taller when
+   * the tick wrapped onto a second line. Now the cell reserves a
+   * single line for the Select and the tick floats over the gap
+   * before the VALUE row. */
+  position: relative;
+  min-width: 0;
 }
 .dvr-tick {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -691,6 +699,9 @@ const branchCount = computed(() => rule.value.branches.length);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
+  /* Sit above the VALUE row's input but visually under the op cell;
+   * z-index keeps the click target above the input border. */
+  z-index: 1;
 }
 .dvr-tick input[type="checkbox"] {
   margin: 0;
@@ -700,6 +711,13 @@ const branchCount = computed(() => rule.value.branches.length);
   cursor: pointer;
 }
 .dvr-tick__label { line-height: 1; }
+/* Reserve space for the tick under the op cell when it's rendered.
+ * Without this, the absolute-positioned tick would overlap the
+ * VALUE row beneath. Bumps the value-row's top margin only when the
+ * grid has the `--has-tick` modifier set by the template. */
+.dvr-grid--has-tick + .dvr-value-row {
+  margin-top: 16px;
+}
 .dvr-value-cell {
   display: flex;
   align-items: center;
