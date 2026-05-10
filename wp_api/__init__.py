@@ -7,6 +7,7 @@ from aiohttp import web
 
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
+from wp_api import bundles as _bundles
 from wp_api import categories as _categories
 from wp_api import import_export as _import_export
 from wp_api import library_save as _library_save
@@ -35,6 +36,7 @@ def register_routes(app: web.Application) -> None:
         logger.exception("wildcard-pipeline: db migration failed")
 
     _modules.register(app.router)
+    _bundles.register(app.router)
     _library_save.register(app.router)
     _categories.register(app.router)
     _test_runner.register(app.router)

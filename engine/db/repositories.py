@@ -413,3 +413,233 @@ class CategoryRepository:
             "ORDER BY sort_order ASC, name COLLATE NOCASE ASC;"
         ).fetchall()
         return [_row_to_category(r) for r in rows]
+
+
+class BundleNotFound(LookupError):
+    """Raised when a requested bundle id does not exist."""
+
+
+def _row_to_bundle(row: sqlite3.Row) -> dict[str, Any]:
+    """Materialize a bundles row into the SPA-facing dict shape.
+
+    `children` is stored as a JSON array of full module snapshots
+    (deep-cloned at save time). The repository deserializes it on
+    read so callers don't have to. `payload_hash` lives in the row
+    rather than being recomputed on demand because bundles are
+    intentionally frozen — the saved hash is the source of truth for
+    insert-time `inserted_at_hash` capture + library-drift detection.
+    """
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "color": row["color"],
+        "category_id": row["category_id"],
+        "tags": json.loads(row["tags"]),
+        "is_favorite": bool(row["is_favorite"]),
+        "children": json.loads(row["children"]),
+        "payload_hash": row["payload_hash"],
+        "version": row["version"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+class BundleRepository:
+    """Library-side store for bundle entries. Mirrors `ModuleRepository`
+    shape (list / get / create / update / delete / count + favorite
+    toggle) so the SPA Library page can re-use its existing fetch
+    patterns.
+
+    Bundles intentionally do NOT support the embed-bundle / snapshot
+    endpoints modules expose — bundles are themselves the snapshot
+    package, so re-snapshotting is a no-op."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def _gen_id(self) -> str:
+        """Generate a fresh 8-hex bundle id. Same scheme as modules so
+        `@{<id>}` ref syntax could theoretically reference a bundle in
+        the future (not currently used — bundles aren't `$variable`
+        producers themselves; their children are). Birthday-paradox
+        50% mark at ~65k bundles, well past expected library size."""
+        return secrets.token_hex(_ID_HEX_LEN // 2)
+
+    def create(
+        self,
+        *,
+        name: str,
+        description: str = "",
+        color: str | None = None,
+        category_id: str | None = None,
+        tags: list[str] | None = None,
+        children: list[dict[str, Any]] | None = None,
+        is_favorite: bool = False,
+        id: str | None = None,
+    ) -> dict[str, Any]:
+        if id is None:
+            bid = self._gen_id()
+        else:
+            if not isinstance(id, str) or len(id) != _ID_HEX_LEN or not all(
+                c in "0123456789abcdef" for c in id
+            ):
+                raise ValueError(
+                    f"id must be a {_ID_HEX_LEN}-char lowercase-hex string"
+                )
+            bid = id
+        children_blob = list(children) if children else []
+        # `payload_hash` is computed off the children blob — the only
+        # field whose change should signal "library has a newer
+        # version" to inserted instances.
+        ph = payload_hash({"children": children_blob})
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO bundles("
+                "id, name, description, color, category_id, tags, "
+                "is_favorite, children, payload_hash, version, "
+                "created_at, updated_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
+                (
+                    bid, name, description, color, category_id,
+                    json.dumps(tags or []), int(is_favorite),
+                    json.dumps(children_blob), ph, now, now,
+                ),
+            )
+        return self.get(bid)
+
+    def get(self, bundle_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM bundles WHERE id = ?;", (bundle_id,),
+        ).fetchone()
+        if row is None:
+            raise BundleNotFound(bundle_id)
+        return _row_to_bundle(row)
+
+    def update(
+        self,
+        bundle_id: str,
+        *,
+        name: str | _Unset = _UNSET,
+        description: str | _Unset = _UNSET,
+        color: str | None | _Unset = _UNSET,
+        category_id: str | None | _Unset = _UNSET,
+        tags: list[str] | _Unset = _UNSET,
+        children: list[dict[str, Any]] | _Unset = _UNSET,
+        is_favorite: bool | _Unset = _UNSET,
+    ) -> dict[str, Any]:
+        existing = self.get(bundle_id)
+        new = {
+            "name": existing["name"] if isinstance(name, _Unset) else name,
+            "description": (
+                existing["description"] if isinstance(description, _Unset) else description
+            ),
+            "color": existing["color"] if isinstance(color, _Unset) else color,
+            "category_id": (
+                existing["category_id"] if isinstance(category_id, _Unset) else category_id
+            ),
+            "tags": existing["tags"] if isinstance(tags, _Unset) else tags,
+            "children": (
+                existing["children"] if isinstance(children, _Unset) else children
+            ),
+            "is_favorite": (
+                existing["is_favorite"] if isinstance(is_favorite, _Unset) else is_favorite
+            ),
+        }
+        # Recompute payload_hash whenever children change. Other field
+        # edits (rename, recolor, retag) don't affect runtime behavior
+        # so they don't bump the hash — inserted instances stay clean
+        # on a pure-cosmetic library update.
+        ph = (
+            existing["payload_hash"]
+            if isinstance(children, _Unset)
+            else payload_hash({"children": new["children"]})
+        )
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "UPDATE bundles SET "
+                "name = ?, description = ?, color = ?, category_id = ?, "
+                "tags = ?, is_favorite = ?, children = ?, payload_hash = ?, "
+                "version = version + 1, updated_at = ? "
+                "WHERE id = ?;",
+                (
+                    new["name"], new["description"], new["color"],
+                    new["category_id"], json.dumps(new["tags"]),
+                    int(new["is_favorite"]),
+                    json.dumps(new["children"]), ph, now, bundle_id,
+                ),
+            )
+        return self.get(bundle_id)
+
+    def delete(self, bundle_id: str) -> None:
+        with self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM bundles WHERE id = ?;", (bundle_id,),
+            )
+        if cur.rowcount == 0:
+            raise BundleNotFound(bundle_id)
+
+    def _build_filter_clause(
+        self,
+        *,
+        category_id: str | None,
+        query: str | None,
+        favorites_only: bool,
+    ) -> tuple[str, list[Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if category_id is not None:
+            clauses.append("category_id = ?")
+            params.append(category_id)
+        if query:
+            escaped = (
+                query.replace("\\", "\\\\")
+                     .replace("%", "\\%")
+                     .replace("_", "\\_")
+            )
+            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            params.append(f"%{escaped}%")
+        if favorites_only:
+            clauses.append("is_favorite = 1")
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        return where, params
+
+    def list(
+        self,
+        *,
+        category_id: str | None = None,
+        query: str | None = None,
+        favorites_only: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where, params = self._build_filter_clause(
+            category_id=category_id, query=query,
+            favorites_only=favorites_only,
+        )
+        sql = "SELECT * FROM bundles" + where + " ORDER BY updated_at DESC, id DESC"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        elif offset:
+            sql += " LIMIT -1 OFFSET ?"
+            params.append(offset)
+        rows = self._conn.execute(sql, params).fetchall()
+        return [_row_to_bundle(r) for r in rows]
+
+    def count(
+        self,
+        *,
+        category_id: str | None = None,
+        query: str | None = None,
+        favorites_only: bool = False,
+    ) -> int:
+        where, params = self._build_filter_clause(
+            category_id=category_id, query=query,
+            favorites_only=favorites_only,
+        )
+        sql = "SELECT COUNT(*) AS n FROM bundles" + where
+        row = self._conn.execute(sql, params).fetchone()
+        return int(row["n"]) if row is not None else 0
