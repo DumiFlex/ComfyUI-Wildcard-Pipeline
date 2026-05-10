@@ -5,6 +5,7 @@ import Button from "./ui/Button.vue";
 import Select from "./ui/Select.vue";
 import Chip from "./ui/Chip.vue";
 import RichTextInput from "./RichTextInput.vue";
+import VarAutocompleteInput from "./VarAutocompleteInput.vue";
 import type {
   DerivationAction,
   DerivationBranch,
@@ -308,15 +309,13 @@ const branchCount = computed(() => rule.value.branches.length);
             :data-test="`cond-var-wrap-${index}-${bi}`"
           >
             <span class="dvr-prefix">$</span>
-            <input
-              type="text"
-              class="dvr-var-input"
-              :value="branch.condition.var"
+            <VarAutocompleteInput
+              :model-value="branch.condition.var"
+              :suggestions="varSuggestions"
               placeholder="variable"
-              :list="`dvr-vars-${index}`"
               :aria-label="`Condition variable for rule ${ruleNumber} branch ${bi + 1}`"
               :data-test="`cond-var-${index}-${bi}`"
-              @input="onConditionVar(bi, ($event.target as HTMLInputElement).value)"
+              @update:model-value="(v) => onConditionVar(bi, v)"
             />
           </div>
           <span class="dvr-label">is</span>
@@ -386,15 +385,14 @@ const branchCount = computed(() => rule.value.branches.length);
             :data-test="`act-var-wrap-${index}-${bi}`"
           >
             <span class="dvr-prefix">$</span>
-            <input
-              type="text"
-              class="dvr-var-input dvr-var-input--target"
-              :value="branch.action.target_var"
+            <VarAutocompleteInput
+              :model-value="branch.action.target_var"
+              :suggestions="varSuggestions"
               placeholder="target_var"
-              :list="`dvr-vars-${index}`"
+              input-color="var(--wp-success, #34d399)"
               :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}`"
               :data-test="`act-target-${index}-${bi}`"
-              @input="onActionTarget(bi, ($event.target as HTMLInputElement).value)"
+              @update:model-value="(v) => onActionTarget(bi, v)"
             />
           </div>
           <span class="dvr-label">action</span>
@@ -444,15 +442,14 @@ const branchCount = computed(() => rule.value.branches.length);
           <span class="dvr-label">Then</span>
           <div class="dvr-var-wrap" :data-test="`else-var-wrap-${index}`">
             <span class="dvr-prefix">$</span>
-            <input
-              type="text"
-              class="dvr-var-input dvr-var-input--target"
-              :value="rule.else.action.target_var"
+            <VarAutocompleteInput
+              :model-value="rule.else.action.target_var"
+              :suggestions="varSuggestions"
               placeholder="target_var"
-              :list="`dvr-vars-${index}`"
+              input-color="var(--wp-success, #34d399)"
               :aria-label="`ELSE action target variable for rule ${ruleNumber}`"
               :data-test="`else-target-${index}`"
-              @input="onElseTarget(($event.target as HTMLInputElement).value)"
+              @update:model-value="(v) => onElseTarget(v)"
             />
           </div>
           <span class="dvr-label">action</span>
@@ -505,15 +502,6 @@ const branchCount = computed(() => rule.value.branches.length);
       >Add else</Button>
     </div>
 
-    <!-- Datalist powering the native autocomplete on WHEN/THEN var
-         inputs (via `list=` attribute). One per rule so the option
-         list stays scoped to this card; varSuggestions is the same
-         catalog the action.value RichTextInput pulls from. Native
-         datalist gives prefix-match dropdown without custom dropdown
-         machinery — minimal CSS surface, browser-default popup. -->
-    <datalist :id="`dvr-vars-${index}`">
-      <option v-for="name in varSuggestions" :key="name" :value="name" />
-    </datalist>
   </Card>
 </template>
 

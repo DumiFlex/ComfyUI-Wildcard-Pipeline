@@ -308,21 +308,11 @@ describe("DerivationRuleCard.vue", () => {
     expect(next.branches[0].condition.op).toBe("not_exists");
   });
 
-  // ── 2026-05-10 follow-up: datalist autocomplete on var inputs ───
+  // ── 2026-05-10 follow-up: var autocomplete uses RichTextInput popover style ──
 
-  it("WHEN var input has list= attribute pointing at the rule's datalist", () => {
-    const wrap = mountCard(makeRule(), 7);
-    const varInput = wrap.find('[data-test="cond-var-7-0"]');
-    expect(varInput.attributes("list")).toBe("dvr-vars-7");
-  });
+  // ── 2026-05-10 follow-up: var autocomplete uses RichTextInput popover style ──
 
-  it("THEN target_var input has list= attribute pointing at the rule's datalist", () => {
-    const wrap = mountCard(makeRule(), 7);
-    const targetInput = wrap.find('[data-test="act-target-7-0"]');
-    expect(targetInput.attributes("list")).toBe("dvr-vars-7");
-  });
-
-  it("datalist renders one option per varSuggestion entry", () => {
+  it("WHEN var input renders the inner <input> via VarAutocompleteInput", () => {
     const wrap = mount(DerivationRuleCard, {
       props: {
         modelValue: makeRule(),
@@ -330,10 +320,33 @@ describe("DerivationRuleCard.vue", () => {
         varSuggestions: ["age", "color", "mood"],
       },
     });
-    const datalist = wrap.find("datalist");
-    expect(datalist.attributes("id")).toBe("dvr-vars-0");
-    const opts = datalist.findAll("option");
-    expect(opts).toHaveLength(3);
-    expect(opts.map((o) => o.attributes("value"))).toEqual(["age", "color", "mood"]);
+    // VarAutocompleteInput forwards data-test to its inner <input>;
+    // both the wrapping element AND the component own the prop.
+    const condVar = wrap.find('[data-test="cond-var-0-0"]');
+    expect(condVar.exists()).toBe(true);
+    expect(condVar.element.tagName).toBe("INPUT");
+  });
+
+  it("each var input is a VarAutocompleteInput with suggestions plumbed", () => {
+    const wrap = mount(DerivationRuleCard, {
+      props: {
+        modelValue: makeRule({
+          else: { action: { target_var: "out", mode: "replace", value: "x" } },
+        }),
+        index: 0,
+        varSuggestions: ["age", "color", "mood"],
+      },
+    });
+    const allAc = wrap.findAllComponents({ name: "VarAutocompleteInput" });
+    // 3 var inputs per rule: condition.var + action.target_var + else.target_var
+    expect(allAc).toHaveLength(3);
+    for (const ac of allAc) {
+      expect(ac.props("suggestions")).toEqual(["age", "color", "mood"]);
+    }
+  });
+
+  it("native browser datalist is no longer rendered (replaced by custom popover)", () => {
+    const wrap = mountCard(makeRule(), 0);
+    expect(wrap.find("datalist").exists()).toBe(false);
   });
 });
