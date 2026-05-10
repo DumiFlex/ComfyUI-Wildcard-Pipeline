@@ -2073,15 +2073,18 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   transition: opacity 0.15s, filter 0.15s;
 }
 .wp-context--muted::before {
-  content: attr(data-mode-label);
+  /* Label dropped — the dim opacity + litegraph's native title bar
+   * dim are enough signal. Keeping the empty pseudo so the existing
+   * positioning rules don't dangle (cheap; renders nothing). */
+  content: "";
   position: absolute;
   top: 4px;
   right: 6px;
   z-index: 4;
-  padding: 1px 8px;
+  padding: 0;
   border-radius: 999px;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
+  background: transparent;
+  border: 0;
   color: var(--wp-text2);
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px;

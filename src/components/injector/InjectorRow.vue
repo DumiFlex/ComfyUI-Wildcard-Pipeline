@@ -135,19 +135,21 @@ function onBindingInput(ev: Event): void {
     var(--wp-bg2) 8px
   );
 }
-/* Conflict border tint — mirrors `.wp-module.wp-conflict-*` from
- * ContextWidget. Severity-colored left border (4px) gives the row a
- * glance-affordance for the conflict state without flooding the
- * background. Cascade order matches the module pattern: info < warn
- * < error so a more severe conflict overrides a less severe one. */
+/* Conflict border + subtle bg — mirrors `.wp-module.wp-conflict-*`
+ * from ContextWidget but with a touch more visual presence (small
+ * bg tint at 5%) so the highlight reads at canvas zoom. Severity
+ * cascade: info < warn < error. */
 .wp-inj-row.wp-conflict-info {
   border-left: 4px solid var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 5%, transparent);
 }
 .wp-inj-row.wp-conflict-warning {
   border-left: 4px solid var(--wp-amber);
+  background: color-mix(in srgb, var(--wp-amber) 5%, transparent);
 }
 .wp-inj-row.wp-conflict-error {
   border-left: 4px solid var(--wp-red);
+  background: color-mix(in srgb, var(--wp-red) 5%, transparent);
 }
 
 .wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }

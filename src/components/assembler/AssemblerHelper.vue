@@ -32,7 +32,13 @@ const props = defineProps<{
   /** Seed used by the server-side preview resolver. Optional; defaults
    *  to 42 for stable preview rolls. */
   previewSeed?: number;
+  /** Litegraph mode — 0=ALWAYS, 2=NEVER (mute), 4=BYPASS. Drives
+   *  the dim overlay so muted/bypassed state matches litegraph's
+   *  native node-frame dim. */
+  nodeMode?: number;
 }>();
+
+const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
 const emit = defineEmits<{
   (e: "insertVar", v: string): void;
@@ -193,7 +199,7 @@ function rippleStyle(v: string): Record<string, string> {
 </script>
 
 <template>
-  <div class="wp-asm-helper">
+  <div class="wp-asm-helper" :class="{ 'wp-asm-helper--skipped': isSkipped }">
     <!-- variables section -->
     <div class="wp-asm-section">
       <span>variables</span>
@@ -260,7 +266,10 @@ function rippleStyle(v: string): Record<string, string> {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: opacity 120ms ease;
 }
+/* Mute (mode 2) / bypass (mode 4) — match litegraph's native dim. */
+.wp-asm-helper--skipped { opacity: 0.45; }
 .wp-asm-section {
   display: flex;
   align-items: center;

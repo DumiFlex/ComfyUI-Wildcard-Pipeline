@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-const props = defineProps<{ snapshot: string }>();
+const props = withDefaults(
+  defineProps<{
+    snapshot: string;
+    /** Litegraph mode — 0=ALWAYS, 2=NEVER (mute), 4=BYPASS. Drives
+     *  the dim overlay so muted/bypassed state matches litegraph's
+     *  native title/border dim. */
+    nodeMode?: number;
+  }>(),
+  { nodeMode: 0 },
+);
+
+const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
 type TabId = "snapshot" | "trace" | "picks" | "warnings";
 
@@ -79,7 +90,7 @@ function downloadJson(): void {
 </script>
 
 <template>
-  <div class="wp-debug">
+  <div class="wp-debug" :class="{ 'wp-debug--skipped': isSkipped }">
     <div v-if="parsed" class="wp-dbg-tabs" role="tablist">
       <button
         v-for="t in TABS"
@@ -140,7 +151,11 @@ function downloadJson(): void {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  transition: opacity 120ms ease;
 }
+/* Mute (mode 2) / bypass (mode 4) — dim widget body so the muted
+ * state matches litegraph's native node-frame dim. */
+.wp-debug--skipped { opacity: 0.45; }
 .wp-dbg-tabs {
   display: flex;
   gap: 2px;

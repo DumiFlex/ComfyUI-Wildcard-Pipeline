@@ -203,6 +203,15 @@ export function mountHelper(node: AssemblerNode) {
         snapshotEqual,
       );
 
+      // Litegraph mode tracker — instant updates via property
+      // intercept in reactiveFromGraph. Drives the dim overlay on
+      // the helper widget when the assembler node is muted/bypassed.
+      const nodeMode = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => (node as unknown as { mode?: number }).mode ?? 0,
+        Object.is,
+      );
+
       // API-backed resolved map. Updates whenever `chainKey` shifts.
       const apiResolved = ref<Record<string, string> | null>(null);
       const apiKey = ref<string>("");
@@ -319,6 +328,7 @@ export function mountHelper(node: AssemblerNode) {
           template,
           resolvedMap: fresh,
           previewSeed: PREVIEW_SEED,
+          nodeMode: nodeMode.value,
           onInsert: (token: string) => insertIntoTemplate(node, token),
           onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
         });
