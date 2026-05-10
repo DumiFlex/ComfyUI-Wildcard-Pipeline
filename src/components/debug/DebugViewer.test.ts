@@ -323,7 +323,7 @@ describe("DebugViewer", () => {
     expect(labels).toEqual(["$color", "$shape", "$size"]);
   });
 
-  it("Internal flag renders pi-lock icon next to the label", async () => {
+  it("Internal flag renders pi-eye-slash icon next to the label", async () => {
     const intSnap = JSON.stringify({
       __wp_trace__: [
         {
@@ -337,10 +337,13 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: intSnap } });
     await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
-    expect(wrapper.find(".wp-dbg-trace-label .pi-lock").exists()).toBe(true);
+    // Eye-slash (hidden / private) reads as "engine-only binding" —
+    // semantically distinct from lock (pinned seed). Was pi-lock
+    // pre-fix but the icons were swapped between internal + seed-lock.
+    expect(wrapper.find(".wp-dbg-trace-label .pi-eye-slash").exists()).toBe(true);
   });
 
-  it("Locked seed renders pi-bookmark-fill icon next to the label", async () => {
+  it("Locked seed renders pi-lock icon next to the label", async () => {
     const lockedSnap = JSON.stringify({
       __wp_trace__: [
         {
@@ -355,7 +358,9 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: lockedSnap } });
     await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
-    expect(wrapper.find(".wp-dbg-trace-label .pi-bookmark-fill").exists()).toBe(true);
+    // Lock icon = "this seed is pinned/locked" — matches the
+    // ContextWidget seed-lock toggle visual.
+    expect(wrapper.find(".wp-dbg-trace-label .pi-lock").exists()).toBe(true);
   });
 
   it("Constraint row labels as $source → $target via trace lookup", async () => {
@@ -446,6 +451,41 @@ describe("DebugViewer", () => {
     const labels = wrapper.findAll(".wp-dbg-trace-label").map((l) => l.text());
     // Last row is the constraint — both ends resolve to $varnames.
     expect(labels[labels.length - 1]).toContain("$color → $shape");
+  });
+
+  it("Warnings tab resolves @{uuid} refs in message text", async () => {
+    // Cycle-detected warnings include the cycle path as `Cycle:
+    // @{a} → @{b} → @{a}` — the same `@{uuid}` → `@{$varname}`
+    // rewrite that picks-tab values get should apply here.
+    const cycleSnap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "d9cb9f0f",
+          type: "wildcard",
+          status: "ok",
+          binding: "cycle_a",
+          writes: [{ variable: "cycle_a", value: "x" }],
+        },
+        {
+          id: "8c299ebd",
+          type: "wildcard",
+          status: "ok",
+          binding: "cycle_b",
+          writes: [{ variable: "cycle_b", value: "y" }],
+        },
+      ],
+      __wp_warnings__: [
+        {
+          type: "cycle_detected",
+          message: "Cycle: @{d9cb9f0f} → @{8c299ebd} → @{d9cb9f0f}",
+          severity: "error",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: cycleSnap } });
+    await wrapper.findAll(".wp-dbg-tab")[3].trigger("click");
+    const msg = wrapper.find(".wp-dbg-warn-msg");
+    expect(msg.text()).toBe("Cycle: @{$cycle_a} → @{$cycle_b} → @{$cycle_a}");
   });
 
   it("Picks tab @{uuid} resolution uses binding fallback for disabled refs", async () => {

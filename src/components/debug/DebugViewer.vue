@@ -427,15 +427,21 @@ const traceCount = computed(() => traceRows.value.length);
 
 /** Typed warnings list — coerce loose dicts into a known shape so
  *  rendering can pull severity / message reliably. Defaults severity
- *  to "warning" when the engine didn't tag one. */
+ *  to "warning" when the engine didn't tag one. Warning messages
+ *  (e.g. cycle-detected paths like `Cycle: @{d9cb9f0f} → @{8c299ebd}
+ *  → @{d9cb9f0f}`) get the same `@{uuid}` → `@{$varname}` rewrite as
+ *  pick values, so the user reads cycle paths in user-language. */
 const warningEntries = computed<WarningEntry[]>(() => {
+  const idMap = moduleIdToVar.value;
   return warnings.value.map((w) => {
     if (!w || typeof w !== "object") return { type: "unknown", message: String(w) };
     const o = w as Record<string, unknown>;
+    const rawMsg = typeof o.message === "string" ? o.message : undefined;
+    const rawBinding = typeof o.binding === "string" ? o.binding : undefined;
     return {
       type: typeof o.type === "string" ? o.type : "unknown",
-      binding: typeof o.binding === "string" ? o.binding : undefined,
-      message: typeof o.message === "string" ? o.message : undefined,
+      binding: rawBinding ? resolveRefsToVarNames(rawBinding, idMap) : undefined,
+      message: rawMsg ? resolveRefsToVarNames(rawMsg, idMap) : undefined,
       severity: (o.severity === "info" || o.severity === "warning" || o.severity === "error")
         ? o.severity
         : "warning",
@@ -562,20 +568,24 @@ function downloadJson(): void {
             <span v-if="row.overwrite" class="wp-dbg-trace-flag" title="Overwrote upstream value">↻</span>
             <!-- Internal flag — `instance.internal` was set, every
                  binding the module wrote is engine-only (stripped
-                 from public ctx). Lock glyph is the same icon used in
-                 ContextWidget's internal toggle. -->
+                 from public ctx). Eye-slash glyph reads as
+                 "hidden / private" — semantically right for "this
+                 binding doesn't appear in the public ctx payload".
+                 Was previously pi-lock, but lock semantically belongs
+                 to "pinned/locked seed" so the icons were swapped. -->
             <i
               v-if="row.internal"
-              class="wp-dbg-trace-flag pi pi-lock"
+              class="wp-dbg-trace-flag pi pi-eye-slash"
               title="Internal — binding hidden from public ctx"
               aria-hidden="true"
             ></i>
             <!-- Seed-lock flag — module rolled with `instance.locked_seed`
-                 instead of inheriting the chain seed. Pin glyph signals
-                 "this seed is pinned" to match the lock-toggle UI. -->
+                 instead of inheriting the chain seed. Lock glyph
+                 ("this seed is locked / pinned") matches the seed-lock
+                 toggle in ContextWidget. -->
             <i
               v-if="row.seedLocked"
-              class="wp-dbg-trace-flag pi pi-bookmark-fill"
+              class="wp-dbg-trace-flag pi pi-lock"
               title="Locked seed — module rolled with a pinned seed"
               aria-hidden="true"
             ></i>
@@ -873,10 +883,15 @@ function downloadJson(): void {
   font-size: 9px;
   margin-left: 2px;
 }
-.wp-dbg-trace-label .pi-lock {
+/* Internal (eye-slash) → accent — same color the rest of the app uses
+ * for "this is engine-internal" cues. */
+.wp-dbg-trace-label .pi-eye-slash {
   color: var(--wp-accent);
 }
-.wp-dbg-trace-label .pi-bookmark-fill {
+/* Locked seed (lock) → amber — same warm tone the chain-seed UI uses
+ * for the lock toggle, so the user reads "this seed is pinned" at a
+ * glance. */
+.wp-dbg-trace-label .pi-lock {
   color: var(--wp-amber);
 }
 /* Type cell is also a `wp-kind-chip` (from theme.css) — the chip
