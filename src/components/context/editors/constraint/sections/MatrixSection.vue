@@ -384,21 +384,29 @@ function onResetFactor(src: string, tgt: string): void {
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.25);
   border: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
+  border-radius: 3px;
+  color: var(--wp-text, #fff);
   cursor: pointer;
   padding: 0;
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1;
-  opacity: 0.45;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
-.mx__cog:hover { opacity: 1; color: var(--wp-accent-text, var(--wp-text)); }
+/* Reveal on cell hover so the corner stays clean when not in use,
+   but the affordance is one mouseover away. Keep visible while
+   hovering the cog itself or while its popover is open. */
+.mx__cell:hover .mx__cog,
+.mx__cog:hover,
+.mx__cog:focus-visible { opacity: 1; }
+.mx__cog:hover { background: var(--wp-accent); color: white; }
 .mx__popover {
   position: absolute;
   top: 100%;
