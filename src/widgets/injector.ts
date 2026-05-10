@@ -17,8 +17,22 @@ const InjectorWidget = defineAsyncComponent(
 );
 
 type InjectorNode = LiteNodeLike & MountTargetNode & {
-  inputs?: Array<{ name?: string; link?: number | null; type?: string } | null | undefined>;
+  inputs?: Array<{ name?: string; type?: string; link?: number | null; label?: string } | null | undefined>;
 };
+
+/**
+ * V3 Autogrow inputs are namespaced with the parent input id — `name`
+ * is e.g. `inputs.input_0`. The trailing segment (`input_0`) is the
+ * stable slot id and matches what the engine receives after the
+ * namespace strip in `injector_node.execute`. `label` is NOT used
+ * since ComfyUI lets the user rename labels (right-click → Rename),
+ * which would break our row-to-slot mapping.
+ */
+function injectorSlotName(inp: { name?: string }): string | null {
+  if (typeof inp.name !== "string") return null;
+  const tail = inp.name.split(".").pop() ?? "";
+  return tail.startsWith("input_") ? tail : null;
+}
 
 export function create(node: InjectorNode, inputName: string) {
   const initial = serializeWidgetJson(
@@ -43,16 +57,11 @@ export function create(node: InjectorNode, inputName: string) {
           const out: string[] = [];
           const inputs = node.inputs ?? [];
           for (const inp of inputs) {
-            if (!inp || typeof inp.name !== "string") continue;
-            if (!inp.name.startsWith("input_")) continue;
+            if (!inp) continue;
+            const slot = injectorSlotName(inp);
+            if (!slot) continue;
             if (inp.link == null) continue;
-            out.push(inp.name);
-          }
-          // Diagnostic — flip on by setting `window.__wp_inj_log__ = true`.
-          const dbg = (window as unknown as { __wp_inj_log__?: boolean }).__wp_inj_log__;
-          if (dbg) {
-            // eslint-disable-next-line no-console
-            console.log("[wp-inj]", node.id, "connected:", out, "raw inputs:", inputs);
+            out.push(slot);
           }
           return out;
         },
@@ -68,11 +77,12 @@ export function create(node: InjectorNode, inputName: string) {
           const out: Record<string, string> = {};
           const inputs = node.inputs ?? [];
           for (const inp of inputs) {
-            if (!inp || typeof inp.name !== "string") continue;
-            if (!inp.name.startsWith("input_")) continue;
+            if (!inp) continue;
+            const slot = injectorSlotName(inp);
+            if (!slot) continue;
             if (inp.link == null) continue;
             if (typeof inp.type === "string" && inp.type !== "*") {
-              out[inp.name] = inp.type;
+              out[slot] = inp.type;
             }
           }
           return out;

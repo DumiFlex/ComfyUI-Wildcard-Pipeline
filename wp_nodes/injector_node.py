@@ -56,6 +56,19 @@ class WPContextInjector(io.ComfyNode):
 
     @classmethod
     def execute(cls, rows: str = "", upstream: PipelineContext | None = None, **slot_values: Any):
+        # V3 Autogrow namespaces dynamic inputs as `inputs.input_0`,
+        # `inputs.input_1`, … — but the widget JSON's `slot_name` field
+        # holds the bare label `input_0`. Normalize incoming kwargs to
+        # strip the parent input id prefix so lookups work with either
+        # form (whatever ComfyUI's executor decides to pass).
+        normalized: dict[str, Any] = {}
+        for key, val in slot_values.items():
+            if key.startswith("inputs."):
+                normalized[key[len("inputs."):]] = val
+            else:
+                normalized[key] = val
+        slot_values = normalized
+
         upstream_ctx: dict = upstream.context if upstream is not None else {}
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = upstream.internals if upstream is not None else {}
