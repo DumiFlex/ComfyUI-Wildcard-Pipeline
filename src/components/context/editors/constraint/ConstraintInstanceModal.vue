@@ -68,11 +68,12 @@ function findWildcard(id: string | null | undefined): WildcardPayload | null {
 }
 
 function wildcardName(id: string | null | undefined): string {
+  // Return meta.name when sibling wildcard is loaded in this Context;
+  // otherwise empty string. Caller falls back to "source"/"target"
+  // role labels — a truncated UUID (`…ae07018b`) communicates nothing
+  // useful to the user when the wildcard lives in another Context.
   const m = findWildcardModule(id);
-  // Prefer meta.name; fall back to short id (last 8 chars) so users
-  // still see *something* identifying the wildcard when not in context.
-  if (m?.meta?.name) return m.meta.name;
-  return id ? `…${id.slice(-8)}` : "";
+  return m?.meta?.name ?? "";
 }
 
 interface ConstraintPayload {
