@@ -928,12 +928,23 @@ onBeforeUnmount(detachCaptureListeners);
   font-family: var(--wp-font);
 }
 
-/* ── Header ──────────────────────────────────────────────────────── */
+/* ── Header — brand gradient + dark wash overlay. Mirrors BundlePicker
+ *  so both pickers read as part of the same family. */
 .wp-picker__head {
   display: flex; align-items: center; gap: 10px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--wp-border);
+  background: var(--wp-brand-gradient);
+  position: relative;
 }
+.wp-picker__head::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(35, 35, 35, 0.85);
+  pointer-events: none;
+}
+.wp-picker__head > * { position: relative; z-index: 1; }
 .wp-picker__head-text { flex: 1; min-width: 0; }
 .wp-picker__eyebrow {
   font-size: 11px;
