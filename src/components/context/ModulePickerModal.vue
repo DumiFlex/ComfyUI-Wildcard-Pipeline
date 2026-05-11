@@ -1333,15 +1333,25 @@ onBeforeUnmount(detachCaptureListeners);
   color: var(--wp-text-dim);
   font-size: 11px;
 }
-.wp-picker__hint { color: var(--wp-text-muted); }
+/* Hint strip — keycap-style kbd chips matching BundlePicker so both
+ * pickers feel like the same family. Raised look via 2px bottom
+ * border, monospaced label, neutral chip color. */
+.wp-picker__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--wp-text-dim, var(--wp-text-muted));
+  font: 500 11px/1 var(--wp-font-sans);
+}
 .wp-picker__hint kbd {
-  font-family: var(--wp-font-mono);
-  font-size: 10px;
+  font: 600 10px/1 var(--wp-font-mono, monospace);
+  background: var(--wp-bg2, var(--wp-bg-3));
   border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3);
-  color: var(--wp-text-muted);
-  border-radius: 4px;
-  padding: 1px 5px;
+  border-bottom-width: 2px;
+  color: var(--wp-text);
+  border-radius: 3px;
+  padding: 2px 5px;
   margin: 0 1px;
 }
 .wp-picker__footer-spacer { flex: 1; }
