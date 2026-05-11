@@ -92,6 +92,13 @@
   --wp-kind-pipeline:    #fb7185;
   --wp-kind-fixed:       #22d3ee;
 
+  /* Bundle frame default color — used when a bundle library entry
+   * has no user-picked color set. Muted steel-blue chosen to read
+   * as "structural wrapper" without competing with any kind hue or
+   * conflict-severity color. Per-bundle color overrides this via
+   * inline style on the BundleFrame component. */
+  --wp-bundle-default:   #46566B;
+
   --wp-radius-lg: 12px;
   /* Three shadow scales used across surfaces:
    *   - sm: subtle drop for inline panels (toasts, context menus)
