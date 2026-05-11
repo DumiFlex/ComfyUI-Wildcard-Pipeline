@@ -2467,6 +2467,11 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
    * bundle frame contains them; row-gap inside breaks the contained
    * look. */
   margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
+  /* Outer padding shrinks the row vertical too — `.wp-module` uses
+   * `--wp-pad-row` (4px 6px default) which makes rows the same
+   * height as standalone modules. Tighter padding here makes the
+   * row visually smaller than a standalone module. */
+  padding: 2px 4px !important;
   /* Children inside the frame use a slightly darker bg than the
    * overlay tint so they stand out as rows, not blank space. */
   background: var(--wp-bg3) !important;
