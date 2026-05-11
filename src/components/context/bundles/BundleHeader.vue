@@ -118,10 +118,16 @@ const summary = computed(() => {
    * radius, no frame walls. When the bundle is collapsed, the
    * bottom divider hides (no children below to separate from).
    *
-   * Padding mirrors `--wp-pad-row` from display-prefs so the header
-   * has the same left/right spacing as standalone module rows. */
+   * Padding + 3px transparent left-border match `.wp-module`'s
+   * box model exactly: module has `border-left: 3px solid <kind>` +
+   * `padding: var(--wp-pad-row)`, so its content starts 3px in
+   * from the row edge before padding. Bundle header without the
+   * border would have content 3px further left than module content.
+   * The transparent border reserves that 3px so headers + module
+   * children line up vertically. */
   background: color-mix(in srgb, var(--b) 18%, transparent);
   border-bottom: 1px solid var(--b);
+  border-left: 3px solid transparent;
   padding: var(--wp-pad-row, 4px 6px);
   display: flex;
   align-items: center;
