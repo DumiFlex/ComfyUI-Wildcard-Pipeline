@@ -2500,11 +2500,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 .wp-module--in-bundle {
   margin-left: 8px !important;
   margin-right: 8px !important;
-  /* Outer padding shrinks the row vertical too — `.wp-module` uses
-   * `--wp-pad-row` (4px 6px default) which makes rows the same
-   * height as standalone modules. Tighter padding here makes the
-   * row visually smaller than a standalone module. */
-  padding: 2px 4px !important;
+  /* Children render at their default row height — drag handle,
+   * collapse caret, kind icon all read the same size as standalone
+   * modules. Tighter padding here squeezed icons visually; reverted
+   * to inherit `--wp-pad-row` from `.wp-module`. */
   /* Children inside the frame use a slightly darker bg than the
    * overlay tint so they stand out as rows, not blank space. */
   background: var(--wp-bg3) !important;
@@ -2514,6 +2513,13 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
  * the header and first child, and between siblings inside the
  * bundle. The overlay extends 6px below the last child for the
  * matching bottom-padding effect. */
+
+/* Last bundle child gets extra margin-bottom so the overlay's
+ * PAD_BOTTOM (6px below last child) doesn't overlap into the next
+ * standalone module — keeps a visible gap after the bundle ends. */
+.wp-module--bundle-last {
+  margin-bottom: 8px !important;
+}
 /* Children keep default icon + control sizes (drag handle, collapse,
  * checkbox, kind icon). Only the outer .wp-module padding shrinks,
  * which reduces row height without making the inner controls look
