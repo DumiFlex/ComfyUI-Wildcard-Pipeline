@@ -18,6 +18,9 @@ import {
   cacheVersion as previewCacheVersion,
 } from "../../extension/preview-resolver";
 import ModulePickerModal from "./ModulePickerModal.vue";
+import BundlePickerModal from "./BundlePickerModal.vue";
+import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
+import { api } from "../../manager/api/client";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
@@ -273,6 +276,76 @@ function dismissFirstRunHint() {
 function openPicker() {
   dismissFirstRunHint();
   showPicker.value = true;
+}
+
+// Bundle picker state — second add-flow alongside the module picker.
+// Opened via the "+ Add Bundle" button in the footer + empty-state.
+const showBundlePicker = ref(false);
+function openBundlePicker() {
+  dismissFirstRunHint();
+  showBundlePicker.value = true;
+}
+
+/** Fetch a bundle from the library, deserialize its children via the
+ *  insert glue, splice into modules[] at the end of the current list,
+ *  and push a fresh BundleInstance into bundles[]. Mutating the shared
+ *  `value` ref triggers the standard write-back + assembler refresh
+ *  path. */
+async function onPickBundle(bundleId: string): Promise<void> {
+  try {
+    const entry = await api.bundles.get(bundleId);
+    const libEntry: BundleLibraryEntry = {
+      id: entry.id,
+      name: entry.name,
+      color: entry.color,
+      children: entry.children as BundleLibraryEntry["children"],
+      payload_hash: entry.payload_hash,
+    };
+    const insertIdx = value.value.modules.length;
+    const { modulesToSplice, bundleInstance } = buildBundleInsertion(libEntry, insertIdx);
+    // Mutate via spread to keep the ref's identity stable + trigger
+    // Vue reactivity. modules[] gets the new rows at the tail, bundles[]
+    // gets the new instance.
+    //
+    // `modulesToSplice` carries the loose ChildSnapshot shape from
+    // uuid-remap (only `id` + `type` typed). Bundle library children
+    // are stored as FULL module snapshots at save time — defaults are
+    // backfilled here for any fields the bundle editor didn't write
+    // explicitly so the spliced row satisfies ModuleEntry at runtime.
+    const splice = modulesToSplice.map((c) => {
+      const rec = c as Record<string, unknown>;
+      const meta = (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" };
+      const entries = (rec.entries as ModuleEntry["entries"] | undefined) ?? [];
+      return {
+        id: c.id,
+        _uid: c._uid,
+        type: c.type as ModuleEntry["type"],
+        enabled: (rec.enabled as boolean | undefined) ?? true,
+        meta,
+        entries,
+        payload: c.payload,
+        instance: c.instance,
+        payload_hash: c.payload_hash,
+        bundle_origin: c.bundle_origin,
+      } as ModuleEntry;
+    });
+    value.value = {
+      ...value.value,
+      modules: [...value.value.modules, ...splice],
+      bundles: [...(value.value.bundles ?? []), bundleInstance],
+    };
+  } catch (e) {
+    // Surface fetch / parse errors via the existing toast channel so
+    // users see what went wrong without diving into devtools.
+    const msg = e instanceof Error ? e.message : String(e);
+    pushToast(`Bundle insert failed: ${msg}`, { severity: "error" });
+  }
+}
+
+/** Stub — opens SPA in author-mode to create a new bundle. v1 routes
+ *  to /bundles/new; SPA wires up the editor in Phase 4. */
+function openBundleAuthor(): void {
+  openSpaLibrary();   // Reuse existing SPA link for v1 — Phase 4 deep-links to bundle editor
 }
 
 // Populated vs. empty page swap is driven by a wrapper <Transition
@@ -1963,7 +2036,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       </div>
         </TransitionGroup>
 
-        <!-- Footer: primary add + SPA link. Shown only when list is non-empty. -->
+        <!-- Footer: primary add + bundle add. Shown only when list is
+             non-empty. "Open in SPA" was replaced with "+ Add Bundle"
+             when the bundle system shipped — bundles ARE the SPA-side
+             reusable scaffolds users typically wanted that button for.
+             SPA library still reachable via the right-click context
+             menu on any module. -->
         <div class="wp-w-footer">
           <button
             class="wp-btn wp-btn--primary"
@@ -1972,8 +2050,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           >
             <i class="pi pi-plus" /> Add module
           </button>
-          <button class="wp-btn" @click="openSpaLibrary">
-            Open in SPA <i class="pi pi-external-link" />
+          <button
+            class="wp-btn"
+            data-testid="open-bundle-picker"
+            @click="openBundlePicker"
+          >
+            <i class="pi pi-plus" /> Add Bundle
           </button>
         </div>
       </div>
@@ -2007,8 +2089,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           >
             <i class="pi pi-plus" /> Add module
           </button>
-          <button class="wp-btn" @click="openSpaLibrary">
-            Open in SPA <i class="pi pi-external-link" />
+          <button
+            class="wp-btn"
+            data-testid="open-bundle-picker"
+            @click="openBundlePicker"
+          >
+            <i class="pi pi-plus" /> Add Bundle
           </button>
         </div>
       </div>
@@ -2028,6 +2114,14 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       :already-added-ids="value.modules.map((m: ModuleEntry) => m.id)"
       @add="onPickerAdd"
       @close="showPicker = false"
+    />
+
+    <BundlePickerModal
+      :visible="showBundlePicker"
+      :already-added-ids="(value.bundles ?? []).map((b) => b.library_id)"
+      @pick="onPickBundle"
+      @create="openBundleAuthor"
+      @close="showBundlePicker = false"
     />
 
     <ModuleEditModal
