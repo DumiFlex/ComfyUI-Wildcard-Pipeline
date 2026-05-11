@@ -44,6 +44,7 @@ const summary = computed(() => {
 <template>
   <div
     class="wp-bundle-header"
+    :class="{ 'wp-bundle-header--collapsed': instance.collapsed }"
     :style="{ '--b': frameColor }"
     :data-bundle-uid="instance._uid"
     data-bundle-header
@@ -93,7 +94,8 @@ const summary = computed(() => {
   /* The bundle frame box is painted by `.wp-bundle-overlay` in
    * ContextWidget. Header carries only its own bottom divider
    * separating it from the children below — no full border, no
-   * radius, no frame walls. */
+   * radius, no frame walls. When the bundle is collapsed, the
+   * bottom divider hides (no children below to separate from). */
   background: color-mix(in srgb, var(--b) 18%, transparent);
   border-bottom: 1px solid var(--b);
   padding: 6px 8px;
@@ -103,6 +105,9 @@ const summary = computed(() => {
   font: 500 11px/1.4 var(--wp-font-sans);
   color: var(--wp-text);
   cursor: default;
+}
+.wp-bundle-header--collapsed {
+  border-bottom-color: transparent;
 }
 .wp-bundle-handle {
   color: var(--wp-text3);
@@ -177,23 +182,36 @@ const summary = computed(() => {
   color: var(--wp-text-dim, var(--wp-text3));
   flex-shrink: 0;
 }
+/* Mirrors `.wp-btn--icon-sm` from ContextWidget — transparent
+ * default, hover reveals border + bg. Same shape as the per-module
+ * action buttons so the action cluster reads as one family. */
 .wp-bundle-action {
-  width: 22px;
-  height: 22px;
-  padding: 4px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--wp-text-dim, var(--wp-text3));
-  border-radius: 3px;
+  font: 500 11px/1 var(--wp-font-sans);
+  padding: 3px;
+  border-radius: var(--wp-radius, 4px);
   cursor: pointer;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.wp-bundle-action:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-border-soft, var(--wp-border2, var(--wp-border)));
+  color: var(--wp-text);
 }
 .wp-bundle-action .pi {
-  font-size: 12px;
-  line-height: 1;
+  font-size: 11px;
+}
+.wp-bundle-action--danger:hover {
+  color: var(--wp-danger);
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border)));
 }
 .wp-bundle-action:hover { background: var(--wp-bg3); }
 .wp-bundle-action--danger:hover { color: var(--wp-red); }

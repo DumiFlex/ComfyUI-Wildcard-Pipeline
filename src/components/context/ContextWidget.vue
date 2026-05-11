@@ -459,19 +459,28 @@ function updateBundleOverlays(): void {
   }
   const bundles = value.value.bundles ?? [];
   const next: BundleOverlay[] = [];
+  // Padding inside the frame — extends the overlay 2px above the
+  // header + 4px below the last child so the children visibly
+  // breathe inside the box. Collapsed bundles get 0 bottom padding
+  // (just the header tight in its own box).
+  const PAD_TOP = 0;
+  const PAD_BOTTOM = 4;
   for (const b of bundles) {
     const headerEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
     const lastChildEl = container.querySelector<HTMLElement>(
       `.wp-module[data-bundle-uid="${b._uid}"][data-module-idx="${b.end_idx}"]`,
     );
     if (!headerEl) continue;
-    const top = headerEl.offsetTop;
-    let bottom = top + headerEl.offsetHeight;
+    const top = headerEl.offsetTop - PAD_TOP;
+    let bottom;
     if (b.collapsed) {
-      // Collapsed: overlay spans the header only.
-      bottom = top + headerEl.offsetHeight;
+      // Collapsed: overlay spans the header only — no extra padding
+      // below since there are no children to contain.
+      bottom = headerEl.offsetTop + headerEl.offsetHeight;
     } else if (lastChildEl) {
-      bottom = lastChildEl.offsetTop + lastChildEl.offsetHeight;
+      bottom = lastChildEl.offsetTop + lastChildEl.offsetHeight + PAD_BOTTOM;
+    } else {
+      bottom = headerEl.offsetTop + headerEl.offsetHeight;
     }
     next.push({
       uid: b._uid,
@@ -554,7 +563,14 @@ function resetCorruptValue() {
 }
 
 function isCollapsed(m: ModuleEntry): boolean {
-  return m.collapsed === true;
+  if (m.collapsed === true) return true;
+  // Bundle children always render in their collapsed state — the
+  // bundle frame is the visual container; expanding each child's
+  // summary line inside the frame creates noise. Users can still
+  // open the edit modal for full editing via right-click → Edit.
+  const idx = value.value.modules.indexOf(m);
+  if (idx >= 0 && bundleContaining(idx)) return true;
+  return false;
 }
 
 let suppressWatch = false;
@@ -1402,7 +1418,26 @@ function removeModule(idx: number) {
   const moduleLabel = removed.meta.name?.trim() || "module";
   const next = [...value.value.modules];
   next.splice(idx, 1);
-  value.value = { ...value.value, modules: next };
+
+  // Bundle-range integrity: removing a module from inside a bundle
+  // must shrink that bundle's end_idx (one fewer child). Bundles
+  // that started AFTER the removed index shift left by one. Bundles
+  // whose range collapses to empty dissolve entirely.
+  const nextBundles = (value.value.bundles ?? [])
+    .map((b) => {
+      if (b.start_idx <= idx && idx <= b.end_idx) {
+        const newEnd = b.end_idx - 1;
+        if (newEnd < b.start_idx) return null;  // empty → dissolve
+        return { ...b, end_idx: newEnd };
+      }
+      if (b.start_idx > idx) {
+        return { ...b, start_idx: b.start_idx - 1, end_idx: b.end_idx - 1 };
+      }
+      return b;
+    })
+    .filter((b): b is NonNullable<typeof b> => b !== null);
+
+  value.value = { ...value.value, modules: next, bundles: nextBundles };
   pushToast(`Removed “${moduleLabel}”`, {
     severity: "info",
     action: {
