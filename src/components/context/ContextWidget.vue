@@ -19,8 +19,10 @@ import {
 } from "../../extension/preview-resolver";
 import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
+import BundleHeader from "./bundles/BundleHeader.vue";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { api } from "../../manager/api/client";
+import type { BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
@@ -346,6 +348,112 @@ async function onPickBundle(bundleId: string): Promise<void> {
  *  to /bundles/new; SPA wires up the editor in Phase 4. */
 function openBundleAuthor(): void {
   openSpaLibrary();   // Reuse existing SPA link for v1 — Phase 4 deep-links to bundle editor
+}
+
+/** Returns the BundleInstance whose start_idx equals `idx`, or null
+ *  if no bundle starts at that module position. Used by the template
+ *  to interleave bundle-header rows BEFORE the matching first child. */
+function bundleStartingAt(idx: number): BundleInstance | null {
+  for (const b of value.value.bundles ?? []) {
+    if (b.start_idx === idx) return b;
+  }
+  return null;
+}
+
+/** Returns the BundleInstance that owns module index `idx` (i.e.
+ *  start_idx ≤ idx ≤ end_idx). null when the module is standalone.
+ *  Used by the template to stamp `data-bundle-uid` + the bundle's
+ *  color CSS var on bundle-member rows. */
+function bundleContaining(idx: number): BundleInstance | null {
+  for (const b of value.value.bundles ?? []) {
+    if (b.start_idx <= idx && idx <= b.end_idx) return b;
+  }
+  return null;
+}
+
+/** Bundle-aware CSS class binding for a module row. Stamps
+ *  `wp-module--in-bundle` (kind-stripe replaced with bundle color),
+ *  `wp-module--bundle-first` (top edge of frame), and
+ *  `wp-module--bundle-last` (bottom edge of frame). */
+function bundleClassForModule(idx: number): Record<string, boolean> {
+  const b = bundleContaining(idx);
+  if (!b) return {};
+  return {
+    "wp-module--in-bundle": true,
+    "wp-module--in-bundle-collapsed": b.collapsed,
+    "wp-module--bundle-first": b.start_idx === idx,
+    "wp-module--bundle-last": b.end_idx === idx,
+  };
+}
+
+/** Inline style with the bundle color CSS var for module rows that
+ *  live inside a bundle. The frame CSS reads `--wp-bundle-color` to
+ *  paint the left stripe + frame edges. Default token used when the
+ *  bundle has no user-picked color. */
+function bundleStyleForModule(idx: number): Record<string, string> {
+  const b = bundleContaining(idx);
+  if (!b) return {};
+  return {
+    "--wp-bundle-color": b.color && b.color.length ? b.color : "var(--wp-bundle-default)",
+  };
+}
+
+/** True when module index `idx` lives inside a COLLAPSED bundle.
+ *  Used by `v-show` to hide bundle children visually while keeping
+ *  them in `value.modules` so the engine sees them. */
+function hiddenByBundleCollapse(idx: number): boolean {
+  const b = bundleContaining(idx);
+  if (!b) return false;
+  return b.collapsed === true;
+}
+
+function toggleBundleCollapsed(uid: string): void {
+  const bundles = value.value.bundles ?? [];
+  const idx = bundles.findIndex((b) => b._uid === uid);
+  if (idx < 0) return;
+  const updated = { ...bundles[idx], collapsed: !bundles[idx].collapsed };
+  const next = [...bundles];
+  next[idx] = updated;
+  value.value = { ...value.value, bundles: next };
+}
+
+function toggleBundleEnabled(uid: string, enabled: boolean): void {
+  const bundles = value.value.bundles ?? [];
+  const idx = bundles.findIndex((b) => b._uid === uid);
+  if (idx < 0) return;
+  const updated = { ...bundles[idx], enabled };
+  const next = [...bundles];
+  next[idx] = updated;
+  value.value = { ...value.value, bundles: next };
+}
+
+function removeBundle(uid: string): void {
+  const bundles = value.value.bundles ?? [];
+  const target = bundles.find((b) => b._uid === uid);
+  if (!target) return;
+  // Drop all child modules in [start_idx..end_idx] from the flat
+  // modules array AND drop the BundleInstance itself.
+  const before = value.value.modules.slice(0, target.start_idx);
+  const after = value.value.modules.slice(target.end_idx + 1);
+  const removedCount = target.end_idx - target.start_idx + 1;
+  // Adjust any sibling bundle indices that sit after the removed range.
+  const remainingBundles = bundles
+    .filter((b) => b._uid !== uid)
+    .map((b) => {
+      if (b.start_idx > target.end_idx) {
+        return {
+          ...b,
+          start_idx: b.start_idx - removedCount,
+          end_idx: b.end_idx - removedCount,
+        };
+      }
+      return b;
+    });
+  value.value = {
+    ...value.value,
+    modules: [...before, ...after],
+    bundles: remainingBundles,
+  };
 }
 
 // Populated vs. empty page swap is driven by a wrapper <Transition
@@ -1803,12 +1911,30 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
         </div>
 
         <TransitionGroup name="wp-list" tag="div" class="wp-modules">
-      <div
-        v-for="(m, idx) in value.modules"
-        :key="m._uid ?? `${m.id}|${idx}`"
+      <template v-for="(m, idx) in value.modules" :key="m._uid ?? `${m.id}|${idx}`">
+        <!-- Bundle header — rendered BEFORE the first child of each
+             bundle range. `bundleStartingAt(idx)` returns the
+             BundleInstance whose start_idx == idx, or null. Keyed
+             separately so the TransitionGroup tracks it independently
+             of the module rows. -->
+        <BundleHeader
+          v-if="bundleStartingAt(idx)"
+          :key="`bh-${bundleStartingAt(idx)?._uid}`"
+          :instance="bundleStartingAt(idx)!"
+          :name="bundleStartingAt(idx)?.name ?? 'Bundle'"
+          :color="bundleStartingAt(idx)?.color"
+          :child-count="(bundleStartingAt(idx)!.end_idx - bundleStartingAt(idx)!.start_idx + 1)"
+          @toggle-collapse="toggleBundleCollapsed(bundleStartingAt(idx)!._uid)"
+          @toggle-enabled="(next) => toggleBundleEnabled(bundleStartingAt(idx)!._uid, next)"
+          @remove="removeBundle(bundleStartingAt(idx)!._uid)"
+        />
+        <div
+        v-show="!hiddenByBundleCollapse(idx)"
         :data-module-id="m.id"
         :data-module-idx="idx"
         :data-kind="m.type"
+        :data-bundle-uid="bundleContaining(idx)?._uid"
+        :style="bundleStyleForModule(idx)"
         class="wp-module"
         tabindex="0"
         draggable="true"
@@ -1826,6 +1952,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           'wp-mod--mod': isModified(m),
           'wp-mod--drift': isDrifted(m),
           'wp-mod--err': isMissingFromLibrary(m),
+          ...bundleClassForModule(idx),
         }"
         @dragstart="(ev) => onDragStart(ev, m, idx)"
         @dragend="onDragEnd"
@@ -2034,6 +2161,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           </div>
         </Transition>
       </div>
+      </template>
         </TransitionGroup>
 
         <!-- Footer: primary add + bundle add. Shown only when list is
@@ -2203,6 +2331,55 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   display: flex;
   flex-direction: column;
   gap: var(--wp-row-gap);
+}
+
+/* ── Bundle frame (Phase 2 Task 10b) ───────────────────────────────
+ * Bundle children are top-level entries in `.wp-modules` but get
+ * decorated with a colored frame painted via border-left + per-edge
+ * borders on the first/last row of the bundle range. The bundle
+ * header (`.wp-bundle-header`) sits as a sibling before the first
+ * child and merges visually with the frame via shared border color.
+ *
+ * Frame color comes from `--wp-bundle-color` set as an inline style
+ * on bundle-membered rows (from `bundleStyleForModule()` in script).
+ * Fallback to `--wp-bundle-default` token when no color is set.
+ *
+ * Note on row-gap collapse: `.wp-modules` uses gap, so adjacent
+ * bundle children have visible space between them. To make the frame
+ * read as a contiguous box, we paint left/right borders on every
+ * bundle-membered row and top/bottom borders on the boundary rows.
+ * Result is a "comb" pattern visually — close enough for v1, full
+ * frame painting will be a Phase 5 polish item.
+ */
+.wp-bundle-header {
+  /* The header sits as a sibling of .wp-module rows in the flex
+   * column. No extra positioning needed — its own border-bottom
+   * (set inside BundleHeader.vue) plus the first child's bundle-left
+   * stripe create the visual frame edge. */
+}
+.wp-module--in-bundle {
+  /* Bundle frame left edge replaces the kind-stripe color while the
+   * row is a bundle member. The kind icon + chip still convey kind
+   * elsewhere on the row, so this swap reads as "the bundle owns
+   * this row's stripe" without losing kind affordance. */
+  border-left-color: var(--wp-bundle-color, var(--wp-bundle-default)) !important;
+}
+.wp-module--bundle-first {
+  /* First child sits directly under the bundle header — no extra
+   * top border needed since the header carries its own bottom border
+   * via BundleHeader.vue. */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.wp-module--bundle-last {
+  /* Last bundle child gets a faint bottom marker tying back into the
+   * frame color. Cheap visual cue without needing a separate footer
+   * element. */
+  border-bottom: 2px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 50%, transparent);
+}
+.wp-module--in-bundle-collapsed {
+  /* Children of a collapsed bundle render hidden via v-show; this
+   * class is reserved for future "show shrunken" affordances. */
 }
 
 /* ── Populated ↔ Empty page swap ───────────────────────────────────────

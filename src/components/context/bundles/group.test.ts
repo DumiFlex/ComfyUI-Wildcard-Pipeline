@@ -23,6 +23,8 @@ function b(uid: string, start_idx: number, end_idx: number): BundleInstance {
     enabled: true,
     collapsed: false,
     inserted_at_hash: "",
+    name: uid,
+    color: null,
   };
 }
 

@@ -12,6 +12,8 @@ function instance(overrides: Partial<BundleInstance> = {}): BundleInstance {
     enabled: true,
     collapsed: false,
     inserted_at_hash: "h",
+    name: "subject_phrase",
+    color: null,
     ...overrides,
   };
 }

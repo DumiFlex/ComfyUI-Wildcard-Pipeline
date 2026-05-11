@@ -83,6 +83,8 @@ describe("parseWidgetJsonWithRecovery for ContextWidgetValue.bundles", () => {
       enabled: true,
       collapsed: false,
       inserted_at_hash: "hash-1",
+      name: "subject_phrase",
+      color: "#FB7185",
     };
     const raw = JSON.stringify({
       version: 1,

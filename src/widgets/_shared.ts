@@ -228,6 +228,16 @@ export interface BundleInstance {
    *  bundle library entry has been updated since this instance was
    *  inserted — informational only, not a conflict. */
   inserted_at_hash: string;
+  /** Bundle name denormalized from the library entry at insert time.
+   *  Carried on the instance so the bundle header can render
+   *  immediately without waiting for a library fetch — and so saved
+   *  workflows still show the right name even if the library entry
+   *  got renamed or deleted later (bundles are frozen snapshots). */
+  name: string;
+  /** Bundle frame color (hex) at insert time. Same denormalization
+   *  rationale as `name`. Optional / nullable — when missing, the
+   *  frame uses the `--wp-bundle-default` token. */
+  color?: string | null;
 }
 
 /** Module kind discriminator. Same six kinds the SPA library carries. */
@@ -563,6 +573,8 @@ export function emptyBundleInstance(library_id: string): BundleInstance {
     enabled: true,
     collapsed: false,
     inserted_at_hash: "",
+    name: "",
+    color: null,
   };
 }
 

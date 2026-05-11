@@ -70,6 +70,11 @@ export function buildBundleInsertion(
   bundleInstance.start_idx = insertIdx;
   bundleInstance.end_idx = insertIdx + entry.children.length - 1;
   bundleInstance.inserted_at_hash = entry.payload_hash;
+  // Denormalize library metadata onto the instance so the bundle
+  // header can render immediately + saved workflows retain the
+  // name/color even if the library entry gets renamed or deleted.
+  bundleInstance.name = entry.name;
+  bundleInstance.color = entry.color ?? null;
 
   // Regen ids + rewrite refs against the bundle-local remap. External
   // refs (uuids not present in `entry.children`) stay verbatim and
