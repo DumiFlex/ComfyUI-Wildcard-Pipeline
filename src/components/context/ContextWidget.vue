@@ -578,6 +578,57 @@ function removeBundle(uid: string): void {
   };
 }
 
+/** Reconcile bundle ranges after a module reorder.
+ *
+ *  Walks the (post-move) modules list, groups indices by each module's
+ *  `bundle_origin`. For each known BundleInstance:
+ *    - If its member indices form a CONTIGUOUS run → update start_idx +
+ *      end_idx to the new positions.
+ *    - If non-contiguous (something foreign sits between the bundle's
+ *      children) → DISSOLVE the bundle: drop the instance + clear
+ *      `bundle_origin` from those children. Contiguity is required v1.
+ *    - If member count drops to zero (all children dragged out) →
+ *      dissolve the bundle.
+ *
+ *  Caller writes both arrays back together. ContextWidget's render
+ *  uses bundle.start_idx/end_idx to position the overlay; rebuilding
+ *  these from the live state keeps the frame painted correctly even
+ *  after drag, splice, or programmatic mutation. */
+function reconcileBundleRanges(
+  modules: ModuleEntry[],
+  bundles: BundleInstance[],
+): BundleInstance[] {
+  if (bundles.length === 0) return bundles;
+  // Group module indices by bundle_origin.
+  const byOrigin = new Map<string, number[]>();
+  modules.forEach((m, idx) => {
+    const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+    if (!origin) return;
+    const arr = byOrigin.get(origin) ?? [];
+    arr.push(idx);
+    byOrigin.set(origin, arr);
+  });
+  const next: BundleInstance[] = [];
+  for (const b of bundles) {
+    const indices = byOrigin.get(b._uid);
+    if (!indices || indices.length === 0) continue;  // dissolve — no members
+    // Contiguity check — sorted indices must form a run.
+    const sorted = [...indices].sort((a, b) => a - b);
+    const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
+    if (!contiguous) {
+      // Dissolve: strip bundle_origin from every former member so the
+      // frame disappears entirely.
+      for (const idx of sorted) {
+        const m = modules[idx] as ModuleEntry & { bundle_origin?: string };
+        delete m.bundle_origin;
+      }
+      continue;
+    }
+    next.push({ ...b, start_idx: sorted[0], end_idx: sorted[sorted.length - 1] });
+  }
+  return next;
+}
+
 /** Detach bundle frame — keep children as standalone modules but
  *  drop the bundle instance + clear `bundle_origin` on each child.
  *  Useful when user wants to keep what's inside but no longer wants
@@ -612,6 +663,125 @@ async function duplicateBundle(uid: string): Promise<void> {
   await onPickBundle(target.library_id);
 }
 
+/** Reset bundle to library snapshot — re-fetch the library entry
+ *  + replace current children with the frozen blob. Drops any user
+ *  edits made to bundle children since insert. Confirms first since
+ *  it's destructive. */
+async function resetBundleToLibrary(uid: string): Promise<void> {
+  const bundles = value.value.bundles ?? [];
+  const target = bundles.find((b) => b._uid === uid);
+  if (!target) return;
+  const ok = window.confirm(
+    `Reset "${target.name ?? "bundle"}" to library snapshot? ` +
+    "Any edits to bundle children will be lost.",
+  );
+  if (!ok) return;
+  try {
+    const entry = await api.bundles.get(target.library_id);
+    const libEntry: BundleLibraryEntry = {
+      id: entry.id,
+      name: entry.name,
+      color: entry.color,
+      children: entry.children as BundleLibraryEntry["children"],
+      payload_hash: entry.payload_hash,
+    };
+    // Replace the current bundle's child range with the freshly
+    // deserialized library snapshot. Preserve the BundleInstance
+    // _uid + position so the overlay doesn't visually re-appear
+    // elsewhere; we just replace its content.
+    const startIdx = target.start_idx;
+    const replacementInsertion = buildBundleInsertion(libEntry, startIdx);
+    const newChildren = replacementInsertion.modulesToSplice.map((c) => {
+      const rec = c as Record<string, unknown>;
+      const meta = (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" };
+      const entries = (rec.entries as ModuleEntry["entries"] | undefined) ?? [];
+      return {
+        id: c.id,
+        _uid: c._uid,
+        type: c.type as ModuleEntry["type"],
+        enabled: (rec.enabled as boolean | undefined) ?? true,
+        collapsed: (rec.collapsed as boolean | undefined) ?? false,
+        meta,
+        entries,
+        payload: c.payload,
+        instance: c.instance,
+        payload_hash: c.payload_hash,
+        // Stamp bundle_origin to the EXISTING bundle's _uid so the
+        // frame stays attached to the same BundleInstance.
+        bundle_origin: target._uid,
+      } as ModuleEntry;
+    });
+    const before = value.value.modules.slice(0, startIdx);
+    const after = value.value.modules.slice(target.end_idx + 1);
+    const sizeDelta = newChildren.length - (target.end_idx - target.start_idx + 1);
+    // Update bundle range to match new children length + shift
+    // later bundles by the delta.
+    const nextBundles = bundles.map((b) => {
+      if (b._uid === uid) {
+        return {
+          ...b,
+          end_idx: startIdx + newChildren.length - 1,
+          inserted_at_hash: entry.payload_hash,
+        };
+      }
+      if (b.start_idx > target.end_idx) {
+        return {
+          ...b,
+          start_idx: b.start_idx + sizeDelta,
+          end_idx: b.end_idx + sizeDelta,
+        };
+      }
+      return b;
+    });
+    value.value = {
+      ...value.value,
+      modules: [...before, ...newChildren, ...after],
+      bundles: nextBundles,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    pushToast(`Reset failed: ${msg}`, { severity: "error" });
+  }
+}
+
+/** Reset a single bundle child to its library-snapshot version.
+ *  Looks up the parent BundleInstance via the child's `bundle_origin`,
+ *  fetches the bundle library entry, picks the snapshot at the same
+ *  position-within-bundle, and replaces just THIS child's payload +
+ *  instance. Other children untouched. */
+async function resetChildToBundleSnapshot(idx: number): Promise<void> {
+  const m = value.value.modules[idx];
+  if (!m) return;
+  const originUid = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+  if (!originUid) return;
+  const bundles = value.value.bundles ?? [];
+  const bundle = bundles.find((b) => b._uid === originUid);
+  if (!bundle) return;
+  const posInBundle = idx - bundle.start_idx;
+  if (posInBundle < 0) return;
+  try {
+    const entry = await api.bundles.get(bundle.library_id);
+    const snapshot = entry.children[posInBundle] as Record<string, unknown> | undefined;
+    if (!snapshot) {
+      pushToast(`No snapshot at position ${posInBundle}`, { severity: "error" });
+      return;
+    }
+    const nextModules = value.value.modules.map((existing, i) => {
+      if (i !== idx) return existing;
+      return {
+        ...existing,
+        payload: snapshot.payload as Record<string, unknown> | undefined,
+        instance: snapshot.instance as ModuleEntry["instance"],
+        payload_hash: snapshot.payload_hash as string | undefined,
+      } as ModuleEntry;
+    });
+    value.value = { ...value.value, modules: nextModules };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    pushToast(`Reset failed: ${msg}`, { severity: "error" });
+  }
+}
+
 /** Bundle right-click menu. Mirrors module ctxmenu pattern — sets
  *  ctxMenu state with bundle-scoped items. The shared ContextMenu
  *  component handles positioning + dismiss. */
@@ -633,6 +803,13 @@ function openBundleContextMenu(ev: MouseEvent, uid: string): void {
       icon: target.enabled ? "pi-eye-slash" : "pi-eye",
       subtitle: "Cascades to all children",
       onSelect: () => toggleBundleEnabled(uid, !target.enabled),
+      divider: true,
+    },
+    {
+      label: "Reset to library snapshot",
+      icon: "pi-refresh",
+      subtitle: "Replace children with frozen library state",
+      onSelect: () => { void resetBundleToLibrary(uid); },
       divider: true,
     },
     {
@@ -1864,6 +2041,19 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
       divider: true,
     });
   }
+  // Bundle children get an extra "Reset to bundle snapshot" item that
+  // restores THIS row from the parent bundle's frozen library blob.
+  // Distinct from "Refresh from library" (which pulls the current
+  // library version of the underlying module).
+  if ((m as ModuleEntry & { bundle_origin?: string }).bundle_origin) {
+    items.push({
+      label: "Reset to bundle snapshot",
+      icon: "pi-history",
+      subtitle: "Restore frozen state from bundle",
+      onSelect: () => { void resetChildToBundleSnapshot(idx); },
+      divider: true,
+    });
+  }
   items.push(
     { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(idx) },
     { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-caret-down" : "pi-caret-right", onSelect: () => toggleCollapsed(idx) },
@@ -1999,7 +2189,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       insertIdx = dropPos === "after" ? adjusted + 1 : adjusted;
     }
     list.splice(insertIdx, 0, ds.module);
-    value.value = { ...value.value, modules: list };
+    const nextBundles = reconcileBundleRanges(list, value.value.bundles ?? []);
+    value.value = { ...value.value, modules: list, bundles: nextBundles };
     sameNodeDropHandled = true;
     return;
   }
