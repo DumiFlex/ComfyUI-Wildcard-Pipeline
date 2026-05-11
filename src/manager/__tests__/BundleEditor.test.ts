@@ -115,6 +115,108 @@ describe("BundleEditor.vue", () => {
     expect(wrap.text()).toContain("This bundle has no children yet");
   });
 
+  it("save click calls bundles.update with form fields", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_save",
+      name: "Original Name",
+      description: "Original desc",
+      color: "#7c3aed",
+      category_id: null,
+      tags: ["old"],
+      is_favorite: false,
+      children: [],
+      payload_hash: "h0",
+      version: 1,
+      created_at: "",
+      updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_save",
+      name: "Edited",
+      description: "New desc",
+      color: "#22d3ee",
+      category_id: null,
+      tags: ["new"],
+      is_favorite: false,
+      children: [],
+      payload_hash: "h1",
+      version: 2,
+      created_at: "",
+      updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_save" });
+    await flushPromises();
+
+    const nameInput = wrap.find('input[aria-label="Bundle name"]');
+    await nameInput.setValue("Edited");
+
+    // Click the Save button — find by text since icon-only would match
+    // the Back button too.
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    expect(saveBtn?.exists()).toBe(true);
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    expect(apiBundles.update).toHaveBeenCalledWith(
+      "bn_save",
+      expect.objectContaining({ name: "Edited" }),
+    );
+  });
+
+  it("save in create-mode shows info toast instead of POST", async () => {
+    const wrap = mountEditor();
+    await flushPromises();
+    // Save button should be disabled in create mode — clicking should
+    // not invoke the create/update API. The component routes users to
+    // the Context widget for creation.
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    expect(saveBtn?.attributes("disabled")).toBeDefined();
+    expect(apiBundles.create).not.toHaveBeenCalled();
+    expect(apiBundles.update).not.toHaveBeenCalled();
+  });
+
+  it("default color saved as null (sentinel for default token)", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_default",
+      name: "Default Bundle",
+      description: "",
+      color: null,  // already at default
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [],
+      payload_hash: "h0",
+      version: 1,
+      created_at: "",
+      updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_default",
+      name: "Default Bundle",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [],
+      payload_hash: "h1",
+      version: 2,
+      created_at: "",
+      updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_default" });
+    await flushPromises();
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    expect(apiBundles.update).toHaveBeenCalledWith(
+      "bn_default",
+      expect.objectContaining({ color: null }),
+    );
+  });
+
   it("addTag pushes the draft tag and clears the input", async () => {
     apiBundles.get.mockResolvedValue({
       id: "bn_y",

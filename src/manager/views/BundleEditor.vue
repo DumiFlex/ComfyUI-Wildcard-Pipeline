@@ -50,6 +50,7 @@ const COLOR_PRESETS = [
 ];
 
 const loading = ref(false);
+const saving = ref(false);
 const original = ref<BundleRow | null>(null);
 
 // Editable fields — bound to inputs. Saved as a single PUT in Task 24.
@@ -109,6 +110,54 @@ function back() {
   router.push("/bundles");
 }
 
+/** Persist the form to the library entry. Save is metadata-only here
+ *  — name, description, color, category, tags. Children are NOT
+ *  re-snapshotted by the editor; that's the Context widget's "Save
+ *  changes to library" action (which operates on a live in-graph
+ *  bundle, not the library entry itself).
+ *
+ *  Create-mode without children disallowed for now: the SPA "+ New
+ *  Bundle" path is intentionally limited — the canonical creation
+ *  flow is Wrap-in-bundle from the Context multi-select. The Save
+ *  button is disabled in create-mode to surface that constraint
+ *  before the user types anything. */
+async function save() {
+  if (!isEdit.value || !props.id) {
+    toast.push({
+      severity: "info",
+      summary: "Create from Context",
+      detail: "New bundles are created by wrapping modules in the Context widget.",
+      life: 4000,
+    });
+    return;
+  }
+  if (!name.value.trim()) {
+    toast.push({ severity: "warn", summary: "Name required", life: 2500 });
+    return;
+  }
+  saving.value = true;
+  try {
+    // Color stored as null when user chose the default — keeps the
+    // library entry free of a hard-coded value if we ever change the
+    // default token, and matches the "color is optional" semantics
+    // the BundleRow type encodes.
+    const colorOut = color.value === DEFAULT_COLOR ? null : color.value;
+    const updated = await store.update(props.id, {
+      name: name.value.trim(),
+      description: description.value,
+      color: colorOut,
+      category_id: categoryId.value,
+      tags: [...tags.value],
+    });
+    original.value = updated;
+    toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
+  } catch (e) {
+    toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
+  } finally {
+    saving.value = false;
+  }
+}
+
 function addTag() {
   const t = tagDraft.value.trim();
   if (!t) return;
@@ -137,8 +186,14 @@ function kindLabel(type: string): string {
         {{ isEdit ? (original?.name || "Loading…") : "New Bundle" }}
       </h2>
       <span class="wp-spacer" />
-      <Button variant="primary" icon="pi-save" disabled title="Save handler lands in next commit">
-        Save
+      <Button
+        variant="primary"
+        icon="pi-save"
+        :disabled="saving || !isEdit"
+        :title="isEdit ? 'Save changes' : 'New bundles are created from the Context widget'"
+        @click="save"
+      >
+        {{ saving ? "Saving…" : "Save" }}
       </Button>
     </div>
 

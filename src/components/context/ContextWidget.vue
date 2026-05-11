@@ -782,6 +782,65 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   }
 }
 
+/** Push current bundle children back to the library entry — i.e.
+ *  "commit" any in-place edits the user made to children so they
+ *  become the new frozen snapshot. Mirrors `resetBundleToLibrary`
+ *  in the opposite direction.
+ *
+ *  Strips frontend-only fields (`_uid`, `bundle_origin`) before
+ *  sending — those are per-instance markers, not part of the
+ *  library shape. The server recomputes `payload_hash` and bumps
+ *  `version`; we update `inserted_at_hash` locally so the bundle
+ *  is no longer considered drifted from the library state we just
+ *  wrote. Confirms first since it overwrites shared library state. */
+async function saveBundleToLibrary(uid: string): Promise<void> {
+  const bundles = value.value.bundles ?? [];
+  const target = bundles.find((b) => b._uid === uid);
+  if (!target) return;
+  const ok = window.confirm(
+    `Save current state of "${target.name ?? "bundle"}" to the library? ` +
+    "This overwrites the frozen snapshot used by every future insert.",
+  );
+  if (!ok) return;
+  const slice = value.value.modules.slice(target.start_idx, target.end_idx + 1);
+  // Strip per-instance fields. The library entry stores plain child
+  // dicts (matching ChildSnapshot shape) — `_uid` is the in-Context
+  // Vue v-for key, `bundle_origin` is the in-Context frame marker.
+  // Neither belongs in the snapshot.
+  const childrenOut = slice.map((m) => {
+    const rec = m as ModuleEntry & { bundle_origin?: string };
+    // Build the snapshot field-by-field so we don't accidentally
+    // leak future per-instance fields we add later.
+    return {
+      id: rec.id,
+      type: rec.type,
+      enabled: rec.enabled,
+      collapsed: rec.collapsed,
+      meta: rec.meta,
+      entries: rec.entries,
+      payload: rec.payload,
+      instance: rec.instance,
+      payload_hash: rec.payload_hash,
+    } as Record<string, unknown>;
+  });
+  try {
+    const updated = await api.bundles.update(target.library_id, {
+      children: childrenOut,
+    });
+    // Refresh the BundleInstance's `inserted_at_hash` so a future
+    // resetBundleToLibrary call would compare against the newly
+    // written hash (i.e. "no drift").
+    const nextBundles = bundles.map((b) =>
+      b._uid === uid ? { ...b, inserted_at_hash: updated.payload_hash } : b,
+    );
+    value.value = { ...value.value, bundles: nextBundles };
+    pushToast(`Saved "${updated.name}" to library`, { severity: "success" });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    pushToast(`Save failed: ${msg}`, { severity: "error" });
+  }
+}
+
 /** Bundle right-click menu. Mirrors module ctxmenu pattern — sets
  *  ctxMenu state with bundle-scoped items. The shared ContextMenu
  *  component handles positioning + dismiss. */
@@ -810,6 +869,12 @@ function openBundleContextMenu(ev: MouseEvent, uid: string): void {
       icon: "pi-refresh",
       subtitle: "Replace children with frozen library state",
       onSelect: () => { void resetBundleToLibrary(uid); },
+    },
+    {
+      label: "Save changes to library",
+      icon: "pi-cloud-upload",
+      subtitle: "Overwrite library with current children",
+      onSelect: () => { void saveBundleToLibrary(uid); },
       divider: true,
     },
     {
