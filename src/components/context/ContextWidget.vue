@@ -2522,7 +2522,32 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 }
 /* Children render at full default row dimensions — no padding or
  * font overrides. Drag handle SVG, collapse caret, kind icon all
- * match the size they have on standalone modules. */
+ * match the size they have on standalone modules.
+ *
+ * Belt-and-suspenders: re-declare the canonical sizes here with
+ * !important so density-pref or other context-class overrides can't
+ * shrink bundle child controls below their standalone equivalents. */
+.wp-module--in-bundle .wp-drag-handle {
+  width: 6px !important;
+}
+.wp-module--in-bundle .wp-collapse-btn {
+  width: 14px !important;
+}
+.wp-module--in-bundle .wp-collapse-btn .pi {
+  font-size: 10px !important;
+}
+.wp-module--in-bundle .wp-toggle-mark {
+  width: 12px !important;
+  height: 12px !important;
+}
+.wp-module--in-bundle .wp-mod-icon {
+  width: 16px !important;
+  height: 16px !important;
+}
+.wp-module--in-bundle .wp-mod-icon .pi {
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
 
 /* ── Bundle frame overlay ──────────────────────────────────────────
  * `.wp-modules-frame` wraps both the overlays + the module list so
