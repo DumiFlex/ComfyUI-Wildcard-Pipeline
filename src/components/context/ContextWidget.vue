@@ -2520,13 +2520,9 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 .wp-module--bundle-last {
   margin-bottom: 8px !important;
 }
-/* Children keep default icon + control sizes (drag handle, collapse,
- * checkbox, kind icon). Only the outer .wp-module padding shrinks,
- * which reduces row height without making the inner controls look
- * smaller than standalone modules. */
-.wp-module--in-bundle .wp-module-header {
-  padding: 4px 6px !important;
-}
+/* Children render at full default row dimensions — no padding or
+ * font overrides. Drag handle SVG, collapse caret, kind icon all
+ * match the size they have on standalone modules. */
 
 /* ── Bundle frame overlay ──────────────────────────────────────────
  * `.wp-modules-frame` wraps both the overlays + the module list so
@@ -2546,7 +2542,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   right: 0;
   z-index: 0;
   pointer-events: none;
+  /* Thick left border mirrors the 3px kind-stripe on standalone
+   * `.wp-module` rows — same visual hierarchy where the colored
+   * vertical edge is the dominant kind indicator. Other three
+   * sides stay 1px for a clean box. */
   border: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
+  border-left-width: 3px;
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
 }
