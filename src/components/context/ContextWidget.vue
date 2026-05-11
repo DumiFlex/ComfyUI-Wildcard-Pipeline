@@ -22,7 +22,7 @@ import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleHeader from "./bundles/BundleHeader.vue";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { api } from "../../manager/api/client";
-import type { BundleInstance } from "../../widgets/_shared";
+import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
 import ContextMenu, {
   type ContextMenuEntry,
@@ -782,17 +782,19 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   }
 }
 
-/** Push current bundle children back to the library entry — i.e.
- *  "commit" any in-place edits the user made to children so they
- *  become the new frozen snapshot. Mirrors `resetBundleToLibrary`
- *  in the opposite direction.
- *
- *  Strips frontend-only fields (`_uid`, `bundle_origin`) before
- *  sending — those are per-instance markers, not part of the
- *  library shape. The server recomputes `payload_hash` and bumps
- *  `version`; we update `inserted_at_hash` locally so the bundle
- *  is no longer considered drifted from the library state we just
- *  wrote. Confirms first since it overwrites shared library state. */
+/** Canonical ChildSnapshot dict — strips per-instance fields
+ *  (`_uid`, `bundle_origin`). Shared by saveBundleToLibrary +
+ *  wrapIntoNewBundle so the library shape stays consistent. */
+function toChildSnapshot(m: ModuleEntry): Record<string, unknown> {
+  return {
+    id: m.id, type: m.type, enabled: m.enabled, collapsed: m.collapsed,
+    meta: m.meta, entries: m.entries, payload: m.payload,
+    instance: m.instance, payload_hash: m.payload_hash,
+  };
+}
+
+/** Push current bundle children back to library — mirrors
+ *  resetBundleToLibrary in the opposite direction. */
 async function saveBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
@@ -802,27 +804,9 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
     "This overwrites the frozen snapshot used by every future insert.",
   );
   if (!ok) return;
-  const slice = value.value.modules.slice(target.start_idx, target.end_idx + 1);
-  // Strip per-instance fields. The library entry stores plain child
-  // dicts (matching ChildSnapshot shape) — `_uid` is the in-Context
-  // Vue v-for key, `bundle_origin` is the in-Context frame marker.
-  // Neither belongs in the snapshot.
-  const childrenOut = slice.map((m) => {
-    const rec = m as ModuleEntry & { bundle_origin?: string };
-    // Build the snapshot field-by-field so we don't accidentally
-    // leak future per-instance fields we add later.
-    return {
-      id: rec.id,
-      type: rec.type,
-      enabled: rec.enabled,
-      collapsed: rec.collapsed,
-      meta: rec.meta,
-      entries: rec.entries,
-      payload: rec.payload,
-      instance: rec.instance,
-      payload_hash: rec.payload_hash,
-    } as Record<string, unknown>;
-  });
+  const childrenOut = value.value.modules
+    .slice(target.start_idx, target.end_idx + 1)
+    .map(toChildSnapshot);
   try {
     const updated = await api.bundles.update(target.library_id, {
       children: childrenOut,
@@ -838,6 +822,38 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushToast(`Save failed: ${msg}`, { severity: "error" });
+  }
+}
+
+/** Wrap THIS module into a new library bundle (single-row v1).
+ *  Users can drag more modules into the range afterwards — the
+ *  range-integrity logic handles extension automatically. */
+async function wrapIntoNewBundle(idx: number): Promise<void> {
+  const m = value.value.modules[idx];
+  if (!m) return;
+  const nameInput = window.prompt("Bundle name?", "Bundle");
+  if (nameInput == null) return;
+  const name = nameInput.trim() || "Bundle";
+  try {
+    const entry = await api.bundles.create({
+      name, color: null, children: [toChildSnapshot(m)],
+    });
+    const bundleInstance: BundleInstance = {
+      ...emptyBundleInstance(entry.id),
+      start_idx: idx, end_idx: idx,
+      inserted_at_hash: entry.payload_hash,
+      name: entry.name, color: entry.color ?? null,
+    };
+    const nextModules = value.value.modules.map((existing, i) =>
+      i === idx ? { ...existing, bundle_origin: bundleInstance._uid } as ModuleEntry : existing,
+    );
+    value.value = {
+      ...value.value, modules: nextModules,
+      bundles: [...(value.value.bundles ?? []), bundleInstance],
+    };
+    pushToast(`Wrapped into "${entry.name}"`, { severity: "success" });
+  } catch (e) {
+    pushToast(`Wrap failed: ${e instanceof Error ? e.message : String(e)}`, { severity: "error" });
   }
 }
 
@@ -2123,6 +2139,18 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
     { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(idx) },
     { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-caret-down" : "pi-caret-right", onSelect: () => toggleCollapsed(idx) },
     { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(idx), divider: true },
+  );
+  // Wrap-into-new-bundle — only for unbundled rows.
+  if (!(m as ModuleEntry & { bundle_origin?: string }).bundle_origin) {
+    items.push({
+      label: "Wrap into new bundle…",
+      icon: "pi-box",
+      subtitle: "Create a library bundle from this row",
+      onSelect: () => { void wrapIntoNewBundle(idx); },
+      divider: true,
+    });
+  }
+  items.push(
     { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(idx, "top") },
     { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(idx, "bottom") },
     { label: "Remove", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(idx) },
