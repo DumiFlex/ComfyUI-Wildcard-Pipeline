@@ -2334,55 +2334,60 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 }
 
 /* ── Bundle frame (Phase 2 Task 10b) ───────────────────────────────
- * Bundle members + the BundleHeader sit as flat siblings in the
- * `.wp-modules` flex column. To make them read as a contiguous
- * boxed group we:
- *   1. Eliminate row-gap BETWEEN the header and its first child + within the bundle
- *      via negative margin-top on bundle-member rows
- *   2. Paint a 2px left+right border on every bundle-member row in
- *      the bundle color
- *   3. Round only the first child's top + last child's bottom
- *   4. Soft tinted bg ties everything visually
- * Frame color comes from `--wp-bundle-color` set inline on each row
- * from `bundleStyleForModule()`. Fallback: `--wp-bundle-default`. */
+ * Bundle members + BundleHeader are flat siblings in the flex column.
+ * The frame is drawn via per-row borders + bg tint, with negative
+ * margins eliminating the row-gap so the box reads as ONE container.
+ *
+ * Bundle children also get a "compact" treatment: action buttons
+ * hidden (edit via right-click), tighter padding, slightly indented.
+ * Goal — children read as sub-items of the bundle, not as full
+ * standalone modules competing for visual weight.
+ *
+ * Frame color from `--wp-bundle-color` set inline on each row from
+ * `bundleStyleForModule()`. Fallback: `--wp-bundle-default`. */
 
-/* Header sits ABOVE the first child. Override its bottom-radius so
- * it joins seamlessly with the row below. */
-.wp-modules > .wp-bundle-header {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
+/* BundleHeader carries the frame's top edge + side walls (rendered
+ * inside its scoped styles, see BundleHeader.vue). Frame walls
+ * continue from the header's bottom into the children below via
+ * negative-margin overlap. */
 
 .wp-module--in-bundle {
-  /* The kind-stripe (3px left border) is replaced with a thicker
-   * bundle-color border. Right/top/bottom borders carry the bundle
-   * color too so the frame walls render continuously. */
+  /* Frame walls — 1px on every side in bundle color. Tinted bg
+   * (8% color-mix) carries the "inside the frame" visual. */
   border-left: 1px solid var(--wp-bundle-color, var(--wp-bundle-default)) !important;
   border-right: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
-  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 4%, var(--wp-bg2)) !important;
-  /* Pull the row up to butt against the previous row (header or
-   * sibling) — kills the visible gap that breaks frame continuity. */
-  margin-top: calc(var(--wp-row-gap, 4px) * -1);
-}
-
-/* Inner border between adjacent bundle members reads as a divider,
- * not as a frame edge. Soft tone of the bundle color matches the
- * tinted bg without competing. */
-.wp-module--in-bundle + .wp-module--in-bundle {
-  border-top: 1px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 30%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 35%, transparent);
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 8%, var(--wp-bg2)) !important;
+  /* Kill the gap between this row and the row above (header or
+   * previous bundle sibling) — keeps the frame walls continuous. */
+  margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
+  /* Slight left indent on the content so children read as "inside"
+   * the frame visually, not flush with the edge. */
+  padding-left: 4px;
 }
 
 .wp-module--bundle-first {
-  /* Top of the frame — sits directly under the header. Header carries
-   * the top edge, so this row's top-radius is squared off to merge. */
+  /* First child sits directly under the header. No own top border
+   * since the header's bottom border serves that role. */
+  border-top: 0 !important;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
 .wp-module--bundle-last {
-  /* Bottom of the frame — render the bottom border in full bundle
-   * color so the frame closes off cleanly. */
-  border-bottom: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
+  /* Last child closes the frame with the bottom edge. */
+  border-bottom: 1px solid var(--wp-bundle-color, var(--wp-bundle-default)) !important;
+  border-bottom-left-radius: var(--wp-radius, 4px);
+  border-bottom-right-radius: var(--wp-radius, 4px);
 }
+
+/* Children render with FULL module chrome (lock/internal/remove
+ * buttons, drift badges, summary line, conflict markers — all
+ * unchanged). Frame contains them visually via the surrounding
+ * border + tint defined above. Children inside the frame act
+ * identically to top-level modules — same right-click menu, same
+ * drag/drop, same buttons. */
+
 .wp-module--in-bundle-collapsed {
   /* Reserved for collapsed-state styling — children currently hidden
    * via v-show. */

@@ -90,7 +90,10 @@ const summary = computed(() => {
 
 .wp-bundle-header {
   background: color-mix(in srgb, var(--b) 18%, transparent);
-  border-bottom: 1px solid var(--b);
+  border: 1px solid var(--b);
+  border-bottom-width: 1px;
+  border-top-left-radius: var(--wp-radius, 4px);
+  border-top-right-radius: var(--wp-radius, 4px);
   padding: 6px 8px;
   display: flex;
   align-items: center;
