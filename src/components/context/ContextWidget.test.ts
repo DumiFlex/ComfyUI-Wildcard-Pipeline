@@ -435,6 +435,278 @@ describe("ContextWidget bulk refresh", () => {
   });
 });
 
+describe("ContextWidget bundle ops via ctxmenu", () => {
+  it("Wrap into new bundle creates bundle + stamps bundle_origin", async () => {
+    resetDriftStore();
+    const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/wp/api/bundles") && init?.method === "POST") {
+        return new Response(JSON.stringify({
+          id: "bn_new", name: "MyBundle", description: "", color: null,
+          category_id: null, tags: [], is_favorite: false,
+          children: [], payload_hash: "ph1", version: 1,
+          created_at: "", updated_at: "",
+        }), { status: 201 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubGlobal("prompt", vi.fn(() => "MyBundle"));
+
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "aaaaaaaa", type: "wildcard", enabled: true,
+          meta: { name: "Hair" }, entries: [],
+          payload: { var_binding: "hair", options: [] }, payload_hash: "h-A",
+        },
+      ],
+    });
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 300, initialJson, upstreamVars: [], onChange },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    await wrapper.find('[data-module-id="aaaaaaaa"]').trigger("contextmenu");
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const wrap = items.find((el) => el.textContent?.includes("Wrap into new bundle"));
+    expect(wrap, "Wrap item should appear for unbundled module").toBeTruthy();
+    wrap!.click();
+    await flushPromises();
+
+    const postCall = fetchSpy.mock.calls.find(
+      ([u, i]) => typeof u === "string" && u.includes("/wp/api/bundles") && (i as RequestInit | undefined)?.method === "POST",
+    );
+    expect(postCall, "POST /wp/api/bundles fired").toBeTruthy();
+    expect(onChange).toHaveBeenCalled();
+    const calls = onChange.mock.calls;
+    const last = calls[calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    expect(parsed.bundles).toHaveLength(1);
+    expect(parsed.bundles[0].library_id).toBe("bn_new");
+    expect(parsed.modules[0].bundle_origin).toBe(parsed.bundles[0]._uid);
+    wrapper.unmount();
+  });
+
+  it("Save changes to library PUTs current children", async () => {
+    resetDriftStore();
+    const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/wp/api/bundles/bn_existing") && init?.method === "PUT") {
+        const body = JSON.parse(init.body as string);
+        return new Response(JSON.stringify({
+          id: "bn_existing", name: "Existing", description: "", color: null,
+          category_id: null, tags: [], is_favorite: false,
+          children: body.children, payload_hash: "ph2", version: 2,
+          created_at: "", updated_at: "",
+        }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    const bundleUid = "buid12345678";
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "cccccccc", type: "wildcard", enabled: true,
+          meta: { name: "EditedChild" }, entries: [],
+          payload: { var_binding: "v", options: [{ id: "o1", value: "x", weight: 1 }] },
+          payload_hash: "h-edited", bundle_origin: bundleUid,
+        },
+      ],
+      bundles: [
+        {
+          _uid: bundleUid, library_id: "bn_existing",
+          start_idx: 0, end_idx: 0, enabled: true, collapsed: false,
+          inserted_at_hash: "ph1", name: "Existing", color: null,
+        },
+      ],
+    });
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 301, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+
+    const header = document.querySelector(`[data-bundle-uid="${bundleUid}"][data-bundle-header]`);
+    expect(header, "bundle header rendered").toBeTruthy();
+    header!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const save = items.find((el) => el.textContent?.includes("Save changes to library"));
+    expect(save, "Save changes to library item present").toBeTruthy();
+    save!.click();
+    await flushPromises();
+
+    const putCall = fetchSpy.mock.calls.find(
+      ([u, i]) => typeof u === "string" && u.includes("/wp/api/bundles/bn_existing") && (i as RequestInit | undefined)?.method === "PUT",
+    );
+    expect(putCall, "PUT /wp/api/bundles/bn_existing fired").toBeTruthy();
+    const sentBody = JSON.parse((putCall![1] as RequestInit).body as string);
+    expect(sentBody.children).toHaveLength(1);
+    expect(sentBody.children[0].id).toBe("cccccccc");
+    expect(sentBody.children[0].payload_hash).toBe("h-edited");
+    wrapper.unmount();
+  });
+
+  it("Reset to library snapshot replaces children with library state", async () => {
+    resetDriftStore();
+    const libraryChildren = [
+      {
+        id: "lib_child", type: "wildcard", enabled: true,
+        meta: { name: "LibraryName" }, entries: [],
+        payload: { var_binding: "v", options: [] }, payload_hash: "h-lib",
+      },
+    ];
+    const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.match(/\/wp\/api\/bundles\/bn_reset$/) && (!init || init.method === "GET")) {
+        return new Response(JSON.stringify({
+          id: "bn_reset", name: "ResetMe", description: "", color: null,
+          category_id: null, tags: [], is_favorite: false,
+          children: libraryChildren, payload_hash: "ph-lib", version: 3,
+          created_at: "", updated_at: "",
+        }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    const bundleUid = "buid87654321";
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "dddddddd", type: "wildcard", enabled: true,
+          meta: { name: "LocallyEdited" }, entries: [],
+          payload: { var_binding: "v", options: [{ id: "o2", value: "y", weight: 2 }] },
+          payload_hash: "h-edited", bundle_origin: bundleUid,
+        },
+      ],
+      bundles: [
+        {
+          _uid: bundleUid, library_id: "bn_reset",
+          start_idx: 0, end_idx: 0, enabled: true, collapsed: false,
+          inserted_at_hash: "ph-old", name: "ResetMe", color: null,
+        },
+      ],
+    });
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 302, initialJson, upstreamVars: [], onChange },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    const header = document.querySelector(`[data-bundle-uid="${bundleUid}"][data-bundle-header]`);
+    expect(header).toBeTruthy();
+    header!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const reset = items.find((el) => el.textContent?.includes("Reset to library snapshot"));
+    expect(reset).toBeTruthy();
+    reset!.click();
+    await flushPromises();
+
+    expect(onChange).toHaveBeenCalled();
+    const calls = onChange.mock.calls;
+    const last = calls[calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    expect(parsed.modules).toHaveLength(1);
+    expect(parsed.modules[0].id).toBe("lib_child");
+    expect(parsed.modules[0].meta.name).toBe("LibraryName");
+    expect(parsed.modules[0].payload_hash).toBe("h-lib");
+    expect(parsed.bundles[0].inserted_at_hash).toBe("ph-lib");
+    wrapper.unmount();
+  });
+
+  it("Reset re-adds children removed since insert (bundle end_idx grew via reconcile)", async () => {
+    resetDriftStore();
+    // Library has TWO children; in-graph bundle currently has ONE
+    // (user removed the second via removeModule which shrank end_idx).
+    const libraryChildren = [
+      {
+        id: "lib_c1", type: "wildcard", enabled: true,
+        meta: { name: "Original1" }, entries: [],
+        payload: { var_binding: "v1", options: [] }, payload_hash: "h1",
+      },
+      {
+        id: "lib_c2", type: "wildcard", enabled: true,
+        meta: { name: "Original2" }, entries: [],
+        payload: { var_binding: "v2", options: [] }, payload_hash: "h2",
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.match(/\/wp\/api\/bundles\/bn_restore$/) && (!init || init.method === "GET")) {
+        return new Response(JSON.stringify({
+          id: "bn_restore", name: "RestoreMe", description: "", color: null,
+          category_id: null, tags: [], is_favorite: false,
+          children: libraryChildren, payload_hash: "ph-lib", version: 1,
+          created_at: "", updated_at: "",
+        }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    }));
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    const bundleUid = "buidrestoreXX";
+    // Only one child in the current bundle (the second was removed).
+    // end_idx therefore shrunk to 0 via removeModule's reconcile path.
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "lib_c1", type: "wildcard", enabled: true,
+          meta: { name: "Original1" }, entries: [],
+          payload: { var_binding: "v1", options: [] }, payload_hash: "h1",
+          bundle_origin: bundleUid,
+        },
+      ],
+      bundles: [
+        {
+          _uid: bundleUid, library_id: "bn_restore",
+          start_idx: 0, end_idx: 0, enabled: true, collapsed: false,
+          inserted_at_hash: "ph-old", name: "RestoreMe", color: null,
+        },
+      ],
+    });
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 303, initialJson, upstreamVars: [], onChange },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    const header = document.querySelector(`[data-bundle-uid="${bundleUid}"][data-bundle-header]`);
+    expect(header).toBeTruthy();
+    header!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await flushPromises();
+    const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
+    const reset = items.find((el) => el.textContent?.includes("Reset to library snapshot"));
+    expect(reset).toBeTruthy();
+    reset!.click();
+    await flushPromises();
+
+    const calls = onChange.mock.calls;
+    const last = calls[calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    // Library had 2 children; reset should restore both.
+    expect(parsed.modules).toHaveLength(2);
+    expect(parsed.modules.map((m: { id: string }) => m.id)).toEqual(["lib_c1", "lib_c2"]);
+    expect(parsed.bundles[0].start_idx).toBe(0);
+    expect(parsed.bundles[0].end_idx).toBe(1);
+    wrapper.unmount();
+  });
+});
+
 describe("ContextWidget summaryFor — constraint", () => {
   it("renders $src → $tgt · NxM with sibling lookup", async () => {
     resetDriftStore();
