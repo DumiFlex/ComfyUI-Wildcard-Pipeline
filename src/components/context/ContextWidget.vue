@@ -24,7 +24,11 @@ import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert"
 import { api } from "../../manager/api/client";
 import type { BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
-import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import ContextMenu, {
+  type ContextMenuEntry,
+  type ContextMenuHeader,
+  type ContextMenuItem,
+} from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
 import { nextBindingSuffix } from "./duplicates/binding-suffix";
 import { pushToast } from "../shared/toast-store";
@@ -118,7 +122,13 @@ const dragOverEnd = ref(false);
  */
 const dragOverPos = ref<"before" | "after" | null>(null);
 
-const ctxMenu = ref<{ visible: boolean; x: number; y: number; items: ContextMenuItem[] }>({
+const ctxMenu = ref<{
+  visible: boolean;
+  x: number;
+  y: number;
+  items: ContextMenuEntry[];
+  header?: ContextMenuHeader;
+}>({
   visible: false,
   x: 0,
   y: 0,
@@ -424,12 +434,25 @@ function toggleBundleCollapsed(uid: string): void {
 
 function toggleBundleEnabled(uid: string, enabled: boolean): void {
   const bundles = value.value.bundles ?? [];
-  const idx = bundles.findIndex((b) => b._uid === uid);
-  if (idx < 0) return;
-  const updated = { ...bundles[idx], enabled };
-  const next = [...bundles];
-  next[idx] = updated;
-  value.value = { ...value.value, bundles: next };
+  const bIdx = bundles.findIndex((b) => b._uid === uid);
+  if (bIdx < 0) return;
+  const updated = { ...bundles[bIdx], enabled };
+  const nextBundles = [...bundles];
+  nextBundles[bIdx] = updated;
+  // Cascade enabled flag to every child module in the bundle range.
+  // Engine's pipeline reads `module.enabled` per-row, so this is all
+  // we need — no engine changes required for bundle-level disable.
+  const nextModules = value.value.modules.map((m, mIdx) => {
+    if (mIdx >= updated.start_idx && mIdx <= updated.end_idx) {
+      return { ...m, enabled };
+    }
+    return m;
+  });
+  value.value = {
+    ...value.value,
+    modules: nextModules,
+    bundles: nextBundles,
+  };
 }
 
 /** ── Bundle frame overlays ─────────────────────────────────────────
@@ -552,6 +575,96 @@ function removeBundle(uid: string): void {
     ...value.value,
     modules: [...before, ...after],
     bundles: remainingBundles,
+  };
+}
+
+/** Detach bundle frame — keep children as standalone modules but
+ *  drop the bundle instance + clear `bundle_origin` on each child.
+ *  Useful when user wants to keep what's inside but no longer wants
+ *  the group wrapping. */
+function detachBundle(uid: string): void {
+  const bundles = value.value.bundles ?? [];
+  const target = bundles.find((b) => b._uid === uid);
+  if (!target) return;
+  const nextModules = value.value.modules.map((m, idx) => {
+    if (idx < target.start_idx || idx > target.end_idx) return m;
+    // Strip bundle_origin from this child; spread so other fields
+    // survive untouched.
+    const next = { ...m } as ModuleEntry & { bundle_origin?: string };
+    delete next.bundle_origin;
+    return next;
+  });
+  const remainingBundles = bundles.filter((b) => b._uid !== uid);
+  value.value = {
+    ...value.value,
+    modules: nextModules,
+    bundles: remainingBundles,
+  };
+}
+
+/** Duplicate bundle — re-fetch the library entry + run insert
+ *  again at the position right after the current bundle. Children
+ *  share library ids with the existing instance (sibling pattern). */
+async function duplicateBundle(uid: string): Promise<void> {
+  const bundles = value.value.bundles ?? [];
+  const target = bundles.find((b) => b._uid === uid);
+  if (!target) return;
+  await onPickBundle(target.library_id);
+}
+
+/** Bundle right-click menu. Mirrors module ctxmenu pattern — sets
+ *  ctxMenu state with bundle-scoped items. The shared ContextMenu
+ *  component handles positioning + dismiss. */
+function openBundleContextMenu(ev: MouseEvent, uid: string): void {
+  const target = (value.value.bundles ?? []).find((b) => b._uid === uid);
+  if (!target) return;
+  const estW = 240;
+  const estH = 220;
+  const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
+  const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
+  const items: ContextMenuEntry[] = [
+    {
+      label: target.collapsed ? "Expand bundle" : "Collapse bundle",
+      icon: target.collapsed ? "pi-caret-down" : "pi-caret-right",
+      onSelect: () => toggleBundleCollapsed(uid),
+    },
+    {
+      label: target.enabled ? "Disable bundle" : "Enable bundle",
+      icon: target.enabled ? "pi-eye-slash" : "pi-eye",
+      subtitle: "Cascades to all children",
+      onSelect: () => toggleBundleEnabled(uid, !target.enabled),
+      divider: true,
+    },
+    {
+      label: "Duplicate bundle",
+      icon: "pi-clone",
+      subtitle: "Insert another instance below",
+      onSelect: () => { void duplicateBundle(uid); },
+    },
+    {
+      label: "Detach",
+      icon: "pi-link",
+      subtitle: "Frame removed, children stay",
+      onSelect: () => detachBundle(uid),
+      divider: true,
+    },
+    {
+      label: "Remove bundle + children",
+      icon: "pi-trash",
+      danger: true,
+      onSelect: () => removeBundle(uid),
+    },
+  ];
+  ctxMenu.value = {
+    visible: true,
+    x: Math.max(8, x),
+    y: Math.max(8, y),
+    items,
+    header: {
+      icon: "pi-box",
+      label: `Bundle · ${target.name ?? "bundle"}`,
+      iconColor: target.color || undefined,
+    },
   };
 }
 
@@ -1759,7 +1872,10 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
     { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(idx, "bottom") },
     { label: "Remove", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(idx) },
   );
-  ctxMenu.value = { visible: true, x: Math.max(8, x), y: Math.max(8, y), items };
+  ctxMenu.value = {
+    visible: true, x: Math.max(8, x), y: Math.max(8, y), items,
+    header: undefined,  // Module ctxmenu has no scope header; clear bundle header leak
+  };
 }
 
 // ── Drag-and-drop ───────────────────────────────────────────────────────
@@ -2063,6 +2179,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           @toggle-collapse="toggleBundleCollapsed(bundleStartingAt(idx)!._uid)"
           @toggle-enabled="(next) => toggleBundleEnabled(bundleStartingAt(idx)!._uid, next)"
           @remove="removeBundle(bundleStartingAt(idx)!._uid)"
+          @contextmenu="(ev) => openBundleContextMenu(ev, bundleStartingAt(idx)!._uid)"
         />
         <div
         v-show="!hiddenByBundleCollapse(idx)"
@@ -2406,6 +2523,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       :x="ctxMenu.x"
       :y="ctxMenu.y"
       :items="ctxMenu.items"
+      :header="ctxMenu.header"
       @close="ctxMenu.visible = false"
     />
   </div>
