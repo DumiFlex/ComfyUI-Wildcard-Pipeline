@@ -39,16 +39,19 @@ describe("buildBundleInsertion", () => {
     }
   });
 
-  it("regenerates every child id and rewrites in-bundle refs", () => {
+  it("preserves child library ids so per-kind drift detection works", () => {
+    // Bundles keep ORIGINAL library uuids on insert. Regenerating
+    // would break the `isMissingFromLibrary` lookup and surface every
+    // child as missing. Multi-instance disambiguation lives in
+    // `_uid` (fresh per row) not `id`.
     const result = buildBundleInsertion(bundle, 0);
     const [w, c] = result.modulesToSplice;
-    // Fresh ids
-    expect(w.id).not.toBe("aabbcc11");
-    expect(c.id).not.toBe("ddeeff22");
-    // The combine's template references the wildcard's old id — the
-    // remap pass rewrites it to the new id.
+    expect(w.id).toBe("aabbcc11");
+    expect(c.id).toBe("ddeeff22");
+    // In-bundle @{uuid} refs likewise stay verbatim — they still
+    // resolve correctly since the referenced child also kept its id.
     const tpl = (c.payload as Record<string, string>).template;
-    expect(tpl).toBe(`see @{${w.id}}`);
+    expect(tpl).toBe("see @{aabbcc11}");
   });
 
   it("sets BundleInstance fields from the library entry + insert position", () => {

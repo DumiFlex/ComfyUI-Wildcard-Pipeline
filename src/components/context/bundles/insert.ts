@@ -23,7 +23,7 @@ import {
   newRowUid,
   type BundleInstance,
 } from "../../../widgets/_shared";
-import { remapBundleUuids, type ChildSnapshot } from "./uuid-remap";
+import { type ChildSnapshot } from "./uuid-remap";
 
 /** Minimal shape of a bundle library entry — same shape the
  *  `/wp/api/bundles/{id}` endpoint returns. Frontend doesn't need
@@ -76,15 +76,21 @@ export function buildBundleInsertion(
   bundleInstance.name = entry.name;
   bundleInstance.color = entry.color ?? null;
 
-  // Regen ids + rewrite refs against the bundle-local remap. External
-  // refs (uuids not present in `entry.children`) stay verbatim and
-  // resolve against whatever lives in the target Context (or fail to
-  // resolve like any other unresolved ref).
-  const { children } = remapBundleUuids(entry.children);
-
-  // Stamp `bundle_origin` + mint a fresh `_uid` per child so Vue's
-  // v-for has stable keys across reorder + delete.
-  const modulesToSplice = children.map((c) => ({
+  // Children keep their ORIGINAL library uuids — that's what the
+  // existing per-kind drift logic (`isDrifted` / `isMissingFromLibrary`)
+  // matches against. Regenerating ids here breaks the library link
+  // and surfaces every child as "missing".
+  //
+  // Multi-instance bundles (same bundle inserted twice into one
+  // Context) intentionally produce children that share `id` — same
+  // pattern existing modules use when duplicate-fork'd. Per-instance
+  // disambiguation lives in `_uid` (fresh per row).
+  //
+  // Known limitation: constraints + @{uuid} refs inside a bundle
+  // that target other bundle children will cross-talk between
+  // instances. Documented as v2 polish — adds bundle-scope-aware
+  // ref resolution.
+  const modulesToSplice = entry.children.map((c) => ({
     ...c,
     _uid: newRowUid(),
     bundle_origin: bundleInstance._uid,

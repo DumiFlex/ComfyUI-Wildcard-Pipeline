@@ -90,6 +90,18 @@ function kindCompositionPills(b: BundleRow): Array<{ label: string; cls: string 
 }
 
 function pickRow(b: BundleRow) {
+  // Re-insert guard — bundles inserted twice produce children that
+  // share library ids (intentional, per spec) but the duplicate
+  // wildcard sibling pattern can confuse users. Prompt before doing
+  // a second insert so it's an explicit choice.
+  if (alreadyAddedSet.value.has(b.id)) {
+    const ok = window.confirm(
+      `"${b.name}" is already inserted in this Context. ` +
+      "Insert another copy? Children will share library ids with " +
+      "the existing instance (siblings).",
+    );
+    if (!ok) return;
+  }
   emit("pick", b.id);
   emit("close");
 }

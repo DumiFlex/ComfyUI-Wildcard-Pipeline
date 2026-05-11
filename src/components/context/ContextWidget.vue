@@ -2334,52 +2334,58 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 }
 
 /* ── Bundle frame (Phase 2 Task 10b) ───────────────────────────────
- * Bundle children are top-level entries in `.wp-modules` but get
- * decorated with a colored frame painted via border-left + per-edge
- * borders on the first/last row of the bundle range. The bundle
- * header (`.wp-bundle-header`) sits as a sibling before the first
- * child and merges visually with the frame via shared border color.
- *
- * Frame color comes from `--wp-bundle-color` set as an inline style
- * on bundle-membered rows (from `bundleStyleForModule()` in script).
- * Fallback to `--wp-bundle-default` token when no color is set.
- *
- * Note on row-gap collapse: `.wp-modules` uses gap, so adjacent
- * bundle children have visible space between them. To make the frame
- * read as a contiguous box, we paint left/right borders on every
- * bundle-membered row and top/bottom borders on the boundary rows.
- * Result is a "comb" pattern visually — close enough for v1, full
- * frame painting will be a Phase 5 polish item.
- */
-.wp-bundle-header {
-  /* The header sits as a sibling of .wp-module rows in the flex
-   * column. No extra positioning needed — its own border-bottom
-   * (set inside BundleHeader.vue) plus the first child's bundle-left
-   * stripe create the visual frame edge. */
+ * Bundle members + the BundleHeader sit as flat siblings in the
+ * `.wp-modules` flex column. To make them read as a contiguous
+ * boxed group we:
+ *   1. Eliminate row-gap BETWEEN the header and its first child + within the bundle
+ *      via negative margin-top on bundle-member rows
+ *   2. Paint a 2px left+right border on every bundle-member row in
+ *      the bundle color
+ *   3. Round only the first child's top + last child's bottom
+ *   4. Soft tinted bg ties everything visually
+ * Frame color comes from `--wp-bundle-color` set inline on each row
+ * from `bundleStyleForModule()`. Fallback: `--wp-bundle-default`. */
+
+/* Header sits ABOVE the first child. Override its bottom-radius so
+ * it joins seamlessly with the row below. */
+.wp-modules > .wp-bundle-header {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
+
 .wp-module--in-bundle {
-  /* Bundle frame left edge replaces the kind-stripe color while the
-   * row is a bundle member. The kind icon + chip still convey kind
-   * elsewhere on the row, so this swap reads as "the bundle owns
-   * this row's stripe" without losing kind affordance. */
-  border-left-color: var(--wp-bundle-color, var(--wp-bundle-default)) !important;
+  /* The kind-stripe (3px left border) is replaced with a thicker
+   * bundle-color border. Right/top/bottom borders carry the bundle
+   * color too so the frame walls render continuously. */
+  border-left: 1px solid var(--wp-bundle-color, var(--wp-bundle-default)) !important;
+  border-right: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
+  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 4%, var(--wp-bg2)) !important;
+  /* Pull the row up to butt against the previous row (header or
+   * sibling) — kills the visible gap that breaks frame continuity. */
+  margin-top: calc(var(--wp-row-gap, 4px) * -1);
 }
+
+/* Inner border between adjacent bundle members reads as a divider,
+ * not as a frame edge. Soft tone of the bundle color matches the
+ * tinted bg without competing. */
+.wp-module--in-bundle + .wp-module--in-bundle {
+  border-top: 1px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 30%, transparent);
+}
+
 .wp-module--bundle-first {
-  /* First child sits directly under the bundle header — no extra
-   * top border needed since the header carries its own bottom border
-   * via BundleHeader.vue. */
+  /* Top of the frame — sits directly under the header. Header carries
+   * the top edge, so this row's top-radius is squared off to merge. */
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
 .wp-module--bundle-last {
-  /* Last bundle child gets a faint bottom marker tying back into the
-   * frame color. Cheap visual cue without needing a separate footer
-   * element. */
-  border-bottom: 2px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 50%, transparent);
+  /* Bottom of the frame — render the bottom border in full bundle
+   * color so the frame closes off cleanly. */
+  border-bottom: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
 }
 .wp-module--in-bundle-collapsed {
-  /* Children of a collapsed bundle render hidden via v-show; this
-   * class is reserved for future "show shrunken" affordances. */
+  /* Reserved for collapsed-state styling — children currently hidden
+   * via v-show. */
 }
 
 /* ── Populated ↔ Empty page swap ───────────────────────────────────────
