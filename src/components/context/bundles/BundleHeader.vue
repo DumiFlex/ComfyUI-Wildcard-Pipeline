@@ -116,10 +116,13 @@ const summary = computed(() => {
    * ContextWidget. Header carries only its own bottom divider
    * separating it from the children below — no full border, no
    * radius, no frame walls. When the bundle is collapsed, the
-   * bottom divider hides (no children below to separate from). */
+   * bottom divider hides (no children below to separate from).
+   *
+   * Padding mirrors `--wp-pad-row` from display-prefs so the header
+   * has the same left/right spacing as standalone module rows. */
   background: color-mix(in srgb, var(--b) 18%, transparent);
   border-bottom: 1px solid var(--b);
-  padding: 6px 8px;
+  padding: var(--wp-pad-row, 4px 6px);
   display: flex;
   align-items: center;
   gap: 6px;
