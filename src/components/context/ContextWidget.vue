@@ -671,11 +671,10 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  const ok = window.confirm(
-    `Reset "${target.name ?? "bundle"}" to library snapshot? ` +
-    "Any edits to bundle children will be lost.",
-  );
-  if (!ok) return;
+  // No `window.confirm` — ComfyUI's host suppresses native modal APIs
+  // in some runtimes (returns false silently → silent no-op). Same
+  // failure mode as wrap's prompt. The op is recoverable: users can
+  // resave via "Save changes to library" if they regret it.
   try {
     const entry = await api.bundles.get(target.library_id);
     const libEntry: BundleLibraryEntry = {
@@ -799,11 +798,9 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  const ok = window.confirm(
-    `Save current state of "${target.name ?? "bundle"}" to the library? ` +
-    "This overwrites the frozen snapshot used by every future insert.",
-  );
-  if (!ok) return;
+  // No `window.confirm` — ComfyUI host suppresses it in some runtimes.
+  // Op is library-side; users can revert by re-saving an older instance
+  // or editing in the SPA library editor.
   const childrenOut = value.value.modules
     .slice(target.start_idx, target.end_idx + 1)
     .map(toChildSnapshot);
