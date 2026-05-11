@@ -323,6 +323,11 @@ async function onPickBundle(bundleId: string): Promise<void> {
         _uid: c._uid,
         type: c.type as ModuleEntry["type"],
         enabled: (rec.enabled as boolean | undefined) ?? true,
+        // Bundle children inserted in their collapsed state per
+        // `buildBundleInsertion` — the explicit rebuild above
+        // dropped this field; now carried through so the chevron
+        // starts in collapsed position.
+        collapsed: (rec.collapsed as boolean | undefined) ?? false,
         meta,
         entries,
         payload: c.payload,
