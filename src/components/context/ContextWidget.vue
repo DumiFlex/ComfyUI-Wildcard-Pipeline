@@ -459,11 +459,14 @@ function updateBundleOverlays(): void {
   }
   const bundles = value.value.bundles ?? [];
   const next: BundleOverlay[] = [];
-  // Padding inside the frame — extends the overlay above the header
-  // and below the last child so children visibly breathe inside the
-  // box. Collapsed bundles get 0 bottom padding (just the header
-  // tight in its own box).
-  const PAD_TOP = 4;
+  // Bottom padding inside the frame — extends the overlay below
+  // the last child so children visibly breathe at the bottom.
+  // Top padding lives between the header and the first child as a
+  // natural flex-gap (no negative margin on `.wp-module--bundle-first`
+  // any more), so the overlay aligns flush with the header's top.
+  // Collapsed bundles get 0 bottom padding — just the header in its
+  // own tight box.
+  const PAD_TOP = 0;
   const PAD_BOTTOM = 6;
   for (const b of bundles) {
     const headerEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
@@ -2506,12 +2509,11 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
    * overlay tint so they stand out as rows, not blank space. */
   background: var(--wp-bg3) !important;
 }
-/* First child sits directly under the header — pull up slightly so
- * it touches the header's bottom divider. Subsequent children keep
- * the flex row-gap for breathing room between siblings. */
-.wp-module--bundle-first {
-  margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
-}
+/* All bundle children — including the first — keep the natural
+ * flex row-gap of `.wp-modules` so there's breathing room between
+ * the header and first child, and between siblings inside the
+ * bundle. The overlay extends 6px below the last child for the
+ * matching bottom-padding effect. */
 /* Children keep default icon + control sizes (drag handle, collapse,
  * checkbox, kind icon). Only the outer .wp-module padding shrinks,
  * which reduces row height without making the inner controls look
