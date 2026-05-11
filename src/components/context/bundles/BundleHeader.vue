@@ -182,13 +182,15 @@ const summary = computed(() => {
   color: var(--wp-text-dim, var(--wp-text3));
   flex-shrink: 0;
 }
-/* Mirrors `.wp-btn--icon-sm` from ContextWidget — transparent
- * default, hover reveals border + bg. Same shape as the per-module
- * action buttons so the action cluster reads as one family. */
+/* Same size + shape as `.wp-btn--icon-sm` from ContextWidget so the
+ * action reads as part of the same family. Difference: the BG +
+ * BORDER are tinted with the bundle color (instead of transparent)
+ * so the button visually anchors to its bundle, and the icon is
+ * white (instead of dim). Hover bumps the tint stronger. */
 .wp-bundle-action {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
+  background: color-mix(in srgb, var(--b) 18%, transparent);
+  border: 1px solid var(--b);
+  color: var(--wp-text);
   font: 500 11px/1 var(--wp-font-sans);
   padding: 3px;
   border-radius: var(--wp-radius, 4px);
@@ -202,16 +204,17 @@ const summary = computed(() => {
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .wp-bundle-action:hover {
-  background: var(--wp-bg2);
-  border-color: var(--wp-border-soft, var(--wp-border2, var(--wp-border)));
-  color: var(--wp-text);
+  background: color-mix(in srgb, var(--b) 32%, transparent);
 }
 .wp-bundle-action .pi {
   font-size: 11px;
 }
 .wp-bundle-action--danger:hover {
+  /* Trash button hover — shift toward danger red so the destructive
+   * intent is clear even though the default tint is bundle color. */
+  background: color-mix(in srgb, var(--wp-danger) 22%, transparent);
+  border-color: var(--wp-danger);
   color: var(--wp-danger);
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border)));
 }
 .wp-bundle-action:hover { background: var(--wp-bg3); }
 .wp-bundle-action--danger:hover { color: var(--wp-red); }

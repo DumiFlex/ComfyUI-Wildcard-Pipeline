@@ -459,12 +459,12 @@ function updateBundleOverlays(): void {
   }
   const bundles = value.value.bundles ?? [];
   const next: BundleOverlay[] = [];
-  // Padding inside the frame — extends the overlay 2px above the
-  // header + 4px below the last child so the children visibly
-  // breathe inside the box. Collapsed bundles get 0 bottom padding
-  // (just the header tight in its own box).
-  const PAD_TOP = 0;
-  const PAD_BOTTOM = 4;
+  // Padding inside the frame — extends the overlay above the header
+  // and below the last child so children visibly breathe inside the
+  // box. Collapsed bundles get 0 bottom padding (just the header
+  // tight in its own box).
+  const PAD_TOP = 4;
+  const PAD_BOTTOM = 6;
   for (const b of bundles) {
     const headerEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
     const lastChildEl = container.querySelector<HTMLElement>(
@@ -2512,22 +2512,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 .wp-module--bundle-first {
   margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
 }
+/* Children keep default icon + control sizes (drag handle, collapse,
+ * checkbox, kind icon). Only the outer .wp-module padding shrinks,
+ * which reduces row height without making the inner controls look
+ * smaller than standalone modules. */
 .wp-module--in-bundle .wp-module-header {
   padding: 4px 6px !important;
-}
-.wp-module--in-bundle .wp-module-name {
-  font-size: 11px !important;
-}
-.wp-module--in-bundle .wp-summary {
-  padding: 2px 6px 4px 32px !important;
-  font-size: 10px !important;
-}
-.wp-module--in-bundle .wp-mod-icon {
-  width: 14px !important;
-  height: 14px !important;
-}
-.wp-module--in-bundle .wp-mod-icon .pi {
-  font-size: 10px !important;
 }
 
 /* ── Bundle frame overlay ──────────────────────────────────────────
