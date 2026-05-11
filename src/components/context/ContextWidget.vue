@@ -2352,19 +2352,16 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
  * negative-margin overlap. */
 
 .wp-module--in-bundle {
-  /* Frame walls — 1px on every side in bundle color. Tinted bg
-   * (8% color-mix) carries the "inside the frame" visual. */
+  /* Frame walls — 1px left+right in bundle color. No bg tint (avoids
+   * the "everything is red" look users flagged). Top border between
+   * adjacent children renders as a subtle divider. */
   border-left: 1px solid var(--wp-bundle-color, var(--wp-bundle-default)) !important;
   border-right: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
-  border-top: 1px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 35%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 25%, transparent);
   border-bottom: 0;
-  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 8%, var(--wp-bg2)) !important;
   /* Kill the gap between this row and the row above (header or
    * previous bundle sibling) — keeps the frame walls continuous. */
   margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
-  /* Slight left indent on the content so children read as "inside"
-   * the frame visually, not flush with the edge. */
-  padding-left: 4px;
 }
 
 .wp-module--bundle-first {
@@ -2381,12 +2378,23 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   border-bottom-right-radius: var(--wp-radius, 4px);
 }
 
-/* Children render with FULL module chrome (lock/internal/remove
- * buttons, drift badges, summary line, conflict markers — all
- * unchanged). Frame contains them visually via the surrounding
- * border + tint defined above. Children inside the frame act
- * identically to top-level modules — same right-click menu, same
- * drag/drop, same buttons. */
+/* Compact-child treatment — children inside the frame render in a
+ * tighter layout so the frame reads as ONE unit, not a stack of
+ * full top-level modules. We keep diagnostic badges (mod / drift /
+ * missing / conflict) and action buttons visible — those are
+ * essential for working with the module — but shrink padding +
+ * name font so each row is visually smaller. The frame's border
+ * + the smaller rows together create the "contained" effect. */
+.wp-module--in-bundle .wp-module-header {
+  padding: 4px 6px;
+}
+.wp-module--in-bundle .wp-module-name {
+  font-size: 11px;
+}
+.wp-module--in-bundle .wp-summary {
+  padding: 2px 6px 4px 32px;
+  font-size: 10px;
+}
 
 .wp-module--in-bundle-collapsed {
   /* Reserved for collapsed-state styling — children currently hidden
