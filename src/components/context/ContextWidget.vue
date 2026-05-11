@@ -2452,33 +2452,46 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
  * continue from the header's bottom into the children below via
  * negative-margin overlap. */
 
-/* Children stay UNTOUCHED — same chrome as standalone modules.
- * The bundle frame is painted as a SEPARATE overlay element
- * (.wp-bundle-overlay below) sized to the range of child rows via
- * JS measurement. This matches the mockup which uses a single
- * wrapper element containing all children, not per-row borders. */
-
-/* Compact-child treatment — slightly tighter padding + smaller name
- * font so the bundle as a whole reads as ONE unit. Kept minimal so
- * children still look like real modules, just slightly more
- * "contained". Diagnostic badges + action buttons stay visible. */
-.wp-module--in-bundle .wp-module-header {
-  padding: 4px 6px;
-}
-.wp-module--in-bundle .wp-module-name {
-  font-size: 11px;
-}
-.wp-module--in-bundle .wp-summary {
-  padding: 2px 6px 4px 32px;
-  font-size: 10px;
-}
-/* Children touch each other vertically inside the bundle frame —
- * removes the row-gap so the frame contains them as one unit. */
+/* Children visually NESTED inside the bundle frame:
+ *   1. Horizontal margin shrinks them inward — they don't touch the
+ *      frame walls, so the eye reads them as contained
+ *   2. Tighter padding + smaller name font — they read as sub-items
+ *   3. Smaller kind-icon + chip — proportional shrink to match
+ *   !important throughout since density-pref `--wp-pad-row` token
+ *   would otherwise win at the same specificity. */
 .wp-module--in-bundle {
+  margin-left: 8px !important;
+  margin-right: 8px !important;
+  /* Eliminate the flex row-gap between bundle siblings + between
+   * the header and the first child by pulling each row UP. The
+   * bundle frame contains them; row-gap inside breaks the contained
+   * look. */
   margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
+  /* Children inside the frame use a slightly darker bg than the
+   * overlay tint so they stand out as rows, not blank space. */
+  background: var(--wp-bg3) !important;
 }
 .wp-module--bundle-first {
-  margin-top: 0 !important;
+  /* First child sits directly under the header — pull up to touch
+   * the header bottom border, no row-gap above. */
+  margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
+}
+.wp-module--in-bundle .wp-module-header {
+  padding: 4px 6px !important;
+}
+.wp-module--in-bundle .wp-module-name {
+  font-size: 11px !important;
+}
+.wp-module--in-bundle .wp-summary {
+  padding: 2px 6px 4px 32px !important;
+  font-size: 10px !important;
+}
+.wp-module--in-bundle .wp-mod-icon {
+  width: 14px !important;
+  height: 14px !important;
+}
+.wp-module--in-bundle .wp-mod-icon .pi {
+  font-size: 10px !important;
 }
 
 /* ── Bundle frame overlay ──────────────────────────────────────────
