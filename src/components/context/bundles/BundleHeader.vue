@@ -46,6 +46,7 @@ const summary = computed(() => {
     class="wp-bundle-header"
     :style="{ '--b': frameColor }"
     :data-bundle-uid="instance._uid"
+    data-bundle-header
     @contextmenu.stop.prevent="(ev) => emit('contextmenu', ev)"
   >
     <span class="wp-bundle-handle" title="Drag to reorder bundle">⠿</span>
@@ -89,11 +90,12 @@ const summary = computed(() => {
 @import "../../shared/theme.css";
 
 .wp-bundle-header {
+  /* The bundle frame box is painted by `.wp-bundle-overlay` in
+   * ContextWidget. Header carries only its own bottom divider
+   * separating it from the children below — no full border, no
+   * radius, no frame walls. */
   background: color-mix(in srgb, var(--b) 18%, transparent);
-  border: 1px solid var(--b);
-  border-bottom-width: 1px;
-  border-top-left-radius: var(--wp-radius, 4px);
-  border-top-right-radius: var(--wp-radius, 4px);
+  border-bottom: 1px solid var(--b);
   padding: 6px 8px;
   display: flex;
   align-items: center;

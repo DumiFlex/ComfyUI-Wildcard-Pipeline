@@ -427,6 +427,88 @@ function toggleBundleEnabled(uid: string, enabled: boolean): void {
   value.value = { ...value.value, bundles: next };
 }
 
+/** ── Bundle frame overlays ─────────────────────────────────────────
+ *  Bundles render as flat siblings of modules in the flex column
+ *  (header + child rows). To paint a SINGLE box around the bundle
+ *  range without restructuring DOM, we measure the bounding box of
+ *  the header + last child via offsetTop / offsetHeight and render
+ *  an absolute-positioned overlay element for each bundle.
+ *
+ *  Recomputed on:
+ *    - bundles[] / modules[] mutation (watch)
+ *    - container resize (ResizeObserver)
+ *    - collapse toggles (also fires via the bundles[] watch)
+ *
+ *  Trade-off vs proper DOM wrapping (extract ModuleCard.vue): keeps
+ *  the existing 250-line module template intact at the cost of an
+ *  extra layout-measurement pass. */
+interface BundleOverlay {
+  uid: string;
+  top: number;
+  height: number;
+  color: string;
+}
+const modulesContainer = ref<HTMLElement | null>(null);
+const bundleOverlays = ref<BundleOverlay[]>([]);
+
+function updateBundleOverlays(): void {
+  const container = modulesContainer.value;
+  if (!container) {
+    bundleOverlays.value = [];
+    return;
+  }
+  const bundles = value.value.bundles ?? [];
+  const next: BundleOverlay[] = [];
+  for (const b of bundles) {
+    const headerEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
+    const lastChildEl = container.querySelector<HTMLElement>(
+      `.wp-module[data-bundle-uid="${b._uid}"][data-module-idx="${b.end_idx}"]`,
+    );
+    if (!headerEl) continue;
+    const top = headerEl.offsetTop;
+    let bottom = top + headerEl.offsetHeight;
+    if (b.collapsed) {
+      // Collapsed: overlay spans the header only.
+      bottom = top + headerEl.offsetHeight;
+    } else if (lastChildEl) {
+      bottom = lastChildEl.offsetTop + lastChildEl.offsetHeight;
+    }
+    next.push({
+      uid: b._uid,
+      top,
+      height: bottom - top,
+      color: b.color && b.color.length ? b.color : "var(--wp-bundle-default)",
+    });
+  }
+  bundleOverlays.value = next;
+}
+
+let _bundleResizeObserver: ResizeObserver | null = null;
+onMounted(() => {
+  if (typeof ResizeObserver !== "undefined" && modulesContainer.value) {
+    _bundleResizeObserver = new ResizeObserver(() => {
+      // Defer to next frame so the layout settles before we measure.
+      requestAnimationFrame(updateBundleOverlays);
+    });
+    _bundleResizeObserver.observe(modulesContainer.value);
+  }
+  // Initial measurement after first paint.
+  nextTick().then(updateBundleOverlays);
+});
+onBeforeUnmount(() => {
+  _bundleResizeObserver?.disconnect();
+  _bundleResizeObserver = null;
+});
+
+/** Watch the bundles array AND the modules array — either changing
+ *  means the overlay positions may shift. `flush: 'post'` waits for
+ *  Vue to apply DOM updates before we re-measure. */
+watch(
+  () => [value.value.modules.length, (value.value.bundles ?? []).length, value.value.bundles ?? []],
+  () => { nextTick().then(updateBundleOverlays); },
+  { deep: true, flush: "post" },
+);
+
 function removeBundle(uid: string): void {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
@@ -1910,6 +1992,24 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           ><i class="pi pi-eye" /></button>
         </div>
 
+        <div class="wp-modules-frame" ref="modulesContainer">
+        <!-- Bundle frame overlays — absolute-positioned boxes painted
+             OVER the bundle ranges. Sized via updateBundleOverlays()
+             from each bundle header's offsetTop + last child's
+             offsetTop+offsetHeight. pointer-events:none so clicks
+             pass through to the modules above. Outside the
+             TransitionGroup so they aren't animated as items. -->
+        <div
+          v-for="overlay in bundleOverlays"
+          :key="`bo-${overlay.uid}`"
+          class="wp-bundle-overlay"
+          :style="{
+            top: `${overlay.top}px`,
+            height: `${overlay.height}px`,
+            '--wp-bundle-color': overlay.color,
+          }"
+          aria-hidden="true"
+        />
         <TransitionGroup name="wp-list" tag="div" class="wp-modules">
       <template v-for="(m, idx) in value.modules" :key="m._uid ?? `${m.id}|${idx}`">
         <!-- Bundle header — rendered BEFORE the first child of each
@@ -2163,6 +2263,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       </div>
       </template>
         </TransitionGroup>
+        </div>
 
         <!-- Footer: primary add + bundle add. Shown only when list is
              non-empty. "Open in SPA" was replaced with "+ Add Bundle"
@@ -2351,40 +2452,16 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
  * continue from the header's bottom into the children below via
  * negative-margin overlap. */
 
-.wp-module--in-bundle {
-  /* Frame walls — 1px left+right in bundle color. No bg tint (avoids
-   * the "everything is red" look users flagged). Top border between
-   * adjacent children renders as a subtle divider. */
-  border-left: 1px solid var(--wp-bundle-color, var(--wp-bundle-default)) !important;
-  border-right: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
-  border-top: 1px solid color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 25%, transparent);
-  border-bottom: 0;
-  /* Kill the gap between this row and the row above (header or
-   * previous bundle sibling) — keeps the frame walls continuous. */
-  margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
-}
+/* Children stay UNTOUCHED — same chrome as standalone modules.
+ * The bundle frame is painted as a SEPARATE overlay element
+ * (.wp-bundle-overlay below) sized to the range of child rows via
+ * JS measurement. This matches the mockup which uses a single
+ * wrapper element containing all children, not per-row borders. */
 
-.wp-module--bundle-first {
-  /* First child sits directly under the header. No own top border
-   * since the header's bottom border serves that role. */
-  border-top: 0 !important;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-.wp-module--bundle-last {
-  /* Last child closes the frame with the bottom edge. */
-  border-bottom: 1px solid var(--wp-bundle-color, var(--wp-bundle-default)) !important;
-  border-bottom-left-radius: var(--wp-radius, 4px);
-  border-bottom-right-radius: var(--wp-radius, 4px);
-}
-
-/* Compact-child treatment — children inside the frame render in a
- * tighter layout so the frame reads as ONE unit, not a stack of
- * full top-level modules. We keep diagnostic badges (mod / drift /
- * missing / conflict) and action buttons visible — those are
- * essential for working with the module — but shrink padding +
- * name font so each row is visually smaller. The frame's border
- * + the smaller rows together create the "contained" effect. */
+/* Compact-child treatment — slightly tighter padding + smaller name
+ * font so the bundle as a whole reads as ONE unit. Kept minimal so
+ * children still look like real modules, just slightly more
+ * "contained". Diagnostic badges + action buttons stay visible. */
 .wp-module--in-bundle .wp-module-header {
   padding: 4px 6px;
 }
@@ -2395,6 +2472,41 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   padding: 2px 6px 4px 32px;
   font-size: 10px;
 }
+/* Children touch each other vertically inside the bundle frame —
+ * removes the row-gap so the frame contains them as one unit. */
+.wp-module--in-bundle {
+  margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
+}
+.wp-module--bundle-first {
+  margin-top: 0 !important;
+}
+
+/* ── Bundle frame overlay ──────────────────────────────────────────
+ * `.wp-modules-frame` wraps both the overlays + the module list so
+ * the overlays use IT as positioning context. Module offsetTop is
+ * measured relative to this wrapper (since `.wp-modules` is its
+ * direct child and `.wp-modules-frame` is the offsetParent).
+ *
+ * Each overlay is a `position: absolute` box sized via JS-measured
+ * top + height to exactly span the bundle's header + child range.
+ * Paints the box: 1px border in bundle color + rounded corners +
+ * soft tinted bg. `z-index: 0` + `pointer-events: none` so clicks
+ * pass through to the modules above. */
+.wp-modules-frame { position: relative; }
+.wp-bundle-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  pointer-events: none;
+  border: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
+  border-radius: var(--wp-radius, 4px);
+  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
+}
+/* Modules paint ABOVE the overlay so action buttons + text stay
+ * interactive + visible. */
+.wp-modules > .wp-module,
+.wp-modules > .wp-bundle-header { position: relative; z-index: 1; }
 
 .wp-module--in-bundle-collapsed {
   /* Reserved for collapsed-state styling — children currently hidden
