@@ -44,7 +44,10 @@ const summary = computed(() => {
 <template>
   <div
     class="wp-bundle-header"
-    :class="{ 'wp-bundle-header--collapsed': instance.collapsed }"
+    :class="{
+      'wp-bundle-header--collapsed': instance.collapsed,
+      'wp-bundle-header--disabled': !instance.enabled,
+    }"
     :style="{ '--b': frameColor }"
     :data-bundle-uid="instance._uid"
     data-bundle-header
@@ -139,6 +142,21 @@ const summary = computed(() => {
 }
 .wp-bundle-header--collapsed {
   border-bottom-color: transparent;
+}
+/* Disabled bundle — mirror `.wp-module.wp-disabled`'s diagonal-stripe
+ * pattern + 55% opacity. The bundle's tinted bg still shines through
+ * via the `--wp-bg2`/`--wp-bg3` stripes mixing with the bundle color
+ * underlay, so the disabled state reads as "off" without losing the
+ * bundle-color identity. */
+.wp-bundle-header--disabled {
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--wp-bg3),
+    var(--wp-bg3) 6px,
+    var(--wp-bg2) 6px,
+    var(--wp-bg2) 8px
+  );
 }
 /* Drag handle — mirror `.wp-drag-handle` from ContextWidget exactly.
  * 6px-wide inline-flex container holding the 6×12 SVG grip; opacity
