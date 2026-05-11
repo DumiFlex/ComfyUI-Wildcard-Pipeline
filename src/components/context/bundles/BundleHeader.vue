@@ -50,11 +50,32 @@ const summary = computed(() => {
     data-bundle-header
     @contextmenu.stop.prevent="(ev) => emit('contextmenu', ev)"
   >
-    <span class="wp-bundle-handle" title="Drag to reorder bundle">⠿</span>
+    <!-- Drag handle — exact same 6×12 SVG dot grid markup the
+         standalone module rows use (`.wp-drag-handle`), so the
+         visual + size matches across the action surface. -->
+    <span class="wp-bundle-handle" aria-hidden="true" title="Drag to reorder bundle">
+      <svg
+        class="wp-bundle-handle__grip"
+        viewBox="0 0 6 12"
+        width="6"
+        height="12"
+        fill="currentColor"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="1.5" cy="2" r="1" />
+        <circle cx="4.5" cy="2" r="1" />
+        <circle cx="1.5" cy="6" r="1" />
+        <circle cx="4.5" cy="6" r="1" />
+        <circle cx="1.5" cy="10" r="1" />
+        <circle cx="4.5" cy="10" r="1" />
+      </svg>
+    </span>
     <button
       type="button"
       class="wp-bundle-collapse"
       :aria-label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
+      :title="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
     >
       <i
@@ -109,25 +130,44 @@ const summary = computed(() => {
 .wp-bundle-header--collapsed {
   border-bottom-color: transparent;
 }
+/* Drag handle — mirror `.wp-drag-handle` from ContextWidget exactly.
+ * 6px-wide inline-flex container holding the 6×12 SVG grip; opacity
+ * fades on hover, color follows --wp-text2 on hover. */
 .wp-bundle-handle {
-  color: var(--wp-text3);
-  font-size: 10px;
-  cursor: grab;
-  flex-shrink: 0;
-}
-.wp-bundle-collapse {
-  background: transparent;
-  border: 0;
-  width: 14px;
-  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text3);
+  width: 6px;
+  flex-shrink: 0;
+  cursor: grab;
+  opacity: 0.45;
+  transition: opacity 0.15s, color 0.15s;
+}
+.wp-bundle-handle:active { cursor: grabbing; }
+.wp-bundle-handle__grip { display: block; }
+.wp-bundle-header:hover .wp-bundle-handle {
+  opacity: 1;
+  color: var(--wp-text2);
+}
+
+/* Collapse caret — mirror `.wp-collapse-btn` from ContextWidget
+ * exactly. 14px-wide button, 10px caret glyph. */
+.wp-bundle-collapse {
+  background: none;
+  border: none;
+  color: var(--wp-text3);
   cursor: pointer;
   padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
 }
-.wp-bundle-collapse .pi { font-size: 9px; }
+.wp-bundle-collapse .pi { font-size: 10px; }
+.wp-bundle-collapse:hover { color: var(--wp-text); }
 .wp-bundle-enabled { display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .wp-bundle-enabled input {
   position: absolute;
