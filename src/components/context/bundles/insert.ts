@@ -94,6 +94,11 @@ export function buildBundleInsertion(
     ...c,
     _uid: newRowUid(),
     bundle_origin: bundleInstance._uid,
+    // Bundle children START collapsed by default — the bundle frame
+    // is the visual container; expanded summaries inside the frame
+    // create noise on first insert. Users can expand individual
+    // children after via the collapse chevron.
+    collapsed: true,
   }));
 
   return { modulesToSplice, bundleInstance };
