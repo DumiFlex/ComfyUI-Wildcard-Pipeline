@@ -827,13 +827,17 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
 
 /** Wrap THIS module into a new library bundle (single-row v1).
  *  Users can drag more modules into the range afterwards — the
- *  range-integrity logic handles extension automatically. */
+ *  range-integrity logic handles extension automatically.
+ *
+ *  Bundle name auto-derived from the wrapped module's display name
+ *  (falls back to "New Bundle"). ComfyUI's frontend host suppresses
+ *  `window.prompt` in some environments — replacing it with a default
+ *  + post-rename via the SPA editor keeps the wrap atomic and never
+ *  silently aborts. */
 async function wrapIntoNewBundle(idx: number): Promise<void> {
   const m = value.value.modules[idx];
   if (!m) return;
-  const nameInput = window.prompt("Bundle name?", "Bundle");
-  if (nameInput == null) return;
-  const name = nameInput.trim() || "Bundle";
+  const name = m.meta?.name?.trim() || "New Bundle";
   try {
     const entry = await api.bundles.create({
       name, color: null, children: [toChildSnapshot(m)],
@@ -851,7 +855,7 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
       ...value.value, modules: nextModules,
       bundles: [...(value.value.bundles ?? []), bundleInstance],
     };
-    pushToast(`Wrapped into "${entry.name}"`, { severity: "success" });
+    pushToast(`Wrapped into "${entry.name}" — rename in Library editor`, { severity: "success" });
   } catch (e) {
     pushToast(`Wrap failed: ${e instanceof Error ? e.message : String(e)}`, { severity: "error" });
   }

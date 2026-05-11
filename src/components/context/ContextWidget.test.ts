@@ -436,21 +436,21 @@ describe("ContextWidget bulk refresh", () => {
 });
 
 describe("ContextWidget bundle ops via ctxmenu", () => {
-  it("Wrap into new bundle creates bundle + stamps bundle_origin", async () => {
+  it("Wrap into new bundle creates bundle named after the module + stamps bundle_origin", async () => {
     resetDriftStore();
     const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
       if (typeof url === "string" && url.includes("/wp/api/bundles") && init?.method === "POST") {
+        const body = JSON.parse(init.body as string);
         return new Response(JSON.stringify({
-          id: "bn_new", name: "MyBundle", description: "", color: null,
+          id: "bn_new", name: body.name, description: "", color: null,
           category_id: null, tags: [], is_favorite: false,
-          children: [], payload_hash: "ph1", version: 1,
+          children: body.children, payload_hash: "ph1", version: 1,
           created_at: "", updated_at: "",
         }), { status: 201 });
       }
       return new Response("{}", { status: 200 });
     });
     vi.stubGlobal("fetch", fetchSpy);
-    vi.stubGlobal("prompt", vi.fn(() => "MyBundle"));
 
     const initialJson = JSON.stringify({
       version: 1,
@@ -488,6 +488,7 @@ describe("ContextWidget bundle ops via ctxmenu", () => {
     const parsed = JSON.parse(last);
     expect(parsed.bundles).toHaveLength(1);
     expect(parsed.bundles[0].library_id).toBe("bn_new");
+    expect(parsed.bundles[0].name).toBe("Hair");  // derived from m.meta.name
     expect(parsed.modules[0].bundle_origin).toBe(parsed.bundles[0]._uid);
     wrapper.unmount();
   });
