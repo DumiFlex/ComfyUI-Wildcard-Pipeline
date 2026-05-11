@@ -566,14 +566,7 @@ function resetCorruptValue() {
 }
 
 function isCollapsed(m: ModuleEntry): boolean {
-  if (m.collapsed === true) return true;
-  // Bundle children always render in their collapsed state — the
-  // bundle frame is the visual container; expanding each child's
-  // summary line inside the frame creates noise. Users can still
-  // open the edit modal for full editing via right-click → Edit.
-  const idx = value.value.modules.indexOf(m);
-  if (idx >= 0 && bundleContaining(idx)) return true;
-  return false;
+  return m.collapsed === true;
 }
 
 let suppressWatch = false;
@@ -2503,10 +2496,11 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   /* Children render at their default row height — drag handle,
    * collapse caret, kind icon all read the same size as standalone
    * modules. Tighter padding here squeezed icons visually; reverted
-   * to inherit `--wp-pad-row` from `.wp-module`. */
-  /* Children inside the frame use a slightly darker bg than the
-   * overlay tint so they stand out as rows, not blank space. */
-  background: var(--wp-bg3) !important;
+   * to inherit `--wp-pad-row` from `.wp-module`.
+   *
+   * Background inherits from `.wp-module` (`var(--wp-bg3)`) — no
+   * !important override here so `.wp-disabled`'s diagonal-stripe
+   * gradient still wins when the child is disabled. */
 }
 /* All bundle children — including the first — keep the natural
  * flex row-gap of `.wp-modules` so there's breathing room between
