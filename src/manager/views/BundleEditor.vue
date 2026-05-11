@@ -76,15 +76,21 @@ interface ChildView {
   name: string;
 }
 
-/** Project library-side child snapshot to a display row. Children carry
- *  `id`, `type`, and `name` at the top level (the engine reads these
- *  same fields), so the projection is trivial. */
+/** Project library-side child snapshot to a display row. Children are
+ *  the canonical `toChildSnapshot` shape from ContextWidget — name
+ *  lives at `meta.name` (mirrors ModuleEntry). Falls back to top-level
+ *  `name` for forward-compat with any caller that builds children
+ *  differently, then "(unnamed)". */
 const childRows = computed<ChildView[]>(() =>
-  children.value.map((c, i) => ({
-    id: String(c.id ?? `child_${i}`),
-    type: String(c.type ?? "module"),
-    name: String(c.name ?? "(unnamed)"),
-  })),
+  children.value.map((c, i) => {
+    const meta = (c.meta as { name?: string } | undefined) ?? undefined;
+    const displayName = meta?.name ?? (c.name as string | undefined) ?? "(unnamed)";
+    return {
+      id: String(c.id ?? `child_${i}`),
+      type: String(c.type ?? "module"),
+      name: String(displayName),
+    };
+  }),
 );
 
 onMounted(async () => {

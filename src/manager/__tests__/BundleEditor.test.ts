@@ -66,8 +66,10 @@ describe("BundleEditor.vue", () => {
       tags: ["character", "v2"],
       is_favorite: false,
       children: [
-        { id: "wc_a", type: "wildcard", name: "hair" },
-        { id: "wc_b", type: "wildcard", name: "outfit" },
+        // Canonical shape produced by ContextWidget#toChildSnapshot —
+        // display name lives at `meta.name`, not top-level.
+        { id: "wc_a", type: "wildcard", meta: { name: "hair" } },
+        { id: "wc_b", type: "wildcard", meta: { name: "outfit" } },
       ],
       payload_hash: "abc123",
       version: 1,
@@ -90,6 +92,40 @@ describe("BundleEditor.vue", () => {
     expect(wrap.text()).toContain("hair");
     expect(wrap.text()).toContain("outfit");
     expect(wrap.text()).toContain("Children (2)");
+  });
+
+  it("renders child names from meta.name (canonical ContextWidget snapshot shape)", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_meta",
+      name: "Meta Test",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        // Real shape from toChildSnapshot — top-level `name` absent,
+        // display name lives under `meta.name`.
+        {
+          id: "wc_meta1",
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "From Meta" },
+          entries: [],
+          payload: {},
+        },
+        // Missing meta entirely → falls through to "(unnamed)".
+        { id: "wc_meta2", type: "wildcard" },
+      ],
+      payload_hash: "",
+      version: 1,
+      created_at: "",
+      updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_meta" });
+    await flushPromises();
+    expect(wrap.text()).toContain("From Meta");
+    expect(wrap.text()).toContain("(unnamed)");
   });
 
   it("falls back to default color when row.color is null", async () => {
