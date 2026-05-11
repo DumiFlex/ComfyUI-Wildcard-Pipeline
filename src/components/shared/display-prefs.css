@@ -152,8 +152,18 @@
 .wp-kind-style-icon .wp-kind-chip {
   display: none !important;
 }
+/* Bundle's chip mirrors the kind-chip pattern — hide it when the
+ * user prefers icon-only display. */
+.wp-kind-style-icon .wp-bundle-chip {
+  display: none !important;
+}
 
 .wp-kind-style-chip .wp-mod-icon {
+  display: none !important;
+}
+/* Bundle's box icon mirrors the per-kind .wp-mod-icon — hide it when
+ * the user prefers chip-only display. */
+.wp-kind-style-chip .wp-bundle-icon {
   display: none !important;
 }
 

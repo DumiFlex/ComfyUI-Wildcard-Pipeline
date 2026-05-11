@@ -2462,11 +2462,6 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 .wp-module--in-bundle {
   margin-left: 8px !important;
   margin-right: 8px !important;
-  /* Eliminate the flex row-gap between bundle siblings + between
-   * the header and the first child by pulling each row UP. The
-   * bundle frame contains them; row-gap inside breaks the contained
-   * look. */
-  margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
   /* Outer padding shrinks the row vertical too — `.wp-module` uses
    * `--wp-pad-row` (4px 6px default) which makes rows the same
    * height as standalone modules. Tighter padding here makes the
@@ -2476,9 +2471,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
    * overlay tint so they stand out as rows, not blank space. */
   background: var(--wp-bg3) !important;
 }
+/* First child sits directly under the header — pull up slightly so
+ * it touches the header's bottom divider. Subsequent children keep
+ * the flex row-gap for breathing room between siblings. */
 .wp-module--bundle-first {
-  /* First child sits directly under the header — pull up to touch
-   * the header bottom border, no row-gap above. */
   margin-top: calc(var(--wp-row-gap, 4px) * -1) !important;
 }
 .wp-module--in-bundle .wp-module-header {

@@ -178,18 +178,22 @@ const summary = computed(() => {
   flex-shrink: 0;
 }
 .wp-bundle-action {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
+  padding: 4px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--wp-text-dim, var(--wp-text3));
-  font-size: 10px;
   border-radius: 3px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+.wp-bundle-action .pi {
+  font-size: 12px;
+  line-height: 1;
 }
 .wp-bundle-action:hover { background: var(--wp-bg3); }
 .wp-bundle-action--danger:hover { color: var(--wp-red); }
