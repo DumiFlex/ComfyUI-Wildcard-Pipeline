@@ -36,6 +36,7 @@ const SECTIONS: NavSection[] = [
       { id: "combines",    label: "Combines",     icon: "pi-share-alt",  to: "/combines"      },
       { id: "derivations", label: "Derivations",  icon: "pi-code",       to: "/derivations"   },
       { id: "constraints", label: "Constraints",  icon: "pi-sitemap",    to: "/constraints"   },
+      { id: "bundles",     label: "Bundles",      icon: "pi-box",        to: "/bundles"       },
     ],
   },
   {
@@ -70,6 +71,7 @@ const activeId = computed<string>(() => {
     ["combines", "combines"],
     ["derivations", "derivations"],
     ["constraints", "constraints"],
+    ["bundles", "bundles"],
     ["categories", "categories"],
     ["import-export", "io"],
     ["test", "test"],
