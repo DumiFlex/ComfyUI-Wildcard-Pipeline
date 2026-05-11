@@ -188,6 +188,50 @@ export interface CategoryRow {
   sort_order: number;
 }
 
+/** Library-side bundle row returned from /wp/api/bundles. Mirrors
+ *  ModuleRow shape but with `color` (user-picked frame color) instead
+ *  of a typed payload, and `children` carrying full deep-cloned module
+ *  snapshots. */
+export interface BundleRow {
+  id: string;
+  name: string;
+  description: string;
+  color: string | null;
+  category_id: string | null;
+  tags: string[];
+  is_favorite: boolean;
+  children: Array<Record<string, unknown>>;
+  payload_hash: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BundleListResponse {
+  items: BundleRow[];
+  total: number;
+}
+
+export interface BundleCreateInput {
+  name: string;
+  description?: string;
+  color?: string | null;
+  category_id?: string | null;
+  tags?: string[];
+  children?: Array<Record<string, unknown>>;
+  is_favorite?: boolean;
+}
+
+export interface BundleUpdateInput {
+  name?: string;
+  description?: string;
+  color?: string | null;
+  category_id?: string | null;
+  tags?: string[];
+  children?: Array<Record<string, unknown>>;
+  is_favorite?: boolean;
+}
+
 export interface CategoryCreateInput {
   name: string;
   color?: string | null;

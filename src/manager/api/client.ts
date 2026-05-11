@@ -1,4 +1,5 @@
 import type {
+  BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   EmbedBundle,
   ImportBundle, ImportResult,
@@ -101,6 +102,37 @@ export const api = {
       return request<{ hashes: Record<string, string> }>(
         "/wp/api/modules/hashes", { method: "GET" },
       );
+    },
+  },
+  bundles: {
+    list(params: ListParams = {}) {
+      const query = qs({
+        category: params.category,
+        q: params.q,
+        favorites: params.favorites ? "1" : undefined,
+        limit: params.limit,
+        offset: params.offset,
+      });
+      return request<BundleListResponse>(`/wp/api/bundles${query}`, { method: "GET" });
+    },
+    get(id: string) {
+      return request<BundleRow>(`/wp/api/bundles/${id}`, { method: "GET" });
+    },
+    create(body: BundleCreateInput) {
+      return request<BundleRow>("/wp/api/bundles", {
+        method: "POST", body: JSON.stringify(body),
+      });
+    },
+    update(id: string, body: BundleUpdateInput) {
+      return request<BundleRow>(`/wp/api/bundles/${id}`, {
+        method: "PUT", body: JSON.stringify(body),
+      });
+    },
+    delete(id: string) {
+      return request<void>(`/wp/api/bundles/${id}`, { method: "DELETE" });
+    },
+    favorite(id: string) {
+      return request<BundleRow>(`/wp/api/bundles/${id}/favorite`, { method: "POST" });
     },
   },
   categories: {
