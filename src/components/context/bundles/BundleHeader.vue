@@ -118,14 +118,15 @@ const summary = computed(() => {
    * radius, no frame walls. When the bundle is collapsed, the
    * bottom divider hides (no children below to separate from).
    *
-   * Padding + 3px transparent left-border match `.wp-module`'s
-   * box model exactly: module has `border-left: 3px solid <kind>` +
-   * `padding: var(--wp-pad-row)`, so its content starts 3px in
-   * from the row edge before padding. Bundle header without the
-   * border would have content 3px further left than module content.
-   * The transparent border reserves that 3px so headers + module
-   * children line up vertically. */
+   * Full border-box parity with `.wp-module` so content (left
+   * edge AND right edge / trash button) lines up identically:
+   *   - left:   3px transparent  (mirrors `.wp-module`'s 3px kind-stripe)
+   *   - right:  1px transparent  (mirrors `.wp-module`'s 1px transparent border)
+   *   - top:    1px transparent  (same)
+   *   - bottom: 1px solid var(--b)  (visible divider above children) */
   background: color-mix(in srgb, var(--b) 18%, transparent);
+  border-top: 1px solid transparent;
+  border-right: 1px solid transparent;
   border-bottom: 1px solid var(--b);
   border-left: 3px solid transparent;
   padding: var(--wp-pad-row, 4px 6px);
