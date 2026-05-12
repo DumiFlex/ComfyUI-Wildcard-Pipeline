@@ -2737,15 +2737,11 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
             @dragend="onDragEnd"
           />
-          <!-- Plain v-for, no inner TransitionGroup — nested
-               TransitionGroups produced ghosting when a row crossed
-               containers (outer leave + inner enter). Drop-target
-               animations now ride on the outer TransitionGroup +
-               CSS transitions on .wp-module's transform. -->
-          <div
-            v-show="!item.bundle!.collapsed"
-            class="wp-bundle-children"
-          >
+          <!-- Plain v-for, no inner TransitionGroup. Collapse/expand
+               is pure CSS via grid-template-rows on .wp-bundle — drop
+               v-show so children stay in DOM and the transition can
+               animate frame + opacity together (Phase B.1). -->
+          <div class="wp-bundle-children">
             <ModuleRow
               v-for="child in item.children"
               :key="child.module._uid ?? `${child.module.id}|${child.idx}`"
@@ -3018,22 +3014,46 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 }
 
 /* Bundle as a real DOM container — header + children inside. Border
- * + bg paint via CSS on this div, growing/shrinking with content. */
+ * + bg paint via CSS on this div, growing/shrinking with content.
+ *
+ * Collapse/expand (Phase B.1) — pure CSS, no v-show, no JS measurement.
+ * grid-template-rows transitions from `auto 1fr` (expanded) to `auto 0fr`
+ * (collapsed); the children container needs min-height: 0 + overflow:
+ * hidden for the row size to collapse to zero. opacity + padding on the
+ * children fade together with the frame shrink. Header divider snaps off
+ * at start of collapse and snaps on at end of expand via 0s transition
+ * with strategic delays. */
 .wp-modules-frame { position: relative; }
 .wp-bundle {
   border: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
   border-left-width: 3px;
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
-  transition: border-width 0.12s, background 0.12s, box-shadow 0.12s;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  transition: grid-template-rows var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              border-width 0.12s ease,
+              background 0.12s ease,
+              box-shadow 0.12s ease;
+}
+.wp-bundle--collapsed {
+  grid-template-rows: auto 0fr;
 }
 .wp-bundle-children {
   padding: 5px 6px 7px 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              padding var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
+}
+.wp-bundle--collapsed .wp-bundle-children {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 /* Frame highlight when crossing into the bundle. */
 .wp-bundle--drop-inside {
@@ -3041,6 +3061,26 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   border-left-width: 4px;
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 15%, transparent);
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
+}
+/* Header divider — snap off at start of collapse, snap on at END of expand.
+ * Default rule (no collapsed class) waits MOTION_COLLAPSE_MS before snapping
+ * border-bottom visible; collapsed rule snaps immediately to transparent. */
+.wp-bundle .wp-bundle-header {
+  transition: border-bottom-color 0s var(--wp-motion-collapse);
+}
+.wp-bundle--collapsed .wp-bundle-header {
+  border-bottom-color: transparent;
+  transition: border-bottom-color 0s 0s;
+}
+/* Caret rotation tied to bundle collapsed state — replaces the previous
+ * icon-class swap (pi-caret-down ↔ pi-caret-right). The BundleHeader
+ * template now always renders pi-caret-down so the CSS rotation owns
+ * the transition. */
+.wp-bundle .wp-bundle-collapse {
+  transition: transform var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
+}
+.wp-bundle--collapsed .wp-bundle-collapse {
+  transform: rotate(-90deg);
 }
 
 /* Populated ↔ Empty page swap. */

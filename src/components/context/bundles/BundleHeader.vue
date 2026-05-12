@@ -91,8 +91,10 @@ const summary = computed(() => {
       :title="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
     >
+      <!-- Caret stays pi-caret-down — parent .wp-bundle--collapsed
+           rotates -90deg via CSS for the transition (Phase B.1). -->
       <i
-        :class="['pi', instance.collapsed ? 'pi-caret-right' : 'pi-caret-down']"
+        class="pi pi-caret-down"
         aria-hidden="true"
       ></i>
     </button>
@@ -126,8 +128,9 @@ const summary = computed(() => {
 @import "../../shared/theme.css";
 
 .wp-bundle-header {
-  /* The bundle frame box is painted by `.wp-bundle-overlay` in
-   * ContextWidget. Header carries only its own bottom divider
+  /* The bundle frame box is painted by `.wp-bundle` directly (Batch 2
+   * replaced the absolute-positioned overlay with a real DOM wrapper).
+   * Header carries only its own bottom divider
    * separating it from the children below — no full border, no
    * radius, no frame walls. When the bundle is collapsed, the
    * bottom divider hides (no children below to separate from).

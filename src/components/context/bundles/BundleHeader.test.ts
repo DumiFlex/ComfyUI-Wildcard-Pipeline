@@ -72,11 +72,15 @@ describe("BundleHeader", () => {
     expect(w.find(".wp-bundle-collapse .pi-caret-down").exists()).toBe(true);
   });
 
-  it("collapse chevron is caret-right when collapsed", () => {
-    const w = mount(BundleHeader, {
+  it("collapse chevron stays caret-down regardless of collapsed state (CSS rotates it)", () => {
+    // Phase B.1: the caret icon is always pi-caret-down; the parent
+    // .wp-bundle--collapsed selector rotates it -90deg via CSS for a
+    // smooth transition. The icon class no longer swaps.
+    const wCollapsed = mount(BundleHeader, {
       props: { instance: instance({ collapsed: true }), name: "x", childCount: 0 },
     });
-    expect(w.find(".wp-bundle-collapse .pi-caret-right").exists()).toBe(true);
+    expect(wCollapsed.find(".wp-bundle-collapse .pi-caret-down").exists()).toBe(true);
+    expect(wCollapsed.find(".wp-bundle-collapse .pi-caret-right").exists()).toBe(false);
   });
 
   it("emits toggle-collapse on chevron click", async () => {

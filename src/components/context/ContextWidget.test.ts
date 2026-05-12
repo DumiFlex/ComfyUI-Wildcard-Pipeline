@@ -1866,3 +1866,62 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     wrapper.unmount();
   });
 });
+
+describe("ContextWidget bundle collapse class (Phase B.1)", () => {
+  function bundleJson(collapsed: boolean): string {
+    return JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "child-a", type: "wildcard", enabled: true,
+          meta: { name: "subject" }, entries: [],
+          payload: { var_binding: "v", options: [{ id: "o1", value: "x", weight: 1 }] },
+          payload_hash: "h1",
+          bundle_origin: "buid-test01",
+        },
+      ],
+      bundles: [
+        {
+          _uid: "buid-test01", library_id: "lib-1",
+          start_idx: 0, end_idx: 0,
+          enabled: true, collapsed,
+          inserted_at_hash: "ph1", name: "Test", color: null,
+        },
+      ],
+    });
+  }
+
+  it("applies .wp-bundle--collapsed when bundle.collapsed is true", async () => {
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 800, initialJson: bundleJson(true), upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    const bundle = wrapper.find(".wp-bundle");
+    expect(bundle.exists()).toBe(true);
+    expect(bundle.classes()).toContain("wp-bundle--collapsed");
+    wrapper.unmount();
+  });
+
+  it("omits .wp-bundle--collapsed when bundle.collapsed is false", async () => {
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 801, initialJson: bundleJson(false), upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    const bundle = wrapper.find(".wp-bundle");
+    expect(bundle.exists()).toBe(true);
+    expect(bundle.classes()).not.toContain("wp-bundle--collapsed");
+    wrapper.unmount();
+  });
+
+  it("renders .wp-bundle-children in DOM even when collapsed (CSS hides via opacity + grid-template-rows)", async () => {
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 802, initialJson: bundleJson(true), upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    // v-show was dropped in Phase B.1 — children stay in DOM so the
+    // transition can animate frame + opacity together.
+    const children = wrapper.find(".wp-bundle-children");
+    expect(children.exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
