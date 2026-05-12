@@ -3055,6 +3055,22 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   padding-top: 0;
   padding-bottom: 0;
 }
+/* Per-module animation INSIDE a bundle — modules actively fade + slide
+ * up toward the header during collapse, not just get clipped. This is
+ * what makes the joint motion visually obvious vs. "frame snaps and
+ * children disappear instantly". Overrides the default .wp-module
+ * transition (lines below) for the duration / curve. */
+.wp-bundle-children .wp-module {
+  transition: opacity var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              transform var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              background 0.14s ease,
+              border-color 0.14s ease;
+}
+.wp-bundle--collapsed .wp-bundle-children .wp-module {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
 /* Frame highlight when crossing into the bundle. */
 .wp-bundle--drop-inside {
   border-width: 2px;
