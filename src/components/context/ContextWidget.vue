@@ -24,6 +24,7 @@ import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
+import { captureRects, applyFlip, MOTION_FLIP_MS, MOTION_CURVE_FLIP } from "./bundles/flip";
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -495,6 +496,43 @@ function holdSuppressMove(): void {
     suppressMove.value = false;
     suppressMoveTimer = null;
   }, 300);
+}
+
+/**
+ * Capture FLIP rects at every list-level container in the widget.
+ * Returns a snapshot to feed back into `playFlipSnapshot` after Vue
+ * commits the mutated `value.value` and re-renders.
+ *
+ * Two scope levels are captured non-overlappingly:
+ *   - `.wp-modules` direct children: bundles + standalone modules
+ *   - each `.wp-bundle-children` direct children: in-bundle modules
+ *
+ * Capturing both lets us animate top-level reorders AND in-bundle
+ * reorders cleanly. A bundle moving as a unit only FLIPs at the top
+ * level; its children get the transform via inheritance and skip the
+ * inner pass (their rects don't change relative to the bundle).
+ */
+type FlipSnapshot = { scope: HTMLElement; before: Map<string, DOMRect> }[];
+
+function captureFlipSnapshot(): FlipSnapshot {
+  const frame = modulesContainer.value;
+  if (!frame) return [];
+  const snapshot: FlipSnapshot = [];
+  const top = frame.querySelector<HTMLElement>(".wp-modules");
+  if (top) snapshot.push({ scope: top, before: captureRects(top, el => el.dataset.uid ?? null) });
+  for (const inner of Array.from(frame.querySelectorAll<HTMLElement>(".wp-bundle-children"))) {
+    snapshot.push({ scope: inner, before: captureRects(inner, el => el.dataset.uid ?? null) });
+  }
+  return snapshot;
+}
+
+function playFlipSnapshot(snapshot: FlipSnapshot): void {
+  for (const { scope, before } of snapshot) {
+    applyFlip(scope, before, el => el.dataset.uid ?? null, {
+      duration: MOTION_FLIP_MS,
+      ease: MOTION_CURVE_FLIP,
+    });
+  }
 }
 
 function removeBundle(uid: string): void {
@@ -2336,7 +2374,7 @@ function onContainerLeave(ev: DragEvent) {
   clearDragHover();
 }
 
-function onDrop(ev: DragEvent, targetIdx: number | null) {
+async function onDrop(ev: DragEvent, targetIdx: number | null) {
   ev.preventDefault();
   ev.stopPropagation();
   const ds = dragState.value;
@@ -2344,6 +2382,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   // Snapshot zone before clearing hover state.
   const zone: DropZone = dragOver.value ?? (targetIdx === null ? { kind: "end" } : null);
   dragOver.value = null;
+  // Capture pre-mutation rects for FLIP-move (Phase B.2). Captures top-
+  // level + every in-bundle child container so any reorder animates
+  // its scope after Vue commits + re-renders.
+  const flipSnap = captureFlipSnapshot();
 
   // Same-node bundle move — slice the whole range out + re-insert at zone.
   if (ds.kind === "bundle" && ds.sourceNodeId === props.nodeId) {
@@ -2378,6 +2420,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     list.splice(ii, 0, ...range);
     holdSuppressMove();
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
+    await nextTick();
+    playFlipSnapshot(flipSnap);
     // Pulse the first row of the moved bundle so the user sees where it
     // landed (the bundle frame itself doesn't host the pulse class).
     pulseDrop(range[0]?._uid);
@@ -2422,6 +2466,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
     );
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, preBundles) };
+    await nextTick();
+    playFlipSnapshot(flipSnap);
     pulseDrop(m._uid);
     sameNodeDropHandled = true;
     return;
@@ -2467,6 +2513,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       modules: list,
       bundles: reconcileBundleRanges(list, [...bundles, newBundle]),
     };
+    await nextTick();
+    playFlipSnapshot(flipSnap);
     pulseDrop(newChildren[0]?._uid);
     dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
@@ -2547,6 +2595,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     modules: list,
     bundles: reconcileBundleRanges(list, preBundles),
   };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
   pulseDrop(inserted._uid);
   dragState.value = { ...ds, consumedBy: props.nodeId };
 }
@@ -2724,6 +2774,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
           }"
           :style="{ '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)' }"
           :data-bundle-uid="item.bundle!._uid"
+          :data-uid="item.bundle!._uid"
         >
           <BundleHeader
             :instance="item.bundle!"
@@ -2747,6 +2798,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
               :key="child.module._uid ?? `${child.module.id}|${child.idx}`"
               :module="child.module"
               :idx="child.idx"
+              :data-uid="child.module._uid"
             />
           </div>
         </div>
@@ -2755,6 +2807,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
           v-else
           :module="item.module!"
           :idx="item.idx!"
+          :data-uid="item.module!._uid"
         />
       </template>
         </div>
