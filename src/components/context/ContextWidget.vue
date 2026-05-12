@@ -2770,7 +2770,10 @@ provide(ModuleRowCtxKey, moduleRowCtx);
              reusable scaffolds users typically wanted that button for.
              SPA library still reachable via the right-click context
              menu on any module. -->
-        <div class="wp-w-footer">
+        <div
+          class="wp-w-footer"
+          :class="{ 'wp-gap-before': dragOver?.kind === 'end' }"
+        >
           <button
             class="wp-btn wp-btn--primary"
             data-testid="open-picker"
@@ -3320,7 +3323,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * via the row's existing `transition: transform/...` rule below; we
  * extend it to cover `margin`. */
 .wp-module.wp-gap-before,
-.wp-bundle-header.wp-gap-before { margin-top: 14px; }
+.wp-bundle-header.wp-gap-before,
+.wp-w-footer.wp-gap-before { margin-top: 14px; }
 .wp-module.wp-gap-after { margin-bottom: 14px; }
 /* Margins snap (no transition) so back-to-back zone changes don't
  * leave half-open gaps mid-flight. Transform/opacity/etc still animate
