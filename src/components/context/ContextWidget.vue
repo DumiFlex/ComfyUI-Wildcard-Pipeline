@@ -93,6 +93,11 @@ const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
 const dragOver = ref<DropZone>(null);
 
+// Disables `.wp-list-move` for one frame around bundle removal so the
+// children + overlay vanish on the same tick as the frame, rather than
+// FLIP-sliding subsequent rows up for 250ms.
+const suppressMove = ref(false);
+
 // Projects active zone onto the row's edge indicator. Bundle zones
 // before/after anchor to the bundle's start/end row; inside → null
 // (frame highlight paints via overlay class below).
@@ -540,7 +545,7 @@ watch(
   { deep: true, flush: "post" },
 );
 
-function removeBundle(uid: string): void {
+async function removeBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
@@ -562,11 +567,18 @@ function removeBundle(uid: string): void {
       }
       return b;
     });
+  // Suppress FLIP-move for one frame so rows below the deleted range
+  // don't slide for 250ms — visual stagger that read as "modules linger
+  // after the bundle is gone" (#8).
+  suppressMove.value = true;
   value.value = {
     ...value.value,
     modules: [...before, ...after],
     bundles: remainingBundles,
   };
+  await nextTick();
+  await new Promise((r) => requestAnimationFrame(r));
+  suppressMove.value = false;
 }
 
 /** Detach bundle frame — keep children as standalone modules but
@@ -2431,7 +2443,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           }"
           aria-hidden="true"
         />
-        <TransitionGroup name="wp-list" tag="div" class="wp-modules">
+        <TransitionGroup
+          name="wp-list"
+          tag="div"
+          class="wp-modules"
+          :data-suppress-move="suppressMove ? 'true' : null"
+        >
       <template v-for="(m, idx) in value.modules" :key="m._uid ?? `${m.id}|${idx}`">
         <!-- Bundle header — rendered BEFORE the first child of each
              bundle range. `bundleStartingAt(idx)` returns the
@@ -3676,6 +3693,9 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
 /* FLIP reorder — TransitionGroup applies wp-list-move when items reorder. */
 .wp-list-move { transition: transform 0.25s ease-out; }
+/* Bundle delete suppresses the FLIP move for one frame so rows below
+ * snap up alongside the frame instead of sliding for 250ms (#8). */
+.wp-modules[data-suppress-move="true"] .wp-list-move { transition: none !important; }
 /* Items entering the list (e.g. add via picker) — fade + slide in.
  * Leave is intentionally instant; the dying card lingering during a
  * fade-out felt sluggish, especially when chained with a FLIP move. */
