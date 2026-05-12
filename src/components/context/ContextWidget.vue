@@ -622,10 +622,6 @@ watch(
   () => { nextTick().then(updateBundleOverlays); },
   { deep: true, flush: "post" },
 );
-// Bundle header sliding (wp-gap-before) shifts the frame's top — re-
-// measure the overlay rect whenever drag-over state changes so the frame
-// stays glued to its header.
-watch(dragOver, () => { nextTick().then(updateBundleOverlays); }, { flush: "post" });
 
 // Suppresses wp-list-move + wp-list-leave-active transitions for the
 // duration; covers the longest TransitionGroup transition (250ms FLIP)
