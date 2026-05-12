@@ -112,17 +112,15 @@ let suppressMoveTimer: number | null = null;
 
 // Gap-metaphor indicator: rows that own a "before"/"after" slot get a
 // margin so the gap opens; the bar element paints inside that gap.
+// Bundle "before"/"after" zones DO NOT project onto bundle-member rows
+// — the .wp-bundle div itself handles its outer margin via
+// bundleHeaderGap(), so projecting onto the first child would open a
+// second gap INSIDE the bundle while the bar paints OUTSIDE.
 function rowGap(idx: number): "before" | "after" | null {
   const z = dragOver.value;
   if (!z) return null;
   if (z.kind === "row") return z.idx === idx ? z.pos : null;
   if (z.kind === "bundle-slot" && z.targetIdx === idx) return z.before ? "before" : "after";
-  if (z.kind === "bundle") {
-    const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
-    if (!b) return null;
-    if (z.zone === "before" && idx === b.start_idx) return "before";
-    if (z.zone === "after" && idx === b.end_idx) return "after";
-  }
   return null;
 }
 
@@ -171,7 +169,17 @@ const gapBarStyle = computed<Record<string, string> | null>(() => {
   } else if (z.kind === "end") {
     const n = value.value.modules.length;
     if (n === 0) return null;
-    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${n - 1}"]`);
+    const lastIdx = n - 1;
+    // If the last module lives inside a bundle, anchor on the bundle
+    // DIV itself so the bar lands below the bundle's frame border
+    // (anchoring on the last child puts the bar inside the bundle's
+    // padding-bottom area).
+    const lastBundle = (value.value.bundles ?? []).find((b) => b.end_idx === lastIdx);
+    if (lastBundle) {
+      anchor = container.querySelector<HTMLElement>(`.wp-bundle[data-bundle-uid="${lastBundle._uid}"]`);
+    } else {
+      anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${lastIdx}"]`);
+    }
     beforeSide = false;
   } else {
     return null;
