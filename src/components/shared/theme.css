@@ -155,7 +155,7 @@
    * descendants. New surfaces under .wp-* roots inherit the override
    * automatically; JS-driven motion gates on the same body class via
    * src/components/context/bundles/flip.ts:shouldAnimate(). */
-  --wp-motion-collapse: 240ms;   /* frame height + children opacity */
+  --wp-motion-collapse: 320ms;   /* frame height + children opacity */
   --wp-motion-flip:     280ms;   /* row reorder transform */
   --wp-motion-pulse:    420ms;   /* drop landing pulse, existing keyframe */
   --wp-motion-fade:     180ms;   /* leave-active opacity */
