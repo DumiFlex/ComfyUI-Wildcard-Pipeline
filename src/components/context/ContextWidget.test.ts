@@ -1590,3 +1590,184 @@ describe("ContextWidget — Phase B: duplicate keeps uuid + auto-suffixes bindin
     wrapper.unmount();
   });
 });
+
+// ── Batch 2: bundle drag/drop regressions (#5/#6/#7/#8/#10) ─────────────
+//
+// One coherent drag/drop model — bundle as unit, children in/out, frame
+// indicators, atomic delete. Each test pins one symptom from the user's
+// Batch 2 bug list so future regressions surface here.
+
+describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
+  function makeDataTransfer() {
+    return { effectAllowed: "", dropEffect: "", setData: () => {}, getData: () => "" };
+  }
+
+  function mountWithBundle() {
+    // Three bundle children + one standalone after. Bundle range [0..2].
+    const modules = [
+      {
+        id: "ch0aaaaa", _uid: "u0", type: "wildcard", enabled: true,
+        meta: { name: "ch0" }, entries: [],
+        payload: { var_binding: "v0", options: [] }, payload_hash: "ph0",
+        bundle_origin: "bundleUidXX",
+      },
+      {
+        id: "ch1aaaaa", _uid: "u1", type: "wildcard", enabled: true,
+        meta: { name: "ch1" }, entries: [],
+        payload: { var_binding: "v1", options: [] }, payload_hash: "ph1",
+        bundle_origin: "bundleUidXX",
+      },
+      {
+        id: "ch2aaaaa", _uid: "u2", type: "wildcard", enabled: true,
+        meta: { name: "ch2" }, entries: [],
+        payload: { var_binding: "v2", options: [] }, payload_hash: "ph2",
+        bundle_origin: "bundleUidXX",
+      },
+      {
+        id: "stdaaaaa", _uid: "u3", type: "wildcard", enabled: true,
+        meta: { name: "std" }, entries: [],
+        payload: { var_binding: "vs", options: [] }, payload_hash: "phs",
+      },
+    ];
+    const bundles = [{
+      _uid: "bundleUidXX", library_id: "lib_b", start_idx: 0, end_idx: 2,
+      enabled: true, collapsed: false, inserted_at_hash: "phB", name: "Group", color: null,
+    }];
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9300,
+        initialJson: JSON.stringify({ version: 1, modules, bundles }),
+        upstreamVars: [],
+        onChange,
+      },
+    });
+    return { wrapper, onChange };
+  }
+
+  function rectOf(top: number, height: number) {
+    return () => ({
+      top, bottom: top + height, left: 0, right: 100,
+      width: 100, height, x: 0, y: top, toJSON() { return this; },
+    });
+  }
+
+  it("#5 — BundleHeader is draggable + dragstart populates kind:'bundle' payload", async () => {
+    const { wrapper } = mountWithBundle();
+    await flushPromises();
+    const header = wrapper.find(".wp-bundle-header");
+    expect(header.exists()).toBe(true);
+    expect(header.attributes("draggable")).toBe("true");
+    const { dragState } = await import("./drag-store");
+    await header.trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    expect(dragState.value).toBeTruthy();
+    expect(dragState.value?.kind).toBe("bundle");
+    if (dragState.value?.kind === "bundle") {
+      expect(dragState.value.bundleUid).toBe("bundleUidXX");
+      expect(dragState.value.sourceStartIdx).toBe(0);
+      expect(dragState.value.sourceEndIdx).toBe(2);
+    }
+    await header.trigger("dragend");
+    wrapper.unmount();
+  });
+
+  it("#6/#7 — drag child OUT of bundle keeps bundle intact + strips bundle_origin", async () => {
+    const { wrapper, onChange } = mountWithBundle();
+    await flushPromises();
+    onChange.mockClear();
+
+    const cards = wrapper.findAll(".wp-module");
+    // Stub rects so pointer math works. Drag ch2 (idx 2, last child) to "after" std (idx 3).
+    (cards[3].element as HTMLElement).getBoundingClientRect = rectOf(400, 100);
+
+    await cards[2].trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    await cards[3].trigger("dragover", { clientY: 480, dataTransfer: makeDataTransfer() });
+    await cards[3].trigger("drop", { dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    expect(onChange).toHaveBeenCalled();
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    // Bundle survives, range shrinks to [0..1].
+    expect(parsed.bundles).toHaveLength(1);
+    expect(parsed.bundles[0].start_idx).toBe(0);
+    expect(parsed.bundles[0].end_idx).toBe(1);
+    // ch2 is now last in list + has no bundle_origin.
+    const moved = parsed.modules[3];
+    expect(moved.id).toBe("ch2aaaaa");
+    expect(moved.bundle_origin).toBeUndefined();
+    // Remaining bundle children still stamped.
+    expect(parsed.modules[0].bundle_origin).toBe("bundleUidXX");
+    expect(parsed.modules[1].bundle_origin).toBe("bundleUidXX");
+    wrapper.unmount();
+  });
+
+  it("#7 — in-bundle reorder preserves frame + all bundle_origin stamps", async () => {
+    const { wrapper, onChange } = mountWithBundle();
+    await flushPromises();
+    onChange.mockClear();
+
+    const cards = wrapper.findAll(".wp-module");
+    // Drag ch0 onto middle of ch1 (idx 1, inside bundle → "inside").
+    (cards[1].element as HTMLElement).getBoundingClientRect = rectOf(100, 100);
+
+    await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    await cards[1].trigger("dragover", { clientY: 150, dataTransfer: makeDataTransfer() });
+    await cards[1].trigger("drop", { dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    // Bundle preserved, range still [0..2], every child stamped.
+    expect(parsed.bundles).toHaveLength(1);
+    expect(parsed.bundles[0].start_idx).toBe(0);
+    expect(parsed.bundles[0].end_idx).toBe(2);
+    for (let i = 0; i <= 2; i++) {
+      expect(parsed.modules[i].bundle_origin).toBe("bundleUidXX");
+    }
+    wrapper.unmount();
+  });
+
+  it("#8 — removeBundle flips suppressMove + clears modules + bundles atomically", async () => {
+    const { wrapper, onChange } = mountWithBundle();
+    await flushPromises();
+    onChange.mockClear();
+
+    // Trigger removal via the header's trash button.
+    const trash = wrapper.find(".wp-bundle-action--danger");
+    await trash.trigger("click");
+    // Synchronously after the click, the TransitionGroup container
+    // should carry data-suppress-move="true" before the rAF clears it.
+    const group = wrapper.find(".wp-modules");
+    expect(group.attributes("data-suppress-move")).toBe("true");
+    // Single state mutation — onChange fires once for both modules + bundles.
+    expect(onChange).toHaveBeenCalled();
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    // Bundle + its 3 children gone; only the standalone module remains.
+    expect(parsed.modules).toHaveLength(1);
+    expect(parsed.modules[0].id).toBe("stdaaaaa");
+    expect(parsed.bundles).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it("#10 — dragover bundle child interior paints overlay drop-inside class", async () => {
+    const { wrapper } = mountWithBundle();
+    await flushPromises();
+    const cards = wrapper.findAll(".wp-module");
+    // ch1 (middle bundle child) — pointer mid-card → "inside" zone.
+    (cards[1].element as HTMLElement).getBoundingClientRect = rectOf(100, 100);
+
+    await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    await cards[1].trigger("dragover", { clientY: 150, dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    const overlay = wrapper.find(".wp-bundle-overlay");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.classes()).toContain("wp-bundle-overlay--drop-inside");
+
+    await cards[0].trigger("dragend");
+    wrapper.unmount();
+  });
+});
