@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, provide } from "vue";
 import {
   parseWidgetJsonWithRecovery, serializeWidgetJson,
   emptyContextValue, newModuleId, newRowUid,
@@ -20,6 +20,8 @@ import {
 import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleHeader from "./bundles/BundleHeader.vue";
+import ModuleRow from "./ModuleRow.vue";
+import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
 import { api } from "../../manager/api/client";
@@ -439,63 +441,6 @@ function openBundleAuthor(): void {
   openSpaLibrary();   // Reuse existing SPA link for v1 — Phase 4 deep-links to bundle editor
 }
 
-/** Returns the BundleInstance whose start_idx equals `idx`, or null
- *  if no bundle starts at that module position. Used by the template
- *  to interleave bundle-header rows BEFORE the matching first child. */
-function bundleStartingAt(idx: number): BundleInstance | null {
-  for (const b of value.value.bundles ?? []) {
-    if (b.start_idx === idx) return b;
-  }
-  return null;
-}
-
-/** Returns the BundleInstance that owns module index `idx` (i.e.
- *  start_idx ≤ idx ≤ end_idx). null when the module is standalone.
- *  Used by the template to stamp `data-bundle-uid` + the bundle's
- *  color CSS var on bundle-member rows. */
-function bundleContaining(idx: number): BundleInstance | null {
-  for (const b of value.value.bundles ?? []) {
-    if (b.start_idx <= idx && idx <= b.end_idx) return b;
-  }
-  return null;
-}
-
-/** Bundle-aware CSS class binding for a module row. Stamps
- *  `wp-module--in-bundle` (kind-stripe replaced with bundle color),
- *  `wp-module--bundle-first` (top edge of frame), and
- *  `wp-module--bundle-last` (bottom edge of frame). */
-function bundleClassForModule(idx: number): Record<string, boolean> {
-  const b = bundleContaining(idx);
-  if (!b) return {};
-  return {
-    "wp-module--in-bundle": true,
-    "wp-module--in-bundle-collapsed": b.collapsed,
-    "wp-module--bundle-first": b.start_idx === idx,
-    "wp-module--bundle-last": b.end_idx === idx,
-  };
-}
-
-/** Inline style with the bundle color CSS var for module rows that
- *  live inside a bundle. The frame CSS reads `--wp-bundle-color` to
- *  paint the left stripe + frame edges. Default token used when the
- *  bundle has no user-picked color. */
-function bundleStyleForModule(idx: number): Record<string, string> {
-  const b = bundleContaining(idx);
-  if (!b) return {};
-  return {
-    "--wp-bundle-color": b.color && b.color.length ? b.color : "var(--wp-bundle-default)",
-  };
-}
-
-/** True when module index `idx` lives inside a COLLAPSED bundle.
- *  Used by `v-show` to hide bundle children visually while keeping
- *  them in `value.modules` so the engine sees them. */
-function hiddenByBundleCollapse(idx: number): boolean {
-  const b = bundleContaining(idx);
-  if (!b) return false;
-  return b.collapsed === true;
-}
-
 function toggleBundleCollapsed(uid: string): void {
   const bundles = value.value.bundles ?? [];
   const idx = bundles.findIndex((b) => b._uid === uid);
@@ -529,99 +474,8 @@ function toggleBundleEnabled(uid: string, enabled: boolean): void {
   };
 }
 
-/** ── Bundle frame overlays ─────────────────────────────────────────
- *  Bundles render as flat siblings of modules in the flex column
- *  (header + child rows). To paint a SINGLE box around the bundle
- *  range without restructuring DOM, we measure the bounding box of
- *  the header + last child via offsetTop / offsetHeight and render
- *  an absolute-positioned overlay element for each bundle.
- *
- *  Recomputed on:
- *    - bundles[] / modules[] mutation (watch)
- *    - container resize (ResizeObserver)
- *    - collapse toggles (also fires via the bundles[] watch)
- *
- *  Trade-off vs proper DOM wrapping (extract ModuleCard.vue): keeps
- *  the existing 250-line module template intact at the cost of an
- *  extra layout-measurement pass. */
-interface BundleOverlay {
-  uid: string;
-  top: number;
-  height: number;
-  color: string;
-}
+// Container ref for list-level drag handlers + bar positioning.
 const modulesContainer = ref<HTMLElement | null>(null);
-const bundleOverlays = ref<BundleOverlay[]>([]);
-
-function updateBundleOverlays(): void {
-  const container = modulesContainer.value;
-  if (!container) {
-    bundleOverlays.value = [];
-    return;
-  }
-  const bundles = value.value.bundles ?? [];
-  const next: BundleOverlay[] = [];
-  // Bottom padding inside the frame — extends the overlay below
-  // the last child so children visibly breathe at the bottom.
-  // Top padding lives between the header and the first child as a
-  // natural flex-gap (no negative margin on `.wp-module--bundle-first`
-  // any more), so the overlay aligns flush with the header's top.
-  // Collapsed bundles get 0 bottom padding — just the header in its
-  // own tight box.
-  const PAD_TOP = 0;
-  const PAD_BOTTOM = 6;
-  for (const b of bundles) {
-    const headerEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
-    const lastChildEl = container.querySelector<HTMLElement>(
-      `.wp-module[data-bundle-uid="${b._uid}"][data-module-idx="${b.end_idx}"]`,
-    );
-    if (!headerEl) continue;
-    const top = headerEl.offsetTop - PAD_TOP;
-    let bottom;
-    if (b.collapsed) {
-      // Collapsed: overlay spans the header only — no extra padding
-      // below since there are no children to contain.
-      bottom = headerEl.offsetTop + headerEl.offsetHeight;
-    } else if (lastChildEl) {
-      bottom = lastChildEl.offsetTop + lastChildEl.offsetHeight + PAD_BOTTOM;
-    } else {
-      bottom = headerEl.offsetTop + headerEl.offsetHeight;
-    }
-    next.push({
-      uid: b._uid,
-      top,
-      height: bottom - top,
-      color: b.color && b.color.length ? b.color : "var(--wp-bundle-default)",
-    });
-  }
-  bundleOverlays.value = next;
-}
-
-let _bundleResizeObserver: ResizeObserver | null = null;
-onMounted(() => {
-  if (typeof ResizeObserver !== "undefined" && modulesContainer.value) {
-    _bundleResizeObserver = new ResizeObserver(() => {
-      // Defer to next frame so the layout settles before we measure.
-      requestAnimationFrame(updateBundleOverlays);
-    });
-    _bundleResizeObserver.observe(modulesContainer.value);
-  }
-  // Initial measurement after first paint.
-  nextTick().then(updateBundleOverlays);
-});
-onBeforeUnmount(() => {
-  _bundleResizeObserver?.disconnect();
-  _bundleResizeObserver = null;
-});
-
-/** Watch the bundles array AND the modules array — either changing
- *  means the overlay positions may shift. `flush: 'post'` waits for
- *  Vue to apply DOM updates before we re-measure. */
-watch(
-  () => [value.value.modules.length, (value.value.bundles ?? []).length, value.value.bundles ?? []],
-  () => { nextTick().then(updateBundleOverlays); },
-  { deep: true, flush: "post" },
-);
 
 // Suppresses wp-list-move + wp-list-leave-active transitions for the
 // duration; covers the longest TransitionGroup transition (250ms FLIP)
@@ -2563,6 +2417,55 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   value.value = { ...value.value, modules: list };
   dragState.value = { ...ds, consumedBy: props.nodeId };
 }
+
+// Top-level render list: standalone modules + bundle wrappers, in
+// document order. Each bundle entry packs its child rows so the
+// template can iterate once + nest children inside a real .wp-bundle
+// div (no more absolute-positioned overlay).
+interface TopLevelItem {
+  kind: "mod" | "bundle";
+  key: string;
+  module?: ModuleEntry;
+  idx?: number;
+  bundle?: BundleInstance;
+  children?: Array<{ module: ModuleEntry; idx: number }>;
+}
+const topLevelItems = computed<TopLevelItem[]>(() => {
+  const modules = value.value.modules;
+  const bundles = value.value.bundles ?? [];
+  const out: TopLevelItem[] = [];
+  let i = 0;
+  while (i < modules.length) {
+    const b = bundles.find((bb) => bb.start_idx === i);
+    if (b && b.end_idx >= b.start_idx) {
+      const kids: Array<{ module: ModuleEntry; idx: number }> = [];
+      for (let j = b.start_idx; j <= b.end_idx; j++) {
+        kids.push({ module: modules[j], idx: j });
+      }
+      out.push({ kind: "bundle", key: `b-${b._uid}`, bundle: b, children: kids });
+      i = b.end_idx + 1;
+    } else {
+      const m = modules[i];
+      out.push({ kind: "mod", key: m._uid ?? `m-${i}`, module: m, idx: i });
+      i++;
+    }
+  }
+  return out;
+});
+
+const moduleRowCtx: ModuleRowCtx = {
+  KIND_TITLE,
+  kindIcon, kindChipModifier, varColorClass,
+  isCollapsed, isLocked, isInternal, isSeedLockable,
+  isModified, isDrifted, isMissingFromLibrary,
+  severityFor, conflictTooltip, conflictBadgeText,
+  modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
+  rowGap, draggingModuleUid, recentDropUid,
+  toggleCollapsed, toggleEnabled, removeModule,
+  toggleLockOnCard, toggleInternalOnCard,
+  onDragStart, onDragEnd, openContextMenu, onCardKeydown,
+};
+provide(ModuleRowCtxKey, moduleRowCtx);
 </script>
 
 <template>
@@ -2656,28 +2559,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           @dragover="onListDragOver"
           @drop="(ev) => onDrop(ev, null)"
         >
-        <!-- Bundle frame overlays — absolute-positioned boxes painted
-             OVER the bundle ranges. Sized via updateBundleOverlays()
-             from each bundle header's offsetTop + last child's
-             offsetTop+offsetHeight. pointer-events:none so clicks
-             pass through to the modules above. Outside the
-             TransitionGroup so they aren't animated as items. -->
-        <div
-          v-for="overlay in bundleOverlays"
-          :key="`bo-${overlay.uid}`"
-          class="wp-bundle-overlay"
-          :class="{ 'wp-bundle-overlay--drop-inside': isBundleInsideTarget(overlay.uid) }"
-          :style="{
-            top: `${overlay.top}px`,
-            height: `${overlay.height}px`,
-            '--wp-bundle-color': overlay.color,
-          }"
-          aria-hidden="true"
-        />
         <!-- Persistent drop-zone bar. Single element kept under the
-             modules container; position computed from `dragOver`. CSS
-             transition on top/left/width slides it between slots, and
-             the Transition wrapper handles enter/exit fade+scale. -->
+             modules container; position computed from `dragOver`. -->
         <Transition name="wp-gap-bar">
           <div
             v-if="gapBarStyle"
@@ -2692,258 +2575,53 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           class="wp-modules"
           :data-suppress-move="suppressMove ? 'true' : null"
         >
-      <template v-for="(m, idx) in value.modules" :key="m._uid ?? `${m.id}|${idx}`">
-        <!-- Bundle header — rendered BEFORE the first child of each
-             bundle range. `bundleStartingAt(idx)` returns the
-             BundleInstance whose start_idx == idx, or null. Keyed
-             separately so the TransitionGroup tracks it independently
-             of the module rows. -->
-        <BundleHeader
-          v-if="bundleStartingAt(idx)"
-          :key="`bh-${bundleStartingAt(idx)?._uid}`"
-          :class="{ 'wp-gap-before': bundleHeaderGap(bundleStartingAt(idx)!._uid) === 'before' }"
-          :instance="bundleStartingAt(idx)!"
-          :name="bundleStartingAt(idx)?.name ?? 'Bundle'"
-          :color="bundleStartingAt(idx)?.color"
-          :child-count="(bundleStartingAt(idx)!.end_idx - bundleStartingAt(idx)!.start_idx + 1)"
-          @toggle-collapse="toggleBundleCollapsed(bundleStartingAt(idx)!._uid)"
-          @toggle-enabled="(next) => toggleBundleEnabled(bundleStartingAt(idx)!._uid, next)"
-          @remove="removeBundle(bundleStartingAt(idx)!._uid)"
-          @contextmenu="(ev) => openBundleContextMenu(ev, bundleStartingAt(idx)!._uid)"
-          @dragstart="(ev) => onBundleDragStart(ev, bundleStartingAt(idx)!._uid)"
-          @dragend="onDragEnd"
-        />
+      <template v-for="item in topLevelItems" :key="item.key">
+        <!-- Bundle wrapper: header + children container, real DOM
+             nesting (no more absolute overlay). Border/bg painted by
+             .wp-bundle directly. -->
         <div
-        v-show="!hiddenByBundleCollapse(idx)"
-        :data-module-id="m.id"
-        :data-module-idx="idx"
-        :data-kind="m.type"
-        :data-bundle-uid="bundleContaining(idx)?._uid"
-        :style="bundleStyleForModule(idx)"
-        class="wp-module"
-        tabindex="0"
-        draggable="true"
-        :class="{
-          'wp-disabled': !m.enabled,
-          'wp-conflict-error': severityFor(m.id) === 'error',
-          'wp-conflict-warning': severityFor(m.id) === 'warning',
-          'wp-conflict-info': severityFor(m.id) === 'info',
-          'wp-state-modified': isModified(m),
-          'wp-state-drift': isDrifted(m),
-          'wp-state-missing': isMissingFromLibrary(m),
-          'wp-gap-before': rowGap(idx) === 'before',
-          'wp-gap-after': rowGap(idx) === 'after',
-          'wp-module--dragging': m._uid === draggingModuleUid,
-          'wp-drop-pulse': m._uid === recentDropUid,
-          'wp-mod--mod': isModified(m),
-          'wp-mod--drift': isDrifted(m),
-          'wp-mod--err': isMissingFromLibrary(m),
-          ...bundleClassForModule(idx),
-        }"
-        @dragstart="(ev) => onDragStart(ev, m, idx)"
-        @dragend="onDragEnd"
-        @contextmenu.stop.prevent="(ev) => openContextMenu(ev, m, idx)"
-        @keydown="(ev) => onCardKeydown(ev, m, idx)"
-      >
-        <div class="wp-module-header">
-          <!-- 6-dot drag affordance (2 columns × 3 rows) — standard
-               grip icon shape (Notion / Linear / VSCode tree). PrimeIcons
-               has no equivalent so the dots render as inline SVG with
-               `currentColor` fill so they pick up the parent's text
-               color. The whole card is `draggable="true"` so dragging
-               from anywhere still works — but the `cursor: grab` is
-               scoped to this handle, matching the visual affordance. -->
-          <span
-            class="wp-drag-handle"
-            aria-hidden="true"
-            title="Drag to reorder"
+          v-if="item.kind === 'bundle'"
+          class="wp-bundle"
+          :class="{
+            'wp-bundle--collapsed': item.bundle!.collapsed,
+            'wp-bundle--drop-inside': isBundleInsideTarget(item.bundle!._uid),
+            'wp-gap-before': bundleHeaderGap(item.bundle!._uid) === 'before',
+          }"
+          :style="{ '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)' }"
+          :data-bundle-uid="item.bundle!._uid"
+        >
+          <BundleHeader
+            :instance="item.bundle!"
+            :name="item.bundle!.name ?? 'Bundle'"
+            :color="item.bundle!.color"
+            :child-count="item.children!.length"
+            @toggle-collapse="toggleBundleCollapsed(item.bundle!._uid)"
+            @toggle-enabled="(next) => toggleBundleEnabled(item.bundle!._uid, next)"
+            @remove="removeBundle(item.bundle!._uid)"
+            @contextmenu="(ev) => openBundleContextMenu(ev, item.bundle!._uid)"
+            @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
+            @dragend="onDragEnd"
+          />
+          <TransitionGroup
+            v-show="!item.bundle!.collapsed"
+            name="wp-list"
+            tag="div"
+            class="wp-bundle-children"
           >
-            <svg
-              class="wp-drag-handle__grip"
-              viewBox="0 0 6 12"
-              width="6"
-              height="12"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="1.5" cy="2" r="1" />
-              <circle cx="4.5" cy="2" r="1" />
-              <circle cx="1.5" cy="6" r="1" />
-              <circle cx="4.5" cy="6" r="1" />
-              <circle cx="1.5" cy="10" r="1" />
-              <circle cx="4.5" cy="10" r="1" />
-            </svg>
-          </span>
-
-          <button
-            type="button"
-            class="wp-collapse-btn"
-            draggable="false"
-            :title="isCollapsed(m) ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed(idx)"
-          ><i :class="['pi', isCollapsed(m) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-
-          <label class="wp-toggle" draggable="false" :title="m.enabled ? 'Disable' : 'Enable'">
-            <input
-              type="checkbox"
-              :checked="m.enabled"
-              :aria-label="`enable ${m.meta.name}`"
-              @change="toggleEnabled(idx)"
+            <ModuleRow
+              v-for="child in item.children"
+              :key="child.module._uid ?? `${child.module.id}|${child.idx}`"
+              :module="child.module"
+              :idx="child.idx"
             />
-            <span class="wp-toggle-mark"></span>
-          </label>
-
-          <span class="wp-mod-icon" :title="m.type" aria-hidden="true">
-            <i :class="kindIcon(m.type)" />
-          </span>
-
-          <!-- Kind chip — small kind label grouped with the kind
-               icon on the LEFT side of the row so it stays adjacent
-               to the name regardless of how wide the action cluster
-               is. (Mockup v5 lines 681, 696, 711, 722, 733 show it
-               trailing the name, but our row layout flexes the name
-               to fill space, which would push the chip far right
-               where it reads as floating chrome rather than as part
-               of the module's identity. Anchoring left keeps the
-               kind icon + chip + name as one visual unit.) -->
-          <span
-            v-if="KIND_TITLE[m.type] || m.type"
-            class="wp-kind-chip"
-            :class="`wp-kind-chip--${kindChipModifier(m.type)}`"
-          >{{ KIND_TITLE[m.type] ?? m.type }}</span>
-
-          <span class="wp-module-name" :title="m.meta.name || '(unnamed)'">
-            {{ m.meta.name || "(unnamed)" }}
-          </span>
-
-          <!-- Sibling badge moved to the .wp-summary line below
-               (Phase B 2026-05-10) so collapsed sibling rows stay
-               clean. Status badges (mod/drift/missing) stay in the
-               header — those are module-health signals that warrant
-               glance-visibility regardless of collapse state. -->
-
-          <!-- Status-dots cluster — read-only indicators grouped so
-               the eye reads them as a single "module health" glance.
-               Order modified → drift → missing → conflict (severity
-               rises left → right). Buttons sit AFTER this cluster so
-               dots never split the interactive controls.
-               Each kind ALSO renders a text badge (mockup v5
-               lines 714, 736, 861) so users recognise the state
-               without hovering for the tooltip. The dot remains as
-               the compact glance affordance at canvas zoom; the
-               badge gives the textual handle. -->
-          <span class="wp-mod-dots">
-            <span
-              v-if="isModified(m)"
-              class="wp-mod-dot wp-mod-dot--modified"
-              :title="modifiedTooltip(m)"
-              aria-hidden="true"
-            ></span>
-            <span
-              v-if="isModified(m)"
-              class="wp-mod-badge wp-mod-badge--mod"
-              :title="modifiedTooltip(m)"
-            >mod</span>
-            <span
-              v-if="isDrifted(m)"
-              class="wp-mod-dot wp-mod-dot--drift"
-              title="Drifted — library has a newer version. Right-click → Refresh from library."
-              aria-hidden="true"
-            ></span>
-            <span
-              v-if="isDrifted(m)"
-              class="wp-mod-badge wp-mod-badge--drift"
-              title="Drifted — library has a newer version. Right-click → Refresh from library."
-            >drift</span>
-            <span
-              v-if="isMissingFromLibrary(m)"
-              class="wp-mod-dot wp-mod-dot--missing"
-              title="Not in library — right-click → Save to library to add it"
-              aria-hidden="true"
-            ></span>
-            <span
-              v-if="isMissingFromLibrary(m)"
-              class="wp-mod-badge wp-mod-badge--missing"
-              title="Not in library — right-click → Save to library to add it"
-            >missing</span>
-            <span
-              v-if="severityFor(m.id)"
-              class="wp-conflict-dot"
-              :class="`wp-conflict-dot--${severityFor(m.id)}`"
-              :title="conflictTooltip(m.id)"
-              aria-hidden="true"
-            ></span>
-            <!-- Conflict text badge — pairs with the conflict dot
-                 the same way the status badges pair with their dots
-                 above. Wording comes from `conflictBadgeText` and
-                 covers shadows_upstream ("override"),
-                 missing_template_variable ("missing var"), and the
-                 constraint-* subtypes. Severity-tinted via
-                 --info / --warning / --error variants. -->
-            <span
-              v-if="severityFor(m.id) && conflictBadgeText(m.id)"
-              class="wp-conflict-badge"
-              :class="`wp-conflict-badge--${severityFor(m.id)}`"
-              :title="conflictTooltip(m.id)"
-            >{{ conflictBadgeText(m.id) }}</span>
-          </span>
-
-          <!-- Inline action cluster — lock + internal + remove.
-               Fades in on row hover via .wp-mod-actions opacity
-               transition. Lock surfaces on every kind whose engine
-               handler honors `locked_seed` (SEED_LOCKABLE_KINDS):
-               wildcard pins option pick, combine pins template {a|b|c}
-               resolution, fixed_values pins per-value alternation. -->
-          <div class="wp-mod-actions" draggable="false">
-            <button
-              v-if="isSeedLockable(m)"
-              type="button"
-              class="wp-btn wp-btn--icon-sm"
-              :class="{ 'is-locked': isLocked(m) }"
-              data-test="row-action-lock"
-              :title="isLocked(m) ? `Locked seed: ${m.instance?.locked_seed}. Click to unlock.` : 'Lock seed'"
-              :aria-label="isLocked(m) ? 'Unlock seed' : 'Lock seed'"
-              @click.stop="toggleLockOnCard(idx)"
-            ><i class="pi pi-lock" /></button>
-            <button
-              v-if="m.type === 'wildcard' || m.type === 'fixed_values' || m.type === 'combine' || m.type === 'derivation'"
-              type="button"
-              class="wp-btn wp-btn--icon-sm"
-              :class="{ 'is-active': isInternal(m) }"
-              data-test="row-action-internal"
-              :title="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
-              :aria-label="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
-              @click.stop="toggleInternalOnCard(idx)"
-            ><i class="pi pi-globe" /></button>
-            <button
-              type="button"
-              class="wp-btn wp-btn--icon-sm wp-btn--danger"
-              data-test="row-action-remove"
-              title="Remove"
-              aria-label="Remove module"
-              @click.stop="removeModule(idx)"
-            ><i class="pi pi-trash" /></button>
-          </div>
+          </TransitionGroup>
         </div>
-
-        <Transition name="wp-collapse">
-          <div v-if="!isCollapsed(m)" class="wp-summary" :title="summaryFor(m)">
-            <span class="wp-summary__main">
-              <template v-for="(tok, i) in summaryTokens(m)" :key="i"><span
-                v-if="tok.kind === 'var'"
-                :class="['var-tok', varColorClass(tok.varName)]"
-              >{{ tok.text }}</span><template v-else>{{ tok.text }}</template></template>
-            </span>
-            <span
-              v-if="siblingInfo(m)"
-              class="wp-summary__sibling"
-              data-test="sibling-chip"
-              :title="`used ${siblingInfo(m)!.total} times in this Context`"
-            >#{{ siblingInfo(m)!.index }} of {{ siblingInfo(m)!.total }}</span>
-          </div>
-        </Transition>
-      </div>
+        <!-- Standalone module — rendered directly via ModuleRow. -->
+        <ModuleRow
+          v-else
+          :module="item.module!"
+          :idx="item.idx!"
+        />
       </template>
         </TransitionGroup>
         </div>
@@ -3195,29 +2873,31 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   line-height: 1 !important;
 }
 
-/* Bundle frame overlay — absolute-positioned box sized via JS measurement. */
+/* Bundle as a real DOM container — header + children inside. Border
+ * + bg paint via CSS on this div, growing/shrinking with content. */
 .wp-modules-frame { position: relative; }
-.wp-bundle-overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 0;
-  pointer-events: none;
+.wp-bundle {
   border: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
   border-left-width: 3px;
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
-  transition: border-width 0.12s, background 0.12s;
+  transition: border-width 0.12s, background 0.12s, box-shadow 0.12s;
+  display: flex;
+  flex-direction: column;
 }
-/* Drop-inside-bundle highlight — thicker border + brighter tint while
- * the user holds a drag over a bundle child (not at its edges). */
-.wp-bundle-overlay--drop-inside {
+.wp-bundle-children {
+  padding: 5px 6px 7px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Frame highlight when crossing into the bundle. */
+.wp-bundle--drop-inside {
   border-width: 2px;
   border-left-width: 4px;
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 15%, transparent);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
 }
-.wp-modules > .wp-module,
-.wp-modules > .wp-bundle-header { position: relative; z-index: 1; }
 
 /* Populated ↔ Empty page swap. */
 .wp-page { display: flex; flex-direction: column; gap: 6px; }
@@ -3501,9 +3181,9 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease; }
 .wp-bundle-header { transition: margin 0.18s cubic-bezier(0.22, 1, 0.36, 1),
   border-bottom-color 0.18s ease, background 0.14s ease; }
-.wp-bundle-overlay { transition: top 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-  height 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+.wp-bundle { transition: margin 0.18s cubic-bezier(0.22, 1, 0.36, 1),
   border-width 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
+.wp-bundle.wp-gap-before { margin-top: 14px; }
 
 /* The bar itself. Animates between slots; enter/leave via Transition. */
 .wp-gap-bar {
@@ -3534,7 +3214,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   opacity: 0.45;
   transform: scale(0.98);
 }
-.wp-bundle-overlay--dragging {
+.wp-bundle--dragging {
   opacity: 0.55;
   transform: scale(0.99);
   box-shadow: 0 10px 24px rgba(0,0,0,0.45);

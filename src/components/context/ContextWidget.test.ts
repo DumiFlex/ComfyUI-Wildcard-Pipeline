@@ -1780,9 +1780,9 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     await cards[1].trigger("dragover", { clientY: 70, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    const overlay = wrapper.find(".wp-bundle-overlay");
+    const overlay = wrapper.find(".wp-bundle");
     expect(overlay.exists()).toBe(true);
-    expect(overlay.classes()).toContain("wp-bundle-overlay--drop-inside");
+    expect(overlay.classes()).toContain("wp-bundle--drop-inside");
 
     await cards[3].trigger("dragend");
     wrapper.unmount();
@@ -1856,9 +1856,9 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     await cards[1].trigger("dragover", { clientY: 70, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    const overlay = wrapper.find(".wp-bundle-overlay");
+    const overlay = wrapper.find(".wp-bundle");
     expect(overlay.exists()).toBe(true);
-    expect(overlay.classes()).not.toContain("wp-bundle-overlay--drop-inside");
+    expect(overlay.classes()).not.toContain("wp-bundle--drop-inside");
 
     await cards[0].trigger("dragend");
     wrapper.unmount();
