@@ -27,6 +27,7 @@ import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
 import {
   captureRects,
   applyFlip,
+  withEnterAnimation,
   withLeaveAnimation,
   shouldAnimate,
   MOTION_FLIP_MS,
@@ -1672,6 +1673,7 @@ async function onLibraryPick(uuids: string[]) {
       seenInBundle.add(uuid);
       newEntries.push({
         id: uuid,
+        _uid: newRowUid(),
         type: entry.type as ModuleEntry["type"],
         enabled: !startDisabled,
         meta: { name: entry.name, library_name: entry.name },
@@ -1801,10 +1803,20 @@ async function removeModule(idx: number): Promise<void> {
     severity: "info",
     action: {
       label: "Undo",
-      onSelect: () => {
-        const list = [...value.value.modules];
-        list.splice(Math.min(idx, list.length), 0, removed);
-        value.value = { ...value.value, modules: list };
+      onSelect: async () => {
+        const restoreUid = removed._uid;
+        const scope = modulesContainer.value;
+        if (restoreUid && scope) {
+          await withEnterAnimation(restoreUid, scope, () => {
+            const list = [...value.value.modules];
+            list.splice(Math.min(idx, list.length), 0, removed);
+            value.value = { ...value.value, modules: list };
+          });
+        } else {
+          const list = [...value.value.modules];
+          list.splice(Math.min(idx, list.length), 0, removed);
+          value.value = { ...value.value, modules: list };
+        }
       },
     },
   });

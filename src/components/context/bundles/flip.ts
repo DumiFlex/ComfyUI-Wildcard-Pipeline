@@ -89,7 +89,11 @@ export async function withEnterAnimation(
 ): Promise<void> {
   mutate();
   if (!shouldAnimate()) return;
-  await Promise.resolve();
+  // Wait one rAF so Vue commits the mutation to DOM before we query.
+  // A bare `await Promise.resolve()` schedules a microtask that can
+  // race Vue's own microtask-based reactivity scheduler — rAF runs
+  // after the microtask queue drains and before paint.
+  await new Promise<void>(r => requestAnimationFrame(() => r()));
   const el = container.querySelector<HTMLElement>(`[data-uid="${uid}"]`);
   if (!el) return;
   el.classList.add("wp-module--arriving");
