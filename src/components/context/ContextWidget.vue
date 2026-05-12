@@ -21,7 +21,7 @@ import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleHeader from "./bundles/BundleHeader.vue";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
-import { reconcileBundleRanges } from "./bundles/drag";
+import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -109,19 +109,24 @@ const props = withDefaults(defineProps<{
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
-// Phase B: drag-over highlight by INDEX rather than id — sibling rows
-// share `m.id`, so id-based highlight would light up every sibling
-// when the user drags over any one of them.
-const dragOverIdx = ref<number | null>(null);
-const dragOverEnd = ref(false);
-/**
- * Phase 3a — drop position relative to `dragOverId`. The card-level
- * `dragover` handler measures the pointer's Y relative to the card's
- * bounding rect midpoint and sets this to "before" (top half) or
- * "after" (bottom half) so a 2px insertion line can render on the
- * right edge of the card. `null` while no drag is active.
- */
-const dragOverPos = ref<"before" | "after" | null>(null);
+// Unified drop-zone state — discriminated union: row / bundle / end / null.
+const dragOver = ref<DropZone>(null);
+
+// Projects the active zone onto the row's edge indicator. Bundle zones
+// "before"/"after" anchor to the bundle's start/end row; "inside" → null
+// (frame highlight via overlay class in Task 5).
+function dropIndicator(idx: number): "before" | "after" | null {
+  const z = dragOver.value;
+  if (!z) return null;
+  if (z.kind === "row") return z.idx === idx ? z.pos : null;
+  if (z.kind === "bundle") {
+    const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
+    if (!b) return null;
+    if (z.zone === "before" && idx === b.start_idx) return "before";
+    if (z.zone === "after" && idx === b.end_idx) return "after";
+  }
+  return null;
+}
 
 const ctxMenu = ref<{
   visible: boolean;
@@ -223,10 +228,8 @@ const siblingNodeVars = computed<string[]>(() => {
 });
 
 function clearDragHover() {
-  if (dragOverIdx.value === null && !dragOverEnd.value && dragOverPos.value === null) return;
-  dragOverIdx.value = null;
-  dragOverEnd.value = false;
-  dragOverPos.value = null;
+  if (dragOver.value === null) return;
+  dragOver.value = null;
 }
 
 onMounted(() => {
@@ -2146,50 +2149,29 @@ function onDragEnd() {
   }
   dragState.value = null;
   sameNodeDropHandled = false;
-  dragOverIdx.value = null;
-  dragOverEnd.value = false;
-  dragOverPos.value = null;
+  dragOver.value = null;
 }
 
 let sameNodeDropHandled = false;
 
-function onDragEnter(ev: DragEvent, targetIdx: number | null) {
-  if (!dragState.value) return;
-  ev.preventDefault();
-  if (targetIdx === null) {
-    dragOverIdx.value = null;
-    dragOverEnd.value = true;
-    dragOverPos.value = null;
-  } else {
-    dragOverIdx.value = targetIdx;
-    dragOverEnd.value = false;
-  }
-}
-
-function onDragOver(ev: DragEvent) {
-  if (!dragState.value) return;
-  ev.preventDefault();
-  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-}
-
-/**
- * Card-scoped dragover. Computes whether the pointer is in the top
- * or bottom half of the hovered card so the insertion line renders
- * on the correct edge. Top half → "before" (drop above this card);
- * bottom half → "after" (drop below). Cheap math: read the card's
- * bounding rect once per move event.
- */
-function onCardDragOver(ev: DragEvent, targetIdx: number) {
+// Per-row dragover: classify zone inline from card midline. Bundle-aware
+// translation (drop-at-bundle-edge → bundle zone) lands in Task 3 along
+// with applyDrop's stamp/strip logic.
+function onRowDragOver(ev: DragEvent, idx: number) {
   if (!dragState.value) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
   const card = ev.currentTarget as HTMLElement;
   const rect = card.getBoundingClientRect();
   const midY = rect.top + rect.height / 2;
-  const next = ev.clientY < midY ? "before" : "after";
-  if (dragOverIdx.value !== targetIdx) dragOverIdx.value = targetIdx;
-  if (dragOverEnd.value) dragOverEnd.value = false;
-  if (dragOverPos.value !== next) dragOverPos.value = next;
+  dragOver.value = { kind: "row", idx, pos: ev.clientY < midY ? "before" : "after" };
+}
+
+function onEndDragOver(ev: DragEvent) {
+  if (!dragState.value) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  dragOver.value = { kind: "end" };
 }
 
 function onContainerLeave(ev: DragEvent) {
@@ -2204,12 +2186,9 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   ev.stopPropagation();
   const ds = dragState.value;
   if (!ds) return;
-  // Snapshot the resolved drop position before clearing the hover state
-  // — we need it to decide whether to insert before or after the target.
-  const dropPos = dragOverPos.value;
-  dragOverIdx.value = null;
-  dragOverEnd.value = false;
-  dragOverPos.value = null;
+  // Snapshot zone before clearing hover state.
+  const zone: DropZone = dragOver.value ?? (targetIdx === null ? { kind: "end" } : null);
+  dragOver.value = null;
 
   if (ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
@@ -2220,12 +2199,11 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     if (fromIdx < 0) return;
     list.splice(fromIdx, 1);
     let insertIdx: number;
-    if (targetIdx === null) {
-      insertIdx = list.length;
-    } else {
-      const adjusted = targetIdx > fromIdx ? targetIdx - 1 : targetIdx;
-      insertIdx = dropPos === "after" ? adjusted + 1 : adjusted;
-    }
+    if (!zone || zone.kind === "end") insertIdx = list.length;
+    else if (zone.kind === "row") {
+      const adj = zone.idx > fromIdx ? zone.idx - 1 : zone.idx;
+      insertIdx = zone.pos === "after" ? adj + 1 : adj;
+    } else insertIdx = list.length;
     list.splice(insertIdx, 0, ds.module);
     const nextBundles = reconcileBundleRanges(list, value.value.bundles ?? []);
     value.value = { ...value.value, modules: list, bundles: nextBundles };
@@ -2275,6 +2253,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   // showed "before" or "after". Mirror the same-node math: "after"
   // → targetIdx + 1, "before" (or unresolved) → targetIdx.
   let insertIdx: number;
+  const dropPos: "before" | "after" | null =
+    zone && zone.kind === "row" ? zone.pos : null;
   if (targetIdx === null) {
     insertIdx = list.length;
   } else if (targetIdx < 0 || targetIdx >= list.length) {
@@ -2428,9 +2408,9 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           'wp-state-modified': isModified(m),
           'wp-state-drift': isDrifted(m),
           'wp-state-missing': isMissingFromLibrary(m),
-          'wp-drop-target': dragOverIdx === idx,
-          'wp-drop-target--before': dragOverIdx === idx && dragOverPos === 'before',
-          'wp-drop-target--after': dragOverIdx === idx && dragOverPos === 'after',
+          'wp-drop-target': dropIndicator(idx) !== null,
+          'wp-drop-target--before': dropIndicator(idx) === 'before',
+          'wp-drop-target--after': dropIndicator(idx) === 'after',
           'wp-mod--mod': isModified(m),
           'wp-mod--drift': isDrifted(m),
           'wp-mod--err': isMissingFromLibrary(m),
@@ -2438,8 +2418,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
         }"
         @dragstart="(ev) => onDragStart(ev, m, idx)"
         @dragend="onDragEnd"
-        @dragenter="(ev) => onDragEnter(ev, idx)"
-        @dragover="(ev) => onCardDragOver(ev, idx)"
+        @dragover="(ev) => onRowDragOver(ev, idx)"
         @drop="(ev) => onDrop(ev, idx)"
         @contextmenu.stop.prevent="(ev) => openContextMenu(ev, m, idx)"
         @keydown="(ev) => onCardKeydown(ev, m, idx)"
@@ -2713,9 +2692,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
     <div
       class="wp-drop-end"
-      :class="{ 'wp-drop-end--active': dragOverEnd, 'wp-drop-end--show': dragState !== null }"
-      @dragenter="(ev) => onDragEnter(ev, null)"
-      @dragover="onDragOver"
+      :class="{ 'wp-drop-end--active': dragOver?.kind === 'end', 'wp-drop-end--show': dragState !== null }"
+      @dragover="onEndDragOver"
       @drop="(ev) => onDrop(ev, null)"
     >Drop here</div>
 

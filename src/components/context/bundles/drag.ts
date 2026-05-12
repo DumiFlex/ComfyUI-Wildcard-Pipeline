@@ -1,6 +1,12 @@
 // Pure drag/drop helpers — no Vue, no DOM. Caller wires events.
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 
+export type DropZone =
+  | { kind: "row"; idx: number; pos: "before" | "after" }
+  | { kind: "bundle"; uid: string; zone: "before" | "inside" | "after" }
+  | { kind: "end" }
+  | null;
+
 // Group module indices by `bundle_origin`, update start/end on
 // contiguous runs, dissolve on gaps.
 export function reconcileBundleRanges(
