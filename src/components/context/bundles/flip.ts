@@ -107,6 +107,45 @@ export async function withEnterAnimation(
 }
 
 /**
+ * Animate a batch of newly-inserted elements (matched by uid array)
+ * with --arriving → --arrived class lifecycle. Caller has already
+ * mutated state and is responsible for waiting nextTick if needed —
+ * this helper waits one rAF before applying classes so Vue's commit
+ * has landed.
+ *
+ * Two-pass design: apply all --arriving classes first (so every row
+ * is at the from-state simultaneously), then apply all --arrived
+ * classes on the next frame (so they all transition together). Avoids
+ * a staircase effect where rows animate sequentially.
+ *
+ * No-op when reduce-motion is on.
+ */
+export async function animateEnterBatch(
+  uids: readonly (string | null | undefined)[],
+  container: HTMLElement,
+): Promise<void> {
+  if (!shouldAnimate()) return;
+  await new Promise<void>(r => requestAnimationFrame(() => r()));
+  const elements: HTMLElement[] = [];
+  for (const uid of uids) {
+    if (!uid) continue;
+    const el = container.querySelector<HTMLElement>(`[data-uid="${uid}"]`);
+    if (el) elements.push(el);
+  }
+  if (elements.length === 0) return;
+  for (const el of elements) el.classList.add("wp-module--arriving");
+  await new Promise<void>(r => requestAnimationFrame(() => r()));
+  for (const el of elements) {
+    el.classList.add("wp-module--arrived");
+    const cleanup = (): void => {
+      el.classList.remove("wp-module--arriving", "wp-module--arrived");
+      el.removeEventListener("transitionend", cleanup);
+    };
+    el.addEventListener("transitionend", cleanup, { once: true });
+  }
+}
+
+/**
  * Animate an element (matched by uid) with --leaving class, wait for the
  * fade to complete, then run mutate to remove from state. Mutate is
  * called immediately when reduce-motion is on (no class added).

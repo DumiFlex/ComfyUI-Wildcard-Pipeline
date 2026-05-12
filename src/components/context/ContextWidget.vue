@@ -29,7 +29,7 @@ import {
   applyFlip,
   withEnterAnimation,
   withLeaveAnimation,
-  shouldAnimate,
+  animateEnterBatch,
   MOTION_FLIP_MS,
   MOTION_CURVE_FLIP,
 } from "./bundles/flip";
@@ -444,6 +444,17 @@ async function onPickBundle(bundleId: string): Promise<void> {
       modules: [...value.value.modules, ...splice],
       bundles: [...(value.value.bundles ?? []), bundleInstance],
     };
+    // Phase B.6: animate the new bundle wrapper + its children with
+    // the same fade-slide as picker-add. Bundle wrapper carries the
+    // same --arriving/--arrived classes thanks to the .wp-bundle CSS
+    // selectors. UIDs: bundle._uid + each child._uid.
+    await nextTick();
+    if (modulesContainer.value) {
+      await animateEnterBatch(
+        [bundleInstance._uid, ...splice.map(c => c._uid)],
+        modulesContainer.value,
+      );
+    }
   } catch (e) {
     // Surface fetch / parse errors via the existing toast channel so
     // users see what went wrong without diving into devtools.
@@ -1700,29 +1711,14 @@ async function onLibraryPick(uuids: string[]) {
 
     // Phase B.6: fade-in + slide-X each newly added row. No FLIP capture
     // here — new rows are appended at the tail so existing rows don't
-    // shift. Class lifecycle inline (don't reuse withEnterAnimation —
-    // that helper bundles mutate + animate, we mutate above and only
-    // need the post-mutate class wiring).
-    if (shouldAnimate()) {
-      await nextTick();
-      const frame = modulesContainer.value;
-      if (frame) {
-        for (const entry of newEntries) {
-          const uid = entry._uid;
-          if (!uid) continue;
-          const el = frame.querySelector<HTMLElement>(`[data-uid="${uid}"]`);
-          if (!el) continue;
-          el.classList.add("wp-module--arriving");
-          requestAnimationFrame(() => {
-            el.classList.add("wp-module--arrived");
-            const cleanup = (): void => {
-              el.classList.remove("wp-module--arriving", "wp-module--arrived");
-              el.removeEventListener("transitionend", cleanup);
-            };
-            el.addEventListener("transitionend", cleanup, { once: true });
-          });
-        }
-      }
+    // shift. Two-pass batched class lifecycle ensures every row arrives
+    // simultaneously instead of in a staircase.
+    await nextTick();
+    if (modulesContainer.value) {
+      await animateEnterBatch(
+        newEntries.map(e => e._uid),
+        modulesContainer.value,
+      );
     }
 
     const overflow = bundle.walkOverflow ?? [];
@@ -1822,8 +1818,9 @@ async function removeModule(idx: number): Promise<void> {
   });
 }
 
-function duplicateModule(idx: number) {
+async function duplicateModule(idx: number): Promise<void> {
   if (idx < 0 || idx >= value.value.modules.length) return;
+  const flipSnap = captureFlipSnapshot();
   const list = [...value.value.modules];
   const i = idx;
   // Phase B: duplicate is a SIBLING — same uuid + payload_hash, only
@@ -1846,17 +1843,32 @@ function duplicateModule(idx: number) {
   }
   list.splice(i + 1, 0, copy);
   value.value = { ...value.value, modules: list };
+  await nextTick();
+  // Sibling rows below the inserted slot shift down via FLIP; the new
+  // row itself fades + slides in via animateEnterBatch.
+  playFlipSnapshot(flipSnap);
+  if (modulesContainer.value && copy._uid) {
+    await animateEnterBatch([copy._uid], modulesContainer.value);
+  }
   pushToast(`Duplicated "${list[i].meta.name?.trim() || "module"}" as sibling`, {
     severity: "success",
     lifeMs: 3000,
     action: {
       label: "Undo",
-      onSelect: () => {
-        // Splice the most recently added sibling at position i+1 — can't
-        // filter by id since the original shares it.
-        const cur = [...value.value.modules];
-        cur.splice(i + 1, 1);
-        value.value = { ...value.value, modules: cur };
+      onSelect: async () => {
+        const scope = modulesContainer.value;
+        const dupUid = copy._uid;
+        if (dupUid && scope) {
+          await withLeaveAnimation(dupUid, scope, () => {
+            const cur = [...value.value.modules];
+            cur.splice(i + 1, 1);
+            value.value = { ...value.value, modules: cur };
+          });
+        } else {
+          const cur = [...value.value.modules];
+          cur.splice(i + 1, 1);
+          value.value = { ...value.value, modules: cur };
+        }
       },
     },
   });
@@ -3997,14 +4009,16 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * Manual orchestration via flip.ts:withEnterAnimation/withLeaveAnimation.
  * No TransitionGroup — Batch 2 ghosting risk. Classes applied + removed
  * by orchestration helpers; a row is in one state at a time. */
-.wp-module.wp-module--leaving {
+.wp-module.wp-module--leaving,
+.wp-bundle.wp-module--leaving {
   opacity: 0;
   transform: translateX(-12px);
   transition: opacity var(--wp-motion-fade) var(--wp-motion-curve-linear),
               transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
   pointer-events: none;
 }
-.wp-module.wp-module--arriving {
+.wp-module.wp-module--arriving,
+.wp-bundle.wp-module--arriving {
   /* Snap to from-state. Without `transition: none` the base
    * `.wp-modules .wp-module` transition (opacity 0.14s) starts fading
    * the row OUT when we add --arriving, then --arrived fights back —
@@ -4013,7 +4027,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   transform: translateX(12px);
   transition: none;
 }
-.wp-module.wp-module--arrived {
+.wp-module.wp-module--arrived,
+.wp-bundle.wp-module--arrived {
   opacity: 1;
   transform: translateX(0);
   transition: opacity var(--wp-motion-fade) var(--wp-motion-curve-linear),
