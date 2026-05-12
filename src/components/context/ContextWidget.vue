@@ -24,7 +24,14 @@ import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
-import { captureRects, applyFlip, MOTION_FLIP_MS, MOTION_CURVE_FLIP } from "./bundles/flip";
+import {
+  captureRects,
+  applyFlip,
+  withLeaveAnimation,
+  shouldAnimate,
+  MOTION_FLIP_MS,
+  MOTION_CURVE_FLIP,
+} from "./bundles/flip";
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -1689,6 +1696,33 @@ async function onLibraryPick(uuids: string[]) {
       modules: [...value.value.modules, ...newEntries],
     };
 
+    // Phase B.6: fade-in + slide-X each newly added row. No FLIP capture
+    // here — new rows are appended at the tail so existing rows don't
+    // shift. Class lifecycle inline (don't reuse withEnterAnimation —
+    // that helper bundles mutate + animate, we mutate above and only
+    // need the post-mutate class wiring).
+    if (shouldAnimate()) {
+      await nextTick();
+      const frame = modulesContainer.value;
+      if (frame) {
+        for (const entry of newEntries) {
+          const uid = entry._uid;
+          if (!uid) continue;
+          const el = frame.querySelector<HTMLElement>(`[data-uid="${uid}"]`);
+          if (!el) continue;
+          el.classList.add("wp-module--arriving");
+          requestAnimationFrame(() => {
+            el.classList.add("wp-module--arrived");
+            const cleanup = (): void => {
+              el.classList.remove("wp-module--arriving", "wp-module--arrived");
+              el.removeEventListener("transitionend", cleanup);
+            };
+            el.addEventListener("transitionend", cleanup, { once: true });
+          });
+        }
+      }
+    }
+
     const overflow = bundle.walkOverflow ?? [];
     if (overflow.length > 0) {
       const cycles = overflow.filter((o) => o.reason === "cycle_detected").length;
@@ -1718,7 +1752,7 @@ async function onLibraryPick(uuids: string[]) {
   }
 }
 
-function removeModule(idx: number) {
+async function removeModule(idx: number): Promise<void> {
   // Soft-delete: capture position + module, drop a toast with Undo. Undo
   // splices it back at its original index. Phase B: removes by index so
   // sibling rows (same uuid, multiple instances) only delete the
@@ -1727,6 +1761,18 @@ function removeModule(idx: number) {
   if (idx < 0 || idx >= value.value.modules.length) return;
   const removed = value.value.modules[idx];
   const moduleLabel = removed.meta.name?.trim() || "module";
+
+  // Phase B.6: animate row out with --leaving, then commit the splice.
+  // FLIP captures pre-mutation rects so sibling rows below slide up to
+  // close the gap once the row is gone.
+  const uid = removed._uid;
+  if (uid) {
+    await withLeaveAnimation(uid, modulesContainer.value ?? document.body, () => {
+      // No-op — mutation happens below after the await resolves.
+    });
+  }
+
+  const flipSnap = captureFlipSnapshot();
   const next = [...value.value.modules];
   next.splice(idx, 1);
 
@@ -1749,6 +1795,8 @@ function removeModule(idx: number) {
     .filter((b): b is NonNullable<typeof b> => b !== null);
 
   value.value = { ...value.value, modules: next, bundles: nextBundles };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
   pushToast(`Removed “${moduleLabel}”`, {
     severity: "info",
     action: {
@@ -3932,6 +3980,28 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * fade-out felt sluggish, especially when chained with a FLIP move. */
 .wp-list-enter-active { transition: opacity 0.2s, transform 0.2s; }
 .wp-list-enter-from { opacity: 0; transform: translateY(-4px); }
+
+/* ── Cross-container enter/leave + module add/remove (Phase B.3 + B.6) ──
+ * Manual orchestration via flip.ts:withEnterAnimation/withLeaveAnimation.
+ * No TransitionGroup — Batch 2 ghosting risk. Classes applied + removed
+ * by orchestration helpers; a row is in one state at a time. */
+.wp-module.wp-module--leaving {
+  opacity: 0;
+  transform: translateX(-12px);
+  transition: opacity var(--wp-motion-fade) var(--wp-motion-curve-linear),
+              transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
+  pointer-events: none;
+}
+.wp-module.wp-module--arriving {
+  opacity: 0;
+  transform: translateX(12px);
+}
+.wp-module.wp-module--arrived {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity var(--wp-motion-fade) var(--wp-motion-curve-linear),
+              transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
+}
 
 /* Collapse/expand summary line */
 .wp-collapse-enter-active,
