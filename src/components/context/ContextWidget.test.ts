@@ -1515,7 +1515,9 @@ describe("ContextWidget drag-drop overhaul", () => {
     wrapper.unmount();
   });
 
-  it("dragover bottom half marks current row as wp-gap-after", async () => {
+  it("dragover bottom half canonicalises to wp-gap-before on next row", async () => {
+    // Single canonical zone per gap — bottom-half of row N projects to
+    // "before row N+1", so cards[2] receives the class, not cards[1].
     const wrapper = mountFour();
     const cards = wrapper.findAll(".wp-module");
     stubRects([
@@ -1526,11 +1528,11 @@ describe("ContextWidget drag-drop overhaul", () => {
     ]);
 
     await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    // Pointer in cards[1] bottom half (y=55, mid=45).
     await cards[1].trigger("dragover", { clientY: 55, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    expect(cards[1].classes()).toContain("wp-gap-after");
+    expect(cards[2].classes()).toContain("wp-gap-before");
+    expect(cards[1].classes()).not.toContain("wp-gap-after");
     expect(cards[1].classes()).not.toContain("wp-gap-before");
 
     await cards[0].trigger("dragend");

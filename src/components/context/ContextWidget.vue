@@ -2212,7 +2212,16 @@ function onListDragOver(ev: DragEvent) {
 
     if (it.type === "row") {
       const mid = it.top + (it.bottom - it.top) / 2;
-      dragOver.value = { kind: "row", idx: it.moduleIdx, pos: cy < mid ? "before" : "after" };
+      if (cy < mid) {
+        dragOver.value = { kind: "row", idx: it.moduleIdx, pos: "before" };
+      } else {
+        // Bottom half — canonicalise to "before next top-level item" so
+        // bottom-of-N and top-of-N+1 resolve to one slot + one bar.
+        const next = items[k + 1];
+        if (!next) dragOver.value = { kind: "end" };
+        else if (next.type === "bundle") dragOver.value = { kind: "bundle", uid: next.uid!, zone: "before" };
+        else dragOver.value = { kind: "row", idx: next.moduleIdx, pos: "before" };
+      }
       return;
     }
 
@@ -2740,7 +2749,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 @import "../shared/theme.css";
 </style>
 
-<style scoped>
+<style>
 .wp-context, .wp-context * { box-sizing: border-box; }
 
 /* Mute / bypass dim. Litegraph dims the title bar + node frame natively
