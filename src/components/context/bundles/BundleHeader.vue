@@ -292,12 +292,12 @@ const summary = computed(() => {
   font-size: 11px;
 }
 .wp-bundle-action--danger:hover {
-  /* Trash hover — danger tint blended with bundle color so it reads
-   * as 'destructive on THIS bundle' without breaking the bundle's
-   * color theme. Pre-fix two overriding `.wp-bundle-action:hover`
-   * rules below clobbered this and left a generic grey background. */
-  background: color-mix(in srgb, var(--wp-danger) 22%, var(--b));
-  border-color: var(--wp-danger);
+  /* Trash hover — mirror module .wp-btn--danger:hover pattern: red
+   * icon, subtle red-tinted border, NOT a full danger-color bg. Bundle
+   * color stays in the background so the button still reads as
+   * 'destructive on THIS bundle' without flipping the whole chip red. */
+  background: color-mix(in srgb, var(--b) 32%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--b));
   color: var(--wp-danger);
 }
 </style>
