@@ -3993,8 +3993,13 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   pointer-events: none;
 }
 .wp-module.wp-module--arriving {
+  /* Snap to from-state. Without `transition: none` the base
+   * `.wp-modules .wp-module` transition (opacity 0.14s) starts fading
+   * the row OUT when we add --arriving, then --arrived fights back —
+   * net effect is a barely-visible flicker instead of clear fade-in. */
   opacity: 0;
   transform: translateX(12px);
+  transition: none;
 }
 .wp-module.wp-module--arrived {
   opacity: 1;
