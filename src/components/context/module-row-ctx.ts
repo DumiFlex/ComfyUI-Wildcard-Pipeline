@@ -25,7 +25,8 @@ export interface ModuleRowCtx {
   siblingInfo: (m: ModuleEntry) => { index: number; total: number } | null;
   rowGap: (idx: number) => "before" | "after" | null;
   draggingModuleUid: Ref<string | null>;
-  recentDropUid: Ref<string | null>;
+  recentDropUids: Ref<Set<string>>;
+  pulseDelayFor: (uid: string | null | undefined) => string;
   toggleCollapsed: (idx: number) => void;
   toggleEnabled: (idx: number) => void;
   removeModule: (idx: number) => void;

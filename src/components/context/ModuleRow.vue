@@ -42,11 +42,14 @@ const {
       'wp-gap-before': rowGap(idx) === 'before',
       'wp-gap-after': rowGap(idx) === 'after',
       'wp-module--dragging': module._uid === ctx.draggingModuleUid.value,
-      'wp-drop-pulse': module._uid === ctx.recentDropUid.value,
+      'wp-drop-pulse': !!module._uid && ctx.recentDropUids.value.has(module._uid),
       'wp-mod--mod': isModified(module),
       'wp-mod--drift': isDrifted(module),
       'wp-mod--err': isMissingFromLibrary(module),
     }"
+    :style="!!module._uid && ctx.recentDropUids.value.has(module._uid)
+      ? { animationDelay: ctx.pulseDelayFor(module._uid) }
+      : undefined"
     @dragstart="(ev) => onDragStart(ev, module, idx)"
     @dragend="onDragEnd"
     @contextmenu.stop.prevent="(ev) => openContextMenu(ev, module, idx)"

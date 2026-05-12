@@ -110,7 +110,13 @@ const dragOver = ref<DropZone>(null);
 const draggingModuleUid = ref<string | null>(null);
 // `_uid` of the most recently dropped row — pulses for 450ms after a
 // drop lands, then clears.
-const recentDropUid = ref<string | null>(null);
+// Phase B.4: Set + order map for multi-child pulse on cross-node bundle
+// drops. Each landed uid gets a CSS animation-delay = index * 60ms via
+// pulseDelayFor; the .wp-drop-pulse keyframe runs at MOTION_PULSE_MS
+// (420ms) so the last row's animation finishes at
+// 420 + (n-1)*60ms after the drop. Timer clears the Set + Map together.
+const recentDropUids = ref<Set<string>>(new Set());
+const pulseOrder = ref<Map<string, number>>(new Map());
 let dropPulseTimer: number | null = null;
 
 // Disables `.wp-list-move` + `.wp-list-leave-active` transitions while
@@ -2204,15 +2210,32 @@ function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
   }
 }
 
-// Pulses the just-dropped module so the user sees where it landed.
-function pulseDrop(uid: string | undefined | null): void {
-  if (!uid) return;
+// Pulses the just-dropped module(s) so the user sees where they landed.
+// Accepts a single uid OR an array — cross-node bundle drops pass every
+// freshly-inserted child so all rows pulse (Phase B.4 bug fix).
+function pulseDrop(uids: string | string[] | undefined | null): void {
+  if (!uids) return;
+  const list = (Array.isArray(uids) ? uids : [uids]).filter((u): u is string => !!u);
+  if (list.length === 0) return;
   if (dropPulseTimer != null) window.clearTimeout(dropPulseTimer);
-  recentDropUid.value = uid;
+  recentDropUids.value = new Set(list);
+  pulseOrder.value = new Map(list.map((uid, i) => [uid, i]));
+  // Last pulse must complete: stagger * (n-1) + pulse duration + 50ms buffer.
+  const totalMs = 420 + (list.length - 1) * 60 + 50;
   dropPulseTimer = window.setTimeout(() => {
-    recentDropUid.value = null;
+    recentDropUids.value = new Set();
+    pulseOrder.value = new Map();
     dropPulseTimer = null;
-  }, 460);
+  }, totalMs);
+}
+
+// Per-row CSS animation-delay derived from pulse order. Returns "0ms"
+// when uid isn't in the current pulse batch — falls through harmlessly
+// because no .wp-drop-pulse class is applied either.
+function pulseDelayFor(uid: string | null | undefined): string {
+  if (!uid) return "0ms";
+  const idx = pulseOrder.value.get(uid);
+  return idx == null ? "0ms" : `${idx * 60}ms`;
 }
 
 // Bundle-as-unit drag — header drag handle initiates a "bundle" payload
@@ -2509,9 +2532,9 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
     await nextTick();
     playFlipSnapshot(flipSnap);
-    // Pulse the first row of the moved bundle so the user sees where it
-    // landed (the bundle frame itself doesn't host the pulse class).
-    pulseDrop(range[0]?._uid);
+    // Pulse every row of the moved bundle so all children flash where
+    // they landed (the bundle frame itself doesn't host the pulse class).
+    pulseDrop(range.map(r => r._uid).filter((u): u is string => !!u));
     sameNodeDropHandled = true;
     return;
   }
@@ -2602,7 +2625,11 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     };
     await nextTick();
     playFlipSnapshot(flipSnap);
-    pulseDrop(newChildren[0]?._uid);
+    // Phase B.4: pulse every newly-inserted child of the cross-node
+    // bundle drop, not just the first one. recentDropUids now carries
+    // a Set; each row gets a CSS animation-delay = index * 60ms via
+    // pulseDelayFor so they cascade rather than fire as one event.
+    pulseDrop(newChildren.map(c => c._uid).filter((u): u is string => !!u));
     dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
   }
@@ -2730,7 +2757,7 @@ const moduleRowCtx: ModuleRowCtx = {
   isModified, isDrifted, isMissingFromLibrary,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
-  rowGap, draggingModuleUid, recentDropUid,
+  rowGap, draggingModuleUid, recentDropUids, pulseDelayFor,
   toggleCollapsed, toggleEnabled, removeModule,
   toggleLockOnCard, toggleInternalOnCard,
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
