@@ -2594,9 +2594,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             aria-hidden="true"
           />
         </Transition>
-        <TransitionGroup
-          name="wp-list"
-          tag="div"
+        <div
           class="wp-modules"
           :data-suppress-move="suppressMove ? 'true' : null"
         >
@@ -2651,7 +2649,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
           :idx="item.idx!"
         />
       </template>
-        </TransitionGroup>
+        </div>
         </div>
 
         <!-- Footer: primary add + bundle add. Shown only when list is
