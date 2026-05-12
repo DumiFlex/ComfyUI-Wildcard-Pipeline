@@ -86,6 +86,7 @@ const summary = computed(() => {
     <button
       type="button"
       class="wp-bundle-collapse"
+      draggable="false"
       :aria-label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
       :title="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
@@ -95,7 +96,7 @@ const summary = computed(() => {
         aria-hidden="true"
       ></i>
     </button>
-    <label class="wp-bundle-enabled" :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'">
+    <label class="wp-bundle-enabled" draggable="false" :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'">
       <input
         type="checkbox"
         :checked="instance.enabled"
@@ -113,6 +114,7 @@ const summary = computed(() => {
     <button
       type="button"
       class="wp-bundle-action wp-bundle-action--danger"
+      draggable="false"
       title="Remove bundle (right-click for more)"
       :aria-label="`remove bundle ${name}`"
       @click.stop="emit('remove')"

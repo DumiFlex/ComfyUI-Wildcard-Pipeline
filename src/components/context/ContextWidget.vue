@@ -166,6 +166,11 @@ const gapBarStyle = computed<Record<string, string> | null>(() => {
     const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
     if (b) anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${b.end_idx}"]`);
     beforeSide = false;
+  } else if (z.kind === "end") {
+    const n = value.value.modules.length;
+    if (n === 0) return null;
+    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${n - 1}"]`);
+    beforeSide = false;
   } else {
     return null;
   }
@@ -617,6 +622,10 @@ watch(
   () => { nextTick().then(updateBundleOverlays); },
   { deep: true, flush: "post" },
 );
+// Bundle header sliding (wp-gap-before) shifts the frame's top — re-
+// measure the overlay rect whenever drag-over state changes so the frame
+// stays glued to its header.
+watch(dragOver, () => { nextTick().then(updateBundleOverlays); }, { flush: "post" });
 
 // Suppresses wp-list-move + wp-list-leave-active transitions for the
 // duration; covers the longest TransitionGroup transition (250ms FLIP)
@@ -2271,29 +2280,64 @@ let sameNodeDropHandled = false;
 // the bundle header (dragover handler on BundleHeader); "after-bundle"
 // comes from the row immediately after the bundle range (treated as a
 // row "before" drop on the post-bundle row).
+// Canonical zone resolver — every conceptual drop slot in the list maps
+// to ONE zone so two different physical hovers (bottom half of row N vs
+// top half of row N+1) produce the same dragOver value + bar position.
+// Convention: always anchor on the item BELOW the slot ("before next").
+// Last-position uses { kind: "end" }.
+function nextTopLevel(startIdx: number): { type: "row" | "bundle"; idx: number; uid?: string } | null {
+  const modules = value.value.modules;
+  const bundles = value.value.bundles ?? [];
+  if (startIdx >= modules.length) return null;
+  const b = bundles.find((bb) => bb.start_idx === startIdx);
+  if (b) return { type: "bundle", idx: startIdx, uid: b._uid };
+  return { type: "row", idx: startIdx };
+}
+
 function onRowDragOver(ev: DragEvent, idx: number) {
   const ds = dragState.value;
   if (!ds) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const before = ev.clientY < r.top + r.height / 2;
-  const b = (value.value.bundles ?? []).find((x) => x.start_idx <= idx && idx <= x.end_idx);
-  if (!b) {
-    dragOver.value = { kind: "row", idx, pos: before ? "before" : "after" };
+  const topHalf = ev.clientY < r.top + r.height / 2;
+  const bundles = value.value.bundles ?? [];
+  const containing = bundles.find((b) => b.start_idx <= idx && idx <= b.end_idx);
+
+  if (containing) {
+    const crossing = !(ds.kind === "module" && ds.sourceBundleUid === containing._uid);
+    if (topHalf) {
+      dragOver.value = { kind: "bundle-slot", uid: containing._uid, targetIdx: idx, before: true, crossing };
+      return;
+    }
+    if (idx < containing.end_idx) {
+      // Bottom half within bundle but more children below → before next child.
+      dragOver.value = { kind: "bundle-slot", uid: containing._uid, targetIdx: idx + 1, before: true, crossing };
+      return;
+    }
+    // Bottom half of bundle's last child → canonical "next top-level item".
+    const nxt = nextTopLevel(containing.end_idx + 1);
+    if (!nxt) { dragOver.value = { kind: "end" }; return; }
+    if (nxt.type === "bundle") { dragOver.value = { kind: "bundle", uid: nxt.uid!, zone: "before" }; return; }
+    dragOver.value = { kind: "row", idx: nxt.idx, pos: "before" };
     return;
   }
-  // Bundle-member row → bundle-slot (line at exact position between two
-  // children). Frame highlight only when source is OUTSIDE this bundle.
-  const crossing = !(ds.kind === "module" && ds.sourceBundleUid === b._uid);
-  dragOver.value = { kind: "bundle-slot", uid: b._uid, targetIdx: idx, before, crossing };
+
+  // Standalone row.
+  if (topHalf) {
+    dragOver.value = { kind: "row", idx, pos: "before" };
+    return;
+  }
+  const nxt = nextTopLevel(idx + 1);
+  if (!nxt) { dragOver.value = { kind: "end" }; return; }
+  if (nxt.type === "bundle") { dragOver.value = { kind: "bundle", uid: nxt.uid!, zone: "before" }; return; }
+  dragOver.value = { kind: "row", idx: nxt.idx, pos: "before" };
 }
 
 // Bundle header dragover:
-//   - top half → drop ABOVE the bundle (standalone insert at start_idx).
-//   - bottom half + crossing → frame highlight, drop as new child at end.
+//   - top half → drop ABOVE the bundle (canonical "before bundle").
+//   - bottom half + crossing → frame highlight (drop as new child).
 //   - bottom half + same-bundle reorder → bundle-slot before first child.
-//   - collapsed bundle: header IS the bundle, same split.
 function onBundleHeaderDragOver(ev: DragEvent, uid: string) {
   const ds = dragState.value;
   if (!ds) return;
