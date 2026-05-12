@@ -79,25 +79,7 @@ const props = withDefaults(defineProps<{
    *  the runtime-skipped state is visually obvious. Other modes are
    *  unused for WP_Context but accepted as default-active (run). */
   nodeMode?: number;
-  /**
-   * Pull the seed that the wildcard with the given module id
-   * ACTUALLY rolled with on the last run. For locked wildcards
-   * that's their `locked_seed`; for unlocked wildcards it's the
-   * chain seed at queue time. Captured by the seed widget's
-   * `beforeQueued` hook (see widgets/context.ts).
-   *
-   * Calling without a module id returns the chain-level snapshot.
-   *
-   * Used by the in-card lock toggle so re-locking after a run
-   * restores the seed THIS wildcard rolled with — not the chain
-   * seed (which it may have ignored if it was already locked) and
-   * not the previous lock value (which may be stale if the user
-   * unlocked + re-ran in between).
-   *
-   * Returns `null` when the user hasn't queued yet —
-   * `_ui.last_locked_seed` falls through next, then 0 as final default.
-   * Optional so headless mounts (tests) can skip wiring it.
-   */
+  /** Last-run seed reader keyed by module id. Null = user hasn't queued. */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
 }>(), {
@@ -109,23 +91,11 @@ const props = withDefaults(defineProps<{
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
-// Unified drop-zone state — discriminated union: row / bundle / end / null.
 const dragOver = ref<DropZone>(null);
 
-// Projects the active zone onto the row's edge indicator. Bundle zones
-// "before"/"after" anchor to the bundle's start/end row; "inside" → null
-// (frame highlight via overlay class in Task 5).
 function dropIndicator(idx: number): "before" | "after" | null {
   const z = dragOver.value;
-  if (!z) return null;
-  if (z.kind === "row") return z.idx === idx ? z.pos : null;
-  if (z.kind === "bundle") {
-    const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
-    if (!b) return null;
-    if (z.zone === "before" && idx === b.start_idx) return "before";
-    if (z.zone === "after" && idx === b.end_idx) return "after";
-  }
-  return null;
+  return z?.kind === "row" && z.idx === idx ? z.pos : null;
 }
 
 const ctxMenu = ref<{
@@ -2154,17 +2124,19 @@ function onDragEnd() {
 
 let sameNodeDropHandled = false;
 
-// Per-row dragover: classify zone inline from card midline. Bundle-aware
-// translation (drop-at-bundle-edge → bundle zone) lands in Task 3 along
-// with applyDrop's stamp/strip logic.
+// Bundle members translate row hover → bundle zone (first-child top
+// half = before, last-child bottom half = after, else = inside).
 function onRowDragOver(ev: DragEvent, idx: number) {
   if (!dragState.value) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  const card = ev.currentTarget as HTMLElement;
-  const rect = card.getBoundingClientRect();
-  const midY = rect.top + rect.height / 2;
-  dragOver.value = { kind: "row", idx, pos: ev.clientY < midY ? "before" : "after" };
+  const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  const pos: "before" | "after" = ev.clientY < r.top + r.height / 2 ? "before" : "after";
+  const b = (value.value.bundles ?? []).find((x) => x.start_idx <= idx && idx <= x.end_idx);
+  if (!b) { dragOver.value = { kind: "row", idx, pos }; return; }
+  const z = idx === b.start_idx && pos === "before" ? "before"
+    : idx === b.end_idx && pos === "after" ? "after" : "inside";
+  dragOver.value = { kind: "bundle", uid: b._uid, zone: z };
 }
 
 function onEndDragOver(ev: DragEvent) {
@@ -2197,16 +2169,28 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       ? srcIdx
       : list.findIndex((m) => m.id === ds.module.id);
     if (fromIdx < 0) return;
-    list.splice(fromIdx, 1);
-    let insertIdx: number;
-    if (!zone || zone.kind === "end") insertIdx = list.length;
+    const [moved] = list.splice(fromIdx, 1);
+    let ii: number;
+    let stamp: string | undefined;
+    if (!zone || zone.kind === "end") ii = list.length;
     else if (zone.kind === "row") {
       const adj = zone.idx > fromIdx ? zone.idx - 1 : zone.idx;
-      insertIdx = zone.pos === "after" ? adj + 1 : adj;
-    } else insertIdx = list.length;
-    list.splice(insertIdx, 0, ds.module);
-    const nextBundles = reconcileBundleRanges(list, value.value.bundles ?? []);
-    value.value = { ...value.value, modules: list, bundles: nextBundles };
+      ii = zone.pos === "after" ? adj + 1 : adj;
+    } else {
+      const ob = (value.value.bundles ?? []).find((b) => b._uid === zone.uid);
+      if (!ob) ii = list.length;
+      else {
+        const s = ob.start_idx - (fromIdx < ob.start_idx ? 1 : 0);
+        const e = ob.end_idx - (fromIdx <= ob.end_idx ? 1 : 0);
+        if (zone.zone === "before") ii = s;
+        else { ii = e + 1; if (zone.zone === "inside") stamp = zone.uid; }
+      }
+    }
+    const m = { ...moved } as ModuleEntry & { bundle_origin?: string };
+    if (stamp) m.bundle_origin = stamp;
+    else delete m.bundle_origin;
+    list.splice(ii, 0, m);
+    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, value.value.bundles ?? []) };
     sameNodeDropHandled = true;
     return;
   }
@@ -2873,17 +2857,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   line-height: 1 !important;
 }
 
-/* ── Bundle frame overlay ──────────────────────────────────────────
- * `.wp-modules-frame` wraps both the overlays + the module list so
- * the overlays use IT as positioning context. Module offsetTop is
- * measured relative to this wrapper (since `.wp-modules` is its
- * direct child and `.wp-modules-frame` is the offsetParent).
- *
- * Each overlay is a `position: absolute` box sized via JS-measured
- * top + height to exactly span the bundle's header + child range.
- * Paints the box: 1px border in bundle color + rounded corners +
- * soft tinted bg. `z-index: 0` + `pointer-events: none` so clicks
- * pass through to the modules above. */
+/* Bundle frame overlay — absolute-positioned box sized via JS measurement. */
 .wp-modules-frame { position: relative; }
 .wp-bundle-overlay {
   position: absolute;
@@ -2891,31 +2865,15 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   right: 0;
   z-index: 0;
   pointer-events: none;
-  /* Thick left border mirrors the 3px kind-stripe on standalone
-   * `.wp-module` rows — same visual hierarchy where the colored
-   * vertical edge is the dominant kind indicator. Other three
-   * sides stay 1px for a clean box. */
   border: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
   border-left-width: 3px;
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
 }
-/* Modules paint ABOVE the overlay so action buttons + text stay
- * interactive + visible. */
 .wp-modules > .wp-module,
 .wp-modules > .wp-bundle-header { position: relative; z-index: 1; }
 
-.wp-module--in-bundle-collapsed {
-  /* Reserved for collapsed-state styling — children currently hidden
-   * via v-show. */
-}
-
-/* ── Populated ↔ Empty page swap ───────────────────────────────────────
- * Wraps both the populated layout (section label + cards + small add btn)
- * and the empty hero. mode="out-in" on the parent <Transition> sequences
- * the swap: populated fades out fully BEFORE empty fades in, so removing
- * the last module never causes the leaving card to stack visually with
- * the appearing hero. */
+/* Populated ↔ Empty page swap. */
 .wp-page { display: flex; flex-direction: column; gap: 6px; }
 .wp-page-enter-active,
 .wp-page-leave-active {
@@ -3172,42 +3130,22 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 }
 .wp-module.wp-disabled .wp-module-name { color: var(--wp-text3); }
 
-/* Card-border tint by state. Rules are ordered low-to-high precedence
- * — equal-specificity selectors lose the cascade race to whichever
- * appears LAST, so the order below reflects severity:
- *   info (conflict)  → indigo  — lowest
- *   modified         → orange  — user override
- *   warning (conflict) → amber  — duplicate / shadow
- *   drift            → amber   — library has newer payload
- *   missing          → red     — uuid gone from library
- *   error (conflict) → red     — broken graph — highest
- * Adding a new tier means slotting it into the right place in this
- * cascade chain, NOT just appending. */
+/* Card-border tint by state — severity cascade (last selector wins).
+ * Order: info → modified → warning → drift → missing → error. */
 .wp-module.wp-conflict-info     { border-color: var(--wp-accent); }
 .wp-module.wp-state-modified    { border-color: var(--wp-status-modified); }
 .wp-module.wp-conflict-warning  { border-color: var(--wp-amber); }
 .wp-module.wp-state-drift       { border-color: var(--wp-warn); }
 .wp-module.wp-state-missing     { border-color: var(--wp-danger); }
 .wp-module.wp-conflict-error    { border-color: var(--wp-red); }
-/* Status-state full-border + bg tint (Task 8).
- * Applied in ADDITION to the existing legacy state classes so the
- * kind border-left is preserved while the full border reflects status. */
+/* Status-state full-border + bg tint, kind border-left preserved. */
 .wp-module.wp-mod--mod   { border-color: var(--wp-status-modified); background: color-mix(in srgb, var(--wp-status-modified) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--drift { border-color: var(--wp-warn);            background: color-mix(in srgb, var(--wp-warn) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--err   { border-color: var(--wp-danger);          background: color-mix(in srgb, var(--wp-danger) 8%, var(--wp-bg3)); }
 
-/* Phase 3a — drop indicators. Two states ride on .wp-drop-target:
- *   - .wp-drop-target--before → insertion line ABOVE this card
- *   - .wp-drop-target--after  → insertion line BELOW this card
- * The line renders as a 3px violet bar via ::before / ::after pseudo
- * pinned to the card edge. The card's own border also gets the
- * accent color so the drop target reads as a unified affordance.
- *
- * Block sits LAST in the cascade so drop feedback wins over the
- * state-color borders (mod/drift/err) when a user drags onto an
- * already-flagged module — drop signal trumps state signal because
- * the user's intent is "I want to put this here", not "this is
- * broken". State borders re-assert the moment the drag releases. */
+/* Drop indicators. .wp-drop-target--before/--after paint a 3px bar via
+ * pseudo elements; .wp-drop-target tints the border. Block sits last so
+ * drop feedback wins over state-color borders during a drag. */
 .wp-module.wp-drop-target {
   border-color: var(--wp-accent);
 }
@@ -3245,10 +3183,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
-/* Narrow 6-dot grip handle. The card itself is draggable so a click on
- * any other part still drags — but the `cursor: grab` is scoped here so
- * the hand cursor only signals on the explicit affordance, like Notion /
- * Linear. Subtle by default, brightens on row hover/focus. */
+/* Drag handle — grab cursor scoped here, full card stays draggable. */
 .wp-drag-handle {
   display: inline-flex;
   align-items: center;
@@ -3278,12 +3213,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   width: 14px;
   flex-shrink: 0;
 }
-/* PrimeIcons set their own `font-size: 1rem` (16px) on `.pi`, so the
- * parent button's font-size never reaches the glyph. Target `.pi`
- * directly to shrink the caret. 10px lands at ~71% of the 14px
- * button width — proportional to standard tree disclosure idioms
- * (macOS Finder, VSCode tree) without becoming hard to spot. Button
- * dimensions stay the same so the hit area stays comfortable. */
+/* Target `.pi` directly — PrimeIcons sets 16px on `.pi` itself. */
 .wp-collapse-btn .pi { font-size: 10px; }
 .wp-collapse-btn:hover { color: var(--wp-text); }
 
