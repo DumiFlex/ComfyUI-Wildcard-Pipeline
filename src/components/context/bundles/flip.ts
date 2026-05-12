@@ -151,7 +151,7 @@ export async function animateEnterBatch(
  * reset, fork). Staggered so bulk refresh cascades. No-op when reduce-
  * motion is on.
  */
-const FLASH_DURATION_MS = 1500;
+const FLASH_DURATION_MS = MOTION_PULSE_MS;  // 420ms — matches drop pulse timing
 export async function flashRows(
   uids: readonly (string | null | undefined)[],
   container: HTMLElement,

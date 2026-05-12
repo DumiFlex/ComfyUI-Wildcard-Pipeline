@@ -2103,7 +2103,7 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
       );
       if (el) {
         el.classList.add("wp-module--flash");
-        setTimeout(() => el.classList.remove("wp-module--flash"), 1500);
+        setTimeout(() => el.classList.remove("wp-module--flash"), 420);
       }
     });
   }
@@ -3705,11 +3705,16 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   80% { transform: translateX(2px); }
 }
 @keyframes wp-flash {
-  0% { box-shadow: 0 0 0 2px var(--wp-kind-combine), 0 0 14px rgba(52,211,153,0.4); }
-  100% { box-shadow: none; }
+  /* Green ring (kind-combine) keeps library-op semantics distinct from
+   * drop pulse's purple accent. Timing mirrors wp-drop-pulse — 420ms
+   * ease-out with the same 35% peak — so the SHAPE feels identical to
+   * the drop flash without overstaying. Previously 1500ms felt overstayed. */
+  0%   { box-shadow: 0 0 0 0 var(--wp-kind-combine), 0 0 0 0 transparent; }
+  35%  { box-shadow: 0 0 0 3px var(--wp-kind-combine), 0 0 16px rgba(52,211,153,0.45); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
 }
 .wp-module--shake { animation: wp-shake 200ms ease-in-out; }
-.wp-module--flash { animation: wp-flash 1500ms ease-out; border-color: var(--wp-kind-combine); }
+.wp-module--flash { animation: wp-flash 420ms ease-out; }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
