@@ -93,10 +93,11 @@ const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
 const dragOver = ref<DropZone>(null);
 
-// Disables `.wp-list-move` for one frame around bundle removal so the
-// children + overlay vanish on the same tick as the frame, rather than
-// FLIP-sliding subsequent rows up for 250ms.
+// Disables `.wp-list-move` + `.wp-list-leave-active` transitions while
+// active so children + overlay vanish on the same tick as the frame
+// (and rows below snap up instead of sliding for 250ms FLIP).
 const suppressMove = ref(false);
+let suppressMoveTimer: number | null = null;
 
 // Projects active zone onto the row's edge indicator. Bundle zones
 // before/after anchor to the bundle's start/end row; inside → null
@@ -234,6 +235,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("dragend", clearDragHover);
   if (dragState.value?.sourceNodeId === props.nodeId) dragState.value = null;
+  if (suppressMoveTimer != null) {
+    window.clearTimeout(suppressMoveTimer);
+    suppressMoveTimer = null;
+  }
   unsubscribeDrift();
 });
 
@@ -545,7 +550,19 @@ watch(
   { deep: true, flush: "post" },
 );
 
-async function removeBundle(uid: string): Promise<void> {
+// Suppresses wp-list-move + wp-list-leave-active transitions for the
+// duration; covers the longest TransitionGroup transition (250ms FLIP)
+// plus a margin so leaving rows + FLIP-moving siblings all snap.
+function holdSuppressMove(): void {
+  suppressMove.value = true;
+  if (suppressMoveTimer != null) window.clearTimeout(suppressMoveTimer);
+  suppressMoveTimer = window.setTimeout(() => {
+    suppressMove.value = false;
+    suppressMoveTimer = null;
+  }, 300);
+}
+
+function removeBundle(uid: string): void {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
@@ -567,18 +584,14 @@ async function removeBundle(uid: string): Promise<void> {
       }
       return b;
     });
-  // Suppress FLIP-move for one frame so rows below the deleted range
-  // don't slide for 250ms — visual stagger that read as "modules linger
-  // after the bundle is gone" (#8).
-  suppressMove.value = true;
+  // Suppress FLIP-move + leave-active for the transition window so the
+  // overlay, children, and follow-up rows all snap on the same frame.
+  holdSuppressMove();
   value.value = {
     ...value.value,
     modules: [...before, ...after],
     bundles: remainingBundles,
   };
-  await nextTick();
-  await new Promise((r) => requestAnimationFrame(r));
-  suppressMove.value = false;
 }
 
 /** Detach bundle frame — keep children as standalone modules but
@@ -2171,8 +2184,12 @@ function onDragEnd() {
 
 let sameNodeDropHandled = false;
 
-// Bundle members translate row hover → bundle zone (first-child top
-// half = before, last-child bottom half = after, else = inside).
+// Dragover on a row: standalone rows produce row zones (before/after);
+// any bundle-member row resolves to its bundle's "inside" zone — the
+// frame highlights as a single drop target. "before-bundle" comes from
+// the bundle header (dragover handler on BundleHeader); "after-bundle"
+// comes from the row immediately after the bundle range (treated as a
+// row "before" drop on the post-bundle row).
 function onRowDragOver(ev: DragEvent, idx: number) {
   if (!dragState.value) return;
   ev.preventDefault();
@@ -2180,10 +2197,25 @@ function onRowDragOver(ev: DragEvent, idx: number) {
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
   const pos: "before" | "after" = ev.clientY < r.top + r.height / 2 ? "before" : "after";
   const b = (value.value.bundles ?? []).find((x) => x.start_idx <= idx && idx <= x.end_idx);
-  if (!b) { dragOver.value = { kind: "row", idx, pos }; return; }
-  const z = idx === b.start_idx && pos === "before" ? "before"
-    : idx === b.end_idx && pos === "after" ? "after" : "inside";
-  dragOver.value = { kind: "bundle", uid: b._uid, zone: z };
+  if (b) { dragOver.value = { kind: "bundle", uid: b._uid, zone: "inside" }; return; }
+  dragOver.value = { kind: "row", idx, pos };
+}
+
+// Bundle header drop target: top half = drop ABOVE the bundle (standalone
+// insert at start_idx); bottom half = drop INTO the bundle as a child.
+function onBundleHeaderDragOver(ev: DragEvent, uid: string) {
+  if (!dragState.value) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  const top = ev.clientY < r.top + r.height / 2;
+  dragOver.value = { kind: "bundle", uid, zone: top ? "before" : "inside" };
+}
+
+function onBundleHeaderDrop(ev: DragEvent) {
+  // Route through the same drop handler; targetIdx is irrelevant once
+  // dragOver carries a bundle zone.
+  onDrop(ev, null);
 }
 
 function onEndDragOver(ev: DragEvent) {
@@ -2238,6 +2270,11 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       }
     }
     list.splice(ii, 0, ...range);
+    // Suppress FLIP so the bundle frame, its children, and surrounding
+    // rows all reposition on the same frame — without this, the overlay
+    // re-measures instantly while children FLIP-slide for 250ms (#5
+    // jank).
+    holdSuppressMove();
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
     sameNodeDropHandled = true;
     return;
@@ -2468,6 +2505,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           @contextmenu="(ev) => openBundleContextMenu(ev, bundleStartingAt(idx)!._uid)"
           @dragstart="(ev) => onBundleDragStart(ev, bundleStartingAt(idx)!._uid)"
           @dragend="onDragEnd"
+          @dragover="(ev) => onBundleHeaderDragOver(ev, bundleStartingAt(idx)!._uid)"
+          @drop="onBundleHeaderDrop"
         />
         <div
         v-show="!hiddenByBundleCollapse(idx)"
@@ -3693,9 +3732,18 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
 /* FLIP reorder — TransitionGroup applies wp-list-move when items reorder. */
 .wp-list-move { transition: transform 0.25s ease-out; }
-/* Bundle delete suppresses the FLIP move for one frame so rows below
- * snap up alongside the frame instead of sliding for 250ms (#8). */
-.wp-modules[data-suppress-move="true"] .wp-list-move { transition: none !important; }
+/* Leave is instant. `.wp-module` declares `transition: transform 0.15s`
+ * as its base, which makes Vue's TransitionGroup wait for a phantom
+ * transitionend before tearing leaving rows out. Killing the transition
+ * on leave-active short-circuits that wait. */
+.wp-list-leave-active { transition: none !important; }
+/* Bundle delete / bundle drag suppress both FLIP move AND leave-active
+ * transitions for the full 300ms hold so the overlay, children, and
+ * follow-up rows all reposition on the same paint (#5 jank + #8). */
+.wp-modules[data-suppress-move="true"] .wp-list-move,
+.wp-modules[data-suppress-move="true"] .wp-list-leave-active {
+  transition: none !important;
+}
 /* Items entering the list (e.g. add via picker) — fade + slide in.
  * Leave is intentionally instant; the dying card lingering during a
  * fade-out felt sluggish, especially when chained with a FLIP move. */
