@@ -2541,7 +2541,13 @@ provide(ModuleRowCtxKey, moduleRowCtx);
          fades in, so the leaving card and the appearing hero never visually
          stack. Recovery panel + drop-zone live outside the swap. -->
     <Transition name="wp-page" mode="out-in">
-      <div v-if="!isEmpty" key="populated" class="wp-page">
+      <div
+        v-if="!isEmpty"
+        key="populated"
+        class="wp-page"
+        @dragover="onListDragOver"
+        @drop="(ev) => onDrop(ev, null)"
+      >
         <!-- Toolbar: module count + bulk-drift refresh + collapse/expand/toggle-all. -->
         <div class="wp-w-toolbar">
           <span class="wp-w-toolbar-label">modules</span>
@@ -2589,8 +2595,6 @@ provide(ModuleRowCtxKey, moduleRowCtx);
         <div
           class="wp-modules-frame"
           ref="modulesContainer"
-          @dragover="onListDragOver"
-          @drop="(ev) => onDrop(ev, null)"
         >
         <!-- Persistent drop-zone bar. Single element kept under the
              modules container; position computed from `dragOver`. -->
