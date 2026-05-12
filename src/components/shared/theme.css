@@ -147,6 +147,23 @@
   --wp-chip-pad: 3px 5px;
   --wp-chip-font: 9px;
   --wp-mod-font: 12px;
+
+  /* ── Motion ────────────────────────────────────────────────────────────
+   * Duration + curve tokens shared across WP surfaces. Reduce-motion is
+   * enforced by `.wp-a11y-no-motion` body class (see a11y.css) which forces
+   * transition-duration + animation-duration to 0.01ms across .wp-context
+   * descendants. New surfaces under .wp-* roots inherit the override
+   * automatically; JS-driven motion gates on the same body class via
+   * src/components/context/bundles/flip.ts:shouldAnimate(). */
+  --wp-motion-collapse: 240ms;   /* frame height + children opacity */
+  --wp-motion-flip:     280ms;   /* row reorder transform */
+  --wp-motion-pulse:    420ms;   /* drop landing pulse, existing keyframe */
+  --wp-motion-fade:     180ms;   /* leave-active opacity */
+  --wp-motion-stagger:   60ms;   /* per-row delay in multi-child drop pulse */
+
+  --wp-motion-curve-collapse: cubic-bezier(0.4, 0, 0.2, 1);    /* Material standard */
+  --wp-motion-curve-flip:     cubic-bezier(0.22, 1, 0.36, 1);  /* decel-heavy */
+  --wp-motion-curve-linear:   linear;                          /* opacity masks */
 }
 
 /* ── Phase 5.5.7 — light theme overrides + canvas/node namespace ───────
