@@ -91,8 +91,10 @@ const summary = computed(() => {
       :title="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
     >
+      <!-- Caret stays pi-caret-down — parent .wp-bundle--collapsed
+           rotates -90deg via CSS for the transition (Phase B.1). -->
       <i
-        :class="['pi', instance.collapsed ? 'pi-caret-right' : 'pi-caret-down']"
+        class="pi pi-caret-down"
         aria-hidden="true"
       ></i>
     </button>
@@ -126,8 +128,9 @@ const summary = computed(() => {
 @import "../../shared/theme.css";
 
 .wp-bundle-header {
-  /* The bundle frame box is painted by `.wp-bundle-overlay` in
-   * ContextWidget. Header carries only its own bottom divider
+  /* The bundle frame box is painted by `.wp-bundle` directly (Batch 2
+   * replaced the absolute-positioned overlay with a real DOM wrapper).
+   * Header carries only its own bottom divider
    * separating it from the children below — no full border, no
    * radius, no frame walls. When the bundle is collapsed, the
    * bottom divider hides (no children below to separate from).
@@ -239,7 +242,9 @@ const summary = computed(() => {
 }
 .wp-bundle-icon .pi { font-size: 12px; }
 .wp-bundle-chip {
-  font: 600 9px/1 var(--wp-font-sans);
+  /* line-height 1.2 keeps room for descenders — line-height: 1 clipped
+   * the bottom of letters like 'g' / 'p' / 'y' in the rendered chip. */
+  font: 600 9px/1.2 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 5px;
@@ -250,14 +255,14 @@ const summary = computed(() => {
 }
 .wp-bundle-name {
   flex: 1;
-  font: 600 12px/1 var(--wp-font-sans);
+  font: 600 12px/1.3 var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .wp-bundle-summary {
-  font: 500 10px/1 var(--wp-font-sans);
+  font: 500 10px/1.3 var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
   flex-shrink: 0;
 }
@@ -289,12 +294,12 @@ const summary = computed(() => {
   font-size: 11px;
 }
 .wp-bundle-action--danger:hover {
-  /* Trash button hover — shift toward danger red so the destructive
-   * intent is clear even though the default tint is bundle color. */
-  background: color-mix(in srgb, var(--wp-danger) 22%, transparent);
-  border-color: var(--wp-danger);
+  /* Trash hover — mirror module .wp-btn--danger:hover pattern: red
+   * icon, subtle red-tinted border, NOT a full danger-color bg. Bundle
+   * color stays in the background so the button still reads as
+   * 'destructive on THIS bundle' without flipping the whole chip red. */
+  background: color-mix(in srgb, var(--b) 32%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--b));
   color: var(--wp-danger);
 }
-.wp-bundle-action:hover { background: var(--wp-bg3); }
-.wp-bundle-action--danger:hover { color: var(--wp-red); }
 </style>

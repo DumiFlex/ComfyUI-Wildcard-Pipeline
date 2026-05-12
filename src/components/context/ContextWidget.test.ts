@@ -1758,8 +1758,15 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     await trash.trigger("click");
     // Synchronously after the click, the TransitionGroup container
     // should carry data-suppress-move="true" before the rAF clears it.
+    // (holdSuppressMove() runs before the await on the leave animation.)
     const group = wrapper.find(".wp-modules");
     expect(group.attributes("data-suppress-move")).toBe("true");
+    // Phase B.6: removeBundle is now async — it awaits MOTION_FADE_MS
+    // (180ms) for the bundle wrapper's --leaving fade before splicing.
+    // Wait for the full removal sequence to settle before asserting on
+    // the mutated state.
+    await new Promise(r => setTimeout(r, 220));
+    await flushPromises();
     // Single state mutation — onChange fires once for both modules + bundles.
     expect(onChange).toHaveBeenCalled();
     const last = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
@@ -1863,6 +1870,65 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     expect(overlay.classes()).not.toContain("wp-bundle--drop-inside");
 
     await cards[0].trigger("dragend");
+    wrapper.unmount();
+  });
+});
+
+describe("ContextWidget bundle collapse class (Phase B.1)", () => {
+  function bundleJson(collapsed: boolean): string {
+    return JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "child-a", type: "wildcard", enabled: true,
+          meta: { name: "subject" }, entries: [],
+          payload: { var_binding: "v", options: [{ id: "o1", value: "x", weight: 1 }] },
+          payload_hash: "h1",
+          bundle_origin: "buid-test01",
+        },
+      ],
+      bundles: [
+        {
+          _uid: "buid-test01", library_id: "lib-1",
+          start_idx: 0, end_idx: 0,
+          enabled: true, collapsed,
+          inserted_at_hash: "ph1", name: "Test", color: null,
+        },
+      ],
+    });
+  }
+
+  it("applies .wp-bundle--collapsed when bundle.collapsed is true", async () => {
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 800, initialJson: bundleJson(true), upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    const bundle = wrapper.find(".wp-bundle");
+    expect(bundle.exists()).toBe(true);
+    expect(bundle.classes()).toContain("wp-bundle--collapsed");
+    wrapper.unmount();
+  });
+
+  it("omits .wp-bundle--collapsed when bundle.collapsed is false", async () => {
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 801, initialJson: bundleJson(false), upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    const bundle = wrapper.find(".wp-bundle");
+    expect(bundle.exists()).toBe(true);
+    expect(bundle.classes()).not.toContain("wp-bundle--collapsed");
+    wrapper.unmount();
+  });
+
+  it("renders .wp-bundle-children in DOM even when collapsed (CSS hides via opacity + grid-template-rows)", async () => {
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 802, initialJson: bundleJson(true), upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    // v-show was dropped in Phase B.1 — children stay in DOM so the
+    // transition can animate frame + opacity together.
+    const children = wrapper.find(".wp-bundle-children");
+    expect(children.exists()).toBe(true);
     wrapper.unmount();
   });
 });

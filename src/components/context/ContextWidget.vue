@@ -24,6 +24,16 @@ import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
+import {
+  captureRects,
+  applyFlip,
+  withEnterAnimation,
+  withLeaveAnimation,
+  animateEnterBatch,
+  flashRows,
+  MOTION_FLIP_MS,
+  MOTION_CURVE_FLIP,
+} from "./bundles/flip";
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -101,7 +111,13 @@ const dragOver = ref<DropZone>(null);
 const draggingModuleUid = ref<string | null>(null);
 // `_uid` of the most recently dropped row — pulses for 450ms after a
 // drop lands, then clears.
-const recentDropUid = ref<string | null>(null);
+// Phase B.4: Set + order map for multi-child pulse on cross-node bundle
+// drops. Each landed uid gets a CSS animation-delay = index * 60ms via
+// pulseDelayFor; the .wp-drop-pulse keyframe runs at MOTION_PULSE_MS
+// (420ms) so the last row's animation finishes at
+// 420 + (n-1)*60ms after the drop. Timer clears the Set + Map together.
+const recentDropUids = ref<Set<string>>(new Set());
+const pulseOrder = ref<Map<string, number>>(new Map());
 let dropPulseTimer: number | null = null;
 
 // Disables `.wp-list-move` + `.wp-list-leave-active` transitions while
@@ -435,6 +451,17 @@ async function onPickBundle(bundleId: string): Promise<void> {
       modules: [...value.value.modules, ...splice],
       bundles: [...(value.value.bundles ?? []), bundleInstance],
     };
+    // Phase B.6: animate the new bundle wrapper + its children with
+    // the same fade-slide as picker-add. Bundle wrapper carries the
+    // same --arriving/--arrived classes thanks to the .wp-bundle CSS
+    // selectors. UIDs: bundle._uid + each child._uid.
+    await nextTick();
+    if (modulesContainer.value) {
+      await animateEnterBatch(
+        [bundleInstance._uid, ...splice.map(c => c._uid)],
+        modulesContainer.value,
+      );
+    }
   } catch (e) {
     // Surface fetch / parse errors via the existing toast channel so
     // users see what went wrong without diving into devtools.
@@ -497,10 +524,74 @@ function holdSuppressMove(): void {
   }, 300);
 }
 
-function removeBundle(uid: string): void {
+/**
+ * Capture FLIP rects at every list-level container in the widget.
+ * Returns a snapshot to feed back into `playFlipSnapshot` after Vue
+ * commits the mutated `value.value` and re-renders.
+ *
+ * Two scope levels are captured non-overlappingly:
+ *   - `.wp-modules` direct children: bundles + standalone modules
+ *   - each `.wp-bundle-children` direct children: in-bundle modules
+ *
+ * Capturing both lets us animate top-level reorders AND in-bundle
+ * reorders cleanly. A bundle moving as a unit only FLIPs at the top
+ * level; its children get the transform via inheritance and skip the
+ * inner pass (their rects don't change relative to the bundle).
+ */
+type FlipSnapshot = { scope: HTMLElement; before: Map<string, DOMRect> }[];
+
+function captureFlipSnapshot(): FlipSnapshot {
+  const frame = modulesContainer.value;
+  if (!frame) return [];
+  const snapshot: FlipSnapshot = [];
+  const top = frame.querySelector<HTMLElement>(".wp-modules");
+  if (top) snapshot.push({ scope: top, before: captureRects(top, el => el.dataset.uid ?? null) });
+  for (const inner of Array.from(frame.querySelectorAll<HTMLElement>(".wp-bundle-children"))) {
+    snapshot.push({ scope: inner, before: captureRects(inner, el => el.dataset.uid ?? null) });
+  }
+  return snapshot;
+}
+
+/**
+ * Drops a uid from every scope's pre-mutation rect map so playFlipSnapshot
+ * leaves that element alone. Used when the row should animate via a
+ * different mechanism (e.g. --arriving fade-slide for cross-scope moves)
+ * — without this, the FLIP inline transform would override the class-
+ * driven transition.
+ */
+function excludeFromFlipSnapshot(snapshot: FlipSnapshot, uid: string): void {
+  for (const entry of snapshot) entry.before.delete(uid);
+}
+
+function playFlipSnapshot(snapshot: FlipSnapshot): void {
+  for (const { scope, before } of snapshot) {
+    applyFlip(scope, before, el => el.dataset.uid ?? null, {
+      duration: MOTION_FLIP_MS,
+      ease: MOTION_CURVE_FLIP,
+    });
+  }
+}
+
+async function removeBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+
+  // Suppress legacy wp-list-move + leave-active CSS immediately so any
+  // downstream layout shifts during the fade don't double-animate via
+  // the old TransitionGroup leftover rule. (#8 regression test asserts
+  // data-suppress-move="true" lands synchronously after the call.)
+  holdSuppressMove();
+
+  // Phase B.6: fade the bundle wrapper out via --leaving before the
+  // splice. Bundle CSS responds to --leaving so the whole frame slides
+  // + fades together. Wait MOTION_FADE_MS, then mutate.
+  const scope = modulesContainer.value;
+  if (scope) {
+    await withLeaveAnimation(uid, scope, () => {});
+  }
+
+  const flipSnap = captureFlipSnapshot();
   // Drop all child modules in [start_idx..end_idx] from the flat
   // modules array AND drop the BundleInstance itself.
   const before = value.value.modules.slice(0, target.start_idx);
@@ -519,24 +610,31 @@ function removeBundle(uid: string): void {
       }
       return b;
     });
-  // Suppress FLIP-move + leave-active for the transition window so the
-  // overlay, children, and follow-up rows all snap on the same frame.
-  holdSuppressMove();
   value.value = {
     ...value.value,
     modules: [...before, ...after],
     bundles: remainingBundles,
   };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
 }
 
 /** Detach bundle frame — keep children as standalone modules but
  *  drop the bundle instance + clear `bundle_origin` on each child.
  *  Useful when user wants to keep what's inside but no longer wants
  *  the group wrapping. */
-function detachBundle(uid: string): void {
+async function detachBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  // Phase B.6 polish: fade the bundle wrapper out via --leaving before
+  // the splice. Symmetry with removeBundle — wrapper disappears with a
+  // visual exit, children stay (they will rise via FLIP into the gap).
+  const scope = modulesContainer.value;
+  if (scope) {
+    await withLeaveAnimation(uid, scope, () => {});
+  }
+  const flipSnap = captureFlipSnapshot();
   const nextModules = value.value.modules.map((m, idx) => {
     if (idx < target.start_idx || idx > target.end_idx) return m;
     // Strip bundle_origin from this child; spread so other fields
@@ -551,6 +649,8 @@ function detachBundle(uid: string): void {
     modules: nextModules,
     bundles: remainingBundles,
   };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
 }
 
 /** Duplicate bundle — re-fetch the library entry + run insert
@@ -637,6 +737,15 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       modules: [...before, ...newChildren, ...after],
       bundles: nextBundles,
     };
+    await nextTick();
+    // Flash every fresh child + the bundle wrapper so the user sees
+    // which rows just got replaced with the library snapshot.
+    if (modulesContainer.value) {
+      void flashRows(
+        [target._uid, ...newChildren.map(c => c._uid)],
+        modulesContainer.value,
+      );
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushToast(`Reset failed: ${msg}`, { severity: "error" });
@@ -715,6 +824,13 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
       b._uid === uid ? { ...b, inserted_at_hash: updated.payload_hash } : b,
     );
     value.value = { ...value.value, bundles: nextBundles };
+    await nextTick();
+    // Flash the bundle wrapper so the user gets a visible confirm that
+    // 'this just got pushed to the library' — wrapper-only (children
+    // didn't change locally; library now matches them).
+    if (modulesContainer.value) {
+      void flashRows([target._uid], modulesContainer.value, 0);
+    }
     pushToast(`Saved "${updated.name}" to library`, { severity: "success" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -735,6 +851,7 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
   const m = value.value.modules[idx];
   if (!m) return;
   const name = m.meta?.name?.trim() || "New Bundle";
+  const flipSnap = captureFlipSnapshot();
   try {
     const entry = await api.bundles.create({
       name, color: null, children: [toChildSnapshot(m)],
@@ -752,6 +869,16 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
       ...value.value, modules: nextModules,
       bundles: [...(value.value.bundles ?? []), bundleInstance],
     };
+    await nextTick();
+    // Sibling rows shift to accommodate the new bundle wrapper around
+    // the wrapped row. Bundle wrapper fades-slides in; the wrapped
+    // module flashes (green ring) to confirm 'this is what just got
+    // wrapped'.
+    playFlipSnapshot(flipSnap);
+    if (modulesContainer.value) {
+      void animateEnterBatch([bundleInstance._uid], modulesContainer.value);
+      void flashRows([m._uid], modulesContainer.value, 0);
+    }
     pushToast(`Wrapped into "${entry.name}" — rename in Library editor`, { severity: "success" });
   } catch (e) {
     pushToast(`Wrap failed: ${e instanceof Error ? e.message : String(e)}`, { severity: "error" });
@@ -1072,6 +1199,10 @@ async function refreshOne(idx: number): Promise<void> {
     const next = [...value.value.modules];
     next[idx] = merged;
     value.value.modules = next;
+    await nextTick();
+    if (modulesContainer.value) {
+      void flashRows([merged._uid], modulesContainer.value, 0);
+    }
     pushToast(`Refreshed "${merged.meta.name || merged.type}".`, { severity: "success" });
     await forceRefreshHashes();
   } catch (err) {
@@ -1106,12 +1237,20 @@ async function refreshAllDrifted(): Promise<void> {
       queueByUuid.set(r.id, q);
     }
     const next = [...value.value.modules];
+    const refreshedUids: string[] = [];
     for (const i of driftedIdx) {
       const m = next[i];
       const merged = queueByUuid.get(m.id)?.shift();
-      if (merged) next[i] = merged;
+      if (merged) {
+        next[i] = merged;
+        if (merged._uid) refreshedUids.push(merged._uid);
+      }
     }
     value.value.modules = next;
+    await nextTick();
+    if (modulesContainer.value && refreshedUids.length > 0) {
+      void flashRows(refreshedUids, modulesContainer.value);
+    }
     await forceRefreshHashes();
   }
 
@@ -1627,6 +1766,7 @@ async function onLibraryPick(uuids: string[]) {
       seenInBundle.add(uuid);
       newEntries.push({
         id: uuid,
+        _uid: newRowUid(),
         type: entry.type as ModuleEntry["type"],
         enabled: !startDisabled,
         meta: { name: entry.name, library_name: entry.name },
@@ -1650,6 +1790,18 @@ async function onLibraryPick(uuids: string[]) {
       ...value.value,
       modules: [...value.value.modules, ...newEntries],
     };
+
+    // Phase B.6: fade-in + slide-X each newly added row. No FLIP capture
+    // here — new rows are appended at the tail so existing rows don't
+    // shift. Two-pass batched class lifecycle ensures every row arrives
+    // simultaneously instead of in a staircase.
+    await nextTick();
+    if (modulesContainer.value) {
+      await animateEnterBatch(
+        newEntries.map(e => e._uid),
+        modulesContainer.value,
+      );
+    }
 
     const overflow = bundle.walkOverflow ?? [];
     if (overflow.length > 0) {
@@ -1680,7 +1832,7 @@ async function onLibraryPick(uuids: string[]) {
   }
 }
 
-function removeModule(idx: number) {
+async function removeModule(idx: number): Promise<void> {
   // Soft-delete: capture position + module, drop a toast with Undo. Undo
   // splices it back at its original index. Phase B: removes by index so
   // sibling rows (same uuid, multiple instances) only delete the
@@ -1689,6 +1841,18 @@ function removeModule(idx: number) {
   if (idx < 0 || idx >= value.value.modules.length) return;
   const removed = value.value.modules[idx];
   const moduleLabel = removed.meta.name?.trim() || "module";
+
+  // Phase B.6: animate row out with --leaving, then commit the splice.
+  // FLIP captures pre-mutation rects so sibling rows below slide up to
+  // close the gap once the row is gone.
+  const uid = removed._uid;
+  if (uid) {
+    await withLeaveAnimation(uid, modulesContainer.value ?? document.body, () => {
+      // No-op — mutation happens below after the await resolves.
+    });
+  }
+
+  const flipSnap = captureFlipSnapshot();
   const next = [...value.value.modules];
   next.splice(idx, 1);
 
@@ -1711,21 +1875,34 @@ function removeModule(idx: number) {
     .filter((b): b is NonNullable<typeof b> => b !== null);
 
   value.value = { ...value.value, modules: next, bundles: nextBundles };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
   pushToast(`Removed “${moduleLabel}”`, {
     severity: "info",
     action: {
       label: "Undo",
-      onSelect: () => {
-        const list = [...value.value.modules];
-        list.splice(Math.min(idx, list.length), 0, removed);
-        value.value = { ...value.value, modules: list };
+      onSelect: async () => {
+        const restoreUid = removed._uid;
+        const scope = modulesContainer.value;
+        if (restoreUid && scope) {
+          await withEnterAnimation(restoreUid, scope, () => {
+            const list = [...value.value.modules];
+            list.splice(Math.min(idx, list.length), 0, removed);
+            value.value = { ...value.value, modules: list };
+          });
+        } else {
+          const list = [...value.value.modules];
+          list.splice(Math.min(idx, list.length), 0, removed);
+          value.value = { ...value.value, modules: list };
+        }
       },
     },
   });
 }
 
-function duplicateModule(idx: number) {
+async function duplicateModule(idx: number): Promise<void> {
   if (idx < 0 || idx >= value.value.modules.length) return;
+  const flipSnap = captureFlipSnapshot();
   const list = [...value.value.modules];
   const i = idx;
   // Phase B: duplicate is a SIBLING — same uuid + payload_hash, only
@@ -1748,17 +1925,32 @@ function duplicateModule(idx: number) {
   }
   list.splice(i + 1, 0, copy);
   value.value = { ...value.value, modules: list };
+  await nextTick();
+  // Sibling rows below the inserted slot shift down via FLIP; the new
+  // row itself fades + slides in via animateEnterBatch.
+  playFlipSnapshot(flipSnap);
+  if (modulesContainer.value && copy._uid) {
+    await animateEnterBatch([copy._uid], modulesContainer.value);
+  }
   pushToast(`Duplicated "${list[i].meta.name?.trim() || "module"}" as sibling`, {
     severity: "success",
     lifeMs: 3000,
     action: {
       label: "Undo",
-      onSelect: () => {
-        // Splice the most recently added sibling at position i+1 — can't
-        // filter by id since the original shares it.
-        const cur = [...value.value.modules];
-        cur.splice(i + 1, 1);
-        value.value = { ...value.value, modules: cur };
+      onSelect: async () => {
+        const scope = modulesContainer.value;
+        const dupUid = copy._uid;
+        if (dupUid && scope) {
+          await withLeaveAnimation(dupUid, scope, () => {
+            const cur = [...value.value.modules];
+            cur.splice(i + 1, 1);
+            value.value = { ...value.value, modules: cur };
+          });
+        } else {
+          const cur = [...value.value.modules];
+          cur.splice(i + 1, 1);
+          value.value = { ...value.value, modules: cur };
+        }
       },
     },
   });
@@ -1911,7 +2103,7 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
       );
       if (el) {
         el.classList.add("wp-module--flash");
-        setTimeout(() => el.classList.remove("wp-module--flash"), 1500);
+        setTimeout(() => el.classList.remove("wp-module--flash"), 420);
       }
     });
   }
@@ -2079,15 +2271,42 @@ function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
   }
 }
 
-// Pulses the just-dropped module so the user sees where it landed.
-function pulseDrop(uid: string | undefined | null): void {
-  if (!uid) return;
+// Pulses the just-dropped module(s) so the user sees where they landed.
+// Accepts a single uid OR an array — cross-node bundle drops pass every
+// freshly-inserted child so all rows pulse (Phase B.4 bug fix).
+//
+// Pulse start is delayed by MOTION_FLIP_MS so the row has finished its
+// arriving fade-slide before the box-shadow ring fires. Without the
+// delay the pulse started mid-fade and the ring painted on a row whose
+// opacity was still transitioning — read as 'pulse before row arrived'.
+let dropPulseStartTimer: number | null = null;
+function pulseDrop(uids: string | string[] | undefined | null): void {
+  if (!uids) return;
+  const list = (Array.isArray(uids) ? uids : [uids]).filter((u): u is string => !!u);
+  if (list.length === 0) return;
   if (dropPulseTimer != null) window.clearTimeout(dropPulseTimer);
-  recentDropUid.value = uid;
-  dropPulseTimer = window.setTimeout(() => {
-    recentDropUid.value = null;
-    dropPulseTimer = null;
-  }, 460);
+  if (dropPulseStartTimer != null) window.clearTimeout(dropPulseStartTimer);
+  dropPulseStartTimer = window.setTimeout(() => {
+    recentDropUids.value = new Set(list);
+    pulseOrder.value = new Map(list.map((uid, i) => [uid, i]));
+    dropPulseStartTimer = null;
+    // Last pulse must complete: stagger * (n-1) + pulse duration + 50ms buffer.
+    const totalMs = 420 + (list.length - 1) * 60 + 50;
+    dropPulseTimer = window.setTimeout(() => {
+      recentDropUids.value = new Set();
+      pulseOrder.value = new Map();
+      dropPulseTimer = null;
+    }, totalMs);
+  }, MOTION_FLIP_MS);
+}
+
+// Per-row CSS animation-delay derived from pulse order. Returns "0ms"
+// when uid isn't in the current pulse batch — falls through harmlessly
+// because no .wp-drop-pulse class is applied either.
+function pulseDelayFor(uid: string | null | undefined): string {
+  if (!uid) return "0ms";
+  const idx = pulseOrder.value.get(uid);
+  return idx == null ? "0ms" : `${idx * 60}ms`;
 }
 
 // Bundle-as-unit drag — header drag handle initiates a "bundle" payload
@@ -2111,6 +2330,8 @@ function onBundleDragStart(ev: DragEvent, uid: string) {
     libraryId: b.library_id,
     bundleName: b.name,
     bundleColor: b.color ?? null,
+    bundleCollapsed: b.collapsed,
+    bundleEnabled: b.enabled,
     children,
   };
   if (ev.dataTransfer) {
@@ -2336,7 +2557,7 @@ function onContainerLeave(ev: DragEvent) {
   clearDragHover();
 }
 
-function onDrop(ev: DragEvent, targetIdx: number | null) {
+async function onDrop(ev: DragEvent, targetIdx: number | null) {
   ev.preventDefault();
   ev.stopPropagation();
   const ds = dragState.value;
@@ -2344,6 +2565,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   // Snapshot zone before clearing hover state.
   const zone: DropZone = dragOver.value ?? (targetIdx === null ? { kind: "end" } : null);
   dragOver.value = null;
+  // Capture pre-mutation rects for FLIP-move (Phase B.2). Captures top-
+  // level + every in-bundle child container so any reorder animates
+  // its scope after Vue commits + re-renders.
+  const flipSnap = captureFlipSnapshot();
 
   // Same-node bundle move — slice the whole range out + re-insert at zone.
   if (ds.kind === "bundle" && ds.sourceNodeId === props.nodeId) {
@@ -2378,9 +2603,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     list.splice(ii, 0, ...range);
     holdSuppressMove();
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
-    // Pulse the first row of the moved bundle so the user sees where it
-    // landed (the bundle frame itself doesn't host the pulse class).
-    pulseDrop(range[0]?._uid);
+    await nextTick();
+    playFlipSnapshot(flipSnap);
+    // Pulse the bundle wrapper AND every child so a collapsed bundle
+    // still shows a landing flash (children invisible when collapsed,
+    // so the wrapper carries the cue).
+    pulseDrop([ds.bundleUid, ...range.map(r => r._uid).filter((u): u is string => !!u)]);
     sameNodeDropHandled = true;
     return;
   }
@@ -2421,7 +2649,21 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     const preBundles = (value.value.bundles ?? []).map((b) =>
       stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
     );
+    // Cross-scope detection: row changed container (standalone ↔ bundle,
+    // or bundle A ↔ bundle B). When true, exclude the moved row from
+    // the FLIP pass and apply a fade-slide via --arriving instead — FLIP
+    // would only animate vertical translate within its OLD container,
+    // but a cross-scope move feels better as a horizontal entry into
+    // the new container.
+    const crossScope = (ds.sourceBundleUid ?? null) !== (stamp ?? null);
+    if (crossScope && m._uid) excludeFromFlipSnapshot(flipSnap, m._uid);
+
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, preBundles) };
+    await nextTick();
+    playFlipSnapshot(flipSnap);
+    if (crossScope && m._uid && modulesContainer.value) {
+      await animateEnterBatch([m._uid], modulesContainer.value);
+    }
     pulseDrop(m._uid);
     sameNodeDropHandled = true;
     return;
@@ -2455,6 +2697,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       end_idx: insertIdx + ds.children.length - 1,
       name: ds.bundleName,
       color: ds.bundleColor,
+      collapsed: ds.bundleCollapsed,
+      enabled: ds.bundleEnabled,
     };
     const newChildren = ds.children.map((c) => {
       const fresh = { ...c, _uid: newRowUid() } as ModuleEntry & { bundle_origin?: string };
@@ -2467,7 +2711,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       modules: list,
       bundles: reconcileBundleRanges(list, [...bundles, newBundle]),
     };
-    pulseDrop(newChildren[0]?._uid);
+    await nextTick();
+    playFlipSnapshot(flipSnap);
+    // Phase B.4: pulse the bundle wrapper AND every newly-inserted
+    // child. Collapsed bundles still get a visible landing cue via
+    // the wrapper; expanded bundles cascade child-by-child.
+    pulseDrop([newBundle._uid, ...newChildren.map(c => c._uid).filter((u): u is string => !!u)]);
     dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
   }
@@ -2547,6 +2796,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     modules: list,
     bundles: reconcileBundleRanges(list, preBundles),
   };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
   pulseDrop(inserted._uid);
   dragState.value = { ...ds, consumedBy: props.nodeId };
 }
@@ -2593,7 +2844,7 @@ const moduleRowCtx: ModuleRowCtx = {
   isModified, isDrifted, isMissingFromLibrary,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
-  rowGap, draggingModuleUid, recentDropUid,
+  rowGap, draggingModuleUid, recentDropUids, pulseDelayFor,
   toggleCollapsed, toggleEnabled, removeModule,
   toggleLockOnCard, toggleInternalOnCard,
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
@@ -2721,9 +2972,14 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             'wp-bundle--collapsed': item.bundle!.collapsed,
             'wp-bundle--drop-inside': isBundleInsideTarget(item.bundle!._uid),
             'wp-gap-before': bundleHeaderGap(item.bundle!._uid) === 'before',
+            'wp-drop-pulse': recentDropUids.has(item.bundle!._uid),
           }"
-          :style="{ '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)' }"
+          :style="{
+            '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)',
+            ...(recentDropUids.has(item.bundle!._uid) ? { animationDelay: pulseDelayFor(item.bundle!._uid) } : {}),
+          }"
           :data-bundle-uid="item.bundle!._uid"
+          :data-uid="item.bundle!._uid"
         >
           <BundleHeader
             :instance="item.bundle!"
@@ -2737,20 +2993,17 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
             @dragend="onDragEnd"
           />
-          <!-- Plain v-for, no inner TransitionGroup — nested
-               TransitionGroups produced ghosting when a row crossed
-               containers (outer leave + inner enter). Drop-target
-               animations now ride on the outer TransitionGroup +
-               CSS transitions on .wp-module's transform. -->
-          <div
-            v-show="!item.bundle!.collapsed"
-            class="wp-bundle-children"
-          >
+          <!-- Plain v-for, no inner TransitionGroup. Collapse/expand
+               is pure CSS via grid-template-rows on .wp-bundle — drop
+               v-show so children stay in DOM and the transition can
+               animate frame + opacity together (Phase B.1). -->
+          <div class="wp-bundle-children">
             <ModuleRow
               v-for="child in item.children"
               :key="child.module._uid ?? `${child.module.id}|${child.idx}`"
               :module="child.module"
               :idx="child.idx"
+              :data-uid="child.module._uid"
             />
           </div>
         </div>
@@ -2759,6 +3012,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
           v-else
           :module="item.module!"
           :idx="item.idx!"
+          :data-uid="item.module!._uid"
         />
       </template>
         </div>
@@ -3018,22 +3272,62 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 }
 
 /* Bundle as a real DOM container — header + children inside. Border
- * + bg paint via CSS on this div, growing/shrinking with content. */
+ * + bg paint via CSS on this div, growing/shrinking with content.
+ *
+ * Collapse/expand (Phase B.1) — pure CSS, no v-show, no JS measurement.
+ * grid-template-rows transitions from `auto 1fr` (expanded) to `auto 0fr`
+ * (collapsed); the children container needs min-height: 0 + overflow:
+ * hidden for the row size to collapse to zero. opacity + padding on the
+ * children fade together with the frame shrink. Header divider snaps off
+ * at start of collapse and snaps on at end of expand via 0s transition
+ * with strategic delays. */
 .wp-modules-frame { position: relative; }
 .wp-bundle {
   border: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
   border-left-width: 3px;
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
-  transition: border-width 0.12s, background 0.12s, box-shadow 0.12s;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  transition: grid-template-rows var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              border-width 0.12s ease,
+              background 0.12s ease,
+              box-shadow 0.12s ease;
+}
+.wp-bundle--collapsed {
+  grid-template-rows: auto 0fr;
 }
 .wp-bundle-children {
   padding: 5px 6px 7px 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              padding var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
+}
+.wp-bundle--collapsed .wp-bundle-children {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* Per-module animation INSIDE a bundle — modules actively fade + slide
+ * up toward the header during collapse, not just get clipped. This is
+ * what makes the joint motion visually obvious vs. "frame snaps and
+ * children disappear instantly". Overrides the default .wp-module
+ * transition (lines below) for the duration / curve. */
+.wp-bundle-children .wp-module {
+  transition: opacity var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              transform var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              background 0.14s ease,
+              border-color 0.14s ease;
+}
+.wp-bundle--collapsed .wp-bundle-children .wp-module {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
 }
 /* Frame highlight when crossing into the bundle. */
 .wp-bundle--drop-inside {
@@ -3041,6 +3335,26 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   border-left-width: 4px;
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 15%, transparent);
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
+}
+/* Header divider — snap off at start of collapse, snap on at END of expand.
+ * Default rule (no collapsed class) waits MOTION_COLLAPSE_MS before snapping
+ * border-bottom visible; collapsed rule snaps immediately to transparent. */
+.wp-bundle .wp-bundle-header {
+  transition: border-bottom-color 0s var(--wp-motion-collapse);
+}
+.wp-bundle--collapsed .wp-bundle-header {
+  border-bottom-color: transparent;
+  transition: border-bottom-color 0s 0s;
+}
+/* Caret rotation tied to bundle collapsed state — replaces the previous
+ * icon-class swap (pi-caret-down ↔ pi-caret-right). The BundleHeader
+ * template now always renders pi-caret-down so the CSS rotation owns
+ * the transition. */
+.wp-bundle .wp-bundle-collapse {
+  transition: transform var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
+}
+.wp-bundle--collapsed .wp-bundle-collapse {
+  transform: rotate(-90deg);
 }
 
 /* Populated ↔ Empty page swap. */
@@ -3391,11 +3705,16 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   80% { transform: translateX(2px); }
 }
 @keyframes wp-flash {
-  0% { box-shadow: 0 0 0 2px var(--wp-kind-combine), 0 0 14px rgba(52,211,153,0.4); }
-  100% { box-shadow: none; }
+  /* Green ring (kind-combine) keeps library-op semantics distinct from
+   * drop pulse's purple accent. Timing mirrors wp-drop-pulse — 420ms
+   * ease-out with the same 35% peak — so the SHAPE feels identical to
+   * the drop flash without overstaying. Previously 1500ms felt overstayed. */
+  0%   { box-shadow: 0 0 0 0 var(--wp-kind-combine), 0 0 0 0 transparent; }
+  35%  { box-shadow: 0 0 0 3px var(--wp-kind-combine), 0 0 16px rgba(52,211,153,0.45); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
 }
 .wp-module--shake { animation: wp-shake 200ms ease-in-out; }
-.wp-module--flash { animation: wp-flash 1500ms ease-out; border-color: var(--wp-kind-combine); }
+.wp-module--flash { animation: wp-flash 420ms ease-out; }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
@@ -3823,6 +4142,36 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * fade-out felt sluggish, especially when chained with a FLIP move. */
 .wp-list-enter-active { transition: opacity 0.2s, transform 0.2s; }
 .wp-list-enter-from { opacity: 0; transform: translateY(-4px); }
+
+/* ── Cross-container enter/leave + module add/remove (Phase B.3 + B.6) ──
+ * Manual orchestration via flip.ts:withEnterAnimation/withLeaveAnimation.
+ * No TransitionGroup — Batch 2 ghosting risk. Classes applied + removed
+ * by orchestration helpers; a row is in one state at a time. */
+.wp-module.wp-module--leaving,
+.wp-bundle.wp-module--leaving {
+  opacity: 0;
+  transform: translateX(-12px);
+  transition: opacity var(--wp-motion-fade) var(--wp-motion-curve-linear),
+              transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
+  pointer-events: none;
+}
+.wp-module.wp-module--arriving,
+.wp-bundle.wp-module--arriving {
+  /* Snap to from-state. Without `transition: none` the base
+   * `.wp-modules .wp-module` transition (opacity 0.14s) starts fading
+   * the row OUT when we add --arriving, then --arrived fights back —
+   * net effect is a barely-visible flicker instead of clear fade-in. */
+  opacity: 0;
+  transform: translateX(12px);
+  transition: none;
+}
+.wp-module.wp-module--arrived,
+.wp-bundle.wp-module--arrived {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity var(--wp-motion-fade) var(--wp-motion-curve-linear),
+              transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
+}
 
 /* Collapse/expand summary line */
 .wp-collapse-enter-active,
