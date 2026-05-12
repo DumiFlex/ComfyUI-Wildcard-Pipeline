@@ -107,7 +107,7 @@ describe("IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
     });
-    expect(w.find('[data-test="id-binding"]').classes()).toContain("id__input--mod");
+    expect(w.find('[data-test="id-binding"]').classes()).toContain("wp-vbind-input--mod");
   });
 
   it("typing binding equal to library default does NOT auto-clear (override sticks)", async () => {

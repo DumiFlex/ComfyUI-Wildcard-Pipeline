@@ -140,17 +140,17 @@ function onResetBinding(): void {
       <span class="id__key">Variable binding</span>
       <div class="id__input-row">
         <div
-          class="id__input-wrap"
+          class="wp-vbind-wrap"
           :class="{
-            'id__input-wrap--mod': bindingOverridden,
-            'id__input-wrap--collision-warn': collidesWith === 'sibling',
-            'id__input-wrap--collision-info': collidesWith === 'upstream',
+            'wp-vbind-wrap--mod': bindingOverridden,
+            'wp-vbind-wrap--collision-warn': collidesWith === 'sibling',
+            'wp-vbind-wrap--collision-info': collidesWith === 'upstream',
           }"
         >
-          <span class="id__input-prefix" data-test="id-binding-prefix">$</span>
+          <span class="wp-vbind-prefix" data-test="id-binding-prefix">$</span>
           <input
-            class="id__input id__input--prefixed"
-            :class="{ 'id__input--mod': bindingOverridden }"
+            class="wp-vbind-input"
+            :class="{ 'wp-vbind-input--mod': bindingOverridden }"
             data-test="id-binding"
             type="text"
             :value="bindingValue"
@@ -193,6 +193,8 @@ function onResetBinding(): void {
 </template>
 
 <style scoped>
+@import "../../../../shared/var-binding-input.css";
+
 .id {
   padding: 12px 16px;
   background: var(--wp-bg);
@@ -230,25 +232,12 @@ function onResetBinding(): void {
   outline: none;
 }
 .id__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-/* "Modified" highlight — diverges from library default. Accent
- * border + accent text, no badge. When the user types the value
- * back to library default the parent computed flips and the class
- * drops automatically. */
+/* "Modified" highlight for the display-name field. The binding input
+ * migrated to .wp-vbind-* — its --mod rule lives in the shared CSS. */
 .id__input--mod {
   border-color: var(--wp-accent);
   color: var(--wp-accent-text, var(--wp-text));
 }
-.id__input-wrap {
-  display: flex;
-  align-items: stretch;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  overflow: hidden;
-  flex: 1;
-}
-.id__input-wrap:focus-within { border-color: var(--wp-accent); }
-.id__input-wrap--mod { border-color: var(--wp-accent); }
 
 /* Per-field row: input + optional inline reset button. The reset
  * shows up only when the field is in `--mod` state, giving the user
@@ -278,32 +267,6 @@ function onResetBinding(): void {
   color: var(--wp-accent-text, var(--wp-text));
 }
 .id__reset .pi { font-size: 10px; }
-.id__input-prefix {
-  background: var(--wp-bg2);
-  color: var(--wp-text-dim, var(--wp-text3));
-  padding: 5px 9px;
-  border-right: 1px solid var(--wp-border);
-  font: 11px var(--wp-font-mono);
-  display: flex;
-  align-items: center;
-}
-.id__input--prefixed {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 5px 8px;
-}
-.id__input--prefixed:focus { outline: none; }
-
-/* Binding-collision visual: warn (sibling-same-node) is loud, info
- * (upstream-shadow) is muted. Tinted border outranks the `--mod`
- * accent so users see the collision before the modified-indicator. */
-.id__input-wrap--collision-warn {
-  border-color: var(--wp-status-modified, #f59e0b);
-}
-.id__input-wrap--collision-info {
-  border-color: var(--wp-accent);
-}
 .id__collision {
   margin-top: 6px;
   display: flex;

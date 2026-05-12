@@ -1,0 +1,56 @@
+/* Variable-binding input — canonical "user types $variable_name" pattern.
+ * Shared by IdentitySection (Wildcard editor), InjectorRow, and any
+ * future surface that takes a user-typed binding. Single source of
+ * truth so the input family stays visually consistent.
+ *
+ * Class vocabulary:
+ *   .wp-vbind-wrap        outer flex shell (bg, border, focus-within)
+ *   .wp-vbind-wrap--mod   user diverged from library default — accent
+ *   .wp-vbind-wrap--empty empty binding (Injector-specific) — warn
+ *   .wp-vbind-wrap--collision-warn  sibling name collision — status-modified
+ *   .wp-vbind-wrap--collision-info  upstream shadow — accent
+ *   .wp-vbind-prefix      `$` glyph cell — bg2 tinted, mono
+ *   .wp-vbind-input       text input inside the wrap — mono, transparent
+ *   .wp-vbind-input--mod  diverged-from-library text color
+ */
+.wp-vbind-wrap {
+  display: flex;
+  align-items: stretch;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+.wp-vbind-wrap:focus-within { border-color: var(--wp-accent); }
+.wp-vbind-wrap--mod         { border-color: var(--wp-accent); }
+.wp-vbind-wrap--empty       { border-color: var(--wp-warn); }
+.wp-vbind-wrap--collision-warn { border-color: var(--wp-status-modified, #f59e0b); }
+.wp-vbind-wrap--collision-info { border-color: var(--wp-accent); }
+
+.wp-vbind-prefix {
+  background: var(--wp-bg2);
+  color: var(--wp-text-dim, var(--wp-text3));
+  padding: 5px 9px;
+  border-right: 1px solid var(--wp-border);
+  font: 11px var(--wp-font-mono);
+  display: flex;
+  align-items: center;
+}
+.wp-vbind-wrap--mod .wp-vbind-prefix   { color: var(--wp-accent-text, var(--wp-text)); }
+.wp-vbind-wrap--empty .wp-vbind-prefix { color: var(--wp-warn); }
+
+.wp-vbind-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 5px 8px;
+  font: 11px var(--wp-font-mono);
+  color: var(--wp-text);
+  min-width: 0;
+  outline: none;
+}
+.wp-vbind-input--mod { color: var(--wp-accent-text, var(--wp-text)); }
+.wp-vbind-input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); font-style: italic; }
+.wp-vbind-wrap--empty .wp-vbind-input::placeholder { color: var(--wp-warn); }
