@@ -27,6 +27,10 @@ const emit = defineEmits<{
   (e: "toggle-enabled", next: boolean): void;
   (e: "remove"): void;
   (e: "contextmenu", ev: MouseEvent): void;
+  (e: "dragstart", ev: DragEvent): void;
+  (e: "dragend", ev: DragEvent): void;
+  (e: "dragover", ev: DragEvent): void;
+  (e: "drop", ev: DragEvent): void;
 }>();
 
 const frameColor = computed(() =>
@@ -51,6 +55,11 @@ const summary = computed(() => {
     :style="{ '--b': frameColor }"
     :data-bundle-uid="instance._uid"
     data-bundle-header
+    draggable="true"
+    @dragstart="(ev) => emit('dragstart', ev)"
+    @dragend="(ev) => emit('dragend', ev)"
+    @dragover="(ev) => emit('dragover', ev)"
+    @drop="(ev) => emit('drop', ev)"
     @contextmenu.stop.prevent="(ev) => emit('contextmenu', ev)"
   >
     <!-- Drag handle — exact same 6×12 SVG dot grid markup the
@@ -77,6 +86,7 @@ const summary = computed(() => {
     <button
       type="button"
       class="wp-bundle-collapse"
+      draggable="false"
       :aria-label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
       :title="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
@@ -86,7 +96,7 @@ const summary = computed(() => {
         aria-hidden="true"
       ></i>
     </button>
-    <label class="wp-bundle-enabled" :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'">
+    <label class="wp-bundle-enabled" draggable="false" :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'">
       <input
         type="checkbox"
         :checked="instance.enabled"
@@ -104,6 +114,7 @@ const summary = computed(() => {
     <button
       type="button"
       class="wp-bundle-action wp-bundle-action--danger"
+      draggable="false"
       title="Remove bundle (right-click for more)"
       :aria-label="`remove bundle ${name}`"
       @click.stop="emit('remove')"

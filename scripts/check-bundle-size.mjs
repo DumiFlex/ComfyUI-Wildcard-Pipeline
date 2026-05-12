@@ -17,8 +17,11 @@ const jsonPath = jsonIdx >= 0 ? args[jsonIdx + 1] : null;
 // 2026-05-10: total bumped 250 → 256 KB to fit Phase B duplicate/fork
 // system (per-kind save-to-library fork handlers + supporting helpers
 // + flash/shake CSS). Cycle was explicitly scoped + approved.
+// 2026-05-12: total bumped 256 → 300 KB to fit Batch 2 bundle drag/drop
+// overhaul + headroom for follow-up batches without per-task contortion.
+// Cycle was explicitly scoped + approved.
 const ENTRY_LIMIT = 30 * 1024;      // 30 KB
-const TOTAL_LIMIT = 256 * 1024;     // 256 KB
+const TOTAL_LIMIT = 300 * 1024;     // 300 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

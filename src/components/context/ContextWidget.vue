@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, provide } from "vue";
 import {
   parseWidgetJsonWithRecovery, serializeWidgetJson,
   emptyContextValue, newModuleId, newRowUid,
@@ -20,7 +20,10 @@ import {
 import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleHeader from "./bundles/BundleHeader.vue";
+import ModuleRow from "./ModuleRow.vue";
+import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
+import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -78,25 +81,7 @@ const props = withDefaults(defineProps<{
    *  the runtime-skipped state is visually obvious. Other modes are
    *  unused for WP_Context but accepted as default-active (run). */
   nodeMode?: number;
-  /**
-   * Pull the seed that the wildcard with the given module id
-   * ACTUALLY rolled with on the last run. For locked wildcards
-   * that's their `locked_seed`; for unlocked wildcards it's the
-   * chain seed at queue time. Captured by the seed widget's
-   * `beforeQueued` hook (see widgets/context.ts).
-   *
-   * Calling without a module id returns the chain-level snapshot.
-   *
-   * Used by the in-card lock toggle so re-locking after a run
-   * restores the seed THIS wildcard rolled with — not the chain
-   * seed (which it may have ignored if it was already locked) and
-   * not the previous lock value (which may be stale if the user
-   * unlocked + re-ran in between).
-   *
-   * Returns `null` when the user hasn't queued yet —
-   * `_ui.last_locked_seed` falls through next, then 0 as final default.
-   * Optional so headless mounts (tests) can skip wiring it.
-   */
+  /** Last-run seed reader keyed by module id. Null = user hasn't queued. */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
 }>(), {
@@ -108,19 +93,112 @@ const props = withDefaults(defineProps<{
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
-// Phase B: drag-over highlight by INDEX rather than id — sibling rows
-// share `m.id`, so id-based highlight would light up every sibling
-// when the user drags over any one of them.
-const dragOverIdx = ref<number | null>(null);
-const dragOverEnd = ref(false);
-/**
- * Phase 3a — drop position relative to `dragOverId`. The card-level
- * `dragover` handler measures the pointer's Y relative to the card's
- * bounding rect midpoint and sets this to "before" (top half) or
- * "after" (bottom half) so a 2px insertion line can render on the
- * right edge of the card. `null` while no drag is active.
- */
-const dragOverPos = ref<"before" | "after" | null>(null);
+const dragOver = ref<DropZone>(null);
+
+// `_uid` of the module currently being dragged (source row). Drives the
+// lifted-ghost class so the source visually picks up alongside the
+// browser's default drag image.
+const draggingModuleUid = ref<string | null>(null);
+// `_uid` of the most recently dropped row — pulses for 450ms after a
+// drop lands, then clears.
+const recentDropUid = ref<string | null>(null);
+let dropPulseTimer: number | null = null;
+
+// Disables `.wp-list-move` + `.wp-list-leave-active` transitions while
+// active so children + overlay vanish on the same tick as the frame
+// (and rows below snap up instead of sliding for 250ms FLIP).
+const suppressMove = ref(false);
+let suppressMoveTimer: number | null = null;
+
+// Gap-metaphor indicator: rows that own a "before"/"after" slot get a
+// margin so the gap opens; the bar element paints inside that gap.
+// Bundle "before"/"after" zones DO NOT project onto bundle-member rows
+// — the .wp-bundle div itself handles its outer margin via
+// bundleHeaderGap(), so projecting onto the first child would open a
+// second gap INSIDE the bundle while the bar paints OUTSIDE.
+function rowGap(idx: number): "before" | "after" | null {
+  const z = dragOver.value;
+  if (!z) return null;
+  if (z.kind === "row") return z.idx === idx ? z.pos : null;
+  if (z.kind === "bundle-slot" && z.targetIdx === idx) return z.before ? "before" : "after";
+  return null;
+}
+
+// True when the drag is targeting this bundle's frame — header bottom
+// half from outside, or any bundle-slot with crossing=true. Drives the
+// `.wp-bundle-overlay--drop-inside` highlight.
+function isBundleInsideTarget(uid: string): boolean {
+  const z = dragOver.value;
+  if (!z) return false;
+  if (z.kind === "bundle" && z.uid === uid && z.zone === "inside") return true;
+  if (z.kind === "bundle-slot" && z.uid === uid && z.crossing) return true;
+  return false;
+}
+
+// Bundle header gets `wp-gap-before` when the bundle "before" zone is
+// active — opens a gap above the header so the bar paints in it.
+function bundleHeaderGap(uid: string): "before" | null {
+  const z = dragOver.value;
+  return z?.kind === "bundle" && z.uid === uid && z.zone === "before" ? "before" : null;
+}
+
+// Computed gap-bar position relative to the modules container. Null when
+// no zone needs a bar (inside-bundle / end / null). Uses offsetTop/Left
+// walkers so the values reflect post-margin layout (not the mid-flight
+// rect from getBoundingClientRect).
+const gapBarStyle = computed<Record<string, string> | null>(() => {
+  const z = dragOver.value;
+  const container = modulesContainer.value;
+  if (!z || !container) return null;
+
+  let anchor: HTMLElement | null = null;
+  let beforeSide = true;
+  if (z.kind === "row") {
+    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${z.idx}"]`);
+    beforeSide = z.pos === "before";
+  } else if (z.kind === "bundle-slot") {
+    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${z.targetIdx}"]`);
+    beforeSide = z.before;
+  } else if (z.kind === "bundle" && z.zone === "before") {
+    anchor = container.querySelector<HTMLElement>(`[data-bundle-uid="${z.uid}"][data-bundle-header]`);
+    beforeSide = true;
+  } else if (z.kind === "bundle" && z.zone === "after") {
+    const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
+    if (b) anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${b.end_idx}"]`);
+    beforeSide = false;
+  } else if (z.kind === "end") {
+    const n = value.value.modules.length;
+    if (n === 0) return null;
+    const lastIdx = n - 1;
+    // If the last module lives inside a bundle, anchor on the bundle
+    // DIV itself so the bar lands below the bundle's frame border
+    // (anchoring on the last child puts the bar inside the bundle's
+    // padding-bottom area).
+    const lastBundle = (value.value.bundles ?? []).find((b) => b.end_idx === lastIdx);
+    if (lastBundle) {
+      anchor = container.querySelector<HTMLElement>(`.wp-bundle[data-bundle-uid="${lastBundle._uid}"]`);
+    } else {
+      anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${lastIdx}"]`);
+    }
+    beforeSide = false;
+  } else {
+    return null;
+  }
+  if (!anchor) return null;
+
+  // Walk offsetTop/Left from anchor up to the modules container so the
+  // values reflect the post-margin layout immediately.
+  let oTop = 0;
+  let oLeft = 0;
+  for (let cur: HTMLElement | null = anchor; cur && cur !== container; cur = cur.offsetParent as HTMLElement | null) {
+    oTop += cur.offsetTop;
+    oLeft += cur.offsetLeft;
+  }
+  const h = anchor.offsetHeight;
+  const w = anchor.offsetWidth;
+  const y = beforeSide ? oTop - 7 : oTop + h + 7;
+  return { top: `${y}px`, left: `${oLeft}px`, width: `${w}px` };
+});
 
 const ctxMenu = ref<{
   visible: boolean;
@@ -222,10 +300,8 @@ const siblingNodeVars = computed<string[]>(() => {
 });
 
 function clearDragHover() {
-  if (dragOverIdx.value === null && !dragOverEnd.value && dragOverPos.value === null) return;
-  dragOverIdx.value = null;
-  dragOverEnd.value = false;
-  dragOverPos.value = null;
+  if (dragOver.value === null) return;
+  dragOver.value = null;
 }
 
 onMounted(() => {
@@ -238,6 +314,14 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("dragend", clearDragHover);
   if (dragState.value?.sourceNodeId === props.nodeId) dragState.value = null;
+  if (suppressMoveTimer != null) {
+    window.clearTimeout(suppressMoveTimer);
+    suppressMoveTimer = null;
+  }
+  if (dropPulseTimer != null) {
+    window.clearTimeout(dropPulseTimer);
+    dropPulseTimer = null;
+  }
   unsubscribeDrift();
 });
 
@@ -365,63 +449,6 @@ function openBundleAuthor(): void {
   openSpaLibrary();   // Reuse existing SPA link for v1 — Phase 4 deep-links to bundle editor
 }
 
-/** Returns the BundleInstance whose start_idx equals `idx`, or null
- *  if no bundle starts at that module position. Used by the template
- *  to interleave bundle-header rows BEFORE the matching first child. */
-function bundleStartingAt(idx: number): BundleInstance | null {
-  for (const b of value.value.bundles ?? []) {
-    if (b.start_idx === idx) return b;
-  }
-  return null;
-}
-
-/** Returns the BundleInstance that owns module index `idx` (i.e.
- *  start_idx ≤ idx ≤ end_idx). null when the module is standalone.
- *  Used by the template to stamp `data-bundle-uid` + the bundle's
- *  color CSS var on bundle-member rows. */
-function bundleContaining(idx: number): BundleInstance | null {
-  for (const b of value.value.bundles ?? []) {
-    if (b.start_idx <= idx && idx <= b.end_idx) return b;
-  }
-  return null;
-}
-
-/** Bundle-aware CSS class binding for a module row. Stamps
- *  `wp-module--in-bundle` (kind-stripe replaced with bundle color),
- *  `wp-module--bundle-first` (top edge of frame), and
- *  `wp-module--bundle-last` (bottom edge of frame). */
-function bundleClassForModule(idx: number): Record<string, boolean> {
-  const b = bundleContaining(idx);
-  if (!b) return {};
-  return {
-    "wp-module--in-bundle": true,
-    "wp-module--in-bundle-collapsed": b.collapsed,
-    "wp-module--bundle-first": b.start_idx === idx,
-    "wp-module--bundle-last": b.end_idx === idx,
-  };
-}
-
-/** Inline style with the bundle color CSS var for module rows that
- *  live inside a bundle. The frame CSS reads `--wp-bundle-color` to
- *  paint the left stripe + frame edges. Default token used when the
- *  bundle has no user-picked color. */
-function bundleStyleForModule(idx: number): Record<string, string> {
-  const b = bundleContaining(idx);
-  if (!b) return {};
-  return {
-    "--wp-bundle-color": b.color && b.color.length ? b.color : "var(--wp-bundle-default)",
-  };
-}
-
-/** True when module index `idx` lives inside a COLLAPSED bundle.
- *  Used by `v-show` to hide bundle children visually while keeping
- *  them in `value.modules` so the engine sees them. */
-function hiddenByBundleCollapse(idx: number): boolean {
-  const b = bundleContaining(idx);
-  if (!b) return false;
-  return b.collapsed === true;
-}
-
 function toggleBundleCollapsed(uid: string): void {
   const bundles = value.value.bundles ?? [];
   const idx = bundles.findIndex((b) => b._uid === uid);
@@ -455,99 +482,20 @@ function toggleBundleEnabled(uid: string, enabled: boolean): void {
   };
 }
 
-/** ── Bundle frame overlays ─────────────────────────────────────────
- *  Bundles render as flat siblings of modules in the flex column
- *  (header + child rows). To paint a SINGLE box around the bundle
- *  range without restructuring DOM, we measure the bounding box of
- *  the header + last child via offsetTop / offsetHeight and render
- *  an absolute-positioned overlay element for each bundle.
- *
- *  Recomputed on:
- *    - bundles[] / modules[] mutation (watch)
- *    - container resize (ResizeObserver)
- *    - collapse toggles (also fires via the bundles[] watch)
- *
- *  Trade-off vs proper DOM wrapping (extract ModuleCard.vue): keeps
- *  the existing 250-line module template intact at the cost of an
- *  extra layout-measurement pass. */
-interface BundleOverlay {
-  uid: string;
-  top: number;
-  height: number;
-  color: string;
-}
+// Container ref for list-level drag handlers + bar positioning.
 const modulesContainer = ref<HTMLElement | null>(null);
-const bundleOverlays = ref<BundleOverlay[]>([]);
 
-function updateBundleOverlays(): void {
-  const container = modulesContainer.value;
-  if (!container) {
-    bundleOverlays.value = [];
-    return;
-  }
-  const bundles = value.value.bundles ?? [];
-  const next: BundleOverlay[] = [];
-  // Bottom padding inside the frame — extends the overlay below
-  // the last child so children visibly breathe at the bottom.
-  // Top padding lives between the header and the first child as a
-  // natural flex-gap (no negative margin on `.wp-module--bundle-first`
-  // any more), so the overlay aligns flush with the header's top.
-  // Collapsed bundles get 0 bottom padding — just the header in its
-  // own tight box.
-  const PAD_TOP = 0;
-  const PAD_BOTTOM = 6;
-  for (const b of bundles) {
-    const headerEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
-    const lastChildEl = container.querySelector<HTMLElement>(
-      `.wp-module[data-bundle-uid="${b._uid}"][data-module-idx="${b.end_idx}"]`,
-    );
-    if (!headerEl) continue;
-    const top = headerEl.offsetTop - PAD_TOP;
-    let bottom;
-    if (b.collapsed) {
-      // Collapsed: overlay spans the header only — no extra padding
-      // below since there are no children to contain.
-      bottom = headerEl.offsetTop + headerEl.offsetHeight;
-    } else if (lastChildEl) {
-      bottom = lastChildEl.offsetTop + lastChildEl.offsetHeight + PAD_BOTTOM;
-    } else {
-      bottom = headerEl.offsetTop + headerEl.offsetHeight;
-    }
-    next.push({
-      uid: b._uid,
-      top,
-      height: bottom - top,
-      color: b.color && b.color.length ? b.color : "var(--wp-bundle-default)",
-    });
-  }
-  bundleOverlays.value = next;
+// Suppresses wp-list-move + wp-list-leave-active transitions for the
+// duration; covers the longest TransitionGroup transition (250ms FLIP)
+// plus a margin so leaving rows + FLIP-moving siblings all snap.
+function holdSuppressMove(): void {
+  suppressMove.value = true;
+  if (suppressMoveTimer != null) window.clearTimeout(suppressMoveTimer);
+  suppressMoveTimer = window.setTimeout(() => {
+    suppressMove.value = false;
+    suppressMoveTimer = null;
+  }, 300);
 }
-
-let _bundleResizeObserver: ResizeObserver | null = null;
-onMounted(() => {
-  if (typeof ResizeObserver !== "undefined" && modulesContainer.value) {
-    _bundleResizeObserver = new ResizeObserver(() => {
-      // Defer to next frame so the layout settles before we measure.
-      requestAnimationFrame(updateBundleOverlays);
-    });
-    _bundleResizeObserver.observe(modulesContainer.value);
-  }
-  // Initial measurement after first paint.
-  nextTick().then(updateBundleOverlays);
-});
-onBeforeUnmount(() => {
-  _bundleResizeObserver?.disconnect();
-  _bundleResizeObserver = null;
-});
-
-/** Watch the bundles array AND the modules array — either changing
- *  means the overlay positions may shift. `flush: 'post'` waits for
- *  Vue to apply DOM updates before we re-measure. */
-watch(
-  () => [value.value.modules.length, (value.value.bundles ?? []).length, value.value.bundles ?? []],
-  () => { nextTick().then(updateBundleOverlays); },
-  { deep: true, flush: "post" },
-);
 
 function removeBundle(uid: string): void {
   const bundles = value.value.bundles ?? [];
@@ -571,62 +519,14 @@ function removeBundle(uid: string): void {
       }
       return b;
     });
+  // Suppress FLIP-move + leave-active for the transition window so the
+  // overlay, children, and follow-up rows all snap on the same frame.
+  holdSuppressMove();
   value.value = {
     ...value.value,
     modules: [...before, ...after],
     bundles: remainingBundles,
   };
-}
-
-/** Reconcile bundle ranges after a module reorder.
- *
- *  Walks the (post-move) modules list, groups indices by each module's
- *  `bundle_origin`. For each known BundleInstance:
- *    - If its member indices form a CONTIGUOUS run → update start_idx +
- *      end_idx to the new positions.
- *    - If non-contiguous (something foreign sits between the bundle's
- *      children) → DISSOLVE the bundle: drop the instance + clear
- *      `bundle_origin` from those children. Contiguity is required v1.
- *    - If member count drops to zero (all children dragged out) →
- *      dissolve the bundle.
- *
- *  Caller writes both arrays back together. ContextWidget's render
- *  uses bundle.start_idx/end_idx to position the overlay; rebuilding
- *  these from the live state keeps the frame painted correctly even
- *  after drag, splice, or programmatic mutation. */
-function reconcileBundleRanges(
-  modules: ModuleEntry[],
-  bundles: BundleInstance[],
-): BundleInstance[] {
-  if (bundles.length === 0) return bundles;
-  // Group module indices by bundle_origin.
-  const byOrigin = new Map<string, number[]>();
-  modules.forEach((m, idx) => {
-    const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
-    if (!origin) return;
-    const arr = byOrigin.get(origin) ?? [];
-    arr.push(idx);
-    byOrigin.set(origin, arr);
-  });
-  const next: BundleInstance[] = [];
-  for (const b of bundles) {
-    const indices = byOrigin.get(b._uid);
-    if (!indices || indices.length === 0) continue;  // dissolve — no members
-    // Contiguity check — sorted indices must form a run.
-    const sorted = [...indices].sort((a, b) => a - b);
-    const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
-    if (!contiguous) {
-      // Dissolve: strip bundle_origin from every former member so the
-      // frame disappears entirely.
-      for (const idx of sorted) {
-        const m = modules[idx] as ModuleEntry & { bundle_origin?: string };
-        delete m.bundle_origin;
-      }
-      continue;
-    }
-    next.push({ ...b, start_idx: sorted[0], end_idx: sorted[sorted.length - 1] });
-  }
-  return next;
 }
 
 /** Detach bundle frame — keep children as standalone modules but
@@ -2164,82 +2064,269 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
 
 // ── Drag-and-drop ───────────────────────────────────────────────────────
 function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
-  // Phase B: stamp the source index on dragState so the same-node drop
-  // path can find the EXACT row to splice (siblings share `mod.id`).
+  // sourceIdx disambiguates siblings sharing `mod.id` at drop time.
   dragState.value = {
+    kind: "module",
     sourceNodeId: props.nodeId,
     module: JSON.parse(JSON.stringify(mod)),
     sourceIdx: idx,
+    sourceBundleUid: (mod as ModuleEntry & { bundle_origin?: string }).bundle_origin ?? null,
   };
+  draggingModuleUid.value = mod._uid ?? null;
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = "move";
     ev.dataTransfer.setData("text/plain", mod.id);
   }
 }
 
+// Pulses the just-dropped module so the user sees where it landed.
+function pulseDrop(uid: string | undefined | null): void {
+  if (!uid) return;
+  if (dropPulseTimer != null) window.clearTimeout(dropPulseTimer);
+  recentDropUid.value = uid;
+  dropPulseTimer = window.setTimeout(() => {
+    recentDropUid.value = null;
+    dropPulseTimer = null;
+  }, 460);
+}
+
+// Bundle-as-unit drag — header drag handle initiates a "bundle" payload
+// carrying the bundle's uid + pre-drag range. Receiver re-slices the
+// range out and re-inserts at the resolved zone.
+function onBundleDragStart(ev: DragEvent, uid: string) {
+  const b = (value.value.bundles ?? []).find((bb) => bb._uid === uid);
+  if (!b) return;
+  // Snapshot children so cross-node drop can splice them into a
+  // different Context. Deep clone via JSON to detach from the source
+  // node's reactive state.
+  const children = value.value.modules
+    .slice(b.start_idx, b.end_idx + 1)
+    .map((m) => JSON.parse(JSON.stringify(m)) as ModuleEntry);
+  dragState.value = {
+    kind: "bundle",
+    sourceNodeId: props.nodeId,
+    bundleUid: uid,
+    sourceStartIdx: b.start_idx,
+    sourceEndIdx: b.end_idx,
+    libraryId: b.library_id,
+    bundleName: b.name,
+    bundleColor: b.color ?? null,
+    children,
+  };
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.setData("text/plain", `bundle:${uid}`);
+  }
+}
+
 function onDragEnd() {
   const ds = dragState.value;
   if (ds && ds.sourceNodeId === props.nodeId && !sameNodeDropHandled) {
-    if (ds.consumedBy != null && ds.consumedBy !== props.nodeId) {
-      // Cross-node consumption — remove the source row by recorded
-      // index (sourceIdx). Falls back to filter-by-id only if sourceIdx
-      // isn't available (legacy drag state).
-      const srcIdx = (ds as { sourceIdx?: number }).sourceIdx;
-      if (typeof srcIdx === "number" && srcIdx >= 0 && srcIdx < value.value.modules.length) {
-        const list = [...value.value.modules];
-        list.splice(srcIdx, 1);
-        value.value = { ...value.value, modules: list };
-      } else {
-        value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+    const consumedByOther = ds.consumedBy != null && ds.consumedBy !== props.nodeId;
+    if (consumedByOther) {
+      if (ds.kind === "module") {
+        // Cross-node consumption — remove source by recorded sourceIdx.
+        const srcIdx = ds.sourceIdx;
+        if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
+          const list = [...value.value.modules];
+          list.splice(srcIdx, 1);
+          value.value = { ...value.value, modules: list };
+        } else {
+          value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+        }
+      } else if (ds.kind === "bundle") {
+        // Cross-node bundle drop — remove the bundle's range from source
+        // modules + drop the BundleInstance.
+        const before = value.value.modules.slice(0, ds.sourceStartIdx);
+        const after = value.value.modules.slice(ds.sourceEndIdx + 1);
+        const removedCount = ds.sourceEndIdx - ds.sourceStartIdx + 1;
+        const remainingBundles = (value.value.bundles ?? [])
+          .filter((b) => b._uid !== ds.bundleUid)
+          .map((b) => (b.start_idx > ds.sourceEndIdx
+            ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
+            : b));
+        value.value = {
+          ...value.value,
+          modules: [...before, ...after],
+          bundles: remainingBundles,
+        };
       }
     }
   }
   dragState.value = null;
   sameNodeDropHandled = false;
-  dragOverIdx.value = null;
-  dragOverEnd.value = false;
-  dragOverPos.value = null;
+  dragOver.value = null;
+  draggingModuleUid.value = null;
 }
 
 let sameNodeDropHandled = false;
 
-function onDragEnter(ev: DragEvent, targetIdx: number | null) {
-  if (!dragState.value) return;
+// Dragover on a row: standalone rows produce row zones (before/after);
+// any bundle-member row resolves to its bundle's "inside" zone — the
+// frame highlights as a single drop target. "before-bundle" comes from
+// the bundle header (dragover handler on BundleHeader); "after-bundle"
+// comes from the row immediately after the bundle range (treated as a
+// row "before" drop on the post-bundle row).
+// List-level dragover resolver — walks every top-level item (rows +
+// bundle frames) once per pointer event. The flat DOM (rows are siblings
+// of bundle headers, bundles render via overlay) means per-row dragover
+// handlers miss the 14px margin gap that opens during drag, so we
+// resolve from the pointer Y against ALL items in one pass.
+//
+// Slots fall into the following categories:
+//   - row "before"/"after" — between top-level standalone rows.
+//   - bundle "before" — above a bundle frame.
+//   - bundle "inside" — drop INTO a bundle as new child at end (crossing).
+//   - bundle-slot before/after — between two specific bundle children
+//     (or AFTER the last child while still inside the bundle, extending
+//     its range).
+//   - end — below all items.
+function onListDragOver(ev: DragEvent) {
+  const ds = dragState.value;
+  if (!ds) return;
   ev.preventDefault();
-  if (targetIdx === null) {
-    dragOverIdx.value = null;
-    dragOverEnd.value = true;
-    dragOverPos.value = null;
-  } else {
-    dragOverIdx.value = targetIdx;
-    dragOverEnd.value = false;
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  const container = modulesContainer.value;
+  if (!container) return;
+  const cy = ev.clientY;
+  const modules = value.value.modules;
+  const bundles = value.value.bundles ?? [];
+
+  // Build top-level item list in render order. Each item carries the
+  // DOM rect we need to test pointer Y against.
+  interface TopItem {
+    type: "row" | "bundle";
+    moduleIdx: number;
+    uid?: string;
+    bundleStartIdx?: number;
+    bundleEndIdx?: number;
+    top: number;
+    bottom: number;
   }
+  const items: TopItem[] = [];
+  let i = 0;
+  while (i < modules.length) {
+    const b = bundles.find((bb) => bb.start_idx === i);
+    if (b) {
+      const hEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
+      // Collapsed bundle hides its children via v-show; their
+      // getBoundingClientRect collapses to zero. Use the header rect
+      // as both top and bottom in that case.
+      const lastEl = b.collapsed
+        ? hEl
+        : container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${b.end_idx}"]`);
+      if (hEl && lastEl) {
+        const hr = hEl.getBoundingClientRect();
+        const lr = lastEl.getBoundingClientRect();
+        items.push({
+          type: "bundle", moduleIdx: i, uid: b._uid,
+          bundleStartIdx: b.start_idx, bundleEndIdx: b.end_idx,
+          top: hr.top, bottom: lr.bottom,
+        });
+      }
+      i = b.end_idx + 1;
+    } else {
+      const el = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${i}"]`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        items.push({ type: "row", moduleIdx: i, top: r.top, bottom: r.bottom });
+      }
+      i++;
+    }
+  }
+  if (items.length === 0) { dragOver.value = { kind: "end" }; return; }
+
+  // Walk items: cy in a gap before an item → slot before that item. cy
+  // inside an item → handle row or bundle internals.
+  for (let k = 0; k < items.length; k++) {
+    const it = items[k];
+    if (cy < it.top) {
+      if (it.type === "bundle") dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
+      else dragOver.value = { kind: "row", idx: it.moduleIdx, pos: "before" };
+      return;
+    }
+    if (cy > it.bottom) continue;
+
+    if (it.type === "row") {
+      const mid = it.top + (it.bottom - it.top) / 2;
+      if (cy < mid) {
+        dragOver.value = { kind: "row", idx: it.moduleIdx, pos: "before" };
+      } else {
+        // Bottom half — canonicalise to "before next top-level item" so
+        // bottom-of-N and top-of-N+1 resolve to one slot + one bar.
+        const next = items[k + 1];
+        if (!next) dragOver.value = { kind: "end" };
+        else if (next.type === "bundle") dragOver.value = { kind: "bundle", uid: next.uid!, zone: "before" };
+        else dragOver.value = { kind: "row", idx: next.moduleIdx, pos: "before" };
+      }
+      return;
+    }
+
+    // Inside a bundle's rect.
+    const hEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${it.uid}"][data-bundle-header]`);
+    if (!hEl) { dragOver.value = { kind: "bundle", uid: it.uid!, zone: "inside" }; return; }
+    const hr = hEl.getBoundingClientRect();
+    const crossing = !(ds.kind === "module" && ds.sourceBundleUid === it.uid);
+
+    // Bundle-as-unit drag never nests — treat the bundle as a single
+    // top-level item: top half = before, bottom half = before next (or end).
+    if (ds.kind === "bundle") {
+      const mid = it.top + (it.bottom - it.top) / 2;
+      if (cy < mid) {
+        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
+      } else {
+        const next = items[k + 1];
+        if (!next) dragOver.value = { kind: "end" };
+        else if (next.type === "bundle") dragOver.value = { kind: "bundle", uid: next.uid!, zone: "before" };
+        else dragOver.value = { kind: "row", idx: next.moduleIdx, pos: "before" };
+      }
+      return;
+    }
+
+    if (cy <= hr.bottom) {
+      // Pointer is on the bundle header itself.
+      if (cy < hr.top + hr.height / 2) {
+        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
+      } else if (crossing || it.bundleEndIdx! < it.bundleStartIdx!) {
+        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "inside" };
+      } else {
+        dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: it.bundleStartIdx!, before: true, crossing: false };
+      }
+      return;
+    }
+
+    // Pointer is in the bundle children area. Find the closest gap.
+    for (let m = it.bundleStartIdx!; m <= it.bundleEndIdx!; m++) {
+      const cEl = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${m}"]`);
+      if (!cEl) continue;
+      const cr = cEl.getBoundingClientRect();
+      if (cy < cr.top + cr.height / 2) {
+        dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: m, before: true, crossing };
+        return;
+      }
+    }
+    dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: it.bundleEndIdx!, before: false, crossing };
+    return;
+  }
+  // Below all items.
+  dragOver.value = { kind: "end" };
 }
 
-function onDragOver(ev: DragEvent) {
+// Empty-state hero is the drop target when the node has no modules.
+// Cross-node drag onto an empty node lands here.
+function onEmptyHeroDragOver(ev: DragEvent) {
+  const ds = dragState.value;
+  if (!ds) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  dragOver.value = { kind: "end" };
+}
+
+function onEndDragOver(ev: DragEvent) {
   if (!dragState.value) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-}
-
-/**
- * Card-scoped dragover. Computes whether the pointer is in the top
- * or bottom half of the hovered card so the insertion line renders
- * on the correct edge. Top half → "before" (drop above this card);
- * bottom half → "after" (drop below). Cheap math: read the card's
- * bounding rect once per move event.
- */
-function onCardDragOver(ev: DragEvent, targetIdx: number) {
-  if (!dragState.value) return;
-  ev.preventDefault();
-  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  const card = ev.currentTarget as HTMLElement;
-  const rect = card.getBoundingClientRect();
-  const midY = rect.top + rect.height / 2;
-  const next = ev.clientY < midY ? "before" : "after";
-  if (dragOverIdx.value !== targetIdx) dragOverIdx.value = targetIdx;
-  if (dragOverEnd.value) dragOverEnd.value = false;
-  if (dragOverPos.value !== next) dragOverPos.value = next;
+  dragOver.value = { kind: "end" };
 }
 
 function onContainerLeave(ev: DragEvent) {
@@ -2254,38 +2341,134 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   ev.stopPropagation();
   const ds = dragState.value;
   if (!ds) return;
-  // Snapshot the resolved drop position before clearing the hover state
-  // — we need it to decide whether to insert before or after the target.
-  const dropPos = dragOverPos.value;
-  dragOverIdx.value = null;
-  dragOverEnd.value = false;
-  dragOverPos.value = null;
+  // Snapshot zone before clearing hover state.
+  const zone: DropZone = dragOver.value ?? (targetIdx === null ? { kind: "end" } : null);
+  dragOver.value = null;
 
-  if (ds.sourceNodeId === props.nodeId) {
+  // Same-node bundle move — slice the whole range out + re-insert at zone.
+  if (ds.kind === "bundle" && ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
-    // Phase B: use the recorded sourceIdx (set at onDragStart) so we
-    // splice the EXACT row the user dragged — siblings share `m.id`,
-    // so a findIndex(m.id === …) lookup would always pick the first
-    // sibling regardless of which one was actually dragged.
-    const srcIdx = (ds as { sourceIdx?: number }).sourceIdx;
-    const fromIdx = typeof srcIdx === "number" && srcIdx >= 0 && srcIdx < list.length
-      ? srcIdx
+    const bundles = value.value.bundles ?? [];
+    const rangeSize = ds.sourceEndIdx - ds.sourceStartIdx + 1;
+    const range = list.splice(ds.sourceStartIdx, rangeSize);
+    const adj = (i: number) => (i > ds.sourceEndIdx ? i - rangeSize : i);
+    let ii: number;
+    if (!zone || zone.kind === "end") ii = list.length;
+    else if (zone.kind === "row") {
+      const a = adj(zone.idx);
+      ii = zone.pos === "after" ? a + 1 : a;
+    } else if (zone.uid === ds.bundleUid) {
+      // Dropped onto self — no-op, restore.
+      list.splice(ds.sourceStartIdx, 0, ...range);
+      sameNodeDropHandled = true;
+      return;
+    } else if (zone.kind === "bundle-slot") {
+      const t = adj(zone.targetIdx);
+      ii = zone.before ? t : t + 1;
+    } else {
+      const ob = bundles.find((b) => b._uid === zone.uid);
+      if (!ob) ii = list.length;
+      else {
+        const s = adj(ob.start_idx);
+        const e = adj(ob.end_idx);
+        // "inside" another bundle treated as "after" — no nesting v1.
+        ii = zone.zone === "before" ? s : e + 1;
+      }
+    }
+    list.splice(ii, 0, ...range);
+    holdSuppressMove();
+    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
+    // Pulse the first row of the moved bundle so the user sees where it
+    // landed (the bundle frame itself doesn't host the pulse class).
+    pulseDrop(range[0]?._uid);
+    sameNodeDropHandled = true;
+    return;
+  }
+
+  if (ds.kind === "module" && ds.sourceNodeId === props.nodeId) {
+    const list = [...value.value.modules];
+    const fromIdx = ds.sourceIdx >= 0 && ds.sourceIdx < list.length
+      ? ds.sourceIdx
       : list.findIndex((m) => m.id === ds.module.id);
     if (fromIdx < 0) return;
-    list.splice(fromIdx, 1);
-    let insertIdx: number;
-    if (targetIdx === null) {
-      insertIdx = list.length;
+    const [moved] = list.splice(fromIdx, 1);
+    let ii: number;
+    let stamp: string | undefined;
+    if (!zone || zone.kind === "end") ii = list.length;
+    else if (zone.kind === "row") {
+      const a = zone.idx > fromIdx ? zone.idx - 1 : zone.idx;
+      ii = zone.pos === "after" ? a + 1 : a;
+    } else if (zone.kind === "bundle-slot") {
+      const t = zone.targetIdx > fromIdx ? zone.targetIdx - 1 : zone.targetIdx;
+      ii = zone.before ? t : t + 1;
+      stamp = zone.uid;
     } else {
-      // After splice the target's idx may shift if it was after fromIdx.
-      const adjusted = targetIdx > fromIdx ? targetIdx - 1 : targetIdx;
-      // "before" → land at targetIdx; "after" → targetIdx + 1.
-      insertIdx = dropPos === "after" ? adjusted + 1 : adjusted;
+      const ob = (value.value.bundles ?? []).find((b) => b._uid === zone.uid);
+      if (!ob) ii = list.length;
+      else {
+        const s = ob.start_idx - (fromIdx < ob.start_idx ? 1 : 0);
+        const e = ob.end_idx - (fromIdx <= ob.end_idx ? 1 : 0);
+        if (zone.zone === "before") ii = s;
+        else { ii = e + 1; if (zone.zone === "inside") stamp = zone.uid; }
+      }
     }
-    list.splice(insertIdx, 0, ds.module);
-    const nextBundles = reconcileBundleRanges(list, value.value.bundles ?? []);
-    value.value = { ...value.value, modules: list, bundles: nextBundles };
+    const m = { ...moved } as ModuleEntry & { bundle_origin?: string };
+    if (stamp) m.bundle_origin = stamp;
+    else delete m.bundle_origin;
+    list.splice(ii, 0, m);
+    // Auto-expand the target bundle when a row drops INTO it — without
+    // this the child lands invisibly under a collapsed frame.
+    const preBundles = (value.value.bundles ?? []).map((b) =>
+      stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
+    );
+    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, preBundles) };
+    pulseDrop(m._uid);
     sameNodeDropHandled = true;
+    return;
+  }
+
+  // Cross-node bundle drag. Receiver splices the bundle's children
+  // (with fresh _uid + new bundle_origin) into its modules array at the
+  // zone-resolved position and registers a new BundleInstance pointing
+  // at the same library entry.
+  if (ds.kind === "bundle") {
+    const list = [...value.value.modules];
+    const bundles = value.value.bundles ?? [];
+    // Resolve insertIdx from the zone (zone is always outside any
+    // other bundle when the drag is a bundle-as-unit — see resolver).
+    let insertIdx: number;
+    if (!zone || zone.kind === "end") {
+      insertIdx = list.length;
+    } else if (zone.kind === "row") {
+      insertIdx = zone.pos === "after" ? zone.idx + 1 : zone.idx;
+    } else if (zone.kind === "bundle") {
+      const ob = bundles.find((b) => b._uid === zone.uid);
+      if (!ob) insertIdx = list.length;
+      else if (zone.zone === "before") insertIdx = ob.start_idx;
+      else insertIdx = ob.end_idx + 1;
+    } else {
+      insertIdx = list.length;
+    }
+    const newBundle: BundleInstance = {
+      ...emptyBundleInstance(ds.libraryId),
+      start_idx: insertIdx,
+      end_idx: insertIdx + ds.children.length - 1,
+      name: ds.bundleName,
+      color: ds.bundleColor,
+    };
+    const newChildren = ds.children.map((c) => {
+      const fresh = { ...c, _uid: newRowUid() } as ModuleEntry & { bundle_origin?: string };
+      fresh.bundle_origin = newBundle._uid;
+      return fresh;
+    });
+    list.splice(insertIdx, 0, ...newChildren);
+    value.value = {
+      ...value.value,
+      modules: list,
+      bundles: reconcileBundleRanges(list, [...bundles, newBundle]),
+    };
+    pulseDrop(newChildren[0]?._uid);
+    dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
   }
 
@@ -2321,27 +2504,101 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   // (each entry's id unique within a widget) when copying them.
   const isLibraryBacked = ds.module.type !== "fixed_values"
     || (ds.module.payload !== undefined && Object.keys(ds.module.payload ?? {}).length > 0);
-  const inserted: ModuleEntry = isLibraryBacked
+  const baseInsert: ModuleEntry = isLibraryBacked
     ? { ...ds.module, _uid: newRowUid() }
     : { ...ds.module, id: newModuleId(), _uid: newRowUid() };
   const list = [...value.value.modules];
-  // Honor the resolved drop position — pre-Phase-3a this branch
-  // always inserted at `targetIdx` so cross-node drops landed
-  // BEFORE the target regardless of whether the visual indicator
-  // showed "before" or "after". Mirror the same-node math: "after"
-  // → targetIdx + 1, "before" (or unresolved) → targetIdx.
+  const bundles = value.value.bundles ?? [];
+
+  // Resolve insertIdx + bundle stamp from the dragOver zone (same model
+  // as same-node module drop). targetIdx is unused now that drops bubble
+  // up to .wp-page; the resolver has already classified the slot.
   let insertIdx: number;
-  if (targetIdx === null) {
+  let stamp: string | undefined;
+  if (!zone || zone.kind === "end") {
     insertIdx = list.length;
-  } else if (targetIdx < 0 || targetIdx >= list.length) {
-    insertIdx = list.length;
+  } else if (zone.kind === "row") {
+    insertIdx = zone.pos === "after" ? zone.idx + 1 : zone.idx;
+  } else if (zone.kind === "bundle-slot") {
+    insertIdx = zone.before ? zone.targetIdx : zone.targetIdx + 1;
+    stamp = zone.uid;
   } else {
-    insertIdx = dropPos === "after" ? targetIdx + 1 : targetIdx;
+    const ob = bundles.find((b) => b._uid === zone.uid);
+    if (!ob) {
+      insertIdx = list.length;
+    } else if (zone.zone === "before") {
+      insertIdx = ob.start_idx;
+    } else if (zone.zone === "after") {
+      insertIdx = ob.end_idx + 1;
+    } else {
+      insertIdx = ob.end_idx + 1;
+      stamp = zone.uid;
+    }
   }
+  const inserted = { ...baseInsert } as ModuleEntry & { bundle_origin?: string };
+  if (stamp) inserted.bundle_origin = stamp;
+  else delete inserted.bundle_origin;
   list.splice(insertIdx, 0, inserted);
-  value.value = { ...value.value, modules: list };
+  const preBundles = bundles.map((b) =>
+    stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
+  );
+  value.value = {
+    ...value.value,
+    modules: list,
+    bundles: reconcileBundleRanges(list, preBundles),
+  };
+  pulseDrop(inserted._uid);
   dragState.value = { ...ds, consumedBy: props.nodeId };
 }
+
+// Top-level render list: standalone modules + bundle wrappers, in
+// document order. Each bundle entry packs its child rows so the
+// template can iterate once + nest children inside a real .wp-bundle
+// div (no more absolute-positioned overlay).
+interface TopLevelItem {
+  kind: "mod" | "bundle";
+  key: string;
+  module?: ModuleEntry;
+  idx?: number;
+  bundle?: BundleInstance;
+  children?: Array<{ module: ModuleEntry; idx: number }>;
+}
+const topLevelItems = computed<TopLevelItem[]>(() => {
+  const modules = value.value.modules;
+  const bundles = value.value.bundles ?? [];
+  const out: TopLevelItem[] = [];
+  let i = 0;
+  while (i < modules.length) {
+    const b = bundles.find((bb) => bb.start_idx === i);
+    if (b && b.end_idx >= b.start_idx) {
+      const kids: Array<{ module: ModuleEntry; idx: number }> = [];
+      for (let j = b.start_idx; j <= b.end_idx; j++) {
+        kids.push({ module: modules[j], idx: j });
+      }
+      out.push({ kind: "bundle", key: `b-${b._uid}`, bundle: b, children: kids });
+      i = b.end_idx + 1;
+    } else {
+      const m = modules[i];
+      out.push({ kind: "mod", key: m._uid ?? `m-${i}`, module: m, idx: i });
+      i++;
+    }
+  }
+  return out;
+});
+
+const moduleRowCtx: ModuleRowCtx = {
+  KIND_TITLE,
+  kindIcon, kindChipModifier, varColorClass,
+  isCollapsed, isLocked, isInternal, isSeedLockable,
+  isModified, isDrifted, isMissingFromLibrary,
+  severityFor, conflictTooltip, conflictBadgeText,
+  modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
+  rowGap, draggingModuleUid, recentDropUid,
+  toggleCollapsed, toggleEnabled, removeModule,
+  toggleLockOnCard, toggleInternalOnCard,
+  onDragStart, onDragEnd, openContextMenu, onCardKeydown,
+};
+provide(ModuleRowCtxKey, moduleRowCtx);
 </script>
 
 <template>
@@ -2384,7 +2641,13 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
          fades in, so the leaving card and the appearing hero never visually
          stack. Recovery panel + drop-zone live outside the swap. -->
     <Transition name="wp-page" mode="out-in">
-      <div v-if="!isEmpty" key="populated" class="wp-page">
+      <div
+        v-if="!isEmpty"
+        key="populated"
+        class="wp-page"
+        @dragover="onListDragOver"
+        @drop="(ev) => onDrop(ev, null)"
+      >
         <!-- Toolbar: module count + bulk-drift refresh + collapse/expand/toggle-all. -->
         <div class="wp-w-toolbar">
           <span class="wp-w-toolbar-label">modules</span>
@@ -2429,278 +2692,76 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           ><i class="pi pi-eye" /></button>
         </div>
 
-        <div class="wp-modules-frame" ref="modulesContainer">
-        <!-- Bundle frame overlays — absolute-positioned boxes painted
-             OVER the bundle ranges. Sized via updateBundleOverlays()
-             from each bundle header's offsetTop + last child's
-             offsetTop+offsetHeight. pointer-events:none so clicks
-             pass through to the modules above. Outside the
-             TransitionGroup so they aren't animated as items. -->
         <div
-          v-for="overlay in bundleOverlays"
-          :key="`bo-${overlay.uid}`"
-          class="wp-bundle-overlay"
-          :style="{
-            top: `${overlay.top}px`,
-            height: `${overlay.height}px`,
-            '--wp-bundle-color': overlay.color,
-          }"
-          aria-hidden="true"
-        />
-        <TransitionGroup name="wp-list" tag="div" class="wp-modules">
-      <template v-for="(m, idx) in value.modules" :key="m._uid ?? `${m.id}|${idx}`">
-        <!-- Bundle header — rendered BEFORE the first child of each
-             bundle range. `bundleStartingAt(idx)` returns the
-             BundleInstance whose start_idx == idx, or null. Keyed
-             separately so the TransitionGroup tracks it independently
-             of the module rows. -->
-        <BundleHeader
-          v-if="bundleStartingAt(idx)"
-          :key="`bh-${bundleStartingAt(idx)?._uid}`"
-          :instance="bundleStartingAt(idx)!"
-          :name="bundleStartingAt(idx)?.name ?? 'Bundle'"
-          :color="bundleStartingAt(idx)?.color"
-          :child-count="(bundleStartingAt(idx)!.end_idx - bundleStartingAt(idx)!.start_idx + 1)"
-          @toggle-collapse="toggleBundleCollapsed(bundleStartingAt(idx)!._uid)"
-          @toggle-enabled="(next) => toggleBundleEnabled(bundleStartingAt(idx)!._uid, next)"
-          @remove="removeBundle(bundleStartingAt(idx)!._uid)"
-          @contextmenu="(ev) => openBundleContextMenu(ev, bundleStartingAt(idx)!._uid)"
-        />
-        <div
-        v-show="!hiddenByBundleCollapse(idx)"
-        :data-module-id="m.id"
-        :data-module-idx="idx"
-        :data-kind="m.type"
-        :data-bundle-uid="bundleContaining(idx)?._uid"
-        :style="bundleStyleForModule(idx)"
-        class="wp-module"
-        tabindex="0"
-        draggable="true"
-        :class="{
-          'wp-disabled': !m.enabled,
-          'wp-conflict-error': severityFor(m.id) === 'error',
-          'wp-conflict-warning': severityFor(m.id) === 'warning',
-          'wp-conflict-info': severityFor(m.id) === 'info',
-          'wp-state-modified': isModified(m),
-          'wp-state-drift': isDrifted(m),
-          'wp-state-missing': isMissingFromLibrary(m),
-          'wp-drop-target': dragOverIdx === idx,
-          'wp-drop-target--before': dragOverIdx === idx && dragOverPos === 'before',
-          'wp-drop-target--after': dragOverIdx === idx && dragOverPos === 'after',
-          'wp-mod--mod': isModified(m),
-          'wp-mod--drift': isDrifted(m),
-          'wp-mod--err': isMissingFromLibrary(m),
-          ...bundleClassForModule(idx),
-        }"
-        @dragstart="(ev) => onDragStart(ev, m, idx)"
-        @dragend="onDragEnd"
-        @dragenter="(ev) => onDragEnter(ev, idx)"
-        @dragover="(ev) => onCardDragOver(ev, idx)"
-        @drop="(ev) => onDrop(ev, idx)"
-        @contextmenu.stop.prevent="(ev) => openContextMenu(ev, m, idx)"
-        @keydown="(ev) => onCardKeydown(ev, m, idx)"
-      >
-        <div class="wp-module-header">
-          <!-- 6-dot drag affordance (2 columns × 3 rows) — standard
-               grip icon shape (Notion / Linear / VSCode tree). PrimeIcons
-               has no equivalent so the dots render as inline SVG with
-               `currentColor` fill so they pick up the parent's text
-               color. The whole card is `draggable="true"` so dragging
-               from anywhere still works — but the `cursor: grab` is
-               scoped to this handle, matching the visual affordance. -->
-          <span
-            class="wp-drag-handle"
+          class="wp-modules-frame"
+          ref="modulesContainer"
+        >
+        <!-- Persistent drop-zone bar. Single element kept under the
+             modules container; position computed from `dragOver`. -->
+        <Transition name="wp-gap-bar">
+          <div
+            v-if="gapBarStyle"
+            class="wp-gap-bar"
+            :style="gapBarStyle"
             aria-hidden="true"
-            title="Drag to reorder"
+          />
+        </Transition>
+        <div
+          class="wp-modules"
+          :data-suppress-move="suppressMove ? 'true' : null"
+        >
+      <template v-for="item in topLevelItems" :key="item.key">
+        <!-- Bundle wrapper: header + children container, real DOM
+             nesting (no more absolute overlay). Border/bg painted by
+             .wp-bundle directly. -->
+        <div
+          v-if="item.kind === 'bundle'"
+          class="wp-bundle"
+          :class="{
+            'wp-bundle--collapsed': item.bundle!.collapsed,
+            'wp-bundle--drop-inside': isBundleInsideTarget(item.bundle!._uid),
+            'wp-gap-before': bundleHeaderGap(item.bundle!._uid) === 'before',
+          }"
+          :style="{ '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)' }"
+          :data-bundle-uid="item.bundle!._uid"
+        >
+          <BundleHeader
+            :instance="item.bundle!"
+            :name="item.bundle!.name ?? 'Bundle'"
+            :color="item.bundle!.color"
+            :child-count="item.children!.length"
+            @toggle-collapse="toggleBundleCollapsed(item.bundle!._uid)"
+            @toggle-enabled="(next) => toggleBundleEnabled(item.bundle!._uid, next)"
+            @remove="removeBundle(item.bundle!._uid)"
+            @contextmenu="(ev) => openBundleContextMenu(ev, item.bundle!._uid)"
+            @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
+            @dragend="onDragEnd"
+          />
+          <!-- Plain v-for, no inner TransitionGroup — nested
+               TransitionGroups produced ghosting when a row crossed
+               containers (outer leave + inner enter). Drop-target
+               animations now ride on the outer TransitionGroup +
+               CSS transitions on .wp-module's transform. -->
+          <div
+            v-show="!item.bundle!.collapsed"
+            class="wp-bundle-children"
           >
-            <svg
-              class="wp-drag-handle__grip"
-              viewBox="0 0 6 12"
-              width="6"
-              height="12"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="1.5" cy="2" r="1" />
-              <circle cx="4.5" cy="2" r="1" />
-              <circle cx="1.5" cy="6" r="1" />
-              <circle cx="4.5" cy="6" r="1" />
-              <circle cx="1.5" cy="10" r="1" />
-              <circle cx="4.5" cy="10" r="1" />
-            </svg>
-          </span>
-
-          <button
-            type="button"
-            class="wp-collapse-btn"
-            draggable="false"
-            :title="isCollapsed(m) ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed(idx)"
-          ><i :class="['pi', isCollapsed(m) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-
-          <label class="wp-toggle" draggable="false" :title="m.enabled ? 'Disable' : 'Enable'">
-            <input
-              type="checkbox"
-              :checked="m.enabled"
-              :aria-label="`enable ${m.meta.name}`"
-              @change="toggleEnabled(idx)"
+            <ModuleRow
+              v-for="child in item.children"
+              :key="child.module._uid ?? `${child.module.id}|${child.idx}`"
+              :module="child.module"
+              :idx="child.idx"
             />
-            <span class="wp-toggle-mark"></span>
-          </label>
-
-          <span class="wp-mod-icon" :title="m.type" aria-hidden="true">
-            <i :class="kindIcon(m.type)" />
-          </span>
-
-          <!-- Kind chip — small kind label grouped with the kind
-               icon on the LEFT side of the row so it stays adjacent
-               to the name regardless of how wide the action cluster
-               is. (Mockup v5 lines 681, 696, 711, 722, 733 show it
-               trailing the name, but our row layout flexes the name
-               to fill space, which would push the chip far right
-               where it reads as floating chrome rather than as part
-               of the module's identity. Anchoring left keeps the
-               kind icon + chip + name as one visual unit.) -->
-          <span
-            v-if="KIND_TITLE[m.type] || m.type"
-            class="wp-kind-chip"
-            :class="`wp-kind-chip--${kindChipModifier(m.type)}`"
-          >{{ KIND_TITLE[m.type] ?? m.type }}</span>
-
-          <span class="wp-module-name" :title="m.meta.name || '(unnamed)'">
-            {{ m.meta.name || "(unnamed)" }}
-          </span>
-
-          <!-- Sibling badge moved to the .wp-summary line below
-               (Phase B 2026-05-10) so collapsed sibling rows stay
-               clean. Status badges (mod/drift/missing) stay in the
-               header — those are module-health signals that warrant
-               glance-visibility regardless of collapse state. -->
-
-          <!-- Status-dots cluster — read-only indicators grouped so
-               the eye reads them as a single "module health" glance.
-               Order modified → drift → missing → conflict (severity
-               rises left → right). Buttons sit AFTER this cluster so
-               dots never split the interactive controls.
-               Each kind ALSO renders a text badge (mockup v5
-               lines 714, 736, 861) so users recognise the state
-               without hovering for the tooltip. The dot remains as
-               the compact glance affordance at canvas zoom; the
-               badge gives the textual handle. -->
-          <span class="wp-mod-dots">
-            <span
-              v-if="isModified(m)"
-              class="wp-mod-dot wp-mod-dot--modified"
-              :title="modifiedTooltip(m)"
-              aria-hidden="true"
-            ></span>
-            <span
-              v-if="isModified(m)"
-              class="wp-mod-badge wp-mod-badge--mod"
-              :title="modifiedTooltip(m)"
-            >mod</span>
-            <span
-              v-if="isDrifted(m)"
-              class="wp-mod-dot wp-mod-dot--drift"
-              title="Drifted — library has a newer version. Right-click → Refresh from library."
-              aria-hidden="true"
-            ></span>
-            <span
-              v-if="isDrifted(m)"
-              class="wp-mod-badge wp-mod-badge--drift"
-              title="Drifted — library has a newer version. Right-click → Refresh from library."
-            >drift</span>
-            <span
-              v-if="isMissingFromLibrary(m)"
-              class="wp-mod-dot wp-mod-dot--missing"
-              title="Not in library — right-click → Save to library to add it"
-              aria-hidden="true"
-            ></span>
-            <span
-              v-if="isMissingFromLibrary(m)"
-              class="wp-mod-badge wp-mod-badge--missing"
-              title="Not in library — right-click → Save to library to add it"
-            >missing</span>
-            <span
-              v-if="severityFor(m.id)"
-              class="wp-conflict-dot"
-              :class="`wp-conflict-dot--${severityFor(m.id)}`"
-              :title="conflictTooltip(m.id)"
-              aria-hidden="true"
-            ></span>
-            <!-- Conflict text badge — pairs with the conflict dot
-                 the same way the status badges pair with their dots
-                 above. Wording comes from `conflictBadgeText` and
-                 covers shadows_upstream ("override"),
-                 missing_template_variable ("missing var"), and the
-                 constraint-* subtypes. Severity-tinted via
-                 --info / --warning / --error variants. -->
-            <span
-              v-if="severityFor(m.id) && conflictBadgeText(m.id)"
-              class="wp-conflict-badge"
-              :class="`wp-conflict-badge--${severityFor(m.id)}`"
-              :title="conflictTooltip(m.id)"
-            >{{ conflictBadgeText(m.id) }}</span>
-          </span>
-
-          <!-- Inline action cluster — lock + internal + remove.
-               Fades in on row hover via .wp-mod-actions opacity
-               transition. Lock surfaces on every kind whose engine
-               handler honors `locked_seed` (SEED_LOCKABLE_KINDS):
-               wildcard pins option pick, combine pins template {a|b|c}
-               resolution, fixed_values pins per-value alternation. -->
-          <div class="wp-mod-actions" draggable="false">
-            <button
-              v-if="isSeedLockable(m)"
-              type="button"
-              class="wp-btn wp-btn--icon-sm"
-              :class="{ 'is-locked': isLocked(m) }"
-              data-test="row-action-lock"
-              :title="isLocked(m) ? `Locked seed: ${m.instance?.locked_seed}. Click to unlock.` : 'Lock seed'"
-              :aria-label="isLocked(m) ? 'Unlock seed' : 'Lock seed'"
-              @click.stop="toggleLockOnCard(idx)"
-            ><i class="pi pi-lock" /></button>
-            <button
-              v-if="m.type === 'wildcard' || m.type === 'fixed_values' || m.type === 'combine' || m.type === 'derivation'"
-              type="button"
-              class="wp-btn wp-btn--icon-sm"
-              :class="{ 'is-active': isInternal(m) }"
-              data-test="row-action-internal"
-              :title="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
-              :aria-label="isInternal(m) ? 'Unmark internal' : 'Mark internal'"
-              @click.stop="toggleInternalOnCard(idx)"
-            ><i class="pi pi-globe" /></button>
-            <button
-              type="button"
-              class="wp-btn wp-btn--icon-sm wp-btn--danger"
-              data-test="row-action-remove"
-              title="Remove"
-              aria-label="Remove module"
-              @click.stop="removeModule(idx)"
-            ><i class="pi pi-trash" /></button>
           </div>
         </div>
-
-        <Transition name="wp-collapse">
-          <div v-if="!isCollapsed(m)" class="wp-summary" :title="summaryFor(m)">
-            <span class="wp-summary__main">
-              <template v-for="(tok, i) in summaryTokens(m)" :key="i"><span
-                v-if="tok.kind === 'var'"
-                :class="['var-tok', varColorClass(tok.varName)]"
-              >{{ tok.text }}</span><template v-else>{{ tok.text }}</template></template>
-            </span>
-            <span
-              v-if="siblingInfo(m)"
-              class="wp-summary__sibling"
-              data-test="sibling-chip"
-              :title="`used ${siblingInfo(m)!.total} times in this Context`"
-            >#{{ siblingInfo(m)!.index }} of {{ siblingInfo(m)!.total }}</span>
-          </div>
-        </Transition>
-      </div>
+        <!-- Standalone module — rendered directly via ModuleRow. -->
+        <ModuleRow
+          v-else
+          :module="item.module!"
+          :idx="item.idx!"
+        />
       </template>
-        </TransitionGroup>
+        </div>
         </div>
 
         <!-- Footer: primary add + bundle add. Shown only when list is
@@ -2709,7 +2770,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
              reusable scaffolds users typically wanted that button for.
              SPA library still reachable via the right-click context
              menu on any module. -->
-        <div class="wp-w-footer">
+        <div
+          class="wp-w-footer"
+          :class="{ 'wp-gap-before': dragOver?.kind === 'end' }"
+        >
           <button
             class="wp-btn wp-btn--primary"
             data-testid="open-picker"
@@ -2733,7 +2797,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
         v-else-if="!parseError"
         key="empty"
         class="wp-empty-hero"
+        :class="{ 'wp-empty-hero--drop-target': dragOver?.kind === 'end' }"
         data-test="context-empty"
+        @dragover="onEmptyHeroDragOver"
+        @drop="(ev) => onDrop(ev, null)"
       >
         <!-- eslint-disable-next-line vue/no-v-html — wpLogoSvg is a static
              import from src/components/shared/wp-logo.svg via Vite ?raw,
@@ -2769,9 +2836,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
     <div
       class="wp-drop-end"
-      :class="{ 'wp-drop-end--active': dragOverEnd, 'wp-drop-end--show': dragState !== null }"
-      @dragenter="(ev) => onDragEnter(ev, null)"
-      @dragover="onDragOver"
+      :class="{ 'wp-drop-end--active': dragOver?.kind === 'end', 'wp-drop-end--show': dragState !== null }"
+      @dragover="onEndDragOver"
       @drop="(ev) => onDrop(ev, null)"
     >Drop here</div>
 
@@ -2818,7 +2884,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 @import "../shared/theme.css";
 </style>
 
-<style scoped>
+<style>
 .wp-context, .wp-context * { box-sizing: border-box; }
 
 /* Mute / bypass dim. Litegraph dims the title bar + node frame natively
@@ -2951,49 +3017,33 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   line-height: 1 !important;
 }
 
-/* ── Bundle frame overlay ──────────────────────────────────────────
- * `.wp-modules-frame` wraps both the overlays + the module list so
- * the overlays use IT as positioning context. Module offsetTop is
- * measured relative to this wrapper (since `.wp-modules` is its
- * direct child and `.wp-modules-frame` is the offsetParent).
- *
- * Each overlay is a `position: absolute` box sized via JS-measured
- * top + height to exactly span the bundle's header + child range.
- * Paints the box: 1px border in bundle color + rounded corners +
- * soft tinted bg. `z-index: 0` + `pointer-events: none` so clicks
- * pass through to the modules above. */
+/* Bundle as a real DOM container — header + children inside. Border
+ * + bg paint via CSS on this div, growing/shrinking with content. */
 .wp-modules-frame { position: relative; }
-.wp-bundle-overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 0;
-  pointer-events: none;
-  /* Thick left border mirrors the 3px kind-stripe on standalone
-   * `.wp-module` rows — same visual hierarchy where the colored
-   * vertical edge is the dominant kind indicator. Other three
-   * sides stay 1px for a clean box. */
+.wp-bundle {
   border: 1px solid var(--wp-bundle-color, var(--wp-bundle-default));
   border-left-width: 3px;
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
+  transition: border-width 0.12s, background 0.12s, box-shadow 0.12s;
+  display: flex;
+  flex-direction: column;
 }
-/* Modules paint ABOVE the overlay so action buttons + text stay
- * interactive + visible. */
-.wp-modules > .wp-module,
-.wp-modules > .wp-bundle-header { position: relative; z-index: 1; }
-
-.wp-module--in-bundle-collapsed {
-  /* Reserved for collapsed-state styling — children currently hidden
-   * via v-show. */
+.wp-bundle-children {
+  padding: 5px 6px 7px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Frame highlight when crossing into the bundle. */
+.wp-bundle--drop-inside {
+  border-width: 2px;
+  border-left-width: 4px;
+  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 15%, transparent);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
 }
 
-/* ── Populated ↔ Empty page swap ───────────────────────────────────────
- * Wraps both the populated layout (section label + cards + small add btn)
- * and the empty hero. mode="out-in" on the parent <Transition> sequences
- * the swap: populated fades out fully BEFORE empty fades in, so removing
- * the last module never causes the leaving card to stack visually with
- * the appearing hero. */
+/* Populated ↔ Empty page swap. */
 .wp-page { display: flex; flex-direction: column; gap: 6px; }
 .wp-page-enter-active,
 .wp-page-leave-active {
@@ -3160,6 +3210,11 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   border-radius: var(--wp-radius, 4px);
   gap: 10px;
   text-align: center;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.wp-empty-hero--drop-target {
+  border-color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-bg-deep, var(--wp-bg)));
 }
 .wp-empty-hero-glyph {
   width: 48px;
@@ -3250,61 +3305,82 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 }
 .wp-module.wp-disabled .wp-module-name { color: var(--wp-text3); }
 
-/* Card-border tint by state. Rules are ordered low-to-high precedence
- * — equal-specificity selectors lose the cascade race to whichever
- * appears LAST, so the order below reflects severity:
- *   info (conflict)  → indigo  — lowest
- *   modified         → orange  — user override
- *   warning (conflict) → amber  — duplicate / shadow
- *   drift            → amber   — library has newer payload
- *   missing          → red     — uuid gone from library
- *   error (conflict) → red     — broken graph — highest
- * Adding a new tier means slotting it into the right place in this
- * cascade chain, NOT just appending. */
+/* Card-border tint by state — severity cascade (last selector wins).
+ * Order: info → modified → warning → drift → missing → error. */
 .wp-module.wp-conflict-info     { border-color: var(--wp-accent); }
 .wp-module.wp-state-modified    { border-color: var(--wp-status-modified); }
 .wp-module.wp-conflict-warning  { border-color: var(--wp-amber); }
 .wp-module.wp-state-drift       { border-color: var(--wp-warn); }
 .wp-module.wp-state-missing     { border-color: var(--wp-danger); }
 .wp-module.wp-conflict-error    { border-color: var(--wp-red); }
-/* Status-state full-border + bg tint (Task 8).
- * Applied in ADDITION to the existing legacy state classes so the
- * kind border-left is preserved while the full border reflects status. */
+/* Status-state full-border + bg tint, kind border-left preserved. */
 .wp-module.wp-mod--mod   { border-color: var(--wp-status-modified); background: color-mix(in srgb, var(--wp-status-modified) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--drift { border-color: var(--wp-warn);            background: color-mix(in srgb, var(--wp-warn) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--err   { border-color: var(--wp-danger);          background: color-mix(in srgb, var(--wp-danger) 8%, var(--wp-bg3)); }
 
-/* Phase 3a — drop indicators. Two states ride on .wp-drop-target:
- *   - .wp-drop-target--before → insertion line ABOVE this card
- *   - .wp-drop-target--after  → insertion line BELOW this card
- * The line renders as a 3px violet bar via ::before / ::after pseudo
- * pinned to the card edge. The card's own border also gets the
- * accent color so the drop target reads as a unified affordance.
- *
- * Block sits LAST in the cascade so drop feedback wins over the
- * state-color borders (mod/drift/err) when a user drags onto an
- * already-flagged module — drop signal trumps state signal because
- * the user's intent is "I want to put this here", not "this is
- * broken". State borders re-assert the moment the drag releases. */
-.wp-module.wp-drop-target {
-  border-color: var(--wp-accent);
+/* Gap metaphor: target row gets margin so a slot opens; the
+ * `.wp-gap-bar` element paints inside that slot. Margin transitions
+ * via the row's existing `transition: transform/...` rule below; we
+ * extend it to cover `margin`. */
+.wp-module.wp-gap-before,
+.wp-bundle-header.wp-gap-before,
+.wp-w-footer.wp-gap-before { margin-top: 14px; }
+.wp-module.wp-gap-after { margin-bottom: 14px; }
+/* Margins snap (no transition) so back-to-back zone changes don't
+ * leave half-open gaps mid-flight. Transform/opacity/etc still animate
+ * via TransitionGroup's FLIP rules + the wp-list-* classes below. */
+.wp-modules .wp-module {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
 }
-.wp-module.wp-drop-target--before::before,
-.wp-module.wp-drop-target--after::after {
-  content: "";
+.wp-bundle-header { transition: border-bottom-color 0.18s ease, background 0.14s ease; }
+.wp-bundle {
+  transition: border-width 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.wp-bundle.wp-gap-before { margin-top: 14px; }
+
+/* The bar itself. Animates between slots; enter/leave via Transition. */
+.wp-gap-bar {
   position: absolute;
-  left: -2px;
-  right: -2px;
   height: 3px;
   background: var(--wp-accent);
   border-radius: 2px;
+  box-shadow: 0 0 8px var(--wp-accent);
   pointer-events: none;
-  /* Sits over the kind border-left so the indicator reads cleanly
-   * as a horizontal bar, not a corner artifact. */
-  z-index: 1;
+  z-index: 4;
+  transform-origin: center;
+  transition: top 0.1s ease,
+    left 0.1s ease,
+    width 0.1s ease;
 }
-.wp-module.wp-drop-target--before::before { top: -3px; }
-.wp-module.wp-drop-target--after::after  { bottom: -3px; }
+.wp-gap-bar-enter-active,
+.wp-gap-bar-leave-active {
+  transition: opacity 0.12s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.wp-gap-bar-enter-from,
+.wp-gap-bar-leave-to {
+  opacity: 0;
+  transform: scaleX(0.4) scaleY(0.5);
+}
+
+/* Source ghost — lift the row while it's mid-drag. */
+.wp-module--dragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+}
+.wp-bundle--dragging {
+  opacity: 0.55;
+  transform: scale(0.99);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+}
+
+/* Drop landing pulse — runs once on the dropped row/bundle. */
+@keyframes wp-drop-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--wp-accent), 0 0 0 0 transparent; }
+  35%  { box-shadow: 0 0 0 3px var(--wp-accent), 0 0 16px rgba(167,139,250,0.45); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
+}
+.wp-drop-pulse { animation: wp-drop-pulse 420ms ease-out; }
 
 /* Phase B: drop-rejection shake (200ms) + post-fork flash (1.5s). */
 @keyframes wp-shake {
@@ -3323,10 +3399,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
-/* Narrow 6-dot grip handle. The card itself is draggable so a click on
- * any other part still drags — but the `cursor: grab` is scoped here so
- * the hand cursor only signals on the explicit affordance, like Notion /
- * Linear. Subtle by default, brightens on row hover/focus. */
+/* Drag handle — grab cursor scoped here, full card stays draggable. */
 .wp-drag-handle {
   display: inline-flex;
   align-items: center;
@@ -3356,12 +3429,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   width: 14px;
   flex-shrink: 0;
 }
-/* PrimeIcons set their own `font-size: 1rem` (16px) on `.pi`, so the
- * parent button's font-size never reaches the glyph. Target `.pi`
- * directly to shrink the caret. 10px lands at ~71% of the 14px
- * button width — proportional to standard tree disclosure idioms
- * (macOS Finder, VSCode tree) without becoming hard to spot. Button
- * dimensions stay the same so the hit area stays comfortable. */
+/* Target `.pi` directly — PrimeIcons sets 16px on `.pi` itself. */
 .wp-collapse-btn .pi { font-size: 10px; }
 .wp-collapse-btn:hover { color: var(--wp-text); }
 
@@ -3713,7 +3781,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 .wp-btn--primary:hover { background: var(--wp-accent); border-color: var(--wp-accent); filter: brightness(1.08); }
 
 /* ── Footer (Task 10) ───────────────────────────────────────────────── */
-.wp-w-footer { display: flex; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--wp-border-soft, var(--wp-border2)); }
+.wp-w-footer { display: flex; gap: 4px; padding-top: 4px; border-top: 1px dashed var(--wp-border-soft, var(--wp-border2)); }
 .wp-w-footer .wp-btn { flex: 1; justify-content: center; }
 
 .wp-drop-end {
@@ -3738,6 +3806,18 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
 /* FLIP reorder — TransitionGroup applies wp-list-move when items reorder. */
 .wp-list-move { transition: transform 0.25s ease-out; }
+/* Leave is instant. `.wp-module` declares `transition: transform 0.15s`
+ * as its base, which makes Vue's TransitionGroup wait for a phantom
+ * transitionend before tearing leaving rows out. Killing the transition
+ * on leave-active short-circuits that wait. */
+.wp-list-leave-active { transition: none !important; }
+/* Bundle delete / bundle drag suppress both FLIP move AND leave-active
+ * transitions for the full 300ms hold so the overlay, children, and
+ * follow-up rows all reposition on the same paint (#5 jank + #8). */
+.wp-modules[data-suppress-move="true"] .wp-list-move,
+.wp-modules[data-suppress-move="true"] .wp-list-leave-active {
+  transition: none !important;
+}
 /* Items entering the list (e.g. add via picker) — fade + slide in.
  * Leave is intentionally instant; the dying card lingering during a
  * fade-out felt sluggish, especially when chained with a FLIP move. */
