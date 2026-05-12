@@ -93,9 +93,26 @@ const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
 const dragOver = ref<DropZone>(null);
 
+// Projects active zone onto the row's edge indicator. Bundle zones
+// before/after anchor to the bundle's start/end row; inside → null
+// (frame highlight paints via overlay class below).
 function dropIndicator(idx: number): "before" | "after" | null {
   const z = dragOver.value;
-  return z?.kind === "row" && z.idx === idx ? z.pos : null;
+  if (!z) return null;
+  if (z.kind === "row") return z.idx === idx ? z.pos : null;
+  if (z.kind !== "bundle") return null;
+  const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
+  if (!b) return null;
+  if (z.zone === "before" && idx === b.start_idx) return "before";
+  if (z.zone === "after" && idx === b.end_idx) return "after";
+  return null;
+}
+
+// True when the active drag is targeting this bundle's interior — paints
+// the frame highlight class on the overlay element.
+function isBundleInsideTarget(uid: string): boolean {
+  const z = dragOver.value;
+  return z?.kind === "bundle" && z.uid === uid && z.zone === "inside";
 }
 
 const ctxMenu = ref<{
@@ -2406,6 +2423,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           v-for="overlay in bundleOverlays"
           :key="`bo-${overlay.uid}`"
           class="wp-bundle-overlay"
+          :class="{ 'wp-bundle-overlay--drop-inside': isBundleInsideTarget(overlay.uid) }"
           :style="{
             top: `${overlay.top}px`,
             height: `${overlay.height}px`,
@@ -2929,6 +2947,14 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   border-left-width: 3px;
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
+  transition: border-width 0.12s, background 0.12s;
+}
+/* Drop-inside-bundle highlight — thicker border + brighter tint while
+ * the user holds a drag over a bundle child (not at its edges). */
+.wp-bundle-overlay--drop-inside {
+  border-width: 2px;
+  border-left-width: 4px;
+  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 15%, transparent);
 }
 .wp-modules > .wp-module,
 .wp-modules > .wp-bundle-header { position: relative; z-index: 1; }
