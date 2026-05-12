@@ -27,6 +27,8 @@ const emit = defineEmits<{
   (e: "toggle-enabled", next: boolean): void;
   (e: "remove"): void;
   (e: "contextmenu", ev: MouseEvent): void;
+  (e: "dragstart", ev: DragEvent): void;
+  (e: "dragend", ev: DragEvent): void;
 }>();
 
 const frameColor = computed(() =>
@@ -51,6 +53,9 @@ const summary = computed(() => {
     :style="{ '--b': frameColor }"
     :data-bundle-uid="instance._uid"
     data-bundle-header
+    draggable="true"
+    @dragstart="(ev) => emit('dragstart', ev)"
+    @dragend="(ev) => emit('dragend', ev)"
     @contextmenu.stop.prevent="(ev) => emit('contextmenu', ev)"
   >
     <!-- Drag handle — exact same 6×12 SVG dot grid markup the

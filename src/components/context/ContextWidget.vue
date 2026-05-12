@@ -2087,12 +2087,13 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
 
 // ── Drag-and-drop ───────────────────────────────────────────────────────
 function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
-  // Phase B: stamp the source index on dragState so the same-node drop
-  // path can find the EXACT row to splice (siblings share `mod.id`).
+  // sourceIdx disambiguates siblings sharing `mod.id` at drop time.
   dragState.value = {
+    kind: "module",
     sourceNodeId: props.nodeId,
     module: JSON.parse(JSON.stringify(mod)),
     sourceIdx: idx,
+    sourceBundleUid: (mod as ModuleEntry & { bundle_origin?: string }).bundle_origin ?? null,
   };
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = "move";
@@ -2100,15 +2101,32 @@ function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
   }
 }
 
+// Bundle-as-unit drag — header drag handle initiates a "bundle" payload
+// carrying the bundle's uid + pre-drag range. Receiver re-slices the
+// range out and re-inserts at the resolved zone.
+function onBundleDragStart(ev: DragEvent, uid: string) {
+  const b = (value.value.bundles ?? []).find((bb) => bb._uid === uid);
+  if (!b) return;
+  dragState.value = {
+    kind: "bundle",
+    sourceNodeId: props.nodeId,
+    bundleUid: uid,
+    sourceStartIdx: b.start_idx,
+    sourceEndIdx: b.end_idx,
+  };
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.setData("text/plain", `bundle:${uid}`);
+  }
+}
+
 function onDragEnd() {
   const ds = dragState.value;
-  if (ds && ds.sourceNodeId === props.nodeId && !sameNodeDropHandled) {
+  if (ds && ds.kind === "module" && ds.sourceNodeId === props.nodeId && !sameNodeDropHandled) {
     if (ds.consumedBy != null && ds.consumedBy !== props.nodeId) {
-      // Cross-node consumption — remove the source row by recorded
-      // index (sourceIdx). Falls back to filter-by-id only if sourceIdx
-      // isn't available (legacy drag state).
-      const srcIdx = (ds as { sourceIdx?: number }).sourceIdx;
-      if (typeof srcIdx === "number" && srcIdx >= 0 && srcIdx < value.value.modules.length) {
+      // Cross-node consumption — remove source by recorded sourceIdx.
+      const srcIdx = ds.sourceIdx;
+      if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
         const list = [...value.value.modules];
         list.splice(srcIdx, 1);
         value.value = { ...value.value, modules: list };
@@ -2162,11 +2180,44 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   const zone: DropZone = dragOver.value ?? (targetIdx === null ? { kind: "end" } : null);
   dragOver.value = null;
 
-  if (ds.sourceNodeId === props.nodeId) {
+  // Same-node bundle move — slice the whole range out + re-insert at zone.
+  if (ds.kind === "bundle" && ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
-    const srcIdx = (ds as { sourceIdx?: number }).sourceIdx;
-    const fromIdx = typeof srcIdx === "number" && srcIdx >= 0 && srcIdx < list.length
-      ? srcIdx
+    const bundles = value.value.bundles ?? [];
+    const rangeSize = ds.sourceEndIdx - ds.sourceStartIdx + 1;
+    const range = list.splice(ds.sourceStartIdx, rangeSize);
+    // Adjust pre-removal index by the removed range size.
+    const adj = (i: number) => (i > ds.sourceEndIdx ? i - rangeSize : i);
+    let ii: number;
+    if (!zone || zone.kind === "end") ii = list.length;
+    else if (zone.kind === "row") {
+      const a = adj(zone.idx);
+      ii = zone.pos === "after" ? a + 1 : a;
+    } else if (zone.uid === ds.bundleUid) {
+      // Dropped onto self — no-op, restore.
+      list.splice(ds.sourceStartIdx, 0, ...range);
+      sameNodeDropHandled = true;
+      return;
+    } else {
+      const ob = bundles.find((b) => b._uid === zone.uid);
+      if (!ob) ii = list.length;
+      else {
+        const s = adj(ob.start_idx);
+        const e = adj(ob.end_idx);
+        // "inside" another bundle treated as "after" — no nesting v1.
+        ii = zone.zone === "before" ? s : e + 1;
+      }
+    }
+    list.splice(ii, 0, ...range);
+    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
+    sameNodeDropHandled = true;
+    return;
+  }
+
+  if (ds.kind === "module" && ds.sourceNodeId === props.nodeId) {
+    const list = [...value.value.modules];
+    const fromIdx = ds.sourceIdx >= 0 && ds.sourceIdx < list.length
+      ? ds.sourceIdx
       : list.findIndex((m) => m.id === ds.module.id);
     if (fromIdx < 0) return;
     const [moved] = list.splice(fromIdx, 1);
@@ -2174,8 +2225,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     let stamp: string | undefined;
     if (!zone || zone.kind === "end") ii = list.length;
     else if (zone.kind === "row") {
-      const adj = zone.idx > fromIdx ? zone.idx - 1 : zone.idx;
-      ii = zone.pos === "after" ? adj + 1 : adj;
+      const a = zone.idx > fromIdx ? zone.idx - 1 : zone.idx;
+      ii = zone.pos === "after" ? a + 1 : a;
     } else {
       const ob = (value.value.bundles ?? []).find((b) => b._uid === zone.uid);
       if (!ob) ii = list.length;
@@ -2191,6 +2242,13 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     else delete m.bundle_origin;
     list.splice(ii, 0, m);
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, value.value.bundles ?? []) };
+    sameNodeDropHandled = true;
+    return;
+  }
+
+  // Cross-node bundle drag not supported v1 — surface a toast + bail.
+  if (ds.kind === "bundle") {
+    pushToast("Drag bundles within the same Context only.", { severity: "info" });
     sameNodeDropHandled = true;
     return;
   }
@@ -2373,6 +2431,8 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           @toggle-enabled="(next) => toggleBundleEnabled(bundleStartingAt(idx)!._uid, next)"
           @remove="removeBundle(bundleStartingAt(idx)!._uid)"
           @contextmenu="(ev) => openBundleContextMenu(ev, bundleStartingAt(idx)!._uid)"
+          @dragstart="(ev) => onBundleDragStart(ev, bundleStartingAt(idx)!._uid)"
+          @dragend="onDragEnd"
         />
         <div
         v-show="!hiddenByBundleCollapse(idx)"
