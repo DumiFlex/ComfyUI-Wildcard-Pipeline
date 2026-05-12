@@ -2414,7 +2414,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     if (stamp) m.bundle_origin = stamp;
     else delete m.bundle_origin;
     list.splice(ii, 0, m);
-    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, value.value.bundles ?? []) };
+    // Auto-expand the target bundle when a row drops INTO it — without
+    // this the child lands invisibly under a collapsed frame.
+    const preBundles = (value.value.bundles ?? []).map((b) =>
+      stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
+    );
+    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, preBundles) };
     pulseDrop(m._uid);
     sameNodeDropHandled = true;
     return;

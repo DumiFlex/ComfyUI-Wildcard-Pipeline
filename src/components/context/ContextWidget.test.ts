@@ -1766,6 +1766,64 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     wrapper.unmount();
   });
 
+  it("auto-expand: dropping a row INTO a collapsed bundle flips collapsed → false", async () => {
+    const modules = [
+      {
+        id: "ch0aaaaa", _uid: "u0", type: "wildcard", enabled: true,
+        meta: { name: "ch0" }, entries: [],
+        payload: { var_binding: "v0", options: [] }, payload_hash: "ph0",
+        bundle_origin: "bundleUidXX",
+      },
+      {
+        id: "ch1aaaaa", _uid: "u1", type: "wildcard", enabled: true,
+        meta: { name: "ch1" }, entries: [],
+        payload: { var_binding: "v1", options: [] }, payload_hash: "ph1",
+        bundle_origin: "bundleUidXX",
+      },
+      {
+        id: "stdaaaaa", _uid: "u2", type: "wildcard", enabled: true,
+        meta: { name: "std" }, entries: [],
+        payload: { var_binding: "vs", options: [] }, payload_hash: "phs",
+      },
+    ];
+    const bundles = [{
+      _uid: "bundleUidXX", library_id: "lib_b", start_idx: 0, end_idx: 1,
+      enabled: true, collapsed: true, inserted_at_hash: "phB", name: "Group", color: null,
+    }];
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9301,
+        initialJson: JSON.stringify({ version: 1, modules, bundles }),
+        upstreamVars: [],
+        onChange,
+      },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    const header = wrapper.find(".wp-bundle-header");
+    (header.element as HTMLElement).getBoundingClientRect = rectOf(0, 30);
+    const stdCard = wrapper.find('[data-module-id="stdaaaaa"]');
+    (stdCard.element as HTMLElement).getBoundingClientRect = rectOf(80, 30);
+
+    // Drag std → bundle header bottom half (clientY in bottom 15px window).
+    await stdCard.trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    await header.trigger("dragover", { clientY: 22, dataTransfer: makeDataTransfer() });
+    await header.trigger("drop", { dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    expect(parsed.bundles).toHaveLength(1);
+    expect(parsed.bundles[0].collapsed).toBe(false);
+    // std joined the bundle.
+    const std = parsed.modules.find((m: { id: string }) => m.id === "stdaaaaa");
+    expect(std.bundle_origin).toBe("bundleUidXX");
+    wrapper.unmount();
+  });
+
   it("#10 — in-bundle reorder does NOT paint frame highlight (gap line only)", async () => {
     const { wrapper } = mountWithBundle();
     await flushPromises();
