@@ -146,6 +146,33 @@ export async function animateEnterBatch(
 }
 
 /**
+ * Flash a batch of rows with the existing wp-module--flash green ring
+ * keyframe (1500ms) — used to indicate library-side mutations (refresh,
+ * reset, fork). Staggered so bulk refresh cascades. No-op when reduce-
+ * motion is on.
+ */
+const FLASH_DURATION_MS = 1500;
+export async function flashRows(
+  uids: readonly (string | null | undefined)[],
+  container: HTMLElement,
+  staggerMs: number = MOTION_STAGGER_MS,
+): Promise<void> {
+  if (!shouldAnimate()) return;
+  await new Promise<void>(r => requestAnimationFrame(() => r()));
+  for (let i = 0; i < uids.length; i++) {
+    const uid = uids[i];
+    if (!uid) continue;
+    const el = container.querySelector<HTMLElement>(`[data-uid="${uid}"]`);
+    if (!el) continue;
+    const delay = i * staggerMs;
+    setTimeout(() => {
+      el.classList.add("wp-module--flash");
+      setTimeout(() => el.classList.remove("wp-module--flash"), FLASH_DURATION_MS);
+    }, delay);
+  }
+}
+
+/**
  * Animate an element (matched by uid) with --leaving class, wait for the
  * fade to complete, then run mutate to remove from state. Mutate is
  * called immediately when reduce-motion is on (no class added).

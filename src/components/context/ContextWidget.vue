@@ -30,6 +30,7 @@ import {
   withEnterAnimation,
   withLeaveAnimation,
   animateEnterBatch,
+  flashRows,
   MOTION_FLIP_MS,
   MOTION_CURVE_FLIP,
 } from "./bundles/flip";
@@ -736,6 +737,15 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       modules: [...before, ...newChildren, ...after],
       bundles: nextBundles,
     };
+    await nextTick();
+    // Flash every fresh child + the bundle wrapper so the user sees
+    // which rows just got replaced with the library snapshot.
+    if (modulesContainer.value) {
+      void flashRows(
+        [target._uid, ...newChildren.map(c => c._uid)],
+        modulesContainer.value,
+      );
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushToast(`Reset failed: ${msg}`, { severity: "error" });
@@ -814,6 +824,13 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
       b._uid === uid ? { ...b, inserted_at_hash: updated.payload_hash } : b,
     );
     value.value = { ...value.value, bundles: nextBundles };
+    await nextTick();
+    // Flash the bundle wrapper so the user gets a visible confirm that
+    // 'this just got pushed to the library' — wrapper-only (children
+    // didn't change locally; library now matches them).
+    if (modulesContainer.value) {
+      void flashRows([target._uid], modulesContainer.value, 0);
+    }
     pushToast(`Saved "${updated.name}" to library`, { severity: "success" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -834,6 +851,7 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
   const m = value.value.modules[idx];
   if (!m) return;
   const name = m.meta?.name?.trim() || "New Bundle";
+  const flipSnap = captureFlipSnapshot();
   try {
     const entry = await api.bundles.create({
       name, color: null, children: [toChildSnapshot(m)],
@@ -851,6 +869,16 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
       ...value.value, modules: nextModules,
       bundles: [...(value.value.bundles ?? []), bundleInstance],
     };
+    await nextTick();
+    // Sibling rows shift to accommodate the new bundle wrapper around
+    // the wrapped row. Bundle wrapper fades-slides in; the wrapped
+    // module flashes (green ring) to confirm 'this is what just got
+    // wrapped'.
+    playFlipSnapshot(flipSnap);
+    if (modulesContainer.value) {
+      void animateEnterBatch([bundleInstance._uid], modulesContainer.value);
+      void flashRows([m._uid], modulesContainer.value, 0);
+    }
     pushToast(`Wrapped into "${entry.name}" — rename in Library editor`, { severity: "success" });
   } catch (e) {
     pushToast(`Wrap failed: ${e instanceof Error ? e.message : String(e)}`, { severity: "error" });
@@ -1171,6 +1199,10 @@ async function refreshOne(idx: number): Promise<void> {
     const next = [...value.value.modules];
     next[idx] = merged;
     value.value.modules = next;
+    await nextTick();
+    if (modulesContainer.value) {
+      void flashRows([merged._uid], modulesContainer.value, 0);
+    }
     pushToast(`Refreshed "${merged.meta.name || merged.type}".`, { severity: "success" });
     await forceRefreshHashes();
   } catch (err) {
@@ -1205,12 +1237,20 @@ async function refreshAllDrifted(): Promise<void> {
       queueByUuid.set(r.id, q);
     }
     const next = [...value.value.modules];
+    const refreshedUids: string[] = [];
     for (const i of driftedIdx) {
       const m = next[i];
       const merged = queueByUuid.get(m.id)?.shift();
-      if (merged) next[i] = merged;
+      if (merged) {
+        next[i] = merged;
+        if (merged._uid) refreshedUids.push(merged._uid);
+      }
     }
     value.value.modules = next;
+    await nextTick();
+    if (modulesContainer.value && refreshedUids.length > 0) {
+      void flashRows(refreshedUids, modulesContainer.value);
+    }
     await forceRefreshHashes();
   }
 
