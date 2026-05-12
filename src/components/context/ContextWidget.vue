@@ -551,6 +551,17 @@ function captureFlipSnapshot(): FlipSnapshot {
   return snapshot;
 }
 
+/**
+ * Drops a uid from every scope's pre-mutation rect map so playFlipSnapshot
+ * leaves that element alone. Used when the row should animate via a
+ * different mechanism (e.g. --arriving fade-slide for cross-scope moves)
+ * — without this, the FLIP inline transform would override the class-
+ * driven transition.
+ */
+function excludeFromFlipSnapshot(snapshot: FlipSnapshot, uid: string): void {
+  for (const entry of snapshot) entry.before.delete(uid);
+}
+
 function playFlipSnapshot(snapshot: FlipSnapshot): void {
   for (const { scope, before } of snapshot) {
     applyFlip(scope, before, el => el.dataset.uid ?? null, {
@@ -611,10 +622,18 @@ async function removeBundle(uid: string): Promise<void> {
  *  drop the bundle instance + clear `bundle_origin` on each child.
  *  Useful when user wants to keep what's inside but no longer wants
  *  the group wrapping. */
-function detachBundle(uid: string): void {
+async function detachBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  // Phase B.6 polish: fade the bundle wrapper out via --leaving before
+  // the splice. Symmetry with removeBundle — wrapper disappears with a
+  // visual exit, children stay (they will rise via FLIP into the gap).
+  const scope = modulesContainer.value;
+  if (scope) {
+    await withLeaveAnimation(uid, scope, () => {});
+  }
+  const flipSnap = captureFlipSnapshot();
   const nextModules = value.value.modules.map((m, idx) => {
     if (idx < target.start_idx || idx > target.end_idx) return m;
     // Strip bundle_origin from this child; spread so other fields
@@ -629,6 +648,8 @@ function detachBundle(uid: string): void {
     modules: nextModules,
     bundles: remainingBundles,
   };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
 }
 
 /** Duplicate bundle — re-fetch the library entry + run insert
@@ -2588,9 +2609,21 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     const preBundles = (value.value.bundles ?? []).map((b) =>
       stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
     );
+    // Cross-scope detection: row changed container (standalone ↔ bundle,
+    // or bundle A ↔ bundle B). When true, exclude the moved row from
+    // the FLIP pass and apply a fade-slide via --arriving instead — FLIP
+    // would only animate vertical translate within its OLD container,
+    // but a cross-scope move feels better as a horizontal entry into
+    // the new container.
+    const crossScope = (ds.sourceBundleUid ?? null) !== (stamp ?? null);
+    if (crossScope && m._uid) excludeFromFlipSnapshot(flipSnap, m._uid);
+
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, preBundles) };
     await nextTick();
     playFlipSnapshot(flipSnap);
+    if (crossScope && m._uid && modulesContainer.value) {
+      await animateEnterBatch([m._uid], modulesContainer.value);
+    }
     pulseDrop(m._uid);
     sameNodeDropHandled = true;
     return;
