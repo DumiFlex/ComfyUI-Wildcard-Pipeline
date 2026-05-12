@@ -2283,6 +2283,16 @@ function onListDragOver(ev: DragEvent) {
   dragOver.value = { kind: "end" };
 }
 
+// Empty-state hero is the drop target when the node has no modules.
+// Cross-node drag onto an empty node lands here.
+function onEmptyHeroDragOver(ev: DragEvent) {
+  const ds = dragState.value;
+  if (!ds) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  dragOver.value = { kind: "end" };
+}
+
 function onEndDragOver(ev: DragEvent) {
   if (!dragState.value) return;
   ev.preventDefault();
@@ -2427,27 +2437,50 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
   // (each entry's id unique within a widget) when copying them.
   const isLibraryBacked = ds.module.type !== "fixed_values"
     || (ds.module.payload !== undefined && Object.keys(ds.module.payload ?? {}).length > 0);
-  const inserted: ModuleEntry = isLibraryBacked
+  const baseInsert: ModuleEntry = isLibraryBacked
     ? { ...ds.module, _uid: newRowUid() }
     : { ...ds.module, id: newModuleId(), _uid: newRowUid() };
   const list = [...value.value.modules];
-  // Honor the resolved drop position — pre-Phase-3a this branch
-  // always inserted at `targetIdx` so cross-node drops landed
-  // BEFORE the target regardless of whether the visual indicator
-  // showed "before" or "after". Mirror the same-node math: "after"
-  // → targetIdx + 1, "before" (or unresolved) → targetIdx.
+  const bundles = value.value.bundles ?? [];
+
+  // Resolve insertIdx + bundle stamp from the dragOver zone (same model
+  // as same-node module drop). targetIdx is unused now that drops bubble
+  // up to .wp-page; the resolver has already classified the slot.
   let insertIdx: number;
-  const dropPos: "before" | "after" | null =
-    zone && zone.kind === "row" ? zone.pos : null;
-  if (targetIdx === null) {
+  let stamp: string | undefined;
+  if (!zone || zone.kind === "end") {
     insertIdx = list.length;
-  } else if (targetIdx < 0 || targetIdx >= list.length) {
-    insertIdx = list.length;
+  } else if (zone.kind === "row") {
+    insertIdx = zone.pos === "after" ? zone.idx + 1 : zone.idx;
+  } else if (zone.kind === "bundle-slot") {
+    insertIdx = zone.before ? zone.targetIdx : zone.targetIdx + 1;
+    stamp = zone.uid;
   } else {
-    insertIdx = dropPos === "after" ? targetIdx + 1 : targetIdx;
+    const ob = bundles.find((b) => b._uid === zone.uid);
+    if (!ob) {
+      insertIdx = list.length;
+    } else if (zone.zone === "before") {
+      insertIdx = ob.start_idx;
+    } else if (zone.zone === "after") {
+      insertIdx = ob.end_idx + 1;
+    } else {
+      insertIdx = ob.end_idx + 1;
+      stamp = zone.uid;
+    }
   }
+  const inserted = { ...baseInsert } as ModuleEntry & { bundle_origin?: string };
+  if (stamp) inserted.bundle_origin = stamp;
+  else delete inserted.bundle_origin;
   list.splice(insertIdx, 0, inserted);
-  value.value = { ...value.value, modules: list };
+  const preBundles = bundles.map((b) =>
+    stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
+  );
+  value.value = {
+    ...value.value,
+    modules: list,
+    bundles: reconcileBundleRanges(list, preBundles),
+  };
+  pulseDrop(inserted._uid);
   dragState.value = { ...ds, consumedBy: props.nodeId };
 }
 
@@ -2694,7 +2727,10 @@ provide(ModuleRowCtxKey, moduleRowCtx);
         v-else-if="!parseError"
         key="empty"
         class="wp-empty-hero"
+        :class="{ 'wp-empty-hero--drop-target': dragOver?.kind === 'end' }"
         data-test="context-empty"
+        @dragover="onEmptyHeroDragOver"
+        @drop="(ev) => onDrop(ev, null)"
       >
         <!-- eslint-disable-next-line vue/no-v-html — wpLogoSvg is a static
              import from src/components/shared/wp-logo.svg via Vite ?raw,
@@ -3104,6 +3140,11 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   border-radius: var(--wp-radius, 4px);
   gap: 10px;
   text-align: center;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.wp-empty-hero--drop-target {
+  border-color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-bg-deep, var(--wp-bg)));
 }
 .wp-empty-hero-glyph {
   width: 48px;
