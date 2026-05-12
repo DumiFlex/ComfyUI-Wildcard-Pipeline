@@ -242,7 +242,9 @@ const summary = computed(() => {
 }
 .wp-bundle-icon .pi { font-size: 12px; }
 .wp-bundle-chip {
-  font: 600 9px/1 var(--wp-font-sans);
+  /* line-height 1.2 keeps room for descenders — line-height: 1 clipped
+   * the bottom of letters like 'g' / 'p' / 'y' in the rendered chip. */
+  font: 600 9px/1.2 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 5px;
@@ -253,14 +255,14 @@ const summary = computed(() => {
 }
 .wp-bundle-name {
   flex: 1;
-  font: 600 12px/1 var(--wp-font-sans);
+  font: 600 12px/1.3 var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .wp-bundle-summary {
-  font: 500 10px/1 var(--wp-font-sans);
+  font: 500 10px/1.3 var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
   flex-shrink: 0;
 }
