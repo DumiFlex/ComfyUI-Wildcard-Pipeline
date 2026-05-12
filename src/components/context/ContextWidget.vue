@@ -3777,7 +3777,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-btn--primary:hover { background: var(--wp-accent); border-color: var(--wp-accent); filter: brightness(1.08); }
 
 /* ── Footer (Task 10) ───────────────────────────────────────────────── */
-.wp-w-footer { display: flex; gap: 4px; margin-top: 4px; padding-top: 4px; }
+.wp-w-footer { display: flex; gap: 4px; padding-top: 4px; border-top: 1px dashed var(--wp-border-soft, var(--wp-border2)); }
 .wp-w-footer .wp-btn { flex: 1; justify-content: center; }
 
 .wp-drop-end {
