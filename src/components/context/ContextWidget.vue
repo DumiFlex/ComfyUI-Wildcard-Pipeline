@@ -21,6 +21,7 @@ import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleHeader from "./bundles/BundleHeader.vue";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
+import { reconcileBundleRanges } from "./bundles/drag";
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
@@ -576,57 +577,6 @@ function removeBundle(uid: string): void {
     modules: [...before, ...after],
     bundles: remainingBundles,
   };
-}
-
-/** Reconcile bundle ranges after a module reorder.
- *
- *  Walks the (post-move) modules list, groups indices by each module's
- *  `bundle_origin`. For each known BundleInstance:
- *    - If its member indices form a CONTIGUOUS run → update start_idx +
- *      end_idx to the new positions.
- *    - If non-contiguous (something foreign sits between the bundle's
- *      children) → DISSOLVE the bundle: drop the instance + clear
- *      `bundle_origin` from those children. Contiguity is required v1.
- *    - If member count drops to zero (all children dragged out) →
- *      dissolve the bundle.
- *
- *  Caller writes both arrays back together. ContextWidget's render
- *  uses bundle.start_idx/end_idx to position the overlay; rebuilding
- *  these from the live state keeps the frame painted correctly even
- *  after drag, splice, or programmatic mutation. */
-function reconcileBundleRanges(
-  modules: ModuleEntry[],
-  bundles: BundleInstance[],
-): BundleInstance[] {
-  if (bundles.length === 0) return bundles;
-  // Group module indices by bundle_origin.
-  const byOrigin = new Map<string, number[]>();
-  modules.forEach((m, idx) => {
-    const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
-    if (!origin) return;
-    const arr = byOrigin.get(origin) ?? [];
-    arr.push(idx);
-    byOrigin.set(origin, arr);
-  });
-  const next: BundleInstance[] = [];
-  for (const b of bundles) {
-    const indices = byOrigin.get(b._uid);
-    if (!indices || indices.length === 0) continue;  // dissolve — no members
-    // Contiguity check — sorted indices must form a run.
-    const sorted = [...indices].sort((a, b) => a - b);
-    const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
-    if (!contiguous) {
-      // Dissolve: strip bundle_origin from every former member so the
-      // frame disappears entirely.
-      for (const idx of sorted) {
-        const m = modules[idx] as ModuleEntry & { bundle_origin?: string };
-        delete m.bundle_origin;
-      }
-      continue;
-    }
-    next.push({ ...b, start_idx: sorted[0], end_idx: sorted[sorted.length - 1] });
-  }
-  return next;
 }
 
 /** Detach bundle frame — keep children as standalone modules but
@@ -2263,10 +2213,6 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 
   if (ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
-    // Phase B: use the recorded sourceIdx (set at onDragStart) so we
-    // splice the EXACT row the user dragged — siblings share `m.id`,
-    // so a findIndex(m.id === …) lookup would always pick the first
-    // sibling regardless of which one was actually dragged.
     const srcIdx = (ds as { sourceIdx?: number }).sourceIdx;
     const fromIdx = typeof srcIdx === "number" && srcIdx >= 0 && srcIdx < list.length
       ? srcIdx
@@ -2277,9 +2223,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     if (targetIdx === null) {
       insertIdx = list.length;
     } else {
-      // After splice the target's idx may shift if it was after fromIdx.
       const adjusted = targetIdx > fromIdx ? targetIdx - 1 : targetIdx;
-      // "before" → land at targetIdx; "after" → targetIdx + 1.
       insertIdx = dropPos === "after" ? adjusted + 1 : adjusted;
     }
     list.splice(insertIdx, 0, ds.module);
