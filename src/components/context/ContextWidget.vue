@@ -2269,6 +2269,8 @@ function onBundleDragStart(ev: DragEvent, uid: string) {
     libraryId: b.library_id,
     bundleName: b.name,
     bundleColor: b.color ?? null,
+    bundleCollapsed: b.collapsed,
+    bundleEnabled: b.enabled,
     children,
   };
   if (ev.dataTransfer) {
@@ -2622,6 +2624,8 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
       end_idx: insertIdx + ds.children.length - 1,
       name: ds.bundleName,
       color: ds.bundleColor,
+      collapsed: ds.bundleCollapsed,
+      enabled: ds.bundleEnabled,
     };
     const newChildren = ds.children.map((c) => {
       const fresh = { ...c, _uid: newRowUid() } as ModuleEntry & { bundle_origin?: string };

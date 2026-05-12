@@ -32,6 +32,10 @@ export type DragPayload =
       /** Denormalized name + color at drag time for the new BundleInstance. */
       bundleName: string;
       bundleColor: string | null;
+      /** Per-instance state carried across the cross-node drop so the
+       *  receiver doesn't reset collapsed/disabled bundles to defaults. */
+      bundleCollapsed: boolean;
+      bundleEnabled: boolean;
       /** Deep snapshots of the bundle's children (in order). Receiver
        *  splices these into its modules array + stamps fresh `_uid`
        *  + `bundle_origin` on each. */
