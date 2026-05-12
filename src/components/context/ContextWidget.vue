@@ -2230,6 +2230,22 @@ function onListDragOver(ev: DragEvent) {
     if (!hEl) { dragOver.value = { kind: "bundle", uid: it.uid!, zone: "inside" }; return; }
     const hr = hEl.getBoundingClientRect();
     const crossing = !(ds.kind === "module" && ds.sourceBundleUid === it.uid);
+
+    // Bundle-as-unit drag never nests — treat the bundle as a single
+    // top-level item: top half = before, bottom half = before next (or end).
+    if (ds.kind === "bundle") {
+      const mid = it.top + (it.bottom - it.top) / 2;
+      if (cy < mid) {
+        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
+      } else {
+        const next = items[k + 1];
+        if (!next) dragOver.value = { kind: "end" };
+        else if (next.type === "bundle") dragOver.value = { kind: "bundle", uid: next.uid!, zone: "before" };
+        else dragOver.value = { kind: "row", idx: next.moduleIdx, pos: "before" };
+      }
+      return;
+    }
+
     if (cy <= hr.bottom) {
       // Pointer is on the bundle header itself.
       if (cy < hr.top + hr.height / 2) {
@@ -3185,13 +3201,17 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-module.wp-gap-before,
 .wp-bundle-header.wp-gap-before { margin-top: 14px; }
 .wp-module.wp-gap-after { margin-bottom: 14px; }
-.wp-modules .wp-module { transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-  margin 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-  background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease; }
-.wp-bundle-header { transition: margin 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-  border-bottom-color 0.18s ease, background 0.14s ease; }
-.wp-bundle { transition: margin 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-  border-width 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
+/* Margins snap (no transition) so back-to-back zone changes don't
+ * leave half-open gaps mid-flight. Transform/opacity/etc still animate
+ * via TransitionGroup's FLIP rules + the wp-list-* classes below. */
+.wp-modules .wp-module {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+}
+.wp-bundle-header { transition: border-bottom-color 0.18s ease, background 0.14s ease; }
+.wp-bundle {
+  transition: border-width 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
 .wp-bundle.wp-gap-before { margin-top: 14px; }
 
 /* The bar itself. Animates between slots; enter/leave via Transition. */
@@ -3204,9 +3224,9 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   pointer-events: none;
   z-index: 4;
   transform-origin: center;
-  transition: top 0.16s cubic-bezier(0.22, 1, 0.36, 1),
-    left 0.16s cubic-bezier(0.22, 1, 0.36, 1),
-    width 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: top 0.1s ease,
+    left 0.1s ease,
+    width 0.1s ease;
 }
 .wp-gap-bar-enter-active,
 .wp-gap-bar-leave-active {
