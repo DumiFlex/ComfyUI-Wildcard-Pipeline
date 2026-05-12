@@ -2627,10 +2627,13 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
             @dragend="onDragEnd"
           />
-          <TransitionGroup
+          <!-- Plain v-for, no inner TransitionGroup — nested
+               TransitionGroups produced ghosting when a row crossed
+               containers (outer leave + inner enter). Drop-target
+               animations now ride on the outer TransitionGroup +
+               CSS transitions on .wp-module's transform. -->
+          <div
             v-show="!item.bundle!.collapsed"
-            name="wp-list"
-            tag="div"
             class="wp-bundle-children"
           >
             <ModuleRow
@@ -2639,7 +2642,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
               :module="child.module"
               :idx="child.idx"
             />
-          </TransitionGroup>
+          </div>
         </div>
         <!-- Standalone module — rendered directly via ModuleRow. -->
         <ModuleRow
