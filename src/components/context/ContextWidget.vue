@@ -93,33 +93,97 @@ const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
 
 const dragOver = ref<DropZone>(null);
 
+// `_uid` of the module currently being dragged (source row). Drives the
+// lifted-ghost class so the source visually picks up alongside the
+// browser's default drag image.
+const draggingModuleUid = ref<string | null>(null);
+// `_uid` of the most recently dropped row — pulses for 450ms after a
+// drop lands, then clears.
+const recentDropUid = ref<string | null>(null);
+let dropPulseTimer: number | null = null;
+
 // Disables `.wp-list-move` + `.wp-list-leave-active` transitions while
 // active so children + overlay vanish on the same tick as the frame
 // (and rows below snap up instead of sliding for 250ms FLIP).
 const suppressMove = ref(false);
 let suppressMoveTimer: number | null = null;
 
-// Projects active zone onto the row's edge indicator. Bundle zones
-// before/after anchor to the bundle's start/end row; inside → null
-// (frame highlight paints via overlay class below).
-function dropIndicator(idx: number): "before" | "after" | null {
+// Gap-metaphor indicator: rows that own a "before"/"after" slot get a
+// margin so the gap opens; the bar element paints inside that gap.
+function rowGap(idx: number): "before" | "after" | null {
   const z = dragOver.value;
   if (!z) return null;
   if (z.kind === "row") return z.idx === idx ? z.pos : null;
-  if (z.kind !== "bundle") return null;
-  const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
-  if (!b) return null;
-  if (z.zone === "before" && idx === b.start_idx) return "before";
-  if (z.zone === "after" && idx === b.end_idx) return "after";
+  if (z.kind === "bundle-slot" && z.targetIdx === idx) return z.before ? "before" : "after";
+  if (z.kind === "bundle") {
+    const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
+    if (!b) return null;
+    if (z.zone === "before" && idx === b.start_idx) return "before";
+    if (z.zone === "after" && idx === b.end_idx) return "after";
+  }
   return null;
 }
 
-// True when the active drag is targeting this bundle's interior — paints
-// the frame highlight class on the overlay element.
+// True when the drag is targeting this bundle's frame — header bottom
+// half from outside, or any bundle-slot with crossing=true. Drives the
+// `.wp-bundle-overlay--drop-inside` highlight.
 function isBundleInsideTarget(uid: string): boolean {
   const z = dragOver.value;
-  return z?.kind === "bundle" && z.uid === uid && z.zone === "inside";
+  if (!z) return false;
+  if (z.kind === "bundle" && z.uid === uid && z.zone === "inside") return true;
+  if (z.kind === "bundle-slot" && z.uid === uid && z.crossing) return true;
+  return false;
 }
+
+// Bundle header gets `wp-gap-before` when the bundle "before" zone is
+// active — opens a gap above the header so the bar paints in it.
+function bundleHeaderGap(uid: string): "before" | null {
+  const z = dragOver.value;
+  return z?.kind === "bundle" && z.uid === uid && z.zone === "before" ? "before" : null;
+}
+
+// Computed gap-bar position relative to the modules container. Null when
+// no zone needs a bar (inside-bundle / end / null). Uses offsetTop/Left
+// walkers so the values reflect post-margin layout (not the mid-flight
+// rect from getBoundingClientRect).
+const gapBarStyle = computed<Record<string, string> | null>(() => {
+  const z = dragOver.value;
+  const container = modulesContainer.value;
+  if (!z || !container) return null;
+
+  let anchor: HTMLElement | null = null;
+  let beforeSide = true;
+  if (z.kind === "row") {
+    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${z.idx}"]`);
+    beforeSide = z.pos === "before";
+  } else if (z.kind === "bundle-slot") {
+    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${z.targetIdx}"]`);
+    beforeSide = z.before;
+  } else if (z.kind === "bundle" && z.zone === "before") {
+    anchor = container.querySelector<HTMLElement>(`[data-bundle-uid="${z.uid}"][data-bundle-header]`);
+    beforeSide = true;
+  } else if (z.kind === "bundle" && z.zone === "after") {
+    const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
+    if (b) anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${b.end_idx}"]`);
+    beforeSide = false;
+  } else {
+    return null;
+  }
+  if (!anchor) return null;
+
+  // Walk offsetTop/Left from anchor up to the modules container so the
+  // values reflect the post-margin layout immediately.
+  let oTop = 0;
+  let oLeft = 0;
+  for (let cur: HTMLElement | null = anchor; cur && cur !== container; cur = cur.offsetParent as HTMLElement | null) {
+    oTop += cur.offsetTop;
+    oLeft += cur.offsetLeft;
+  }
+  const h = anchor.offsetHeight;
+  const w = anchor.offsetWidth;
+  const y = beforeSide ? oTop - 7 : oTop + h + 7;
+  return { top: `${y}px`, left: `${oLeft}px`, width: `${w}px` };
+});
 
 const ctxMenu = ref<{
   visible: boolean;
@@ -238,6 +302,10 @@ onBeforeUnmount(() => {
   if (suppressMoveTimer != null) {
     window.clearTimeout(suppressMoveTimer);
     suppressMoveTimer = null;
+  }
+  if (dropPulseTimer != null) {
+    window.clearTimeout(dropPulseTimer);
+    dropPulseTimer = null;
   }
   unsubscribeDrift();
 });
@@ -2137,10 +2205,22 @@ function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
     sourceIdx: idx,
     sourceBundleUid: (mod as ModuleEntry & { bundle_origin?: string }).bundle_origin ?? null,
   };
+  draggingModuleUid.value = mod._uid ?? null;
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = "move";
     ev.dataTransfer.setData("text/plain", mod.id);
   }
+}
+
+// Pulses the just-dropped module so the user sees where it landed.
+function pulseDrop(uid: string | undefined | null): void {
+  if (!uid) return;
+  if (dropPulseTimer != null) window.clearTimeout(dropPulseTimer);
+  recentDropUid.value = uid;
+  dropPulseTimer = window.setTimeout(() => {
+    recentDropUid.value = null;
+    dropPulseTimer = null;
+  }, 460);
 }
 
 // Bundle-as-unit drag — header drag handle initiates a "bundle" payload
@@ -2180,6 +2260,7 @@ function onDragEnd() {
   dragState.value = null;
   sameNodeDropHandled = false;
   dragOver.value = null;
+  draggingModuleUid.value = null;
 }
 
 let sameNodeDropHandled = false;
@@ -2191,25 +2272,46 @@ let sameNodeDropHandled = false;
 // comes from the row immediately after the bundle range (treated as a
 // row "before" drop on the post-bundle row).
 function onRowDragOver(ev: DragEvent, idx: number) {
-  if (!dragState.value) return;
+  const ds = dragState.value;
+  if (!ds) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const pos: "before" | "after" = ev.clientY < r.top + r.height / 2 ? "before" : "after";
+  const before = ev.clientY < r.top + r.height / 2;
   const b = (value.value.bundles ?? []).find((x) => x.start_idx <= idx && idx <= x.end_idx);
-  if (b) { dragOver.value = { kind: "bundle", uid: b._uid, zone: "inside" }; return; }
-  dragOver.value = { kind: "row", idx, pos };
+  if (!b) {
+    dragOver.value = { kind: "row", idx, pos: before ? "before" : "after" };
+    return;
+  }
+  // Bundle-member row → bundle-slot (line at exact position between two
+  // children). Frame highlight only when source is OUTSIDE this bundle.
+  const crossing = !(ds.kind === "module" && ds.sourceBundleUid === b._uid);
+  dragOver.value = { kind: "bundle-slot", uid: b._uid, targetIdx: idx, before, crossing };
 }
 
-// Bundle header drop target: top half = drop ABOVE the bundle (standalone
-// insert at start_idx); bottom half = drop INTO the bundle as a child.
+// Bundle header dragover:
+//   - top half → drop ABOVE the bundle (standalone insert at start_idx).
+//   - bottom half + crossing → frame highlight, drop as new child at end.
+//   - bottom half + same-bundle reorder → bundle-slot before first child.
+//   - collapsed bundle: header IS the bundle, same split.
 function onBundleHeaderDragOver(ev: DragEvent, uid: string) {
-  if (!dragState.value) return;
+  const ds = dragState.value;
+  if (!ds) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const top = ev.clientY < r.top + r.height / 2;
-  dragOver.value = { kind: "bundle", uid, zone: top ? "before" : "inside" };
+  const topHalf = ev.clientY < r.top + r.height / 2;
+  if (topHalf) {
+    dragOver.value = { kind: "bundle", uid, zone: "before" };
+    return;
+  }
+  const b = (value.value.bundles ?? []).find((bb) => bb._uid === uid);
+  const crossing = !(ds.kind === "module" && ds.sourceBundleUid === uid);
+  if (!b || crossing || b.end_idx < b.start_idx) {
+    dragOver.value = { kind: "bundle", uid, zone: "inside" };
+    return;
+  }
+  dragOver.value = { kind: "bundle-slot", uid, targetIdx: b.start_idx, before: true, crossing: false };
 }
 
 function onBundleHeaderDrop(ev: DragEvent) {
@@ -2247,7 +2349,6 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     const bundles = value.value.bundles ?? [];
     const rangeSize = ds.sourceEndIdx - ds.sourceStartIdx + 1;
     const range = list.splice(ds.sourceStartIdx, rangeSize);
-    // Adjust pre-removal index by the removed range size.
     const adj = (i: number) => (i > ds.sourceEndIdx ? i - rangeSize : i);
     let ii: number;
     if (!zone || zone.kind === "end") ii = list.length;
@@ -2259,6 +2360,9 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       list.splice(ds.sourceStartIdx, 0, ...range);
       sameNodeDropHandled = true;
       return;
+    } else if (zone.kind === "bundle-slot") {
+      const t = adj(zone.targetIdx);
+      ii = zone.before ? t : t + 1;
     } else {
       const ob = bundles.find((b) => b._uid === zone.uid);
       if (!ob) ii = list.length;
@@ -2270,12 +2374,11 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
       }
     }
     list.splice(ii, 0, ...range);
-    // Suppress FLIP so the bundle frame, its children, and surrounding
-    // rows all reposition on the same frame — without this, the overlay
-    // re-measures instantly while children FLIP-slide for 250ms (#5
-    // jank).
     holdSuppressMove();
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
+    // Pulse the first row of the moved bundle so the user sees where it
+    // landed (the bundle frame itself doesn't host the pulse class).
+    pulseDrop(range[0]?._uid);
     sameNodeDropHandled = true;
     return;
   }
@@ -2293,6 +2396,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     else if (zone.kind === "row") {
       const a = zone.idx > fromIdx ? zone.idx - 1 : zone.idx;
       ii = zone.pos === "after" ? a + 1 : a;
+    } else if (zone.kind === "bundle-slot") {
+      const t = zone.targetIdx > fromIdx ? zone.targetIdx - 1 : zone.targetIdx;
+      ii = zone.before ? t : t + 1;
+      stamp = zone.uid;
     } else {
       const ob = (value.value.bundles ?? []).find((b) => b._uid === zone.uid);
       if (!ob) ii = list.length;
@@ -2308,6 +2415,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     else delete m.bundle_origin;
     list.splice(ii, 0, m);
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, value.value.bundles ?? []) };
+    pulseDrop(m._uid);
     sameNodeDropHandled = true;
     return;
   }
@@ -2480,6 +2588,18 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           }"
           aria-hidden="true"
         />
+        <!-- Persistent drop-zone bar. Single element kept under the
+             modules container; position computed from `dragOver`. CSS
+             transition on top/left/width slides it between slots, and
+             the Transition wrapper handles enter/exit fade+scale. -->
+        <Transition name="wp-gap-bar">
+          <div
+            v-if="gapBarStyle"
+            class="wp-gap-bar"
+            :style="gapBarStyle"
+            aria-hidden="true"
+          />
+        </Transition>
         <TransitionGroup
           name="wp-list"
           tag="div"
@@ -2495,6 +2615,7 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
         <BundleHeader
           v-if="bundleStartingAt(idx)"
           :key="`bh-${bundleStartingAt(idx)?._uid}`"
+          :class="{ 'wp-gap-before': bundleHeaderGap(bundleStartingAt(idx)!._uid) === 'before' }"
           :instance="bundleStartingAt(idx)!"
           :name="bundleStartingAt(idx)?.name ?? 'Bundle'"
           :color="bundleStartingAt(idx)?.color"
@@ -2526,9 +2647,10 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           'wp-state-modified': isModified(m),
           'wp-state-drift': isDrifted(m),
           'wp-state-missing': isMissingFromLibrary(m),
-          'wp-drop-target': dropIndicator(idx) !== null,
-          'wp-drop-target--before': dropIndicator(idx) === 'before',
-          'wp-drop-target--after': dropIndicator(idx) === 'after',
+          'wp-gap-before': rowGap(idx) === 'before',
+          'wp-gap-after': rowGap(idx) === 'after',
+          'wp-module--dragging': m._uid === draggingModuleUid,
+          'wp-drop-pulse': m._uid === recentDropUid,
           'wp-mod--mod': isModified(m),
           'wp-mod--drift': isDrifted(m),
           'wp-mod--err': isMissingFromLibrary(m),
@@ -3285,28 +3407,64 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
 .wp-module.wp-mod--drift { border-color: var(--wp-warn);            background: color-mix(in srgb, var(--wp-warn) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--err   { border-color: var(--wp-danger);          background: color-mix(in srgb, var(--wp-danger) 8%, var(--wp-bg3)); }
 
-/* Drop indicators. .wp-drop-target--before/--after paint a 3px bar via
- * pseudo elements; .wp-drop-target tints the border. Block sits last so
- * drop feedback wins over state-color borders during a drag. */
-.wp-module.wp-drop-target {
-  border-color: var(--wp-accent);
-}
-.wp-module.wp-drop-target--before::before,
-.wp-module.wp-drop-target--after::after {
-  content: "";
+/* Gap metaphor: target row gets margin so a slot opens; the
+ * `.wp-gap-bar` element paints inside that slot. Margin transitions
+ * via the row's existing `transition: transform/...` rule below; we
+ * extend it to cover `margin`. */
+.wp-module.wp-gap-before,
+.wp-bundle-header.wp-gap-before { margin-top: 14px; }
+.wp-module.wp-gap-after { margin-bottom: 14px; }
+.wp-modules .wp-module { transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+  margin 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+  background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease; }
+.wp-bundle-header { transition: margin 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+  border-bottom-color 0.18s ease, background 0.14s ease; }
+.wp-bundle-overlay { transition: top 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+  height 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+  border-width 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
+
+/* The bar itself. Animates between slots; enter/leave via Transition. */
+.wp-gap-bar {
   position: absolute;
-  left: -2px;
-  right: -2px;
   height: 3px;
   background: var(--wp-accent);
   border-radius: 2px;
+  box-shadow: 0 0 8px var(--wp-accent);
   pointer-events: none;
-  /* Sits over the kind border-left so the indicator reads cleanly
-   * as a horizontal bar, not a corner artifact. */
-  z-index: 1;
+  z-index: 4;
+  transform-origin: center;
+  transition: top 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.wp-module.wp-drop-target--before::before { top: -3px; }
-.wp-module.wp-drop-target--after::after  { bottom: -3px; }
+.wp-gap-bar-enter-active,
+.wp-gap-bar-leave-active {
+  transition: opacity 0.12s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.wp-gap-bar-enter-from,
+.wp-gap-bar-leave-to {
+  opacity: 0;
+  transform: scaleX(0.4) scaleY(0.5);
+}
+
+/* Source ghost — lift the row while it's mid-drag. */
+.wp-module--dragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+}
+.wp-bundle-overlay--dragging {
+  opacity: 0.55;
+  transform: scale(0.99);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+}
+
+/* Drop landing pulse — runs once on the dropped row/bundle. */
+@keyframes wp-drop-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--wp-accent), 0 0 0 0 transparent; }
+  35%  { box-shadow: 0 0 0 3px var(--wp-accent), 0 0 16px rgba(167,139,250,0.45); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
+}
+.wp-drop-pulse { animation: wp-drop-pulse 420ms ease-out; }
 
 /* Phase B: drop-rejection shake (200ms) + post-fork flash (1.5s). */
 @keyframes wp-shake {

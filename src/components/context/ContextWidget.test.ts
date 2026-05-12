@@ -1484,34 +1484,28 @@ describe("ContextWidget drag-drop overhaul", () => {
     wrapper.unmount();
   });
 
-  it("dragover with clientY in top half marks card as drop-target--before", async () => {
+  it("dragover top half adds wp-gap-before (gap metaphor)", async () => {
     const wrapper = mountFour();
     const cards = wrapper.findAll(".wp-module");
 
-    // Stub getBoundingClientRect on the second card so the math has a
-    // measurable rect (JSDOM defaults to 0/0). Top half of a 200px-tall
-    // card centered at y=300 → y=200..300 means "before".
     const targetEl = cards[1].element as HTMLElement;
     targetEl.getBoundingClientRect = () => ({
       top: 200, bottom: 400, left: 0, right: 100,
       width: 100, height: 200, x: 0, y: 200, toJSON() { return this; },
     });
 
-    // Initiate a drag from the first card so dragState is populated.
     await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    // Hover with pointer in the TOP half of the second card (y=220).
     await cards[1].trigger("dragover", { clientY: 220, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    expect(cards[1].classes()).toContain("wp-drop-target");
-    expect(cards[1].classes()).toContain("wp-drop-target--before");
-    expect(cards[1].classes()).not.toContain("wp-drop-target--after");
+    expect(cards[1].classes()).toContain("wp-gap-before");
+    expect(cards[1].classes()).not.toContain("wp-gap-after");
 
     await cards[0].trigger("dragend");
     wrapper.unmount();
   });
 
-  it("dragover with clientY in bottom half marks card as drop-target--after", async () => {
+  it("dragover bottom half adds wp-gap-after (gap metaphor)", async () => {
     const wrapper = mountFour();
     const cards = wrapper.findAll(".wp-module");
 
@@ -1522,12 +1516,11 @@ describe("ContextWidget drag-drop overhaul", () => {
     });
 
     await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    // BOTTOM half (y=380, well past the midpoint at y=300).
     await cards[1].trigger("dragover", { clientY: 380, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    expect(cards[1].classes()).toContain("wp-drop-target--after");
-    expect(cards[1].classes()).not.toContain("wp-drop-target--before");
+    expect(cards[1].classes()).toContain("wp-gap-after");
+    expect(cards[1].classes()).not.toContain("wp-gap-before");
 
     await cards[0].trigger("dragend");
     wrapper.unmount();
@@ -1752,20 +1745,41 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     wrapper.unmount();
   });
 
-  it("#10 — dragover bundle child interior paints overlay drop-inside class", async () => {
+  it("#10 — dragging from OUTSIDE into bundle paints frame highlight", async () => {
     const { wrapper } = mountWithBundle();
     await flushPromises();
     const cards = wrapper.findAll(".wp-module");
     // ch1 (middle bundle child) — pointer mid-card → "inside" zone.
     (cards[1].element as HTMLElement).getBoundingClientRect = rectOf(100, 100);
 
-    await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    // Drag from std (idx 3, OUTSIDE bundle) onto ch1 → crossing=true
+    // → frame highlights (in-bundle reorder would leave it neutral).
+    await cards[3].trigger("dragstart", { dataTransfer: makeDataTransfer() });
     await cards[1].trigger("dragover", { clientY: 150, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
     const overlay = wrapper.find(".wp-bundle-overlay");
     expect(overlay.exists()).toBe(true);
     expect(overlay.classes()).toContain("wp-bundle-overlay--drop-inside");
+
+    await cards[3].trigger("dragend");
+    wrapper.unmount();
+  });
+
+  it("#10 — in-bundle reorder does NOT paint frame highlight (gap line only)", async () => {
+    const { wrapper } = mountWithBundle();
+    await flushPromises();
+    const cards = wrapper.findAll(".wp-module");
+    (cards[1].element as HTMLElement).getBoundingClientRect = rectOf(100, 100);
+
+    // Drag from ch0 (inside same bundle) onto ch1 → crossing=false.
+    await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    await cards[1].trigger("dragover", { clientY: 150, dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    const overlay = wrapper.find(".wp-bundle-overlay");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.classes()).not.toContain("wp-bundle-overlay--drop-inside");
 
     await cards[0].trigger("dragend");
     wrapper.unmount();

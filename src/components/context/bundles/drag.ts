@@ -4,6 +4,11 @@ import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 export type DropZone =
   | { kind: "row"; idx: number; pos: "before" | "after" }
   | { kind: "bundle"; uid: string; zone: "before" | "inside" | "after" }
+  /** Slot between two specific bundle children. `targetIdx` is the row
+   *  the bar anchors to in `value.modules[]`; `before` picks above/below
+   *  that row. `crossing` true → the drag came from outside this bundle,
+   *  paint the frame highlight alongside the gap line. */
+  | { kind: "bundle-slot"; uid: string; targetIdx: number; before: boolean; crossing: boolean }
   | { kind: "end" }
   | null;
 
