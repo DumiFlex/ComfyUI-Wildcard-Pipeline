@@ -14,7 +14,7 @@
  * src/components/shared/theme.css (--wp-motion-*). Keep these in sync.
  */
 
-export const MOTION_COLLAPSE_MS = 320;
+export const MOTION_COLLAPSE_MS = 450;
 export const MOTION_FLIP_MS = 280;
 export const MOTION_FADE_MS = 180;
 export const MOTION_PULSE_MS = 420;
