@@ -2213,20 +2213,30 @@ function onDragStart(ev: DragEvent, mod: ModuleEntry, idx: number) {
 // Pulses the just-dropped module(s) so the user sees where they landed.
 // Accepts a single uid OR an array — cross-node bundle drops pass every
 // freshly-inserted child so all rows pulse (Phase B.4 bug fix).
+//
+// Pulse start is delayed by MOTION_FLIP_MS so the row has finished its
+// arriving fade-slide before the box-shadow ring fires. Without the
+// delay the pulse started mid-fade and the ring painted on a row whose
+// opacity was still transitioning — read as 'pulse before row arrived'.
+let dropPulseStartTimer: number | null = null;
 function pulseDrop(uids: string | string[] | undefined | null): void {
   if (!uids) return;
   const list = (Array.isArray(uids) ? uids : [uids]).filter((u): u is string => !!u);
   if (list.length === 0) return;
   if (dropPulseTimer != null) window.clearTimeout(dropPulseTimer);
-  recentDropUids.value = new Set(list);
-  pulseOrder.value = new Map(list.map((uid, i) => [uid, i]));
-  // Last pulse must complete: stagger * (n-1) + pulse duration + 50ms buffer.
-  const totalMs = 420 + (list.length - 1) * 60 + 50;
-  dropPulseTimer = window.setTimeout(() => {
-    recentDropUids.value = new Set();
-    pulseOrder.value = new Map();
-    dropPulseTimer = null;
-  }, totalMs);
+  if (dropPulseStartTimer != null) window.clearTimeout(dropPulseStartTimer);
+  dropPulseStartTimer = window.setTimeout(() => {
+    recentDropUids.value = new Set(list);
+    pulseOrder.value = new Map(list.map((uid, i) => [uid, i]));
+    dropPulseStartTimer = null;
+    // Last pulse must complete: stagger * (n-1) + pulse duration + 50ms buffer.
+    const totalMs = 420 + (list.length - 1) * 60 + 50;
+    dropPulseTimer = window.setTimeout(() => {
+      recentDropUids.value = new Set();
+      pulseOrder.value = new Map();
+      dropPulseTimer = null;
+    }, totalMs);
+  }, MOTION_FLIP_MS);
 }
 
 // Per-row CSS animation-delay derived from pulse order. Returns "0ms"
@@ -2532,9 +2542,10 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
     await nextTick();
     playFlipSnapshot(flipSnap);
-    // Pulse every row of the moved bundle so all children flash where
-    // they landed (the bundle frame itself doesn't host the pulse class).
-    pulseDrop(range.map(r => r._uid).filter((u): u is string => !!u));
+    // Pulse the bundle wrapper AND every child so a collapsed bundle
+    // still shows a landing flash (children invisible when collapsed,
+    // so the wrapper carries the cue).
+    pulseDrop([ds.bundleUid, ...range.map(r => r._uid).filter((u): u is string => !!u)]);
     sameNodeDropHandled = true;
     return;
   }
@@ -2625,11 +2636,10 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     };
     await nextTick();
     playFlipSnapshot(flipSnap);
-    // Phase B.4: pulse every newly-inserted child of the cross-node
-    // bundle drop, not just the first one. recentDropUids now carries
-    // a Set; each row gets a CSS animation-delay = index * 60ms via
-    // pulseDelayFor so they cascade rather than fire as one event.
-    pulseDrop(newChildren.map(c => c._uid).filter((u): u is string => !!u));
+    // Phase B.4: pulse the bundle wrapper AND every newly-inserted
+    // child. Collapsed bundles still get a visible landing cue via
+    // the wrapper; expanded bundles cascade child-by-child.
+    pulseDrop([newBundle._uid, ...newChildren.map(c => c._uid).filter((u): u is string => !!u)]);
     dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
   }
@@ -2885,8 +2895,12 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             'wp-bundle--collapsed': item.bundle!.collapsed,
             'wp-bundle--drop-inside': isBundleInsideTarget(item.bundle!._uid),
             'wp-gap-before': bundleHeaderGap(item.bundle!._uid) === 'before',
+            'wp-drop-pulse': recentDropUids.has(item.bundle!._uid),
           }"
-          :style="{ '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)' }"
+          :style="{
+            '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)',
+            ...(recentDropUids.has(item.bundle!._uid) ? { animationDelay: pulseDelayFor(item.bundle!._uid) } : {}),
+          }"
           :data-bundle-uid="item.bundle!._uid"
           :data-uid="item.bundle!._uid"
         >
