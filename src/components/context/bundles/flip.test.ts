@@ -147,3 +147,103 @@ describe("applyFlip", () => {
     document.body.removeChild(container);
   });
 });
+
+describe("withEnterAnimation", () => {
+  beforeEach(() => {
+    document.body.className = "";
+  });
+
+  it("calls mutate then adds --arriving + --arrived classes", async () => {
+    const { withEnterAnimation } = await import("./flip");
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const mutate = vi.fn(() => {
+      const el = document.createElement("div");
+      el.classList.add("wp-module");
+      el.dataset.uid = "uid-new";
+      container.appendChild(el);
+    });
+
+    await withEnterAnimation("uid-new", container, mutate);
+    await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => requestAnimationFrame(r));
+
+    expect(mutate).toHaveBeenCalled();
+    const el = container.querySelector<HTMLElement>("[data-uid='uid-new']");
+    expect(el).not.toBeNull();
+    expect(el?.classList.contains("wp-module--arriving")).toBe(true);
+    expect(el?.classList.contains("wp-module--arrived")).toBe(true);
+
+    document.body.removeChild(container);
+  });
+
+  it("calls mutate but skips class application when reduce-motion is on", async () => {
+    document.body.classList.add("wp-a11y-no-motion");
+    const { withEnterAnimation } = await import("./flip");
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const mutate = vi.fn(() => {
+      const el = document.createElement("div");
+      el.dataset.uid = "uid-new";
+      container.appendChild(el);
+    });
+
+    await withEnterAnimation("uid-new", container, mutate);
+
+    expect(mutate).toHaveBeenCalled();
+    const el = container.querySelector<HTMLElement>("[data-uid='uid-new']");
+    expect(el?.classList.contains("wp-module--arriving")).toBe(false);
+
+    document.body.removeChild(container);
+  });
+});
+
+describe("withLeaveAnimation", () => {
+  beforeEach(() => {
+    document.body.className = "";
+  });
+
+  it("adds --leaving class, waits MOTION_FADE_MS, then calls mutate", async () => {
+    vi.useFakeTimers();
+    const { withLeaveAnimation, MOTION_FADE_MS } = await import("./flip");
+    const container = document.createElement("div");
+    const el = document.createElement("div");
+    el.dataset.uid = "uid-old";
+    container.appendChild(el);
+    document.body.appendChild(container);
+
+    const mutate = vi.fn(() => {
+      container.removeChild(el);
+    });
+
+    const promise = withLeaveAnimation("uid-old", container, mutate);
+
+    expect(el.classList.contains("wp-module--leaving")).toBe(true);
+    expect(mutate).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(MOTION_FADE_MS);
+    await promise;
+    expect(mutate).toHaveBeenCalled();
+
+    document.body.removeChild(container);
+    vi.useRealTimers();
+  });
+
+  it("calls mutate immediately when reduce-motion is on", async () => {
+    document.body.classList.add("wp-a11y-no-motion");
+    const { withLeaveAnimation } = await import("./flip");
+    const container = document.createElement("div");
+    const el = document.createElement("div");
+    el.dataset.uid = "uid-old";
+    container.appendChild(el);
+    document.body.appendChild(container);
+
+    const mutate = vi.fn();
+    await withLeaveAnimation("uid-old", container, mutate);
+
+    expect(mutate).toHaveBeenCalled();
+    expect(el.classList.contains("wp-module--leaving")).toBe(false);
+
+    document.body.removeChild(container);
+  });
+});

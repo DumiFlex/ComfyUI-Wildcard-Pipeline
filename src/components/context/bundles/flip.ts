@@ -74,3 +74,50 @@ export function applyFlip(
     });
   }
 }
+
+/**
+ * Mutate state then animate the newly-inserted element (matched by uid)
+ * with --arriving → --arrived class transition. The arriving class is
+ * applied after the mutation + a microtask so the browser registers
+ * the "from" state; arrived flips the next frame so the transition fires.
+ * No-op (mutate-only) when reduce-motion is on.
+ */
+export async function withEnterAnimation(
+  uid: string,
+  container: HTMLElement,
+  mutate: () => void,
+): Promise<void> {
+  mutate();
+  if (!shouldAnimate()) return;
+  await Promise.resolve();
+  const el = container.querySelector<HTMLElement>(`[data-uid="${uid}"]`);
+  if (!el) return;
+  el.classList.add("wp-module--arriving");
+  await new Promise<void>(r => requestAnimationFrame(() => r()));
+  el.classList.add("wp-module--arrived");
+  const cleanup = (): void => {
+    el.classList.remove("wp-module--arriving", "wp-module--arrived");
+    el.removeEventListener("transitionend", cleanup);
+  };
+  el.addEventListener("transitionend", cleanup, { once: true });
+}
+
+/**
+ * Animate an element (matched by uid) with --leaving class, wait for the
+ * fade to complete, then run mutate to remove from state. Mutate is
+ * called immediately when reduce-motion is on (no class added).
+ */
+export async function withLeaveAnimation(
+  uid: string,
+  container: HTMLElement,
+  mutate: () => void,
+): Promise<void> {
+  if (!shouldAnimate()) {
+    mutate();
+    return;
+  }
+  const el = container.querySelector<HTMLElement>(`[data-uid="${uid}"]`);
+  if (el) el.classList.add("wp-module--leaving");
+  await new Promise<void>(r => setTimeout(r, MOTION_FADE_MS));
+  mutate();
+}
