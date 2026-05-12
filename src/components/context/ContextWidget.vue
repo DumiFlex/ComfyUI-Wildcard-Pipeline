@@ -2096,12 +2096,22 @@ function pulseDrop(uid: string | undefined | null): void {
 function onBundleDragStart(ev: DragEvent, uid: string) {
   const b = (value.value.bundles ?? []).find((bb) => bb._uid === uid);
   if (!b) return;
+  // Snapshot children so cross-node drop can splice them into a
+  // different Context. Deep clone via JSON to detach from the source
+  // node's reactive state.
+  const children = value.value.modules
+    .slice(b.start_idx, b.end_idx + 1)
+    .map((m) => JSON.parse(JSON.stringify(m)) as ModuleEntry);
   dragState.value = {
     kind: "bundle",
     sourceNodeId: props.nodeId,
     bundleUid: uid,
     sourceStartIdx: b.start_idx,
     sourceEndIdx: b.end_idx,
+    libraryId: b.library_id,
+    bundleName: b.name,
+    bundleColor: b.color ?? null,
+    children,
   };
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = "move";
@@ -2111,16 +2121,35 @@ function onBundleDragStart(ev: DragEvent, uid: string) {
 
 function onDragEnd() {
   const ds = dragState.value;
-  if (ds && ds.kind === "module" && ds.sourceNodeId === props.nodeId && !sameNodeDropHandled) {
-    if (ds.consumedBy != null && ds.consumedBy !== props.nodeId) {
-      // Cross-node consumption — remove source by recorded sourceIdx.
-      const srcIdx = ds.sourceIdx;
-      if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
-        const list = [...value.value.modules];
-        list.splice(srcIdx, 1);
-        value.value = { ...value.value, modules: list };
-      } else {
-        value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+  if (ds && ds.sourceNodeId === props.nodeId && !sameNodeDropHandled) {
+    const consumedByOther = ds.consumedBy != null && ds.consumedBy !== props.nodeId;
+    if (consumedByOther) {
+      if (ds.kind === "module") {
+        // Cross-node consumption — remove source by recorded sourceIdx.
+        const srcIdx = ds.sourceIdx;
+        if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
+          const list = [...value.value.modules];
+          list.splice(srcIdx, 1);
+          value.value = { ...value.value, modules: list };
+        } else {
+          value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+        }
+      } else if (ds.kind === "bundle") {
+        // Cross-node bundle drop — remove the bundle's range from source
+        // modules + drop the BundleInstance.
+        const before = value.value.modules.slice(0, ds.sourceStartIdx);
+        const after = value.value.modules.slice(ds.sourceEndIdx + 1);
+        const removedCount = ds.sourceEndIdx - ds.sourceStartIdx + 1;
+        const remainingBundles = (value.value.bundles ?? [])
+          .filter((b) => b._uid !== ds.bundleUid)
+          .map((b) => (b.start_idx > ds.sourceEndIdx
+            ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
+            : b));
+        value.value = {
+          ...value.value,
+          modules: [...before, ...after],
+          bundles: remainingBundles,
+        };
       }
     }
   }
@@ -2398,10 +2427,48 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
     return;
   }
 
-  // Cross-node bundle drag not supported v1 — surface a toast + bail.
+  // Cross-node bundle drag. Receiver splices the bundle's children
+  // (with fresh _uid + new bundle_origin) into its modules array at the
+  // zone-resolved position and registers a new BundleInstance pointing
+  // at the same library entry.
   if (ds.kind === "bundle") {
-    pushToast("Drag bundles within the same Context only.", { severity: "info" });
-    sameNodeDropHandled = true;
+    const list = [...value.value.modules];
+    const bundles = value.value.bundles ?? [];
+    // Resolve insertIdx from the zone (zone is always outside any
+    // other bundle when the drag is a bundle-as-unit — see resolver).
+    let insertIdx: number;
+    if (!zone || zone.kind === "end") {
+      insertIdx = list.length;
+    } else if (zone.kind === "row") {
+      insertIdx = zone.pos === "after" ? zone.idx + 1 : zone.idx;
+    } else if (zone.kind === "bundle") {
+      const ob = bundles.find((b) => b._uid === zone.uid);
+      if (!ob) insertIdx = list.length;
+      else if (zone.zone === "before") insertIdx = ob.start_idx;
+      else insertIdx = ob.end_idx + 1;
+    } else {
+      insertIdx = list.length;
+    }
+    const newBundle: BundleInstance = {
+      ...emptyBundleInstance(ds.libraryId),
+      start_idx: insertIdx,
+      end_idx: insertIdx + ds.children.length - 1,
+      name: ds.bundleName,
+      color: ds.bundleColor,
+    };
+    const newChildren = ds.children.map((c) => {
+      const fresh = { ...c, _uid: newRowUid() } as ModuleEntry & { bundle_origin?: string };
+      fresh.bundle_origin = newBundle._uid;
+      return fresh;
+    });
+    list.splice(insertIdx, 0, ...newChildren);
+    value.value = {
+      ...value.value,
+      modules: list,
+      bundles: reconcileBundleRanges(list, [...bundles, newBundle]),
+    };
+    pulseDrop(newChildren[0]?._uid);
+    dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
   }
 
@@ -3710,7 +3777,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-btn--primary:hover { background: var(--wp-accent); border-color: var(--wp-accent); filter: brightness(1.08); }
 
 /* ── Footer (Task 10) ───────────────────────────────────────────────── */
-.wp-w-footer { display: flex; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--wp-border-soft, var(--wp-border2)); }
+.wp-w-footer { display: flex; gap: 4px; margin-top: 4px; padding-top: 4px; }
 .wp-w-footer .wp-btn { flex: 1; justify-content: center; }
 
 .wp-drop-end {

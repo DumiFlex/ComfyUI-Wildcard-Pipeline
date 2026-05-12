@@ -27,6 +27,15 @@ export type DragPayload =
       bundleUid: string;
       sourceStartIdx: number;
       sourceEndIdx: number;
+      /** Library entry id — receiver re-uses to attach new BundleInstance. */
+      libraryId: string;
+      /** Denormalized name + color at drag time for the new BundleInstance. */
+      bundleName: string;
+      bundleColor: string | null;
+      /** Deep snapshots of the bundle's children (in order). Receiver
+       *  splices these into its modules array + stamps fresh `_uid`
+       *  + `bundle_origin` on each. */
+      children: ModuleEntry[];
       consumedBy?: number;
     };
 
