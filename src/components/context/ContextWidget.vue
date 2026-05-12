@@ -554,10 +554,26 @@ function playFlipSnapshot(snapshot: FlipSnapshot): void {
   }
 }
 
-function removeBundle(uid: string): void {
+async function removeBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+
+  // Suppress legacy wp-list-move + leave-active CSS immediately so any
+  // downstream layout shifts during the fade don't double-animate via
+  // the old TransitionGroup leftover rule. (#8 regression test asserts
+  // data-suppress-move="true" lands synchronously after the call.)
+  holdSuppressMove();
+
+  // Phase B.6: fade the bundle wrapper out via --leaving before the
+  // splice. Bundle CSS responds to --leaving so the whole frame slides
+  // + fades together. Wait MOTION_FADE_MS, then mutate.
+  const scope = modulesContainer.value;
+  if (scope) {
+    await withLeaveAnimation(uid, scope, () => {});
+  }
+
+  const flipSnap = captureFlipSnapshot();
   // Drop all child modules in [start_idx..end_idx] from the flat
   // modules array AND drop the BundleInstance itself.
   const before = value.value.modules.slice(0, target.start_idx);
@@ -576,14 +592,13 @@ function removeBundle(uid: string): void {
       }
       return b;
     });
-  // Suppress FLIP-move + leave-active for the transition window so the
-  // overlay, children, and follow-up rows all snap on the same frame.
-  holdSuppressMove();
   value.value = {
     ...value.value,
     modules: [...before, ...after],
     bundles: remainingBundles,
   };
+  await nextTick();
+  playFlipSnapshot(flipSnap);
 }
 
 /** Detach bundle frame — keep children as standalone modules but

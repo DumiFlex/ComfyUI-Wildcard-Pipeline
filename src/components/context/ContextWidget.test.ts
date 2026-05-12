@@ -1758,8 +1758,15 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     await trash.trigger("click");
     // Synchronously after the click, the TransitionGroup container
     // should carry data-suppress-move="true" before the rAF clears it.
+    // (holdSuppressMove() runs before the await on the leave animation.)
     const group = wrapper.find(".wp-modules");
     expect(group.attributes("data-suppress-move")).toBe("true");
+    // Phase B.6: removeBundle is now async — it awaits MOTION_FADE_MS
+    // (180ms) for the bundle wrapper's --leaving fade before splicing.
+    // Wait for the full removal sequence to settle before asserting on
+    // the mutated state.
+    await new Promise(r => setTimeout(r, 220));
+    await flushPromises();
     // Single state mutation — onChange fires once for both modules + bundles.
     expect(onChange).toHaveBeenCalled();
     const last = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
