@@ -1484,18 +1484,28 @@ describe("ContextWidget drag-drop overhaul", () => {
     wrapper.unmount();
   });
 
+  function stubRects(els: Array<{ el: HTMLElement; top: number; height: number }>) {
+    for (const { el, top, height } of els) {
+      el.getBoundingClientRect = () => ({
+        top, bottom: top + height, left: 0, right: 100,
+        width: 100, height, x: 0, y: top, toJSON() { return this; },
+      });
+    }
+  }
+
   it("dragover top half adds wp-gap-before (gap metaphor)", async () => {
     const wrapper = mountFour();
     const cards = wrapper.findAll(".wp-module");
-
-    const targetEl = cards[1].element as HTMLElement;
-    targetEl.getBoundingClientRect = () => ({
-      top: 200, bottom: 400, left: 0, right: 100,
-      width: 100, height: 200, x: 0, y: 200, toJSON() { return this; },
-    });
+    stubRects([
+      { el: cards[0].element as HTMLElement, top: 0,   height: 30 },
+      { el: cards[1].element as HTMLElement, top: 30,  height: 30 },
+      { el: cards[2].element as HTMLElement, top: 60,  height: 30 },
+      { el: cards[3].element as HTMLElement, top: 90,  height: 30 },
+    ]);
 
     await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[1].trigger("dragover", { clientY: 220, dataTransfer: makeDataTransfer() });
+    // Pointer in cards[1] top half (y=40, mid=45).
+    await cards[1].trigger("dragover", { clientY: 40, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
     expect(cards[1].classes()).toContain("wp-gap-before");
@@ -1505,24 +1515,22 @@ describe("ContextWidget drag-drop overhaul", () => {
     wrapper.unmount();
   });
 
-  it("dragover bottom half canonicalises to wp-gap-before on next row", async () => {
-    // Canonical-slot model: bottom half of row N maps to slot N+1 =
-    // "before next row". The bar anchors on row N+1, not row N.
+  it("dragover bottom half marks current row as wp-gap-after", async () => {
     const wrapper = mountFour();
     const cards = wrapper.findAll(".wp-module");
-
-    const targetEl = cards[1].element as HTMLElement;
-    targetEl.getBoundingClientRect = () => ({
-      top: 200, bottom: 400, left: 0, right: 100,
-      width: 100, height: 200, x: 0, y: 200, toJSON() { return this; },
-    });
+    stubRects([
+      { el: cards[0].element as HTMLElement, top: 0,   height: 30 },
+      { el: cards[1].element as HTMLElement, top: 30,  height: 30 },
+      { el: cards[2].element as HTMLElement, top: 60,  height: 30 },
+      { el: cards[3].element as HTMLElement, top: 90,  height: 30 },
+    ]);
 
     await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[1].trigger("dragover", { clientY: 380, dataTransfer: makeDataTransfer() });
+    // Pointer in cards[1] bottom half (y=55, mid=45).
+    await cards[1].trigger("dragover", { clientY: 55, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    expect(cards[2].classes()).toContain("wp-gap-before");
-    expect(cards[1].classes()).not.toContain("wp-gap-after");
+    expect(cards[1].classes()).toContain("wp-gap-after");
     expect(cards[1].classes()).not.toContain("wp-gap-before");
 
     await cards[0].trigger("dragend");
@@ -1649,6 +1657,21 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     });
   }
 
+  // List-level dragover resolver iterates ALL top-level items so each
+  // test fixture needs every visible row + bundle-header rect stubbed.
+  // Standard layout: header at y=0 (30px), 4 module cards 30px each.
+  function stubFixtureRects(wrapper: ReturnType<typeof mount>) {
+    const header = wrapper.find(".wp-bundle-header");
+    if (header.exists()) {
+      (header.element as HTMLElement).getBoundingClientRect = rectOf(0, 30);
+    }
+    const cards = wrapper.findAll(".wp-module");
+    // ch0=30, ch1=60, ch2=90, std=120; each 30px tall.
+    cards.forEach((c, i) => {
+      (c.element as HTMLElement).getBoundingClientRect = rectOf(30 + i * 30, 30);
+    });
+  }
+
   it("#5 — BundleHeader is draggable + dragstart populates kind:'bundle' payload", async () => {
     const { wrapper } = mountWithBundle();
     await flushPromises();
@@ -1672,13 +1695,12 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     const { wrapper, onChange } = mountWithBundle();
     await flushPromises();
     onChange.mockClear();
-
+    stubFixtureRects(wrapper);
     const cards = wrapper.findAll(".wp-module");
-    // Stub rects so pointer math works. Drag ch2 (idx 2, last child) to "after" std (idx 3).
-    (cards[3].element as HTMLElement).getBoundingClientRect = rectOf(400, 100);
 
+    // std is the 4th card (idx 3) at y=120..150. Drop in its bottom half (y=140) → after std.
     await cards[2].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[3].trigger("dragover", { clientY: 480, dataTransfer: makeDataTransfer() });
+    await cards[3].trigger("dragover", { clientY: 140, dataTransfer: makeDataTransfer() });
     await cards[3].trigger("drop", { dataTransfer: makeDataTransfer() });
     await flushPromises();
 
@@ -1703,13 +1725,12 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     const { wrapper, onChange } = mountWithBundle();
     await flushPromises();
     onChange.mockClear();
-
+    stubFixtureRects(wrapper);
     const cards = wrapper.findAll(".wp-module");
-    // Drag ch0 onto middle of ch1 (idx 1, inside bundle → "inside").
-    (cards[1].element as HTMLElement).getBoundingClientRect = rectOf(100, 100);
 
+    // ch1 at y=60..90, mid=75. Drop in top half (y=65) → before ch1 = same-bundle reorder.
     await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[1].trigger("dragover", { clientY: 150, dataTransfer: makeDataTransfer() });
+    await cards[1].trigger("dragover", { clientY: 65, dataTransfer: makeDataTransfer() });
     await cards[1].trigger("drop", { dataTransfer: makeDataTransfer() });
     await flushPromises();
 
@@ -1751,14 +1772,12 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
   it("#10 — dragging from OUTSIDE into bundle paints frame highlight", async () => {
     const { wrapper } = mountWithBundle();
     await flushPromises();
+    stubFixtureRects(wrapper);
     const cards = wrapper.findAll(".wp-module");
-    // ch1 (middle bundle child) — pointer mid-card → "inside" zone.
-    (cards[1].element as HTMLElement).getBoundingClientRect = rectOf(100, 100);
 
-    // Drag from std (idx 3, OUTSIDE bundle) onto ch1 → crossing=true
-    // → frame highlights (in-bundle reorder would leave it neutral).
+    // ch1 at y=60..90, mid=75. clientY=70 → inside bundle, top half of ch1.
     await cards[3].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[1].trigger("dragover", { clientY: 150, dataTransfer: makeDataTransfer() });
+    await cards[1].trigger("dragover", { clientY: 70, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
     const overlay = wrapper.find(".wp-bundle-overlay");
@@ -1830,12 +1849,11 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
   it("#10 — in-bundle reorder does NOT paint frame highlight (gap line only)", async () => {
     const { wrapper } = mountWithBundle();
     await flushPromises();
+    stubFixtureRects(wrapper);
     const cards = wrapper.findAll(".wp-module");
-    (cards[1].element as HTMLElement).getBoundingClientRect = rectOf(100, 100);
 
-    // Drag from ch0 (inside same bundle) onto ch1 → crossing=false.
     await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[1].trigger("dragover", { clientY: 150, dataTransfer: makeDataTransfer() });
+    await cards[1].trigger("dragover", { clientY: 70, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
     const overlay = wrapper.find(".wp-bundle-overlay");

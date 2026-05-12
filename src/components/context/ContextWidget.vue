@@ -2280,88 +2280,124 @@ let sameNodeDropHandled = false;
 // the bundle header (dragover handler on BundleHeader); "after-bundle"
 // comes from the row immediately after the bundle range (treated as a
 // row "before" drop on the post-bundle row).
-// Canonical zone resolver — every conceptual drop slot in the list maps
-// to ONE zone so two different physical hovers (bottom half of row N vs
-// top half of row N+1) produce the same dragOver value + bar position.
-// Convention: always anchor on the item BELOW the slot ("before next").
-// Last-position uses { kind: "end" }.
-function nextTopLevel(startIdx: number): { type: "row" | "bundle"; idx: number; uid?: string } | null {
+// List-level dragover resolver — walks every top-level item (rows +
+// bundle frames) once per pointer event. The flat DOM (rows are siblings
+// of bundle headers, bundles render via overlay) means per-row dragover
+// handlers miss the 14px margin gap that opens during drag, so we
+// resolve from the pointer Y against ALL items in one pass.
+//
+// Slots fall into the following categories:
+//   - row "before"/"after" — between top-level standalone rows.
+//   - bundle "before" — above a bundle frame.
+//   - bundle "inside" — drop INTO a bundle as new child at end (crossing).
+//   - bundle-slot before/after — between two specific bundle children
+//     (or AFTER the last child while still inside the bundle, extending
+//     its range).
+//   - end — below all items.
+function onListDragOver(ev: DragEvent) {
+  const ds = dragState.value;
+  if (!ds) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  const container = modulesContainer.value;
+  if (!container) return;
+  const cy = ev.clientY;
   const modules = value.value.modules;
   const bundles = value.value.bundles ?? [];
-  if (startIdx >= modules.length) return null;
-  const b = bundles.find((bb) => bb.start_idx === startIdx);
-  if (b) return { type: "bundle", idx: startIdx, uid: b._uid };
-  return { type: "row", idx: startIdx };
-}
 
-function onRowDragOver(ev: DragEvent, idx: number) {
-  const ds = dragState.value;
-  if (!ds) return;
-  ev.preventDefault();
-  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const topHalf = ev.clientY < r.top + r.height / 2;
-  const bundles = value.value.bundles ?? [];
-  const containing = bundles.find((b) => b.start_idx <= idx && idx <= b.end_idx);
+  // Build top-level item list in render order. Each item carries the
+  // DOM rect we need to test pointer Y against.
+  interface TopItem {
+    type: "row" | "bundle";
+    moduleIdx: number;
+    uid?: string;
+    bundleStartIdx?: number;
+    bundleEndIdx?: number;
+    top: number;
+    bottom: number;
+  }
+  const items: TopItem[] = [];
+  let i = 0;
+  while (i < modules.length) {
+    const b = bundles.find((bb) => bb.start_idx === i);
+    if (b) {
+      const hEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
+      // Collapsed bundle hides its children via v-show; their
+      // getBoundingClientRect collapses to zero. Use the header rect
+      // as both top and bottom in that case.
+      const lastEl = b.collapsed
+        ? hEl
+        : container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${b.end_idx}"]`);
+      if (hEl && lastEl) {
+        const hr = hEl.getBoundingClientRect();
+        const lr = lastEl.getBoundingClientRect();
+        items.push({
+          type: "bundle", moduleIdx: i, uid: b._uid,
+          bundleStartIdx: b.start_idx, bundleEndIdx: b.end_idx,
+          top: hr.top, bottom: lr.bottom,
+        });
+      }
+      i = b.end_idx + 1;
+    } else {
+      const el = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${i}"]`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        items.push({ type: "row", moduleIdx: i, top: r.top, bottom: r.bottom });
+      }
+      i++;
+    }
+  }
+  if (items.length === 0) { dragOver.value = { kind: "end" }; return; }
 
-  if (containing) {
-    const crossing = !(ds.kind === "module" && ds.sourceBundleUid === containing._uid);
-    if (topHalf) {
-      dragOver.value = { kind: "bundle-slot", uid: containing._uid, targetIdx: idx, before: true, crossing };
+  // Walk items: cy in a gap before an item → slot before that item. cy
+  // inside an item → handle row or bundle internals.
+  for (let k = 0; k < items.length; k++) {
+    const it = items[k];
+    if (cy < it.top) {
+      if (it.type === "bundle") dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
+      else dragOver.value = { kind: "row", idx: it.moduleIdx, pos: "before" };
       return;
     }
-    if (idx < containing.end_idx) {
-      // Bottom half within bundle but more children below → before next child.
-      dragOver.value = { kind: "bundle-slot", uid: containing._uid, targetIdx: idx + 1, before: true, crossing };
+    if (cy > it.bottom) continue;
+
+    if (it.type === "row") {
+      const mid = it.top + (it.bottom - it.top) / 2;
+      dragOver.value = { kind: "row", idx: it.moduleIdx, pos: cy < mid ? "before" : "after" };
       return;
     }
-    // Bottom half of bundle's last child → canonical "next top-level item".
-    const nxt = nextTopLevel(containing.end_idx + 1);
-    if (!nxt) { dragOver.value = { kind: "end" }; return; }
-    if (nxt.type === "bundle") { dragOver.value = { kind: "bundle", uid: nxt.uid!, zone: "before" }; return; }
-    dragOver.value = { kind: "row", idx: nxt.idx, pos: "before" };
-    return;
-  }
 
-  // Standalone row.
-  if (topHalf) {
-    dragOver.value = { kind: "row", idx, pos: "before" };
-    return;
-  }
-  const nxt = nextTopLevel(idx + 1);
-  if (!nxt) { dragOver.value = { kind: "end" }; return; }
-  if (nxt.type === "bundle") { dragOver.value = { kind: "bundle", uid: nxt.uid!, zone: "before" }; return; }
-  dragOver.value = { kind: "row", idx: nxt.idx, pos: "before" };
-}
+    // Inside a bundle's rect.
+    const hEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${it.uid}"][data-bundle-header]`);
+    if (!hEl) { dragOver.value = { kind: "bundle", uid: it.uid!, zone: "inside" }; return; }
+    const hr = hEl.getBoundingClientRect();
+    const crossing = !(ds.kind === "module" && ds.sourceBundleUid === it.uid);
+    if (cy <= hr.bottom) {
+      // Pointer is on the bundle header itself.
+      if (cy < hr.top + hr.height / 2) {
+        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
+      } else if (crossing || it.bundleEndIdx! < it.bundleStartIdx!) {
+        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "inside" };
+      } else {
+        dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: it.bundleStartIdx!, before: true, crossing: false };
+      }
+      return;
+    }
 
-// Bundle header dragover:
-//   - top half → drop ABOVE the bundle (canonical "before bundle").
-//   - bottom half + crossing → frame highlight (drop as new child).
-//   - bottom half + same-bundle reorder → bundle-slot before first child.
-function onBundleHeaderDragOver(ev: DragEvent, uid: string) {
-  const ds = dragState.value;
-  if (!ds) return;
-  ev.preventDefault();
-  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const topHalf = ev.clientY < r.top + r.height / 2;
-  if (topHalf) {
-    dragOver.value = { kind: "bundle", uid, zone: "before" };
+    // Pointer is in the bundle children area. Find the closest gap.
+    for (let m = it.bundleStartIdx!; m <= it.bundleEndIdx!; m++) {
+      const cEl = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${m}"]`);
+      if (!cEl) continue;
+      const cr = cEl.getBoundingClientRect();
+      if (cy < cr.top + cr.height / 2) {
+        dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: m, before: true, crossing };
+        return;
+      }
+    }
+    dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: it.bundleEndIdx!, before: false, crossing };
     return;
   }
-  const b = (value.value.bundles ?? []).find((bb) => bb._uid === uid);
-  const crossing = !(ds.kind === "module" && ds.sourceBundleUid === uid);
-  if (!b || crossing || b.end_idx < b.start_idx) {
-    dragOver.value = { kind: "bundle", uid, zone: "inside" };
-    return;
-  }
-  dragOver.value = { kind: "bundle-slot", uid, targetIdx: b.start_idx, before: true, crossing: false };
-}
-
-function onBundleHeaderDrop(ev: DragEvent) {
-  // Route through the same drop handler; targetIdx is irrelevant once
-  // dragOver carries a bundle zone.
-  onDrop(ev, null);
+  // Below all items.
+  dragOver.value = { kind: "end" };
 }
 
 function onEndDragOver(ev: DragEvent) {
@@ -2618,7 +2654,12 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           ><i class="pi pi-eye" /></button>
         </div>
 
-        <div class="wp-modules-frame" ref="modulesContainer">
+        <div
+          class="wp-modules-frame"
+          ref="modulesContainer"
+          @dragover="onListDragOver"
+          @drop="(ev) => onDrop(ev, null)"
+        >
         <!-- Bundle frame overlays — absolute-positioned boxes painted
              OVER the bundle ranges. Sized via updateBundleOverlays()
              from each bundle header's offsetTop + last child's
@@ -2675,8 +2716,6 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
           @contextmenu="(ev) => openBundleContextMenu(ev, bundleStartingAt(idx)!._uid)"
           @dragstart="(ev) => onBundleDragStart(ev, bundleStartingAt(idx)!._uid)"
           @dragend="onDragEnd"
-          @dragover="(ev) => onBundleHeaderDragOver(ev, bundleStartingAt(idx)!._uid)"
-          @drop="onBundleHeaderDrop"
         />
         <div
         v-show="!hiddenByBundleCollapse(idx)"
@@ -2707,8 +2746,6 @@ function onDrop(ev: DragEvent, targetIdx: number | null) {
         }"
         @dragstart="(ev) => onDragStart(ev, m, idx)"
         @dragend="onDragEnd"
-        @dragover="(ev) => onRowDragOver(ev, idx)"
-        @drop="(ev) => onDrop(ev, idx)"
         @contextmenu.stop.prevent="(ev) => openContextMenu(ev, m, idx)"
         @keydown="(ev) => onCardKeydown(ev, m, idx)"
       >
