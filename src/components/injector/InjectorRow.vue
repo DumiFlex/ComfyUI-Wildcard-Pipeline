@@ -154,6 +154,16 @@ function onDragEnd(): void {
     @drop.prevent="onDrop"
     @dragend="onDragEnd"
   >
+    <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder">
+      <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
+        <circle cx="1.5" cy="2" r="1" />
+        <circle cx="4.5" cy="2" r="1" />
+        <circle cx="1.5" cy="6" r="1" />
+        <circle cx="4.5" cy="6" r="1" />
+        <circle cx="1.5" cy="10" r="1" />
+        <circle cx="4.5" cy="10" r="1" />
+      </svg>
+    </span>
     <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'" draggable="false">
       <input
         type="checkbox"
@@ -217,10 +227,10 @@ function onDragEnd(): void {
       data-test="inj-row-conflict"
     >{{ conflictLabel }}</span>
 
-    <div class="wp-inj-actions" draggable="false">
+    <div class="wp-row-actions" draggable="false">
       <button
         type="button"
-        class="wp-inj-action"
+        class="wp-btn--icon-sm"
         :class="{ 'is-active': row.internal }"
         data-test="inj-row-internal"
         draggable="false"
@@ -229,7 +239,7 @@ function onDragEnd(): void {
       ><i class="pi pi-globe" aria-hidden="true" /></button>
       <button
         type="button"
-        class="wp-inj-action wp-inj-action--danger"
+        class="wp-btn--icon-sm wp-btn--danger"
         data-test="inj-row-remove"
         draggable="false"
         title="Disconnect this input wire"
@@ -243,6 +253,7 @@ function onDragEnd(): void {
 <style scoped>
 @import "../shared/var-binding-input.css";
 @import "../shared/theme.css";
+@import "../shared/row-primitives.css";
 
 /* Card-framed row — mirrors .wp-module shape. Type-color left stripe
  * mirrors data-kind border-left from ContextWidget. */
@@ -423,75 +434,24 @@ function onDragEnd(): void {
 .wp-inj-row[data-type="guider"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-3) 22%, transparent); color: var(--wp-var-3); }
 .wp-inj-row[data-type="sampler"]      .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
 
-/* Conflict dot + badge — same family as ContextWidget */
-.wp-conflict-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  cursor: help;
-  border: 1px solid transparent;
-}
-.wp-conflict-dot--info    { background: color-mix(in oklab, var(--wp-accent) 14%, transparent); border-color: var(--wp-accent); }
-.wp-conflict-dot--warning { background: color-mix(in oklab, var(--wp-amber)  14%, transparent); border-color: var(--wp-amber); }
-.wp-conflict-dot--error   { background: color-mix(in oklab, var(--wp-red)    14%, transparent); border-color: var(--wp-red); }
+/* .wp-conflict-dot + .wp-conflict-badge + severity variants
+ * + .wp-btn--icon-sm + variants → src/components/shared/row-primitives.css.
+ * The shared file is imported at the top of this scoped block. */
 
+/* Injector-specific badge truncation. The shared .wp-conflict-badge
+ * doesn't truncate by default (Context's row has flex:1 module name
+ * absorbing slack). Injector's row layout puts vbind-wrap right next
+ * to the badge, so a long label can squeeze the binding input. Cap
+ * + ellipsis prevents that. */
 .wp-conflict-badge {
-  font: 600 9px/1 var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 3px 5px;
-  border-radius: 2px;
-  /* Cap + ellipsis so a long badge ("duplicate variable") can't
-   * eat the binding input width. Tried auto-widening the node
-   * instead but every observer-driven approach created feedback
-   * loops with litegraph's re-render — surveyed nodes (rgthree,
-   * KJNodes, LoRA Manager) all truncate or stay static. Full
-   * text remains accessible via the title tooltip. */
   max-width: 88px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 1;
-  cursor: help;
 }
-.wp-conflict-badge--info    { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); color: var(--wp-accent); }
-.wp-conflict-badge--warning { background: color-mix(in oklab, var(--wp-amber)  18%, transparent); color: var(--wp-amber); }
-.wp-conflict-badge--error   { background: color-mix(in oklab, var(--wp-red)    18%, transparent); color: var(--wp-red); }
 
-/* Actions cluster — same as Context's .wp-btn--icon-sm */
-.wp-inj-actions { display: flex; gap: 1px; flex-shrink: 0; }
-.wp-inj-action {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font: 500 11px/1 var(--wp-font-sans);
-  padding: 3px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-.wp-inj-action:hover {
-  background: var(--wp-bg2);
-  border-color: var(--wp-border-soft, var(--wp-border2));
-  color: var(--wp-text);
-}
-.wp-inj-action .pi { font-size: 11px; }
-.wp-inj-action.is-active {
-  color: var(--wp-accent-text, var(--wp-accent));
-  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
-}
-/* Danger variant hover — mirror .wp-btn--danger:hover from ModuleRow:
- * red icon + red-tinted border, NO bg flip. Reads as "destructive on
- * this row" without competing with the row's own hover bg. */
-.wp-inj-action--danger:hover {
-  background: transparent;
-  color: var(--wp-danger);
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
-}
+/* Row action cluster — flex row of icon buttons. Uses the shared
+ * .wp-btn--icon-sm for each button's styling. */
+.wp-row-actions { display: flex; gap: 1px; flex-shrink: 0; }
 </style>

@@ -1,0 +1,187 @@
+/* Row primitives — shared visual components used across every list
+ * surface in the extension (ModuleRow in ContextWidget, InjectorRow
+ * in InjectorWidget, future row-like UIs in Debug / Assembler).
+ *
+ * Single source of truth for:
+ *   - Small icon button family (.wp-btn--icon-sm + variants)
+ *   - Drag handle glyph (.wp-drag-handle)
+ *   - Conflict cluster (.wp-conflict-dot + .wp-conflict-badge + variants)
+ *   - State badges (.wp-mod-badge + variants for mod/drift/missing)
+ *
+ * Imported by both ContextWidget (unscoped) and InjectorRow (scoped
+ * — Vue's scoper safely runs PostCSS over the import). Any visual
+ * tweak to a row primitive lands once here and propagates to every
+ * consumer; no more duplicating CSS across feature widgets.
+ *
+ * NOT wrapped in `@layer wp-extension` — same constraint as
+ * theme.css and var-binding-input.css: Vue's <style scoped> scoper
+ * can't parse @layer atrules in CSS that gets @imported into a
+ * scoped block. The `.wp-*` namespace prefix carries isolation duty
+ * for this file.
+ */
+
+/* ── Small icon button family ────────────────────────────────────── */
+
+/* Used everywhere a single pi-icon needs a 20×20 button: trash,
+ * lock, internal-flag toggle, etc. Variants:
+ *   .wp-btn--danger          → trash / destructive (red hover)
+ *   .is-active               → toggled-on state (internal flag)
+ *   .is-locked               → seed-lock active (warn-tinted)
+ */
+.wp-btn--icon-sm {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
+  font: 500 11px/1 var(--wp-font-sans);
+  padding: 3px;
+  border-radius: var(--wp-radius, 4px);
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.wp-btn--icon-sm:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-border-soft, var(--wp-border2));
+  color: var(--wp-text);
+}
+.wp-btn--icon-sm .pi { font-size: 11px; }
+.wp-btn--icon-sm.is-active {
+  color: var(--wp-accent-text, var(--wp-accent));
+  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
+}
+.wp-btn--icon-sm.is-locked {
+  color: var(--wp-warn);
+  background: color-mix(in srgb, var(--wp-warn) 14%, transparent);
+}
+/* Danger variant — red icon + red-tinted border on hover. NOT a bg
+ * flip — the row's own hover bg stays the dominant surface, the
+ * red ring just signals "destructive action on THIS row". */
+.wp-btn--icon-sm.wp-btn--danger:hover {
+  background: transparent;
+  color: var(--wp-danger);
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
+}
+
+/* ── Drag handle ─────────────────────────────────────────────────── */
+
+/* Visible 6-dot grip glyph used to signal "row is draggable". Sized
+ * 6px wide × full row height so it sits flush at the row's left
+ * edge. Opacity ramps on row hover / focus to keep idle rows clean
+ * — drag affordance fades in when the user looks at the row. */
+.wp-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wp-text3);
+  width: 6px;
+  flex-shrink: 0;
+  cursor: grab;
+  opacity: 0.45;
+  transition: opacity 0.15s, color 0.15s;
+}
+.wp-drag-handle:active { cursor: grabbing; }
+.wp-drag-handle__grip { display: block; }
+
+/* ── Conflict cluster (dot + text badge) ─────────────────────────── */
+
+/* 7px filled circle, kept consistent with .wp-mod-dot's size so the
+ * cluster reads as one design family. Severity tints come from the
+ * accent/amber/red triple — only the hue distinguishes the issue
+ * kind. */
+.wp-conflict-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: help;
+  border: 1px solid transparent;
+}
+.wp-conflict-dot--info {
+  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
+  border-color: var(--wp-accent);
+}
+.wp-conflict-dot--warning {
+  background:   color-mix(in oklab, var(--wp-amber) 14%, transparent);
+  border-color: var(--wp-amber);
+}
+.wp-conflict-dot--error {
+  background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
+  border-color: var(--wp-red);
+}
+
+/* Text badge paired with the dot — short label ("override",
+ * "missing var", "duplicate", etc). Same chip shape + density token
+ * as wp-mod-badge so the row's cluster looks uniform. */
+.wp-conflict-badge {
+  font-family: var(--wp-font-sans, sans-serif);
+  font-weight: 600;
+  font-size: var(--wp-chip-font);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--wp-chip-pad);
+  border-radius: 2px;
+  flex-shrink: 0;
+  cursor: help;
+}
+.wp-conflict-badge--info {
+  background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
+}
+.wp-conflict-badge--warning {
+  background: color-mix(in oklab, var(--wp-amber) 18%, transparent);
+  color: var(--wp-amber);
+}
+.wp-conflict-badge--error {
+  background: color-mix(in oklab, var(--wp-red) 18%, transparent);
+  color: var(--wp-red);
+}
+
+/* ── State badges (mod / drift / missing) ────────────────────────── */
+
+/* Status text-badges — kind-tinted label that pairs with the
+ * matching `.wp-mod-dot--*` so users see BOTH the colour glance and
+ * the textual state. Currently used by ModuleRow only; available
+ * for any row that needs to flag a library-divergent state. */
+.wp-mod-badge {
+  font-family: var(--wp-font-sans);
+  font-weight: 600;
+  font-size: var(--wp-chip-font);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--wp-chip-pad);
+  border-radius: 2px;
+}
+.wp-mod-badge--mod,
+.wp-mod-badge--drift,
+.wp-mod-badge--missing {
+  flex-shrink: 0;
+}
+.wp-mod-badge--mod {
+  background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
+  color: var(--wp-status-modified);
+}
+.wp-mod-badge--drift {
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
+  color: var(--wp-warn);
+}
+.wp-mod-badge--missing {
+  background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
+  color: var(--wp-danger);
+}
+
+/* Sibling-count badge — distinct from state badges (different
+ * meaning: "this row N of M in the duplicate group"). Mono font +
+ * non-uppercase so it reads as a count, not an alert. */
+.wp-mod-badge--sibling {
+  background: color-mix(in srgb, var(--wp-text-dim, var(--wp-text3)) 22%, transparent);
+  color: var(--wp-text-muted, var(--wp-text3));
+  font-family: var(--wp-font-mono);
+  text-transform: none;
+  flex-shrink: 0;
+}

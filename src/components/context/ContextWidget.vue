@@ -3176,6 +3176,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 
 <style>
 @import "../shared/theme.css";
+@import "../shared/row-primitives.css";
 </style>
 
 <style>
@@ -3768,19 +3769,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
 /* Drag handle — grab cursor scoped here, full card stays draggable. */
-.wp-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--wp-text3);
-  width: 6px;
-  flex-shrink: 0;
-  cursor: grab;
-  opacity: 0.45;
-  transition: opacity 0.15s, color 0.15s;
-}
-.wp-drag-handle:active { cursor: grabbing; }
-.wp-drag-handle__grip { display: block; }
+/* .wp-drag-handle base styles → src/components/shared/row-primitives.css */
 .wp-module:hover .wp-drag-handle,
 .wp-module:focus-within .wp-drag-handle { opacity: 1; color: var(--wp-text2); }
 
@@ -3866,61 +3855,10 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   min-width: 0;
 }
 
-/* Conflict dots — structural graph issues (missing template var,
- * duplicate variable, shadowed upstream). Same chip-style triple as
- * `.wp-mod-dot` so the cluster reads as one design family — only the
- * hue distinguishes the kind of issue. Sized 7px to match the mod-dots
- * exactly; the previous 8px outlier made the cluster feel uneven. */
-.wp-conflict-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  cursor: help;
-  border: 1px solid transparent;
-}
-.wp-conflict-dot--info {
-  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
-  border-color: var(--wp-accent);
-}
-.wp-conflict-dot--warning {
-  background:   color-mix(in oklab, var(--wp-amber) 14%, transparent);
-  border-color: var(--wp-amber);
-}
-.wp-conflict-dot--error {
-  background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
-  border-color: var(--wp-red);
-}
-
-/* Conflict text badges — pair with `.wp-conflict-dot--*`. Same
- * shape + sizing as `.wp-mod-badge` (status badges next to status
- * dots), but tinted off the conflict-severity tokens so the badge
- * picks up the same hue as its dot. Surfaces `override`,
- * `missing var`, `duplicate`, and the constraint-* short labels. */
-.wp-conflict-badge {
-  font-family: var(--wp-font-sans, sans-serif);
-  font-weight: 600;
-  font-size: var(--wp-chip-font);
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: var(--wp-chip-pad);
-  border-radius: 2px;
-  flex-shrink: 0;
-  cursor: help;
-}
-.wp-conflict-badge--info {
-  background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
-  color: var(--wp-accent);
-}
-.wp-conflict-badge--warning {
-  background: color-mix(in oklab, var(--wp-amber) 18%, transparent);
-  color: var(--wp-amber);
-}
-.wp-conflict-badge--error {
-  background: color-mix(in oklab, var(--wp-red) 18%, transparent);
-  color: var(--wp-red);
-}
+/* .wp-conflict-dot + .wp-conflict-badge + severity variants →
+ * src/components/shared/row-primitives.css. Kept commented anchor
+ * here for grep discoverability — every row-list widget consumes
+ * the same cluster (ModuleRow, InjectorRow, future Debug rows). */
 
 /* Cluster wrapper — keeps every status dot (modified, missing,
  * conflict) on one inline run so they never get separated by
@@ -3981,26 +3919,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 /* ── Sibling badge ──────────────────────────────────────────────────────
  * Rendered when the same uuid appears more than once in this Context.
  * Phase A: count display only. Phase B will wire auto-fork prompt. */
-.wp-mod-badge {
-  /* Longhand instead of `font:` shorthand so font-size can flex with the
-   * --wp-chip-font density token without each density mode re-declaring
-   * the full shorthand. */
-  font-family: var(--wp-font-sans);
-  font-weight: 600;
-  font-size: var(--wp-chip-font);
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: var(--wp-chip-pad);
-  border-radius: 2px;
-}
-.wp-mod-badge--sibling {
-  background: color-mix(in srgb, var(--wp-text-dim, var(--wp-text3)) 22%, transparent);
-  color: var(--wp-text-muted, var(--wp-text3));
-  font-family: var(--wp-font-mono);
-  text-transform: none;
-  flex-shrink: 0;
-}
+/* .wp-mod-badge + .wp-mod-badge--* + .wp-mod-badge--sibling →
+ * src/components/shared/row-primitives.css. */
 
 /* Status text-badges (mockup v5 lines 714, 736, 861) — kind-tinted
  * label that pairs with the matching `.wp-mod-dot--*` so users see
@@ -4011,24 +3931,13 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  *   --wp-warn             → "no link" (Injector socket — re-uses drift hue)
  *   --wp-danger           → "missing" (gone from library)
  */
+/* Hover cursor for the status text badges — kept here (not in
+ * shared) because cursor:help is a Context-row-specific UX
+ * decision (the badges have hover-tooltips that explain the state). */
 .wp-mod-badge--mod,
 .wp-mod-badge--drift,
-.wp-mod-badge--missing {
-  flex-shrink: 0;
-  cursor: help;
-}
-.wp-mod-badge--mod {
-  background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
-  color: var(--wp-status-modified);
-}
-.wp-mod-badge--drift {
-  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
-  color: var(--wp-warn);
-}
-.wp-mod-badge--missing {
-  background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
-  color: var(--wp-danger);
-}
+.wp-mod-badge--missing { cursor: help; }
+/* .wp-mod-badge--mod/drift/missing color rules → row-primitives.css */
 
 /* `.wp-kind-chip` rules live in shared/theme.css so the chip stays
  * visually identical across the row, picker, and edit-modal header.
@@ -4043,39 +3952,10 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   gap: 1px;
   flex-shrink: 0;
 }
-.wp-btn--icon-sm {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font: 500 11px/1 var(--wp-font-sans);
-  padding: 3px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-.wp-btn--icon-sm:hover {
-  background: var(--wp-bg2);
-  border-color: var(--wp-border-soft, var(--wp-border2));
-  color: var(--wp-text);
-}
-.wp-btn--icon-sm .pi { font-size: 11px; }
-.wp-btn--icon-sm.is-active {
-  color: var(--wp-accent-text, var(--wp-accent));
-  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
-}
-.wp-btn--icon-sm.is-locked {
-  color: var(--wp-warn);
-  background: color-mix(in srgb, var(--wp-warn) 14%, transparent);
-}
-.wp-btn--danger:hover {
-  color: var(--wp-danger);
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
-}
+/* .wp-btn--icon-sm + variants (.is-active, .is-locked, .wp-btn--danger)
+ * → src/components/shared/row-primitives.css. Used by ModuleRow,
+ * BundleHeader, InjectorRow, and any future row surface that needs
+ * a small icon button. */
 
 /* Summary line — read-only preview. Edit via right-click → Edit (or Enter
  * on focused card). Keeping the card chrome non-interactive avoids
