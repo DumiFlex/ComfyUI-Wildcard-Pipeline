@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import {
   emptyInjectorRowsValue,
   newRowUid,
@@ -10,7 +10,22 @@ import {
 } from "../../widgets/_shared";
 import { reorderInjectorRows } from "../../widgets/injector";
 import { labelFor, scanInjectorConflicts } from "../../extension/conflicts";
+import { applyFlip, captureRects } from "../shared/flip";
 import InjectorRowComp from "./InjectorRow.vue";
+
+// NOTE: when we wire enter/leave animations (row added on connect,
+// row removed on disconnect) we'll pass `{ classes: INJ_ANIM_CLASSES }`
+// into withEnterAnimation / withLeaveAnimation. Reserved for that
+// future commit:
+//   const INJ_ANIM_CLASSES: AnimationClasses = {
+//     arriving: "wp-inj-row--arriving",
+//     arrived:  "wp-inj-row--arrived",
+//     leaving:  "wp-inj-row--leaving",
+//     flash:    "wp-inj-row--flash",
+//   };
+// The reorder path below uses applyFlip directly — it doesn't add
+// any classes, just inverse-transforms each row from its old to new
+// position, so the class vocabulary is irrelevant for this case.
 
 const props = withDefaults(
   defineProps<{
@@ -306,7 +321,16 @@ watch(
 // physical input_N socket then feeds whatever variable now sits at
 // that index. dragSrcIdx is captured on dragstart and cleared on
 // drop / dragend so a cancelled drag doesn't leak state.
+//
+// FLIP animation: captureRects BEFORE the row mutation snapshots
+// each row's current Y position keyed by `data-uid`. After Vue
+// re-renders the new order (nextTick), applyFlip computes the
+// inverse-transform per row and tweens back to identity — the rows
+// appear to slide to their new positions instead of jump-cutting.
+// shared/flip.ts honors the wp-a11y-no-motion body class so the
+// animation no-ops under reduce-motion settings.
 const dragSrcIdx = ref<number | null>(null);
+const listEl = ref<HTMLElement | null>(null);
 
 function onRowDragStart(fromIdx: number): void {
   dragSrcIdx.value = fromIdx;
@@ -323,8 +347,24 @@ function onRowDrop(overIdx: number, edge: "before" | "after"): void {
   const toIdx = edge === "before" ? overIdx : overIdx + 1;
   const nextRows = reorderInjectorRows(value.value.rows, from, toIdx);
   if (nextRows === value.value.rows) return;
+
+  // Snapshot row positions BEFORE the mutation. applyFlip below
+  // diffs against these to compute the slide distance per row.
+  const container = listEl.value;
+  const before = container
+    ? captureRects(container, (el) => el.dataset.uid ?? null)
+    : null;
+
   value.value = { ...value.value, rows: nextRows };
   persist();
+
+  if (container && before) {
+    // Wait one render tick so Vue commits the new row order to the
+    // DOM before we re-measure rects in applyFlip.
+    void nextTick(() => {
+      applyFlip(container, before, (el) => el.dataset.uid ?? null);
+    });
+  }
 }
 
 function onRowDragEnd(): void {
@@ -361,7 +401,7 @@ defineExpose({ addRow, removeRow });
       </button>
     </div>
 
-    <div v-if="!collapsed" class="wp-inj-list">
+    <div v-if="!collapsed" ref="listEl" class="wp-inj-list">
       <InjectorRowComp
         v-for="(row, idx) in value.rows"
         :key="row._uid"

@@ -136,6 +136,7 @@ function onDragEnd(): void {
   <div
     class="wp-inj-row"
     :data-type="(valueType ?? '').toLowerCase()"
+    :data-uid="row._uid"
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
@@ -287,6 +288,37 @@ function onDragEnd(): void {
 .wp-inj-row--dragging { opacity: 0.4; }
 .wp-inj-row--drop-before { box-shadow: inset 0 2px 0 0 var(--wp-accent); }
 .wp-inj-row--drop-after  { box-shadow: inset 0 -2px 0 0 var(--wp-accent); }
+
+/* Enter / leave / flash classes consumed by src/components/shared/
+ * flip.ts when InjectorWidget calls withEnterAnimation /
+ * withLeaveAnimation / flashRows. Mirror of ModuleRow's
+ * .wp-module--* family with injector-tinted accents — visual parity
+ * across both row UIs. The `transition: none` on --arriving snaps
+ * the row to the from-state without fighting the base row's
+ * background transition. */
+.wp-inj-row.wp-inj-row--leaving {
+  opacity: 0;
+  transform: translateX(-12px);
+  transition: opacity 180ms linear, transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.wp-inj-row.wp-inj-row--arriving {
+  opacity: 0;
+  transform: translateX(12px);
+  transition: none;
+}
+.wp-inj-row.wp-inj-row--arrived {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 180ms linear, transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Flash — green ring keyframe for library-side mutations (refresh
+ * etc). Currently used for drag-drop drop-pulse signal on arrival. */
+.wp-inj-row--flash { animation: wp-inj-flash 420ms ease-out; }
+@keyframes wp-inj-flash {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--wp-green) 60%, transparent); }
+  100% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--wp-green) 0%, transparent); }
+}
 
 .wp-inj-row[data-type="string"]       { border-left-color: var(--wp-amber); }
 .wp-inj-row[data-type="int"]          { border-left-color: var(--wp-green); }
