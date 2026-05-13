@@ -24,6 +24,18 @@ const emit = defineEmits<{
 
 const isEmpty = computed(() => !props.row.binding.trim());
 
+/** Type → pi-* icon mapping. Falls back to pi-circle for unknown types
+ *  so the icon slot never goes empty (consistent row height). */
+const TYPE_ICONS: Record<string, string> = {
+  string: "pi-pencil",
+  int: "pi-hashtag",
+  float: "pi-percentage",
+  boolean: "pi-check-square",
+};
+const typeIcon = computed(
+  () => TYPE_ICONS[(props.valueType ?? "").toLowerCase()] ?? "pi-circle",
+);
+
 function onBindingInput(ev: Event): void {
   const next = (ev.target as HTMLInputElement).value;
   emit("update", { binding: next });
@@ -33,6 +45,7 @@ function onBindingInput(ev: Event): void {
 <template>
   <div
     class="wp-inj-row"
+    :data-type="(valueType ?? '').toLowerCase()"
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
@@ -52,46 +65,53 @@ function onBindingInput(ev: Event): void {
       <span class="wp-inj-toggle-mark"></span>
     </label>
 
-    <div class="wp-inj-main">
-      <div class="wp-inj-binding-line">
-        <span
-          class="wp-inj-slot-tag"
-          :title="`Bound to socket ${row.slot_name}`"
-          data-test="inj-row-slot"
-        >{{ row.slot_name }}</span>
-        <input
-          type="text"
-          class="wp-inj-row-binding"
-          :class="{ 'wp-inj-row-binding--empty': isEmpty }"
-          data-test="inj-row-binding"
-          :value="row.binding"
-          :aria-label="`binding for ${row.slot_name}`"
-          placeholder="binding…"
-          spellcheck="false"
-          @input="onBindingInput"
-        />
-        <span
-          v-if="valueType"
-          class="wp-inj-type-chip"
-          :class="`wp-inj-type-chip--${valueType.toLowerCase()}`"
-          data-test="inj-row-type"
-        >{{ valueType }}</span>
-        <span
-          v-if="conflictSeverity"
-          class="wp-conflict-dot"
-          :class="`wp-conflict-dot--${conflictSeverity}`"
-          :title="conflictLabel"
-          aria-hidden="true"
-        ></span>
-        <span
-          v-if="conflictSeverity && conflictLabel"
-          class="wp-conflict-badge"
-          :class="`wp-conflict-badge--${conflictSeverity}`"
-          :title="conflictLabel"
-          data-test="inj-row-conflict"
-        >{{ conflictLabel }}</span>
-      </div>
+    <span class="wp-inj-type-icon" aria-hidden="true">
+      <i :class="['pi', typeIcon]" />
+    </span>
+
+    <span
+      class="wp-inj-slot"
+      :title="`Bound to socket ${row.slot_name}`"
+      data-test="inj-row-slot"
+    >{{ row.slot_name }}</span>
+
+    <span
+      v-if="valueType"
+      class="wp-inj-type-chip"
+      data-test="inj-row-type"
+    >{{ valueType.toLowerCase() }}</span>
+
+    <div
+      class="wp-vbind-wrap"
+      :class="{ 'wp-vbind-wrap--empty': isEmpty }"
+    >
+      <span class="wp-vbind-prefix">$</span>
+      <input
+        type="text"
+        class="wp-vbind-input"
+        data-test="inj-row-binding"
+        :value="row.binding"
+        :aria-label="`binding for ${row.slot_name}`"
+        placeholder="variable_name"
+        spellcheck="false"
+        @input="onBindingInput"
+      />
     </div>
+
+    <span
+      v-if="conflictSeverity"
+      class="wp-conflict-dot"
+      :class="`wp-conflict-dot--${conflictSeverity}`"
+      :title="conflictLabel"
+      aria-hidden="true"
+    ></span>
+    <span
+      v-if="conflictSeverity && conflictLabel"
+      class="wp-conflict-badge"
+      :class="`wp-conflict-badge--${conflictSeverity}`"
+      :title="conflictLabel"
+      data-test="inj-row-conflict"
+    >{{ conflictLabel }}</span>
 
     <div class="wp-inj-actions">
       <button
@@ -107,34 +127,32 @@ function onBindingInput(ev: Event): void {
 </template>
 
 <style scoped>
+@import "../shared/var-binding-input.css";
 @import "../shared/theme.css";
 
+/* Card-framed row — mirrors .wp-module shape. Type-color left stripe
+ * mirrors data-kind border-left from ContextWidget. */
 .wp-inj-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  /* Density-aware: `--wp-pad-row` + `--wp-row-gap` are overridden by
-   * `.wp-density-{compact,minimal}` body classes (display-prefs.css)
-   * so the row tightens up alongside Context module rows when the
-   * user picks a denser layout. */
-  gap: var(--wp-row-gap, 10px);
-  padding: var(--wp-pad-row, 8px 10px);
-  /* Full 1px transparent border so conflict severity rules can paint
-   * the FULL frame of the row by overriding `border-color` only —
-   * mirrors `.wp-module.wp-conflict-*` from ContextWidget. Bottom-only
-   * separator handled by adjacent-sibling rule below. */
-  border: 1px solid transparent;
+  background: var(--wp-bg3);
+  border: 1px solid var(--wp-border);
+  border-left-width: 3px;
+  border-left-color: var(--wp-text3);  /* fallback for unknown type */
   border-radius: var(--wp-radius-sm);
-  border-bottom-color: var(--wp-border-soft, var(--wp-border));
+  padding: var(--wp-pad-row, 4px 6px);
+  display: flex;
+  align-items: center;
+  gap: var(--wp-row-gap, 6px);
+  font: 500 12px var(--wp-font-sans);
+  color: var(--wp-text);
+  transition: background-color 0.15s, border-color 0.15s;
 }
-.wp-inj-row:last-child { border-bottom-color: transparent; }
-.wp-inj-row--disconnected {
-  border-left: 2px dashed var(--wp-warn);
-  background: color-mix(in srgb, var(--wp-warn) 4%, transparent);
-}
-/* Disabled — mirrors `.wp-module.wp-disabled` from ContextWidget:
- * 55% opacity + diagonal stripe so the row reads as off without
- * disappearing entirely. */
+
+.wp-inj-row[data-type="string"]  { border-left-color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]     { border-left-color: var(--wp-green); }
+.wp-inj-row[data-type="float"]   { border-left-color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"] { border-left-color: var(--wp-var-5); }
+
+/* Disabled — mirrors .wp-module.wp-disabled diagonal-stripe + 55% opacity. */
 .wp-inj-row--disabled {
   opacity: 0.55;
   background: repeating-linear-gradient(
@@ -145,16 +163,22 @@ function onBindingInput(ev: Event): void {
     var(--wp-bg2) 8px
   );
 }
-/* Conflict frame — mirrors `.wp-module.wp-conflict-*` from
- * ContextWidget exactly: 1px full border in severity color around
- * the row, no bg tint (the colored frame alone reads at canvas
- * zoom). Overrides the transparent default border declared above
- * by changing `border-color` only — keeps the row's hit-box width
- * + height consistent across conflict states. */
+
+/* Conflict frame — mirrors .wp-module.wp-conflict-* (severity color
+ * paints the full border; left stripe stays type-color underneath). */
 .wp-inj-row.wp-conflict-info    { border-color: var(--wp-accent); }
 .wp-inj-row.wp-conflict-warning { border-color: var(--wp-amber); }
 .wp-inj-row.wp-conflict-error   { border-color: var(--wp-red); }
 
+/* Disconnected — Injector-specific. Dashed amber left stripe + faint
+ * amber wash so the user sees 'row exists but socket has no wire'. */
+.wp-inj-row--disconnected {
+  border-left-style: dashed;
+  border-left-color: var(--wp-warn);
+  background: color-mix(in srgb, var(--wp-warn) 4%, var(--wp-bg3));
+}
+
+/* Toggle checkbox — same as Context's .wp-toggle */
 .wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .wp-inj-toggle input {
   position: absolute;
@@ -180,59 +204,48 @@ function onBindingInput(ev: Event): void {
   box-shadow: 0 0 0 2px var(--wp-violet);
 }
 
-.wp-inj-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.wp-inj-binding-line { display: flex; align-items: center; gap: 8px; }
-/* Slot-name tag — shows which input socket (input_0, input_1, …)
- * the row is bound to, so the user can correlate row order with the
- * socket pin order on the node body. Mono font + dim color so it
- * reads as a positional label, not data. */
-.wp-inj-slot-tag {
-  font: 600 9px var(--wp-font-mono);
-  color: var(--wp-text-dim, var(--wp-text3));
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
-  padding: 1px 5px;
+/* Type icon — color-matched to type, mirrors .wp-mod-icon from Context */
+.wp-inj-type-icon {
+  width: 16px;
+  flex-shrink: 0;
+  font-size: 11px;
+  text-align: center;
+  line-height: 1;
+  color: var(--wp-text3);
+}
+.wp-inj-row[data-type="string"]  .wp-inj-type-icon { color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]     .wp-inj-type-icon { color: var(--wp-green); }
+.wp-inj-row[data-type="float"]   .wp-inj-type-icon { color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"] .wp-inj-type-icon { color: var(--wp-var-5); }
+.wp-inj-type-icon .pi { font-size: 11px; }
+
+/* Slot tag — kind-chip-shaped pill in muted grey, sans font */
+.wp-inj-slot {
+  font: 600 9px/1.2 var(--wp-font-sans);
+  text-transform: lowercase;
   letter-spacing: 0.04em;
+  padding: 3px 5px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--wp-text3) 18%, transparent);
+  color: var(--wp-text2);
   flex-shrink: 0;
 }
-.wp-inj-row-binding {
-  flex: 1;
-  background: var(--wp-input-shade);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font: 600 12px var(--wp-font-mono);
-  padding: 3px 8px;
-  min-width: 0;
-}
-.wp-inj-row-binding--empty {
-  color: var(--wp-warn);
-  font-style: italic;
-}
-.wp-inj-row-binding--empty::placeholder {
-  color: var(--wp-warn);
-  font-style: italic;
-}
 
+/* Type chip — same shape as Context .wp-kind-chip, color-keyed by type */
 .wp-inj-type-chip {
-  font: 600 9px var(--wp-font-mono);
-  padding: 2px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.06em;
+  font: 600 9px/1.2 var(--wp-font-sans);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  padding: 3px 5px;
+  border-radius: 2px;
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--wp-text-muted, var(--wp-text2)) 18%, transparent);
-  color: var(--wp-text-muted, var(--wp-text2));
 }
-.wp-inj-type-chip--string { background: color-mix(in srgb, var(--wp-amber) 22%, transparent); color: var(--wp-amber); }
-.wp-inj-type-chip--int    { background: color-mix(in srgb, var(--wp-green) 22%, transparent); color: var(--wp-green); }
-.wp-inj-type-chip--float  { background: color-mix(in srgb, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
-.wp-inj-type-chip--boolean{ background: color-mix(in srgb, var(--wp-var-5) 22%, transparent); color: var(--wp-var-5); }
+.wp-inj-row[data-type="string"]  .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-amber)  22%, transparent); color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]     .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-green)  22%, transparent); color: var(--wp-green); }
+.wp-inj-row[data-type="float"]   .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-7)  22%, transparent); color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"] .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-5)  22%, transparent); color: var(--wp-var-5); }
 
-/* Conflict dot + badge — copy of `.wp-conflict-dot--*` /
- * `.wp-conflict-badge--*` from ContextWidget so the cluster reads as
- * the same design family across both nodes. Severity tokens
- * `--info` / `--warning` / `--error` resolve to accent / amber / red. */
+/* Conflict dot + badge — same family as ContextWidget */
 .wp-conflict-dot {
   width: 7px;
   height: 7px;
@@ -241,23 +254,12 @@ function onBindingInput(ev: Event): void {
   cursor: help;
   border: 1px solid transparent;
 }
-.wp-conflict-dot--info {
-  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
-  border-color: var(--wp-accent);
-}
-.wp-conflict-dot--warning {
-  background:   color-mix(in oklab, var(--wp-amber) 14%, transparent);
-  border-color: var(--wp-amber);
-}
-.wp-conflict-dot--error {
-  background:   color-mix(in oklab, var(--wp-red) 14%, transparent);
-  border-color: var(--wp-red);
-}
+.wp-conflict-dot--info    { background: color-mix(in oklab, var(--wp-accent) 14%, transparent); border-color: var(--wp-accent); }
+.wp-conflict-dot--warning { background: color-mix(in oklab, var(--wp-amber)  14%, transparent); border-color: var(--wp-amber); }
+.wp-conflict-dot--error   { background: color-mix(in oklab, var(--wp-red)    14%, transparent); border-color: var(--wp-red); }
+
 .wp-conflict-badge {
-  font-family: var(--wp-font-sans, sans-serif);
-  font-weight: 600;
-  font-size: 9px;
-  line-height: 1;
+  font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 5px;
@@ -265,23 +267,11 @@ function onBindingInput(ev: Event): void {
   flex-shrink: 0;
   cursor: help;
 }
-.wp-conflict-badge--info {
-  background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
-  color: var(--wp-accent);
-}
-.wp-conflict-badge--warning {
-  background: color-mix(in oklab, var(--wp-amber) 18%, transparent);
-  color: var(--wp-amber);
-}
-.wp-conflict-badge--error {
-  background: color-mix(in oklab, var(--wp-red) 18%, transparent);
-  color: var(--wp-red);
-}
+.wp-conflict-badge--info    { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); color: var(--wp-accent); }
+.wp-conflict-badge--warning { background: color-mix(in oklab, var(--wp-amber)  18%, transparent); color: var(--wp-amber); }
+.wp-conflict-badge--error   { background: color-mix(in oklab, var(--wp-red)    18%, transparent); color: var(--wp-red); }
 
-/* Mirrors ContextWidget's `.wp-btn--icon-sm` so the injector's
- * action cluster reads as part of the same family — transparent
- * border by default, hover-reveals border + bg, accent-tint when
- * active. */
+/* Actions cluster — same as Context's .wp-btn--icon-sm */
 .wp-inj-actions { display: flex; gap: 1px; flex-shrink: 0; }
 .wp-inj-action {
   background: transparent;
@@ -307,9 +297,5 @@ function onBindingInput(ev: Event): void {
 .wp-inj-action.is-active {
   color: var(--wp-accent-text, var(--wp-accent));
   background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
-}
-.wp-inj-action--danger:hover {
-  color: var(--wp-danger);
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
 }
 </style>

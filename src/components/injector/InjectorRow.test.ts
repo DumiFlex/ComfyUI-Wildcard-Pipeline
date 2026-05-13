@@ -21,16 +21,21 @@ describe("InjectorRow — binding + type chip", () => {
     expect(input.element.value).toBe("seed_phrase");
   });
 
-  it("shows warn-color placeholder + class when binding is empty", () => {
+  it("shows warn-color placeholder + wrap class when binding is empty", () => {
+    // C.1a: empty state moved from the <input> class to the .wp-vbind-wrap
+    // parent so the border + prefix + placeholder all react. Placeholder
+    // text changed to $variable_name semantics (user types it, system
+    // doesn't generate it).
     const w = mount(InjectorRow, { props: { row: makeRow({ binding: "" }) } });
     const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"]');
-    expect(input.attributes("placeholder")).toBe("binding…");
-    expect(input.classes()).toContain("wp-inj-row-binding--empty");
+    expect(input.attributes("placeholder")).toBe("variable_name");
+    expect(w.find(".wp-vbind-wrap--empty").exists()).toBe(true);
   });
 
-  it("shows the type chip from the valueType prop", () => {
+  it("shows the type chip from the valueType prop (lowercase)", () => {
+    // C.1a: chip text lowercased to match the Context kind-chip family.
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "STRING" } });
-    expect(w.find('[data-test="inj-row-type"]').text()).toBe("STRING");
+    expect(w.find('[data-test="inj-row-type"]').text()).toBe("string");
   });
 
   it("emits update with new binding when the input changes", async () => {
@@ -141,5 +146,46 @@ describe("InjectorRow — disconnected variant", () => {
       },
     });
     expect(w.find('[data-test="inj-row-conflict"]').text()).toBe("no link");
+  });
+});
+
+describe("InjectorRow — type icon (Phase C.1a)", () => {
+  it("renders pi-pencil for string type", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "STRING" } });
+    expect(w.find(".wp-inj-type-icon .pi-pencil").exists()).toBe(true);
+  });
+  it("renders pi-hashtag for int type", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "INT" } });
+    expect(w.find(".wp-inj-type-icon .pi-hashtag").exists()).toBe(true);
+  });
+  it("renders pi-percentage for float type", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "FLOAT" } });
+    expect(w.find(".wp-inj-type-icon .pi-percentage").exists()).toBe(true);
+  });
+  it("renders pi-check-square for boolean type", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "BOOLEAN" } });
+    expect(w.find(".wp-inj-type-icon .pi-check-square").exists()).toBe(true);
+  });
+  it("falls back to pi-circle for unknown type", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "WEIRDTYPE" } });
+    expect(w.find(".wp-inj-type-icon .pi-circle").exists()).toBe(true);
+  });
+});
+
+describe("InjectorRow — data-type attribute (Phase C.1a)", () => {
+  it("sets data-type to lowercased valueType on the row", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "STRING" } });
+    expect(w.find(".wp-inj-row").attributes("data-type")).toBe("string");
+  });
+  it("data-type is empty string when valueType absent", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow() } });
+    expect(w.find(".wp-inj-row").attributes("data-type")).toBe("");
+  });
+});
+
+describe("InjectorRow — slot tag (Phase C.1a)", () => {
+  it("renders .wp-inj-slot containing the row.slot_name", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow({ slot_name: "input_2" }) } });
+    expect(w.find(".wp-inj-slot").text()).toBe("input_2");
   });
 });
