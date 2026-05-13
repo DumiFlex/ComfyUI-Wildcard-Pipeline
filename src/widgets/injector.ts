@@ -144,6 +144,16 @@ export function create(node: InjectorNode, inputName: string) {
   );
   const currentJson = ref(initial);
 
+  // Hoisted refs + compute fns so normalizeSlots (defined below in
+  // create() scope, OUTSIDE setup()) can force a refresh of
+  // reactiveFromGraph state after renaming inputs[i].name. The
+  // reactiveFromGraph chain ran BEFORE our rAF normalize, so those
+  // refs hold pre-rename names until we manually re-evaluate them.
+  let connectedSlotsRef: import("vue").Ref<string[]> | null = null;
+  let slotTypesRef: import("vue").Ref<Record<string, string>> | null = null;
+  let computeConnectedSlotsFn: (() => string[]) | null = null;
+  let computeSlotTypesFn: (() => Record<string, string>) | null = null;
+
   const wrapper: Component = {
     setup() {
       // Poll-based slot reconciliation. ComfyUI's
@@ -155,20 +165,25 @@ export function create(node: InjectorNode, inputName: string) {
       // Vue's reactivity system + onScopeDispose hooks bind to the
       // active component instance — calling it at module scope leaves
       // the ref dangling.
+      // Extract compute fn so normalizeSlots can manually re-run it
+      // post-rename (reactiveFromGraph refreshes on onConnectionsChange
+      // BEFORE our rAF normalize runs — snapshots are stale by the
+      // time the rename mutates inputs[i].name).
+      const computeConnectedSlots = (): string[] => {
+        const out: string[] = [];
+        const inputs = node.inputs ?? [];
+        for (const inp of inputs) {
+          if (!inp) continue;
+          const slot = injectorSlotName(inp);
+          if (!slot) continue;
+          if (inp.link == null) continue;
+          out.push(slot);
+        }
+        return out;
+      };
       const connectedSlots = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
-        () => {
-          const out: string[] = [];
-          const inputs = node.inputs ?? [];
-          for (const inp of inputs) {
-            if (!inp) continue;
-            const slot = injectorSlotName(inp);
-            if (!slot) continue;
-            if (inp.link == null) continue;
-            out.push(slot);
-          }
-          return out;
-        },
+        computeConnectedSlots,
         stringArrayEqual,
       );
 
@@ -177,34 +192,35 @@ export function create(node: InjectorNode, inputName: string) {
       // type. The input's own `.type` stays `*` because Autogrow
       // inputs are wildcard-typed; the meaningful type lives on the
       // CONNECTED source socket. Drives the row's type chip + icon.
+      const computeSlotTypes = (): Record<string, string> => {
+        const out: Record<string, string> = {};
+        const inputs = node.inputs ?? [];
+        const graph = ((node as unknown as { graph?: { links?: Record<number, { origin_id: number; origin_slot: number }>; getNodeById?: (id: number) => { outputs?: Array<{ type?: string } | null | undefined> } | null }}).graph)
+          ?? (app.graph as unknown as { links?: Record<number, { origin_id: number; origin_slot: number }>; getNodeById?: (id: number) => { outputs?: Array<{ type?: string } | null | undefined> } | null });
+        if (!graph) return out;
+        for (const inp of inputs) {
+          if (!inp) continue;
+          const slot = injectorSlotName(inp);
+          if (!slot) continue;
+          if (inp.link == null) continue;
+          // Walk the link: input.link → graph.links[id] →
+          // origin node → output[origin_slot].type. This is the
+          // type ComfyUI actually wired through the connection,
+          // not the wildcard-typed Autogrow slot's stored type.
+          const link = graph.links?.[inp.link];
+          if (!link) continue;
+          const origin = graph.getNodeById?.(link.origin_id);
+          const sourceOutput = origin?.outputs?.[link.origin_slot];
+          const sourceType = sourceOutput?.type;
+          if (typeof sourceType === "string" && sourceType !== "*") {
+            out[slot] = sourceType;
+          }
+        }
+        return out;
+      };
       const slotTypes = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
-        () => {
-          const out: Record<string, string> = {};
-          const inputs = node.inputs ?? [];
-          const graph = ((node as unknown as { graph?: { links?: Record<number, { origin_id: number; origin_slot: number }>; getNodeById?: (id: number) => { outputs?: Array<{ type?: string } | null | undefined> } | null }}).graph)
-            ?? (app.graph as unknown as { links?: Record<number, { origin_id: number; origin_slot: number }>; getNodeById?: (id: number) => { outputs?: Array<{ type?: string } | null | undefined> } | null });
-          if (!graph) return out;
-          for (const inp of inputs) {
-            if (!inp) continue;
-            const slot = injectorSlotName(inp);
-            if (!slot) continue;
-            if (inp.link == null) continue;
-            // Walk the link: input.link → graph.links[id] →
-            // origin node → output[origin_slot].type. This is the
-            // type ComfyUI actually wired through the connection,
-            // not the wildcard-typed Autogrow slot's stored type.
-            const link = graph.links?.[inp.link];
-            if (!link) continue;
-            const origin = graph.getNodeById?.(link.origin_id);
-            const sourceOutput = origin?.outputs?.[link.origin_slot];
-            const sourceType = sourceOutput?.type;
-            if (typeof sourceType === "string" && sourceType !== "*") {
-              out[slot] = sourceType;
-            }
-          }
-          return out;
-        },
+        computeSlotTypes,
         (a, b) => {
           const ak = Object.keys(a);
           if (ak.length !== Object.keys(b).length) return false;
@@ -237,6 +253,13 @@ export function create(node: InjectorNode, inputName: string) {
         () => (node as unknown as { mode?: number }).mode ?? 0,
         Object.is,
       );
+
+      // Publish refs + computes to the outer-scope hoists so
+      // normalizeSlots can force a refresh post-rename.
+      connectedSlotsRef = connectedSlots;
+      slotTypesRef = slotTypes;
+      computeConnectedSlotsFn = computeConnectedSlots;
+      computeSlotTypesFn = computeSlotTypes;
 
       return () =>
         h(InjectorWidget, {
@@ -271,6 +294,17 @@ export function create(node: InjectorNode, inputName: string) {
     if (!node.addInput || !node.removeInput) return;
     const { renames, removed } = reindexInjectorSlots(node as ReindexSurface);
     if (renames.size === 0 && removed.size === 0) return;
+    // The reactiveFromGraph chain refreshed BEFORE our rAF normalize
+    // (onConnectionsChange handler order — see reactive.ts). Their
+    // snapshots hold pre-rename slot names. Manually re-run the
+    // compute fns + assign so connectedSlots / slotTypes match the
+    // freshly-mutated inputs[] before the next paint.
+    if (connectedSlotsRef && computeConnectedSlotsFn) {
+      connectedSlotsRef.value = computeConnectedSlotsFn();
+    }
+    if (slotTypesRef && computeSlotTypesFn) {
+      slotTypesRef.value = computeSlotTypesFn();
+    }
     // Push the slot mutation through to row JSON in the same tick.
     // Drop rows whose socket disappeared (removed set), then remap
     // surviving rows to their new socket name (renames map). Reorder
