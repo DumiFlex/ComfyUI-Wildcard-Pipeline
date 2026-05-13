@@ -134,8 +134,16 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       // feedback loop. User-initiated drag past minWidth is
       // preserved because we never shrink below minWidth.
       if (baseMinWidth && growthDelta > 0) {
-        const nextW = minWidth + growthDelta;
-        minWidth = nextW;
+        // Hard caps as runaway insurance: per-tick growth is bounded
+        // so a pathological overflow source can't widen the node by
+        // hundreds of pixels in a single observer fire; absolute cap
+        // at 3x base prevents the node from growing unbounded across
+        // many ticks even if the per-tick gate misfires. 3x covers
+        // every realistic conflict-badge / long-binding scenario.
+        const cappedDelta = Math.min(growthDelta, 64);
+        const absoluteCap = baseMinWidth * 3;
+        const nextW = Math.min(minWidth + cappedDelta, absoluteCap);
+        if (nextW > minWidth) minWidth = nextW;
       }
 
       const min = resizable.computeSize?.();
