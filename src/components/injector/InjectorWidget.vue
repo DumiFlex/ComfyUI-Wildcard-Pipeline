@@ -256,7 +256,13 @@ defineExpose({ addRow, removeRow });
   color: var(--wp-text-muted, var(--wp-text2));
   margin-left: auto;
 }
-.wp-inj-list { display: flex; flex-direction: column; }
+.wp-inj-list {
+  display: flex;
+  flex-direction: column;
+  /* Match Context's .wp-modules padding so rows have breathing room
+   * on all sides of the list, not just between each other. */
+  padding: 6px 8px;
+}
 .wp-inj-ghost {
   display: flex;
   align-items: center;

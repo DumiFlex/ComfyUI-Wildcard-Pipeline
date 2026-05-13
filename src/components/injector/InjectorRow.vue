@@ -65,11 +65,7 @@ function onBindingInput(ev: Event): void {
       <span class="wp-inj-toggle-mark"></span>
     </label>
 
-    <span
-      class="wp-inj-type-icon"
-      aria-hidden="true"
-      :data-debug-vt="JSON.stringify(valueType ?? null)"
-    >
+    <span class="wp-inj-type-icon" aria-hidden="true">
       <i :class="['pi', typeIcon]" />
     </span>
 

@@ -98,20 +98,34 @@ export function create(node: InjectorNode, inputName: string) {
       );
 
       // Per-slot type label (STRING / INT / FLOAT / BOOLEAN / *) —
-      // read from the input's `type` field (set by ComfyUI when the
-      // connection resolves). Drives the row's type chip.
+      // resolved by walking the upstream link to the source output's
+      // type. The input's own `.type` stays `*` because Autogrow
+      // inputs are wildcard-typed; the meaningful type lives on the
+      // CONNECTED source socket. Drives the row's type chip + icon.
       const slotTypes = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
         () => {
           const out: Record<string, string> = {};
           const inputs = node.inputs ?? [];
+          const graph = ((node as unknown as { graph?: { links?: Record<number, { origin_id: number; origin_slot: number }>; getNodeById?: (id: number) => { outputs?: Array<{ type?: string } | null | undefined> } | null }}).graph)
+            ?? (app.graph as unknown as { links?: Record<number, { origin_id: number; origin_slot: number }>; getNodeById?: (id: number) => { outputs?: Array<{ type?: string } | null | undefined> } | null });
+          if (!graph) return out;
           for (const inp of inputs) {
             if (!inp) continue;
             const slot = injectorSlotName(inp);
             if (!slot) continue;
             if (inp.link == null) continue;
-            if (typeof inp.type === "string" && inp.type !== "*") {
-              out[slot] = inp.type;
+            // Walk the link: input.link → graph.links[id] →
+            // origin node → output[origin_slot].type. This is the
+            // type ComfyUI actually wired through the connection,
+            // not the wildcard-typed Autogrow slot's stored type.
+            const link = graph.links?.[inp.link];
+            if (!link) continue;
+            const origin = graph.getNodeById?.(link.origin_id);
+            const sourceOutput = origin?.outputs?.[link.origin_slot];
+            const sourceType = sourceOutput?.type;
+            if (typeof sourceType === "string" && sourceType !== "*") {
+              out[slot] = sourceType;
             }
           }
           return out;
