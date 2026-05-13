@@ -14,6 +14,7 @@ import {
   applyCollapsedLabels,
   attachCollapsableConnections,
   isCollapsed as readCollapsed,
+  relabelSlotIf,
   setCollapsed,
 } from "../extension/collapse-connections";
 import {
@@ -170,8 +171,10 @@ export function create(node: InjectorNode, inputName: string) {
   // refs hold pre-rename names until we manually re-evaluate them.
   let connectedSlotsRef: import("vue").Ref<string[]> | null = null;
   let slotTypesRef: import("vue").Ref<Record<string, string>> | null = null;
+  let slotLabelsRef: import("vue").Ref<Record<string, string>> | null = null;
   let computeConnectedSlotsFn: (() => string[]) | null = null;
   let computeSlotTypesFn: (() => Record<string, string>) | null = null;
+  let computeSlotLabelsFn: (() => Record<string, string>) | null = null;
 
 
   const wrapper: Component = {
@@ -249,6 +252,43 @@ export function create(node: InjectorNode, inputName: string) {
         },
       );
 
+      // Per-slot display label. ComfyUI lets users rename a socket's
+      // .label via the slot context menu; surfacing it in the row tag
+      // lets users correlate `row ↔ wire` after a rename. Falls back
+      // to slot_name when no custom label. While collapsed, the live
+      // .label holds our " " placeholder — read from `_wpOrigLabel`
+      // stash if present so the row keeps showing the user's value.
+      const computeSlotLabels = (): Record<string, string> => {
+        const out: Record<string, string> = {};
+        const inputs = node.inputs ?? [];
+        for (const inp of inputs) {
+          if (!inp) continue;
+          const slot = injectorSlotName(inp);
+          if (!slot) continue;
+          if (inp.link == null) continue;
+          const withStash = inp as { label?: string; _wpOrigLabel?: string };
+          const resolved =
+            "_wpOrigLabel" in withStash ? withStash._wpOrigLabel : withStash.label;
+          // Skip the default mirroring case (label === name) — row
+          // already shows slot_name as fallback. Only publish when
+          // the label is genuinely different (= user customization).
+          if (typeof resolved === "string" && resolved.trim() !== "" && resolved !== slot) {
+            out[slot] = resolved;
+          }
+        }
+        return out;
+      };
+      const slotLabels = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        computeSlotLabels,
+        (a, b) => {
+          const ak = Object.keys(a);
+          if (ak.length !== Object.keys(b).length) return false;
+          for (const k of ak) if (a[k] !== b[k]) return false;
+          return true;
+        },
+      );
+
       // Variables produced by anything upstream of this injector. Used
       // by the conflict scanner to flag bindings that shadow upstream
       // Context output (`shadows_upstream`, info-level).
@@ -288,8 +328,10 @@ export function create(node: InjectorNode, inputName: string) {
       // normalizeSlots can force a refresh post-rename.
       connectedSlotsRef = connectedSlots;
       slotTypesRef = slotTypes;
+      slotLabelsRef = slotLabels;
       computeConnectedSlotsFn = computeConnectedSlots;
       computeSlotTypesFn = computeSlotTypes;
+      computeSlotLabelsFn = computeSlotLabels;
 
       return () =>
         h(InjectorWidget, {
@@ -297,6 +339,7 @@ export function create(node: InjectorNode, inputName: string) {
           initialJson: currentJson.value,
           connectedSlots: connectedSlots.value,
           slotTypes: slotTypes.value,
+          slotLabels: slotLabels.value,
           upstreamVars: upstreamVars.value,
           nodeMode: nodeMode.value,
           connectionsCollapsed: connectionsCollapsed.value,
@@ -339,7 +382,12 @@ export function create(node: InjectorNode, inputName: string) {
 
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: initial,
-    minHeight: 80,
+    // Floor sized for header-only state. The inner caret (pi-caret-
+    // down) toggles the rows list visibility; when hidden, only the
+    // 26-ish-px header remains. A higher floor would leave the node
+    // body taller than the widget content, breaking the autosize
+    // contract. ResizeObserver grows past this whenever rows render.
+    minHeight: 36,
     minWidth: 280,
     onValueRestored: (v: string) => {
       if (v !== currentJson.value) currentJson.value = v;
@@ -375,6 +423,24 @@ export function create(node: InjectorNode, inputName: string) {
       applyCollapsedLabels(node as Parameters<typeof applyCollapsedLabels>[0]);
       return;
     }
+    // reindexInjectorSlots mutated inputs[i].name but didn't touch
+    // .label. For every renamed slot whose label was the DEFAULT
+    // (label === old name), sync the label to the new name so the
+    // node body renders consistently. User-customized labels
+    // (predicate fails) stay put. relabelSlotIf transparently
+    // handles the collapsed case where the label sits in the stash.
+    if (renames.size > 0) {
+      const inputs = (node.inputs ?? []) as Array<{ name?: string } | null | undefined>;
+      for (const [oldName, newName] of renames) {
+        const inp = inputs.find((i) => i != null && i.name === newName);
+        if (!inp) continue;
+        relabelSlotIf(
+          inp as Parameters<typeof relabelSlotIf>[0],
+          newName,
+          (cur) => cur === oldName,
+        );
+      }
+    }
     // The reactiveFromGraph chain refreshed BEFORE our rAF normalize
     // (onConnectionsChange handler order — see reactive.ts). Their
     // snapshots hold pre-rename slot names. Manually re-run the
@@ -385,6 +451,9 @@ export function create(node: InjectorNode, inputName: string) {
     }
     if (slotTypesRef && computeSlotTypesFn) {
       slotTypesRef.value = computeSlotTypesFn();
+    }
+    if (slotLabelsRef && computeSlotLabelsFn) {
+      slotLabelsRef.value = computeSlotLabelsFn();
     }
     // Push the slot mutation through to row JSON in the same tick.
     // Drop rows whose socket disappeared (removed set), then remap

@@ -311,6 +311,33 @@ export function attachCollapsableConnections(
   }
 }
 
+/** Rename a slot's display label IF the current label matches a
+ *  predicate. Handles both expanded (live `.label`) and collapsed
+ *  (stashed `_wpOrigLabel`) states transparently — callers that
+ *  rename slots programmatically can use this to keep labels in sync
+ *  without knowing whether the node is currently collapsed.
+ *
+ *  Typical use: after renaming `slot.name` from "input_3" to
+ *  "input_2", call with `predicate: (cur) => cur === "input_3"` so
+ *  the label only updates when it was the DEFAULT mirroring the old
+ *  name. User-customized labels (predicate fails) stay put. */
+export function relabelSlotIf(
+  slot: Slot,
+  newLabel: string | undefined,
+  predicate: (currentLabel: string | undefined) => boolean,
+): void {
+  const inStash = "_wpOrigLabel" in slot;
+  const current = inStash ? slot._wpOrigLabel : slot.label;
+  if (!predicate(current)) return;
+  if (inStash) {
+    slot._wpOrigLabel = newLabel;
+  } else if (newLabel === undefined) {
+    delete slot.label;
+  } else {
+    slot.label = newLabel;
+  }
+}
+
 /** Current collapsed state — reads `node.properties[propertyKey]`. */
 export function isCollapsed(
   node: CollapseTargetNode,

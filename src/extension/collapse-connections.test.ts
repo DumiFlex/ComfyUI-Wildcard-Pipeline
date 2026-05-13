@@ -5,6 +5,7 @@ import {
   countMatching,
   firstMatchingIndex,
   isCollapsed,
+  relabelSlotIf,
   setCollapsed,
 } from "./collapse-connections";
 
@@ -422,6 +423,42 @@ describe("collapse-connections — unified label + resize side effects", () => {
     setCollapsed(node, false);
     expect(node.inputs[1].label).toBe("input_0");
     expect(node.inputs[2].label).toBe("input_1");
+  });
+});
+
+describe("collapse-connections — relabelSlotIf", () => {
+  it("updates live label when predicate matches", () => {
+    const slot: MockSlot = { name: "input_3", label: "input_3" };
+    relabelSlotIf(slot, "input_2", (cur) => cur === "input_3");
+    expect(slot.label).toBe("input_2");
+  });
+
+  it("leaves label alone when predicate fails (user-customized)", () => {
+    const slot: MockSlot = { name: "input_3", label: "renamed_by_user" };
+    relabelSlotIf(slot, "input_2", (cur) => cur === "input_3");
+    expect(slot.label).toBe("renamed_by_user");
+  });
+
+  it("updates stashed _wpOrigLabel instead of live label when collapsed", () => {
+    // Simulate the collapsed state: stash holds the original label,
+    // live .label is the placeholder.
+    const slot: MockSlot = { name: "input_3", label: " ", _wpOrigLabel: "input_3" };
+    relabelSlotIf(slot, "input_2", (cur) => cur === "input_3");
+    expect(slot._wpOrigLabel).toBe("input_2");
+    expect(slot.label).toBe(" ");  // live placeholder untouched
+  });
+
+  it("undefined newLabel deletes .label (re-enable name-fallback)", () => {
+    const slot: MockSlot = { name: "input_3", label: "input_3" };
+    relabelSlotIf(slot, undefined, (cur) => cur === "input_3");
+    expect("label" in slot).toBe(false);
+  });
+
+  it("undefined newLabel sets stash to undefined when collapsed", () => {
+    const slot: MockSlot = { name: "input_3", label: " ", _wpOrigLabel: "input_3" };
+    relabelSlotIf(slot, undefined, (cur) => cur === "input_3");
+    expect(slot._wpOrigLabel).toBeUndefined();
+    expect("_wpOrigLabel" in slot).toBe(true);  // key still present
   });
 });
 
