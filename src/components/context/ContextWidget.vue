@@ -3139,12 +3139,15 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 </style>
 
 <style>
-/* @layer wp-extension ensures host CSS (ComfyUI, other custom nodes)
- * wins by default on any selector collision. Unlayered rules outrank
- * layered ones, so our styles can never accidentally override the
- * host. All selectors below are .wp-* prefixed; the layer wrap is
- * defense-in-depth in case a future rule slips through. */
-@layer wp-extension {
+/* NOT wrapped in @layer wp-extension despite the rest of the
+ * extension being layered. The block below has ~1000 lines of
+ * interleaved rules whose cascade priority relative to
+ * component-scoped (unlayered) Vue rules has been stable. Layering
+ * this block would flip the priority of dozens of rules that
+ * currently win source-order — visual regressions in modules,
+ * bundles, summaries. The .wp-* namespace prefix is the primary
+ * isolation here; consider re-introducing @layer per-section once
+ * each section's cascade interaction is verified. */
 .wp-context, .wp-context * { box-sizing: border-box; }
 
 /* Mute / bypass dim. Litegraph dims the title bar + node frame natively
@@ -4204,6 +4207,5 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   40%  { transform: scale(1.4); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
-}  /* end @layer wp-extension */
 
 </style>

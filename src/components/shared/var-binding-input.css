@@ -26,7 +26,11 @@
   border-radius: 3px;
   overflow: hidden;
   flex: 1;
-  min-width: 0;
+  /* Floor at 80px so flex layout doesn't squash the input to zero
+   * when siblings (conflict badge, action cluster) compete for the
+   * row width. The user must always be able to see at least the
+   * `$` prefix + a few characters of the binding name. */
+  min-width: 80px;
 }
 .wp-vbind-wrap:focus-within { border-color: var(--wp-accent); }
 .wp-vbind-wrap--mod         { border-color: var(--wp-accent); }

@@ -186,10 +186,23 @@ function onBindingInput(ev: Event): void {
 }
 .wp-inj-row:last-child { margin-bottom: 0; }
 
-.wp-inj-row[data-type="string"]  { border-left-color: var(--wp-amber); }
-.wp-inj-row[data-type="int"]     { border-left-color: var(--wp-green); }
-.wp-inj-row[data-type="float"]   { border-left-color: var(--wp-var-7); }
-.wp-inj-row[data-type="boolean"] { border-left-color: var(--wp-var-5); }
+.wp-inj-row[data-type="string"]       { border-left-color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]          { border-left-color: var(--wp-green); }
+.wp-inj-row[data-type="float"]        { border-left-color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"]      { border-left-color: var(--wp-var-5); }
+.wp-inj-row[data-type="image"]        { border-left-color: var(--wp-var-1); }
+.wp-inj-row[data-type="mask"]         { border-left-color: var(--wp-var-6); }
+.wp-inj-row[data-type="latent"]       { border-left-color: var(--wp-var-4); }
+.wp-inj-row[data-type="conditioning"] { border-left-color: var(--wp-var-2); }
+.wp-inj-row[data-type="model"]        { border-left-color: var(--wp-var-8); }
+.wp-inj-row[data-type="clip"]         { border-left-color: var(--wp-var-3); }
+.wp-inj-row[data-type="vae"]          { border-left-color: var(--wp-var-6); }
+.wp-inj-row[data-type="audio"]        { border-left-color: var(--wp-var-7); }
+.wp-inj-row[data-type="video"]        { border-left-color: var(--wp-var-4); }
+.wp-inj-row[data-type="noise"]        { border-left-color: var(--wp-var-6); }
+.wp-inj-row[data-type="sigmas"]       { border-left-color: var(--wp-var-1); }
+.wp-inj-row[data-type="guider"]       { border-left-color: var(--wp-var-3); }
+.wp-inj-row[data-type="sampler"]      { border-left-color: var(--wp-var-2); }
 
 /* Disabled — mirrors .wp-module.wp-disabled diagonal-stripe + 55% opacity. */
 .wp-inj-row--disabled {
@@ -338,7 +351,14 @@ function onBindingInput(ev: Event): void {
   letter-spacing: 0.04em;
   padding: 3px 5px;
   border-radius: 2px;
-  flex-shrink: 0;
+  /* Cap + ellipsis so a long badge ("duplicate variable") can't
+   * eat the entire binding input width. flex-shrink kicks in past
+   * the cap so the row degrades gracefully on narrow nodes. */
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
   cursor: help;
 }
 .wp-conflict-badge--info    { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); color: var(--wp-accent); }
