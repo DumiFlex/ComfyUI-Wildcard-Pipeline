@@ -124,37 +124,44 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       scheduled = false;
       const nextH = Math.max(baseMin, measuredH);
       if (nextH !== minHeight) minHeight = nextH;
-      // Width grows monotonically and ONLY when content actually
-      // overflowed the container — growthDelta is the px the content
-      // exceeded clientWidth by, so adding it bumps minWidth just
-      // enough to swallow the overflow. Without this gate the node
-      // would grow infinitely: each ResizeObserver tick reports
-      // scrollWidth which converges-to-but-tracks clientWidth, so
-      // any sub-pixel rounding gets amplified into a positive
-      // feedback loop. User-initiated drag past minWidth is
-      // preserved because we never shrink below minWidth.
-      if (baseMinWidth && growthDelta > 0) {
-        // Hard caps as runaway insurance: per-tick growth is bounded
-        // so a pathological overflow source can't widen the node by
-        // hundreds of pixels in a single observer fire; absolute cap
-        // at 3x base prevents the node from growing unbounded across
-        // many ticks even if the per-tick gate misfires. 3x covers
-        // every realistic conflict-badge / long-binding scenario.
-        const cappedDelta = Math.min(growthDelta, 64);
-        const absoluteCap = baseMinWidth * 3;
-        const nextW = Math.min(minWidth + cappedDelta, absoluteCap);
-        if (nextW > minWidth) minWidth = nextW;
+      // Width handling:
+      //   - growthDelta > 0  → content currently overflows; bump
+      //     minWidth by the overflow amount (capped per-tick) so the
+      //     next layout swallows it.
+      //   - growthDelta = 0  → content fits at current width. Try
+      //     shrinking minWidth one step toward baseMinWidth. If the
+      //     shrink leaves content overflowing, the next mutation tick
+      //     re-grows. Converges to the smallest width that fits the
+      //     current content — releases extra room when transient
+      //     conflict badges disappear.
+      if (baseMinWidth) {
+        if (growthDelta > 0) {
+          // Hard caps prevent runaway: 64px/tick + 3x baseMinWidth
+          // absolute ceiling. 3x covers realistic verbose badges.
+          const cappedDelta = Math.min(growthDelta, 64);
+          const absoluteCap = baseMinWidth * 3;
+          minWidth = Math.min(minWidth + cappedDelta, absoluteCap);
+        } else if (minWidth > baseMinWidth) {
+          // Probe shrink. 24px/step trades convergence speed against
+          // jitter — fast enough that a vanished badge clears the
+          // excess width within ~5 ticks, slow enough that quick
+          // grow/shrink toggles don't visibly hunt.
+          minWidth = Math.max(baseMinWidth, minWidth - 24);
+        }
       }
 
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      // Height axis: always match content. Width axis: grow if content
-      // needs more room than current width, never shrink below user's
-      // manual drag-wider.
       const targetH = min[1];
-      const targetW = Math.max(cur[0], min[0]);
-      if (cur[1] !== targetH || cur[0] < targetW) {
+      // Width axis: match minWidth (which may be growing or shrinking
+      // back). NOTE: this overrides a user's manual drag-wider. For
+      // the auto-shrink-back-to-baseMinWidth behavior to feel right,
+      // the auto-sized width has to be authoritative. If a future
+      // requirement is "preserve manual drag", we'd need to track
+      // whether the current size came from setSize-by-us vs the user.
+      const targetW = min[0];
+      if (cur[1] !== targetH || cur[0] !== targetW) {
         resizable.setSize([targetW, targetH]);
         resizable.setDirtyCanvas?.(true, true);
       }
@@ -195,18 +202,16 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
         if (h > 0) pushSize(h, growthDelta);
       }
     });
-    // MutationObserver covers the width path. Adding a conflict badge
-    // or expanding row content doesn't necessarily change `inner`'s
-    // box (inner is width:100% — fills whatever the host gives it),
-    // so ResizeObserver never fires for that case. Mutation re-checks
-    // overflow on every DOM change in the Vue subtree.
+    // MutationObserver: fires on every DOM change in the Vue subtree.
+    // Always push (height + width). Width handling:
+    //   - overflow > 2px → growthDelta = overflow (grow)
+    //   - overflow <= 2px → growthDelta = 0 (try to shrink, see pushSize)
+    // Height handling: every push refreshes minHeight, so a mutation
+    // that shrinks content (e.g. row removal) is picked up here even
+    // if ResizeObserver doesn't fire for the same delta.
     mutationObserver = new MutationObserver(() => {
       const overflow = maxOverflowBelow(inner);
-      if (overflow <= 2) return;
-      const growthDelta = Math.ceil(overflow);
-      // Read height from the entry-free path here — getBoundingClientRect
-      // forces a layout but only when we already know we need to grow,
-      // so the cost only fires when there's something to do.
+      const growthDelta = overflow > 2 ? Math.ceil(overflow) : 0;
       const h = Math.ceil(inner.getBoundingClientRect().height);
       if (h > 0) pushSize(h, growthDelta);
     });
