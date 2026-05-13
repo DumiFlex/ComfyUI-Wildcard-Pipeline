@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 
 const props = defineProps<{
@@ -20,6 +20,13 @@ const props = defineProps<{
    *  socket label, falls back to the row's slot_name (input_N) when
    *  unset. Truncates with ellipsis when too long for the tag. */
   displayLabel?: string;
+  /** Index of this row in the parent's `value.rows` array — used as
+   *  the dataTransfer payload during drag-to-reorder. */
+  index?: number;
+  /** When true, the row root is `draggable` and emits the reorder
+   *  events. When false (default), drag is a no-op so external
+   *  consumers (tests, isolated mounts) aren't surprised by dnd. */
+  reorderable?: boolean;
 }>();
 
 const slotLabel = computed(() => props.displayLabel ?? props.row.slot_name);
@@ -27,6 +34,13 @@ const slotLabel = computed(() => props.displayLabel ?? props.row.slot_name);
 const emit = defineEmits<{
   (e: "update", patch: Partial<InjectorRow>): void;
   (e: "disconnect"): void;
+  (e: "row-drag-start", payload: { fromIdx: number }): void;
+  /** Fires while a drag is hovering over this row. `edge` tells the
+   *  parent which side the drop indicator should highlight (so the
+   *  user can preview the insertion point before releasing). */
+  (e: "row-drag-over", payload: { overIdx: number; edge: "before" | "after" }): void;
+  (e: "row-drop", payload: { overIdx: number; edge: "before" | "after" }): void;
+  (e: "row-drag-end"): void;
 }>();
 
 const isEmpty = computed(() => !props.row.binding.trim());
@@ -67,6 +81,55 @@ function onBindingInput(ev: Event): void {
   const next = (ev.target as HTMLInputElement).value;
   emit("update", { binding: next });
 }
+
+// ─── Drag-to-reorder state. The visible drop indicator is driven by
+// `dropEdge` — we recompute it on each dragover based on the cursor's
+// Y position relative to the row's midpoint. Cleared on dragleave +
+// drop + dragend so a row can't get stuck with a stale indicator.
+const isDragging = ref(false);
+const dropEdge = ref<"before" | "after" | null>(null);
+
+function onDragStart(ev: DragEvent): void {
+  if (!props.reorderable || props.index === undefined) return;
+  isDragging.value = true;
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = "move";
+    // Set a payload so the platform considers this a valid drag —
+    // some browsers/HiDPI hosts no-op dragstart when dataTransfer
+    // is empty. The actual payload is read back via the parent's
+    // tracked fromIdx; this is just a marker.
+    ev.dataTransfer.setData("text/wp-injector-row", String(props.index));
+  }
+  emit("row-drag-start", { fromIdx: props.index });
+}
+
+function onDragOver(ev: DragEvent): void {
+  if (!props.reorderable || props.index === undefined) return;
+  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  const edge: "before" | "after" = ev.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  if (dropEdge.value !== edge) dropEdge.value = edge;
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  emit("row-drag-over", { overIdx: props.index, edge });
+}
+
+function onDragLeave(): void {
+  dropEdge.value = null;
+}
+
+function onDrop(ev: DragEvent): void {
+  if (!props.reorderable || props.index === undefined) return;
+  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  const edge: "before" | "after" = ev.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  dropEdge.value = null;
+  isDragging.value = false;
+  emit("row-drop", { overIdx: props.index, edge });
+}
+
+function onDragEnd(): void {
+  isDragging.value = false;
+  dropEdge.value = null;
+  emit("row-drag-end");
+}
 </script>
 
 <template>
@@ -76,12 +139,22 @@ function onBindingInput(ev: Event): void {
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
+      'wp-inj-row--dragging': isDragging,
+      'wp-inj-row--drop-before': dropEdge === 'before',
+      'wp-inj-row--drop-after': dropEdge === 'after',
       'wp-conflict-info': conflictSeverity === 'info',
       'wp-conflict-warning': conflictSeverity === 'warning',
       'wp-conflict-error': conflictSeverity === 'error',
     }"
+    :draggable="reorderable"
+    title="Drag from the row edge to reorder"
+    @dragstart="onDragStart"
+    @dragover.prevent="onDragOver"
+    @dragleave="onDragLeave"
+    @drop.prevent="onDrop"
+    @dragend="onDragEnd"
   >
-    <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'">
+    <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'" draggable="false">
       <input
         type="checkbox"
         :checked="row.enabled"
@@ -113,6 +186,7 @@ function onBindingInput(ev: Event): void {
     <div
       class="wp-vbind-wrap"
       :class="{ 'wp-vbind-wrap--empty': isEmpty }"
+      draggable="false"
     >
       <span class="wp-vbind-prefix">$</span>
       <input
@@ -123,6 +197,7 @@ function onBindingInput(ev: Event): void {
         :aria-label="`binding for ${row.slot_name}`"
         placeholder="variable_name"
         spellcheck="false"
+        draggable="false"
         @input="onBindingInput"
       />
     </div>
@@ -142,12 +217,13 @@ function onBindingInput(ev: Event): void {
       data-test="inj-row-conflict"
     >{{ conflictLabel }}</span>
 
-    <div class="wp-inj-actions">
+    <div class="wp-inj-actions" draggable="false">
       <button
         type="button"
         class="wp-inj-action"
         :class="{ 'is-active': row.internal }"
         data-test="inj-row-internal"
+        draggable="false"
         :title="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
         @click="emit('update', { internal: !row.internal })"
       ><i class="pi pi-globe" aria-hidden="true" /></button>
@@ -155,6 +231,7 @@ function onBindingInput(ev: Event): void {
         type="button"
         class="wp-inj-action wp-inj-action--danger"
         data-test="inj-row-remove"
+        draggable="false"
         title="Disconnect this input wire"
         :aria-label="`disconnect ${row.slot_name}`"
         @click="emit('disconnect')"
@@ -185,6 +262,20 @@ function onBindingInput(ev: Event): void {
   transition: background-color 0.15s, border-color 0.15s;
 }
 .wp-inj-row:last-child { margin-bottom: 0; }
+/* Drag-to-reorder. Row root carries `draggable` when reorderable;
+ * the row gets a grab cursor on hover so the affordance is
+ * discoverable without a separate handle glyph. Interactive
+ * children (toggle, binding input, action buttons) carry
+ * draggable="false" so click + text-selection still work normally.
+ *
+ * Dragging row: dimmed via opacity so the user sees their grab.
+ * Drop target: 2px accent bar above (before-edge) or below
+ * (after-edge) — mirrors the cross-platform "drop here" affordance. */
+.wp-inj-row[draggable="true"] { cursor: grab; }
+.wp-inj-row[draggable="true"]:active { cursor: grabbing; }
+.wp-inj-row--dragging { opacity: 0.4; }
+.wp-inj-row--drop-before { box-shadow: inset 0 2px 0 0 var(--wp-accent); }
+.wp-inj-row--drop-after  { box-shadow: inset 0 -2px 0 0 var(--wp-accent); }
 
 .wp-inj-row[data-type="string"]       { border-left-color: var(--wp-amber); }
 .wp-inj-row[data-type="int"]          { border-left-color: var(--wp-green); }

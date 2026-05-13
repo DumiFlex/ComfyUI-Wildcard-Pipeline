@@ -1,5 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
-import { reindexInjectorSlots, type ReindexSurface } from "./injector";
+import { reindexInjectorSlots, reorderInjectorRows, type ReindexSurface } from "./injector";
+import type { InjectorRow } from "./_shared";
+
+function makeRow(over: Partial<InjectorRow> = {}): InjectorRow {
+  return {
+    _uid: over._uid ?? Math.random().toString(36).slice(2),
+    slot_name: "input_0",
+    binding: "",
+    enabled: true,
+    internal: false,
+    ...over,
+  };
+}
 
 type MockInput = { name?: string; type?: string; link?: number | null };
 
@@ -186,5 +198,84 @@ describe("reindexInjectorSlots", () => {
     expect(node.__inputs[0].name).toBe("model");
     expect(node.__inputs[0].link).toBe(1);
     expect(node.__inputs.map((i) => i.name)).toEqual(["model", "input_0", "input_1"]);
+  });
+});
+
+describe("reorderInjectorRows", () => {
+  it("returns unchanged when from === to", () => {
+    const rows = [
+      makeRow({ slot_name: "input_0", binding: "a" }),
+      makeRow({ slot_name: "input_1", binding: "b" }),
+    ];
+    expect(reorderInjectorRows(rows, 1, 1)).toBe(rows);
+  });
+
+  it("moves row to new position + reassigns slot_names to match position", () => {
+    // input_0=foo, input_1=bar, input_2=baz
+    // Drag baz (idx 2) above foo (target 0).
+    // Expected: rows = [baz, foo, bar] with slot_names [input_0, input_1, input_2]
+    // The wire at input_0 socket now feeds variable "baz" (was "foo").
+    const rows = [
+      makeRow({ _uid: "u-foo", slot_name: "input_0", binding: "foo" }),
+      makeRow({ _uid: "u-bar", slot_name: "input_1", binding: "bar" }),
+      makeRow({ _uid: "u-baz", slot_name: "input_2", binding: "baz" }),
+    ];
+    const next = reorderInjectorRows(rows, 2, 0);
+    expect(next.map((r) => r.binding)).toEqual(["baz", "foo", "bar"]);
+    expect(next.map((r) => r.slot_name)).toEqual(["input_0", "input_1", "input_2"]);
+    // _uid stays with the row data so Vue keying remains stable.
+    expect(next.map((r) => r._uid)).toEqual(["u-baz", "u-foo", "u-bar"]);
+  });
+
+  it("drag downward — toIdx accounts for the post-removal shift", () => {
+    // Drag foo (idx 0) DOWN to position 2 (visual: between bar and baz).
+    // After splice(0,1), bar moves to idx 0, baz to idx 1, so the
+    // visual target index 2 becomes insertion at idx 1.
+    // Final: [bar, foo, baz]
+    const rows = [
+      makeRow({ _uid: "u-foo", slot_name: "input_0", binding: "foo" }),
+      makeRow({ _uid: "u-bar", slot_name: "input_1", binding: "bar" }),
+      makeRow({ _uid: "u-baz", slot_name: "input_2", binding: "baz" }),
+    ];
+    const next = reorderInjectorRows(rows, 0, 2);
+    expect(next.map((r) => r.binding)).toEqual(["bar", "foo", "baz"]);
+    expect(next.map((r) => r.slot_name)).toEqual(["input_0", "input_1", "input_2"]);
+  });
+
+  it("preserves binding / enabled / internal fields across reorder", () => {
+    const rows = [
+      makeRow({ slot_name: "input_0", binding: "a", enabled: false, internal: false }),
+      makeRow({ slot_name: "input_1", binding: "b", enabled: true, internal: true }),
+    ];
+    const next = reorderInjectorRows(rows, 1, 0);
+    expect(next[0].binding).toBe("b");
+    expect(next[0].enabled).toBe(true);
+    expect(next[0].internal).toBe(true);
+    expect(next[1].binding).toBe("a");
+    expect(next[1].enabled).toBe(false);
+    expect(next[1].internal).toBe(false);
+  });
+
+  it("out-of-range indices are no-ops", () => {
+    const rows = [makeRow({ slot_name: "input_0" })];
+    expect(reorderInjectorRows(rows, -1, 0)).toBe(rows);
+    expect(reorderInjectorRows(rows, 0, -1)).toBe(rows);
+    expect(reorderInjectorRows(rows, 5, 0)).toBe(rows);
+    expect(reorderInjectorRows(rows, 0, 10)).toBe(rows);
+  });
+
+  it("ignores rows whose slot_name doesn't match input_N pattern", () => {
+    // Hypothetical fixed slot kept by name. Reorder still moves but
+    // the non-pattern slot_name doesn't get renumbered.
+    const rows = [
+      makeRow({ slot_name: "input_0", binding: "a" }),
+      makeRow({ slot_name: "fixed_input", binding: "b" }),
+      makeRow({ slot_name: "input_1", binding: "c" }),
+    ];
+    const next = reorderInjectorRows(rows, 2, 0);
+    expect(next.map((r) => r.binding)).toEqual(["c", "a", "b"]);
+    // Counter only ticks for matching rows: "c" at pos 0 → input_0,
+    // "a" at pos 1 → input_1, "fixed_input" untouched.
+    expect(next.map((r) => r.slot_name)).toEqual(["input_0", "input_1", "fixed_input"]);
   });
 });

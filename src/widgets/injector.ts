@@ -5,6 +5,7 @@ import {
   emptyInjectorRowsValue,
   parseWidgetJson,
   serializeWidgetJson,
+  type InjectorRow,
   type InjectorRowsValue,
   type MountTargetNode,
 } from "./_shared";
@@ -158,6 +159,43 @@ export function reindexInjectorSlots(node: ReindexSurface): ReindexResult {
 // nextInputName helper was retired with the normalizeSlots rewrite —
 // reindexInjectorSlots now controls the trailing-empty's name via a
 // simple counter rather than a "find first unused" scan.
+
+/** Move a row from one index to another and reassign every row's
+ *  `slot_name` to its new position. Used by the widget's drag-to-
+ *  reorder UX: the physical wires at each `input_N` socket stay put,
+ *  but the binding (variable name) the user dragged now takes over
+ *  the wire feed at its new position.
+ *
+ *  Pure function — operates on the rows array, doesn't touch litegraph.
+ *  The widget calls this, persists the new JSON, and lets the engine
+ *  resolve `{input_0, input_1, ...} → variables` by lookup at run time.
+ *
+ *  Only rows with `input_N` slot_names get renumbered (defensive
+ *  check; current architecture always uses `input_N`). */
+export function reorderInjectorRows(
+  rows: InjectorRow[],
+  fromIdx: number,
+  toIdx: number,
+): InjectorRow[] {
+  if (fromIdx === toIdx) return rows;
+  if (fromIdx < 0 || fromIdx >= rows.length) return rows;
+  if (toIdx < 0 || toIdx > rows.length) return rows;
+  const moved = rows.slice();
+  const [taken] = moved.splice(fromIdx, 1);
+  // toIdx is the desired POST-removal insertion index. When toIdx
+  // > fromIdx, the splice above already shifted indices down by 1;
+  // the caller hands us the visual target so we just insert there.
+  const insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx;
+  moved.splice(insertAt, 0, taken);
+  // Reassign slot_name sequentially so position == socket.
+  let counter = 0;
+  return moved.map((r) => {
+    const pattern = /^input_\d+$/;
+    if (!pattern.test(r.slot_name)) return r;
+    const newName = `input_${counter++}`;
+    return r.slot_name === newName ? r : { ...r, slot_name: newName };
+  });
+}
 
 export function create(node: InjectorNode, inputName: string) {
   const initial = serializeWidgetJson(

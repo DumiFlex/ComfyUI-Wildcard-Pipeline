@@ -8,6 +8,7 @@ import {
   type InjectorRow,
   type InjectorRowsValue,
 } from "../../widgets/_shared";
+import { reorderInjectorRows } from "../../widgets/injector";
 import { labelFor, scanInjectorConflicts } from "../../extension/conflicts";
 import InjectorRowComp from "./InjectorRow.vue";
 
@@ -215,6 +216,36 @@ watch(
   { immediate: true },
 );
 
+// ── Drag-to-reorder. Persists the new row order with sequential
+// slot_name reassignment (reorderInjectorRows): the wire at each
+// physical input_N socket then feeds whatever variable now sits at
+// that index. dragSrcIdx is captured on dragstart and cleared on
+// drop / dragend so a cancelled drag doesn't leak state.
+const dragSrcIdx = ref<number | null>(null);
+
+function onRowDragStart(fromIdx: number): void {
+  dragSrcIdx.value = fromIdx;
+}
+
+function onRowDrop(overIdx: number, edge: "before" | "after"): void {
+  const from = dragSrcIdx.value;
+  dragSrcIdx.value = null;
+  if (from === null || from === overIdx) return;
+  // Convert the (overIdx, edge) pair into a single splice-style
+  // target index. "before idx N" => insert at N; "after idx N" =>
+  // insert at N+1. reorderInjectorRows handles the post-removal
+  // shift internally.
+  const toIdx = edge === "before" ? overIdx : overIdx + 1;
+  const nextRows = reorderInjectorRows(value.value.rows, from, toIdx);
+  if (nextRows === value.value.rows) return;
+  value.value = { ...value.value, rows: nextRows };
+  persist();
+}
+
+function onRowDragEnd(): void {
+  dragSrcIdx.value = null;
+}
+
 defineExpose({ addRow, removeRow });
 </script>
 
@@ -247,9 +278,11 @@ defineExpose({ addRow, removeRow });
 
     <div v-if="!collapsed" class="wp-inj-list">
       <InjectorRowComp
-        v-for="row in value.rows"
+        v-for="(row, idx) in value.rows"
         :key="row._uid"
         :row="row"
+        :index="idx"
+        :reorderable="value.rows.length > 1"
         :is-connected="isConnected(row.slot_name)"
         :value-type="slotTypes[row.slot_name]"
         :display-label="slotLabels[row.slot_name]"
@@ -257,6 +290,9 @@ defineExpose({ addRow, removeRow });
         :conflict-label="conflictByUid[row._uid]?.label"
         @update="(patch) => updateRow(row._uid, patch)"
         @disconnect="emit('disconnect-slot', row.slot_name)"
+        @row-drag-start="(p) => onRowDragStart(p.fromIdx)"
+        @row-drop="(p) => onRowDrop(p.overIdx, p.edge)"
+        @row-drag-end="onRowDragEnd"
       />
       <div
         v-if="value.rows.length === 0"
