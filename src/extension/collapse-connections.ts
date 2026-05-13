@@ -24,6 +24,7 @@
  */
 
 import {
+  nodeCollapseAnimToken,
   nodeCollapseAttached,
   nodeCollapseConfig,
   slotLabelStashed,
@@ -212,27 +213,82 @@ export function applyCollapsedLabels(node: CollapseTargetNode): void {
   }
 }
 
-/** Call computeSize → setSize so the node body actually shrinks /
- *  expands. Litegraph reads `node.size` for layout each paint but
- *  doesn't re-derive it from computeSize unless a layout-trigger
- *  event fires (drag, connect, resize handle). Forcing the apply
- *  makes the collapse feel atomic instead of "eventually consistent
- *  next time you wiggle the node". */
-function forceResize(node: CollapseTargetNode): void {
-  if (!node.computeSize) return;
-  const next = node.computeSize();
-  const w = (next as { 0: number })[0];
-  const h = (next as { 1: number })[1];
+/** Animation duration for the collapse/expand height tween. Short
+ *  enough to feel snappy, long enough to read as motion (not a
+ *  snap). Bypassed when `wp-a11y-no-motion` is on the body. */
+const COLLAPSE_ANIM_MS = 200;
+
+function prefersReducedMotion(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.body.classList.contains("wp-a11y-no-motion");
+}
+
+/** Smooth tween of `node.size[1]` from current to target height.
+ *  Animation cancels cleanly if `setCollapsed` is invoked again
+ *  mid-tween (token bump check on each rAF tick). Falls back to a
+ *  snap (single setSize) when reduced motion is requested or when
+ *  the delta is small enough that animation would be invisible. */
+function animateResize(node: CollapseTargetNode, targetH: number): void {
+  if (!node.size) return;
+  const startH = node.size[1];
+  const delta = targetH - startH;
+  // <3px delta — not worth the rAF round-trip.
+  if (Math.abs(delta) < 3 || prefersReducedMotion()) {
+    snapToSize(node, targetH);
+    return;
+  }
+
+  const prevToken = nodeCollapseAnimToken.get(node as object) ?? 0;
+  const myToken = prevToken + 1;
+  nodeCollapseAnimToken.set(node as object, myToken);
+
+  const start = performance.now();
+  function step(now: number): void {
+    // A newer token means a fresh toggle superseded us — bail so
+    // the two animations don't fight over node.size[1].
+    if (nodeCollapseAnimToken.get(node as object) !== myToken) return;
+    const t = Math.min(1, (now - start) / COLLAPSE_ANIM_MS);
+    // easeInOutQuad — symmetric ease, no overshoot.
+    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const nextH = startH + delta * eased;
+    if (node.size) node.size[1] = nextH;
+    node.setDirtyCanvas?.(true, true);
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      // Snap to exact target at end + go through setSize so any
+      // host-side layout hooks fire on completion.
+      snapToSize(node, targetH);
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+function snapToSize(node: CollapseTargetNode, targetH: number): void {
+  if (!node.size) return;
   // Preserve the current width — collapse should only affect height.
   // Some hosts (ComfyUI) widen nodes manually past computeSize's
   // suggested width; respecting that avoids visible width snap-back.
-  const targetW = Math.max(w, node.size?.[0] ?? w);
+  const targetW = node.size[0];
   if (typeof node.setSize === "function") {
-    node.setSize([targetW, h]);
-  } else if (node.size) {
-    node.size[0] = targetW;
-    node.size[1] = h;
+    node.setSize([targetW, targetH]);
+  } else {
+    node.size[1] = targetH;
   }
+  node.setDirtyCanvas?.(true, true);
+}
+
+/** Compute the post-collapse target height via computeSize + apply
+ *  it. Defaults to an animated tween for user toggles; pass
+ *  `{ animate: false }` for workflow-load initialization so the
+ *  pre-collapsed state doesn't briefly flash at expanded height
+ *  before animating down. */
+function forceResize(node: CollapseTargetNode, opts: { animate?: boolean } = {}): void {
+  if (!node.computeSize) return;
+  const next = node.computeSize();
+  const h = (next as { 1: number })[1];
+  if (opts.animate === false) snapToSize(node, h);
+  else animateResize(node, h);
 }
 
 /** Patch the node so its slot-position methods reroute matched
@@ -311,10 +367,11 @@ export function attachCollapsableConnections(
   // Workflows can load with collapse_connections=true (state persists
   // in node.properties). Apply labels + resize immediately so the
   // node renders correctly on first paint without waiting for a
-  // toggle.
+  // toggle. Skip animation so the user doesn't see a brief expanded
+  // flash before the tween settles to the saved collapsed height.
   if (readCollapsed(node, propertyKey)) {
     applyCollapsedLabels(node);
-    forceResize(node);
+    forceResize(node, { animate: false });
   }
 }
 

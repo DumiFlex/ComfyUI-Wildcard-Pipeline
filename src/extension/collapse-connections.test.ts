@@ -247,6 +247,16 @@ describe("collapse-connections — position patch", () => {
 });
 
 describe("collapse-connections — unified label + resize side effects", () => {
+  // setCollapsed animates the height tween via rAF. Force the
+  // no-motion path so setSize is called synchronously and tests can
+  // assert against it without flushing animation frames.
+  beforeEach(() => {
+    document.body.classList.add("wp-a11y-no-motion");
+  });
+  afterEach(() => {
+    document.body.classList.remove("wp-a11y-no-motion");
+  });
+
   function makeInjectorLike() {
     return makeNode({
       inputs: [

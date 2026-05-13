@@ -399,11 +399,27 @@ export function create(node: InjectorNode, inputName: string) {
   // Predicate matches ONLY `input_N` slots so any fixed input (e.g.
   // future upstream context wire) stays at its own position. State
   // lives on node.properties.collapse_connections — persists with
-  // the workflow. Collapsed-state label is "inputs" so the first
-  // pin reads cleanly without overlapping the input_N names.
+  // the workflow. Collapsed-state label is computed as
+  // `inputs ×${count}` so the user can read how many wires are
+  // merged into the single pin without expanding.
+  const matchDynamicInput = (inp: { name?: string }) =>
+    injectorSlotName(inp) !== null;
   attachCollapsableConnections(node as Parameters<typeof attachCollapsableConnections>[0], {
-    matchInput: (inp) => injectorSlotName(inp as { name?: string }) !== null,
-    collapsedInputLabel: "inputs",
+    matchInput: matchDynamicInput as (inp: unknown, idx: number) => boolean,
+    collapsedInputLabel: (n) => {
+      // Count only WIRED dynamic inputs — the trailing empty input_N
+      // shouldn't bump the badge count. Reads "inputs ×N" when more
+      // than one wire is merged so the user sees scale at a glance.
+      const inputs = (n as { inputs?: Array<{ name?: string; link?: number | null } | null | undefined> }).inputs ?? [];
+      let count = 0;
+      for (const inp of inputs) {
+        if (!inp) continue;
+        if (!matchDynamicInput(inp)) continue;
+        if (inp.link == null) continue;
+        count++;
+      }
+      return count > 1 ? `inputs ×${count}` : "inputs";
+    },
   });
 
   // Manual socket management. The schema declares NO dynamic inputs

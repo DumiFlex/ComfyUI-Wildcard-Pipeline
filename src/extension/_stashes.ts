@@ -64,3 +64,10 @@ export const nodeBadgeSeverity: WeakMap<object, string | null> = new WeakMap();
  *  override + interval, called on node removal to detach handlers.
  *  Replaces `_wpBadgeCleanup`. */
 export const nodeBadgeCleanup: WeakMap<object, () => void> = new WeakMap();
+
+/** Active collapse-animation token (a monotonic number per node).
+ *  setCollapsed bumps the token and reads it on each rAF tick;
+ *  when a fresh toggle bumps again, the old tween's check fails and
+ *  it bails. Prevents "double animation" jitter when the user
+ *  toggles rapidly. */
+export const nodeCollapseAnimToken: WeakMap<object, number> = new WeakMap();
