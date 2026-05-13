@@ -76,8 +76,6 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   let state = options.initialValue ?? "";
   const baseMin = options.minHeight ?? 80;
   let minHeight = baseMin;
-  const baseMinWidth = options.minWidth ?? 0;
-  let minWidth = baseMinWidth;
 
   const widgetOpts: Record<string, unknown> = {
     socketless: true,
@@ -94,10 +92,17 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   const widget = node.addDOMWidget(widgetName, "wp-dom", host, widgetOpts);
   // Force a minimum node width if requested. LoRA Manager docs §4.3 — only
   // way to widen the node from a DOM widget is overriding computeLayoutSize.
-  // The width is a LIVE getter (not a captured constant) so the auto-grow
-  // observer below can ratchet minWidth up as row content gets wider —
-  // e.g. injector conflict badge text "duplicate variable" needs more room.
-  if (baseMinWidth) {
+  // Width is STATIC (captured constant). The auto-widen-on-overflow attempt
+  // was reverted: it required a MutationObserver which created feedback
+  // loops with litegraph's own re-renders. Surveyed nodes (rgthree,
+  // KJNodes, LoRA Manager, pythongosssss, comfy_mtb) all use either
+  // pull-based size callbacks or static widths — none observe DOM
+  // mutations for auto-sizing. Components that need verbose content
+  // should truncate (e.g. conflict badge text-overflow:ellipsis) so the
+  // row stays within the node's width. The user can manually drag wider
+  // if they want more breathing room.
+  if (options.minWidth) {
+    const minWidth = options.minWidth;
     widget.computeLayoutSize = () => ({ minWidth, minHeight });
   }
   // createApp's prop overload requires the second arg's keys to extend the
@@ -117,114 +122,37 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // the saved-workflow size when ComfyUI restores it on page load.
   const resizable = node as unknown as ResizableNode;
   let scheduled = false;
-  function pushSize(measuredH: number, growthDelta: number) {
+  function pushSize(measured: number) {
     if (scheduled) return;
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
-      const nextH = Math.max(baseMin, measuredH);
-      if (nextH !== minHeight) minHeight = nextH;
-      // Width handling:
-      //   - growthDelta > 0  → content currently overflows; bump
-      //     minWidth by the overflow amount (capped per-tick) so the
-      //     next layout swallows it.
-      //   - growthDelta = 0  → content fits at current width. Try
-      //     shrinking minWidth one step toward baseMinWidth. If the
-      //     shrink leaves content overflowing, the next mutation tick
-      //     re-grows. Converges to the smallest width that fits the
-      //     current content — releases extra room when transient
-      //     conflict badges disappear.
-      if (baseMinWidth) {
-        if (growthDelta > 0) {
-          // Hard caps prevent runaway: 64px/tick + 3x baseMinWidth
-          // absolute ceiling. 3x covers realistic verbose badges.
-          const cappedDelta = Math.min(growthDelta, 64);
-          const absoluteCap = baseMinWidth * 3;
-          minWidth = Math.min(minWidth + cappedDelta, absoluteCap);
-        } else if (minWidth > baseMinWidth) {
-          // Probe shrink. 24px/step trades convergence speed against
-          // jitter — fast enough that a vanished badge clears the
-          // excess width within ~5 ticks, slow enough that quick
-          // grow/shrink toggles don't visibly hunt.
-          minWidth = Math.max(baseMinWidth, minWidth - 24);
-        }
-      }
+      const next = Math.max(baseMin, measured);
+      if (next !== minHeight) minHeight = next;
 
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      const targetH = min[1];
-      // Width axis: match minWidth (which may be growing or shrinking
-      // back). NOTE: this overrides a user's manual drag-wider. For
-      // the auto-shrink-back-to-baseMinWidth behavior to feel right,
-      // the auto-sized width has to be authoritative. If a future
-      // requirement is "preserve manual drag", we'd need to track
-      // whether the current size came from setSize-by-us vs the user.
-      const targetW = min[0];
-      if (cur[1] !== targetH || cur[0] !== targetW) {
-        resizable.setSize([targetW, targetH]);
+      // Always match content size on the height axis. Width is left to the
+      // user (drag wider preserved). If user wants more vertical space they
+      // collapse modules / use whitespace.
+      if (cur[1] !== min[1]) {
+        resizable.setSize([Math.max(cur[0], min[0]), min[1]]);
         resizable.setDirtyCanvas?.(true, true);
       }
     });
   }
-  // Walk inner's descendants to find the worst horizontal overflow.
-  // Plain `inner.scrollWidth` doesn't work here because at least one
-  // descendant (`.wp-inj-widget`) sets `overflow: hidden`, which
-  // creates a scroll container that ABSORBS the children's natural
-  // overflow — the inner reads as `scrollWidth === clientWidth` even
-  // when rows visibly spill past it. Walking the tree finds the
-  // actual overflowing element (typically a flex row whose children
-  // sum exceeds its width) and reports the worst overflow delta.
-  function maxOverflowBelow(root: Element): number {
-    let max = 0;
-    function walk(el: Element): void {
-      if (el instanceof HTMLElement) {
-        const delta = el.scrollWidth - el.clientWidth;
-        if (delta > max) max = delta;
-      }
-      for (let i = 0; i < el.children.length; i++) walk(el.children[i]);
-    }
-    walk(root);
-    return max;
-  }
-
-  let resizeObserver: ResizeObserver | null = null;
-  let mutationObserver: MutationObserver | null = null;
-  if (!options.fillHost) {
-    // ResizeObserver covers the height path — content getting taller
-    // (more rows, taller widget) trips it. Uses the entry's borderBox
-    // dimensions which are reliable across all browsers.
-    resizeObserver = new ResizeObserver((entries) => {
-      for (const e of entries) {
-        const h = Math.ceil(e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height);
-        const overflow = maxOverflowBelow(inner);
-        const growthDelta = overflow > 2 ? Math.ceil(overflow) : 0;
-        if (h > 0) pushSize(h, growthDelta);
-      }
-    });
-    // MutationObserver: fires on every DOM change in the Vue subtree.
-    // Always push (height + width). Width handling:
-    //   - overflow > 2px → growthDelta = overflow (grow)
-    //   - overflow <= 2px → growthDelta = 0 (try to shrink, see pushSize)
-    // Height handling: every push refreshes minHeight, so a mutation
-    // that shrinks content (e.g. row removal) is picked up here even
-    // if ResizeObserver doesn't fire for the same delta.
-    mutationObserver = new MutationObserver(() => {
-      const overflow = maxOverflowBelow(inner);
-      const growthDelta = overflow > 2 ? Math.ceil(overflow) : 0;
-      const h = Math.ceil(inner.getBoundingClientRect().height);
-      if (h > 0) pushSize(h, growthDelta);
-    });
-    queueMicrotask(() => {
-      resizeObserver?.observe(inner);
-      mutationObserver?.observe(inner, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-        attributes: true,
+  // Skip the autosize observer in fill mode — node size is user-controlled,
+  // content fills whatever space is given.
+  const resizeObserver = options.fillHost
+    ? null
+    : new ResizeObserver((entries) => {
+        for (const e of entries) {
+          const h = Math.ceil(e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height);
+          if (h > 0) pushSize(h);
+        }
       });
-    });
-  }
+  if (resizeObserver) queueMicrotask(() => resizeObserver.observe(inner));
 
   return {
     widget,
@@ -232,7 +160,6 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     app,
     unmount: () => {
       resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
       app.unmount();
     },
     getValue: () => state,

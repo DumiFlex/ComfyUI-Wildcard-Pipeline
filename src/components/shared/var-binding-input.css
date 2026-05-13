@@ -26,11 +26,11 @@
   border-radius: 3px;
   overflow: hidden;
   flex: 1;
-  /* Floor at 100px so the binding input always shows the `$` prefix
-   * plus several characters even when siblings push hard. The host
-   * widget container auto-widens past this when row content needs
-   * more room (see createDomWidgetHost's minWidth observer). */
-  min-width: 100px;
+  /* Floor at 80px so flex layout doesn't squash the input to zero
+   * when siblings (conflict badge, action cluster) compete for the
+   * row width. The `$` prefix + a few characters of the binding
+   * remain visible even on the narrowest node width. */
+  min-width: 80px;
 }
 .wp-vbind-wrap:focus-within { border-color: var(--wp-accent); }
 .wp-vbind-wrap--mod         { border-color: var(--wp-accent); }

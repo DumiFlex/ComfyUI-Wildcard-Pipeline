@@ -442,11 +442,17 @@ function onDragEnd(): void {
   letter-spacing: 0.04em;
   padding: 3px 5px;
   border-radius: 2px;
+  /* Cap + ellipsis so a long badge ("duplicate variable") can't
+   * eat the binding input width. Tried auto-widening the node
+   * instead but every observer-driven approach created feedback
+   * loops with litegraph's re-render — surveyed nodes (rgthree,
+   * KJNodes, LoRA Manager) all truncate or stay static. Full
+   * text remains accessible via the title tooltip. */
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  /* No max-width or shrink — the badge keeps its full text and the
-   * node auto-widens to fit (handled by createDomWidgetHost's
-   * minWidth observer). Reads honestly even when verbose. */
-  flex-shrink: 0;
+  flex-shrink: 1;
   cursor: help;
 }
 .wp-conflict-badge--info    { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); color: var(--wp-accent); }
