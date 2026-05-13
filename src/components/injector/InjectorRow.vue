@@ -309,4 +309,12 @@ function onBindingInput(ev: Event): void {
   color: var(--wp-accent-text, var(--wp-accent));
   background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
 }
+/* Danger variant hover — mirror .wp-btn--danger:hover from ModuleRow:
+ * red icon + red-tinted border, NO bg flip. Reads as "destructive on
+ * this row" without competing with the row's own hover bg. */
+.wp-inj-action--danger:hover {
+  background: transparent;
+  color: var(--wp-danger);
+  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
+}
 </style>
