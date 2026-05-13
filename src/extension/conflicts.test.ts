@@ -14,14 +14,17 @@ function injRow(over: Partial<InjectorRowsValue["rows"][number]> = {}): Injector
 }
 
 describe("scanInjectorConflicts", () => {
-  it("flags row with empty binding as injector_input_disconnected", () => {
+  it("flags row with empty binding as injector_binding_missing", () => {
+    // Empty binding = socket linked but user hasn't typed the
+    // variable name. Distinct from injector_input_disconnected which
+    // means the socket has no wire.
     const value: InjectorRowsValue = {
       version: 1,
       rows: [injRow({ binding: "" })],
     };
     const out = scanInjectorConflicts(value, []);
     expect(out).toHaveLength(1);
-    expect(out[0].type).toBe("injector_input_disconnected");
+    expect(out[0].type).toBe("injector_binding_missing");
   });
 
   it("flags row whose slot_name is not in the connectedSlots list", () => {

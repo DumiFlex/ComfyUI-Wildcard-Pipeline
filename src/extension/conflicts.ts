@@ -141,7 +141,8 @@ export type ConflictType =
   | "constraint_target_before_self"
   | "constraint_target_in_upstream"
   | "constraint_target_missing"
-  | "injector_input_disconnected";
+  | "injector_input_disconnected"
+  | "injector_binding_missing";
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
   moduleId: string;
@@ -166,6 +167,7 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_target_missing") return "target missing";
   if (type === "constraint_source_in_downstream") return "source in downstream";
   if (type === "injector_input_disconnected") return "no link";
+  if (type === "injector_binding_missing") return "no binding";
   return type;
 }
 
@@ -190,10 +192,13 @@ export function scanInjectorConflicts(
     if (!row.enabled) continue;
     const binding = row.binding.trim();
     if (!binding) {
+      // Distinct from injector_input_disconnected (severed socket) —
+      // here the socket IS linked but the user hasn't typed a binding
+      // name yet. Badge reads "no binding", not "no link".
       out.push({
         moduleId: row._uid,
         variable: row.slot_name,
-        type: "injector_input_disconnected",
+        type: "injector_binding_missing",
         severity: "warning",
       });
       continue;
