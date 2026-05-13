@@ -345,7 +345,14 @@ export function create(node: InjectorNode, inputName: string) {
       changed,
     });
     if (changed) {
-      host.setValue(serializeWidgetJson({ ...parsed, rows: remappedRows }));
+      const next = serializeWidgetJson({ ...parsed, rows: remappedRows });
+      host.setValue(next);
+      // Mirror the manual currentJson sync from the parent's onChange
+      // handler — host.setValue only updates internal state, not
+      // currentJson. Without this the InjectorWidget watcher reads
+      // stale props.initialJson and drops rows whose old slot name
+      // is no longer in connectedSlots.
+      if (next !== currentJson.value) currentJson.value = next;
     }
   }
 
