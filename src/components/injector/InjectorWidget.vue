@@ -20,6 +20,12 @@ const props = withDefaults(
     connectedSlots?: string[];
     /** Per-slot type label — `STRING` / `INT` / `FLOAT` / `BOOLEAN`. */
     slotTypes?: Record<string, string>;
+    /** Per-slot display label keyed by slot_name (input_N). Holds the
+     *  user-customized socket label when set; rows fall back to the
+     *  slot_name when this map has no entry. Lets a renamed pin
+     *  surface its label in the DOM row badge so the user can
+     *  correlate row ↔ wire after renaming. */
+    slotLabels?: Record<string, string>;
     /** Variables produced by anything upstream of this injector. Used
      *  by the conflict scanner to flag shadows_upstream when an
      *  injector binding overrides an upstream Context output. */
@@ -35,7 +41,7 @@ const props = withDefaults(
      *  — this prop is the reactive read-side. */
     connectionsCollapsed?: boolean;
   }>(),
-  { connectedSlots: () => [], slotTypes: () => ({}), upstreamVars: () => [], nodeMode: 0, connectionsCollapsed: false },
+  { connectedSlots: () => [], slotTypes: () => ({}), slotLabels: () => ({}), upstreamVars: () => [], nodeMode: 0, connectionsCollapsed: false },
 );
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -246,6 +252,7 @@ defineExpose({ addRow, removeRow });
         :row="row"
         :is-connected="isConnected(row.slot_name)"
         :value-type="slotTypes[row.slot_name]"
+        :display-label="slotLabels[row.slot_name]"
         :conflict-severity="conflictByUid[row._uid]?.severity"
         :conflict-label="conflictByUid[row._uid]?.label"
         @update="(patch) => updateRow(row._uid, patch)"

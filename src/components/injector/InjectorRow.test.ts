@@ -171,6 +171,26 @@ describe("InjectorRow — type icon (Phase C.1a)", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "WEIRDTYPE" } });
     expect(w.find(".wp-inj-type-icon .pi-circle").exists()).toBe(true);
   });
+  it("maps ComfyUI tensor types: IMAGE → pi-image", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "IMAGE" } });
+    expect(w.find(".wp-inj-type-icon .pi-image").exists()).toBe(true);
+  });
+  it("maps ComfyUI tensor types: LATENT → pi-cloud", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "LATENT" } });
+    expect(w.find(".wp-inj-type-icon .pi-cloud").exists()).toBe(true);
+  });
+  it("maps ComfyUI model types: MODEL → pi-cube", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "MODEL" } });
+    expect(w.find(".wp-inj-type-icon .pi-cube").exists()).toBe(true);
+  });
+  it("maps ComfyUI model types: CLIP → pi-tag", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "CLIP" } });
+    expect(w.find(".wp-inj-type-icon .pi-tag").exists()).toBe(true);
+  });
+  it("maps audio types: AUDIO → pi-volume-up", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "AUDIO" } });
+    expect(w.find(".wp-inj-type-icon .pi-volume-up").exists()).toBe(true);
+  });
 });
 
 describe("InjectorRow — data-type attribute (Phase C.1a)", () => {
@@ -185,8 +205,24 @@ describe("InjectorRow — data-type attribute (Phase C.1a)", () => {
 });
 
 describe("InjectorRow — slot tag (Phase C.1a)", () => {
-  it("renders .wp-inj-slot containing the row.slot_name", () => {
+  it("renders .wp-inj-slot containing the row.slot_name when no displayLabel", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ slot_name: "input_2" }) } });
     expect(w.find(".wp-inj-slot").text()).toBe("input_2");
+  });
+
+  it("renders the displayLabel when provided (user-customized socket label)", () => {
+    const w = mount(InjectorRow, {
+      props: { row: makeRow({ slot_name: "input_2" }), displayLabel: "model_wire" },
+    });
+    expect(w.find(".wp-inj-slot").text()).toBe("model_wire");
+  });
+
+  it("title tooltip surfaces both slot_name and custom label when they differ", () => {
+    const w = mount(InjectorRow, {
+      props: { row: makeRow({ slot_name: "input_2" }), displayLabel: "model_wire" },
+    });
+    expect(w.find(".wp-inj-slot").attributes("title")).toBe(
+      "Bound to socket input_2 (label: model_wire)",
+    );
   });
 });

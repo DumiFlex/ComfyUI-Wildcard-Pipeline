@@ -16,7 +16,13 @@ const props = defineProps<{
   /** Short label rendered inside the conflict badge (e.g. "duplicate",
    *  "no link", "overrides upstream"). */
   conflictLabel?: string;
+  /** Display label for the slot tag — usually the user-customized
+   *  socket label, falls back to the row's slot_name (input_N) when
+   *  unset. Truncates with ellipsis when too long for the tag. */
+  displayLabel?: string;
 }>();
+
+const slotLabel = computed(() => props.displayLabel ?? props.row.slot_name);
 
 const emit = defineEmits<{
   (e: "update", patch: Partial<InjectorRow>): void;
@@ -25,13 +31,33 @@ const emit = defineEmits<{
 
 const isEmpty = computed(() => !props.row.binding.trim());
 
-/** Type → pi-* icon mapping. Falls back to pi-circle for unknown types
- *  so the icon slot never goes empty (consistent row height). */
+/** Type → pi-* icon mapping. Covers the four engine-native primitive
+ *  types (string/int/float/boolean) plus common ComfyUI model & tensor
+ *  types — those get stringified server-side, but the icon still helps
+ *  the user correlate the wire visually. Falls back to pi-circle for
+ *  unknown types so the icon slot never goes empty (consistent row
+ *  height). */
 const TYPE_ICONS: Record<string, string> = {
+  // Engine-native primitives
   string: "pi-pencil",
   int: "pi-hashtag",
   float: "pi-percentage",
   boolean: "pi-check-square",
+  // Common ComfyUI tensor / model types — stringified by engine but
+  // worth surfacing visually so the user reads the wire kind.
+  image: "pi-image",
+  mask: "pi-clone",
+  latent: "pi-cloud",
+  conditioning: "pi-comment",
+  model: "pi-cube",
+  clip: "pi-tag",
+  vae: "pi-box",
+  audio: "pi-volume-up",
+  video: "pi-video",
+  noise: "pi-sparkles",
+  sigmas: "pi-chart-line",
+  guider: "pi-compass",
+  sampler: "pi-sliders-h",
 };
 const typeIcon = computed(
   () => TYPE_ICONS[(props.valueType ?? "").toLowerCase()] ?? "pi-circle",
@@ -72,9 +98,11 @@ function onBindingInput(ev: Event): void {
 
     <span
       class="wp-inj-slot"
-      :title="`Bound to socket ${row.slot_name}`"
+      :title="slotLabel === row.slot_name
+        ? `Bound to socket ${row.slot_name}`
+        : `Bound to socket ${row.slot_name} (label: ${slotLabel})`"
       data-test="inj-row-slot"
-    >{{ row.slot_name }}</span>
+    >{{ slotLabel }}</span>
 
     <span
       v-if="valueType"
@@ -224,13 +252,31 @@ function onBindingInput(ev: Event): void {
   line-height: 1;
   color: var(--wp-text3);
 }
-.wp-inj-row[data-type="string"]  .wp-inj-type-icon { color: var(--wp-amber); }
-.wp-inj-row[data-type="int"]     .wp-inj-type-icon { color: var(--wp-green); }
-.wp-inj-row[data-type="float"]   .wp-inj-type-icon { color: var(--wp-var-7); }
-.wp-inj-row[data-type="boolean"] .wp-inj-type-icon { color: var(--wp-var-5); }
+.wp-inj-row[data-type="string"]       .wp-inj-type-icon { color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]          .wp-inj-type-icon { color: var(--wp-green); }
+.wp-inj-row[data-type="float"]        .wp-inj-type-icon { color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"]      .wp-inj-type-icon { color: var(--wp-var-5); }
+/* ComfyUI tensor / model types — colored from the wp-var palette to
+ * stay in the same visual family as the four primitives. */
+.wp-inj-row[data-type="image"]        .wp-inj-type-icon { color: var(--wp-var-1); }
+.wp-inj-row[data-type="mask"]         .wp-inj-type-icon { color: var(--wp-var-6); }
+.wp-inj-row[data-type="latent"]       .wp-inj-type-icon { color: var(--wp-var-4); }
+.wp-inj-row[data-type="conditioning"] .wp-inj-type-icon { color: var(--wp-var-2); }
+.wp-inj-row[data-type="model"]        .wp-inj-type-icon { color: var(--wp-var-8); }
+.wp-inj-row[data-type="clip"]         .wp-inj-type-icon { color: var(--wp-var-3); }
+.wp-inj-row[data-type="vae"]          .wp-inj-type-icon { color: var(--wp-var-6); }
+.wp-inj-row[data-type="audio"]        .wp-inj-type-icon { color: var(--wp-var-7); }
+.wp-inj-row[data-type="video"]        .wp-inj-type-icon { color: var(--wp-var-4); }
+.wp-inj-row[data-type="noise"]        .wp-inj-type-icon { color: var(--wp-var-6); }
+.wp-inj-row[data-type="sigmas"]       .wp-inj-type-icon { color: var(--wp-var-1); }
+.wp-inj-row[data-type="guider"]       .wp-inj-type-icon { color: var(--wp-var-3); }
+.wp-inj-row[data-type="sampler"]      .wp-inj-type-icon { color: var(--wp-var-2); }
 .wp-inj-type-icon .pi { font-size: 11px; }
 
-/* Slot tag — kind-chip-shaped pill in muted grey, sans font */
+/* Slot tag — kind-chip-shaped pill in muted grey, sans font.
+ * Shows either input_N or the user's custom socket label. Cap width
+ * so a long custom label can't push the rest of the row out of view;
+ * full text remains accessible via the title tooltip. */
 .wp-inj-slot {
   font: 600 9px/1.2 var(--wp-font-sans);
   text-transform: lowercase;
@@ -240,6 +286,10 @@ function onBindingInput(ev: Event): void {
   background: color-mix(in oklab, var(--wp-text3) 18%, transparent);
   color: var(--wp-text2);
   flex-shrink: 0;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Type chip — same shape as Context .wp-kind-chip, color-keyed by type */
@@ -251,10 +301,23 @@ function onBindingInput(ev: Event): void {
   border-radius: 2px;
   flex-shrink: 0;
 }
-.wp-inj-row[data-type="string"]  .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-amber)  22%, transparent); color: var(--wp-amber); }
-.wp-inj-row[data-type="int"]     .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-green)  22%, transparent); color: var(--wp-green); }
-.wp-inj-row[data-type="float"]   .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-7)  22%, transparent); color: var(--wp-var-7); }
-.wp-inj-row[data-type="boolean"] .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-5)  22%, transparent); color: var(--wp-var-5); }
+.wp-inj-row[data-type="string"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-amber)  22%, transparent); color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]          .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-green)  22%, transparent); color: var(--wp-green); }
+.wp-inj-row[data-type="float"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"]      .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-5) 22%, transparent); color: var(--wp-var-5); }
+.wp-inj-row[data-type="image"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-1) 22%, transparent); color: var(--wp-var-1); }
+.wp-inj-row[data-type="mask"]         .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
+.wp-inj-row[data-type="latent"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-4) 22%, transparent); color: var(--wp-var-4); }
+.wp-inj-row[data-type="conditioning"] .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
+.wp-inj-row[data-type="model"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-8) 22%, transparent); color: var(--wp-var-8); }
+.wp-inj-row[data-type="clip"]         .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-3) 22%, transparent); color: var(--wp-var-3); }
+.wp-inj-row[data-type="vae"]          .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
+.wp-inj-row[data-type="audio"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
+.wp-inj-row[data-type="video"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-4) 22%, transparent); color: var(--wp-var-4); }
+.wp-inj-row[data-type="noise"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
+.wp-inj-row[data-type="sigmas"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-1) 22%, transparent); color: var(--wp-var-1); }
+.wp-inj-row[data-type="guider"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-3) 22%, transparent); color: var(--wp-var-3); }
+.wp-inj-row[data-type="sampler"]      .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
 
 /* Conflict dot + badge — same family as ContextWidget */
 .wp-conflict-dot {
