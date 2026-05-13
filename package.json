@@ -16,6 +16,7 @@
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,vue}\"",
     "size": "node scripts/check-bundle-size.mjs",
+    "check:css-isolation": "node scripts/check-css-isolation.mjs",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --passWithNoTests",

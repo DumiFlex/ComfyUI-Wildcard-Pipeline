@@ -29,6 +29,7 @@ pnpm test:coverage     # Vitest + v8 coverage (with thresholds)
 pnpm typecheck         # vue-tsc --noEmit
 pnpm lint              # ESLint flat config
 pnpm size              # bundle-size gate (--json <path> for manifest)
+pnpm check:css-isolation  # flag non-wp-prefixed top-level CSS selectors
 pytest                 # Python unit tests
 ruff check .           # Python lint
 ```
@@ -48,6 +49,11 @@ ruff check .           # Python lint
 - **Coverage gate** — vitest v8 coverage with thresholds (lines/statements 50%, functions 40%, branches 65%). Anchored to current baseline; ratchet up alongside new tests.
 - **Caching** — `WP_Context` + `WP_Debug` set `not_idempotent=True` so seed cycling always re-executes.
 - **Conventional Commits** — enforced by commitlint. semantic-release read log to cut versions.
+- **Extension isolation — four layers**:
+  1. **CSS class namespace**: every class selector starts with `.wp-*` (or `.var-1..8`). Never write a top-level rule with an unprefixed class — it could collide with ComfyUI core or another custom node. New top-level non-`wp-*` selectors are blocked by `pnpm check:css-isolation`.
+  2. **`@layer wp-extension` wrap**: standalone extension CSS (`a11y.css`, `display-prefs.css`, `ContextWidget.vue` unscoped block, etc.) sits in `@layer wp-extension { ... }` so host CSS (unlayered) beats us on any selector collision. Layered author rules are subservient to unlayered ones in the same origin. NOT applicable to CSS that gets `@imported` into Vue `<style scoped>` blocks — the scoper can't parse `@layer` atrules; rely on namespace prefix there.
+  3. **WeakMap stashes for litegraph object metadata**: never attach state to nodes/slots via string keys (`node._wpFoo = ...`). Use the WeakMaps in `src/extension/_stashes.ts` — module-private, no collision risk with other extensions, invisible to workflow serialization. Method overrides (`getInputPos`, `onConnectionsChange`, etc.) must keep their standard names because litegraph reads them; isolation there is via wrap-and-call-original chaining.
+  4. **Persistent state on `node.properties` only**: anything that must survive workflow save lives on `node.properties[key]` with a `wp_*` / `collapse_connections`-style string key (workflow JSON is the serialization root). Transient session state belongs in WeakMaps.
 
 ## Frontend overview
 
