@@ -157,6 +157,10 @@
 .wp-kind-style-icon .wp-bundle-chip {
   display: none !important;
 }
+/* Injector type chip — same pattern, hide on icon-only. */
+.wp-kind-style-icon .wp-inj-type-chip {
+  display: none !important;
+}
 
 .wp-kind-style-chip .wp-mod-icon {
   display: none !important;
@@ -164,6 +168,10 @@
 /* Bundle's box icon mirrors the per-kind .wp-mod-icon — hide it when
  * the user prefers chip-only display. */
 .wp-kind-style-chip .wp-bundle-icon {
+  display: none !important;
+}
+/* Injector type icon — same pattern, hide on chip-only. */
+.wp-kind-style-chip .wp-inj-type-icon {
   display: none !important;
 }
 
