@@ -11,6 +11,7 @@ import {
 import { attachThemeDetector } from "../extension/theme-detector";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import {
+  applyCollapsedLabels,
   attachCollapsableConnections,
   isCollapsed as readCollapsed,
   setCollapsed,
@@ -350,9 +351,11 @@ export function create(node: InjectorNode, inputName: string) {
   // Predicate matches ONLY `input_N` slots so any fixed input (e.g.
   // future upstream context wire) stays at its own position. State
   // lives on node.properties.collapse_connections — persists with
-  // the workflow.
+  // the workflow. Collapsed-state label is "inputs" so the first
+  // pin reads cleanly without overlapping the input_N names.
   attachCollapsableConnections(node as Parameters<typeof attachCollapsableConnections>[0], {
     matchInput: (inp) => injectorSlotName(inp as { name?: string }) !== null,
+    collapsedInputLabel: "inputs",
   });
 
   // Manual socket management. The schema declares NO dynamic inputs
@@ -364,7 +367,14 @@ export function create(node: InjectorNode, inputName: string) {
   function normalizeSlots(): void {
     if (!node.addInput || !node.removeInput) return;
     const { renames, removed } = reindexInjectorSlots(node as ReindexSurface);
-    if (renames.size === 0 && removed.size === 0) return;
+    if (renames.size === 0 && removed.size === 0) {
+      // Even when no rename happened, addInput may have appended a
+      // fresh empty input_N — if we're currently collapsed, blank
+      // its label so it doesn't render next to the unified "inputs"
+      // label.
+      applyCollapsedLabels(node as Parameters<typeof applyCollapsedLabels>[0]);
+      return;
+    }
     // The reactiveFromGraph chain refreshed BEFORE our rAF normalize
     // (onConnectionsChange handler order — see reactive.ts). Their
     // snapshots hold pre-rename slot names. Manually re-run the
@@ -403,6 +413,12 @@ export function create(node: InjectorNode, inputName: string) {
       // is no longer in connectedSlots.
       if (next !== currentJson.value) currentJson.value = next;
     }
+    // Renames mutated inputs[i].name in place — if currently
+    // collapsed, the stashed `_wpOrigLabel` on each slot no longer
+    // matches the new identity, and any newly-added trailing slot
+    // is unmasked. Re-apply labels so the unified "inputs" + blank
+    // siblings render correctly.
+    applyCollapsedLabels(node as Parameters<typeof applyCollapsedLabels>[0]);
   }
 
   const origOnConnectionsChange = (node as { onConnectionsChange?: (...args: unknown[]) => void })

@@ -229,11 +229,14 @@ defineExpose({ addRow, removeRow });
         type="button"
         class="wp-inj-collapse-conns"
         :class="{ 'is-active': connectionsCollapsed }"
-        :title="connectionsCollapsed ? 'Show all input wires' : 'Collapse all input wires onto input_0'"
+        :title="connectionsCollapsed ? 'Show all input wires individually' : 'Merge all input wires onto a single pin'"
         :aria-label="connectionsCollapsed ? 'Expand input connections' : 'Collapse input connections'"
         data-test="inj-toolbar-collapse-conns"
         @click="emit('toggle-connections-collapse')"
-      ><i :class="['pi', connectionsCollapsed ? 'pi-arrows-alt' : 'pi-arrows-v']" aria-hidden="true" /></button>
+      >
+        <i :class="['pi', connectionsCollapsed ? 'pi-arrows-alt' : 'pi-arrows-v']" aria-hidden="true" />
+        <span class="wp-inj-collapse-conns__label">{{ connectionsCollapsed ? "expand wires" : "merge wires" }}</span>
+      </button>
     </div>
 
     <div v-if="!collapsed" class="wp-inj-list">
@@ -304,32 +307,36 @@ defineExpose({ addRow, removeRow });
   color: var(--wp-text-dim, var(--wp-text3));
 }
 /* Collapse-connections toggle — sits at the right end of the header.
- * Inactive: subtle dim text + transparent bg, matches the caret on
- * the left. Active (collapsed): accent-tinted bg + accent text so
- * it's obvious which mode the node is in at a glance. */
+ * Pill-shaped button with persistent bg + border so it reads as
+ * tappable at rest (no hover-required affordance). Active (collapsed):
+ * accent-tinted so the mode change is obvious at a glance. */
 .wp-inj-collapse-conns {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  padding: 2px 4px;
-  margin-left: 4px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border-soft, var(--wp-border2));
+  color: var(--wp-text-dim, var(--wp-text3));
+  font: 500 10px var(--wp-font-sans);
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  margin-left: 4px;
+  border-radius: 999px;
+  cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .wp-inj-collapse-conns:hover {
-  background: var(--wp-bg2);
-  border-color: var(--wp-border-soft, var(--wp-border2));
+  background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-bg2));
+  border-color: color-mix(in srgb, var(--wp-accent) 40%, var(--wp-border-soft, var(--wp-border2)));
   color: var(--wp-text);
 }
 .wp-inj-collapse-conns.is-active {
   color: var(--wp-accent-text, var(--wp-accent));
-  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--wp-accent) 55%, transparent);
 }
-.wp-inj-collapse-conns .pi { font-size: 11px; }
+.wp-inj-collapse-conns .pi { font-size: 10px; line-height: 1; }
+.wp-inj-collapse-conns__label { line-height: 1; }
 .wp-inj-list {
   display: flex;
   flex-direction: column;
