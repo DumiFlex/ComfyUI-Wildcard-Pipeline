@@ -135,14 +135,23 @@ function addRow(slotName: string): void {
 // have been severed. (Earlier design kept severed rows with a warn
 // badge; user feedback flipped it to auto-cleanup since the row is
 // useless without a wire and re-creating it is just re-connecting.)
+//
+// C.1b note: read rows from `props.initialJson` (latest source-of-
+// truth) rather than `value.value.rows` (potentially stale). When
+// the slot reindexer in injector.ts mutates socket names AND row
+// JSON in the same tick, this watcher and the initialJson watcher
+// can race — if connectedSlots fires first, value.value.rows still
+// holds the pre-rename state and we'd false-positive every row as
+// severed. Parsing initialJson here breaks the race.
 watch(
   () => props.connectedSlots,
   (next) => {
+    const freshRows = parseWidgetJsonWithRecovery(props.initialJson, emptyInjectorRowsValue()).value.rows;
     const connectedSet = new Set(next);
-    const known = new Set(value.value.rows.map((r) => r.slot_name));
+    const known = new Set(freshRows.map((r) => r.slot_name));
     const toAdd = next.filter((slot) => !known.has(slot));
-    const survivors = value.value.rows.filter((r) => connectedSet.has(r.slot_name));
-    const removed = survivors.length !== value.value.rows.length;
+    const survivors = freshRows.filter((r) => connectedSet.has(r.slot_name));
+    const removed = survivors.length !== freshRows.length;
     if (toAdd.length === 0 && !removed) return;
     value.value = {
       ...value.value,
