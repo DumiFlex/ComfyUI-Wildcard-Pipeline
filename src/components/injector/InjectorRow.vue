@@ -351,14 +351,11 @@ function onBindingInput(ev: Event): void {
   letter-spacing: 0.04em;
   padding: 3px 5px;
   border-radius: 2px;
-  /* Cap + ellipsis so a long badge ("duplicate variable") can't
-   * eat the entire binding input width. flex-shrink kicks in past
-   * the cap so the row degrades gracefully on narrow nodes. */
-  max-width: 88px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  flex-shrink: 1;
+  /* No max-width or shrink — the badge keeps its full text and the
+   * node auto-widens to fit (handled by createDomWidgetHost's
+   * minWidth observer). Reads honestly even when verbose. */
+  flex-shrink: 0;
   cursor: help;
 }
 .wp-conflict-badge--info    { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); color: var(--wp-accent); }

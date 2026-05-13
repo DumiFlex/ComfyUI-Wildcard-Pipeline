@@ -76,6 +76,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   let state = options.initialValue ?? "";
   const baseMin = options.minHeight ?? 80;
   let minHeight = baseMin;
+  const baseMinWidth = options.minWidth ?? 0;
+  let minWidth = baseMinWidth;
 
   const widgetOpts: Record<string, unknown> = {
     socketless: true,
@@ -92,8 +94,10 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   const widget = node.addDOMWidget(widgetName, "wp-dom", host, widgetOpts);
   // Force a minimum node width if requested. LoRA Manager docs §4.3 — only
   // way to widen the node from a DOM widget is overriding computeLayoutSize.
-  if (options.minWidth) {
-    const minWidth = options.minWidth;
+  // The width is a LIVE getter (not a captured constant) so the auto-grow
+  // observer below can ratchet minWidth up as row content gets wider —
+  // e.g. injector conflict badge text "duplicate variable" needs more room.
+  if (baseMinWidth) {
     widget.computeLayoutSize = () => ({ minWidth, minHeight });
   }
   // createApp's prop overload requires the second arg's keys to extend the
@@ -113,22 +117,33 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // the saved-workflow size when ComfyUI restores it on page load.
   const resizable = node as unknown as ResizableNode;
   let scheduled = false;
-  function pushSize(measured: number) {
+  function pushSize(measuredH: number, measuredW: number) {
     if (scheduled) return;
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
-      const next = Math.max(baseMin, measured);
-      if (next !== minHeight) minHeight = next;
+      const nextH = Math.max(baseMin, measuredH);
+      if (nextH !== minHeight) minHeight = nextH;
+      // Width grows monotonically — once a row needed 320px of room for
+      // its conflict badge, the floor stays at 320px even when the badge
+      // disappears. Prevents flicker when toggling temporary states.
+      // User-initiated drag past minWidth is preserved because we only
+      // ever GROW minWidth (never shrink).
+      if (baseMinWidth) {
+        const nextW = Math.max(minWidth, measuredW);
+        if (nextW !== minWidth) minWidth = nextW;
+      }
 
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      // Always match content size on the height axis. Width is left to the
-      // user (drag wider preserved). If user wants more vertical space they
-      // collapse modules / use whitespace.
-      if (cur[1] !== min[1]) {
-        resizable.setSize([Math.max(cur[0], min[0]), min[1]]);
+      // Height axis: always match content. Width axis: grow if content
+      // needs more room than current width, never shrink below user's
+      // manual drag-wider.
+      const targetH = min[1];
+      const targetW = Math.max(cur[0], min[0]);
+      if (cur[1] !== targetH || cur[0] < targetW) {
+        resizable.setSize([targetW, targetH]);
         resizable.setDirtyCanvas?.(true, true);
       }
     });
@@ -140,7 +155,13 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     : new ResizeObserver((entries) => {
         for (const e of entries) {
           const h = Math.ceil(e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height);
-          if (h > 0) pushSize(h);
+          // scrollWidth measures the FULL natural content width, including
+          // anything overflowing the visible widget area. That's what we
+          // need to bump the node's minWidth past — observing borderBoxSize
+          // alone would only report the container's current width, never
+          // detecting overflow.
+          const w = Math.ceil(inner.scrollWidth);
+          if (h > 0) pushSize(h, w);
         }
       });
   if (observer) queueMicrotask(() => observer.observe(inner));
