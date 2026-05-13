@@ -354,6 +354,75 @@ describe("collapse-connections — unified label + resize side effects", () => {
     expect(node.inputs[1].label).toBe("input_0");  // unchanged
     expect(node.setSize).not.toHaveBeenCalled();
   });
+
+  it("slots with no explicit .label restore to undefined (name-fallback) on expand", () => {
+    // Regression: slots created via litegraph addInput often have
+    // .label === undefined and rely on .name fallback. The old code
+    // used `=== undefined` to detect "never stashed", which collided
+    // with "stashed as undefined" and broke restore.
+    const node = makeNode({
+      inputs: [
+        { name: "input_0" },  // NO explicit label
+        { name: "input_1" },
+        { name: "input_2" },
+      ],
+      inputPositions: [[0, 0], [0, 20], [0, 40]],
+      size: [200, 60],
+    });
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: "inputs",
+    });
+    setCollapsed(node, true);
+    expect(node.inputs[0].label).toBe("inputs");
+    expect(node.inputs[1].label).toBe(" ");
+
+    setCollapsed(node, false);
+    // After restore, .label property should be DELETED so litegraph
+    // re-uses .name for display.
+    expect("label" in node.inputs[0]).toBe(false);
+    expect("label" in node.inputs[1]).toBe(false);
+    // _wpOrigLabel stash cleaned up so the next collapse re-snapshots.
+    expect("_wpOrigLabel" in node.inputs[0]).toBe(false);
+    expect("_wpOrigLabel" in node.inputs[1]).toBe(false);
+  });
+
+  it("user modifies a label between collapse cycles — second expand restores the new value", () => {
+    // Regression: stash is cleared on every expand, so the next
+    // collapse re-snapshots fresh — preserving any label edits the
+    // user made while expanded.
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, { matchInput, collapsedInputLabel: "inputs" });
+
+    // Cycle 1: collapse + expand. Labels restored to originals.
+    setCollapsed(node, true);
+    setCollapsed(node, false);
+    expect(node.inputs[1].label).toBe("input_0");
+
+    // User renames a slot's label while expanded.
+    node.inputs[1].label = "renamed_by_user";
+
+    // Cycle 2: collapse + expand. The user's edit must survive.
+    setCollapsed(node, true);
+    setCollapsed(node, false);
+    expect(node.inputs[1].label).toBe("renamed_by_user");
+  });
+
+  it("repeated collapse calls don't overwrite the stash with the placeholder", () => {
+    // Regression: calling applyCollapsedLabels multiple times while
+    // collapsed (e.g. from normalizeSlots) must not re-stash the
+    // current label (" " placeholder), or expand would restore to
+    // blank instead of the user's original.
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, { matchInput, collapsedInputLabel: "inputs" });
+    setCollapsed(node, true);
+    // Simulate normalizeSlots running again while collapsed.
+    applyCollapsedLabels(node);
+    applyCollapsedLabels(node);
+    setCollapsed(node, false);
+    expect(node.inputs[1].label).toBe("input_0");
+    expect(node.inputs[2].label).toBe("input_1");
+  });
 });
 
 describe("collapse-connections — uses LiteGraph.NODE_SLOT_HEIGHT when present", () => {

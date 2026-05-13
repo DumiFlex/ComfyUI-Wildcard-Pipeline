@@ -129,6 +129,14 @@ export function countMatching(
  *  blank " " so litegraph doesn't render them overlapping. Expanded:
  *  restore stashed `_wpOrigLabel` (set during the collapse pass).
  *
+ *  Stash presence is tracked via the `in` operator rather than a
+ *  value comparison — slots without an explicit `.label` rely on
+ *  litegraph's `label || name` fallback at paint, so the stashed
+ *  value can legitimately be `undefined`. Using `"_wpOrigLabel" in
+ *  slot` lets us distinguish "never stashed" from "stashed as
+ *  undefined", and `delete slot.label` on restore re-enables the
+ *  name-fallback rather than leaving an empty string sitting there.
+ *
  *  Exported so callers that mutate inputs/outputs at runtime can
  *  manually re-sync labels (e.g. injector adds an input_N after
  *  reindex — the new slot needs its blank label applied if the node
@@ -163,16 +171,33 @@ export function applyCollapsedLabels(node: CollapseTargetNode): void {
       const slot = slots[i];
       if (!slot || !match(slot, i)) continue;
       if (collapsed) {
-        if (slot._wpOrigLabel === undefined) slot._wpOrigLabel = slot.label;
-        // First matched slot: use unified label, else keep original.
-        // Other matched slots: blank space so they don't draw a name.
+        // First-time-collapse stash. Capture whatever .label is now
+        // (possibly undefined if the slot used name-fallback). The
+        // `in` check is critical: a slot already collapsed once has
+        // _wpOrigLabel set, even if to `undefined` — re-stashing
+        // would overwrite it with our placeholder (" ") and corrupt
+        // the next restore.
+        if (!("_wpOrigLabel" in slot)) {
+          slot._wpOrigLabel = slot.label;
+        }
         if (i === first) {
+          // Unified label if configured; otherwise restore the
+          // original (handles cases where the caller doesn't supply
+          // a label but still wants other slots blanked).
           slot.label = label !== undefined ? label : slot._wpOrigLabel;
         } else {
           slot.label = " ";
         }
-      } else if (slot._wpOrigLabel !== undefined) {
-        slot.label = slot._wpOrigLabel;
+      } else if ("_wpOrigLabel" in slot) {
+        // Restore. If the original was undefined, delete the .label
+        // key so litegraph's name-fallback resumes — assigning
+        // undefined would leave the property defined with a falsy
+        // value, which some hosts render as empty string.
+        if (slot._wpOrigLabel === undefined) {
+          delete slot.label;
+        } else {
+          slot.label = slot._wpOrigLabel;
+        }
         delete slot._wpOrigLabel;
       }
     }
