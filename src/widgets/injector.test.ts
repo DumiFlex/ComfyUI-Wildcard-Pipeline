@@ -134,6 +134,45 @@ describe("reindexInjectorSlots", () => {
     expect(removed.has("input_1")).toBe(true);  // OLD trailing empty was removed
   });
 
+  it("respects MAX_INJECTOR_SLOTS cap — no trailing empty when at cap", () => {
+    // Build a node with 10 connected dynamic slots (the soft cap).
+    // After normalize, the array stays at 10 entries — no new empty
+    // is appended at input_10.
+    const inputs: MockInput[] = [];
+    for (let i = 0; i < 10; i++) {
+      inputs.push({ name: `input_${i}`, type: "*", link: 1000 + i });
+    }
+    const node = makeNode(inputs);
+
+    reindexInjectorSlots(node);
+
+    // All 10 connected slots kept (no rename — already contiguous);
+    // no new trailing empty added because counter reached MAX.
+    expect(node.__inputs.map((i) => i.name)).toEqual([
+      "input_0", "input_1", "input_2", "input_3", "input_4",
+      "input_5", "input_6", "input_7", "input_8", "input_9",
+    ]);
+    expect(node.__inputs.every((i) => i.link != null)).toBe(true);
+  });
+
+  it("trailing empty appears again when a slot disconnects below cap", () => {
+    // 10 connected (at cap) + disconnect one. Now we're at 9 connected
+    // and the trailing empty should re-appear at input_9.
+    const inputs: MockInput[] = [];
+    for (let i = 0; i < 10; i++) {
+      inputs.push({ name: `input_${i}`, type: "*", link: i === 5 ? null : 1000 + i });
+    }
+    const node = makeNode(inputs);
+
+    reindexInjectorSlots(node);
+
+    // 9 connected (input_5 was disconnected, removed during normalize)
+    // + 1 trailing empty = 10 entries total.
+    expect(node.__inputs.length).toBe(10);
+    expect(node.__inputs[9].link).toBeNull();
+    expect(node.__inputs.slice(0, 9).every((i) => i.link != null)).toBe(true);
+  });
+
   it("ignores non-input_N slots (e.g. fixed named inputs)", () => {
     const node = makeNode([
       { name: "model", type: "MODEL", link: 1 },     // not dynamic — keep

@@ -55,6 +55,14 @@ function parseInputIndex(slotName: string): number {
   return m ? parseInt(m[1], 10) : 999;
 }
 
+/** Soft cap on dynamic input slots per Injector node. When the
+ *  connected count reaches this, no trailing empty is added — user
+ *  must disconnect an existing slot before they can wire another.
+ *  Workflows loaded with more than MAX connected slots keep them all
+ *  (we don't truncate), they just can't grow further until below
+ *  the cap. */
+const MAX_INJECTOR_SLOTS = 10;
+
 /** Surface used by reindexInjectorSlots — narrow shape over the
  *  LiteGraph node so the algorithm is testable against a plain mock. */
 export interface ReindexSurface {
@@ -122,8 +130,13 @@ export function reindexInjectorSlots(node: ReindexSurface): ReindexResult {
     }
   }
 
-  // 4. Add the trailing empty slot at input_${counter}.
-  node.addInput(`input_${counter}`, "*");
+  // 4. Add the trailing empty slot at input_${counter}, unless we're
+  //    at or above the soft cap. Connected slots over MAX stay (no
+  //    truncation), but no new empty slot appears so the user can't
+  //    grow further until disconnecting brings count back below cap.
+  if (counter < MAX_INJECTOR_SLOTS) {
+    node.addInput(`input_${counter}`, "*");
+  }
 
   // 5. Force redraw — LiteGraph reads inputs[i].name lazily at paint,
   //    so .name mutation alone doesn't schedule a repaint.
