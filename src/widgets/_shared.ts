@@ -162,30 +162,55 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   }
   // Skip the autosize observer in fill mode — node size is user-controlled,
   // content fills whatever space is given.
-  const observer = options.fillHost
-    ? null
-    : new ResizeObserver((entries) => {
-        for (const e of entries) {
-          const h = Math.ceil(e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height);
-          // Width-growth signal: only fire when content has actually
-          // overflowed the container. `scrollWidth > clientWidth` is
-          // the canonical overflow check. The 2px tolerance absorbs
-          // subpixel rounding so a stable state doesn't bleed into
-          // a slow-creep grow loop. Reports the overflow delta so
-          // pushSize knows exactly how much to widen.
-          const overflowPx = inner.scrollWidth - inner.clientWidth;
-          const growthDelta = overflowPx > 2 ? Math.ceil(overflowPx) : 0;
-          if (h > 0) pushSize(h, growthDelta);
-        }
+  function measure(): { h: number; growthDelta: number } {
+    // Width-growth signal: only fire when content has actually
+    // overflowed the container. `scrollWidth > clientWidth` is the
+    // canonical overflow check. 2px tolerance absorbs subpixel
+    // rounding so a stable state doesn't slow-creep grow.
+    const overflowPx = inner.scrollWidth - inner.clientWidth;
+    const growthDelta = overflowPx > 2 ? Math.ceil(overflowPx) : 0;
+    const h = Math.ceil(inner.getBoundingClientRect().height);
+    return { h, growthDelta };
+  }
+
+  let resizeObserver: ResizeObserver | null = null;
+  let mutationObserver: MutationObserver | null = null;
+  if (!options.fillHost) {
+    // ResizeObserver covers the height path — content getting taller
+    // (more rows, taller widget) trips it.
+    resizeObserver = new ResizeObserver(() => {
+      const { h, growthDelta } = measure();
+      if (h > 0) pushSize(h, growthDelta);
+    });
+    // MutationObserver covers the width path. Inserting a conflict
+    // badge or expanding row content doesn't change `inner`'s box
+    // (inner is width:100% — fills whatever the host gives it), so
+    // ResizeObserver never fires for that case. MutationObserver
+    // fires on every DOM change in the Vue subtree, which is the
+    // precise signal we need: re-measure scrollWidth vs clientWidth
+    // after the new children are in place.
+    mutationObserver = new MutationObserver(() => {
+      const { h, growthDelta } = measure();
+      if (h > 0) pushSize(h, growthDelta);
+    });
+    queueMicrotask(() => {
+      resizeObserver?.observe(inner);
+      mutationObserver?.observe(inner, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
       });
-  if (observer) queueMicrotask(() => observer.observe(inner));
+    });
+  }
 
   return {
     widget,
     element: inner,
     app,
     unmount: () => {
-      observer?.disconnect();
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
       app.unmount();
     },
     getValue: () => state,
