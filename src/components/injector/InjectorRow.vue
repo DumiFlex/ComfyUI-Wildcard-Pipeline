@@ -65,7 +65,11 @@ function onBindingInput(ev: Event): void {
       <span class="wp-inj-toggle-mark"></span>
     </label>
 
-    <span class="wp-inj-type-icon" aria-hidden="true">
+    <span
+      class="wp-inj-type-icon"
+      aria-hidden="true"
+      :data-debug-vt="JSON.stringify(valueType ?? null)"
+    >
       <i :class="['pi', typeIcon]" />
     </span>
 
@@ -139,6 +143,7 @@ function onBindingInput(ev: Event): void {
   border-left-color: var(--wp-text3);  /* fallback for unknown type */
   border-radius: var(--wp-radius-sm);
   padding: var(--wp-pad-row, 4px 6px);
+  margin-bottom: 4px;  /* gap between rows — mirrors Context module spacing */
   display: flex;
   align-items: center;
   gap: var(--wp-row-gap, 6px);
@@ -146,6 +151,7 @@ function onBindingInput(ev: Event): void {
   color: var(--wp-text);
   transition: background-color 0.15s, border-color 0.15s;
 }
+.wp-inj-row:last-child { margin-bottom: 0; }
 
 .wp-inj-row[data-type="string"]  { border-left-color: var(--wp-amber); }
 .wp-inj-row[data-type="int"]     { border-left-color: var(--wp-green); }
