@@ -93,15 +93,35 @@ const conflictByUid = computed<Record<string, RowConflict>>(() => {
 const collapsed = ref<boolean>(false);
 
 function persist(): void {
-  emit("change", serializeWidgetJson(value.value));
+  const serialized = serializeWidgetJson(value.value);
+  emit("change", serialized);
 }
 
+// Debounce binding-only edits so persist() doesn't fire on every
+// keystroke. 250ms timeout — short enough that disconnect / save
+// shortly after typing still sees the latest binding (the timer
+// fires well before any realistic graph mutation). Non-binding
+// patches (enabled / internal toggle) persist immediately.
+let bindingDebounce: number | null = null;
 function updateRow(uid: string, patch: Partial<InjectorRow>): void {
   value.value = {
     ...value.value,
     rows: value.value.rows.map((r) => (r._uid === uid ? { ...r, ...patch } : r)),
   };
-  persist();
+  const onlyBinding = Object.keys(patch).length === 1 && Object.prototype.hasOwnProperty.call(patch, "binding");
+  if (onlyBinding) {
+    if (bindingDebounce != null) window.clearTimeout(bindingDebounce);
+    bindingDebounce = window.setTimeout(() => {
+      bindingDebounce = null;
+      persist();
+    }, 250);
+  } else {
+    if (bindingDebounce != null) {
+      window.clearTimeout(bindingDebounce);
+      bindingDebounce = null;
+    }
+    persist();
+  }
 }
 
 function removeRow(uid: string): void {
@@ -152,6 +172,11 @@ watch(
   () => props.connectedSlots,
   (next) => {
     const freshRows = parseWidgetJsonWithRecovery(props.initialJson, emptyInjectorRowsValue()).value.rows;
+    console.log("[WP injector] watcher fired", {
+      nextConnected: next,
+      freshRows: freshRows.map((r) => ({ slot: r.slot_name, binding: r.binding })),
+      currentValueRows: value.value.rows.map((r) => ({ slot: r.slot_name, binding: r.binding })),
+    });
     const connectedSet = new Set(next);
     const known = new Set(freshRows.map((r) => r.slot_name));
     const toAdd = next.filter((slot) => !known.has(slot));
