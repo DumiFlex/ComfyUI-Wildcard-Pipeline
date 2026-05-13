@@ -2,6 +2,7 @@ import { walkAllNodes, collectUpstreamVariables, type LiteGraphLike, type LiteNo
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
+import { nodeBadge, nodeBadgeCleanup, nodeBadgeSeverity } from "./_stashes";
 
 // ── Subgraph conflict badge ────────────────────────────────────────────
 // Users can drop our nodes inside a subgraph. From the parent graph, the
@@ -50,12 +51,6 @@ type SubgraphNodeLike = LiteNodeLike & {
   setDirtyCanvas?: (foreground: boolean, background: boolean) => void;
   onConnectionsChange?: (...args: unknown[]) => void;
   onRemoved?: (...args: unknown[]) => void;
-  /** Internal: latest computed severity so we can avoid pushing duplicate badges. */
-  _wpBadgeSeverity?: Severity | null;
-  /** Internal: badge instance currently in `node.badges` (or null). */
-  _wpBadge?: LGraphBadgeInstance | null;
-  /** Internal: cleanup handle so we can detach observers on node removal. */
-  _wpBadgeCleanup?: () => void;
 };
 
 interface SeverityColors { bg: string; fg: string }
@@ -138,21 +133,27 @@ function computeBadgeState(rootGraph: LiteGraphLike, subgraph: LiteGraphLike): B
   return { severity: worst.severity, text: formatBadgeText(worst, sameSeverityCount) };
 }
 
+function readBadge(node: SubgraphNodeLike): LGraphBadgeInstance | null {
+  return (nodeBadge.get(node as object) as LGraphBadgeInstance | undefined) ?? null;
+}
+
 function removeBadge(node: SubgraphNodeLike) {
-  if (!node._wpBadge || !Array.isArray(node.badges)) return;
-  const idx = node.badges.indexOf(node._wpBadge);
+  const current = readBadge(node);
+  if (!current || !Array.isArray(node.badges)) return;
+  const idx = node.badges.indexOf(current);
   if (idx >= 0) node.badges.splice(idx, 1);
-  node._wpBadge = null;
+  nodeBadge.delete(node as object);
 }
 
 function applyBadge(node: SubgraphNodeLike, state: BadgeState, BadgeCtor: LGraphBadgeCtor) {
   const colors = SEVERITY_COLORS[state.severity];
   // Reuse the existing instance when possible — mutating fields keeps
   // ComfyUI's draw loop happy without churning the badges array.
-  if (node._wpBadge) {
-    node._wpBadge.text = state.text;
-    node._wpBadge.bgColor = colors.bg;
-    node._wpBadge.fgColor = colors.fg;
+  const current = readBadge(node);
+  if (current) {
+    current.text = state.text;
+    current.bgColor = colors.bg;
+    current.fgColor = colors.fg;
     return;
   }
   const badge = new BadgeCtor({
@@ -166,7 +167,7 @@ function applyBadge(node: SubgraphNodeLike, state: BadgeState, BadgeCtor: LGraph
   });
   if (!Array.isArray(node.badges)) node.badges = [];
   node.badges.push(badge);
-  node._wpBadge = badge;
+  nodeBadge.set(node as object, badge);
 }
 
 /**
@@ -175,7 +176,7 @@ function applyBadge(node: SubgraphNodeLike, state: BadgeState, BadgeCtor: LGraph
  * `node.onRemoved` so we don't leak intervals on node deletion.
  */
 export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraphLike): void {
-  if (node._wpBadgeCleanup) return; // already attached
+  if (nodeBadgeCleanup.has(node as object)) return; // already attached
   // Captured into a const here so the closure below sees a non-nullable
   // type — avoids the no-non-null-assertion lint while staying as cheap
   // as the previous `BadgeCtor!`.
@@ -191,11 +192,12 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
     // Cache key includes both severity AND text — same severity with a new
     // variable name (e.g. user fixed $foo but $bar is still missing) needs a
     // re-render even though severity is unchanged.
+    const prevSeverity = nodeBadgeSeverity.get(node as object) ?? null;
     const sameAsBefore =
-      (next === null && node._wpBadgeSeverity === null) ||
-      (!!next && next.severity === node._wpBadgeSeverity && next.text === node._wpBadge?.text);
+      (next === null && prevSeverity === null) ||
+      (!!next && next.severity === prevSeverity && next.text === readBadge(node)?.text);
     if (sameAsBefore) return;
-    node._wpBadgeSeverity = next?.severity ?? null;
+    nodeBadgeSeverity.set(node as object, next?.severity ?? null);
     if (!next) removeBadge(node);
     else applyBadge(node, next, Ctor);
     node.setDirtyCanvas?.(true, true);
@@ -227,16 +229,17 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
   // Cleanup wired through onRemoved so a deleted SubgraphNode tears down
   // its observers cleanly. We chain so other extensions still run.
   const origRemoved = node.onRemoved;
-  node._wpBadgeCleanup = () => {
+  const cleanup = () => {
     window.clearInterval(interval);
     unsubGraphLoaded();
     node.onConnectionsChange = origCC;
     node.onRemoved = origRemoved;
     removeBadge(node);
-    node._wpBadgeCleanup = undefined;
+    nodeBadgeCleanup.delete(node as object);
   };
+  nodeBadgeCleanup.set(node as object, cleanup);
   node.onRemoved = function (...args: unknown[]) {
-    node._wpBadgeCleanup?.();
+    nodeBadgeCleanup.get(node as object)?.();
     origRemoved?.apply(this, args);
   };
 }

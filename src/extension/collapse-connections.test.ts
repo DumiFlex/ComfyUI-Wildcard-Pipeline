@@ -5,14 +5,15 @@ import {
   countMatching,
   firstMatchingIndex,
   isCollapsed,
+  readSlotLabel,
   relabelSlotIf,
   setCollapsed,
 } from "./collapse-connections";
+import { slotLabelStashed, slotOrigLabel } from "./_stashes";
 
 type MockSlot = {
   name?: string;
   label?: string;
-  _wpOrigLabel?: string | undefined;
   type?: string;
   link?: number | null;
 };
@@ -274,7 +275,7 @@ describe("collapse-connections — unified label + resize side effects", () => {
     expect(node.inputs[3].label).toBe(" ");
   });
 
-  it("setCollapsed(false) restores original labels from _wpOrigLabel stash", () => {
+  it("setCollapsed(false) restores original labels from the slotOrigLabel stash", () => {
     const node = makeInjectorLike();
     attachCollapsableConnections(node, {
       matchInput,
@@ -286,7 +287,7 @@ describe("collapse-connections — unified label + resize side effects", () => {
     expect(node.inputs[2].label).toBe("input_1");
     expect(node.inputs[3].label).toBe("input_2");
     // Stash cleaned up so a future collapse re-snapshots fresh labels.
-    expect(node.inputs[1]._wpOrigLabel).toBeUndefined();
+    expect(slotLabelStashed.has(node.inputs[1])).toBe(false);
   });
 
   it("collapsedInputLabel undefined keeps the first slot's original label", () => {
@@ -383,9 +384,10 @@ describe("collapse-connections — unified label + resize side effects", () => {
     // re-uses .name for display.
     expect("label" in node.inputs[0]).toBe(false);
     expect("label" in node.inputs[1]).toBe(false);
-    // _wpOrigLabel stash cleaned up so the next collapse re-snapshots.
-    expect("_wpOrigLabel" in node.inputs[0]).toBe(false);
-    expect("_wpOrigLabel" in node.inputs[1]).toBe(false);
+    // Stash cleaned up via the WeakMap+WeakSet so next collapse re-snapshots.
+    expect(slotLabelStashed.has(node.inputs[0])).toBe(false);
+    expect(slotLabelStashed.has(node.inputs[1])).toBe(false);
+    expect(slotOrigLabel.has(node.inputs[0])).toBe(false);
   });
 
   it("user modifies a label between collapse cycles — second expand restores the new value", () => {
@@ -439,12 +441,15 @@ describe("collapse-connections — relabelSlotIf", () => {
     expect(slot.label).toBe("renamed_by_user");
   });
 
-  it("updates stashed _wpOrigLabel instead of live label when collapsed", () => {
-    // Simulate the collapsed state: stash holds the original label,
-    // live .label is the placeholder.
-    const slot: MockSlot = { name: "input_3", label: " ", _wpOrigLabel: "input_3" };
+  it("updates stashed label instead of live label when collapsed", () => {
+    // Simulate the collapsed state by populating the stash WeakMaps
+    // directly — bypasses the full attach/setCollapsed dance so the
+    // test stays focused on relabelSlotIf's contract.
+    const slot: MockSlot = { name: "input_3", label: " " };
+    slotOrigLabel.set(slot, "input_3");
+    slotLabelStashed.add(slot);
     relabelSlotIf(slot, "input_2", (cur) => cur === "input_3");
-    expect(slot._wpOrigLabel).toBe("input_2");
+    expect(slotOrigLabel.get(slot)).toBe("input_2");
     expect(slot.label).toBe(" ");  // live placeholder untouched
   });
 
@@ -455,10 +460,31 @@ describe("collapse-connections — relabelSlotIf", () => {
   });
 
   it("undefined newLabel sets stash to undefined when collapsed", () => {
-    const slot: MockSlot = { name: "input_3", label: " ", _wpOrigLabel: "input_3" };
+    const slot: MockSlot = { name: "input_3", label: " " };
+    slotOrigLabel.set(slot, "input_3");
+    slotLabelStashed.add(slot);
     relabelSlotIf(slot, undefined, (cur) => cur === "input_3");
-    expect(slot._wpOrigLabel).toBeUndefined();
-    expect("_wpOrigLabel" in slot).toBe(true);  // key still present
+    expect(slotOrigLabel.get(slot)).toBeUndefined();
+    expect(slotLabelStashed.has(slot)).toBe(true);  // marker still set
+  });
+});
+
+describe("collapse-connections — readSlotLabel", () => {
+  it("returns live .label when no stash present", () => {
+    const slot: MockSlot = { name: "input_0", label: "my_wire" };
+    expect(readSlotLabel(slot)).toBe("my_wire");
+  });
+
+  it("returns stashed label when collapsed (live label is placeholder)", () => {
+    const slot: MockSlot = { name: "input_0", label: " " };
+    slotOrigLabel.set(slot, "user_set");
+    slotLabelStashed.add(slot);
+    expect(readSlotLabel(slot)).toBe("user_set");
+  });
+
+  it("returns undefined when neither stash nor live label is set", () => {
+    const slot: MockSlot = { name: "input_0" };
+    expect(readSlotLabel(slot)).toBeUndefined();
   });
 });
 

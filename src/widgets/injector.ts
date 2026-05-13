@@ -14,6 +14,7 @@ import {
   applyCollapsedLabels,
   attachCollapsableConnections,
   isCollapsed as readCollapsed,
+  readSlotLabel,
   relabelSlotIf,
   setCollapsed,
 } from "../extension/collapse-connections";
@@ -256,8 +257,9 @@ export function create(node: InjectorNode, inputName: string) {
       // .label via the slot context menu; surfacing it in the row tag
       // lets users correlate `row ↔ wire` after a rename. Falls back
       // to slot_name when no custom label. While collapsed, the live
-      // .label holds our " " placeholder — read from `_wpOrigLabel`
-      // stash if present so the row keeps showing the user's value.
+      // .label holds our " " placeholder — readSlotLabel transparently
+      // returns the stashed original so the row keeps showing the
+      // user's value regardless of collapse state.
       const computeSlotLabels = (): Record<string, string> => {
         const out: Record<string, string> = {};
         const inputs = node.inputs ?? [];
@@ -266,9 +268,7 @@ export function create(node: InjectorNode, inputName: string) {
           const slot = injectorSlotName(inp);
           if (!slot) continue;
           if (inp.link == null) continue;
-          const withStash = inp as { label?: string; _wpOrigLabel?: string };
-          const resolved =
-            "_wpOrigLabel" in withStash ? withStash._wpOrigLabel : withStash.label;
+          const resolved = readSlotLabel(inp as Parameters<typeof readSlotLabel>[0]);
           // Skip the default mirroring case (label === name) — row
           // already shows slot_name as fallback. Only publish when
           // the label is genuinely different (= user customization).

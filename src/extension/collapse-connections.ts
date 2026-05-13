@@ -13,18 +13,27 @@
  *   3. Mutate `.label` on matched slots: first matched slot shows the
  *      configured unified label (e.g. "inputs"), the rest get a blank
  *      " " so litegraph doesn't render their names overlapping at the
- *      same Y. Original labels are stashed on each slot via
- *      `_wpOrigLabel` and restored on expand.
+ *      same Y. Original labels are stashed in the module-private
+ *      `slotOrigLabel` WeakMap and restored on expand.
  *
  * State lives on `node.properties[propertyKey]` so it persists with
  * the workflow JSON. Default key `collapse_connections` is wire-
- * compatible with rgthree.
+ * compatible with rgthree. Transient metadata (label stash, attach
+ * marker, per-node config) lives in WeakMaps from `_stashes.ts` so
+ * other extensions can't read or collide with our internals.
  */
+
+import {
+  nodeCollapseAttached,
+  nodeCollapseConfig,
+  slotLabelStashed,
+  slotOrigLabel,
+} from "./_stashes";
 
 const DEFAULT_PROPERTY_KEY = "collapse_connections";
 const FALLBACK_SLOT_HEIGHT = 20;
 
-type Slot = { name?: string; label?: string; _wpOrigLabel?: string | undefined; [k: string]: unknown };
+type Slot = { name?: string; label?: string; [k: string]: unknown };
 
 export interface CollapseConfig {
   /** Predicate — return true for inputs that participate in the
@@ -68,17 +77,12 @@ interface CollapseTargetNode {
   graph?: { setDirtyCanvas?: (a: boolean, b: boolean) => void } | null | undefined;
 }
 
-const ATTACHED_MARKER = "__wpCollapseAttached";
-const CONFIG_KEY = "__wpCollapseConfig";
-
 function readCollapsed(node: CollapseTargetNode, key: string): boolean {
   return !!node.properties?.[key];
 }
 
 function readConfig(node: CollapseTargetNode): CollapseConfig | undefined {
-  return (node as CollapseTargetNode & Record<string, unknown>)[CONFIG_KEY] as
-    | CollapseConfig
-    | undefined;
+  return nodeCollapseConfig.get(node as object) as CollapseConfig | undefined;
 }
 
 function nodeSlotHeight(): number {
@@ -173,32 +177,36 @@ export function applyCollapsedLabels(node: CollapseTargetNode): void {
       if (collapsed) {
         // First-time-collapse stash. Capture whatever .label is now
         // (possibly undefined if the slot used name-fallback). The
-        // `in` check is critical: a slot already collapsed once has
-        // _wpOrigLabel set, even if to `undefined` — re-stashing
-        // would overwrite it with our placeholder (" ") and corrupt
-        // the next restore.
-        if (!("_wpOrigLabel" in slot)) {
-          slot._wpOrigLabel = slot.label;
+        // WeakSet `has` check is critical: a slot already collapsed
+        // once has its label stashed (even if as `undefined`) —
+        // re-stashing would overwrite it with our placeholder (" ")
+        // and corrupt the next restore.
+        if (!slotLabelStashed.has(slot as object)) {
+          slotOrigLabel.set(slot as object, slot.label);
+          slotLabelStashed.add(slot as object);
         }
+        const stashed = slotOrigLabel.get(slot as object);
         if (i === first) {
           // Unified label if configured; otherwise restore the
           // original (handles cases where the caller doesn't supply
           // a label but still wants other slots blanked).
-          slot.label = label !== undefined ? label : slot._wpOrigLabel;
+          slot.label = label !== undefined ? label : stashed;
         } else {
           slot.label = " ";
         }
-      } else if ("_wpOrigLabel" in slot) {
+      } else if (slotLabelStashed.has(slot as object)) {
         // Restore. If the original was undefined, delete the .label
         // key so litegraph's name-fallback resumes — assigning
         // undefined would leave the property defined with a falsy
         // value, which some hosts render as empty string.
-        if (slot._wpOrigLabel === undefined) {
+        const stashed = slotOrigLabel.get(slot as object);
+        if (stashed === undefined) {
           delete slot.label;
         } else {
-          slot.label = slot._wpOrigLabel;
+          slot.label = stashed;
         }
-        delete slot._wpOrigLabel;
+        slotOrigLabel.delete(slot as object);
+        slotLabelStashed.delete(slot as object);
       }
     }
   }
@@ -234,10 +242,9 @@ export function attachCollapsableConnections(
   node: CollapseTargetNode,
   cfg: CollapseConfig = {},
 ): void {
-  const target = node as CollapseTargetNode & Record<string, unknown>;
-  if (target[ATTACHED_MARKER]) return;
-  target[ATTACHED_MARKER] = true;
-  target[CONFIG_KEY] = cfg;
+  if (nodeCollapseAttached.has(node as object)) return;
+  nodeCollapseAttached.add(node as object);
+  nodeCollapseConfig.set(node as object, cfg);
 
   const propertyKey = cfg.propertyKey ?? DEFAULT_PROPERTY_KEY;
   node.properties = node.properties ?? {};
@@ -313,9 +320,10 @@ export function attachCollapsableConnections(
 
 /** Rename a slot's display label IF the current label matches a
  *  predicate. Handles both expanded (live `.label`) and collapsed
- *  (stashed `_wpOrigLabel`) states transparently — callers that
- *  rename slots programmatically can use this to keep labels in sync
- *  without knowing whether the node is currently collapsed.
+ *  (stashed via the slotOrigLabel WeakMap) states transparently —
+ *  callers that rename slots programmatically can use this to keep
+ *  labels in sync without knowing whether the node is currently
+ *  collapsed.
  *
  *  Typical use: after renaming `slot.name` from "input_3" to
  *  "input_2", call with `predicate: (cur) => cur === "input_3"` so
@@ -326,16 +334,29 @@ export function relabelSlotIf(
   newLabel: string | undefined,
   predicate: (currentLabel: string | undefined) => boolean,
 ): void {
-  const inStash = "_wpOrigLabel" in slot;
-  const current = inStash ? slot._wpOrigLabel : slot.label;
+  const inStash = slotLabelStashed.has(slot as object);
+  const current = inStash ? slotOrigLabel.get(slot as object) : slot.label;
   if (!predicate(current)) return;
   if (inStash) {
-    slot._wpOrigLabel = newLabel;
+    slotOrigLabel.set(slot as object, newLabel);
   } else if (newLabel === undefined) {
     delete slot.label;
   } else {
     slot.label = newLabel;
   }
+}
+
+/** Read the slot's effective display label — returns the stashed
+ *  original when collapsed (so callers see the user-visible value
+ *  rather than our " " placeholder), otherwise the live `.label`.
+ *  Exported so consumers like the injector compute layer can surface
+ *  the right value in DOM widgets without needing to know about the
+ *  stash internals. */
+export function readSlotLabel(slot: Slot): string | undefined {
+  if (slotLabelStashed.has(slot as object)) {
+    return slotOrigLabel.get(slot as object);
+  }
+  return slot.label;
 }
 
 /** Current collapsed state — reads `node.properties[propertyKey]`. */
