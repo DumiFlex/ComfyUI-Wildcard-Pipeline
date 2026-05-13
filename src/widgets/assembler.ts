@@ -175,6 +175,11 @@ function hashChain(chain: unknown[][]): string {
 }
 
 export function mountHelper(node: AssemblerNode) {
+  // State-driven minWidth, updated by AssemblerHelper's
+  // `requestMinWidth` emit. Initial value covers the chip-strip +
+  // preview baseline before the SFC mounts. Pull-based via
+  // computeLayoutSize; see injector.ts for the architecture.
+  let dynamicMinWidth = 320;
   const wrapper: Component = {
     setup() {
       // Snapshot is cheap to compute (no fetch); the API-backed roll
@@ -331,13 +336,22 @@ export function mountHelper(node: AssemblerNode) {
           nodeMode: nodeMode.value,
           onInsert: (token: string) => insertIntoTemplate(node, token),
           onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
+          onRequestMinWidth: (w: number) => {
+            if (w === dynamicMinWidth) return;
+            dynamicMinWidth = w;
+            assemblerHost.requestRelayout();
+          },
         });
       };
     },
   };
   const assemblerHost = createDomWidgetHost(node, "assembler-helper", wrapper, {
     minHeight: 80,
-    minWidth: 280,
+    // Pull-based — getter reads the latest dynamicMinWidth each
+    // litegraph relayout. AssemblerHelper's `requestMinWidth` emit
+    // updates the var + calls assemblerHost.requestRelayout when
+    // missing-var presence changes.
+    minWidth: () => dynamicMinWidth,
   });
   attachThemeDetector(assemblerHost.widget.element, app);
 }

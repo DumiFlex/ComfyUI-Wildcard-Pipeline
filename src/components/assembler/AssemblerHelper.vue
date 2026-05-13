@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 
 const props = defineProps<{
@@ -42,6 +42,12 @@ const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
 const emit = defineEmits<{
   (e: "insertVar", v: string): void;
+  /** State-driven minWidth signal. Fires when the formula-computed
+   *  required width changes (currently keyed on `missing.length`).
+   *  Mount glue updates its tracked dynamicMinWidth + calls
+   *  host.requestRelayout. Loop-free: deps are pure Vue reactive
+   *  state, no DOM measurements. */
+  (e: "requestMinWidth", w: number): void;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -73,6 +79,30 @@ const missing = computed(() => {
   const upstream = props.upstreamVars ?? [];
   return templateVarsInternal.value.filter((v) => !upstream.includes(v));
 });
+
+// ── Formula-driven minWidth ────────────────────────────────────────
+// Most assembler content (chip strip, preview, hint) wraps freely so
+// width is mostly content-driven. The one state that meaningfully
+// shifts the floor is the "X missing" header stat — that lights up
+// only when something needs the user's attention, and it pushes the
+// section-stat line wider. Adds a small bump so the warning doesn't
+// fight with the section title for room.
+//
+// Pull-based: mount glue reads this through a getter via
+// computeLayoutSize. No DOM measurement, no observer feedback.
+const requiredMinWidth = computed(() => {
+  let w = 320; // base: section labels + chip strip + preview row
+  if (missing.value.length > 0) w += 60;
+  return w;
+});
+
+watch(
+  requiredMinWidth,
+  (next) => {
+    emit("requestMinWidth", next);
+  },
+  { immediate: true },
+);
 
 // ---------------------------------------------------------------------------
 // Preview tokenisation

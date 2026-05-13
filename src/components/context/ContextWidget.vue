@@ -94,6 +94,12 @@ const props = withDefaults(defineProps<{
   /** Last-run seed reader keyed by module id. Null = user hasn't queued. */
   lastUsedSeedReader?: (moduleId?: string) => number | null;
   onChange: (json: string) => void;
+  /** Called whenever the formula-computed minimum node width changes
+   *  (a conflict appears, a state badge gets attached). Mount glue
+   *  updates its tracked dynamicMinWidth + invokes host.requestRelayout
+   *  so litegraph re-reads computeLayoutSize. Loop-free: the watch
+   *  deps are pure Vue reactive state, never DOM measurements. */
+  onRequestMinWidth?: (w: number) => void;
 }>(), {
   nodeMode: 0,
   upstreamWildcardUuids: () => [],
@@ -1349,6 +1355,40 @@ function isLocked(m: ModuleEntry): boolean {
 function isInternal(m: ModuleEntry): boolean {
   return !!m.instance?.internal;
 }
+
+// ── Formula-driven minWidth ────────────────────────────────────────
+// Pull-based pattern: createDomWidgetHost reads this through a
+// getter, litegraph queries each layout pass, no observer required.
+// Module rows have a flex:1 `wp-module-name` that absorbs slack —
+// adding a conflict badge or state badge doesn't widen the row,
+// just shrinks the name's render area. So the formula adjusts up
+// when badges are present so the name keeps useful breathing room
+// (without state-driven width, a row with name "long_module_alias"
+// + conflict badge + actions would clip the name to ~30px when
+// node is at the minimum).
+//
+// Base 380 covers the footer's two "+ Add module" / "+ Add Bundle"
+// buttons side-by-side, which is the widest mandatory element. Per-
+// badge bumps give the name room to breathe.
+const hasAnyConflict = computed(() => Object.keys(conflictsByModule.value).length > 0);
+const hasAnyStateBadge = computed(() =>
+  value.value.modules.some((m) => isModified(m) || isDrifted(m) || isMissingFromLibrary(m)),
+);
+
+const requiredMinWidth = computed(() => {
+  let w = 380; // footer-driven baseline
+  if (hasAnyConflict.value) w += 60;
+  if (hasAnyStateBadge.value) w += 60;
+  return w;
+});
+
+watch(
+  requiredMinWidth,
+  (next) => {
+    props.onRequestMinWidth?.(next);
+  },
+  { immediate: true },
+);
 
 /** In-card lock toggle. Off → null `locked_seed` but keep
  *  `_ui.last_locked_seed` so the next toggle-on has a fallback.

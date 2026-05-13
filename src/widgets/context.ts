@@ -39,6 +39,13 @@ export function create(node: ContextNode, inputName: string) {
   // prop. No imperative remount, no focus loss on edits.
   const currentJson = ref(initial);
 
+  // State-driven minWidth, updated by ContextWidget's
+  // `onRequestMinWidth` callback (formula based on conflict + state-
+  // badge presence). Initial value covers the footer-driven baseline
+  // before Vue mounts and emits. Pull-based via computeLayoutSize;
+  // see injector.ts + _shared.ts for the architecture.
+  let dynamicMinWidth = 380;
+
   const wrapper: Component = {
     setup() {
       const upstreamVars = reactiveFromGraph(
@@ -198,6 +205,11 @@ export function create(node: ContextNode, inputName: string) {
         nodeMode: nodeMode.value,
         lastUsedSeedReader,
         onChange: (json: string) => host.setValue(json),
+        onRequestMinWidth: (w: number) => {
+          if (w === dynamicMinWidth) return;
+          dynamicMinWidth = w;
+          host.requestRelayout();
+        },
       });
     },
   };
@@ -205,7 +217,11 @@ export function create(node: ContextNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: initial,
     minHeight: 80,
-    minWidth: 280,
+    // Pull-based — getter reads the latest dynamicMinWidth on every
+    // litegraph relayout. ContextWidget's `onRequestMinWidth` updates
+    // the var + calls host.requestRelayout when conflict / state-badge
+    // presence changes.
+    minWidth: () => dynamicMinWidth,
     onValueRestored: (v: string) => {
       // Workflow load — push the restored value into the reactive prop so the
       // SFC picks it up whether it has already mounted or not.
