@@ -133,19 +133,20 @@ describe("InjectorRow — disconnected variant", () => {
     expect(w.find('.wp-inj-row').classes()).toContain("wp-inj-row--disconnected");
   });
 
-  it("disconnected rows surface as conflict cluster (no separate nolink badge)", () => {
-    // The standalone `no link` badge moved into the unified conflict
-    // cluster — `injector_input_disconnected` is now a warning-severity
-    // conflict surfaced via the dot+badge cluster like the rest.
+  it("empty-binding rows surface as conflict cluster with 'no binding' badge", () => {
+    // C.1b: injector_binding_missing replaces the retired
+    // injector_input_disconnected for the only reachable case
+    // (linked socket, no typed binding). Severed-socket rows are
+    // auto-removed before they can render.
     const w = mount(InjectorRow, {
       props: {
         row: makeRow(),
-        isConnected: false,
+        isConnected: true,
         conflictSeverity: "warning" as const,
-        conflictLabel: "no link",
+        conflictLabel: "no binding",
       },
     });
-    expect(w.find('[data-test="inj-row-conflict"]').text()).toBe("no link");
+    expect(w.find('[data-test="inj-row-conflict"]').text()).toBe("no binding");
   });
 });
 

@@ -27,15 +27,10 @@ describe("scanInjectorConflicts", () => {
     expect(out[0].type).toBe("injector_binding_missing");
   });
 
-  it("flags row whose slot_name is not in the connectedSlots list", () => {
-    const value: InjectorRowsValue = {
-      version: 1,
-      rows: [injRow({ slot_name: "input_2", binding: "x" })],
-    };
-    const out = scanInjectorConflicts(value, ["input_0", "input_1"]);
-    expect(out).toHaveLength(1);
-    expect(out[0].type).toBe("injector_input_disconnected");
-  });
+  // Severed-socket conflict (injector_input_disconnected) was retired —
+  // InjectorWidget auto-removes rows whose slot is no longer in
+  // connectedSlots, so the case is unreachable in practice. Test
+  // dropped alongside the conflict type itself.
 
   it("flags duplicate bindings as duplicate_variable across enabled injector rows", () => {
     const value: InjectorRowsValue = {

@@ -141,7 +141,6 @@ export type ConflictType =
   | "constraint_target_before_self"
   | "constraint_target_in_upstream"
   | "constraint_target_missing"
-  | "injector_input_disconnected"
   | "injector_binding_missing";
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
@@ -166,7 +165,6 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_target_in_upstream") return "target already picked upstream";
   if (type === "constraint_target_missing") return "target missing";
   if (type === "constraint_source_in_downstream") return "source in downstream";
-  if (type === "injector_input_disconnected") return "no link";
   if (type === "injector_binding_missing") return "no binding";
   return type;
 }
@@ -180,10 +178,9 @@ export function labelFor(type: ConflictType): string {
  *  Context module's output (`shadows_upstream`, info-level). */
 export function scanInjectorConflicts(
   value: InjectorRowsValue,
-  connectedSlots: string[],
+  _connectedSlots: string[],
   upstreamVars: string[] = [],
 ): Conflict[] {
-  const connected = new Set(connectedSlots);
   const upstream = new Set(upstreamVars);
   const written = new Set<string>();
   const out: Conflict[] = [];
@@ -203,15 +200,10 @@ export function scanInjectorConflicts(
       });
       continue;
     }
-    if (!connected.has(row.slot_name)) {
-      out.push({
-        moduleId: row._uid,
-        variable: binding,
-        type: "injector_input_disconnected",
-        severity: "warning",
-      });
-      continue;
-    }
+    // Severed-socket case is unreachable in practice — the
+    // InjectorWidget watcher auto-removes rows whose slot is no
+    // longer in connectedSlots, so a row with row.slot_name not in
+    // `connected` can't exist at this point. Path retired.
     if (written.has(binding)) {
       out.push({
         moduleId: row._uid,
