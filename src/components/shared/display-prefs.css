@@ -2,7 +2,10 @@
  * src/extension/settings.ts). The `wp-density-*`, `wp-decor-*`,
  * `wp-indicator-*`, `wp-border-highlight-*`, and `wp-focus-mode`
  * markers are toggled on <body>; rules here scope overrides to our
- * widgets so we don't mutate ComfyUI core or other extensions. */
+ * widgets so we don't mutate ComfyUI core or other extensions.
+ *
+ * Wrapped in @layer wp-extension so host rules win on any collision. */
+@layer wp-extension {
 
 /* ── Density ────────────────────────────────────────────────────────
  * Comfortable is the default and uses :root tokens declared in
@@ -335,3 +338,4 @@ body.wp-color-vivid {
   --wp-kind-pipeline:    oklch(from #fb7185 l calc(c * 1.30) h);
   --wp-kind-fixed:       oklch(from #22d3ee l calc(c * 1.30) h);
 }
+}  /* end @layer wp-extension */

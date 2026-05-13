@@ -3139,6 +3139,12 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 </style>
 
 <style>
+/* @layer wp-extension ensures host CSS (ComfyUI, other custom nodes)
+ * wins by default on any selector collision. Unlayered rules outrank
+ * layered ones, so our styles can never accidentally override the
+ * host. All selectors below are .wp-* prefixed; the layer wrap is
+ * defense-in-depth in case a future rule slips through. */
+@layer wp-extension {
 .wp-context, .wp-context * { box-sizing: border-box; }
 
 /* Mute / bypass dim. Litegraph dims the title bar + node frame natively
@@ -4198,5 +4204,6 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   40%  { transform: scale(1.4); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+}  /* end @layer wp-extension */
 
 </style>

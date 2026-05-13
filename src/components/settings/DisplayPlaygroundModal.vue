@@ -420,6 +420,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+/* @layer wp-extension — keeps these rules below host CSS in cascade
+ * priority, so even if a host page happened to style any of the
+ * .wp-pg-* selectors, the host wins. Layered author rules are
+ * subservient to unlayered ones in the same origin. */
+@layer wp-extension {
 .wp-pg-overlay {
   position: fixed;
   inset: 0;
@@ -601,4 +606,5 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 }
+}  /* end @layer wp-extension */
 </style>

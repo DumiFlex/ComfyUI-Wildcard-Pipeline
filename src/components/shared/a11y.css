@@ -1,7 +1,12 @@
 /* Accessibility overrides driven by ComfyUI settings (see
  * src/extension/settings.ts). The `.wp-a11y-*` markers are toggled on
  * <body>; rules here scope the override to our own widgets so we don't
- * mutate ComfyUI core or other extensions. */
+ * mutate ComfyUI core or other extensions.
+ *
+ * Wrapped in @layer wp-extension so host CSS (unlayered) wins on any
+ * collision — these rules are subservient by cascade priority, not
+ * just by selector specificity. */
+@layer wp-extension {
 
 /* ── Reduce motion ──────────────────────────────────────────────────── */
 /* Targets every WP container root (extension widgets + manager SPA shell)
@@ -139,3 +144,4 @@
 .wp-a11y-high-contrast .wp-toggle input:focus-visible + .wp-toggle-mark {
   box-shadow: 0 0 0 3px var(--wp-violet) !important;
 }
+}  /* end @layer wp-extension */

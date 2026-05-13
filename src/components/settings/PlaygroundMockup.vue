@@ -318,7 +318,12 @@ function toggleCollapsed(key: ModuleKey): void {
 <style>
 /* Unscoped on purpose — these rules need to match the same classes
  * ContextWidget uses for the body-class CSS in display-prefs.css to
- * apply consistently to both the real module list AND this mockup. */
+ * apply consistently to both the real module list AND this mockup.
+ *
+ * @layer wp-extension caps cascade priority below the host so even
+ * an unprefixed rule (none here, but defense-in-depth) can't
+ * outrank ComfyUI's own. */
+@layer wp-extension {
 .wp-pg-mockup {
   display: flex;
   flex-direction: column;
@@ -614,4 +619,5 @@ function toggleCollapsed(key: ModuleKey): void {
 .wp-pg-mockup .wp-toggle { cursor: pointer; }
 .wp-pg-mockup .wp-collapse-btn { cursor: pointer; }
 .wp-pg-mockup .wp-collapse-btn:hover { color: var(--wp-text); }
+}  /* end @layer wp-extension */
 </style>

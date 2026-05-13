@@ -1,5 +1,14 @@
 /* Theme tokens shared across WP widgets.
  * Brand palette pinned to public/images/favicon.svg — indigo / violet / teal.
+ *
+ * NOT wrapped in `@layer wp-extension` even though we wrap the
+ * extension's other CSS in that layer for cascade-priority isolation.
+ * The reason: Vue's <style scoped> scoper (`@vue/compiler-sfc`)
+ * can't parse `@layer` at-rules in CSS that gets @imported into a
+ * scoped block, and theme.css IS imported into both scoped and
+ * unscoped Vue style blocks. Rules below are `:root` custom-property
+ * definitions + `.wp-*` and `.var-*` prefixed classes; the namespace
+ * prefix is the primary isolation here.
  */
 :root {
   /* Backgrounds — match ComfyUI's node interior */

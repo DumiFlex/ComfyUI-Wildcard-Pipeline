@@ -3,6 +3,11 @@
  * future surface that takes a user-typed binding. Single source of
  * truth so the input family stays visually consistent.
  *
+ * NOT wrapped in `@layer wp-extension` — see theme.css for the
+ * reasoning; this file is also @imported into Vue scoped style
+ * blocks, where the scoper can't parse @layer atrules. The .wp-vbind-*
+ * namespace prefix is the primary isolation here.
+ *
  * Class vocabulary:
  *   .wp-vbind-wrap        outer flex shell (bg, border, focus-within)
  *   .wp-vbind-wrap--mod   user diverged from library default — accent
