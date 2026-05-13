@@ -292,6 +292,21 @@ export function create(node: InjectorNode, inputName: string) {
             // sync here.
             if (json !== currentJson.value) currentJson.value = json;
           },
+          // Trash-button-from-row → LiteGraph disconnect at the
+          // matching slot index. The subsequent onConnectionsChange
+          // → normalizeSlots chain handles removal + renumber.
+          onDisconnectSlot: (slotName: string) => {
+            const idx = (node.inputs ?? []).findIndex(
+              (inp) => inp != null && injectorSlotName(inp) === slotName,
+            );
+            if (idx < 0) return;
+            const disconnectFn = (node as unknown as {
+              disconnectInput?: (slot: number) => boolean;
+            }).disconnectInput;
+            if (typeof disconnectFn === "function") {
+              disconnectFn.call(node, idx);
+            }
+          },
         });
     },
   };
@@ -301,7 +316,6 @@ export function create(node: InjectorNode, inputName: string) {
     minHeight: 80,
     minWidth: 280,
     onValueRestored: (v: string) => {
-      console.log("[WP injector] onValueRestored", { newLen: v.length, prevLen: currentJson.value.length, equal: v === currentJson.value, sample: v.slice(0, 200) });
       if (v !== currentJson.value) currentJson.value = v;
     },
   });
@@ -328,17 +342,12 @@ export function create(node: InjectorNode, inputName: string) {
     if (slotTypesRef && computeSlotTypesFn) {
       slotTypesRef.value = computeSlotTypesFn();
     }
-    console.log("[WP injector] normalizeSlots refresh", {
-      newConnectedSlots: connectedSlotsRef?.value ?? null,
-      newSlotTypes: slotTypesRef?.value ?? null,
-    });
     // Push the slot mutation through to row JSON in the same tick.
     // Drop rows whose socket disappeared (removed set), then remap
     // surviving rows to their new socket name (renames map). Reorder
     // by new slot_name so the visual list matches socket pin order.
     // Without this atomic update, the InjectorWidget Vue watcher
     // would false-positive every row as severed and wipe bindings.
-    console.log("[WP injector] normalizeSlots currentJson", { sample: currentJson.value.slice(0, 400), len: currentJson.value.length });
     const parsed = parseWidgetJson<InjectorRowsValue>(currentJson.value, emptyInjectorRowsValue());
     const remappedRows = parsed.rows
       .filter((r) => !removed.has(r.slot_name))
@@ -350,13 +359,6 @@ export function create(node: InjectorNode, inputName: string) {
     const changed =
       remappedRows.length !== parsed.rows.length ||
       remappedRows.some((r, i) => r.slot_name !== parsed.rows[i].slot_name);
-    console.log("[WP injector] row update", {
-      parsedRows: parsed.rows.map((r) => ({ slot: r.slot_name, binding: r.binding })),
-      removed: Array.from(removed),
-      renames: Object.fromEntries(renames),
-      remappedRows: remappedRows.map((r) => ({ slot: r.slot_name, binding: r.binding })),
-      changed,
-    });
     if (changed) {
       const next = serializeWidgetJson({ ...parsed, rows: remappedRows });
       host.setValue(next);

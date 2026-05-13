@@ -20,6 +20,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update", patch: Partial<InjectorRow>): void;
+  (e: "disconnect"): void;
 }>();
 
 const isEmpty = computed(() => !props.row.binding.trim());
@@ -122,6 +123,14 @@ function onBindingInput(ev: Event): void {
         :title="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
         @click="emit('update', { internal: !row.internal })"
       ><i class="pi pi-globe" aria-hidden="true" /></button>
+      <button
+        type="button"
+        class="wp-inj-action wp-inj-action--danger"
+        data-test="inj-row-remove"
+        title="Disconnect this input wire"
+        :aria-label="`disconnect ${row.slot_name}`"
+        @click="emit('disconnect')"
+      ><i class="pi pi-trash" aria-hidden="true" /></button>
     </div>
   </div>
 </template>

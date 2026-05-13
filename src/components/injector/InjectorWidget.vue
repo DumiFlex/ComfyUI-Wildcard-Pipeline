@@ -36,6 +36,7 @@ const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
 const emit = defineEmits<{
   (e: "change", json: string): void;
+  (e: "disconnect-slot", slotName: string): void;
 }>();
 
 const value = ref<InjectorRowsValue>(
@@ -172,11 +173,6 @@ watch(
   () => props.connectedSlots,
   (next) => {
     const freshRows = parseWidgetJsonWithRecovery(props.initialJson, emptyInjectorRowsValue()).value.rows;
-    console.log("[WP injector] watcher fired", {
-      nextConnected: next,
-      freshRows: freshRows.map((r) => ({ slot: r.slot_name, binding: r.binding })),
-      currentValueRows: value.value.rows.map((r) => ({ slot: r.slot_name, binding: r.binding })),
-    });
     const connectedSet = new Set(next);
     const known = new Set(freshRows.map((r) => r.slot_name));
     const toAdd = next.filter((slot) => !known.has(slot));
@@ -234,6 +230,7 @@ defineExpose({ addRow, removeRow });
         :conflict-severity="conflictByUid[row._uid]?.severity"
         :conflict-label="conflictByUid[row._uid]?.label"
         @update="(patch) => updateRow(row._uid, patch)"
+        @disconnect="emit('disconnect-slot', row.slot_name)"
       />
       <div
         v-if="value.rows.length === 0"
