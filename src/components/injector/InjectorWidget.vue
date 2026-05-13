@@ -143,6 +143,11 @@ function addRow(slotName: string): void {
 // can race — if connectedSlots fires first, value.value.rows still
 // holds the pre-rename state and we'd false-positive every row as
 // severed. Parsing initialJson here breaks the race.
+function slotOrderIndex(slotName: string): number {
+  const m = slotName.match(/^input_(\d+)$/);
+  return m ? parseInt(m[1], 10) : 999;
+}
+
 watch(
   () => props.connectedSlots,
   (next) => {
@@ -164,7 +169,12 @@ watch(
           enabled: true,
           internal: false,
         })),
-      ],
+      // Always order rows by slot index so the visual list matches
+      // the socket pin order on the node body, regardless of when
+      // each row was added (toAdd appends at end; without this sort
+      // a newly-connected lower-numbered slot would render below
+      // already-known higher-numbered rows).
+      ].sort((a, b) => slotOrderIndex(a.slot_name) - slotOrderIndex(b.slot_name)),
     };
     persist();
   },
