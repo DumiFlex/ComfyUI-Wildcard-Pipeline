@@ -117,21 +117,25 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // the saved-workflow size when ComfyUI restores it on page load.
   const resizable = node as unknown as ResizableNode;
   let scheduled = false;
-  function pushSize(measuredH: number, measuredW: number) {
+  function pushSize(measuredH: number, growthDelta: number) {
     if (scheduled) return;
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
       const nextH = Math.max(baseMin, measuredH);
       if (nextH !== minHeight) minHeight = nextH;
-      // Width grows monotonically — once a row needed 320px of room for
-      // its conflict badge, the floor stays at 320px even when the badge
-      // disappears. Prevents flicker when toggling temporary states.
-      // User-initiated drag past minWidth is preserved because we only
-      // ever GROW minWidth (never shrink).
-      if (baseMinWidth) {
-        const nextW = Math.max(minWidth, measuredW);
-        if (nextW !== minWidth) minWidth = nextW;
+      // Width grows monotonically and ONLY when content actually
+      // overflowed the container — growthDelta is the px the content
+      // exceeded clientWidth by, so adding it bumps minWidth just
+      // enough to swallow the overflow. Without this gate the node
+      // would grow infinitely: each ResizeObserver tick reports
+      // scrollWidth which converges-to-but-tracks clientWidth, so
+      // any sub-pixel rounding gets amplified into a positive
+      // feedback loop. User-initiated drag past minWidth is
+      // preserved because we never shrink below minWidth.
+      if (baseMinWidth && growthDelta > 0) {
+        const nextW = minWidth + growthDelta;
+        minWidth = nextW;
       }
 
       const min = resizable.computeSize?.();
@@ -155,13 +159,15 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     : new ResizeObserver((entries) => {
         for (const e of entries) {
           const h = Math.ceil(e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height);
-          // scrollWidth measures the FULL natural content width, including
-          // anything overflowing the visible widget area. That's what we
-          // need to bump the node's minWidth past — observing borderBoxSize
-          // alone would only report the container's current width, never
-          // detecting overflow.
-          const w = Math.ceil(inner.scrollWidth);
-          if (h > 0) pushSize(h, w);
+          // Width-growth signal: only fire when content has actually
+          // overflowed the container. `scrollWidth > clientWidth` is
+          // the canonical overflow check. The 2px tolerance absorbs
+          // subpixel rounding so a stable state doesn't bleed into
+          // a slow-creep grow loop. Reports the overflow delta so
+          // pushSize knows exactly how much to widen.
+          const overflowPx = inner.scrollWidth - inner.clientWidth;
+          const growthDelta = overflowPx > 2 ? Math.ceil(overflowPx) : 0;
+          if (h > 0) pushSize(h, growthDelta);
         }
       });
   if (observer) queueMicrotask(() => observer.observe(inner));
