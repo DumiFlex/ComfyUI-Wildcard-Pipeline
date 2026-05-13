@@ -1,0 +1,139 @@
+import { describe, it, expect, vi } from "vitest";
+import { reindexInjectorSlots, type ReindexSurface } from "./injector";
+
+type MockInput = { name?: string; type?: string; link?: number | null };
+
+function makeNode(inputs: MockInput[]): ReindexSurface & { __inputs: MockInput[]; setDirtyCanvas: ReturnType<typeof vi.fn> } {
+  const arr: MockInput[] = [...inputs];
+  return {
+    inputs: arr,
+    __inputs: arr,
+    addInput: (name: string, type: string): MockInput => {
+      const inp: MockInput = { name, type, link: null };
+      arr.push(inp);
+      return inp;
+    },
+    removeInput: (slot: number): void => {
+      arr.splice(slot, 1);
+    },
+    setDirtyCanvas: vi.fn(),
+  };
+}
+
+describe("reindexInjectorSlots", () => {
+  it("disconnect input_0 — input_1 renames to input_0 + trailing empty added", () => {
+    const node = makeNode([
+      { name: "input_0", type: "*", link: null },   // just disconnected
+      { name: "input_1", type: "*", link: 43 },     // still connected
+      { name: "input_2", type: "*", link: null },   // existing trailing empty
+    ]);
+
+    const renameMap = reindexInjectorSlots(node);
+
+    // Disconnected slots gone, the surviving connected becomes input_0,
+    // one trailing empty named input_1 appended.
+    expect(node.__inputs.map((i) => i.name)).toEqual(["input_0", "input_1"]);
+    expect(node.__inputs[0].link).toBe(43);
+    expect(node.__inputs[1].link).toBeNull();
+
+    // Rename map records the input_1 → input_0 migration.
+    expect(renameMap.get("input_1")).toBe("input_0");
+    // input_2 was disconnected so it's gone entirely (not renamed).
+    expect(renameMap.has("input_2")).toBe(false);
+  });
+
+  it("disconnect middle slot — surviving slots shift contiguously", () => {
+    const node = makeNode([
+      { name: "input_0", type: "*", link: 100 },  // connected
+      { name: "input_1", type: "*", link: null }, // just disconnected
+      { name: "input_2", type: "*", link: 102 },  // still connected
+      { name: "input_3", type: "*", link: null }, // trailing empty
+    ]);
+
+    const renameMap = reindexInjectorSlots(node);
+
+    expect(node.__inputs.map((i) => i.name)).toEqual(["input_0", "input_1", "input_2"]);
+    expect(node.__inputs[0].link).toBe(100);
+    expect(node.__inputs[1].link).toBe(102);
+    expect(node.__inputs[2].link).toBeNull();
+    expect(renameMap.get("input_2")).toBe("input_1");
+    expect(renameMap.has("input_0")).toBe(false);  // no change
+  });
+
+  it("non-contiguous workflow load normalizes to contiguous run", () => {
+    // Simulates a workflow saved before this fix — slots numbered
+    // 5/2/9 (out of order, gaps). On load, normalizeSlots runs once
+    // and produces input_0..input_2 + trailing input_3.
+    const node = makeNode([
+      { name: "input_5", type: "*", link: 50 },
+      { name: "input_2", type: "*", link: 20 },
+      { name: "input_9", type: "*", link: 90 },
+    ]);
+
+    const renameMap = reindexInjectorSlots(node);
+
+    expect(node.__inputs.map((i) => i.name)).toEqual(["input_0", "input_1", "input_2", "input_3"]);
+    expect(node.__inputs[0].link).toBe(50);  // was input_5, still first in array
+    expect(node.__inputs[1].link).toBe(20);  // was input_2
+    expect(node.__inputs[2].link).toBe(90);  // was input_9
+    expect(node.__inputs[3].link).toBeNull();
+    expect(renameMap.get("input_5")).toBe("input_0");
+    expect(renameMap.get("input_2")).toBe("input_1");
+    expect(renameMap.get("input_9")).toBe("input_2");
+  });
+
+  it("calls setDirtyCanvas(true, true) after rename", () => {
+    const node = makeNode([
+      { name: "input_0", type: "*", link: null },
+      { name: "input_1", type: "*", link: 43 },
+    ]);
+
+    reindexInjectorSlots(node);
+
+    expect(node.setDirtyCanvas).toHaveBeenCalledWith(true, true);
+  });
+
+  it("calls setDirtyCanvas even on no-op (idempotent — repaint cheap)", () => {
+    // Algorithm always calls setDirtyCanvas after step 4 regardless
+    // of whether anything changed. Cheap enough not to gate.
+    const node = makeNode([
+      { name: "input_0", type: "*", link: 100 },
+      { name: "input_1", type: "*", link: null },
+    ]);
+
+    reindexInjectorSlots(node);
+
+    expect(node.setDirtyCanvas).toHaveBeenCalledWith(true, true);
+  });
+
+  it("idempotent — running on canonical state changes nothing meaningful", () => {
+    const node = makeNode([
+      { name: "input_0", type: "*", link: 100 },
+      { name: "input_1", type: "*", link: null },  // already trailing empty
+    ]);
+
+    const renameMap = reindexInjectorSlots(node);
+
+    // Removes the disconnected input_1 then adds a new input_1 — net
+    // same state but the trailing empty is a fresh element.
+    expect(node.__inputs.map((i) => i.name)).toEqual(["input_0", "input_1"]);
+    expect(node.__inputs[0].link).toBe(100);
+    expect(node.__inputs[1].link).toBeNull();
+    expect(renameMap.size).toBe(0);
+  });
+
+  it("ignores non-input_N slots (e.g. fixed named inputs)", () => {
+    const node = makeNode([
+      { name: "model", type: "MODEL", link: 1 },     // not dynamic — keep
+      { name: "input_0", type: "*", link: 100 },     // dynamic, connected
+      { name: "input_1", type: "*", link: null },    // dynamic, empty
+    ]);
+
+    reindexInjectorSlots(node);
+
+    // model stays untouched; dynamic slots renumbered + trailing empty added.
+    expect(node.__inputs[0].name).toBe("model");
+    expect(node.__inputs[0].link).toBe(1);
+    expect(node.__inputs.map((i) => i.name)).toEqual(["model", "input_0", "input_1"]);
+  });
+});

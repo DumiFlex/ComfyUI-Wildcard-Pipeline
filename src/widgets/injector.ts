@@ -48,20 +48,78 @@ function injectorSlotName(inp: { name?: string }): string | null {
   return tail.startsWith("input_") ? tail : null;
 }
 
-/** Next available `input_N` name not currently on the node. */
-function nextInputName(inputs: Array<InjectorInput | null | undefined>): string {
-  const used = new Set<string>();
-  for (const inp of inputs) {
+/** Parse the numeric tail of an `input_N` slot name. Returns 999 for
+ *  non-matching strings so sorts push junk to the end. */
+function parseInputIndex(slotName: string): number {
+  const m = slotName.match(/^input_(\d+)$/);
+  return m ? parseInt(m[1], 10) : 999;
+}
+
+/** Surface used by reindexInjectorSlots — narrow shape over the
+ *  LiteGraph node so the algorithm is testable against a plain mock. */
+export interface ReindexSurface {
+  inputs: Array<{ name?: string; type?: string; link?: number | null } | null | undefined>;
+  addInput: (name: string, type: string) => unknown;
+  removeInput: (slot: number) => void;
+  setDirtyCanvas?: (a: boolean, b: boolean) => void;
+}
+
+/** Snapshot, remove disconnected, renumber survivors to contiguous
+ *  input_0..input_N, add trailing empty input_N+1. Returns a rename
+ *  map (old slot name → new slot name) so the caller can propagate
+ *  the rename to row JSON in the same tick. */
+export function reindexInjectorSlots(node: ReindexSurface): Map<string, string> {
+  const inputs = node.inputs ?? [];
+
+  // 1. Snapshot dynamic slot info BEFORE any mutation.
+  type SlotInfo = { idx: number; oldName: string; connected: boolean };
+  const dynamic: SlotInfo[] = [];
+  for (let i = 0; i < inputs.length; i++) {
+    const inp = inputs[i];
     if (!inp) continue;
     const slot = injectorSlotName(inp);
-    if (slot) used.add(slot);
+    if (!slot) continue;
+    dynamic.push({ idx: i, oldName: slot, connected: inp.link != null });
   }
-  for (let i = 0; i < 100; i++) {
-    const name = `input_${i}`;
-    if (!used.has(name)) return name;
+
+  // 2. Remove all disconnected dynamic slots in reverse so indices
+  //    stay valid during the loop.
+  for (let k = dynamic.length - 1; k >= 0; k--) {
+    if (!dynamic[k].connected) node.removeInput(dynamic[k].idx);
   }
-  return `input_${inputs.length}`;  // fallback — should never hit
+
+  // 3. Walk remaining dynamic slots in array order. Mutate .name in
+  //    place to be contiguous input_0..input_N. Build the rename map
+  //    so the caller can update row JSON.
+  const renameMap = new Map<string, string>();
+  const after = node.inputs ?? [];
+  let counter = 0;
+  for (const inp of after) {
+    if (!inp) continue;
+    const slot = injectorSlotName(inp);
+    if (!slot) continue;
+    const newName = `input_${counter++}`;
+    if (slot !== newName) {
+      renameMap.set(slot, newName);
+      inp.name = newName;
+    }
+  }
+
+  // 4. Add the trailing empty slot at input_${counter}.
+  node.addInput(`input_${counter}`, "*");
+
+  // 5. Force redraw — LiteGraph reads inputs[i].name lazily at paint,
+  //    so .name mutation alone doesn't schedule a repaint.
+  if (typeof node.setDirtyCanvas === "function") {
+    node.setDirtyCanvas(true, true);
+  }
+
+  return renameMap;
 }
+
+// nextInputName helper was retired with the normalizeSlots rewrite —
+// reindexInjectorSlots now controls the trailing-empty's name via a
+// simple counter rather than a "find first unused" scan.
 
 export function create(node: InjectorNode, inputName: string) {
   const initial = serializeWidgetJson(
@@ -193,34 +251,25 @@ export function create(node: InjectorNode, inputName: string) {
   // disconnect any non-trailing slot, we remove it. Engine-side,
   // `accept_all_inputs=True` lets the node receive arbitrary kwargs.
   function normalizeSlots(): void {
-    const inputs = node.inputs ?? [];
     if (!node.addInput || !node.removeInput) return;
-    type SlotInfo = { idx: number; connected: boolean; name: string };
-    const dynamicSlots: SlotInfo[] = [];
-    for (let i = 0; i < inputs.length; i++) {
-      const inp = inputs[i];
-      if (!inp) continue;
-      const slot = injectorSlotName(inp);
-      if (!slot) continue;
-      dynamicSlots.push({ idx: i, connected: inp.link != null, name: slot });
-    }
-    // Drop empty slots — we'll add exactly one trailing back below.
-    // Walk in reverse so index removal doesn't shift higher entries.
-    for (let k = dynamicSlots.length - 1; k >= 0; k--) {
-      const s = dynamicSlots[k];
-      if (!s.connected) node.removeInput(s.idx);
-    }
-    // Ensure exactly one trailing empty slot exists. Re-read inputs
-    // since removeInput mutated the array.
-    const after = node.inputs ?? [];
-    const hasEmpty = after.some((inp) => {
-      if (!inp) return false;
-      if (!injectorSlotName(inp)) return false;
-      return inp.link == null;
-    });
-    if (!hasEmpty) {
-      const name = nextInputName(after);
-      node.addInput(name, "*");
+    const renameMap = reindexInjectorSlots(node as ReindexSurface);
+    if (renameMap.size === 0) return;
+    // Push rename through to row JSON in the same tick. Without this,
+    // the InjectorWidget Vue watcher on connectedSlots reads the new
+    // socket names + the OLD row slot_names and false-positives every
+    // row as severed — wiping typed bindings.
+    const parsed = parseWidgetJson<InjectorRowsValue>(currentJson.value, emptyInjectorRowsValue());
+    const remappedRows = parsed.rows
+      .map((r) => {
+        const newName = renameMap.get(r.slot_name);
+        return newName ? { ...r, slot_name: newName } : r;
+      })
+      .sort((a, b) => parseInputIndex(a.slot_name) - parseInputIndex(b.slot_name));
+    const changed =
+      remappedRows.length !== parsed.rows.length ||
+      remappedRows.some((r, i) => r.slot_name !== parsed.rows[i].slot_name);
+    if (changed) {
+      host.setValue(serializeWidgetJson({ ...parsed, rows: remappedRows }));
     }
   }
 
