@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  applyCollapsedLabels,
   attachCollapsableConnections,
   countMatching,
   firstMatchingIndex,
@@ -7,13 +8,21 @@ import {
   setCollapsed,
 } from "./collapse-connections";
 
-type MockSlot = { name?: string; type?: string; link?: number | null };
+type MockSlot = {
+  name?: string;
+  label?: string;
+  _wpOrigLabel?: string | undefined;
+  type?: string;
+  link?: number | null;
+};
 
 interface MockNode {
   inputs: MockSlot[];
   outputs: MockSlot[];
   properties: Record<string, unknown>;
+  size?: [number, number];
   setDirtyCanvas?: ReturnType<typeof vi.fn>;
+  setSize?: ReturnType<typeof vi.fn>;
   graph?: { setDirtyCanvas?: ReturnType<typeof vi.fn> };
   getInputPos?: (slot: number) => [number, number];
   getOutputPos?: (slot: number) => [number, number];
@@ -41,10 +50,16 @@ function makeNode(opts: {
     inputs,
     outputs,
     properties: {},
+    size: [size[0], size[1]],
     setDirtyCanvas: vi.fn(),
+    setSize: vi.fn(),
     __origPositions: { input: inputPositions, output: outputPositions },
     __origSize: [size[0], size[1]],
   };
+  // Wire setSize to update size in place (mirrors litegraph behavior).
+  node.setSize!.mockImplementation((s: [number, number]) => {
+    node.size = [s[0], s[1]];
+  });
 
   node.getInputPos = (slot: number) => inputPositions[slot] ?? [0, 0];
   node.getOutputPos = (slot: number) => outputPositions[slot] ?? [0, 0];
@@ -226,6 +241,118 @@ describe("collapse-connections — position patch", () => {
     // yields the un-collapsed pos to confirm isolation.
     expect(isCollapsed(node)).toBe(false);
     expect(isCollapsed(node, "wp_fold_inputs")).toBe(true);
+  });
+});
+
+describe("collapse-connections — unified label + resize side effects", () => {
+  function makeInjectorLike() {
+    return makeNode({
+      inputs: [
+        { name: "context_in", label: "context" },
+        { name: "input_0", label: "input_0" },
+        { name: "input_1", label: "input_1" },
+        { name: "input_2", label: "input_2" },
+      ],
+      inputPositions: [[0, 0], [0, 20], [0, 40], [0, 60]],
+      size: [240, 80],
+    });
+  }
+
+  const matchInput = (s: MockSlot) => /^input_\d+$/.test(s.name ?? "");
+
+  it("setCollapsed(true) swaps first matched label to configured + blanks the rest", () => {
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: "inputs",
+    });
+    setCollapsed(node, true);
+    expect(node.inputs[0].label).toBe("context");  // non-matched untouched
+    expect(node.inputs[1].label).toBe("inputs");   // first matched → unified
+    expect(node.inputs[2].label).toBe(" ");        // rest blanked
+    expect(node.inputs[3].label).toBe(" ");
+  });
+
+  it("setCollapsed(false) restores original labels from _wpOrigLabel stash", () => {
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: "inputs",
+    });
+    setCollapsed(node, true);
+    setCollapsed(node, false);
+    expect(node.inputs[1].label).toBe("input_0");
+    expect(node.inputs[2].label).toBe("input_1");
+    expect(node.inputs[3].label).toBe("input_2");
+    // Stash cleaned up so a future collapse re-snapshots fresh labels.
+    expect(node.inputs[1]._wpOrigLabel).toBeUndefined();
+  });
+
+  it("collapsedInputLabel undefined keeps the first slot's original label", () => {
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, { matchInput });
+    setCollapsed(node, true);
+    expect(node.inputs[1].label).toBe("input_0");  // original kept
+    expect(node.inputs[2].label).toBe(" ");
+  });
+
+  it("collapsedInputLabel function receives the node and computes per-state", () => {
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: (n) => `${countMatching(n.inputs, matchInput)} inputs`,
+    });
+    setCollapsed(node, true);
+    expect(node.inputs[1].label).toBe("3 inputs");
+  });
+
+  it("setCollapsed calls setSize with shrunk height when collapsed", () => {
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, { matchInput });
+    setCollapsed(node, true);
+    expect(node.setSize).toHaveBeenCalled();
+    const lastCall = node.setSize!.mock.calls[node.setSize!.mock.calls.length - 1];
+    expect(lastCall[0][1]).toBe(80 - 2 * 20);  // shrunk by 2 hidden slots
+  });
+
+  it("setCollapsed preserves the current width (no width snap-back)", () => {
+    const node = makeInjectorLike();
+    node.size = [400, 80];  // user widened past computeSize's 240
+    attachCollapsableConnections(node, { matchInput });
+    setCollapsed(node, true);
+    const lastCall = node.setSize!.mock.calls[node.setSize!.mock.calls.length - 1];
+    expect(lastCall[0][0]).toBe(400);  // width unchanged
+  });
+
+  it("workflow loaded with collapsed=true applies labels + resize on attach", () => {
+    const node = makeInjectorLike();
+    node.properties.collapse_connections = true;
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: "inputs",
+    });
+    expect(node.inputs[1].label).toBe("inputs");
+    expect(node.setSize).toHaveBeenCalled();
+  });
+
+  it("applyCollapsedLabels exported for manual re-sync after runtime slot mutation", () => {
+    const node = makeInjectorLike();
+    attachCollapsableConnections(node, {
+      matchInput,
+      collapsedInputLabel: "inputs",
+    });
+    setCollapsed(node, true);
+    // Simulate runtime mutation: new input_3 appended after collapse.
+    node.inputs.push({ name: "input_3", label: "input_3" });
+    applyCollapsedLabels(node);
+    expect(node.inputs[4].label).toBe(" ");  // newly added matched slot gets blank
+  });
+
+  it("setCollapsed without prior attach skips label/size side effects", () => {
+    const node = makeInjectorLike();
+    setCollapsed(node, true);
+    expect(node.inputs[1].label).toBe("input_0");  // unchanged
+    expect(node.setSize).not.toHaveBeenCalled();
   });
 });
 
