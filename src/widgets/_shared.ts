@@ -160,37 +160,54 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       }
     });
   }
-  // Skip the autosize observer in fill mode — node size is user-controlled,
-  // content fills whatever space is given.
-  function measure(): { h: number; growthDelta: number } {
-    // Width-growth signal: only fire when content has actually
-    // overflowed the container. `scrollWidth > clientWidth` is the
-    // canonical overflow check. 2px tolerance absorbs subpixel
-    // rounding so a stable state doesn't slow-creep grow.
-    const overflowPx = inner.scrollWidth - inner.clientWidth;
-    const growthDelta = overflowPx > 2 ? Math.ceil(overflowPx) : 0;
-    const h = Math.ceil(inner.getBoundingClientRect().height);
-    return { h, growthDelta };
+  // Walk inner's descendants to find the worst horizontal overflow.
+  // Plain `inner.scrollWidth` doesn't work here because at least one
+  // descendant (`.wp-inj-widget`) sets `overflow: hidden`, which
+  // creates a scroll container that ABSORBS the children's natural
+  // overflow — the inner reads as `scrollWidth === clientWidth` even
+  // when rows visibly spill past it. Walking the tree finds the
+  // actual overflowing element (typically a flex row whose children
+  // sum exceeds its width) and reports the worst overflow delta.
+  function maxOverflowBelow(root: Element): number {
+    let max = 0;
+    function walk(el: Element): void {
+      if (el instanceof HTMLElement) {
+        const delta = el.scrollWidth - el.clientWidth;
+        if (delta > max) max = delta;
+      }
+      for (let i = 0; i < el.children.length; i++) walk(el.children[i]);
+    }
+    walk(root);
+    return max;
   }
 
   let resizeObserver: ResizeObserver | null = null;
   let mutationObserver: MutationObserver | null = null;
   if (!options.fillHost) {
     // ResizeObserver covers the height path — content getting taller
-    // (more rows, taller widget) trips it.
-    resizeObserver = new ResizeObserver(() => {
-      const { h, growthDelta } = measure();
-      if (h > 0) pushSize(h, growthDelta);
+    // (more rows, taller widget) trips it. Uses the entry's borderBox
+    // dimensions which are reliable across all browsers.
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const h = Math.ceil(e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height);
+        const overflow = maxOverflowBelow(inner);
+        const growthDelta = overflow > 2 ? Math.ceil(overflow) : 0;
+        if (h > 0) pushSize(h, growthDelta);
+      }
     });
-    // MutationObserver covers the width path. Inserting a conflict
-    // badge or expanding row content doesn't change `inner`'s box
-    // (inner is width:100% — fills whatever the host gives it), so
-    // ResizeObserver never fires for that case. MutationObserver
-    // fires on every DOM change in the Vue subtree, which is the
-    // precise signal we need: re-measure scrollWidth vs clientWidth
-    // after the new children are in place.
+    // MutationObserver covers the width path. Adding a conflict badge
+    // or expanding row content doesn't necessarily change `inner`'s
+    // box (inner is width:100% — fills whatever the host gives it),
+    // so ResizeObserver never fires for that case. Mutation re-checks
+    // overflow on every DOM change in the Vue subtree.
     mutationObserver = new MutationObserver(() => {
-      const { h, growthDelta } = measure();
+      const overflow = maxOverflowBelow(inner);
+      if (overflow <= 2) return;
+      const growthDelta = Math.ceil(overflow);
+      // Read height from the entry-free path here — getBoundingClientRect
+      // forces a layout but only when we already know we need to grow,
+      // so the cost only fires when there's something to do.
+      const h = Math.ceil(inner.getBoundingClientRect().height);
       if (h > 0) pushSize(h, growthDelta);
     });
     queueMicrotask(() => {
