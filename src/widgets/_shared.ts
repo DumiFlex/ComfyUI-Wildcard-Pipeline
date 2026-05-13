@@ -176,7 +176,22 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // synchronous re-entry. 32ms release matches rgthree's _tempWidth
   // debouncer — long enough to outlive a single paint cycle, short
   // enough that real successive state changes still apply promptly.
+  //
+  // Width preservation: we track the width WE LAST SET via
+  // `lastAutoSetWidth`. If the node's current width matches that, we
+  // know the change came from us — safe to follow min[0] up OR down.
+  // If the current width differs, the user (or another extension)
+  // resized the node manually; we respect their width and only grow
+  // it when min[0] demands more room. This is the KJNodes-style
+  // "delta-check" pattern: by attributing each cur[0] to either
+  // "us" or "not-us", we can distinguish "minWidth dropped because
+  // state cleared" (should shrink) from "user dragged wider" (should
+  // preserve).
+  //
+  // Height axis still always snaps to content (driven separately by
+  // the height observer).
   let relayouting = false;
+  let lastAutoSetWidth = 0;
   function requestRelayout(): void {
     if (relayouting) return;
     relayouting = true;
@@ -184,7 +199,18 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      resizable.setSize([min[0], min[1]]);
+      const userControlsWidth =
+        lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
+      const targetW = userControlsWidth
+        ? Math.max(cur[0], min[0])  // preserve drag; grow only if needed
+        : min[0];                    // we own width; follow min up OR down
+      if (Math.abs(cur[0] - targetW) < 1 && cur[1] === min[1]) return;
+      resizable.setSize([targetW, min[1]]);
+      // Record what WE asked for. Even if litegraph clamps slightly
+      // (subpixel rounding, snap-to-grid), the reverse delta check
+      // tolerates ±1px so a small clamp doesn't get misread as a
+      // user drag.
+      lastAutoSetWidth = targetW;
       resizable.setDirtyCanvas?.(true, true);
     } finally {
       setTimeout(() => { relayouting = false; }, 32);
