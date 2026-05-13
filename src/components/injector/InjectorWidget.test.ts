@@ -53,3 +53,32 @@ describe("InjectorWidget — lifecycle", () => {
     expect(JSON.parse(lastJson).rows).toHaveLength(1);
   });
 });
+
+describe("InjectorWidget — collapse-connections button", () => {
+  it("renders the toolbar button with the expand icon when expanded (default)", () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: EMPTY },
+    });
+    const btn = w.find('[data-test="inj-toolbar-collapse-conns"]');
+    expect(btn.exists()).toBe(true);
+    expect(btn.find(".pi-arrows-v").exists()).toBe(true);
+    expect(btn.classes()).not.toContain("is-active");
+  });
+
+  it("flips icon + active class when connectionsCollapsed is true", () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: EMPTY, connectionsCollapsed: true },
+    });
+    const btn = w.find('[data-test="inj-toolbar-collapse-conns"]');
+    expect(btn.find(".pi-arrows-alt").exists()).toBe(true);
+    expect(btn.classes()).toContain("is-active");
+  });
+
+  it("emits toggle-connections-collapse on click", async () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: EMPTY },
+    });
+    await w.find('[data-test="inj-toolbar-collapse-conns"]').trigger("click");
+    expect(w.emitted("toggle-connections-collapse")).toHaveLength(1);
+  });
+});

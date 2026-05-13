@@ -28,8 +28,14 @@ const props = withDefaults(
      *  Drives the dim overlay so muted/bypassed state reads at a
      *  glance, matching ContextWidget's pattern. */
     nodeMode?: number;
+    /** Whether the input wires are visually collapsed onto a single
+     *  pin. Drives the header button's icon + tooltip. State lives
+     *  on `node.properties.collapse_connections` (managed by the
+     *  outer mount glue via the shared collapse-connections helper)
+     *  — this prop is the reactive read-side. */
+    connectionsCollapsed?: boolean;
   }>(),
-  { connectedSlots: () => [], slotTypes: () => ({}), upstreamVars: () => [], nodeMode: 0 },
+  { connectedSlots: () => [], slotTypes: () => ({}), upstreamVars: () => [], nodeMode: 0, connectionsCollapsed: false },
 );
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -37,6 +43,7 @@ const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const emit = defineEmits<{
   (e: "change", json: string): void;
   (e: "disconnect-slot", slotName: string): void;
+  (e: "toggle-connections-collapse"): void;
 }>();
 
 const value = ref<InjectorRowsValue>(
@@ -218,6 +225,15 @@ defineExpose({ addRow, removeRow });
       ><i :class="['pi', collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
       <span data-test="inj-toolbar-label" class="wp-inj-header-label">injected variables</span>
       <span data-test="inj-toolbar-count" class="wp-inj-header-count">{{ enabledCount }} / {{ value.rows.length }}</span>
+      <button
+        type="button"
+        class="wp-inj-collapse-conns"
+        :class="{ 'is-active': connectionsCollapsed }"
+        :title="connectionsCollapsed ? 'Show all input wires' : 'Collapse all input wires onto input_0'"
+        :aria-label="connectionsCollapsed ? 'Expand input connections' : 'Collapse input connections'"
+        data-test="inj-toolbar-collapse-conns"
+        @click="emit('toggle-connections-collapse')"
+      ><i :class="['pi', connectionsCollapsed ? 'pi-arrows-alt' : 'pi-arrows-v']" aria-hidden="true" /></button>
     </div>
 
     <div v-if="!collapsed" class="wp-inj-list">
@@ -287,6 +303,33 @@ defineExpose({ addRow, removeRow });
   font: 600 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
+/* Collapse-connections toggle — sits at the right end of the header.
+ * Inactive: subtle dim text + transparent bg, matches the caret on
+ * the left. Active (collapsed): accent-tinted bg + accent text so
+ * it's obvious which mode the node is in at a glance. */
+.wp-inj-collapse-conns {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
+  padding: 2px 4px;
+  margin-left: 4px;
+  border-radius: var(--wp-radius, 4px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.wp-inj-collapse-conns:hover {
+  background: var(--wp-bg2);
+  border-color: var(--wp-border-soft, var(--wp-border2));
+  color: var(--wp-text);
+}
+.wp-inj-collapse-conns.is-active {
+  color: var(--wp-accent-text, var(--wp-accent));
+  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
+}
+.wp-inj-collapse-conns .pi { font-size: 11px; }
 .wp-inj-list {
   display: flex;
   flex-direction: column;

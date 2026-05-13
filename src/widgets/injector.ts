@@ -11,6 +11,11 @@ import {
 import { attachThemeDetector } from "../extension/theme-detector";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import {
+  attachCollapsableConnections,
+  isCollapsed as readCollapsed,
+  setCollapsed,
+} from "../extension/collapse-connections";
+import {
   collectUpstreamVariables,
   findRootGraph,
   type LiteGraphLike,
@@ -268,6 +273,16 @@ export function create(node: InjectorNode, inputName: string) {
         Object.is,
       );
 
+      // Connection-collapse toggle — reactive read of the property
+      // we manage via setCollapsed. The header button + reactive
+      // pulse keep the widget icon in sync with the property when
+      // toggled from any surface (button now, future menu items).
+      const connectionsCollapsed = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => readCollapsed(node as Parameters<typeof readCollapsed>[0]),
+        Object.is,
+      );
+
       // Publish refs + computes to the outer-scope hoists so
       // normalizeSlots can force a refresh post-rename.
       connectedSlotsRef = connectedSlots;
@@ -283,6 +298,16 @@ export function create(node: InjectorNode, inputName: string) {
           slotTypes: slotTypes.value,
           upstreamVars: upstreamVars.value,
           nodeMode: nodeMode.value,
+          connectionsCollapsed: connectionsCollapsed.value,
+          onToggleConnectionsCollapse: () => {
+            const next = setCollapsed(
+              node as Parameters<typeof setCollapsed>[0],
+            );
+            // Mirror the property change into the reactive ref so the
+            // header icon flips this tick without waiting for the
+            // 400ms reactive poll.
+            connectionsCollapsed.value = next;
+          },
           onChange: (json: string) => {
             host.setValue(json);
             // host.setValue is designed not to fire onValueRestored on
@@ -320,6 +345,15 @@ export function create(node: InjectorNode, inputName: string) {
     },
   });
   attachThemeDetector(host.widget.element, app);
+
+  // Visual collapse of the dynamic input wires onto input_0's pin.
+  // Predicate matches ONLY `input_N` slots so any fixed input (e.g.
+  // future upstream context wire) stays at its own position. State
+  // lives on node.properties.collapse_connections — persists with
+  // the workflow.
+  attachCollapsableConnections(node as Parameters<typeof attachCollapsableConnections>[0], {
+    matchInput: (inp) => injectorSlotName(inp as { name?: string }) !== null,
+  });
 
   // Manual socket management. The schema declares NO dynamic inputs
   // (V3 Autogrow doesn't shrink on disconnect, so we drop it). We
