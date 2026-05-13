@@ -167,21 +167,17 @@ defineExpose({ addRow, removeRow });
 
 <template>
   <div class="wp-inj-widget" :class="{ 'wp-inj-widget--skipped': isSkipped }">
-    <div class="wp-inj-toolbar">
+    <div class="wp-inj-header">
       <button
         type="button"
-        class="wp-inj-collapse-btn"
+        class="wp-inj-caret"
         :title="collapsed ? 'Expand rows' : 'Collapse rows'"
         :aria-label="collapsed ? 'Expand injector rows' : 'Collapse injector rows'"
         data-test="inj-toolbar-collapse"
         @click="collapsed = !collapsed"
       ><i :class="['pi', collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
-      <span data-test="inj-toolbar-label" class="wp-inj-toolbar-label">
-        injected variables
-      </span>
-      <span data-test="inj-toolbar-count" class="wp-inj-toolbar-count">
-        {{ enabledCount }} / {{ value.rows.length }}
-      </span>
+      <span data-test="inj-toolbar-label" class="wp-inj-header-label">injected variables</span>
+      <span data-test="inj-toolbar-count" class="wp-inj-header-count">{{ enabledCount }} / {{ value.rows.length }}</span>
     </div>
 
     <div v-if="!collapsed" class="wp-inj-list">
@@ -223,38 +219,32 @@ defineExpose({ addRow, removeRow });
  * stay on so the user can still edit binding names while the node
  * is paused; engine-side ComfyUI skips execute() outright. */
 .wp-inj-widget--skipped { opacity: 0.45; }
-.wp-inj-toolbar {
+.wp-inj-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--wp-bg2);
-  border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
-  font: 600 9px var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--wp-text-dim, var(--wp-text3));
+  gap: 6px;
+  padding: 4px 8px 6px;
+  font: 500 11px var(--wp-font-sans);
+  color: var(--wp-text-muted, var(--wp-text2));
 }
-.wp-inj-collapse-btn {
+.wp-inj-caret {
   background: transparent;
   border: none;
   color: var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0;
   font-size: 10px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
 }
-.wp-inj-collapse-btn:hover { color: var(--wp-text); }
-.wp-inj-toolbar-label { flex: 0 0 auto; }
-.wp-inj-toolbar-count {
-  background: var(--wp-bg3);
-  border-radius: 8px;
-  padding: 1px 6px;
-  font: 600 9px var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
+.wp-inj-caret:hover { color: var(--wp-text); }
+.wp-inj-caret .pi { font-size: 10px; }
+.wp-inj-header-label { flex: 0 0 auto; }
+.wp-inj-header-count {
   margin-left: auto;
+  font: 600 10px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
 }
 .wp-inj-list {
   display: flex;
