@@ -65,10 +65,20 @@ export interface ReindexSurface {
 }
 
 /** Snapshot, remove disconnected, renumber survivors to contiguous
- *  input_0..input_N, add trailing empty input_N+1. Returns a rename
- *  map (old slot name → new slot name) so the caller can propagate
- *  the rename to row JSON in the same tick. */
-export function reindexInjectorSlots(node: ReindexSurface): Map<string, string> {
+ *  input_0..input_N, add trailing empty input_N+1. Returns BOTH a
+ *  rename map (old name → new name for survivors) AND a removed
+ *  set (names of slots that were dropped entirely). Caller uses
+ *  removed to drop orphaned rows BEFORE applying the rename map —
+ *  otherwise a row whose original socket vanished collides with the
+ *  new tenant of its old name (e.g. row@input_0 sticks around after
+ *  the original input_0 is disconnected and a different socket gets
+ *  renamed INTO input_0). */
+export interface ReindexResult {
+  renames: Map<string, string>;
+  removed: Set<string>;
+}
+
+export function reindexInjectorSlots(node: ReindexSurface): ReindexResult {
   const inputs = node.inputs ?? [];
 
   // 1. Snapshot dynamic slot info BEFORE any mutation.
@@ -82,6 +92,13 @@ export function reindexInjectorSlots(node: ReindexSurface): Map<string, string> 
     dynamic.push({ idx: i, oldName: slot, connected: inp.link != null });
   }
 
+  // Names of slots about to be dropped — used by caller to filter
+  // orphaned rows before applying the rename map.
+  const removed = new Set<string>();
+  for (const s of dynamic) {
+    if (!s.connected) removed.add(s.oldName);
+  }
+
   // 2. Remove all disconnected dynamic slots in reverse so indices
   //    stay valid during the loop.
   for (let k = dynamic.length - 1; k >= 0; k--) {
@@ -91,7 +108,7 @@ export function reindexInjectorSlots(node: ReindexSurface): Map<string, string> 
   // 3. Walk remaining dynamic slots in array order. Mutate .name in
   //    place to be contiguous input_0..input_N. Build the rename map
   //    so the caller can update row JSON.
-  const renameMap = new Map<string, string>();
+  const renames = new Map<string, string>();
   const after = node.inputs ?? [];
   let counter = 0;
   for (const inp of after) {
@@ -100,7 +117,7 @@ export function reindexInjectorSlots(node: ReindexSurface): Map<string, string> 
     if (!slot) continue;
     const newName = `input_${counter++}`;
     if (slot !== newName) {
-      renameMap.set(slot, newName);
+      renames.set(slot, newName);
       inp.name = newName;
     }
   }
@@ -114,7 +131,7 @@ export function reindexInjectorSlots(node: ReindexSurface): Map<string, string> 
     node.setDirtyCanvas(true, true);
   }
 
-  return renameMap;
+  return { renames, removed };
 }
 
 // nextInputName helper was retired with the normalizeSlots rewrite —
@@ -252,16 +269,19 @@ export function create(node: InjectorNode, inputName: string) {
   // `accept_all_inputs=True` lets the node receive arbitrary kwargs.
   function normalizeSlots(): void {
     if (!node.addInput || !node.removeInput) return;
-    const renameMap = reindexInjectorSlots(node as ReindexSurface);
-    if (renameMap.size === 0) return;
-    // Push rename through to row JSON in the same tick. Without this,
-    // the InjectorWidget Vue watcher on connectedSlots reads the new
-    // socket names + the OLD row slot_names and false-positives every
-    // row as severed — wiping typed bindings.
+    const { renames, removed } = reindexInjectorSlots(node as ReindexSurface);
+    if (renames.size === 0 && removed.size === 0) return;
+    // Push the slot mutation through to row JSON in the same tick.
+    // Drop rows whose socket disappeared (removed set), then remap
+    // surviving rows to their new socket name (renames map). Reorder
+    // by new slot_name so the visual list matches socket pin order.
+    // Without this atomic update, the InjectorWidget Vue watcher
+    // would false-positive every row as severed and wipe bindings.
     const parsed = parseWidgetJson<InjectorRowsValue>(currentJson.value, emptyInjectorRowsValue());
     const remappedRows = parsed.rows
+      .filter((r) => !removed.has(r.slot_name))
       .map((r) => {
-        const newName = renameMap.get(r.slot_name);
+        const newName = renames.get(r.slot_name);
         return newName ? { ...r, slot_name: newName } : r;
       })
       .sort((a, b) => parseInputIndex(a.slot_name) - parseInputIndex(b.slot_name));

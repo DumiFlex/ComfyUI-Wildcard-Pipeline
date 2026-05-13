@@ -28,7 +28,7 @@ describe("reindexInjectorSlots", () => {
       { name: "input_2", type: "*", link: null },   // existing trailing empty
     ]);
 
-    const renameMap = reindexInjectorSlots(node);
+    const { renames, removed } = reindexInjectorSlots(node);
 
     // Disconnected slots gone, the surviving connected becomes input_0,
     // one trailing empty named input_1 appended.
@@ -37,9 +37,13 @@ describe("reindexInjectorSlots", () => {
     expect(node.__inputs[1].link).toBeNull();
 
     // Rename map records the input_1 → input_0 migration.
-    expect(renameMap.get("input_1")).toBe("input_0");
-    // input_2 was disconnected so it's gone entirely (not renamed).
-    expect(renameMap.has("input_2")).toBe(false);
+    expect(renames.get("input_1")).toBe("input_0");
+    // input_0 was a disconnected slot — it's in removed, NOT in renames.
+    // The orphan-row check uses `removed` to drop rows whose original
+    // socket vanished entirely.
+    expect(removed.has("input_0")).toBe(true);
+    expect(removed.has("input_2")).toBe(true);
+    expect(renames.has("input_0")).toBe(false);
   });
 
   it("disconnect middle slot — surviving slots shift contiguously", () => {
@@ -50,14 +54,16 @@ describe("reindexInjectorSlots", () => {
       { name: "input_3", type: "*", link: null }, // trailing empty
     ]);
 
-    const renameMap = reindexInjectorSlots(node);
+    const { renames, removed } = reindexInjectorSlots(node);
 
     expect(node.__inputs.map((i) => i.name)).toEqual(["input_0", "input_1", "input_2"]);
     expect(node.__inputs[0].link).toBe(100);
     expect(node.__inputs[1].link).toBe(102);
     expect(node.__inputs[2].link).toBeNull();
-    expect(renameMap.get("input_2")).toBe("input_1");
-    expect(renameMap.has("input_0")).toBe(false);  // no change
+    expect(renames.get("input_2")).toBe("input_1");
+    expect(renames.has("input_0")).toBe(false);  // no change
+    expect(removed.has("input_1")).toBe(true);
+    expect(removed.has("input_3")).toBe(true);
   });
 
   it("non-contiguous workflow load normalizes to contiguous run", () => {
@@ -70,16 +76,18 @@ describe("reindexInjectorSlots", () => {
       { name: "input_9", type: "*", link: 90 },
     ]);
 
-    const renameMap = reindexInjectorSlots(node);
+    const { renames, removed } = reindexInjectorSlots(node);
 
     expect(node.__inputs.map((i) => i.name)).toEqual(["input_0", "input_1", "input_2", "input_3"]);
     expect(node.__inputs[0].link).toBe(50);  // was input_5, still first in array
     expect(node.__inputs[1].link).toBe(20);  // was input_2
     expect(node.__inputs[2].link).toBe(90);  // was input_9
     expect(node.__inputs[3].link).toBeNull();
-    expect(renameMap.get("input_5")).toBe("input_0");
-    expect(renameMap.get("input_2")).toBe("input_1");
-    expect(renameMap.get("input_9")).toBe("input_2");
+    expect(renames.get("input_5")).toBe("input_0");
+    expect(renames.get("input_2")).toBe("input_1");
+    expect(renames.get("input_9")).toBe("input_2");
+    // Nothing removed — all three slots were connected.
+    expect(removed.size).toBe(0);
   });
 
   it("calls setDirtyCanvas(true, true) after rename", () => {
@@ -112,14 +120,18 @@ describe("reindexInjectorSlots", () => {
       { name: "input_1", type: "*", link: null },  // already trailing empty
     ]);
 
-    const renameMap = reindexInjectorSlots(node);
+    const { renames, removed } = reindexInjectorSlots(node);
 
     // Removes the disconnected input_1 then adds a new input_1 — net
-    // same state but the trailing empty is a fresh element.
+    // same state but the trailing empty is a fresh element. input_1
+    // counts as removed (the OLD one) even though a new input_1 was
+    // immediately added; this is fine because no row had slot_name
+    // input_1 in the orphan-row check.
     expect(node.__inputs.map((i) => i.name)).toEqual(["input_0", "input_1"]);
     expect(node.__inputs[0].link).toBe(100);
     expect(node.__inputs[1].link).toBeNull();
-    expect(renameMap.size).toBe(0);
+    expect(renames.size).toBe(0);
+    expect(removed.has("input_1")).toBe(true);  // OLD trailing empty was removed
   });
 
   it("ignores non-input_N slots (e.g. fixed named inputs)", () => {
