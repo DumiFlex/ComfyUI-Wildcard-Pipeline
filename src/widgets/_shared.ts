@@ -12,6 +12,13 @@ export interface DomWidgetHost {
   unmount: () => void;
   getValue: () => string;
   setValue: (v: string) => void;
+  /** Trigger a node relayout — runs the canonical 3-step
+   *  (`computeSize → setSize → setDirtyCanvas`) once. Callers invoke
+   *  this when their state has changed in a way that affects the
+   *  width returned by their `minWidth` getter. Re-entrant calls
+   *  collapse via an internal flag, so a burst of state changes
+   *  yields exactly one setSize. */
+  requestRelayout: () => void;
 }
 
 export interface MountTargetNode {
@@ -27,8 +34,13 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
   componentProps?: P;
   /** Minimum widget height in pixels. Skips per-frame DOM measurement. */
   minHeight?: number;
-  /** Force the parent node to be at least this wide (px). LoRA Manager docs §4.3. */
-  minWidth?: number;
+  /** Force the parent node to be at least this wide (px). LoRA Manager
+   *  docs §4.3. Accepts either a static number OR a getter function
+   *  — the function is called every time litegraph queries
+   *  computeLayoutSize during relayout, so callers can return a value
+   *  that depends on current widget state (e.g. wider when a conflict
+   *  badge is rendered, narrower when it isn't). */
+  minWidth?: number | (() => number);
   /**
    * Fill the host's allocated height instead of growing the node to fit
    * content. Use for read-only viewers (debug snapshot) where the node size
@@ -90,20 +102,25 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   };
 
   const widget = node.addDOMWidget(widgetName, "wp-dom", host, widgetOpts);
-  // Force a minimum node width if requested. LoRA Manager docs §4.3 — only
-  // way to widen the node from a DOM widget is overriding computeLayoutSize.
-  // Width is STATIC (captured constant). The auto-widen-on-overflow attempt
-  // was reverted: it required a MutationObserver which created feedback
-  // loops with litegraph's own re-renders. Surveyed nodes (rgthree,
-  // KJNodes, LoRA Manager, pythongosssss, comfy_mtb) all use either
-  // pull-based size callbacks or static widths — none observe DOM
-  // mutations for auto-sizing. Components that need verbose content
-  // should truncate (e.g. conflict badge text-overflow:ellipsis) so the
-  // row stays within the node's width. The user can manually drag wider
-  // if they want more breathing room.
-  if (options.minWidth) {
-    const minWidth = options.minWidth;
-    widget.computeLayoutSize = () => ({ minWidth, minHeight });
+  // Force a minimum node width if requested. LoRA Manager docs §4.3 —
+  // only way to widen the node from a DOM widget is overriding
+  // computeLayoutSize. `minWidth` accepts either a static number or
+  // a getter; the getter is called each layout pass, so callers can
+  // recompute from their own state (e.g. width depends on whether a
+  // conflict badge is rendered). This is the "pull-based" pattern
+  // documented in the Comfy-Org frontend source — layout asks us,
+  // we don't push back via setSize. No observer cascade is possible
+  // because nothing observes the DOM.
+  let minWidthGetter: (() => number) | null = null;
+  if (typeof options.minWidth === "function") {
+    minWidthGetter = options.minWidth;
+  } else if (typeof options.minWidth === "number") {
+    const captured = options.minWidth;
+    minWidthGetter = () => captured;
+  }
+  if (minWidthGetter) {
+    const getter = minWidthGetter;
+    widget.computeLayoutSize = () => ({ minWidth: getter(), minHeight });
   }
   // createApp's prop overload requires the second arg's keys to extend the
   // component's prop keys. With componentProps?: P (defaulting to {}), TS
@@ -154,6 +171,26 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       });
   if (resizeObserver) queueMicrotask(() => resizeObserver.observe(inner));
 
+  // Pull-based relayout. Reentrancy flag short-circuits if litegraph's
+  // response to our setSize triggers (via some plugin or observer) a
+  // synchronous re-entry. 32ms release matches rgthree's _tempWidth
+  // debouncer — long enough to outlive a single paint cycle, short
+  // enough that real successive state changes still apply promptly.
+  let relayouting = false;
+  function requestRelayout(): void {
+    if (relayouting) return;
+    relayouting = true;
+    try {
+      const min = resizable.computeSize?.();
+      const cur = resizable.size;
+      if (!min || !cur || !resizable.setSize) return;
+      resizable.setSize([min[0], min[1]]);
+      resizable.setDirtyCanvas?.(true, true);
+    } finally {
+      setTimeout(() => { relayouting = false; }, 32);
+    }
+  }
+
   return {
     widget,
     element: inner,
@@ -166,6 +203,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     setValue: (v) => {
       state = v;
     },
+    requestRelayout,
   };
 }
 

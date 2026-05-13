@@ -51,6 +51,13 @@ const emit = defineEmits<{
   (e: "change", json: string): void;
   (e: "disconnect-slot", slotName: string): void;
   (e: "toggle-connections-collapse"): void;
+  /** Fires whenever the formula-computed minimum node width changes —
+   *  triggered by state shifts that add or remove row children
+   *  (conflict badge appears, a row with a known type chip is added,
+   *  rows are added/removed). Mount glue handles the value by
+   *  updating its own minWidth getter and calling requestRelayout
+   *  on the dom widget host. One-shot per state change; loop-free. */
+  (e: "request-min-width", minWidth: number): void;
 }>();
 
 const value = ref<InjectorRowsValue>(
@@ -100,6 +107,84 @@ const conflictByUid = computed<Record<string, RowConflict>>(() => {
   }
   return out;
 });
+
+// ── Formula-driven minWidth ────────────────────────────────────────
+// Mirror of CSS-defined widths for each row child. The formula sums
+// only the children that are CURRENTLY rendered (based on state), so
+// the node defaults to a smaller width when there are no conflicts /
+// no type chips, and grows only when state demands it.
+//
+// Pull-based: createDomWidgetHost wires `() => requiredMinWidth.value`
+// into widget.computeLayoutSize, which litegraph reads on every
+// relayout. We don't push setSize; the parent (mount glue) does it
+// via host.requestRelayout when this value changes.
+//
+// CSS source-of-truth dependencies (keep in lockstep):
+//   .wp-inj-toggle, .wp-inj-toggle-mark
+//   .wp-inj-type-icon       width 16
+//   .wp-inj-slot            max-width 96
+//   .wp-inj-type-chip       ~50 (font 9px × ~7 chars for "boolean")
+//   .wp-vbind-wrap          min-width 80
+//   .wp-conflict-dot        7
+//   .wp-conflict-badge      max-width 88
+//   .wp-inj-action          width 20 (× 2 in cluster)
+//   .wp-inj-row             gap 6, padding 4px 6px, border 1 + border-left 3
+//   .wp-inj-list            padding 6px 8px
+//   .wp-inj-widget          border 1px
+const ROW_PART = {
+  TOGGLE: 16,
+  TYPE_ICON: 16,
+  SLOT_TAG_MAX: 96,
+  TYPE_CHIP: 50,
+  VBIND_MIN: 80,
+  CONFLICT_DOT: 7,
+  CONFLICT_BADGE_MAX: 88,
+  ACTIONS_CLUSTER: 41,   // 2 buttons × 20px + 1px gap
+  GAP: 6,
+  ROW_PADDING_H: 12,     // 6 + 6
+  ROW_BORDER: 4,         // 3 left + 1 right
+  LIST_PADDING_H: 16,    // 8 + 8
+  WIDGET_BORDER: 2,      // 1 + 1
+} as const;
+
+const hasAnyType = computed(() =>
+  value.value.rows.some((r) => Boolean(props.slotTypes[r.slot_name])),
+);
+const hasAnyConflict = computed(() =>
+  value.value.rows.some((r) => Boolean(conflictByUid.value[r._uid])),
+);
+
+const requiredMinWidth = computed(() => {
+  const p = ROW_PART;
+  // Always-present row children: toggle, type-icon, slot tag, vbind,
+  // actions cluster. That's 5 flex children, 4 gaps between them.
+  let sum = p.TOGGLE + p.TYPE_ICON + p.SLOT_TAG_MAX + p.VBIND_MIN + p.ACTIONS_CLUSTER;
+  let childCount = 5;
+  if (hasAnyType.value) {
+    sum += p.TYPE_CHIP;
+    childCount += 1;
+  }
+  if (hasAnyConflict.value) {
+    sum += p.CONFLICT_DOT + p.CONFLICT_BADGE_MAX;
+    childCount += 2;
+  }
+  sum += p.GAP * (childCount - 1);
+  sum += p.ROW_PADDING_H + p.ROW_BORDER;
+  sum += p.LIST_PADDING_H + p.WIDGET_BORDER;
+  return sum;
+});
+
+// Emit on every change. `immediate: true` fires on mount so the
+// mount glue gets the correct initial width without waiting for a
+// state change. One-shot per state change — no loop because the
+// watch deps only include reactive state, not DOM measurements.
+watch(
+  requiredMinWidth,
+  (next) => {
+    emit("request-min-width", next);
+  },
+  { immediate: true },
+);
 
 /** Collapse toggle — hides the rows list. Mirrors the per-module
  *  collapse pattern from ContextWidget where collapsing a row hides

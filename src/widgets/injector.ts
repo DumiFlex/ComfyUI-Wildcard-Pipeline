@@ -203,6 +203,15 @@ export function create(node: InjectorNode, inputName: string) {
   );
   const currentJson = ref(initial);
 
+  // State-driven minWidth. Initialized to the worst-case-fits value so
+  // the node has a sensible width on first paint, before Vue has
+  // mounted and emitted its computed value. InjectorWidget emits a
+  // `request-min-width` event whenever its row state changes, which
+  // updates this var + triggers a relayout. createDomWidgetHost wires
+  // `() => dynamicMinWidth` into widget.computeLayoutSize so each
+  // litegraph layout pass reads the current value.
+  let dynamicMinWidth = 470;
+
   // Hoisted refs + compute fns so normalizeSlots (defined below in
   // create() scope, OUTSIDE setup()) can force a refresh of
   // reactiveFromGraph state after renaming inputs[i].name. The
@@ -414,6 +423,19 @@ export function create(node: InjectorNode, inputName: string) {
               disconnectFn.call(node, idx);
             }
           },
+          // State-driven minWidth. InjectorWidget computes the
+          // required width from its current props/state (which rows
+          // render which children, e.g. type chip + conflict badge)
+          // and emits it here whenever the value changes. We update
+          // our local ref + tell the host to relayout — litegraph
+          // then queries computeLayoutSize, which returns our latest
+          // value, and applies it via the standard 3-step. No
+          // observers, no measurement, no feedback loop.
+          onRequestMinWidth: (w: number) => {
+            if (w === dynamicMinWidth) return;
+            dynamicMinWidth = w;
+            host.requestRelayout();
+          },
         });
     },
   };
@@ -426,18 +448,14 @@ export function create(node: InjectorNode, inputName: string) {
     // body taller than the widget content, breaking the autosize
     // contract. ResizeObserver grows past this whenever rows render.
     minHeight: 36,
-    // Width sized to fit the worst-case row layout without truncation:
-    //   toggle (16) + icon (16) + slot tag max (96) + type chip (~50)
-    //   + vbind min (80) + conflict dot (7) + conflict badge max (88)
-    //   + actions (40) + 7 inter-child gaps (42) + row padding (12)
-    //   + border-left (4) + list padding (14) + widget border (2)
-    //   ≈ 467px → rounded to 470.
-    // Static value because every observer-driven auto-resize approach
-    // we tried created feedback loops with litegraph's re-render.
-    // Surveyed nodes (rgthree, KJNodes, LoRA Manager, comfy_mtb) all
-    // use static minWidth or pull-based callbacks — none observe DOM
-    // mutations for sizing.
-    minWidth: 470,
+    // Pull-based width getter — called by litegraph during every
+    // relayout. The actual value is computed in InjectorWidget.vue's
+    // requiredMinWidth formula (sum of CSS-known child widths based
+    // on which children are currently rendered) and emitted via
+    // `request-min-width` whenever state changes. We stash it in
+    // `dynamicMinWidth` and call host.requestRelayout() so litegraph
+    // re-reads the getter.
+    minWidth: () => dynamicMinWidth,
     onValueRestored: (v: string) => {
       if (v !== currentJson.value) currentJson.value = v;
     },
