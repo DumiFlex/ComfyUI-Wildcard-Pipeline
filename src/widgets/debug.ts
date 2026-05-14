@@ -13,6 +13,12 @@ interface DebugNode extends MountTargetNode {
 
 export function create(node: DebugNode, inputName: string) {
   const snapshot = ref("");
+  // State-driven minWidth — seed with the no-filter-visible value;
+  // DebugViewer's `request-min-width` emit updates this when the user
+  // switches tabs (trace/picks tabs reveal the filter input which
+  // widens the toolbar) or the panel chrome otherwise changes.
+  let dynamicMinWidth = 372;
+  let host: ReturnType<typeof createDomWidgetHost> | null = null;
   const wrapper: Component = {
     setup() {
       const nodeMode = reactiveFromGraph(
@@ -23,18 +29,29 @@ export function create(node: DebugNode, inputName: string) {
       return () => h(DebugViewer, {
         snapshot: snapshot.value,
         nodeMode: nodeMode.value,
+        onRequestMinWidth: (w: number) => {
+          if (w === dynamicMinWidth) return;
+          dynamicMinWidth = w;
+          // `host` is forward-declared so the immediate-mode emit
+          // that fires during setup doesn't TDZ on it. By the time
+          // a real tab-switch emit lands, host has been assigned.
+          host?.requestRelayout();
+        },
       });
     },
   };
   // Backend declares `viewer` as required but ignores it at runtime — seed an
   // empty string so workflow serialization and prompt validation both pass.
-  const host = createDomWidgetHost(node, inputName, wrapper, {
+  host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: "",
     // Fill mode — viewer fills whatever node size the user gives it. Snapshot
     // doesn't push the node larger; oversized snapshots scroll inside.
     fillHost: true,
     minHeight: 200,
-    minWidth: 280,
+    // Pull-based getter — litegraph reads on each layout pass.
+    // DebugViewer recomputes from CSS-known toolbar widths whenever
+    // active tab changes; we expose the current value here.
+    minWidth: () => dynamicMinWidth,
   });
   attachThemeDetector(host.widget.element, app);
   const orig = node.onExecuted;

@@ -157,7 +157,12 @@
  * the extension — Module rows, Injector rows, anything future that
  * uses the same primitives. No per-widget toggle wiring needed. */
 
-.wp-kind-style-icon .wp-kind-chip {
+/* Debug trace's type cell is the ONLY column carrying the kind
+ * signal in that table (no paired `.wp-row-type-icon`), so hiding
+ * its chip in icon-mode would erase the type column entirely.
+ * Exempt it via `:not(.wp-dbg-trace-type)` so Debug ALWAYS reads
+ * with badges regardless of the global display preference. */
+.wp-kind-style-icon .wp-kind-chip:not(.wp-dbg-trace-type) {
   display: none !important;
 }
 /* Bundle's chip mirrors the kind-chip pattern — hide it when the

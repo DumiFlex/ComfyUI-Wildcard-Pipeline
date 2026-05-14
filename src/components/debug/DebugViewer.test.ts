@@ -174,9 +174,35 @@ describe("DebugViewer", () => {
     expect(types[2].classes()).toContain("wp-kind-chip--combine");
     expect(types[3].classes()).toContain("wp-kind-chip--derivation");
     expect(types[4].classes()).toContain("wp-kind-chip--constraint");
-    // Injector trace's `type` field is "str" (from injector_node.py),
-    // doesn't map to a known kind — falls back to unknown variant.
-    expect(types[5].classes()).toContain("wp-kind-chip--unknown");
+    // Injector trace entries (node === "WP_ContextInjector") render
+    // with the dedicated `injector` kind chip — the raw `type` field
+    // carries the value type (str/int/float/bool) which surfaces
+    // separately as a `.wp-dbg-trace-subtype` secondary chip.
+    expect(types[5].classes()).toContain("wp-kind-chip--injector");
+  });
+
+  it("Injector trace row surfaces value-type subchip + TPL badge for template path", async () => {
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        { node: "WP_ContextInjector", binding: "raw_str",   type: "str",            status: "ok" },
+        { node: "WP_ContextInjector", binding: "raw_int",   type: "int",            status: "ok" },
+        { node: "WP_ContextInjector", binding: "raw_float", type: "float",          status: "ok" },
+        { node: "WP_ContextInjector", binding: "tpl_row",   type: "str(template)",  status: "ok" },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const subs = wrapper.findAll(".wp-dbg-trace-subtype");
+    expect(subs).toHaveLength(4);
+    expect(subs[0].text()).toBe("STR");
+    expect(subs[1].text()).toBe("INT");
+    expect(subs[2].text()).toBe("FLOAT");
+    // template path: subtype shows the rendered type (STR) — the
+    // template-ness is conveyed by the separate TPL badge.
+    expect(subs[3].text()).toBe("STR");
+    const tplBadges = wrapper.findAll(".wp-dbg-trace-tpl");
+    expect(tplBadges).toHaveLength(1);
+    expect(tplBadges[0].text()).toBe("TPL");
   });
 
   it("Trace row for module with no bindings still surfaces (constraint-style)", async () => {
@@ -601,5 +627,112 @@ describe("DebugViewer", () => {
     expect(refChip.exists()).toBe(true);
     expect(refChip.text()).toBe("@fabric");
     expect(refChip.classes()).not.toContain("wp-dbg-ref--unknown");
+  });
+
+  it("right-click on a trace row opens the shared ContextMenu with copy actions", async () => {
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        { id: "w1", type: "wildcard", status: "ok", seed: 12345, writes: [{ variable: "myvar", value: "myvalue" }] },
+      ],
+    });
+    const wrapper = mount(DebugViewer, {
+      props: { snapshot: snap },
+      attachTo: document.body,
+    });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    await wrapper.find(".wp-dbg-trace-row:not(.wp-dbg-trace-row--head)").trigger("contextmenu", { clientX: 50, clientY: 50 });
+    const menu = document.querySelector(".wp-ctxmenu");
+    expect(menu).not.toBeNull();
+    const labels = Array.from(document.querySelectorAll(".wp-ctxmenu__title")).map((n) => n.textContent);
+    expect(labels).toContain("Copy value");
+    expect(labels).toContain("Copy $myvar");
+    expect(labels).toContain("Copy seed");
+    expect(labels).toContain("Copy module id");
+    wrapper.unmount();
+  });
+
+  it("Trace assigns unique run-order numbers to duplicate variables", async () => {
+    // Chain pattern: two modules both write `$chain_a`. Each row
+    // should get a distinct .wp-dbg-trace-seq value + a unique key.
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        { id: "m1", type: "wildcard", status: "ok", writes: [{ variable: "chain_a", value: "A→B-leaf" }] },
+        { id: "m2", type: "wildcard", status: "ok", writes: [{ variable: "other",   value: "x" }] },
+        { id: "m3", type: "wildcard", status: "ok", writes: [{ variable: "chain_a", value: "A-leaf-1", overwrite: true }] },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const seqCells = wrapper.findAll(".wp-dbg-trace-row:not(.wp-dbg-trace-row--head) .wp-dbg-trace-seq");
+    expect(seqCells.map((w) => w.text())).toEqual(["1", "2", "3"]);
+  });
+
+  it("filter narrows trace rows by $var name", async () => {
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        { id: "w1", type: "wildcard", status: "ok", writes: [{ variable: "alpha", value: "a-value" }] },
+        { id: "w2", type: "wildcard", status: "ok", writes: [{ variable: "beta",  value: "b-value" }] },
+        { id: "w3", type: "wildcard", status: "ok", writes: [{ variable: "gamma", value: "g-value" }] },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    expect(wrapper.findAll(".wp-dbg-trace-row:not(.wp-dbg-trace-row--head)")).toHaveLength(3);
+    const input = wrapper.find<HTMLInputElement>('[data-test="dbg-filter"]');
+    await input.setValue("bet");
+    const rows = wrapper.findAll(".wp-dbg-trace-row:not(.wp-dbg-trace-row--head)");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text()).toContain("$beta");
+  });
+
+  it("pinned trace rows stay visible even when filter would exclude them", async () => {
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        { id: "w1", type: "wildcard", status: "ok", writes: [{ variable: "alpha", value: "a" }] },
+        { id: "w2", type: "wildcard", status: "ok", writes: [{ variable: "beta",  value: "b" }] },
+      ],
+    });
+    const wrapper = mount(DebugViewer, {
+      props: { snapshot: snap },
+      attachTo: document.body,
+    });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    // Pin alpha via the ctxmenu.
+    await wrapper.findAll(".wp-dbg-trace-row:not(.wp-dbg-trace-row--head)")[0].trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const pinItem = Array.from(document.querySelectorAll<HTMLElement>(".wp-ctxmenu__item")).find(
+      (el) => el.querySelector(".wp-ctxmenu__title")?.textContent?.startsWith("Pin"),
+    );
+    expect(pinItem).toBeTruthy();
+    pinItem!.click();
+    await wrapper.vm.$nextTick();
+    // Now filter to "beta" — alpha would normally be excluded but it's pinned.
+    const input = wrapper.find<HTMLInputElement>('[data-test="dbg-filter"]');
+    await input.setValue("beta");
+    const labels = wrapper.findAll(".wp-dbg-trace-row:not(.wp-dbg-trace-row--head) .wp-dbg-trace-label")
+      .map((w) => w.text());
+    expect(labels).toContain("$alpha");
+    expect(labels).toContain("$beta");
+    wrapper.unmount();
+  });
+
+  it("right-click on a pick row opens the shared ContextMenu", async () => {
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        { id: "w1", type: "wildcard", status: "ok", writes: [{ variable: "color", value: "blue" }] },
+      ],
+      __wp_picks__: {
+        w1: { value: "blue", sub_category: "primary" },
+      },
+    });
+    const wrapper = mount(DebugViewer, {
+      props: { snapshot: snap },
+      attachTo: document.body,
+    });
+    await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
+    await wrapper.find(".wp-dbg-pick-row:not(.wp-dbg-pick-row--head)").trigger("contextmenu", { clientX: 50, clientY: 50 });
+    const labels = Array.from(document.querySelectorAll(".wp-ctxmenu__title")).map((n) => n.textContent);
+    expect(labels).toContain("Copy value");
+    expect(labels).toContain("Copy $color");
+    wrapper.unmount();
   });
 });
