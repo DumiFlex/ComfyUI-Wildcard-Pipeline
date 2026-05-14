@@ -51,9 +51,13 @@
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .wp-btn--icon-sm:hover {
+  /* Only the BACKGROUND lifts on hover. Border + icon color are
+   * controlled by the variant classes (.wp-btn--danger/--accent/--warn)
+   * so the colored ring stays consistent rest→hover and the icon
+   * flips to the variant tone on hover. Without this split the base
+   * hover's border-color would fight the variant's at-rest border-
+   * color (same specificity → source-order coin flip). */
   background: var(--wp-bg4, var(--wp-bg2));
-  border-color: var(--wp-border, var(--wp-border2));
-  color: var(--wp-text);
 }
 .wp-btn--icon-sm .pi { font-size: 11px; }
 .wp-btn--icon-sm.is-active {
@@ -64,13 +68,36 @@
   color: var(--wp-warn);
   background: color-mix(in srgb, var(--wp-warn) 14%, transparent);
 }
-/* Danger variant — red icon + red-tinted border on hover. NOT a bg
- * flip — the row's own hover bg stays the dominant surface, the
- * red ring just signals "destructive action on THIS row". */
-.wp-btn--icon-sm.wp-btn--danger:hover {
-  background: transparent;
-  color: var(--wp-danger);
+/* Tonal variants — colored border at REST (signals what kind of
+ * action this button does even when idle), icon flips to the same
+ * tone on HOVER. Bg stays at rest's value (bg2, bundle-tinted, etc).
+ *
+ *   .wp-btn--danger  →  red    (destructive: trash / disconnect / delete)
+ *   .wp-btn--accent  →  indigo (toggles: internal flag, mute, etc)
+ *   .wp-btn--warn    →  amber  (cautionary: seed lock, drift ack, etc)
+ *
+ * Border lives on the variant at rest (no :hover) — so the user sees
+ * the action's intent from across the row without hovering, and the
+ * border stays put on hover (only the icon changes). Bundle's
+ * .wp-bundle-action overrides border-color back to var(--b) so the
+ * bundle-color anchor wins inside a bundle frame. */
+.wp-btn--icon-sm.wp-btn--danger {
   border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
+}
+.wp-btn--icon-sm.wp-btn--danger:hover {
+  color: var(--wp-danger);
+}
+.wp-btn--icon-sm.wp-btn--accent {
+  border-color: color-mix(in srgb, var(--wp-accent) 40%, var(--wp-border-soft, var(--wp-border2)));
+}
+.wp-btn--icon-sm.wp-btn--accent:hover {
+  color: var(--wp-accent);
+}
+.wp-btn--icon-sm.wp-btn--warn {
+  border-color: color-mix(in srgb, var(--wp-warn) 40%, var(--wp-border-soft, var(--wp-border2)));
+}
+.wp-btn--icon-sm.wp-btn--warn:hover {
+  color: var(--wp-warn);
 }
 
 /* ── Row type icon ───────────────────────────────────────────────── */

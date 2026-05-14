@@ -231,7 +231,7 @@ function onDragEnd(): void {
     <div class="wp-row-actions" draggable="false">
       <button
         type="button"
-        class="wp-btn--icon-sm"
+        class="wp-btn--icon-sm wp-btn--accent"
         :class="{ 'is-active': row.internal }"
         data-test="inj-row-internal"
         draggable="false"

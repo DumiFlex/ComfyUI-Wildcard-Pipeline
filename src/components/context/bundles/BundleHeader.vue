@@ -255,22 +255,14 @@ const summary = computed(() => {
  * .wp-btn--icon-sm. Bundle-specific tweak: bg + border tinted with
  * the bundle frame color so the action reads as belonging to THIS
  * bundle (instead of looking like a generic row-level icon button).
- * Hover bumps the tint and (via .wp-btn--danger:hover from shared)
- * flips the icon to danger-red while keeping the bundle bg. */
+ * Hover bumps the bundle-color tint; shared `.wp-btn--danger:hover`
+ * adds the red icon + red-tinted border without overriding the
+ * bundle's bg — same hover behavior every other danger button gets. */
 .wp-bundle-action {
   background: color-mix(in srgb, var(--b) 18%, transparent);
   border-color: var(--b);
 }
 .wp-bundle-action:hover {
   background: color-mix(in srgb, var(--b) 32%, transparent);
-}
-/* Override the shared .wp-btn--icon-sm.wp-btn--danger:hover so the
- * bundle-color bg stays visible even when the danger hover fires
- * (shared resets bg to transparent — we want the bundle anchor
- * preserved here). */
-.wp-bundle-action.wp-btn--danger:hover {
-  background: color-mix(in srgb, var(--b) 32%, transparent);
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--b));
-  color: var(--wp-danger);
 }
 </style>
