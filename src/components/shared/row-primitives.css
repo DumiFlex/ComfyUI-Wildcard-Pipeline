@@ -68,33 +68,22 @@
   color: var(--wp-warn);
   background: color-mix(in srgb, var(--wp-warn) 14%, transparent);
 }
-/* Tonal variants — colored border at REST (signals what kind of
- * action this button does even when idle), icon flips to the same
- * tone on HOVER. Bg stays at rest's value (bg2, bundle-tinted, etc).
+/* Tonal hover variants — ONLY the icon color flips on hover. Border
+ * stays whatever the base (or a consumer-scoped override) painted
+ * at rest. No flashy colored ring fights the row's visual weight;
+ * the icon-color flip is enough to telegraph "this does X".
  *
  *   .wp-btn--danger  →  red    (destructive: trash / disconnect / delete)
  *   .wp-btn--accent  →  indigo (toggles: internal flag, mute, etc)
  *   .wp-btn--warn    →  amber  (cautionary: seed lock, drift ack, etc)
  *
- * Border lives on the variant at rest (no :hover) — so the user sees
- * the action's intent from across the row without hovering, and the
- * border stays put on hover (only the icon changes). Bundle's
- * .wp-bundle-action overrides border-color back to var(--b) so the
- * bundle-color anchor wins inside a bundle frame. */
-.wp-btn--icon-sm.wp-btn--danger {
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
-}
+ * Consumer-scoped border-color overrides (e.g. .wp-bundle-action
+ * setting border-color: var(--b)) survive hover untouched. */
 .wp-btn--icon-sm.wp-btn--danger:hover {
   color: var(--wp-danger);
 }
-.wp-btn--icon-sm.wp-btn--accent {
-  border-color: color-mix(in srgb, var(--wp-accent) 40%, var(--wp-border-soft, var(--wp-border2)));
-}
 .wp-btn--icon-sm.wp-btn--accent:hover {
   color: var(--wp-accent);
-}
-.wp-btn--icon-sm.wp-btn--warn {
-  border-color: color-mix(in srgb, var(--wp-warn) 40%, var(--wp-border-soft, var(--wp-border2)));
 }
 .wp-btn--icon-sm.wp-btn--warn:hover {
   color: var(--wp-warn);
