@@ -151,10 +151,14 @@ export interface Conflict {
 }
 
 /** Canonical label per ConflictType. Use this everywhere conflict text
- *  surfaces (card tooltip, subgraph badge, future log viewers) so the
- *  wording stays in sync across surfaces — drift between
- *  "overrides upstream" / "shadows" / "shadow" is a real reported UX
- *  bug. Always paired with `$${variable}` by the caller. */
+ *  surfaces in TOOLTIP form (card tooltip, subgraph badge, future log
+ *  viewers) so the wording stays in sync across surfaces — drift
+ *  between "overrides upstream" / "shadows" / "shadow" is a real
+ *  reported UX bug. Always paired with `$${variable}` by the caller.
+ *
+ *  For the short chip label rendered inside row badges, use
+ *  `shortConflictLabel` instead — keeps both row surfaces (module +
+ *  injector) writing the same compact wording. */
 export function labelFor(type: ConflictType): string {
   if (type === "shadows_upstream") return "overrides upstream";
   if (type === "duplicate_variable") return "duplicate";
@@ -167,6 +171,26 @@ export function labelFor(type: ConflictType): string {
   if (type === "constraint_source_in_downstream") return "source in downstream";
   if (type === "injector_binding_missing") return "no binding";
   return type;
+}
+
+/** Compact label for the in-row conflict chip. Mirrors the wording
+ *  ModuleRow uses so injector rows and module rows surface identical
+ *  badges for the same conflict type — chip width budget is tight,
+ *  full sentences live in the tooltip via `labelFor`. */
+export function shortConflictLabel(type: ConflictType): string {
+  switch (type) {
+    case "shadows_upstream":                return "override";
+    case "duplicate_variable":              return "duplicate";
+    case "missing_template_variable":       return "missing var";
+    case "constraint_source_after_self":    return "src after";
+    case "constraint_source_missing":       return "src missing";
+    case "constraint_target_before_self":   return "tgt before";
+    case "constraint_target_in_upstream":   return "tgt upstream";
+    case "constraint_target_missing":       return "tgt missing";
+    case "constraint_source_in_downstream": return "src downstream";
+    case "injector_binding_missing":        return "no binding";
+    default:                                return "conflict";
+  }
 }
 
 /** Scan an injector node's rows for missing connections + duplicate

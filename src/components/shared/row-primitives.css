@@ -94,6 +94,68 @@
   color: var(--wp-warn);
 }
 
+/* ── Collapse caret button ───────────────────────────────────────── */
+
+/* Small 14px-wide chevron toggle used at a row's leading edge to
+ * show/hide a summary line below the row header. Same dim default
+ * + hover-to-text-bright pattern as other row controls. */
+.wp-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--wp-text3);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+}
+.wp-collapse-btn .pi { font-size: 10px; }
+.wp-collapse-btn:hover { color: var(--wp-text); }
+
+/* ── Summary line ────────────────────────────────────────────────── */
+
+/* Slim mono-font preview row that lives below a row's header. Used
+ * by ModuleRow for tokenized template content and by InjectorRow for
+ * the binding template preview. Padding-left is a hint — consumers
+ * may override to align the summary under their specific header
+ * column (modules align past handle+collapse+toggle+icon at 36px). */
+.wp-summary {
+  color: var(--wp-text2);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 11px;
+  padding: 2px 4px 2px 36px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wp-summary__main {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ── Vue transition: `wp-collapse` ───────────────────────────────── */
+
+/* Pairs with `<Transition name="wp-collapse">` to animate the summary
+ * line in/out via max-height + opacity. Cap matches typical summary
+ * height (32px); consumers with taller summaries can override the
+ * `enter-to` / `leave-from` max-height in their scoped block. */
+.wp-collapse-enter-active,
+.wp-collapse-leave-active {
+  transition: max-height 0.2s ease, opacity 0.15s, padding 0.15s;
+  overflow: hidden;
+}
+.wp-collapse-enter-from,
+.wp-collapse-leave-to { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
+.wp-collapse-enter-to,
+.wp-collapse-leave-from { max-height: 32px; opacity: 1; }
+
 /* ── Row type icon ───────────────────────────────────────────────── */
 
 /* Canonical pi-icon wrapper used at the start of a list row to

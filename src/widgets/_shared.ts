@@ -150,13 +150,27 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      // Always match content size on the height axis. Width is left to the
-      // user (drag wider preserved). If user wants more vertical space they
-      // collapse modules / use whitespace.
-      if (cur[1] !== min[1]) {
-        resizable.setSize([Math.max(cur[0], min[0]), min[1]]);
-        resizable.setDirtyCanvas?.(true, true);
-      }
+      // Delta-check the height axis too: if cur[1] matches what WE
+      // last set, the change came from us → safe to follow min[1] up
+      // OR down (content shrank, collapse modules, etc). If cur[1]
+      // differs, the user dragged taller — preserve their value, only
+      // grow if content demands more room.
+      const userControlsHeight =
+        lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1;
+      const targetH = userControlsHeight
+        ? Math.max(cur[1], min[1])  // preserve drag; grow only if content demands
+        : min[1];                    // we own height; follow min up OR down
+      // Width axis: same delta-check pattern. requestRelayout sets
+      // lastAutoSetWidth too, so a width-grow there is preserved by
+      // pushSize here when it fires shortly after.
+      const userControlsWidth =
+        lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
+      const targetW = userControlsWidth ? Math.max(cur[0], min[0]) : Math.max(cur[0], min[0]);
+      if (Math.abs(cur[0] - targetW) < 1 && Math.abs(cur[1] - targetH) < 1) return;
+      resizable.setSize([targetW, targetH]);
+      lastAutoSetWidth = targetW;
+      lastAutoSetHeight = targetH;
+      resizable.setDirtyCanvas?.(true, true);
     });
   }
   // Skip the autosize observer in fill mode — node size is user-controlled,
@@ -177,21 +191,21 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // debouncer — long enough to outlive a single paint cycle, short
   // enough that real successive state changes still apply promptly.
   //
-  // Width preservation: we track the width WE LAST SET via
-  // `lastAutoSetWidth`. If the node's current width matches that, we
-  // know the change came from us — safe to follow min[0] up OR down.
-  // If the current width differs, the user (or another extension)
-  // resized the node manually; we respect their width and only grow
-  // it when min[0] demands more room. This is the KJNodes-style
-  // "delta-check" pattern: by attributing each cur[0] to either
-  // "us" or "not-us", we can distinguish "minWidth dropped because
-  // state cleared" (should shrink) from "user dragged wider" (should
-  // preserve).
+  // Size preservation: track BOTH axes independently via the KJNodes-
+  // style "delta-check" pattern. We record `lastAutoSetWidth` /
+  // `lastAutoSetHeight` whenever WE call setSize; on the next
+  // requestRelayout we compare cur to those values. Match → the
+  // change came from us, safe to follow min up OR down. Mismatch →
+  // the user (or another extension) resized that axis manually; we
+  // preserve their value and only grow if min demands more room.
   //
-  // Height axis still always snaps to content (driven separately by
-  // the height observer).
+  // Why each axis individually: the user might drag the node wider
+  // (preserve width on tab-change) while autosize legitimately wants
+  // to shrink the height (snapshot cleared, viewport collapsed). The
+  // two states are independent.
   let relayouting = false;
   let lastAutoSetWidth = 0;
+  let lastAutoSetHeight = 0;
   function requestRelayout(): void {
     if (relayouting) return;
     relayouting = true;
@@ -204,13 +218,30 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       const targetW = userControlsWidth
         ? Math.max(cur[0], min[0])  // preserve drag; grow only if needed
         : min[0];                    // we own width; follow min up OR down
-      if (Math.abs(cur[0] - targetW) < 1 && cur[1] === min[1]) return;
-      resizable.setSize([targetW, min[1]]);
-      // Record what WE asked for. Even if litegraph clamps slightly
-      // (subpixel rounding, snap-to-grid), the reverse delta check
-      // tolerates ±1px so a small clamp doesn't get misread as a
-      // user drag.
+      // Height policy depends on autosize mode:
+      //   - fillHost (Debug): height is 100% user-controlled. No
+      //     ResizeObserver fires to seed `lastAutoSetHeight`, so the
+      //     delta-check would always read "we own height" on first
+      //     call and snap the node back to min. Preserve cur[1] but
+      //     respect the floor — never shrink the user's drag.
+      //   - normal mode: pushSize observer drives height; this path
+      //     is rarely the height-mover, but if it does fire (an
+      //     explicit width-state change emit), preserve user drags
+      //     via the delta-check.
+      const userControlsHeight =
+        options.fillHost
+        || (lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1);
+      const targetH = userControlsHeight
+        ? Math.max(cur[1], min[1])
+        : min[1];
+      if (Math.abs(cur[0] - targetW) < 1 && Math.abs(cur[1] - targetH) < 1) return;
+      resizable.setSize([targetW, targetH]);
+      // Record what WE asked for on both axes. Even if litegraph
+      // clamps slightly (subpixel rounding, snap-to-grid), the
+      // reverse delta check tolerates ±1px so a small clamp doesn't
+      // get misread as a user drag.
       lastAutoSetWidth = targetW;
+      lastAutoSetHeight = targetH;
       resizable.setDirtyCanvas?.(true, true);
     } finally {
       setTimeout(() => { relayouting = false; }, 32);
@@ -675,6 +706,24 @@ export interface InjectorRow {
   /** True = mark binding for assembler chip strip skip (still writes
    *  to ctx, just hidden from the chip strip UI). */
   internal: boolean;
+  /** When true, the row's summary line is hidden (default = expanded
+   *  = false). Mirrors ModuleRow's per-row collapse pattern so users
+   *  can hide the preview chrome on rows whose configuration is
+   *  stable. Persists in the widget JSON via the same `change` emit
+   *  the other field updates use. */
+  _collapsed?: boolean;
+  /** Optional binding template — when set + non-empty, the engine
+   *  writes the substituted template into ctx[binding] instead of the
+   *  raw socket value. Supports `$<slot_name>` refs to other rows'
+   *  sockets in the same injector (e.g. `"i love $input_0"`). Empty /
+   *  null = pass-through (legacy behavior: ctx[binding] = raw socket
+   *  value). The InjectorBindingModal manages this field; row chrome
+   *  surfaces a small badge when a template is active so users see at
+   *  a glance which rows transform their values. Engine plumbing lives
+   *  in wp_nodes/injector_node.py — when this field is set, the engine
+   *  substitutes `$<slot_name>` tokens with the live socket value at
+   *  each referenced slot before writing to ctx. */
+  template?: string | null;
 }
 
 export function emptyInjectorRowsValue(): InjectorRowsValue {

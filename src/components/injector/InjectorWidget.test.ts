@@ -54,6 +54,144 @@ describe("InjectorWidget — lifecycle", () => {
   });
 });
 
+describe("InjectorWidget — template persistence (Phase 6)", () => {
+  const ONE_ROW = JSON.stringify({
+    version: 1,
+    rows: [{ _uid: "uid_a", slot_name: "input_0", binding: "phrase", enabled: true, internal: false }],
+  });
+
+  it("template typed in the edit modal flows into the persisted JSON via change emit", async () => {
+    const w = mount(InjectorWidget, {
+      props: {
+        nodeId: 7,
+        initialJson: ONE_ROW,
+        connectedSlots: ["input_0"],
+        slotTypes: { input_0: "STRING" },
+      },
+      attachTo: document.body,
+    });
+    // Open the row's ctxmenu, pick Edit, type a template, Save.
+    await w.find('[data-uid="uid_a"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const editItem = Array.from(document.querySelectorAll<HTMLElement>(".wp-ctxmenu__item")).find(
+      (el) => el.querySelector(".wp-ctxmenu__title")?.textContent === "Edit",
+    );
+    expect(editItem).toBeTruthy();
+    editItem!.click();
+    await w.vm.$nextTick();
+
+    const textarea = document.querySelector<HTMLTextAreaElement>('[data-test="ibm-template"]');
+    expect(textarea).not.toBeNull();
+    textarea!.value = "i love $input_0";
+    textarea!.dispatchEvent(new Event("input"));
+    await w.vm.$nextTick();
+
+    const saveBtn = document.querySelector<HTMLButtonElement>('[data-test="ibm-save"]');
+    expect(saveBtn).not.toBeNull();
+    saveBtn!.click();
+    await w.vm.$nextTick();
+
+    const changes = w.emitted("change")!;
+    const lastJson = changes[changes.length - 1][0] as string;
+    const parsed = JSON.parse(lastJson);
+    expect(parsed.rows[0].template).toBe("i love $input_0");
+    w.unmount();
+  });
+});
+
+describe("InjectorWidget — right-click context menu (Phase 4)", () => {
+  const TWO_ROWS = JSON.stringify({
+    version: 1,
+    rows: [
+      { _uid: "uid_a", slot_name: "input_0", binding: "a", enabled: true, internal: false },
+      { _uid: "uid_b", slot_name: "input_1", binding: "b", enabled: false, internal: false },
+    ],
+  });
+
+  it("opens the shared ContextMenu on right-click with the expected entries", async () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: TWO_ROWS, connectedSlots: ["input_0", "input_1"] },
+      attachTo: document.body,
+    });
+    await w.find('[data-uid="uid_a"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const menu = document.querySelector(".wp-ctxmenu");
+    expect(menu).not.toBeNull();
+    const labels = Array.from(document.querySelectorAll(".wp-ctxmenu__title")).map(
+      (n) => n.textContent,
+    );
+    expect(labels).toContain("Edit");
+    expect(labels).toContain("Disable");          // row a is enabled
+    expect(labels).toContain("Collapse");         // default: _collapsed unset → falsy → expanded
+    expect(labels).toContain("Move to top");
+    expect(labels).toContain("Move to bottom");
+    expect(labels).toContain("Disconnect");
+    w.unmount();
+  });
+
+  it("Move to top is disabled on the first row", async () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: TWO_ROWS, connectedSlots: ["input_0", "input_1"] },
+      attachTo: document.body,
+    });
+    await w.find('[data-uid="uid_a"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const items = Array.from(document.querySelectorAll<HTMLElement>(".wp-ctxmenu__item"));
+    const moveTop = items.find((el) => el.querySelector(".wp-ctxmenu__title")?.textContent === "Move to top");
+    expect(moveTop?.classList.contains("wp-ctxmenu__item--disabled")).toBe(true);
+    w.unmount();
+  });
+
+  it("renders the scope header with type icon + 'Type · $binding' label", async () => {
+    const w = mount(InjectorWidget, {
+      props: {
+        nodeId: 7,
+        initialJson: TWO_ROWS,
+        connectedSlots: ["input_0", "input_1"],
+        slotTypes: { input_0: "STRING", input_1: "INT" },
+      },
+      attachTo: document.body,
+    });
+    await w.find('[data-uid="uid_a"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const header = document.querySelector(".wp-ctxmenu__header");
+    expect(header).not.toBeNull();
+    expect(header!.querySelector(".pi-pencil")).not.toBeNull();
+    expect(header!.querySelector(".wp-ctxmenu__header-label")!.textContent).toBe("String · $a");
+    w.unmount();
+  });
+
+  it("header label falls back to slot_name when binding is empty", async () => {
+    const EMPTY_BINDING = JSON.stringify({
+      version: 1,
+      rows: [{ _uid: "uid_x", slot_name: "input_0", binding: "", enabled: true, internal: false }],
+    });
+    const w = mount(InjectorWidget, {
+      props: {
+        nodeId: 7,
+        initialJson: EMPTY_BINDING,
+        connectedSlots: ["input_0"],
+        slotTypes: { input_0: "INT" },
+      },
+      attachTo: document.body,
+    });
+    await w.find('[data-uid="uid_x"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const label = document.querySelector(".wp-ctxmenu__header-label")!.textContent;
+    expect(label).toBe("Int · input_0");
+    w.unmount();
+  });
+
+  it("right-click on a disabled row swaps the Disable entry to Enable", async () => {
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: TWO_ROWS, connectedSlots: ["input_0", "input_1"] },
+      attachTo: document.body,
+    });
+    await w.find('[data-uid="uid_b"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const labels = Array.from(document.querySelectorAll(".wp-ctxmenu__title")).map(
+      (n) => n.textContent,
+    );
+    expect(labels).toContain("Enable");
+    expect(labels).not.toContain("Disable");
+    w.unmount();
+  });
+});
+
 describe("InjectorWidget — collapse-connections button", () => {
   it("renders the toolbar button with merge-wires label + icon when expanded (default)", () => {
     const w = mount(InjectorWidget, {

@@ -78,7 +78,21 @@ function gotoEdge(edge: "first" | "last") {
   activeIndex.value = edge === "first" ? idxs[0] : idxs[idxs.length - 1];
 }
 
-function onWindowClick() {
+function onWindowPointerDown(ev: PointerEvent) {
+  // Close on any pointerdown outside the menu. Capture phase so
+  // inner `@click.stop` handlers (trace value cells, seed buttons,
+  // etc) can't swallow the close — pointerdown fires before click,
+  // and the capture-phase listener runs before any descendant's
+  // own listener could stop propagation. Click inside the menu
+  // is gated by the `@click.stop` on the UL — pointerdown there
+  // bubbles, but the menu element is detected by composedPath()
+  // so we don't close.
+  const path = ev.composedPath();
+  for (const el of path) {
+    if (el instanceof HTMLElement && el.classList?.contains("wp-ctxmenu")) {
+      return;
+    }
+  }
   emit("close");
 }
 
@@ -102,19 +116,23 @@ function onKey(ev: KeyboardEvent) {
 watch(() => props.visible, async (v) => {
   if (v) {
     activeIndex.value = -1;
-    window.addEventListener("click", onWindowClick);
+    // Capture phase so descendant `@click.stop` handlers (trace
+    // value cells, seed buttons, etc) can't prevent the close.
+    window.addEventListener("pointerdown", onWindowPointerDown, true);
     window.addEventListener("keydown", onKey);
-    // Defer one tick so the click that opened the menu doesn't immediately
-    // close it — and so the first ArrowDown lands on the first item.
+    // Defer one tick so the right-click that opened the menu doesn't
+    // immediately close it (the synthetic mousedown that preceded the
+    // contextmenu happens BEFORE the listener is wired, so this is
+    // mostly belt-and-braces).
     await nextTick();
   } else {
-    window.removeEventListener("click", onWindowClick);
+    window.removeEventListener("pointerdown", onWindowPointerDown, true);
     window.removeEventListener("keydown", onKey);
   }
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("click", onWindowClick);
+  window.removeEventListener("pointerdown", onWindowPointerDown, true);
   window.removeEventListener("keydown", onKey);
 });
 
@@ -138,6 +156,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
       role="menu"
       @click.stop
       @contextmenu.prevent
+      @mouseleave="activeIndex = -1"
     >
       <!-- Header — kind icon + scope label, only renders when prop provided.
            Non-interactive — divider between header and items handled by

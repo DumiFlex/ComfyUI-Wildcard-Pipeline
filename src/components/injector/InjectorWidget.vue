@@ -9,9 +9,11 @@ import {
   type InjectorRowsValue,
 } from "../../widgets/_shared";
 import { reorderInjectorRows } from "../../widgets/injector";
-import { labelFor, scanInjectorConflicts } from "../../extension/conflicts";
+import { shortConflictLabel, scanInjectorConflicts } from "../../extension/conflicts";
 import { applyFlip, captureRects, MOTION_FLIP_MS } from "../shared/flip";
 import InjectorRowComp from "./InjectorRow.vue";
+import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import InjectorBindingModal from "./InjectorBindingModal.vue";
 
 // NOTE: when we wire enter/leave animations (row added on connect,
 // row removed on disconnect) we'll pass `{ classes: INJ_ANIM_CLASSES }`
@@ -116,7 +118,7 @@ const conflictByUid = computed<Record<string, RowConflict>>(() => {
   );
   const rank: Record<RowConflict["severity"], number> = { info: 0, warning: 1, error: 2 };
   for (const c of conflicts) {
-    const next: RowConflict = { severity: c.severity, label: labelFor(c.type) };
+    const next: RowConflict = { severity: c.severity, label: shortConflictLabel(c.type) };
     const prev = out[c.moduleId];
     if (!prev || rank[next.severity] > rank[prev.severity]) out[c.moduleId] = next;
   }
@@ -331,6 +333,23 @@ watch(
 // animation no-ops under reduce-motion settings.
 const dragSrcIdx = ref<number | null>(null);
 const listEl = ref<HTMLElement | null>(null);
+
+// Parent-coordinated drop indicator. Tracks the row + edge the
+// pointer is currently over so only ONE row shows the gap+bar
+// indicator at a time. Per-row local state would race: HTML5 fires
+// the previous row's dragleave AFTER the new row's dragenter, so a
+// brief frame can have two rows showing indicators. Lifting here
+// gives a single source: each row emits row-drag-over on its own
+// dragover; we just overwrite the target.
+const dragOverUid = ref<string | null>(null);
+const dragOverEdge = ref<"before" | "after" | null>(null);
+function dropIndicatorFor(uid: string): "before" | "after" | null {
+  return uid === dragOverUid.value ? dragOverEdge.value : null;
+}
+function clearDropIndicator(): void {
+  dragOverUid.value = null;
+  dragOverEdge.value = null;
+}
 /** UIDs of rows that just landed via drag-drop. Template binds the
  *  `.wp-drop-pulse` class while a UID is present; entries clear after
  *  the keyframe duration (420ms in shared/row-primitives.css). */
@@ -341,9 +360,73 @@ function onRowDragStart(fromIdx: number): void {
   dragSrcIdx.value = fromIdx;
 }
 
+// List-level dragover. Tracking at LIST level (not per-row) so the
+// drop-target stays stable when individual rows shift by margin-top
+// /bottom (the slot opens via `.wp-inj-row--drop-before/after`
+// rules). Per-row dragover ran into oscillation: row 2 dragover
+// opens its top gap → row 2 shifts down → pointer now sits in the
+// gap above row 2 → row 1's dragover fires → row 1 opens its
+// bottom gap → row 1 shifts down → flip-flop. List-level handler
+// reads pointer Y vs each row's rect once, so shifts inside the
+// list don't change the target computation. Mirrors
+// ContextWidget.onListDragOver.
+function onListDragOver(ev: DragEvent): void {
+  if (dragSrcIdx.value === null) return;
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+  const list = listEl.value;
+  if (!list) return;
+  const rows = Array.from(list.querySelectorAll<HTMLElement>(".wp-inj-row[data-uid]"));
+  let targetUid: string | null = null;
+  let edge: "before" | "after" | null = null;
+  for (const el of rows) {
+    const r = el.getBoundingClientRect();
+    if (ev.clientY <= r.top + r.height / 2) {
+      targetUid = el.dataset.uid ?? null;
+      edge = "before";
+      break;
+    }
+    if (ev.clientY < r.bottom) {
+      targetUid = el.dataset.uid ?? null;
+      edge = "after";
+      break;
+    }
+  }
+  if (!targetUid && rows.length > 0) {
+    // Pointer past all rows → drop at end (after last row).
+    const lastEl = rows[rows.length - 1];
+    targetUid = lastEl.dataset.uid ?? null;
+    edge = "after";
+  }
+  if (targetUid && edge) {
+    if (dragOverUid.value !== targetUid) dragOverUid.value = targetUid;
+    if (dragOverEdge.value !== edge) dragOverEdge.value = edge;
+  }
+}
+
+// List-level drop. Reads the last-tracked target from state instead
+// of recomputing from the drop event's clientY — by the time drop
+// fires, the gap may have already opened (margin shifted the rows),
+// so the pointer Y at drop time can pick a different target than
+// the visual indicator showed during dragover. Trust the indicator.
+function onListDrop(ev: DragEvent): void {
+  ev.preventDefault();
+  if (dragSrcIdx.value === null) {
+    clearDropIndicator();
+    return;
+  }
+  const targetUid = dragOverUid.value;
+  const edge = dragOverEdge.value;
+  clearDropIndicator();
+  if (!targetUid || !edge) return;
+  const overIdx = value.value.rows.findIndex((r) => r._uid === targetUid);
+  if (overIdx < 0) return;
+  onRowDrop(overIdx, edge);
+}
+
 function onRowDrop(overIdx: number, edge: "before" | "after"): void {
   const from = dragSrcIdx.value;
   dragSrcIdx.value = null;
+  clearDropIndicator();
   if (from === null || from === overIdx) return;
   // Convert the (overIdx, edge) pair into a single splice-style
   // target index. "before idx N" => insert at N; "after idx N" =>
@@ -395,6 +478,175 @@ function onRowDrop(overIdx: number, edge: "before" | "after"): void {
 
 function onRowDragEnd(): void {
   dragSrcIdx.value = null;
+  clearDropIndicator();
+}
+
+// ── Move-to-edge (top / bottom) ────────────────────────────────────
+// Same FLIP-animated path as drag-drop reorder, just driven by the
+// right-click menu. Falls through to reorderInjectorRows so slot_name
+// reassignment + sequential ordering stays consistent with the drag
+// path. Skips when the row is already at the target edge.
+function moveRowToEdge(idx: number, edge: "top" | "bottom"): void {
+  const rows = value.value.rows;
+  const toIdx = edge === "top" ? 0 : rows.length;
+  if (edge === "top" && idx === 0) return;
+  if (edge === "bottom" && idx === rows.length - 1) return;
+  const nextRows = reorderInjectorRows(rows, idx, toIdx);
+  if (nextRows === rows) return;
+
+  const container = listEl.value;
+  const before = container
+    ? captureRects(container, (el) => el.dataset.uid ?? null)
+    : null;
+  value.value = { ...value.value, rows: nextRows };
+  persist();
+  if (container && before) {
+    void nextTick(() => {
+      applyFlip(container, before, (el) => el.dataset.uid ?? null);
+    });
+  }
+}
+
+// ── Right-click context menu ───────────────────────────────────────
+// Shared ContextMenu component (used by ModuleRow / BundleHeader).
+// `openRowContextMenu` builds the items per-row based on current
+// state — Enable/Disable + Expand/Collapse labels flip with the row,
+// Move-to-{top,bottom} are disabled at the edges, Disconnect is
+// the destructive trailing entry.
+//
+// Type-icon + type-color maps power the menu's scope header (mirrors
+// the bundle ctxmenu's `Kind · Name` layout). InjectorRow has its own
+// copy of TYPE_ICONS for the row chrome — duplicated here rather than
+// exported because exporting from a Vue SFC adds a re-export shim and
+// the maps are short. Keep both in lockstep if a new type is added.
+const HEADER_TYPE_ICON: Record<string, string> = {
+  string: "pi-pencil",
+  int: "pi-hashtag",
+  float: "pi-percentage",
+  boolean: "pi-check-square",
+  image: "pi-image",
+  mask: "pi-clone",
+  latent: "pi-cloud",
+  conditioning: "pi-comment",
+  model: "pi-cube",
+  clip: "pi-tag",
+  vae: "pi-box",
+  audio: "pi-volume-up",
+  video: "pi-video",
+  noise: "pi-sparkles",
+  sigmas: "pi-chart-line",
+  guider: "pi-compass",
+  sampler: "pi-sliders-h",
+};
+const HEADER_TYPE_COLOR: Record<string, string> = {
+  string: "var(--wp-amber)",
+  int: "var(--wp-green)",
+  float: "var(--wp-var-7)",
+  boolean: "var(--wp-var-5)",
+  image: "var(--wp-var-1)",
+  mask: "var(--wp-var-6)",
+  latent: "var(--wp-var-4)",
+  conditioning: "var(--wp-var-2)",
+  model: "var(--wp-var-8)",
+  clip: "var(--wp-var-3)",
+  vae: "var(--wp-var-6)",
+  audio: "var(--wp-var-7)",
+  video: "var(--wp-var-4)",
+  noise: "var(--wp-var-6)",
+  sigmas: "var(--wp-var-1)",
+  guider: "var(--wp-var-3)",
+  sampler: "var(--wp-var-2)",
+};
+
+const ctxMenu = ref<{
+  visible: boolean;
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+  header?: { icon: string; label: string; iconColor?: string };
+}>({ visible: false, x: 0, y: 0, items: [] });
+
+// Binding edit modal — one row at a time. Stored as the row's `_uid`
+// so the modal target stays valid across reorders (idx would shift).
+// `null` = closed. Edit ctxmenu item sets this; modal close clears it.
+const editingRowUid = ref<string | null>(null);
+const editingRow = computed<InjectorRow | null>(() => {
+  if (!editingRowUid.value) return null;
+  return value.value.rows.find((r) => r._uid === editingRowUid.value) ?? null;
+});
+
+function openEditModal(uid: string): void {
+  editingRowUid.value = uid;
+}
+function closeEditModal(): void {
+  editingRowUid.value = null;
+}
+
+function openRowContextMenu(ev: MouseEvent, idx: number): void {
+  const row = value.value.rows[idx];
+  if (!row) return;
+  const rows = value.value.rows;
+  const estW = 250;
+  const estH = 280;
+  const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
+  const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
+  const items: ContextMenuItem[] = [
+    {
+      label: "Edit",
+      icon: "pi-pencil",
+      onSelect: () => openEditModal(row._uid),
+    },
+    {
+      label: row.enabled ? "Disable" : "Enable",
+      icon: row.enabled ? "pi-eye-slash" : "pi-eye",
+      onSelect: () => updateRow(row._uid, { enabled: !row.enabled }),
+    },
+    {
+      label: row._collapsed ? "Expand" : "Collapse",
+      icon: row._collapsed ? "pi-caret-down" : "pi-caret-right",
+      onSelect: () => updateRow(row._uid, { _collapsed: !row._collapsed }),
+      divider: true,
+    },
+    {
+      label: "Move to top",
+      icon: "pi-angle-double-up",
+      disabled: idx === 0,
+      onSelect: () => moveRowToEdge(idx, "top"),
+    },
+    {
+      label: "Move to bottom",
+      icon: "pi-angle-double-down",
+      disabled: idx === rows.length - 1,
+      onSelect: () => moveRowToEdge(idx, "bottom"),
+    },
+    {
+      label: "Disconnect",
+      icon: "pi-trash",
+      danger: true,
+      divider: true,
+      onSelect: () => emit("disconnect-slot", row.slot_name),
+    },
+  ];
+  const typeKey = (props.slotTypes[row.slot_name] ?? "").toLowerCase();
+  const typeLabel = typeKey ? typeKey[0].toUpperCase() + typeKey.slice(1) : "Input";
+  const nameForHeader = row.binding.trim()
+    ? `$${row.binding}`
+    : (props.slotLabels[row.slot_name] ?? row.slot_name);
+  ctxMenu.value = {
+    visible: true,
+    x: Math.max(8, x),
+    y: Math.max(8, y),
+    items,
+    // Scope header — mirrors the bundle/module ctxmenu pattern:
+    // type icon + "<Type> · <Name>". Name falls back to the slot
+    // label (e.g. input_0) when no binding is typed yet, so the
+    // header always reads as a specific row identifier.
+    header: {
+      icon: HEADER_TYPE_ICON[typeKey] ?? "pi-circle",
+      label: `${typeLabel} · ${nameForHeader}`,
+      iconColor: HEADER_TYPE_COLOR[typeKey],
+    },
+  };
 }
 
 defineExpose({ addRow, removeRow });
@@ -427,7 +679,13 @@ defineExpose({ addRow, removeRow });
       </button>
     </div>
 
-    <div v-if="!collapsed" ref="listEl" class="wp-inj-list">
+    <div
+      v-if="!collapsed"
+      ref="listEl"
+      class="wp-inj-list"
+      @dragover.prevent="onListDragOver"
+      @drop.prevent="onListDrop"
+    >
       <InjectorRowComp
         v-for="(row, idx) in value.rows"
         :key="row._uid"
@@ -440,20 +698,40 @@ defineExpose({ addRow, removeRow });
         :display-label="slotLabels[row.slot_name]"
         :conflict-severity="conflictByUid[row._uid]?.severity"
         :conflict-label="conflictByUid[row._uid]?.label"
+        :drop-indicator="dropIndicatorFor(row._uid)"
         @update="(patch) => updateRow(row._uid, patch)"
         @disconnect="emit('disconnect-slot', row.slot_name)"
         @row-drag-start="(p) => onRowDragStart(p.fromIdx)"
-        @row-drop="(p) => onRowDrop(p.overIdx, p.edge)"
         @row-drag-end="onRowDragEnd"
+        @row-contextmenu="(p) => openRowContextMenu(p.ev, p.idx)"
       />
       <div
         v-if="value.rows.length === 0"
         data-test="inj-ghost"
         class="wp-inj-ghost"
       >
-        ↓ Connect any node output to "+ new input" → new variable row appears here
+        ↓ Wire an upstream node's output into this node's input pin — a variable row appears here.
       </div>
     </div>
+    <ContextMenu
+      :visible="ctxMenu.visible"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :items="ctxMenu.items"
+      :header="ctxMenu.header"
+      @close="ctxMenu.visible = false"
+    />
+    <Teleport to="body">
+      <InjectorBindingModal
+        v-if="editingRow"
+        :row="editingRow"
+        :sibling-rows="value.rows"
+        :slot-types="slotTypes"
+        :slot-labels="slotLabels"
+        @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
+        @close="closeEditModal"
+      />
+    </Teleport>
   </div>
 </template>
 

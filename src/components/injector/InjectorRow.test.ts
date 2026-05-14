@@ -204,6 +204,80 @@ describe("InjectorRow — data-type attribute (Phase C.1a)", () => {
   });
 });
 
+describe("InjectorRow — right-click context menu (Phase 4)", () => {
+  it("emits row-contextmenu with idx + event on right click", async () => {
+    const w = mount(InjectorRow, { props: { row: makeRow(), index: 3 } });
+    await w.find(".wp-inj-row").trigger("contextmenu", { clientX: 50, clientY: 60 });
+    const ev = w.emitted("row-contextmenu");
+    expect(ev).toBeTruthy();
+    const payload = ev![0][0] as { ev: MouseEvent; idx: number };
+    expect(payload.idx).toBe(3);
+    expect(payload.ev).toBeInstanceOf(Event);
+  });
+
+  it("does not emit row-contextmenu when index prop is unset", async () => {
+    const w = mount(InjectorRow, { props: { row: makeRow() } });
+    await w.find(".wp-inj-row").trigger("contextmenu");
+    expect(w.emitted("row-contextmenu")).toBeUndefined();
+  });
+});
+
+describe("InjectorRow — collapse / summary (Phase 5)", () => {
+  it("summary renders by default (row expanded)", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow() } });
+    expect(w.find('[data-test="inj-row-summary"]').exists()).toBe(true);
+  });
+
+  it("summary hidden when row._collapsed is true", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow({ _collapsed: true }) } });
+    expect(w.find('[data-test="inj-row-summary"]').exists()).toBe(false);
+  });
+
+  it("caret toggles _collapsed via update emit", async () => {
+    const w = mount(InjectorRow, { props: { row: makeRow({ _collapsed: false }) } });
+    await w.find('[data-test="inj-row-collapse"]').trigger("click");
+    const last = w.emitted("update")![0][0] as Partial<RowType>;
+    expect(last._collapsed).toBe(true);
+  });
+
+  it("caret shows pi-caret-down when expanded, pi-caret-right when collapsed", () => {
+    const expanded = mount(InjectorRow, { props: { row: makeRow({ _collapsed: false }) } });
+    expect(expanded.find('[data-test="inj-row-collapse"] .pi-caret-down').exists()).toBe(true);
+    const collapsed = mount(InjectorRow, { props: { row: makeRow({ _collapsed: true }) } });
+    expect(collapsed.find('[data-test="inj-row-collapse"] .pi-caret-right').exists()).toBe(true);
+  });
+
+  it("summary contains binding + slot when binding present", () => {
+    const w = mount(InjectorRow, {
+      props: { row: makeRow({ binding: "seed_phrase", slot_name: "input_0" }), valueType: "STRING" },
+    });
+    const text = w.find('[data-test="inj-row-summary"]').text();
+    expect(text).toContain("seed_phrase");
+    expect(text).toContain("input_0");
+    expect(text).toContain("string");
+  });
+
+  it("summary shows empty-binding hint when binding is blank", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow({ binding: "" }) } });
+    expect(w.find(".wp-inj-summary__empty").exists()).toBe(true);
+  });
+
+  it("renders the template + tpl badge when row.template is set", () => {
+    const w = mount(InjectorRow, {
+      props: { row: makeRow({ template: "hello $input_1" }) },
+    });
+    expect(w.find('[data-test="inj-row-summary-template"]').text()).toBe("hello $input_1");
+    expect(w.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(true);
+  });
+
+  it("no tpl badge when template is empty/null", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow({ template: "" }) } });
+    expect(w.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(false);
+    const w2 = mount(InjectorRow, { props: { row: makeRow({ template: null }) } });
+    expect(w2.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(false);
+  });
+});
+
 describe("InjectorRow — slot tag (Phase C.1a)", () => {
   it("renders .wp-inj-slot containing the row.slot_name when no displayLabel", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ slot_name: "input_2" }) } });

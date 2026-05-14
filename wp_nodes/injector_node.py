@@ -15,6 +15,32 @@ from wp_nodes.types import InjectorRowsInput, PipelineContext
 
 _BINDING_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
 
+# Tokenizer for the per-row template field. Matches `$$` (literal `$`),
+# `$<name>` slot refs, and falls through to literal text.
+_TEMPLATE_TOKEN_RE = re.compile(r"\$\$|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _render_template(template: str, slot_values: dict[str, Any]) -> str:
+    """Substitute `$<slot_name>` refs with stringified socket values.
+
+    - `$$` -> literal `$`
+    - `$slot_name` where slot is wired -> stringified value at that slot
+       (Python `str()` semantics — booleans yield "True"/"False" to match
+       the pass-through path's downstream stringification.)
+    - `$slot_name` where slot is NOT wired -> left as literal `$slot_name`
+       so the user can spot the typo in the rendered output
+    """
+
+    def repl(m: re.Match[str]) -> str:
+        if m.group(0) == "$$":
+            return "$"
+        name = m.group(1)
+        if name in slot_values:
+            return str(slot_values[name])
+        return m.group(0)
+
+    return _TEMPLATE_TOKEN_RE.sub(repl, template)
+
 
 class WPContextInjector(io.ComfyNode):
     """Graph-side ctx writer. No library, no payload, no resolve-time logic.
@@ -114,15 +140,34 @@ class WPContextInjector(io.ComfyNode):
                 })
                 continue
             slot_name = row.get("slot_name", "")
-            if not isinstance(slot_name, str) or slot_name not in slot_values:
-                continue
-            value = slot_values[slot_name]
-            if isinstance(value, bool):
-                stored: Any = value
-            elif isinstance(value, (str, int, float)):
-                stored = value
+            template_raw = row.get("template", None)
+            template_str = (
+                template_raw.strip()
+                if isinstance(template_raw, str) and template_raw.strip()
+                else ""
+            )
+            # Pass-through path: row has no template, just needs the
+            # wired socket value. Requires the slot to be wired or the
+            # row is skipped (matches legacy behavior).
+            if not template_str:
+                if not isinstance(slot_name, str) or slot_name not in slot_values:
+                    continue
+                value = slot_values[slot_name]
+                if isinstance(value, bool):
+                    stored: Any = value
+                elif isinstance(value, (str, int, float)):
+                    stored = value
+                else:
+                    stored = str(value)
+                trace_type = type(value).__name__
             else:
-                stored = str(value)
+                # Template path: render `$<slot_name>` substitutions
+                # against ALL wired sockets (not just this row's). Result
+                # is always a string. The row's own slot does NOT need
+                # to be wired in this case — the template might only
+                # reference other rows' sockets.
+                stored = _render_template(template_str, slot_values)
+                trace_type = "str(template)"
             ctx[stripped] = stored
             if row.get("internal", False):
                 internal_keys.add(stripped)
@@ -130,7 +175,15 @@ class WPContextInjector(io.ComfyNode):
                 "node": "WP_ContextInjector",
                 "binding": stripped,
                 "internal": bool(row.get("internal", False)),
-                "type": type(value).__name__,
+                "type": trace_type,
+                # `value` surfaces the written ctx value in Debug's
+                # trace tab. Engine module traces use `writes: [{...}]`
+                # for the same purpose; injector trace stays flat
+                # (single-write per row) so a top-level `value` keeps
+                # the shape minimal while giving Debug something to
+                # render. Stringified to keep the JSON shape stable
+                # across primitive types — Debug formats further.
+                "value": str(stored) if not isinstance(stored, (str, int, float, bool)) else stored,
             })
 
         if internal_keys:

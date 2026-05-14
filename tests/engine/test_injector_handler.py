@@ -138,3 +138,135 @@ def test_each_written_row_emits_trace_entry():
     bindings = sorted(t.get("binding") for t in inj)
     assert bindings == ["a", "b"]
     assert any(t.get("internal") is True for t in inj)
+
+
+# ─── Phase 6: per-row template substitution ──────────────────────────────────
+
+
+def _row_with_template(slot_name: str, binding: str, template: str | None) -> dict:
+    return {
+        "_uid": f"uid_{slot_name}",
+        "slot_name": slot_name,
+        "binding": binding,
+        "enabled": True,
+        "internal": False,
+        "template": template,
+    }
+
+
+def test_template_substitutes_self_slot_value():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row_with_template("input_0", "phrase", "i love $input_0")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="puppies")
+    assert out.values[0].context["phrase"] == "i love puppies"
+
+
+def test_template_substitutes_cross_slot_value():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_0", "raw_name"),
+            _row_with_template("input_1", "greeting", "hello $input_0!"),
+        ],
+    })
+    out = WPContextInjector.execute(
+        rows=rows, upstream=None, input_0="Alice", input_1="ignored"
+    )
+    assert out.values[0].context["greeting"] == "hello Alice!"
+
+
+def test_template_unknown_ref_left_literal():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row_with_template("input_0", "phrase", "value=$missing")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x")
+    assert out.values[0].context["phrase"] == "value=$missing"
+
+
+def test_template_double_dollar_escapes_to_literal():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row_with_template("input_0", "phrase", "$$5.00 paid by $input_0")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="Bob")
+    assert out.values[0].context["phrase"] == "$5.00 paid by Bob"
+
+
+def test_template_with_unwired_self_slot_still_renders_when_template_uses_others():
+    # Self-slot disconnected, but template only references another wired
+    # slot. Engine should NOT skip the row — template path bypasses the
+    # "self slot must be wired" gate the pass-through path enforces.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_0", "name"),
+            _row_with_template("input_1", "shout", "$input_0 IS HERE"),
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="Eve")
+    assert out.values[0].context["shout"] == "Eve IS HERE"
+
+
+def test_template_empty_or_whitespace_falls_back_to_pass_through():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row_with_template("input_0", "a", ""),
+            _row_with_template("input_1", "b", "   "),
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="raw_a", input_1="raw_b")
+    assert out.values[0].context["a"] == "raw_a"
+    assert out.values[0].context["b"] == "raw_b"
+
+
+def test_template_boolean_substitution_matches_python_str():
+    # Booleans render as Python's str(bool) -> "True"/"False" so the
+    # template path's output agrees with the pass-through path's
+    # downstream stringification semantics. Consistent casing avoids
+    # the "i love False" / "i love false" disparity when a row toggles
+    # between template + pass-through.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row_with_template("input_0", "flag", "is_on=$input_0")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0=True)
+    assert out.values[0].context["flag"] == "is_on=True"
+    out2 = WPContextInjector.execute(rows=rows, upstream=None, input_0=False)
+    assert out2.values[0].context["flag"] == "is_on=False"
+
+
+def test_template_trace_kind_marks_template_row():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row_with_template("input_0", "phrase", "hi $input_0")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x")
+    trace = out.values[0].debug.get("__wp_trace__", [])
+    template_traces = [t for t in trace if t.get("binding") == "phrase"]
+    assert template_traces
+    assert template_traces[0]["type"] == "str(template)"
+
+
+def test_trace_carries_written_value_for_debug_viewer():
+    # Debug's trace tab needs the written value alongside the binding
+    # so the value column isn't blank for injector rows. Engine
+    # modules use `writes: [{value}]` for the same purpose; injector
+    # emits a flat top-level `value` (one write per row).
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_0", "a"),
+            _row_with_template("input_1", "b", "$input_1 boom"),
+        ],
+    })
+    out = WPContextInjector.execute(
+        rows=rows, upstream=None, input_0="alpha", input_1=42,
+    )
+    trace = out.values[0].debug.get("__wp_trace__", [])
+    by_binding = {t.get("binding"): t for t in trace}
+    assert by_binding["a"]["value"] == "alpha"
+    assert by_binding["b"]["value"] == "42 boom"

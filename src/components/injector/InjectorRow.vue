@@ -27,6 +27,13 @@ const props = defineProps<{
    *  events. When false (default), drag is a no-op so external
    *  consumers (tests, isolated mounts) aren't surprised by dnd. */
   reorderable?: boolean;
+  /** Parent-coordinated drop indicator. `null` = no indicator on
+   *  this row; `'before'` / `'after'` = paint the accent gap+bar at
+   *  the corresponding edge. Lifted to InjectorWidget so only ONE
+   *  row carries the indicator at a time — HTML5 dragleave races
+   *  with the next dragenter, so per-row local state can leave a
+   *  stale indicator on a row the pointer just left. */
+  dropIndicator?: "before" | "after" | null;
 }>();
 
 const slotLabel = computed(() => props.displayLabel ?? props.row.slot_name);
@@ -35,13 +42,19 @@ const emit = defineEmits<{
   (e: "update", patch: Partial<InjectorRow>): void;
   (e: "disconnect"): void;
   (e: "row-drag-start", payload: { fromIdx: number }): void;
-  /** Fires while a drag is hovering over this row. `edge` tells the
-   *  parent which side the drop indicator should highlight (so the
-   *  user can preview the insertion point before releasing). */
-  (e: "row-drag-over", payload: { overIdx: number; edge: "before" | "after" }): void;
-  (e: "row-drop", payload: { overIdx: number; edge: "before" | "after" }): void;
   (e: "row-drag-end"): void;
+  /** Right-click on the row root. Parent opens a shared ContextMenu
+   *  with edit / disable / collapse / move-top / move-bottom /
+   *  disconnect entries. ev.clientX/Y feeds the menu anchor. */
+  (e: "row-contextmenu", payload: { ev: MouseEvent; idx: number }): void;
 }>();
+
+function onContextMenu(ev: MouseEvent): void {
+  if (props.index === undefined) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  emit("row-contextmenu", { ev, idx: props.index });
+}
 
 const isEmpty = computed(() => !props.row.binding.trim());
 
@@ -77,17 +90,30 @@ const typeIcon = computed(
   () => TYPE_ICONS[(props.valueType ?? "").toLowerCase()] ?? "pi-circle",
 );
 
+const hasTemplate = computed(() => {
+  const t = props.row.template;
+  return typeof t === "string" && t.trim().length > 0;
+});
+
+const summaryTitle = computed(() => {
+  if (isEmpty.value) return `Socket ${props.row.slot_name} has no binding — type a variable name to write the wired value into ctx`;
+  if (hasTemplate.value) return `ctx["${props.row.binding}"] ← template "${props.row.template}"`;
+  const t = props.valueType ? ` (${props.valueType.toLowerCase()})` : "";
+  return `ctx["${props.row.binding}"] ← socket ${props.row.slot_name}${t}`;
+});
+
 function onBindingInput(ev: Event): void {
   const next = (ev.target as HTMLInputElement).value;
   emit("update", { binding: next });
 }
 
-// ─── Drag-to-reorder state. The visible drop indicator is driven by
-// `dropEdge` — we recompute it on each dragover based on the cursor's
-// Y position relative to the row's midpoint. Cleared on dragleave +
-// drop + dragend so a row can't get stuck with a stale indicator.
+// Drag-to-reorder state. Only `isDragging` is local now — the visual
+// drop indicator (`dropIndicator` prop) is driven by InjectorWidget
+// based on `row-drag-over` events so a single source of truth picks
+// the active target row + edge. Pre-lift this state caused stale
+// indicators on rows the pointer just left (HTML5 dragleave races
+// with the next row's dragenter).
 const isDragging = ref(false);
-const dropEdge = ref<"before" | "after" | null>(null);
 
 function onDragStart(ev: DragEvent): void {
   if (!props.reorderable || props.index === undefined) return;
@@ -103,31 +129,13 @@ function onDragStart(ev: DragEvent): void {
   emit("row-drag-start", { fromIdx: props.index });
 }
 
-function onDragOver(ev: DragEvent): void {
-  if (!props.reorderable || props.index === undefined) return;
-  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const edge: "before" | "after" = ev.clientY < rect.top + rect.height / 2 ? "before" : "after";
-  if (dropEdge.value !== edge) dropEdge.value = edge;
-  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  emit("row-drag-over", { overIdx: props.index, edge });
-}
-
-function onDragLeave(): void {
-  dropEdge.value = null;
-}
-
-function onDrop(ev: DragEvent): void {
-  if (!props.reorderable || props.index === undefined) return;
-  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const edge: "before" | "after" = ev.clientY < rect.top + rect.height / 2 ? "before" : "after";
-  dropEdge.value = null;
-  isDragging.value = false;
-  emit("row-drop", { overIdx: props.index, edge });
-}
-
+// dragover + drop are handled at the LIST level by InjectorWidget so
+// the drop-target stays stable when individual rows shift via
+// margin-top/bottom (the gap-opening pattern oscillates per-row
+// dragover otherwise). dragstart / dragend stay per-row because
+// HTML5 fires them on the source element.
 function onDragEnd(): void {
   isDragging.value = false;
-  dropEdge.value = null;
   emit("row-drag-end");
 }
 </script>
@@ -141,113 +149,137 @@ function onDragEnd(): void {
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
       'wp-inj-row--dragging': isDragging,
-      'wp-inj-row--drop-before': dropEdge === 'before',
-      'wp-inj-row--drop-after': dropEdge === 'after',
+      'wp-inj-row--drop-before': dropIndicator === 'before',
+      'wp-inj-row--drop-after': dropIndicator === 'after',
+      'wp-inj-row--has-template': hasTemplate,
       'wp-conflict-info': conflictSeverity === 'info',
       'wp-conflict-warning': conflictSeverity === 'warning',
       'wp-conflict-error': conflictSeverity === 'error',
     }"
     :draggable="reorderable"
-    title="Drag from the row edge to reorder"
     @dragstart="onDragStart"
-    @dragover.prevent="onDragOver"
-    @dragleave="onDragLeave"
-    @drop.prevent="onDrop"
     @dragend="onDragEnd"
+    @contextmenu="onContextMenu"
   >
-    <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder">
-      <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
-        <circle cx="1.5" cy="2" r="1" />
-        <circle cx="4.5" cy="2" r="1" />
-        <circle cx="1.5" cy="6" r="1" />
-        <circle cx="4.5" cy="6" r="1" />
-        <circle cx="1.5" cy="10" r="1" />
-        <circle cx="4.5" cy="10" r="1" />
-      </svg>
-    </span>
-    <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'" draggable="false">
-      <input
-        type="checkbox"
-        :checked="row.enabled"
-        data-test="inj-row-enabled"
-        :aria-label="`enable injector row ${row._uid}`"
-        @change="(ev) => emit('update', { enabled: (ev.target as HTMLInputElement).checked })"
-      />
-      <span class="wp-inj-toggle-mark"></span>
-    </label>
-
-    <span class="wp-row-type-icon" aria-hidden="true">
-      <i :class="['pi', typeIcon]" />
-    </span>
-
-    <span
-      class="wp-inj-slot"
-      :title="slotLabel === row.slot_name
-        ? `Bound to socket ${row.slot_name}`
-        : `Bound to socket ${row.slot_name} (label: ${slotLabel})`"
-      data-test="inj-row-slot"
-    >{{ slotLabel }}</span>
-
-    <span
-      v-if="valueType"
-      class="wp-kind-chip"
-      data-test="inj-row-type"
-    >{{ valueType.toLowerCase() }}</span>
-
-    <div
-      class="wp-vbind-wrap"
-      :class="{ 'wp-vbind-wrap--empty': isEmpty }"
-      draggable="false"
-    >
-      <span class="wp-vbind-prefix">$</span>
-      <input
-        type="text"
-        class="wp-vbind-input"
-        data-test="inj-row-binding"
-        :value="row.binding"
-        :aria-label="`binding for ${row.slot_name}`"
-        placeholder="variable_name"
-        spellcheck="false"
-        draggable="false"
-        @input="onBindingInput"
-      />
-    </div>
-
-    <span
-      v-if="conflictSeverity"
-      class="wp-conflict-dot"
-      :class="`wp-conflict-dot--${conflictSeverity}`"
-      :title="conflictLabel"
-      aria-hidden="true"
-    ></span>
-    <span
-      v-if="conflictSeverity && conflictLabel"
-      class="wp-conflict-badge"
-      :class="`wp-conflict-badge--${conflictSeverity}`"
-      :title="conflictLabel"
-      data-test="inj-row-conflict"
-    >{{ conflictLabel }}</span>
-
-    <div class="wp-row-actions" draggable="false">
+    <div class="wp-inj-row-header">
+      <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder">
+        <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
+          <circle cx="1.5" cy="2" r="1" />
+          <circle cx="4.5" cy="2" r="1" />
+          <circle cx="1.5" cy="6" r="1" />
+          <circle cx="4.5" cy="6" r="1" />
+          <circle cx="1.5" cy="10" r="1" />
+          <circle cx="4.5" cy="10" r="1" />
+        </svg>
+      </span>
       <button
         type="button"
-        class="wp-btn--icon-sm wp-btn--accent"
-        :class="{ 'is-active': row.internal }"
-        data-test="inj-row-internal"
+        class="wp-collapse-btn"
         draggable="false"
-        :title="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
-        @click="emit('update', { internal: !row.internal })"
-      ><i class="pi pi-globe" aria-hidden="true" /></button>
-      <button
-        type="button"
-        class="wp-btn--icon-sm wp-btn--danger"
-        data-test="inj-row-remove"
+        data-test="inj-row-collapse"
+        :title="row._collapsed ? 'Expand' : 'Collapse'"
+        :aria-label="row._collapsed ? 'Expand row preview' : 'Collapse row preview'"
+        @click.stop="emit('update', { _collapsed: !row._collapsed })"
+      ><i :class="['pi', row._collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
+      <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'" draggable="false">
+        <input
+          type="checkbox"
+          :checked="row.enabled"
+          data-test="inj-row-enabled"
+          :aria-label="`enable injector row ${row._uid}`"
+          @change="(ev) => emit('update', { enabled: (ev.target as HTMLInputElement).checked })"
+        />
+        <span class="wp-inj-toggle-mark"></span>
+      </label>
+
+      <span class="wp-row-type-icon" aria-hidden="true">
+        <i :class="['pi', typeIcon]" />
+      </span>
+
+      <span
+        class="wp-inj-slot"
+        :title="slotLabel === row.slot_name
+          ? `Bound to socket ${row.slot_name}`
+          : `Bound to socket ${row.slot_name} (label: ${slotLabel})`"
+        data-test="inj-row-slot"
+      >{{ slotLabel }}</span>
+
+      <span
+        v-if="valueType"
+        class="wp-kind-chip"
+        data-test="inj-row-type"
+      >{{ valueType.toLowerCase() }}</span>
+
+      <div
+        class="wp-vbind-wrap"
+        :class="{ 'wp-vbind-wrap--empty': isEmpty }"
         draggable="false"
-        title="Disconnect this input wire"
-        :aria-label="`disconnect ${row.slot_name}`"
-        @click="emit('disconnect')"
-      ><i class="pi pi-trash" aria-hidden="true" /></button>
+      >
+        <span class="wp-vbind-prefix">$</span>
+        <input
+          type="text"
+          class="wp-vbind-input"
+          data-test="inj-row-binding"
+          :value="row.binding"
+          :aria-label="`binding for ${row.slot_name}`"
+          placeholder="variable_name"
+          spellcheck="false"
+          draggable="false"
+          @input="onBindingInput"
+        />
+      </div>
+
+      <span
+        v-if="conflictSeverity"
+        class="wp-conflict-dot"
+        :class="`wp-conflict-dot--${conflictSeverity}`"
+        :title="conflictLabel"
+        aria-hidden="true"
+      ></span>
+      <span
+        v-if="conflictSeverity && conflictLabel"
+        class="wp-conflict-badge"
+        :class="`wp-conflict-badge--${conflictSeverity}`"
+        :title="conflictLabel"
+        data-test="inj-row-conflict"
+      >{{ conflictLabel }}</span>
+
+      <div class="wp-row-actions" draggable="false">
+        <button
+          type="button"
+          class="wp-btn--icon-sm wp-btn--accent"
+          :class="{ 'is-active': row.internal }"
+          data-test="inj-row-internal"
+          draggable="false"
+          :title="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
+          @click="emit('update', { internal: !row.internal })"
+        ><i class="pi pi-globe" aria-hidden="true" /></button>
+        <button
+          type="button"
+          class="wp-btn--icon-sm wp-btn--danger"
+          data-test="inj-row-remove"
+          draggable="false"
+          title="Disconnect this input wire"
+          :aria-label="`disconnect ${row.slot_name}`"
+          @click="emit('disconnect')"
+        ><i class="pi pi-trash" aria-hidden="true" /></button>
+      </div>
     </div>
+    <Transition name="wp-collapse">
+      <div v-if="!row._collapsed" class="wp-summary wp-inj-summary" :title="summaryTitle" data-test="inj-row-summary">
+        <span class="wp-summary__main">
+          <template v-if="isEmpty"><span class="wp-inj-summary__empty">no binding — type a variable name</span></template>
+          <template v-else-if="hasTemplate"><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__template" data-test="inj-row-summary-template">{{ row.template }}</span></template>
+          <template v-else><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__slot">{{ row.slot_name }}</span><template v-if="valueType"><span class="wp-inj-summary__type"> ({{ valueType.toLowerCase() }})</span></template></template>
+        </span>
+        <span
+          v-if="hasTemplate"
+          class="wp-inj-summary__tpl-badge"
+          data-test="inj-row-tpl-badge"
+          title="Template active — engine substitutes $slot_name refs before writing to ctx"
+        >tpl</span>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -257,7 +289,9 @@ function onDragEnd(): void {
 @import "../shared/row-primitives.css";
 
 /* Card-framed row — mirrors .wp-module shape. Type-color left stripe
- * mirrors data-kind border-left from ContextWidget. */
+ * mirrors data-kind border-left from ContextWidget. Root is now
+ * flex-column so the optional summary line (`.wp-inj-summary`) can
+ * sit below the header without breaking the row's existing layout. */
 .wp-inj-row {
   background: var(--wp-bg3);
   border: 1px solid var(--wp-border);
@@ -267,13 +301,29 @@ function onDragEnd(): void {
   padding: var(--wp-pad-row, 4px 6px);
   margin-bottom: 4px;  /* gap between rows — mirrors Context module spacing */
   display: flex;
-  align-items: center;
-  gap: var(--wp-row-gap, 6px);
+  flex-direction: column;
+  gap: 2px;
   font: 500 12px var(--wp-font-sans);
   color: var(--wp-text);
-  transition: background-color 0.15s, border-color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s,
+    margin-top 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    margin-bottom 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .wp-inj-row:last-child { margin-bottom: 0; }
+/* Drop-after on the last row still needs the gap — the `:last-child`
+ * rule above would otherwise zero it out (more specific than the
+ * `--drop-after` class alone). Chain both selectors to win on
+ * specificity. */
+.wp-inj-row.wp-inj-row--drop-after:last-child { margin-bottom: 14px; }
+
+/* Header row — original flat layout lives here. All header controls
+ * stay on one line via flex-row, while the parent row can expand
+ * vertically when the summary line appears. */
+.wp-inj-row-header {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-row-gap, 6px);
+}
 /* Drag-to-reorder. Row root carries `draggable` when reorderable;
  * the row gets a grab cursor on hover so the affordance is
  * discoverable without a separate handle glyph. Interactive
@@ -283,11 +333,47 @@ function onDragEnd(): void {
  * Dragging row: dimmed via opacity so the user sees their grab.
  * Drop target: 2px accent bar above (before-edge) or below
  * (after-edge) — mirrors the cross-platform "drop here" affordance. */
-.wp-inj-row[draggable="true"] { cursor: grab; }
-.wp-inj-row[draggable="true"]:active { cursor: grabbing; }
+/* Cursor: ModuleRow pattern — only `.wp-drag-handle` shows grab/grabbing
+ * (from shared/row-primitives.css). Row root keeps the default cursor
+ * so hovering over the binding input, buttons, or summary doesn't
+ * suggest the whole row is grab-target. Drag still works from anywhere
+ * on the row since `draggable=true` lives on root; the cursor is just
+ * an affordance hint, not a permission gate. */
 .wp-inj-row--dragging { opacity: 0.4; }
-.wp-inj-row--drop-before { box-shadow: inset 0 2px 0 0 var(--wp-accent); }
-.wp-inj-row--drop-after  { box-shadow: inset 0 -2px 0 0 var(--wp-accent); }
+/* Drop-zone gap + bar — mirrors ModuleRow's wp-gap-before/after
+ * pattern: target row gets extra margin so a 14px slot opens, then a
+ * 3px accent bar paints inside that slot via a ::before/::after
+ * pseudo-element. Bar carries a soft accent glow so the user sees
+ * where the row will land at a glance. Margins animate via the
+ * `transition: margin` on `.wp-inj-row` so the gap eases open as the
+ * pointer crosses the row's midline. */
+.wp-inj-row {
+  position: relative;
+  /* Margin axis added on top of the existing background/border-color
+   * transitions so the slot opens smoothly instead of snap-jumping
+   * when `wp-inj-row--drop-before/after` toggles. */
+}
+.wp-inj-row--drop-before { margin-top: 14px; }
+.wp-inj-row--drop-after  { margin-bottom: 14px; }
+.wp-inj-row--drop-before::before,
+.wp-inj-row--drop-after::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--wp-accent);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--wp-accent);
+  pointer-events: none;
+  animation: wp-inj-drop-bar-in 140ms ease-out;
+}
+.wp-inj-row--drop-before::before { top: -8px; }
+.wp-inj-row--drop-after::after   { bottom: -8px; }
+@keyframes wp-inj-drop-bar-in {
+  from { opacity: 0; transform: scaleX(0.6); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
 
 /* Enter / leave / flash classes consumed by src/components/shared/
  * flip.ts when InjectorWidget calls withEnterAnimation /
@@ -432,6 +518,15 @@ function onDragEnd(): void {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Template-active recolor — when a row has a template, the slot chip
+ * shares the accent tint with the `tpl` summary badge so a collapsed
+ * row (summary hidden) still signals "this row transforms its value".
+ * Matches `.wp-inj-summary__tpl-badge` so the two read as the same
+ * visual family. */
+.wp-inj-row.wp-inj-row--has-template .wp-inj-slot {
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
+}
 
 /* Type chip — base + neutral default come from shared `.wp-kind-chip`
  * (defined in src/components/shared/theme.css). The per-value-type
@@ -476,4 +571,37 @@ function onDragEnd(): void {
 /* Row action cluster — flex row of icon buttons. Uses the shared
  * .wp-btn--icon-sm for each button's styling. */
 .wp-row-actions { display: flex; gap: 1px; flex-shrink: 0; }
+
+/* Summary line — base shape comes from shared `.wp-summary`. Override
+ * padding-left so the preview text aligns under the slot tag instead
+ * of the default ModuleRow indent (which assumes a wider leading
+ * cluster). Injector's leading column = handle (6) + caret (14) +
+ * toggle (12) + icon (16) + gaps (~12) ≈ 60px. */
+.wp-inj-summary { padding: 2px 4px 2px 50px; }
+.wp-inj-summary__prefix { color: var(--wp-accent); font-weight: 700; }
+.wp-inj-summary__var    { color: var(--wp-text); font-weight: 600; }
+.wp-inj-summary__sep    { color: var(--wp-text3); }
+.wp-inj-summary__slot   { color: var(--wp-text2); }
+.wp-inj-summary__type   { color: var(--wp-text3); }
+.wp-inj-summary__empty  { color: var(--wp-warn); font-style: italic; }
+.wp-inj-summary__template {
+  color: var(--wp-accent);
+  font-family: var(--wp-font-mono, monospace);
+}
+
+/* Template-active badge — small pill at the trailing edge of the
+ * summary line. Mirrors the `mod`/`drift`/`missing` badge family on
+ * ModuleRow so the visual language stays consistent. Color picks up
+ * `--wp-accent` because template = "this row does something custom",
+ * not a problem state. */
+.wp-inj-summary__tpl-badge {
+  flex-shrink: 0;
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
+}
 </style>

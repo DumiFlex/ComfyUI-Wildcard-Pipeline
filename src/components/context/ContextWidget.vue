@@ -5,7 +5,7 @@ import {
   emptyContextValue, newModuleId, newRowUid,
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
-import { scanConflicts, labelFor as conflictLabelFor, type Conflict } from "../../extension/conflicts";
+import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
 import {
   getCollapseMode,
   getCollapsedByDefault,
@@ -1055,23 +1055,14 @@ function conflictBadgeText(id: string): string | null {
   const list = conflictsByModule.value[id];
   if (!list?.length) return null;
   // Pick the highest-severity conflict; tie-break by first occurrence
-  // so the badge wording stays stable across renders.
+  // so the badge wording stays stable across renders. Label text comes
+  // from the shared `shortConflictLabel` so module + injector rows
+  // surface identical chip wording for the same conflict type.
   const order = { error: 0, warning: 1, info: 2 } as const;
   const top = [...list].sort(
     (a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9),
   )[0];
-  switch (top.type) {
-    case "shadows_upstream":           return "override";
-    case "duplicate_variable":         return "duplicate";
-    case "missing_template_variable":  return "missing var";
-    case "constraint_source_after_self":     return "src after";
-    case "constraint_source_missing":        return "src missing";
-    case "constraint_target_before_self":    return "tgt before";
-    case "constraint_target_in_upstream":    return "tgt upstream";
-    case "constraint_target_missing":        return "tgt missing";
-    case "constraint_source_in_downstream":  return "src downstream";
-    default:                                  return "conflict";
-  }
+  return shortConflictLabel(top.type);
 }
 
 function conflictTooltip(id: string): string {
@@ -2290,7 +2281,16 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
   );
   ctxMenu.value = {
     visible: true, x: Math.max(8, x), y: Math.max(8, y), items,
-    header: undefined,  // Module ctxmenu has no scope header; clear bundle header leak
+    // Scope header — kind icon + "Kind · Name" label. Mirrors the
+    // bundle ctxmenu's header so every right-click reads as "you are
+    // operating on THIS specific entity". `kindIcon` returns
+    // "pi pi-X" (two-class); ContextMenu's template prepends "pi"
+    // already, so we strip the leading word to avoid double-prefix.
+    header: {
+      icon: kindIcon(m.type).split(" ").pop() ?? "pi-circle",
+      label: `${KIND_TITLE[m.type] ?? m.type} · ${m.meta.name || "(unnamed)"}`,
+      iconColor: `var(--wp-kind-${kindChipModifier(m.type)})`,
+    },
   };
 }
 
@@ -3177,6 +3177,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 <style>
 @import "../shared/theme.css";
 @import "../shared/row-primitives.css";
+@import "./editors/_modal-head.css";
+@import "./editors/_modal-template-ctrls.css";
 </style>
 
 <style>
@@ -3753,22 +3755,9 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-module:hover .wp-drag-handle,
 .wp-module:focus-within .wp-drag-handle { opacity: 1; color: var(--wp-text2); }
 
-.wp-collapse-btn {
-  background: none;
-  border: none;
-  color: var(--wp-text3);
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  flex-shrink: 0;
-}
-/* Target `.pi` directly — PrimeIcons sets 16px on `.pi` itself. */
-.wp-collapse-btn .pi { font-size: 10px; }
-.wp-collapse-btn:hover { color: var(--wp-text); }
+/* .wp-collapse-btn base → src/components/shared/row-primitives.css.
+ * Module-specific: PrimeIcons sets 16px on `.pi` itself; our shared
+ * rule sets 10px which matches what Context wanted. */
 
 .wp-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .wp-toggle input {
@@ -3932,26 +3921,10 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * BundleHeader, InjectorRow, and any future row surface that needs
  * a small icon button. */
 
-/* Summary line — read-only preview. Edit via right-click → Edit (or Enter
- * on focused card). Keeping the card chrome non-interactive avoids
- * competing click affordances inside the small DOM widget. */
-.wp-summary {
-  color: var(--wp-text2);
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 11px;
-  padding: 2px 4px 2px 36px;  /* align under the module name (past handle/collapse/toggle/icon) */
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.wp-summary__main {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
+/* .wp-summary + .wp-summary__main base styles → row-primitives.css.
+ * Default padding-left:36px aligns under the module header's icon
+ * column (drag+collapse+toggle+icon = 36px); InjectorRow can
+ * override in its scoped block if its header column widths differ. */
 .wp-summary__sibling {
   font-family: var(--wp-font-mono);
   font-size: 9px;
@@ -4077,16 +4050,9 @@ provide(ModuleRowCtxKey, moduleRowCtx);
               transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
 }
 
-/* Collapse/expand summary line */
-.wp-collapse-enter-active,
-.wp-collapse-leave-active {
-  transition: max-height 0.2s ease, opacity 0.15s, padding 0.15s;
-  overflow: hidden;
-}
-.wp-collapse-enter-from,
-.wp-collapse-leave-to { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
-.wp-collapse-enter-to,
-.wp-collapse-leave-from { max-height: 32px; opacity: 1; }
+/* `wp-collapse` Vue transition → row-primitives.css. Animates the
+ * max-height + opacity of the summary line for both ModuleRow and
+ * InjectorRow. */
 
 /* Pulse on first appear — applies uniformly to every state-marker dot
  * (mod / drift / missing AND every conflict severity) so the user gets

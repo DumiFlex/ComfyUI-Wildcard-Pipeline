@@ -203,6 +203,18 @@ export function create(node: InjectorNode, inputName: string) {
   );
   const currentJson = ref(initial);
 
+  // Forward-declare so the InjectorWidget setup callbacks (which
+  // close over `host` for `requestRelayout`) can be invoked during
+  // mount without hitting the const TDZ. createDomWidgetHost
+  // synchronously invokes wrapper.setup(), and InjectorWidget's
+  // `immediate: true` watch fires `request-min-width` from inside
+  // setup — that handler hits `host.requestRelayout()` BEFORE the
+  // surrounding `const host = createDomWidgetHost(...)` line had a
+  // chance to return + bind. Hoisting to a `let` initialized to null
+  // means the early call no-ops on the null check instead of crashing
+  // with a ReferenceError.
+  let host: ReturnType<typeof createDomWidgetHost> | null = null;
+
   // State-driven minWidth. Initialized to the worst-case-fits value so
   // the node has a sensible width on first paint, before Vue has
   // mounted and emitted its computed value. InjectorWidget emits a
@@ -400,7 +412,13 @@ export function create(node: InjectorNode, inputName: string) {
             connectionsCollapsed.value = next;
           },
           onChange: (json: string) => {
-            host.setValue(json);
+            // `host` is forward-declared as nullable above so the very
+            // first `request-min-width` emit (fired during setup, before
+            // the `host =` assignment lands) doesn't crash. By the time
+            // onChange fires the host is always non-null — Vue's
+            // `change` event only fires from user-driven mutations
+            // that happen after mount.
+            host!.setValue(json);
             // host.setValue is designed not to fire onValueRestored on
             // user-side mutations (prevents persist loops). But we DO
             // want currentJson to reflect the latest so normalizeSlots
@@ -434,13 +452,21 @@ export function create(node: InjectorNode, inputName: string) {
           onRequestMinWidth: (w: number) => {
             if (w === dynamicMinWidth) return;
             dynamicMinWidth = w;
-            host.requestRelayout();
+            // host is null during the very first emit (fired by the
+            // `immediate: true` watch inside InjectorWidget.setup()
+            // — happens BEFORE createDomWidgetHost has returned the
+            // host reference). The initial width was already baked
+            // into `dynamicMinWidth`'s seed value (470), so missing
+            // that first relayout is harmless; the host's own
+            // `computeLayoutSize` will read `dynamicMinWidth` on the
+            // first paint anyway.
+            host?.requestRelayout();
           },
         });
     },
   };
 
-  const host = createDomWidgetHost(node, inputName, wrapper, {
+  host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: initial,
     // Floor sized for header-only state. The inner caret (pi-caret-
     // down) toggles the rows list visibility; when hidden, only the
@@ -460,7 +486,7 @@ export function create(node: InjectorNode, inputName: string) {
       if (v !== currentJson.value) currentJson.value = v;
     },
   });
-  attachThemeDetector(host.widget.element, app);
+  attachThemeDetector(host!.widget.element, app);
 
   // Visual collapse of the dynamic input wires onto input_0's pin.
   // Predicate matches ONLY `input_N` slots so any fixed input (e.g.
@@ -557,7 +583,7 @@ export function create(node: InjectorNode, inputName: string) {
       remappedRows.some((r, i) => r.slot_name !== parsed.rows[i].slot_name);
     if (changed) {
       const next = serializeWidgetJson({ ...parsed, rows: remappedRows });
-      host.setValue(next);
+      host!.setValue(next);
       // Mirror the manual currentJson sync from the parent's onChange
       // handler — host.setValue only updates internal state, not
       // currentJson. Without this the InjectorWidget watcher reads
