@@ -185,3 +185,41 @@
   text-transform: none;
   flex-shrink: 0;
 }
+
+/* ── Drop-pulse + library-flash animations ───────────────────────── */
+
+/* Drop-pulse — accent ring expands then fades, runs once on the
+ * row a user just dropped. Acts as visual confirmation that the
+ * reorder landed. Toggled via `:class="{ 'wp-drop-pulse': ... }"`
+ * on the row's root with the consumer's recentDropUids Set; the
+ * class removes after the keyframe's duration via a setTimeout
+ * cleanup in the consumer (no transitionend listener needed because
+ * keyframes don't fire one for box-shadow). */
+@keyframes wp-drop-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--wp-accent), 0 0 0 0 transparent; }
+  35%  { box-shadow: 0 0 0 3px var(--wp-accent), 0 0 16px rgba(167,139,250,0.45); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
+}
+.wp-drop-pulse { animation: wp-drop-pulse 420ms ease-out; }
+
+/* Library-mutation flash — green ring keeps library-op semantics
+ * distinct from drop-pulse's purple. Used by flashRows() in flip.ts
+ * (Context's library-side refresh / reset / fork paths). Same 420ms
+ * timing so the SHAPE feels identical to drop-pulse. */
+@keyframes wp-row-flash {
+  0%   { box-shadow: 0 0 0 0 var(--wp-kind-combine), 0 0 0 0 transparent; }
+  35%  { box-shadow: 0 0 0 3px var(--wp-kind-combine), 0 0 16px rgba(52,211,153,0.45); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
+}
+.wp-row-flash { animation: wp-row-flash 420ms ease-out; }
+
+/* Drop-rejection shake — used when a row drag is dropped on an
+ * invalid target. Subtle horizontal jitter, 200ms total. */
+@keyframes wp-row-shake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+.wp-row-shake { animation: wp-row-shake 200ms ease-in-out; }

@@ -3738,33 +3738,13 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   box-shadow: 0 10px 24px rgba(0,0,0,0.45);
 }
 
-/* Drop landing pulse — runs once on the dropped row/bundle. */
-@keyframes wp-drop-pulse {
-  0%   { box-shadow: 0 0 0 0 var(--wp-accent), 0 0 0 0 transparent; }
-  35%  { box-shadow: 0 0 0 3px var(--wp-accent), 0 0 16px rgba(167,139,250,0.45); }
-  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
-}
-.wp-drop-pulse { animation: wp-drop-pulse 420ms ease-out; }
-
-/* Phase B: drop-rejection shake (200ms) + post-fork flash (1.5s). */
-@keyframes wp-shake {
-  0%,100% { transform: translateX(0); }
-  20% { transform: translateX(-4px); }
-  40% { transform: translateX(4px); }
-  60% { transform: translateX(-3px); }
-  80% { transform: translateX(2px); }
-}
-@keyframes wp-flash {
-  /* Green ring (kind-combine) keeps library-op semantics distinct from
-   * drop pulse's purple accent. Timing mirrors wp-drop-pulse — 420ms
-   * ease-out with the same 35% peak — so the SHAPE feels identical to
-   * the drop flash without overstaying. Previously 1500ms felt overstayed. */
-  0%   { box-shadow: 0 0 0 0 var(--wp-kind-combine), 0 0 0 0 transparent; }
-  35%  { box-shadow: 0 0 0 3px var(--wp-kind-combine), 0 0 16px rgba(52,211,153,0.45); }
-  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
-}
-.wp-module--shake { animation: wp-shake 200ms ease-in-out; }
-.wp-module--flash { animation: wp-flash 420ms ease-out; }
+/* Drop-pulse + library-flash + drop-shake keyframes → moved to
+ * src/components/shared/row-primitives.css so InjectorRow can use
+ * the same animations. .wp-module--flash kept here as an alias to
+ * the shared .wp-row-flash so existing flip.ts default classes
+ * still work for Context's library-op flash path. */
+.wp-module--flash { animation: wp-row-flash 420ms ease-out; }
+.wp-module--shake { animation: wp-row-shake 200ms ease-in-out; }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 

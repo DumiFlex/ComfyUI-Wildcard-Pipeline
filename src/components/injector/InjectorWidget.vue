@@ -331,6 +331,11 @@ watch(
 // animation no-ops under reduce-motion settings.
 const dragSrcIdx = ref<number | null>(null);
 const listEl = ref<HTMLElement | null>(null);
+/** UIDs of rows that just landed via drag-drop. Template binds the
+ *  `.wp-drop-pulse` class while a UID is present; entries clear after
+ *  the keyframe duration (420ms in shared/row-primitives.css). */
+const recentDropUids = ref<Set<string>>(new Set());
+const DROP_PULSE_MS = 420;
 
 function onRowDragStart(fromIdx: number): void {
   dragSrcIdx.value = fromIdx;
@@ -348,6 +353,11 @@ function onRowDrop(overIdx: number, edge: "before" | "after"): void {
   const nextRows = reorderInjectorRows(value.value.rows, from, toIdx);
   if (nextRows === value.value.rows) return;
 
+  // Capture the moved row's uid so we can pulse it AFTER the reorder.
+  // reorderInjectorRows reassigns slot_name in place (sequential
+  // input_N), but _uid is stable per row identity.
+  const movedUid = value.value.rows[from]?._uid;
+
   // Snapshot row positions BEFORE the mutation. applyFlip below
   // diffs against these to compute the slide distance per row.
   const container = listEl.value;
@@ -364,6 +374,20 @@ function onRowDrop(overIdx: number, edge: "before" | "after"): void {
     void nextTick(() => {
       applyFlip(container, before, (el) => el.dataset.uid ?? null);
     });
+  }
+
+  // Drop-pulse on the dropped row. Set entry → template binds
+  // `.wp-drop-pulse` → keyframe runs 420ms → cleanup removes uid.
+  // Skip the pulse under reduce-motion so the user's setting is
+  // respected — checking the body class directly mirrors how
+  // shared/flip.ts gates its own animations.
+  if (movedUid && !document.body.classList.contains("wp-a11y-no-motion")) {
+    recentDropUids.value = new Set([...recentDropUids.value, movedUid]);
+    setTimeout(() => {
+      const next = new Set(recentDropUids.value);
+      next.delete(movedUid);
+      recentDropUids.value = next;
+    }, DROP_PULSE_MS);
   }
 }
 
@@ -405,6 +429,7 @@ defineExpose({ addRow, removeRow });
       <InjectorRowComp
         v-for="(row, idx) in value.rows"
         :key="row._uid"
+        :class="{ 'wp-drop-pulse': recentDropUids.has(row._uid) }"
         :row="row"
         :index="idx"
         :reorderable="value.rows.length > 1"
