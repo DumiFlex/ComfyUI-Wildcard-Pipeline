@@ -254,53 +254,8 @@ function onSpaClick(): void {
   font-size: 12px;
   color: var(--wp-text);
 }
-.cnm__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  background: var(--wp-brand-gradient);
-  border-bottom: 1px solid var(--wp-border);
-  position: relative;
-}
-.cnm__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(35, 35, 35, 0.85);
-  pointer-events: none;
-}
-.cnm__head > * { position: relative; z-index: 1; }
-.cnm__head-icon {
-  color: var(--wp-kind-constraint, var(--wp-accent));
-  font-size: 16px;
-  margin-top: 1px;
-}
-.cnm__title-block { flex: 1; min-width: 0; }
-.cnm__title-row { display: flex; align-items: center; gap: 8px; }
-.cnm__name { font: 700 13px var(--wp-font-sans); color: var(--wp-text); }
-.cnm__chip {
-  font: 600 9px var(--wp-font-sans);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-  padding: 2px 5px;
-  border-radius: 2px;
-  background: color-mix(in oklab, var(--wp-kind-constraint, var(--wp-accent)) 22%, transparent);
-  color: var(--wp-kind-constraint, var(--wp-accent));
-}
-.cnm__sub {
-  font: 10px var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
-  margin-top: 2px;
-}
-.cnm__close {
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font-size: 13px;
-  padding: 4px;
-  cursor: pointer;
-}
+/* Head styling lives in src/components/context/editors/_modal-head.css
+ * (imported once by ContextWidget). */
 .cnm__foot {
   display: flex;
   align-items: center;

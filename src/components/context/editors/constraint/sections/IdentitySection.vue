@@ -104,22 +104,6 @@ function onResetName(): void {
   gap: 6px;
 }
 .id__input-row .id__input { flex: 1; min-width: 0; }
-.id__reset {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: auto;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.id__reset:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.id__reset .pi { font-size: 10px; }
+/* `.id__reset` styling lives in src/components/context/editors/
+ * _modal-template-ctrls.css (imported by ContextWidget unscoped). */
 </style>

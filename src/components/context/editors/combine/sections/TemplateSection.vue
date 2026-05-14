@@ -380,71 +380,10 @@ function toggleVarMenu(): void {
   align-items: center;
   gap: 6px;
 }
-.tpl__menu-wrap { position: relative; }
-.tpl__menu-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 600 10px var(--wp-font-mono);
-  cursor: pointer;
-}
-.tpl__menu-btn:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.tpl__menu-btn .pi { font-size: 9px; }
-.tpl__menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 140px;
-  max-height: 220px;
-  overflow-y: auto;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 20;
-  padding: 3px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.tpl__menu-item {
-  text-align: left;
-  padding: 4px 8px;
-  background: transparent;
-  border: 0;
-  border-radius: 2px;
-  font: 600 11px var(--wp-font-mono);
-  cursor: pointer;
-  color: var(--wp-text);
-}
-.tpl__menu-item:hover {
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-}
-.tpl__reset {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-}
-.tpl__reset:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.tpl__reset .pi { font-size: 10px; }
+/* Insert-var menu button + reset button + dropdown panel + items —
+ * shared with the InjectorBindingModal via
+ * src/components/context/editors/_modal-template-ctrls.css. Single
+ * source of truth keeps both modals at the same 22px button height. */
 
 .tpl__input {
   width: 100%;

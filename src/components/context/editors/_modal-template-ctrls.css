@@ -1,0 +1,126 @@
+/* Shared template-section controls — insert-var/insert-slot dropdown
+ * button + reset button + dropdown panel + dropdown item. Used by:
+ *   - Combine's TemplateSection (`.tpl__*`)
+ *   - InjectorBindingModal     (`.ibm__*`)
+ *
+ * Both modals previously declared their own copies of these rules with
+ * tiny differences in padding/height — visible in the UI as a slight
+ * vertical mis-match between the `+ $slot` / `+ $var` button and the
+ * sibling reset button. Single source of truth here keeps both modals
+ * locked to the same dimensions (22px tall, explicit height + box-
+ * sizing).
+ *
+ * Imported globally from ContextWidget's unscoped `<style>` block.
+ * Class names are namespaced (`.tpl__*`, `.ibm__*`) so no leakage
+ * concerns. */
+
+/* Wrap div is `inline-flex` (not the default block) so its inner
+ * `<button>` (inline-flex, height: 22px) doesn't generate a taller
+ * anonymous line-box around it from the parent's inherited
+ * line-height. Block-level wrapper + inline-flex child can leave
+ * 1-2px of descender space below the button, shifting it down vs
+ * the sibling reset button (which is a direct flex child with no
+ * wrapping line-box). Empirically: this is the exact gap the
+ * injector modal showed but the combine modal didn't, since the
+ * combine modal's `.tpl` section uses a different base line-height
+ * inheritance chain. Switching the wrapper to inline-flex pins
+ * cross-axis size to the button itself, killing the offset. */
+.tpl__menu-wrap, .ibm__menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tpl__menu-btn, .ibm__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  box-sizing: border-box;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font: 600 10px var(--wp-font-mono);
+  cursor: pointer;
+  line-height: 1;
+}
+.tpl__menu-btn:hover, .ibm__menu-btn:hover {
+  border-color: var(--wp-accent);
+  color: var(--wp-text);
+}
+.tpl__menu-btn .pi, .ibm__menu-btn .pi { font-size: 9px; }
+
+/* Reset button — used by section-level modal headers:
+ *   - .tpl__reset      Combine TemplateSection reset
+ *   - .ibm__reset      InjectorBindingModal template reset
+ *   - .id__reset       IdentitySection reset (all kinds)
+ *
+ * 22x22 square so it visually pairs with the 22px-tall menu-btn
+ * variants above. Consumers used to declare their own copies with
+ * tiny drift (`width: 24px`, `height: auto`, etc) — single source
+ * keeps them locked.
+ *
+ * NOT included here: `.row__reset` / `.row__delete` (FixedValues
+ * ValueRow inline per-row actions) and `.cfp__reset` (Constraint
+ * cell popover). Those use a "stealth" style (transparent border
+ * at rest, colored bg on hover) for in-row inline actions rather
+ * than the section-level affordance shape. Different visual role,
+ * different rule set — kept local to those SFCs. */
+.tpl__reset, .ibm__reset, .id__reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.tpl__reset:hover, .ibm__reset:hover, .id__reset:hover {
+  border-color: var(--wp-accent);
+  color: var(--wp-text);
+}
+.tpl__reset .pi, .ibm__reset .pi, .id__reset .pi {
+  font-size: 10px;
+}
+
+.tpl__menu, .ibm__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 20;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tpl__menu-item, .ibm__menu-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  text-align: left;
+  padding: 4px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  color: var(--wp-text);
+}
+.tpl__menu-item:hover, .ibm__menu-item:hover {
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+}

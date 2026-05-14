@@ -147,64 +147,9 @@ function onSpaClick(): void {
   font-size: 12px;
   color: var(--wp-text);
 }
-.wcm__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  /* Match the v1 modal head: brand gradient (indigo→teal) overlaid
-   * with a near-opaque dark wash so a faint hue bleeds through.
-   * `::after` positions the wash absolutely; children sit on top
-   * via z-index. */
-  background: var(--wp-brand-gradient);
-  border-bottom: 1px solid var(--wp-border);
-  position: relative;
-}
-.wcm__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(35, 35, 35, 0.85);
-  pointer-events: none;
-}
-.wcm__head > * { position: relative; z-index: 1; }
-.wcm__head-icon {
-  color: var(--wp-kind-wildcard);
-  font-size: 16px;
-  margin-top: 1px;
-}
-.wcm__title-block { flex: 1; min-width: 0; }
-.wcm__title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.wcm__name {
-  font: 700 13px var(--wp-font-sans);
-  color: var(--wp-text);
-}
-.wcm__chip {
-  font: 600 9px var(--wp-font-sans);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-  padding: 2px 5px;
-  border-radius: 2px;
-  background: var(--wp-violet-bg);
-  color: var(--wp-kind-wildcard);
-}
-.wcm__sub {
-  font: 10px var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
-  margin-top: 2px;
-}
-.wcm__close {
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font-size: 13px;
-  padding: 4px;
-  cursor: pointer;
-}
+/* Head styling lives in src/components/context/editors/_modal-head.css
+ * (imported once by ContextWidget). Adopted from InjectorBindingModal
+ * so every per-instance edit modal reads as one design family. */
 .wcm__foot {
   display: flex;
   align-items: center;

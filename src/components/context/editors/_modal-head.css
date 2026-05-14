@@ -1,0 +1,86 @@
+/* Shared modal-head styling — adopted from InjectorBindingModal so
+ * every per-instance edit modal in the extension reads as one
+ * design family. Each modal sets `--modal-accent` to its kind color;
+ * the gradient + chip + icon all read from that single var.
+ *
+ * Imported once from ContextWidget's unscoped `<style>` block — the
+ * class names are namespaced (`cbm__`, `cnm__`, `dvm__`, `fvm__`,
+ * `wcm__`) so global declaration is safe.
+ *
+ * NOT wrapped in `@layer wp-extension` — same constraint as the
+ * other shared CSS files in the codebase (Vue's scoped CSS scoper
+ * can't parse @layer; namespace prefix carries isolation duty).
+ */
+
+/* Per-modal accent — kind color drives the head gradient + chip + icon. */
+.cbm__head { --modal-accent: var(--wp-kind-combine); }
+.cnm__head { --modal-accent: var(--wp-kind-constraint, var(--wp-accent)); }
+.dvm__head { --modal-accent: var(--wp-kind-derivation, var(--wp-accent)); }
+.fvm__head { --modal-accent: var(--wp-kind-fixed); }
+.wcm__head { --modal-accent: var(--wp-kind-wildcard); }
+
+.cbm__head, .cnm__head, .dvm__head, .fvm__head, .wcm__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 18%, var(--wp-bg2)) 0%,
+    var(--wp-bg2) 100%
+  );
+  border-bottom: 1px solid var(--wp-border);
+}
+
+.cbm__head-icon, .cnm__head-icon, .dvm__head-icon, .fvm__head-icon, .wcm__head-icon {
+  color: var(--modal-accent, var(--wp-accent));
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+
+.cbm__title-block, .cnm__title-block, .dvm__title-block, .fvm__title-block, .wcm__title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.cbm__title-row, .cnm__title-row, .dvm__title-row, .fvm__title-row, .wcm__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cbm__name, .cnm__name, .dvm__name, .fvm__name, .wcm__name {
+  font: 600 13px var(--wp-font-sans);
+  color: var(--wp-text);
+}
+
+.cbm__chip, .cnm__chip, .dvm__chip, .fvm__chip, .wcm__chip {
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 22%, transparent);
+  color: var(--modal-accent, var(--wp-accent));
+}
+
+.cbm__sub, .cnm__sub, .dvm__sub, .fvm__sub, .wcm__sub {
+  font: 400 10px var(--wp-font-mono);
+  color: var(--wp-text-dim, var(--wp-text3));
+  margin-top: 2px;
+}
+
+.cbm__close, .cnm__close, .dvm__close, .fvm__close, .wcm__close {
+  background: transparent;
+  border: 0;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  padding: 4px;
+}
+.cbm__close:hover, .cnm__close:hover, .dvm__close:hover, .fvm__close:hover, .wcm__close:hover {
+  color: var(--wp-text);
+}
+.cbm__close .pi, .cnm__close .pi, .dvm__close .pi, .fvm__close .pi, .wcm__close .pi {
+  font-size: 12px;
+}
