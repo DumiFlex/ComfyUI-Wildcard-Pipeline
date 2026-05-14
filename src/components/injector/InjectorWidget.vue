@@ -10,7 +10,7 @@ import {
 } from "../../widgets/_shared";
 import { reorderInjectorRows } from "../../widgets/injector";
 import { labelFor, scanInjectorConflicts } from "../../extension/conflicts";
-import { applyFlip, captureRects } from "../shared/flip";
+import { applyFlip, captureRects, MOTION_FLIP_MS } from "../shared/flip";
 import InjectorRowComp from "./InjectorRow.vue";
 
 // NOTE: when we wire enter/leave animations (row added on connect,
@@ -376,18 +376,20 @@ function onRowDrop(overIdx: number, edge: "before" | "after"): void {
     });
   }
 
-  // Drop-pulse on the dropped row. Set entry → template binds
-  // `.wp-drop-pulse` → keyframe runs 420ms → cleanup removes uid.
-  // Skip the pulse under reduce-motion so the user's setting is
-  // respected — checking the body class directly mirrors how
-  // shared/flip.ts gates its own animations.
+  // Drop-pulse on the dropped row. Delay the class apply by
+  // MOTION_FLIP_MS so the FLIP slide finishes first — without the
+  // delay the pulse ring would paint mid-swap on a row that's still
+  // animating into position (matches ContextWidget's pulseDrop
+  // pattern). Skip entirely under reduce-motion.
   if (movedUid && !document.body.classList.contains("wp-a11y-no-motion")) {
-    recentDropUids.value = new Set([...recentDropUids.value, movedUid]);
     setTimeout(() => {
-      const next = new Set(recentDropUids.value);
-      next.delete(movedUid);
-      recentDropUids.value = next;
-    }, DROP_PULSE_MS);
+      recentDropUids.value = new Set([...recentDropUids.value, movedUid]);
+      setTimeout(() => {
+        const next = new Set(recentDropUids.value);
+        next.delete(movedUid);
+        recentDropUids.value = next;
+      }, DROP_PULSE_MS);
+    }, MOTION_FLIP_MS);
   }
 }
 

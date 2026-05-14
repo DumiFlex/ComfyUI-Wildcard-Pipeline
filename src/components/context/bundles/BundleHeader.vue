@@ -62,12 +62,13 @@ const summary = computed(() => {
     @drop="(ev) => emit('drop', ev)"
     @contextmenu.stop.prevent="(ev) => emit('contextmenu', ev)"
   >
-    <!-- Drag handle — exact same 6×12 SVG dot grid markup the
-         standalone module rows use (`.wp-drag-handle`), so the
-         visual + size matches across the action surface. -->
-    <span class="wp-bundle-handle" aria-hidden="true" title="Drag to reorder bundle">
+    <!-- Drag handle — uses the shared `.wp-drag-handle` class from
+         row-primitives.css, same 6×12 SVG grip ModuleRow + InjectorRow
+         render. Per-state hover/active behavior comes from shared CSS;
+         bundle-specific opacity-fade-on-header-hover stays in scoped. -->
+    <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder bundle">
       <svg
-        class="wp-bundle-handle__grip"
+        class="wp-drag-handle__grip"
         viewBox="0 0 6 12"
         width="6"
         height="12"
@@ -107,7 +108,7 @@ const summary = computed(() => {
       />
       <span class="wp-bundle-enabled-mark"></span>
     </label>
-    <span class="wp-bundle-icon" aria-hidden="true">
+    <span class="wp-row-type-icon wp-bundle-icon" aria-hidden="true">
       <i class="pi pi-box"></i>
     </span>
     <span class="wp-bundle-chip">bundle</span>
@@ -115,7 +116,7 @@ const summary = computed(() => {
     <span class="wp-bundle-summary">{{ summary }}</span>
     <button
       type="button"
-      class="wp-bundle-action wp-bundle-action--danger"
+      class="wp-btn--icon-sm wp-btn--danger wp-bundle-action"
       draggable="false"
       title="Remove bundle (right-click for more)"
       :aria-label="`remove bundle ${name}`"
@@ -126,6 +127,7 @@ const summary = computed(() => {
 
 <style scoped>
 @import "../../shared/theme.css";
+@import "../../shared/row-primitives.css";
 
 .wp-bundle-header {
   /* The bundle frame box is painted by `.wp-bundle` directly (Batch 2
@@ -172,23 +174,11 @@ const summary = computed(() => {
     var(--wp-bg2) 8px
   );
 }
-/* Drag handle — mirror `.wp-drag-handle` from ContextWidget exactly.
- * 6px-wide inline-flex container holding the 6×12 SVG grip; opacity
- * fades on hover, color follows --wp-text2 on hover. */
-.wp-bundle-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--wp-text3);
-  width: 6px;
-  flex-shrink: 0;
-  cursor: grab;
-  opacity: 0.45;
-  transition: opacity 0.15s, color 0.15s;
-}
-.wp-bundle-handle:active { cursor: grabbing; }
-.wp-bundle-handle__grip { display: block; }
-.wp-bundle-header:hover .wp-bundle-handle {
+/* Drag handle base styles come from shared row-primitives.css
+ * (`.wp-drag-handle` + `.wp-drag-handle__grip`). Bundle-specific
+ * tweak: hover-on-header reveal (the row-level grip stays subtle
+ * until the user looks at the row). */
+.wp-bundle-header:hover .wp-drag-handle {
   opacity: 1;
   color: var(--wp-text2);
 }
@@ -231,15 +221,10 @@ const summary = computed(() => {
   background: var(--b);
   border-color: var(--b);
 }
-.wp-bundle-icon {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--b);
-}
+/* Bundle icon base from shared .wp-row-type-icon (16×16 inline-flex).
+ * Bundle-specific override: color from bundle frame token, font-size
+ * 12 for visual parity with ModuleRow's .wp-row-type-icon density. */
+.wp-bundle-icon { color: var(--b); }
 .wp-bundle-icon .pi { font-size: 12px; }
 .wp-bundle-chip {
   /* line-height 1.2 keeps room for descenders — line-height: 1 clipped
@@ -266,38 +251,24 @@ const summary = computed(() => {
   color: var(--wp-text-dim, var(--wp-text3));
   flex-shrink: 0;
 }
-/* Same size + shape as `.wp-btn--icon-sm` from ContextWidget so the
- * action reads as part of the same family. Difference: the BG +
- * BORDER are tinted with the bundle color (instead of transparent)
- * so the button visually anchors to its bundle, and the icon is
- * white (instead of dim). Hover bumps the tint stronger. */
+/* Bundle action button — base size + shape from shared
+ * .wp-btn--icon-sm. Bundle-specific tweak: bg + border tinted with
+ * the bundle frame color so the action reads as belonging to THIS
+ * bundle (instead of looking like a generic row-level icon button).
+ * Hover bumps the tint and (via .wp-btn--danger:hover from shared)
+ * flips the icon to danger-red while keeping the bundle bg. */
 .wp-bundle-action {
   background: color-mix(in srgb, var(--b) 18%, transparent);
-  border: 1px solid var(--b);
-  color: var(--wp-text);
-  font: 500 11px/1 var(--wp-font-sans);
-  padding: 3px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  border-color: var(--b);
 }
 .wp-bundle-action:hover {
   background: color-mix(in srgb, var(--b) 32%, transparent);
 }
-.wp-bundle-action .pi {
-  font-size: 11px;
-}
-.wp-bundle-action--danger:hover {
-  /* Trash hover — mirror module .wp-btn--danger:hover pattern: red
-   * icon, subtle red-tinted border, NOT a full danger-color bg. Bundle
-   * color stays in the background so the button still reads as
-   * 'destructive on THIS bundle' without flipping the whole chip red. */
+/* Override the shared .wp-btn--icon-sm.wp-btn--danger:hover so the
+ * bundle-color bg stays visible even when the danger hover fires
+ * (shared resets bg to transparent — we want the bundle anchor
+ * preserved here). */
+.wp-bundle-action.wp-btn--danger:hover {
   background: color-mix(in srgb, var(--b) 32%, transparent);
   border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--b));
   color: var(--wp-danger);

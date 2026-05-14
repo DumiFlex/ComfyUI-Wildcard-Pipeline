@@ -1753,8 +1753,11 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     await flushPromises();
     onChange.mockClear();
 
-    // Trigger removal via the header's trash button.
-    const trash = wrapper.find(".wp-bundle-action--danger");
+    // Trigger removal via the header's trash button. Bundle-action
+    // migrated to shared `.wp-btn--icon-sm.wp-btn--danger` (Phase 1
+    // shared-primitive consolidation); the bundle-color-tinted bg
+    // override stays on `.wp-bundle-action`.
+    const trash = wrapper.find(".wp-bundle-action.wp-btn--danger");
     await trash.trigger("click");
     // Synchronously after the click, the TransitionGroup container
     // should carry data-suppress-move="true" before the rAF clears it.

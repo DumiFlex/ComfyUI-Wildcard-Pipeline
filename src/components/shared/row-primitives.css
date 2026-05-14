@@ -28,10 +28,17 @@
  *   .is-active               → toggled-on state (internal flag)
  *   .is-locked               → seed-lock active (warn-tinted)
  */
+/* Canonical small icon-button styling. Visible-at-rest (light bg
+ * + light border) so the button reads as a discoverable affordance
+ * instead of an invisible hover-target. ModuleRow historically
+ * achieved this look via the cascade of `.wp-btn` + `.wp-btn--icon-sm`
+ * — by baking it into the icon-sm rule directly, InjectorRow (which
+ * uses only `.wp-btn--icon-sm`) renders identically without needing
+ * to add a `.wp-btn` base class. */
 .wp-btn--icon-sm {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border2);
+  color: var(--wp-text);
   font: 500 11px/1 var(--wp-font-sans);
   padding: 3px;
   border-radius: var(--wp-radius, 4px);
@@ -44,8 +51,8 @@
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .wp-btn--icon-sm:hover {
-  background: var(--wp-bg2);
-  border-color: var(--wp-border-soft, var(--wp-border2));
+  background: var(--wp-bg4, var(--wp-bg2));
+  border-color: var(--wp-border, var(--wp-border2));
   color: var(--wp-text);
 }
 .wp-btn--icon-sm .pi { font-size: 11px; }

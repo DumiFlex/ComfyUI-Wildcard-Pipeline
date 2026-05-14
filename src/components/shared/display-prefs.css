@@ -143,14 +143,19 @@
 }
 
 /* ── Kind style ─────────────────────────────────────────────────────
- * Module type is currently shown by TWO redundant elements:
- *   .wp-mod-icon  — the colored PrimeIcon (per kind: wildcard/fixed/...)
- *   .wp-kind-chip — the text label ("wildcard", "fixed", "combine"...)
+ * Row type is shown by TWO redundant elements per row:
+ *   .wp-row-type-icon  — the colored PrimeIcon (shared across
+ *                        ModuleRow + InjectorRow + future rows)
+ *   .wp-kind-chip      — the text label, shared across the same
  *
  * Default `icon` shows the icon and hides the chip — most compact and
  * the colored icon already telegraphs the kind. `chip` hides the icon
  * and shows the text label — preferred for users who scan by name.
- * `both` keeps the legacy stacked layout for users who want max info. */
+ * `both` keeps the legacy stacked layout for users who want max info.
+ *
+ * The shared classes mean this setting now reaches every row UI in
+ * the extension — Module rows, Injector rows, anything future that
+ * uses the same primitives. No per-widget toggle wiring needed. */
 
 .wp-kind-style-icon .wp-kind-chip {
   display: none !important;
@@ -160,21 +165,13 @@
 .wp-kind-style-icon .wp-bundle-chip {
   display: none !important;
 }
-/* Injector type chip — same pattern, hide on icon-only. */
-.wp-kind-style-icon .wp-inj-type-chip {
-  display: none !important;
-}
 
-.wp-kind-style-chip .wp-mod-icon {
+.wp-kind-style-chip .wp-row-type-icon {
   display: none !important;
 }
-/* Bundle's box icon mirrors the per-kind .wp-mod-icon — hide it when
- * the user prefers chip-only display. */
+/* Bundle's box icon mirrors the per-kind .wp-row-type-icon — hide
+ * it when the user prefers chip-only display. */
 .wp-kind-style-chip .wp-bundle-icon {
-  display: none !important;
-}
-/* Injector type icon — same pattern, hide on chip-only. */
-.wp-kind-style-chip .wp-inj-type-icon {
   display: none !important;
 }
 
