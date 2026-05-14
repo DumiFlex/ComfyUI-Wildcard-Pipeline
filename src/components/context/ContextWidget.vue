@@ -3312,11 +3312,11 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   width: 12px !important;
   height: 12px !important;
 }
-.wp-module--in-bundle .wp-mod-icon {
+.wp-module--in-bundle .wp-row-type-icon {
   width: 16px !important;
   height: 16px !important;
 }
-.wp-module--in-bundle .wp-mod-icon .pi {
+.wp-module--in-bundle .wp-row-type-icon .pi {
   font-size: 12px !important;
   line-height: 1 !important;
 }
@@ -3809,21 +3809,16 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-type-icon.type-pipeline     { color: var(--wp-kind-pipeline); }
 
 /* Kind icon — canonical PrimeIcons per module type (Task 8).
- * Color follows the same --wp-kind-* token map as the border-left. */
-.wp-mod-icon {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--wp-kind-wildcard);
-}
-.wp-mod-icon .pi { font-size: 12px; line-height: 1; }
-.wp-module[data-kind="combine"]      .wp-mod-icon { color: var(--wp-kind-combine); }
-.wp-module[data-kind="derivation"]   .wp-mod-icon { color: var(--wp-kind-derivation); }
-.wp-module[data-kind="constraint"]   .wp-mod-icon { color: var(--wp-kind-constraint); }
-.wp-module[data-kind="fixed_values"] .wp-mod-icon { color: var(--wp-kind-fixed); }
+ * Base styles live in src/components/shared/row-primitives.css under
+ * `.wp-row-type-icon`. Color follows the same --wp-kind-* token map
+ * as the border-left. Default color override (wildcard) + bump font
+ * size to 12 to match Module density. */
+.wp-row-type-icon { color: var(--wp-kind-wildcard); }
+.wp-row-type-icon .pi { font-size: 12px; }
+.wp-module[data-kind="combine"]      .wp-row-type-icon { color: var(--wp-kind-combine); }
+.wp-module[data-kind="derivation"]   .wp-row-type-icon { color: var(--wp-kind-derivation); }
+.wp-module[data-kind="constraint"]   .wp-row-type-icon { color: var(--wp-kind-constraint); }
+.wp-module[data-kind="fixed_values"] .wp-row-type-icon { color: var(--wp-kind-fixed); }
 
 .wp-module-name {
   flex: 1;

@@ -153,43 +153,43 @@ describe("InjectorRow — disconnected variant", () => {
 describe("InjectorRow — type icon (Phase C.1a)", () => {
   it("renders pi-pencil for string type", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "STRING" } });
-    expect(w.find(".wp-inj-type-icon .pi-pencil").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-pencil").exists()).toBe(true);
   });
   it("renders pi-hashtag for int type", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "INT" } });
-    expect(w.find(".wp-inj-type-icon .pi-hashtag").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-hashtag").exists()).toBe(true);
   });
   it("renders pi-percentage for float type", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "FLOAT" } });
-    expect(w.find(".wp-inj-type-icon .pi-percentage").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-percentage").exists()).toBe(true);
   });
   it("renders pi-check-square for boolean type", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "BOOLEAN" } });
-    expect(w.find(".wp-inj-type-icon .pi-check-square").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-check-square").exists()).toBe(true);
   });
   it("falls back to pi-circle for unknown type", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "WEIRDTYPE" } });
-    expect(w.find(".wp-inj-type-icon .pi-circle").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-circle").exists()).toBe(true);
   });
   it("maps ComfyUI tensor types: IMAGE → pi-image", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "IMAGE" } });
-    expect(w.find(".wp-inj-type-icon .pi-image").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-image").exists()).toBe(true);
   });
   it("maps ComfyUI tensor types: LATENT → pi-cloud", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "LATENT" } });
-    expect(w.find(".wp-inj-type-icon .pi-cloud").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-cloud").exists()).toBe(true);
   });
   it("maps ComfyUI model types: MODEL → pi-cube", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "MODEL" } });
-    expect(w.find(".wp-inj-type-icon .pi-cube").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-cube").exists()).toBe(true);
   });
   it("maps ComfyUI model types: CLIP → pi-tag", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "CLIP" } });
-    expect(w.find(".wp-inj-type-icon .pi-tag").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-tag").exists()).toBe(true);
   });
   it("maps audio types: AUDIO → pi-volume-up", () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), valueType: "AUDIO" } });
-    expect(w.find(".wp-inj-type-icon .pi-volume-up").exists()).toBe(true);
+    expect(w.find(".wp-row-type-icon .pi-volume-up").exists()).toBe(true);
   });
 });
 

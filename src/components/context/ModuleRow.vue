@@ -74,7 +74,7 @@ const {
         <input type="checkbox" :checked="module.enabled" :aria-label="`enable ${module.meta.name}`" @change="toggleEnabled(idx)" />
         <span class="wp-toggle-mark"></span>
       </label>
-      <span class="wp-mod-icon" :title="module.type" aria-hidden="true">
+      <span class="wp-row-type-icon" :title="module.type" aria-hidden="true">
         <i :class="kindIcon(module.type)" />
       </span>
       <span v-if="KIND_TITLE[module.type] || module.type"

@@ -176,7 +176,7 @@ function onDragEnd(): void {
       <span class="wp-inj-toggle-mark"></span>
     </label>
 
-    <span class="wp-inj-type-icon" aria-hidden="true">
+    <span class="wp-row-type-icon" aria-hidden="true">
       <i :class="['pi', typeIcon]" />
     </span>
 
@@ -190,7 +190,7 @@ function onDragEnd(): void {
 
     <span
       v-if="valueType"
-      class="wp-inj-type-chip"
+      class="wp-kind-chip"
       data-test="inj-row-type"
     >{{ valueType.toLowerCase() }}</span>
 
@@ -390,35 +390,29 @@ function onDragEnd(): void {
   box-shadow: 0 0 0 2px var(--wp-violet);
 }
 
-/* Type icon — color-matched to type, mirrors .wp-mod-icon from Context */
-.wp-inj-type-icon {
-  width: 16px;
-  flex-shrink: 0;
-  font-size: 11px;
-  text-align: center;
-  line-height: 1;
-  color: var(--wp-text3);
-}
-.wp-inj-row[data-type="string"]       .wp-inj-type-icon { color: var(--wp-amber); }
-.wp-inj-row[data-type="int"]          .wp-inj-type-icon { color: var(--wp-green); }
-.wp-inj-row[data-type="float"]        .wp-inj-type-icon { color: var(--wp-var-7); }
-.wp-inj-row[data-type="boolean"]      .wp-inj-type-icon { color: var(--wp-var-5); }
+/* Type icon — base style lives in src/components/shared/row-primitives.css
+ * under `.wp-row-type-icon`. Only the per-value-type color overrides
+ * are injector-specific and stay here. ContextWidget has its own
+ * per-module-kind color rules in its scoped block. */
+.wp-inj-row[data-type="string"]       .wp-row-type-icon { color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]          .wp-row-type-icon { color: var(--wp-green); }
+.wp-inj-row[data-type="float"]        .wp-row-type-icon { color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"]      .wp-row-type-icon { color: var(--wp-var-5); }
 /* ComfyUI tensor / model types — colored from the wp-var palette to
  * stay in the same visual family as the four primitives. */
-.wp-inj-row[data-type="image"]        .wp-inj-type-icon { color: var(--wp-var-1); }
-.wp-inj-row[data-type="mask"]         .wp-inj-type-icon { color: var(--wp-var-6); }
-.wp-inj-row[data-type="latent"]       .wp-inj-type-icon { color: var(--wp-var-4); }
-.wp-inj-row[data-type="conditioning"] .wp-inj-type-icon { color: var(--wp-var-2); }
-.wp-inj-row[data-type="model"]        .wp-inj-type-icon { color: var(--wp-var-8); }
-.wp-inj-row[data-type="clip"]         .wp-inj-type-icon { color: var(--wp-var-3); }
-.wp-inj-row[data-type="vae"]          .wp-inj-type-icon { color: var(--wp-var-6); }
-.wp-inj-row[data-type="audio"]        .wp-inj-type-icon { color: var(--wp-var-7); }
-.wp-inj-row[data-type="video"]        .wp-inj-type-icon { color: var(--wp-var-4); }
-.wp-inj-row[data-type="noise"]        .wp-inj-type-icon { color: var(--wp-var-6); }
-.wp-inj-row[data-type="sigmas"]       .wp-inj-type-icon { color: var(--wp-var-1); }
-.wp-inj-row[data-type="guider"]       .wp-inj-type-icon { color: var(--wp-var-3); }
-.wp-inj-row[data-type="sampler"]      .wp-inj-type-icon { color: var(--wp-var-2); }
-.wp-inj-type-icon .pi { font-size: 11px; }
+.wp-inj-row[data-type="image"]        .wp-row-type-icon { color: var(--wp-var-1); }
+.wp-inj-row[data-type="mask"]         .wp-row-type-icon { color: var(--wp-var-6); }
+.wp-inj-row[data-type="latent"]       .wp-row-type-icon { color: var(--wp-var-4); }
+.wp-inj-row[data-type="conditioning"] .wp-row-type-icon { color: var(--wp-var-2); }
+.wp-inj-row[data-type="model"]        .wp-row-type-icon { color: var(--wp-var-8); }
+.wp-inj-row[data-type="clip"]         .wp-row-type-icon { color: var(--wp-var-3); }
+.wp-inj-row[data-type="vae"]          .wp-row-type-icon { color: var(--wp-var-6); }
+.wp-inj-row[data-type="audio"]        .wp-row-type-icon { color: var(--wp-var-7); }
+.wp-inj-row[data-type="video"]        .wp-row-type-icon { color: var(--wp-var-4); }
+.wp-inj-row[data-type="noise"]        .wp-row-type-icon { color: var(--wp-var-6); }
+.wp-inj-row[data-type="sigmas"]       .wp-row-type-icon { color: var(--wp-var-1); }
+.wp-inj-row[data-type="guider"]       .wp-row-type-icon { color: var(--wp-var-3); }
+.wp-inj-row[data-type="sampler"]      .wp-row-type-icon { color: var(--wp-var-2); }
 
 /* Slot tag — kind-chip-shaped pill in muted grey, sans font.
  * Shows either input_N or the user's custom socket label. Cap width
@@ -439,32 +433,28 @@ function onDragEnd(): void {
   white-space: nowrap;
 }
 
-/* Type chip — same shape as Context .wp-kind-chip, color-keyed by type */
-.wp-inj-type-chip {
-  font: 600 9px/1.2 var(--wp-font-sans);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-  padding: 3px 5px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.wp-inj-row[data-type="string"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-amber)  22%, transparent); color: var(--wp-amber); }
-.wp-inj-row[data-type="int"]          .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-green)  22%, transparent); color: var(--wp-green); }
-.wp-inj-row[data-type="float"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
-.wp-inj-row[data-type="boolean"]      .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-5) 22%, transparent); color: var(--wp-var-5); }
-.wp-inj-row[data-type="image"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-1) 22%, transparent); color: var(--wp-var-1); }
-.wp-inj-row[data-type="mask"]         .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
-.wp-inj-row[data-type="latent"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-4) 22%, transparent); color: var(--wp-var-4); }
-.wp-inj-row[data-type="conditioning"] .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
-.wp-inj-row[data-type="model"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-8) 22%, transparent); color: var(--wp-var-8); }
-.wp-inj-row[data-type="clip"]         .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-3) 22%, transparent); color: var(--wp-var-3); }
-.wp-inj-row[data-type="vae"]          .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
-.wp-inj-row[data-type="audio"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
-.wp-inj-row[data-type="video"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-4) 22%, transparent); color: var(--wp-var-4); }
-.wp-inj-row[data-type="noise"]        .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
-.wp-inj-row[data-type="sigmas"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-1) 22%, transparent); color: var(--wp-var-1); }
-.wp-inj-row[data-type="guider"]       .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-3) 22%, transparent); color: var(--wp-var-3); }
-.wp-inj-row[data-type="sampler"]      .wp-inj-type-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
+/* Type chip — base + neutral default come from shared `.wp-kind-chip`
+ * (defined in src/components/shared/theme.css). The per-value-type
+ * color overrides are injector-specific (vocabulary differs from
+ * ModuleRow's wildcard/fixed/combine/... kinds) so they stay here,
+ * targeting the shared base class. */
+.wp-inj-row[data-type="string"]       .wp-kind-chip { background: color-mix(in oklab, var(--wp-amber)  22%, transparent); color: var(--wp-amber); }
+.wp-inj-row[data-type="int"]          .wp-kind-chip { background: color-mix(in oklab, var(--wp-green)  22%, transparent); color: var(--wp-green); }
+.wp-inj-row[data-type="float"]        .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
+.wp-inj-row[data-type="boolean"]      .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-5) 22%, transparent); color: var(--wp-var-5); }
+.wp-inj-row[data-type="image"]        .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-1) 22%, transparent); color: var(--wp-var-1); }
+.wp-inj-row[data-type="mask"]         .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
+.wp-inj-row[data-type="latent"]       .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-4) 22%, transparent); color: var(--wp-var-4); }
+.wp-inj-row[data-type="conditioning"] .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
+.wp-inj-row[data-type="model"]        .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-8) 22%, transparent); color: var(--wp-var-8); }
+.wp-inj-row[data-type="clip"]         .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-3) 22%, transparent); color: var(--wp-var-3); }
+.wp-inj-row[data-type="vae"]          .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
+.wp-inj-row[data-type="audio"]        .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-7) 22%, transparent); color: var(--wp-var-7); }
+.wp-inj-row[data-type="video"]        .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-4) 22%, transparent); color: var(--wp-var-4); }
+.wp-inj-row[data-type="noise"]        .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-6) 22%, transparent); color: var(--wp-var-6); }
+.wp-inj-row[data-type="sigmas"]       .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-1) 22%, transparent); color: var(--wp-var-1); }
+.wp-inj-row[data-type="guider"]       .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-3) 22%, transparent); color: var(--wp-var-3); }
+.wp-inj-row[data-type="sampler"]      .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
 
 /* .wp-conflict-dot + .wp-conflict-badge + severity variants
  * + .wp-btn--icon-sm + variants → src/components/shared/row-primitives.css.

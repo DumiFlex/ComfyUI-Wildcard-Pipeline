@@ -66,6 +66,28 @@
   border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border-soft, var(--wp-border2)));
 }
 
+/* ── Row type icon ───────────────────────────────────────────────── */
+
+/* Canonical pi-icon wrapper used at the start of a list row to
+ * signal "what kind of thing is this". Color follows a token chosen
+ * by the consumer via a parent attribute selector (e.g.
+ * `.wp-module[data-kind="combine"] .wp-row-type-icon { color: ...}`
+ * or `.wp-inj-row[data-type="string"] .wp-row-type-icon { color: ...}`).
+ * Consumers also set the inner `.pi` font-size if they want it
+ * larger than the default 11. */
+.wp-row-type-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-align: center;
+  line-height: 1;
+  color: var(--wp-text3);
+}
+.wp-row-type-icon .pi { font-size: 11px; }
+
 /* ── Drag handle ─────────────────────────────────────────────────── */
 
 /* Visible 6-dot grip glyph used to signal "row is draggable". Sized
