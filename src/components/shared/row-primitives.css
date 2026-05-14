@@ -60,8 +60,13 @@
   background: var(--wp-bg4, var(--wp-bg2));
 }
 .wp-btn--icon-sm .pi { font-size: 11px; }
+/* Toggled-on states. Same `color` tokens as the hover variants below
+ * so a button reads with the SAME tint whether the user is hovering
+ * over it or it's already toggled on. Background uses an accent-
+ * tinted wash so the toggled-on row reads as "this is currently
+ * active" beyond just the icon color. */
 .wp-btn--icon-sm.is-active {
-  color: var(--wp-accent-text, var(--wp-accent));
+  color: var(--wp-accent);
   background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
 }
 .wp-btn--icon-sm.is-locked {
