@@ -21,6 +21,9 @@ import WildcardRuntimeSection from "../../components/context/editors/wildcard/se
 import CombineIdentitySection from "../../components/context/editors/combine/sections/IdentitySection.vue";
 import CombineTemplateSection from "../../components/context/editors/combine/sections/TemplateSection.vue";
 import CombineRuntimeSection from "../../components/context/editors/combine/sections/RuntimeSection.vue";
+import FixedIdentitySection from "../../components/context/editors/fixed-values/sections/IdentitySection.vue";
+import FixedValuesSection from "../../components/context/editors/fixed-values/sections/ValuesSection.vue";
+import FixedRuntimeSection from "../../components/context/editors/fixed-values/sections/RuntimeSection.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { ModuleEntry } from "../../widgets/_shared";
 
@@ -127,6 +130,16 @@ function onUpdate(patch: Partial<ModuleEntry>) {
         <CombineIdentitySection :module="moduleEntry" @update="onUpdate" />
         <CombineTemplateSection :module="moduleEntry" @update="onUpdate" />
         <CombineRuntimeSection :module="moduleEntry" @update="onUpdate" />
+      </div>
+
+      <div
+        v-else-if="kind === 'fixed_values' && moduleEntry"
+        data-test="bundle-pane-sections-fixed-values"
+        class="wp-bpane__sections"
+      >
+        <FixedIdentitySection :module="moduleEntry" @update="onUpdate" />
+        <FixedValuesSection :module="moduleEntry" @update="onUpdate" />
+        <FixedRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
       <div

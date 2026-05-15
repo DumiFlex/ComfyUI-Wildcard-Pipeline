@@ -98,6 +98,21 @@ describe("BundleChildPane.vue", () => {
     expect(wrap.find('[data-test="bundle-pane-sections-combine"]').exists()).toBe(true);
   });
 
+  it("mounts fixed_values sections when child.type === 'fixed_values'", () => {
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: {
+          id: "fv_a",
+          type: "fixed_values",
+          meta: { name: "constants" },
+          payload: { values: [] },
+          instance: {},
+        },
+      },
+    });
+    expect(wrap.find('[data-test="bundle-pane-sections-fixed-values"]').exists()).toBe(true);
+  });
+
   it("renders unsupported-kind placeholder for unknown types", () => {
     const wrap = mount(BundleChildPane, {
       props: {
