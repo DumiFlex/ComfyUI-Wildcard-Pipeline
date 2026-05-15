@@ -47,11 +47,11 @@ interface KindMeta {
 }
 
 const KIND_META: Record<ModuleType, KindMeta> = {
-  wildcard:     { type: "wildcard",     label: "Wildcard",    icon: "pi pi-th-large",  routeBase: "/wildcards" },
+  wildcard:     { type: "wildcard",     label: "Wildcard",    icon: "pi pi-sparkles",  routeBase: "/wildcards" },
   fixed_values: { type: "fixed_values", label: "Fixed Value", icon: "pi pi-tag",       routeBase: "/fixed-values" },
-  combine:      { type: "combine",      label: "Combine",     icon: "pi pi-share-alt", routeBase: "/combines" },
-  derivation:   { type: "derivation",   label: "Derivation",  icon: "pi pi-code",      routeBase: "/derivations" },
-  constraint:   { type: "constraint",   label: "Constraint",  icon: "pi pi-sitemap",   routeBase: "/constraints" },
+  combine:      { type: "combine",      label: "Combine",     icon: "pi pi-link", routeBase: "/combines" },
+  derivation:   { type: "derivation",   label: "Derivation",  icon: "pi pi-arrow-right-arrow-left",      routeBase: "/derivations" },
+  constraint:   { type: "constraint",   label: "Constraint",  icon: "pi pi-filter",   routeBase: "/constraints" },
   pipeline:     { type: "pipeline",     label: "Pipeline",    icon: "pi pi-list",      routeBase: "/pipelines" },
 };
 

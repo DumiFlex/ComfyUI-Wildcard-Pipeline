@@ -555,7 +555,7 @@ watch(
               @click="presetApplyFull"
             >Full library</Button>
             <Button
-              variant="ghost" size="sm" icon="pi-th-large"
+              variant="ghost" size="sm" icon="pi-sparkles"
               data-test="io-preset-wildcards"
               @click="presetApplyWildcards"
             >Wildcards only</Button>

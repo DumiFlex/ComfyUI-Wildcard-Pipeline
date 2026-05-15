@@ -37,11 +37,11 @@ export interface GroupMeta {
  * docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx.
  */
 export const GROUPS: GroupMeta[] = [
-  { key: "wildcard",     label: "Wildcards",    icon: "pi pi-th-large",  color: "var(--wp-kind-wildcard)",   type: "wildcard" },
-  { key: "fixed_values", label: "Fixed Values", icon: "pi pi-tag",       color: "var(--wp-kind-fixed)",      type: "fixed_values" },
-  { key: "combine",      label: "Combines",     icon: "pi pi-share-alt", color: "var(--wp-kind-combine)",    type: "combine" },
-  { key: "derivation",   label: "Derivations",  icon: "pi pi-code",      color: "var(--wp-kind-derivation)", type: "derivation" },
-  { key: "constraint",   label: "Constraints",  icon: "pi pi-sitemap",   color: "var(--wp-kind-constraint)", type: "constraint" },
+  { key: "wildcard",     label: "Wildcards",    icon: "pi pi-sparkles",                color: "var(--wp-kind-wildcard)",   type: "wildcard" },
+  { key: "fixed_values", label: "Fixed Values", icon: "pi pi-tag",                     color: "var(--wp-kind-fixed)",      type: "fixed_values" },
+  { key: "combine",      label: "Combines",     icon: "pi pi-link",                    color: "var(--wp-kind-combine)",    type: "combine" },
+  { key: "derivation",   label: "Derivations",  icon: "pi pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)", type: "derivation" },
+  { key: "constraint",   label: "Constraints",  icon: "pi pi-filter",                  color: "var(--wp-kind-constraint)", type: "constraint" },
   { key: "pipeline",     label: "Pipelines",    icon: "pi pi-list",      color: "var(--wp-kind-pipeline)",   type: "pipeline" },
   { key: "category",     label: "Categories",   icon: "pi pi-bookmark",  color: "var(--wp-kind-category, #60a5fa)", type: null },
 ];

@@ -20,11 +20,11 @@ interface KindMeta {
 
 // Mirrors KIND_META from docs/design-handoff/wildcardpipeline/project/data.jsx.
 const KIND_META: KindMeta[] = [
-  { type: "wildcard",     label: "Wildcards",     icon: "pi-th-large",  color: "var(--wp-kind-wildcard)",   slug: "wildcards" },
-  { type: "fixed_values", label: "Fixed Values",  icon: "pi-tag",       color: "var(--wp-kind-fixed)",      slug: "fixed-values" },
-  { type: "combine",      label: "Combines",      icon: "pi-share-alt", color: "var(--wp-kind-combine)",    slug: "combines" },
-  { type: "derivation",   label: "Derivations",   icon: "pi-code",      color: "var(--wp-kind-derivation)", slug: "derivations" },
-  { type: "constraint",   label: "Constraints",   icon: "pi-sitemap",   color: "var(--wp-kind-constraint)", slug: "constraints" },
+  { type: "wildcard",     label: "Wildcards",     icon: "pi-sparkles",                color: "var(--wp-kind-wildcard)",   slug: "wildcards" },
+  { type: "fixed_values", label: "Fixed Values",  icon: "pi-tag",                     color: "var(--wp-kind-fixed)",      slug: "fixed-values" },
+  { type: "combine",      label: "Combines",      icon: "pi-link",                    color: "var(--wp-kind-combine)",    slug: "combines" },
+  { type: "derivation",   label: "Derivations",   icon: "pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)", slug: "derivations" },
+  { type: "constraint",   label: "Constraints",   icon: "pi-filter",                  color: "var(--wp-kind-constraint)", slug: "constraints" },
   { type: "pipeline",     label: "Pipelines",     icon: "pi-list",      color: "var(--wp-kind-pipeline)",   slug: "pipelines" },
 ];
 

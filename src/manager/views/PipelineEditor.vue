@@ -169,11 +169,11 @@ const preview = computed<PreviewStep[]>(() =>
 );
 
 const KIND_ICON: Record<ModuleType, string> = {
-  wildcard: "pi pi-th-large",
+  wildcard: "pi pi-sparkles",
   fixed_values: "pi pi-tag",
-  combine: "pi pi-share-alt",
-  derivation: "pi pi-code",
-  constraint: "pi pi-sitemap",
+  combine: "pi pi-link",
+  derivation: "pi pi-arrow-right-arrow-left",
+  constraint: "pi pi-filter",
   pipeline: "pi pi-list",
 };
 
