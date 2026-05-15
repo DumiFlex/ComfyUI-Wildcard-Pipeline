@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import AssemblerHelper from "./AssemblerHelper.vue";
 import { varColorClass } from "../shared/var-color";
@@ -37,13 +37,26 @@ describe("AssemblerHelper.vue", () => {
     expect(inserted).toBe("$style");
   });
 
-  it("renders upstream count in section stat when no vars", () => {
+  it("renders the empty-state ghost when no upstream vars + no template", () => {
     const wrapper = mount(AssemblerHelper, {
       props: {
         upstreamVars: [],
         templateVars: [],
         template: "",
         resolved: "",
+      },
+    });
+    expect(wrapper.find('[data-test="asm-empty"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("No upstream variables yet");
+  });
+
+  it("renders upstream count in section stat when there's a template but no vars", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: [],
+        templateVars: [],
+        template: "literal text",
+        resolved: "literal text",
       },
     });
     expect(wrapper.text()).toContain("0 upstream");
@@ -239,5 +252,67 @@ describe("AssemblerHelper var-color rendering", () => {
     });
     expect(wrapper.text()).toMatch(/2\s*upstream/);
     expect(wrapper.text()).toMatch(/2\s*missing/);
+  });
+
+  it("clear-template button fires onClearTemplate when template is set", async () => {
+    const onClearTemplate = vi.fn();
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["mood"],
+        template: "$mood good",
+        onClearTemplate,
+      },
+    });
+    const btn = wrapper.find('[data-test="asm-clear-template"]');
+    expect(btn.exists()).toBe(true);
+    await btn.trigger("click");
+    expect(onClearTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it("clear-template button hidden when template is empty", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["mood"],
+        template: "",
+        onClearTemplate: () => {},
+      },
+    });
+    expect(wrapper.find('[data-test="asm-clear-template"]').exists()).toBe(false);
+  });
+
+  it("right-click on upstream chip opens ctxmenu with Copy / Insert / Remove", async () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["mood"],
+        template: "$mood",
+        onRemoveVar: () => {},
+      },
+      attachTo: document.body,
+    });
+    await wrapper.find('[data-test="asm-chip-mood"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const labels = Array.from(document.querySelectorAll(".wp-ctxmenu__title")).map((n) => n.textContent);
+    expect(labels).toContain("Copy $mood");
+    expect(labels).toContain("Insert at caret");
+    expect(labels).toContain("Remove from template");
+    wrapper.unmount();
+  });
+
+  it("right-click on missing chip surfaces Remove but disables Insert", async () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: [],
+        templateVars: ["nope"],
+        template: "$nope",
+        onRemoveVar: () => {},
+      },
+      attachTo: document.body,
+    });
+    await wrapper.find('[data-test="asm-chip-nope"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const items = Array.from(document.querySelectorAll<HTMLElement>(".wp-ctxmenu__item"));
+    const insert = items.find((el) => el.querySelector(".wp-ctxmenu__title")?.textContent === "Insert at caret");
+    expect(insert?.classList.contains("wp-ctxmenu__item--disabled")).toBe(true);
+    const remove = items.find((el) => el.querySelector(".wp-ctxmenu__title")?.textContent === "Remove from template");
+    expect(remove?.classList.contains("wp-ctxmenu__item--disabled")).toBe(false);
+    wrapper.unmount();
   });
 });

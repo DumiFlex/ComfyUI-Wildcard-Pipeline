@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
+import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -27,8 +28,14 @@ const props = defineProps<{
    *  to the UNRESOLVED chips so users can one-click drop a name
    *  they accidentally typed (or that an upstream module no longer
    *  binds). Optional — host widgets can skip wiring it if they
-   *  don't want the click affordance. */
+   *  don't want the click affordance. Right-click ctxmenu on ANY
+   *  chip (upstream or missing) also surfaces this as the "Remove
+   *  from template" action so users have one consistent way to
+   *  drop a var regardless of its state. */
   onRemoveVar?: (varname: string) => void;
+  /** Clear the entire template string. Wired to the toolbar trash
+   *  button; optional so headless mounts/tests can skip it. */
+  onClearTemplate?: () => void;
   /** Seed used by the server-side preview resolver. Optional; defaults
    *  to 42 for stable preview rolls. */
   previewSeed?: number;
@@ -226,58 +233,177 @@ function rippleStyle(v: string): Record<string, string> {
   };
 }
 
+// ── Right-click ctxmenu on chips ────────────────────────────────────
+// Reuses the shared ContextMenu so the affordance matches modules /
+// injector / debug rows. Items adapt per chip state (missing chips
+// are already in the template; upstream chips may or may not be).
+async function clipboardWrite(text: string): Promise<void> {
+  try { await navigator.clipboard.writeText(text); } catch { /* permission denied */ }
+}
+
+interface AsmCtxMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+  header?: { icon: string; label: string; iconColor?: string };
+}
+const ctxMenu = ref<AsmCtxMenuState>({ visible: false, x: 0, y: 0, items: [] });
+/** Var name whose ctxmenu is currently open — drives the visual
+ *  active-chip outline so the user reads which chip the menu is for. */
+const ctxActiveVar = ref<string | null>(null);
+function closeCtxMenu(): void {
+  ctxMenu.value.visible = false;
+  ctxActiveVar.value = null;
+}
+
+/** True when the var is referenced in the template (so the Remove
+ *  item is meaningful). Missing chips are by definition referenced;
+ *  upstream chips might not be (user hasn't inserted them yet). */
+function isInTemplate(v: string): boolean {
+  return templateVarsInternal.value.includes(v);
+}
+
+function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const estW = 250;
+  const estH = 180;
+  const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
+  const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
+  const inTpl = isInTemplate(v);
+  const items: ContextMenuItem[] = [
+    {
+      label: `Copy $${v}`,
+      icon: "pi-copy",
+      onSelect: () => { void clipboardWrite(`$${v}`); },
+    },
+    {
+      label: "Insert at caret",
+      icon: "pi-plus",
+      disabled: isMissing,  // missing chip can't usefully insert — it's already in tpl
+      onSelect: () => {
+        if (props.onInsert) props.onInsert(`$${v}`);
+        emit("insertVar", v);
+      },
+    },
+    {
+      label: "Remove from template",
+      icon: "pi-trash",
+      danger: true,
+      disabled: !inTpl || !props.onRemoveVar,
+      divider: true,
+      onSelect: () => { props.onRemoveVar?.(v); },
+    },
+  ];
+  ctxActiveVar.value = v;
+  ctxMenu.value = {
+    visible: true,
+    x: Math.max(8, x),
+    y: Math.max(8, y),
+    items,
+    header: {
+      icon: isMissing ? "pi-exclamation-triangle" : "pi-at",
+      label: `${isMissing ? "Missing" : "Upstream"} · $${v}`,
+    },
+  };
+}
+
 </script>
 
 <template>
   <div class="wp-asm-helper" :class="{ 'wp-asm-helper--skipped': isSkipped }">
+    <!-- Empty-state ghost — surfaces when there's nothing upstream
+         AND no template typed. Mirrors the injector ghost shape so
+         empty-states across the extension read uniformly. -->
+    <div
+      v-if="upstreamNames.length === 0 && !props.template"
+      class="wp-asm-empty"
+      data-test="asm-empty"
+    >
+      <i class="pi pi-puzzle-piece wp-asm-empty__icon" aria-hidden="true" />
+      <span class="wp-asm-empty__line">No upstream variables yet.</span>
+      <span class="wp-asm-empty__hint">Wire a Context / Injector node and type a template above.</span>
+    </div>
+
     <!-- variables section -->
-    <div class="wp-asm-section">
-      <span>variables</span>
-      <span class="wp-asm-section-stat">
-        {{ upstreamNames.length }} upstream
-        <template v-if="missing.length">
-          · <span class="wp-asm-section-stat--warn">{{ missing.length }} missing</span>
+    <template v-if="upstreamNames.length > 0 || props.template">
+      <div class="wp-asm-section">
+        <span>variables</span>
+        <span class="wp-asm-section-stat">
+          {{ upstreamNames.length }} upstream
+          <template v-if="missing.length">
+            · <span class="wp-asm-section-stat--warn">{{ missing.length }} missing</span>
+          </template>
+        </span>
+        <button
+          v-if="onClearTemplate && props.template"
+          type="button"
+          class="wp-asm-clear"
+          data-test="asm-clear-template"
+          title="Clear the entire template"
+          aria-label="Clear template"
+          @click="onClearTemplate"
+        ><i class="pi pi-trash" aria-hidden="true" /></button>
+      </div>
+      <div class="wp-asm-vars">
+        <span
+          v-for="v in upstreamNames"
+          :key="v"
+          :data-test="`asm-chip-${v}`"
+          :class="['wp-asm-var', varColorClass(v), {
+            'wp-asm__chip--ripple': ripples.has(v),
+            'wp-asm-var--in-template': isInTemplate(v),
+            'wp-asm-var--ctx-active': ctxActiveVar === v,
+          }]"
+          :style="rippleStyle(v)"
+          :title="`Click to insert $${v} at caret · Right-click for more`"
+          @click="(ev) => onChipClick(ev, v)"
+          @contextmenu="(ev) => openChipMenu(ev, v, false)"
+        ><span class="var-tok">{{ v }}</span></span>
+        <span
+          v-for="v in missing"
+          :key="`miss-${v}`"
+          :data-test="`asm-chip-${v}`"
+          :class="['wp-asm-var', 'wp-asm-var--missing', {
+            'wp-asm-var--clickable': !!onRemoveVar,
+            'wp-asm-var--ctx-active': ctxActiveVar === v,
+          }]"
+          :title="onRemoveVar ? `Click to remove $${v} from template · Right-click for more` : undefined"
+          @click="onRemoveVar?.(v)"
+          @contextmenu="(ev) => openChipMenu(ev, v, true)"
+        ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
+      </div>
+
+      <!-- preview section -->
+      <div class="wp-asm-section">
+        <span>preview</span>
+        <span :class="['wp-asm-section-stat', isResolved ? 'is-ok' : '']">
+          {{ isResolved ? "resolved" : "(template empty or unresolved)" }}
+        </span>
+      </div>
+      <div class="wp-asm-preview" data-test="asm-preview">
+        <template v-for="(tok, i) in previewTokens" :key="i">
+          <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
+          <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
         </template>
-      </span>
-    </div>
-    <div class="wp-asm-vars">
-      <span
-        v-for="v in upstreamNames"
-        :key="v"
-        :data-test="`asm-chip-${v}`"
-        :class="['wp-asm-var', varColorClass(v), { 'wp-asm__chip--ripple': ripples.has(v) }]"
-        :style="rippleStyle(v)"
-        @click="(ev) => onChipClick(ev, v)"
-      ><span class="var-tok">{{ v }}</span></span>
-      <span
-        v-for="v in missing"
-        :key="`miss-${v}`"
-        :data-test="`asm-chip-${v}`"
-        :class="['wp-asm-var', 'wp-asm-var--missing', { 'wp-asm-var--clickable': !!onRemoveVar }]"
-        :title="onRemoveVar ? `Click to remove $${v} from template` : undefined"
-        @click="onRemoveVar?.(v)"
-      ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
-    </div>
+      </div>
 
-    <!-- preview section -->
-    <div class="wp-asm-section">
-      <span>preview</span>
-      <span :class="['wp-asm-section-stat', isResolved ? 'is-ok' : '']">
-        {{ isResolved ? "resolved" : "(template empty or unresolved)" }}
-      </span>
-    </div>
-    <div class="wp-asm-preview" data-test="asm-preview">
-      <template v-for="(tok, i) in previewTokens" :key="i">
-        <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
-        <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
-      </template>
-    </div>
+      <!-- hint -->
+      <div class="wp-asm-hint">
+        <span>click chip → insert <kbd>$var</kbd> · right-click for more</span>
+        <span style="margin-left: auto;">click missing → remove</span>
+      </div>
+    </template>
 
-    <!-- hint -->
-    <div class="wp-asm-hint">
-      <span>click chip → insert <kbd>$var</kbd> at caret</span>
-      <span style="margin-left: auto;">click missing → remove from template</span>
-    </div>
+    <ContextMenu
+      :visible="ctxMenu.visible"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :items="ctxMenu.items"
+      :header="ctxMenu.header"
+      @close="closeCtxMenu"
+    />
   </div>
 </template>
 
@@ -315,6 +441,70 @@ function rippleStyle(v: string): Record<string, string> {
 }
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
+
+/* Clear-template trash button — sits at the right edge of the
+ * variables section header. Tiny + dim by default; turns red on
+ * hover so the destructive action is unmistakable. Only renders
+ * when the template is non-empty (no point clearing an empty one). */
+.wp-asm-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+}
+.wp-asm-clear:hover {
+  color: var(--wp-danger);
+  border-color: color-mix(in srgb, var(--wp-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 8%, transparent);
+}
+.wp-asm-clear .pi { font-size: 10px; }
+
+/* Empty-state ghost — mirrors injector + debug ghosts. Stacked
+ * icon + line + hint, dim color, centered. */
+.wp-asm-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  text-align: center;
+}
+.wp-asm-empty__icon {
+  font-size: 28px;
+  color: color-mix(in srgb, var(--wp-accent) 65%, var(--wp-text3));
+  opacity: 0.65;
+}
+.wp-asm-empty__line {
+  font: 600 12px var(--wp-font-sans);
+  color: var(--wp-text2);
+}
+.wp-asm-empty__hint {
+  font: 11px var(--wp-font-sans);
+  color: var(--wp-text3);
+}
+
+/* Chip in-template marker — subtle ring around chips whose name
+ * the user has already typed into the template. Lets the user
+ * scan which upstream vars are wired in without reading the
+ * template. */
+.wp-asm-var--in-template {
+  outline: 1px dashed color-mix(in srgb, var(--wp-accent) 50%, transparent);
+  outline-offset: 1px;
+}
+/* Right-click target highlight — same accent ring used by Debug
+ * + Module ctxmenu rows. */
+.wp-asm-var--ctx-active {
+  outline: 1px solid var(--wp-accent);
+  outline-offset: 1px;
+}
 
 .wp-asm-vars {
   display: flex;

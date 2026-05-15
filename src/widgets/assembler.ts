@@ -336,6 +336,7 @@ export function mountHelper(node: AssemblerNode) {
           nodeMode: nodeMode.value,
           onInsert: (token: string) => insertIntoTemplate(node, token),
           onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
+          onClearTemplate: () => clearTemplate(node),
           onRequestMinWidth: (w: number) => {
             if (w === dynamicMinWidth) return;
             dynamicMinWidth = w;
@@ -422,4 +423,25 @@ function removeFromTemplate(node: AssemblerNode, varname: string) {
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Wipe the entire template string. Mirrors the textarea-vs-fallback
+ * split of insertIntoTemplate/removeFromTemplate so caret + native
+ * input event fire the same way — downstream widgets/listeners stay
+ * in sync regardless of which path runs.
+ */
+function clearTemplate(node: AssemblerNode) {
+  const w = node.widgets?.find((x) => x.name === "template") as
+    | { name: string; value: unknown; inputEl?: HTMLTextAreaElement | HTMLInputElement }
+    | undefined;
+  if (!w || typeof w.value !== "string") return;
+  const el = w.inputEl;
+  if (el) {
+    el.value = "";
+    w.value = "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+  w.value = "";
 }
