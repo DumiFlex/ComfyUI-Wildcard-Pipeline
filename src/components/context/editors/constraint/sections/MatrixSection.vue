@@ -398,7 +398,7 @@ function onResetFactor(src: string, tgt: string): void {
   font-size: 9px;
   line-height: 1;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity var(--wp-motion-quick) ease;
 }
 /* Reveal on cell hover so the corner stays clean when not in use,
    but the affordance is one mouseover away. Keep visible while

@@ -347,7 +347,7 @@ function fmtPct(p: number): string {
   height: 100%;
   background: var(--wp-accent);
   border-radius: 2px;
-  transition: width 0.15s ease;
+  transition: width var(--wp-motion-hover) ease;
 }
 .opt__prob-pct {
   font: 10px var(--wp-font-mono);

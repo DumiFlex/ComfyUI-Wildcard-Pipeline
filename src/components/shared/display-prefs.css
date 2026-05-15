@@ -221,13 +221,13 @@
 
 .wp-focus-mode .wp-modules:has(.wp-module:hover) .wp-module:not(:hover) {
   opacity: 0.55;
-  transition: opacity 120ms ease;
+  transition: opacity var(--wp-motion-quick) ease;
 }
 
 /* Same focus-mode dim for injector row siblings. */
 .wp-focus-mode .wp-inj-list:has(.wp-inj-row:hover) .wp-inj-row:not(:hover) {
   opacity: 0.55;
-  transition: opacity 120ms ease;
+  transition: opacity var(--wp-motion-quick) ease;
 }
 
 /* ── State badge priority ───────────────────────────────────────────

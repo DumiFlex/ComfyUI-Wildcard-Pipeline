@@ -585,7 +585,7 @@ onBeforeUnmount(() => {
   font: 600 12px var(--wp-font-sans);
   padding: 6px 14px;
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover), color var(--wp-motion-hover);
 }
 .wp-pg__btn:hover {
   border-color: var(--wp-border2);

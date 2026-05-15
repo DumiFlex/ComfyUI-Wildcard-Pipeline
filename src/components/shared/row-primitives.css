@@ -48,7 +48,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick), color var(--wp-motion-quick);
 }
 .wp-btn--icon-sm:hover {
   /* Only the BACKGROUND lifts on hover. Border + icon color are
@@ -148,7 +148,7 @@
  * `enter-to` / `leave-from` max-height in their scoped block. */
 .wp-collapse-enter-active,
 .wp-collapse-leave-active {
-  transition: max-height 0.2s ease, opacity 0.15s, padding 0.15s;
+  transition: max-height var(--wp-motion-swap) ease, opacity var(--wp-motion-hover), padding var(--wp-motion-hover);
   overflow: hidden;
 }
 .wp-collapse-enter-from,
@@ -193,7 +193,7 @@
   flex-shrink: 0;
   cursor: grab;
   opacity: 0.45;
-  transition: opacity 0.15s, color 0.15s;
+  transition: opacity var(--wp-motion-hover), color var(--wp-motion-hover);
 }
 .wp-drag-handle:active { cursor: grabbing; }
 .wp-drag-handle__grip { display: block; }
@@ -312,7 +312,7 @@
   35%  { box-shadow: 0 0 0 3px var(--wp-accent), 0 0 16px rgba(167,139,250,0.45); }
   100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
 }
-.wp-drop-pulse { animation: wp-drop-pulse 420ms ease-out; }
+.wp-drop-pulse { animation: wp-drop-pulse var(--wp-motion-pulse) ease-out; }
 
 /* Library-mutation flash — green ring keeps library-op semantics
  * distinct from drop-pulse's purple. Used by flashRows() in flip.ts
@@ -323,7 +323,7 @@
   35%  { box-shadow: 0 0 0 3px var(--wp-kind-combine), 0 0 16px rgba(52,211,153,0.45); }
   100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
 }
-.wp-row-flash { animation: wp-row-flash 420ms ease-out; }
+.wp-row-flash { animation: wp-row-flash var(--wp-motion-pulse) ease-out; }
 
 /* Drop-rejection shake — used when a row drag is dropped on an
  * invalid target. Subtle horizontal jitter, 200ms total. */
@@ -334,4 +334,4 @@
   60% { transform: translateX(-3px); }
   80% { transform: translateX(2px); }
 }
-.wp-row-shake { animation: wp-row-shake 200ms ease-in-out; }
+.wp-row-shake { animation: wp-row-shake var(--wp-motion-swap) ease-in-out; }

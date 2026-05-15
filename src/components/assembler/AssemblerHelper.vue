@@ -489,7 +489,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  transition: opacity 120ms ease;
+  transition: opacity var(--wp-motion-quick) ease;
 }
 /* Mute (mode 2) / bypass (mode 4) — match litegraph's native dim. */
 .wp-asm-helper--skipped { opacity: 0.45; }
@@ -539,7 +539,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   color: var(--wp-text-muted, var(--wp-text2));
   font: 500 10px var(--wp-font-sans);
   cursor: pointer;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  transition: color var(--wp-motion-quick), border-color var(--wp-motion-quick), background var(--wp-motion-quick);
   white-space: nowrap;
 }
 .wp-asm-clear:hover:not(:disabled) {
@@ -614,7 +614,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   padding: 3px 7px;
   font: 11px/1 var(--wp-font-mono);
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
   position: relative;
   overflow: hidden;
 }
@@ -678,7 +678,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
  * timing on both for visual coherence. */
 .wp-asm-fade-enter-active,
 .wp-asm-fade-leave-active {
-  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity var(--wp-motion-fade) ease, transform var(--wp-motion-swap) var(--wp-motion-curve-flip);
 }
 .wp-asm-fade-enter-from,
 .wp-asm-fade-leave-to {

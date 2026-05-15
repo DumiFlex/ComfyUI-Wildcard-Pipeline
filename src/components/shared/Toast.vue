@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   padding: 3px 10px;
   cursor: pointer;
-  transition: filter 0.12s;
+  transition: filter var(--wp-motion-quick);
   flex-shrink: 0;
 }
 .wp-toast__action:hover { filter: brightness(1.2); }
@@ -156,7 +156,7 @@ onBeforeUnmount(() => {
 .wp-toast__close:hover { color: var(--wp-text); }
 
 /* Slide-in from the right; instant out for snappiness. */
-.wp-toast-enter-active { transition: opacity 0.2s, transform 0.2s; }
+.wp-toast-enter-active { transition: opacity var(--wp-motion-swap), transform var(--wp-motion-swap); }
 .wp-toast-enter-from { opacity: 0; transform: translateX(20px); }
-.wp-toast-move { transition: transform 0.2s ease-out; }
+.wp-toast-move { transition: transform var(--wp-motion-swap) ease-out; }
 </style>

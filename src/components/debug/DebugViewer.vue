@@ -1453,7 +1453,7 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  transition: opacity 120ms ease;
+  transition: opacity var(--wp-motion-quick) ease;
 }
 /* Mute (mode 2) / bypass (mode 4) — dim widget body so the muted
  * state matches litegraph's native node-frame dim. */
@@ -1525,7 +1525,7 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick), color var(--wp-motion-quick);
 }
 .wp-btn--icon:hover {
   background: var(--wp-bg2);
@@ -1930,7 +1930,7 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
   padding: 2px 6px;
   cursor: pointer;
   text-align: right;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick), color var(--wp-motion-quick);
 }
 .wp-dbg-trace-seed--clickable:hover {
   background: var(--wp-bg2);

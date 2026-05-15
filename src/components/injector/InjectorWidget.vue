@@ -745,7 +745,7 @@ defineExpose({ addRow, removeRow });
   font-family: var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
-  transition: opacity 120ms ease;
+  transition: opacity var(--wp-motion-quick) ease;
 }
 /* Mute (mode 2) / bypass (mode 4) — dim entire widget body so the
  * muted state mirrors litegraph's title/border dimming. Pointer-events
@@ -796,7 +796,7 @@ defineExpose({ addRow, removeRow });
   margin-left: 4px;
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
 .wp-inj-collapse-conns:hover {
   background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-bg2));

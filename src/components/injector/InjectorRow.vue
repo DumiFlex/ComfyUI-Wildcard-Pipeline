@@ -305,9 +305,9 @@ function onDragEnd(): void {
   gap: 2px;
   font: 500 12px var(--wp-font-sans);
   color: var(--wp-text);
-  transition: background-color 0.15s, border-color 0.15s,
-    margin-top 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    margin-bottom 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover),
+    margin-top var(--wp-motion-fade) var(--wp-motion-curve-flip),
+    margin-bottom var(--wp-motion-fade) var(--wp-motion-curve-flip);
 }
 .wp-inj-row:last-child { margin-bottom: 0; }
 /* Drop-after on the last row still needs the gap — the `:last-child`
@@ -366,7 +366,7 @@ function onDragEnd(): void {
   border-radius: 2px;
   box-shadow: 0 0 8px var(--wp-accent);
   pointer-events: none;
-  animation: wp-inj-drop-bar-in 140ms ease-out;
+  animation: wp-inj-drop-bar-in var(--wp-motion-quick) ease-out;
 }
 .wp-inj-row--drop-before::before { top: -8px; }
 .wp-inj-row--drop-after::after   { bottom: -8px; }
@@ -385,7 +385,7 @@ function onDragEnd(): void {
 .wp-inj-row.wp-inj-row--leaving {
   opacity: 0;
   transform: translateX(-12px);
-  transition: opacity 180ms linear, transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity var(--wp-motion-fade) linear, transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
   pointer-events: none;
 }
 .wp-inj-row.wp-inj-row--arriving {
@@ -396,11 +396,11 @@ function onDragEnd(): void {
 .wp-inj-row.wp-inj-row--arrived {
   opacity: 1;
   transform: translateX(0);
-  transition: opacity 180ms linear, transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity var(--wp-motion-fade) linear, transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
 }
 /* Flash — green ring keyframe for library-side mutations (refresh
  * etc). Currently used for drag-drop drop-pulse signal on arrival. */
-.wp-inj-row--flash { animation: wp-inj-flash 420ms ease-out; }
+.wp-inj-row--flash { animation: wp-inj-flash var(--wp-motion-pulse) ease-out; }
 @keyframes wp-inj-flash {
   0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--wp-green) 60%, transparent); }
   100% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--wp-green) 0%, transparent); }
@@ -466,7 +466,7 @@ function onDragEnd(): void {
   border-radius: 2px;
   border: 1px solid var(--wp-border2);
   background: var(--wp-bg2);
-  transition: background-color 0.15s, border-color 0.15s;
+  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover);
 }
 .wp-inj-toggle input:checked + .wp-inj-toggle-mark {
   background: var(--wp-accent);

@@ -974,7 +974,7 @@ onBeforeUnmount(detachCaptureListeners);
   border-radius: 6px;
   color: var(--wp-text-muted);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
 }
 .wp-picker__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
 .wp-picker__close:focus-visible {
@@ -1009,7 +1009,7 @@ onBeforeUnmount(detachCaptureListeners);
   display: flex; align-items: center;
   padding: 0 8px;
   gap: 6px;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease;
 }
 .wp-picker__search.is-focused,
 .wp-picker__search:focus-within {
@@ -1033,7 +1033,7 @@ onBeforeUnmount(detachCaptureListeners);
   font-size: 10px;
   padding: 2px;
   border-radius: 999px;
-  transition: color 120ms ease;
+  transition: color var(--wp-motion-quick) ease;
 }
 .wp-picker__search-clear:hover { color: var(--wp-text); }
 
@@ -1145,7 +1145,7 @@ onBeforeUnmount(detachCaptureListeners);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background 100ms ease;
+  transition: background var(--wp-motion-quick) ease;
 }
 .wp-picker__row:hover { background: var(--wp-bg-3); }
 .wp-picker__row:focus-visible {
@@ -1189,7 +1189,7 @@ onBeforeUnmount(detachCaptureListeners);
   background: var(--wp-bg-3);
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
 }
 .wp-picker__check .pi {
   font-size: 9px;
@@ -1367,7 +1367,7 @@ onBeforeUnmount(detachCaptureListeners);
   font-family: inherit;
   cursor: pointer;
   display: inline-flex; align-items: center; gap: 6px;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
 }
 .wp-picker__btn:hover:not(:disabled) {
   background: var(--wp-bg-4);
@@ -1409,7 +1409,7 @@ onBeforeUnmount(detachCaptureListeners);
   border-radius: 6px;
   color: var(--wp-text3);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
   flex-shrink: 0;
 }
 .wp-picker__icon-btn:hover {
@@ -1526,7 +1526,7 @@ onBeforeUnmount(detachCaptureListeners);
  * the trigger. */
 .wp-pop-enter-active,
 .wp-pop-leave-active {
-  transition: opacity 0.12s, transform 0.12s;
+  transition: opacity var(--wp-motion-quick), transform var(--wp-motion-quick);
   transform-origin: top right;
 }
 .wp-pop-enter-from,
@@ -1551,7 +1551,7 @@ onBeforeUnmount(detachCaptureListeners);
   letter-spacing: 0.02em;
   padding: 2px 8px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
 .wp-picker__tag-chip:hover {
   color: var(--wp-text);

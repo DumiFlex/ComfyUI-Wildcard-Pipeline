@@ -597,7 +597,7 @@ function toggleCollapsed(key: ModuleKey): void {
  * collapses transition-duration to 0.01ms — instant snap, no fade. */
 .wp-pg-mockup .wp-collapse-enter-active,
 .wp-pg-mockup .wp-collapse-leave-active {
-  transition: max-height 0.2s ease, opacity 0.15s, padding 0.15s;
+  transition: max-height var(--wp-motion-swap) ease, opacity var(--wp-motion-hover), padding var(--wp-motion-hover);
   overflow: hidden;
 }
 .wp-pg-mockup .wp-collapse-enter-from,

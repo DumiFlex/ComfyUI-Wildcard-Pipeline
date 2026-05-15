@@ -3204,7 +3204,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   position: relative;
   opacity: 0.45;
   filter: saturate(0.6);
-  transition: opacity 0.15s, filter 0.15s;
+  transition: opacity var(--wp-motion-hover), filter var(--wp-motion-hover);
 }
 .wp-context--muted::before {
   /* Label dropped — the dim opacity + litegraph's native title bar
@@ -3342,9 +3342,9 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   display: grid;
   grid-template-rows: auto 1fr;
   transition: grid-template-rows var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
-              border-width 0.12s ease,
-              background 0.12s ease,
-              box-shadow 0.12s ease;
+              border-width var(--wp-motion-quick) ease,
+              background var(--wp-motion-quick) ease,
+              box-shadow var(--wp-motion-quick) ease;
 }
 .wp-bundle--collapsed {
   grid-template-rows: auto 0fr;
@@ -3373,8 +3373,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-bundle-children .wp-module {
   transition: opacity var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
               transform var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
-              background 0.14s ease,
-              border-color 0.14s ease;
+              background var(--wp-motion-quick) ease,
+              border-color var(--wp-motion-quick) ease;
 }
 .wp-bundle--collapsed .wp-bundle-children .wp-module {
   opacity: 0;
@@ -3413,7 +3413,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-page { display: flex; flex-direction: column; gap: 6px; }
 .wp-page-enter-active,
 .wp-page-leave-active {
-  transition: opacity 0.18s ease;
+  transition: opacity var(--wp-motion-fade) ease;
 }
 .wp-page-enter-from,
 .wp-page-leave-to {
@@ -3465,7 +3465,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick), color var(--wp-motion-quick);
 }
 .wp-recovery__btn:hover {
   background: var(--wp-bg4);
@@ -3540,7 +3540,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 2px 6px;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  transition: color var(--wp-motion-quick), border-color var(--wp-motion-quick), background var(--wp-motion-quick);
 }
 .wp-section-label__bulk:hover {
   color: var(--wp-text);
@@ -3576,7 +3576,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   border-radius: var(--wp-radius, 4px);
   gap: 10px;
   text-align: center;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease;
 }
 .wp-empty-hero--drop-target {
   border-color: var(--wp-accent);
@@ -3617,7 +3617,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   letter-spacing: 0.02em;
   /* Dimmed at rest; hover lifts to full brand saturation. */
   filter: brightness(0.82) saturate(0.85);
-  transition: filter 0.15s;
+  transition: filter var(--wp-motion-hover);
 }
 .wp-emptystate__cta:hover { filter: brightness(1) saturate(1); }
 .wp-emptystate__cta:focus-visible {
@@ -3638,7 +3638,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   /* `position: relative` is the anchor for the ::before / ::after
    * insertion-line pseudos used by the drop indicators below. */
   position: relative;
-  transition: background-color 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover), transform var(--wp-motion-hover), box-shadow var(--wp-motion-hover);
 }
 /* Kind border-left color — driven by data-kind attribute (Task 8). */
 .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
@@ -3696,12 +3696,12 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * leave half-open gaps mid-flight. Transform/opacity/etc still animate
  * via TransitionGroup's FLIP rules + the wp-list-* classes below. */
 .wp-modules .wp-module {
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+  transition: transform var(--wp-motion-fade) var(--wp-motion-curve-flip),
+    background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease, opacity var(--wp-motion-quick) ease;
 }
-.wp-bundle-header { transition: border-bottom-color 0.18s ease, background 0.14s ease; }
+.wp-bundle-header { transition: border-bottom-color var(--wp-motion-fade) ease, background var(--wp-motion-quick) ease; }
 .wp-bundle {
-  transition: border-width 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transition: border-width var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease, box-shadow var(--wp-motion-quick) ease;
 }
 .wp-bundle.wp-gap-before { margin-top: 14px; }
 
@@ -3715,13 +3715,13 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   pointer-events: none;
   z-index: 4;
   transform-origin: center;
-  transition: top 0.1s ease,
-    left 0.1s ease,
+  transition: top var(--wp-motion-quick) ease,
+    left var(--wp-motion-quick) ease,
     width 0.1s ease;
 }
 .wp-gap-bar-enter-active,
 .wp-gap-bar-leave-active {
-  transition: opacity 0.12s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity var(--wp-motion-quick) ease, transform var(--wp-motion-fade) var(--wp-motion-curve-flip);
 }
 .wp-gap-bar-enter-from,
 .wp-gap-bar-leave-to {
@@ -3745,8 +3745,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * the same animations. .wp-module--flash kept here as an alias to
  * the shared .wp-row-flash so existing flip.ts default classes
  * still work for Context's library-op flash path. */
-.wp-module--flash { animation: wp-row-flash 420ms ease-out; }
-.wp-module--shake { animation: wp-row-shake 200ms ease-in-out; }
+.wp-module--flash { animation: wp-row-flash var(--wp-motion-pulse) ease-out; }
+.wp-module--shake { animation: wp-row-shake var(--wp-motion-swap) ease-in-out; }
 
 .wp-module-header { display: flex; align-items: center; gap: 6px; }
 
@@ -3774,7 +3774,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   border-radius: 2px;
   border: 1px solid var(--wp-border2);
   background: var(--wp-bg2);
-  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover), box-shadow var(--wp-motion-hover);
 }
 .wp-toggle input:checked + .wp-toggle-mark { background: var(--wp-accent); border-color: var(--wp-accent); }
 .wp-toggle input:focus-visible + .wp-toggle-mark {
@@ -3968,7 +3968,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  transition: background .12s ease, border-color .12s ease;
+  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
 }
 .wp-btn:hover { background: var(--wp-bg4); border-color: var(--wp-border, var(--wp-border2)); }
 .wp-btn--icon { padding: 5px 6px; width: 26px; height: 26px; justify-content: center; }
@@ -4001,8 +4001,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 /* ── Animations ─────────────────────────────────────────────────────── */
 
 /* FLIP reorder — TransitionGroup applies wp-list-move when items reorder. */
-.wp-list-move { transition: transform 0.25s ease-out; }
-/* Leave is instant. `.wp-module` declares `transition: transform 0.15s`
+.wp-list-move { transition: transform var(--wp-motion-flip) ease-out; }
+/* Leave is instant. `.wp-module` declares `transition: transform var(--wp-motion-hover)`
  * as its base, which makes Vue's TransitionGroup wait for a phantom
  * transitionend before tearing leaving rows out. Killing the transition
  * on leave-active short-circuits that wait. */
@@ -4017,7 +4017,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 /* Items entering the list (e.g. add via picker) — fade + slide in.
  * Leave is intentionally instant; the dying card lingering during a
  * fade-out felt sluggish, especially when chained with a FLIP move. */
-.wp-list-enter-active { transition: opacity 0.2s, transform 0.2s; }
+.wp-list-enter-active { transition: opacity var(--wp-motion-swap), transform var(--wp-motion-swap); }
 .wp-list-enter-from { opacity: 0; transform: translateY(-4px); }
 
 /* ── Cross-container enter/leave + module add/remove (Phase B.3 + B.6) ──
@@ -4035,7 +4035,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-module.wp-module--arriving,
 .wp-bundle.wp-module--arriving {
   /* Snap to from-state. Without `transition: none` the base
-   * `.wp-modules .wp-module` transition (opacity 0.14s) starts fading
+   * `.wp-modules .wp-module` transition (opacity var(--wp-motion-quick)) starts fading
    * the row OUT when we add --arriving, then --arrived fights back —
    * net effect is a barely-visible flicker instead of clear fade-in. */
   opacity: 0;
@@ -4061,7 +4061,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
  * dots feel different from mod-state dots in side-by-side testing. */
 .wp-conflict-dot,
 .wp-mod-dot {
-  animation: wp-pulse 0.8s ease-out;
+  animation: wp-pulse 800ms ease-out;
 }
 @keyframes wp-pulse {
   0%   { transform: scale(0.4); opacity: 0; }

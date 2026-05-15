@@ -215,7 +215,7 @@ const summary = computed(() => {
   border-radius: 2px;
   border: 1px solid var(--wp-border2, var(--wp-border));
   background: var(--wp-bg2);
-  transition: background-color 0.15s, border-color 0.15s;
+  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover);
 }
 .wp-bundle-enabled input:checked + .wp-bundle-enabled-mark {
   background: var(--b);
