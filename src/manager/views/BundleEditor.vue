@@ -80,6 +80,15 @@ const selectedChildIdx = computed<number>(() => {
   return children.value.findIndex((c) => (c.id as string) === id);
 });
 
+const childrenSubtitle = computed<string>(() => {
+  if (!selectedChildId.value || !selectedChild.value) {
+    return "Frozen snapshots — click row to edit on the right.";
+  }
+  const meta = selectedChild.value.meta as { name?: string } | undefined;
+  const name = meta?.name ?? "(unnamed)";
+  return `Editing snapshot of ${name} — click × on the pane to close`;
+});
+
 onMounted(async () => {
   await categoryStore.fetchAll();
   if (!props.id) return;
@@ -261,18 +270,12 @@ function onDragEnd() {
 
       <Card
         :title="`Children (${children.length})`"
-        :subtitle="selectedChildId
-          ? `Editing snapshot of ${selectedChild?.meta && (selectedChild.meta as { name?: string }).name || '(unnamed)'} — click × to close`
-          : 'Frozen snapshots — click row to edit on the right.'"
+        :subtitle="childrenSubtitle"
       >
         <div v-if="!children.length" class="wp-dim wp-bundle-editor__empty">
           This bundle has no children yet.
         </div>
-        <div
-          v-else
-          class="wp-bundle-children-grid"
-          :data-has-selection="selectedChildId ? 'true' : null"
-        >
+        <div v-else class="wp-bundle-children-grid">
           <div class="wp-bundle-children-stack" data-test="bundle-children-list">
             <BundleChildRow
               v-for="(child, idx) in children"
@@ -293,7 +296,6 @@ function onDragEnd() {
             />
           </div>
           <BundleChildPane
-            v-if="selectedChildId"
             :child="selectedChild"
             @update="onPaneUpdate"
             @close="onPaneClose"
@@ -310,12 +312,9 @@ function onDragEnd() {
 
 .wp-bundle-children-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.4fr);
   gap: 12px;
   align-items: start;
-}
-.wp-bundle-children-grid[data-has-selection] {
-  grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.4fr);
 }
 .wp-bundle-children-stack {
   display: flex;
