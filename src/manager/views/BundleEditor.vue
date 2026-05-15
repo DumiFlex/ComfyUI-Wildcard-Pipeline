@@ -161,6 +161,7 @@ function kindLabel(type: string): string {
           <ColorPicker
             v-model="color"
             :presets="COLOR_PRESETS"
+            inline
             aria-label="Bundle frame color"
           />
         </template>

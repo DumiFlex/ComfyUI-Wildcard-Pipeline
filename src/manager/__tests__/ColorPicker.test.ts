@@ -69,4 +69,28 @@ describe("ColorPicker.vue", () => {
     await openPopover(wrap);
     expect(wrap.findAll('[data-test="color-preset"]').length).toBe(2);
   });
+
+  describe("inline mode", () => {
+    it("renders hex input and presets without clicking a swatch toggle", () => {
+      const wrap = mount(ColorPicker, {
+        props: { modelValue: "#7c3aed", inline: true },
+        global: { plugins: [] },
+      });
+      // No popover-trigger swatch button.
+      expect(wrap.find('[data-test="color-swatch"]').exists()).toBe(false);
+      // Hex input visible immediately.
+      expect(wrap.find('[data-test="color-hex-input"]').exists()).toBe(true);
+      // Preset chips visible immediately.
+      expect(wrap.findAll('[data-test="color-preset"]').length).toBe(12);
+    });
+
+    it("preset click emits update:modelValue in inline mode", async () => {
+      const wrap = mount(ColorPicker, {
+        props: { modelValue: "#000000", inline: true, presets: ["#abcdef"] },
+        global: { plugins: [] },
+      });
+      await wrap.get('[data-test="color-preset"]').trigger("click");
+      expect(wrap.emitted("update:modelValue")?.[0]).toEqual(["#abcdef"]);
+    });
+  });
 });

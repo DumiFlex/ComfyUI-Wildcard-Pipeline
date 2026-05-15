@@ -6,6 +6,10 @@ interface Props {
   modelValue: string;
   presets?: string[];
   ariaLabel?: string;
+  /** When true, render hex input + preset palette inline (no click-to-open
+   *  popover). Used by editors where the color edit is a primary surface
+   *  rather than an occasional pop-out, e.g. BundleEditor's frame color. */
+  inline?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -15,6 +19,7 @@ const props = withDefaults(defineProps<Props>(), {
     "#6366f1", "#10b981", "#f59e0b", "#8b5cf6",
   ],
   ariaLabel: undefined,
+  inline: false,
 });
 
 const emit = defineEmits<{
@@ -98,25 +103,21 @@ function isActivePreset(preset: string): boolean {
 </script>
 
 <template>
-  <div ref="root" class="wp-color-picker" @keydown="handleKeydown">
-    <button
-      type="button"
-      class="wp-color-picker__swatch"
-      :style="{ background: swatchColor }"
-      :aria-label="swatchAriaLabel"
-      :aria-expanded="open"
-      aria-haspopup="dialog"
-      data-test="color-swatch"
-      @click="toggleOpen"
-    />
-
-    <div
-      v-if="open"
-      class="wp-color-picker__popover"
-      role="dialog"
-      :aria-label="swatchAriaLabel"
-    >
+  <div
+    ref="root"
+    class="wp-color-picker"
+    :data-inline="inline ? 'true' : null"
+    @keydown="handleKeydown"
+  >
+    <!-- Inline layout: hex input + native picker + preset row, no toggle. -->
+    <template v-if="inline">
       <div class="wp-color-picker__row">
+        <div
+          class="wp-color-picker__swatch wp-color-picker__swatch--inline"
+          :style="{ background: swatchColor }"
+          :aria-label="swatchAriaLabel"
+          role="img"
+        />
         <Input
           :model-value="hexDraft"
           aria-label="Hex color value"
@@ -133,7 +134,11 @@ function isActivePreset(preset: string): boolean {
           @input="onNativeInput"
         >
       </div>
-      <div class="wp-color-picker__palette" role="listbox" aria-label="Preset colors">
+      <div
+        class="wp-color-picker__palette wp-color-picker__palette--inline"
+        role="listbox"
+        aria-label="Preset colors"
+      >
         <button
           v-for="preset in props.presets"
           :key="preset"
@@ -147,7 +152,60 @@ function isActivePreset(preset: string): boolean {
           @click="selectPreset(preset)"
         />
       </div>
-    </div>
+    </template>
+
+    <!-- Popover layout (default). Swatch button toggles a dialog with hex + presets. -->
+    <template v-else>
+      <button
+        type="button"
+        class="wp-color-picker__swatch"
+        :style="{ background: swatchColor }"
+        :aria-label="swatchAriaLabel"
+        :aria-expanded="open"
+        aria-haspopup="dialog"
+        data-test="color-swatch"
+        @click="toggleOpen"
+      />
+
+      <div
+        v-if="open"
+        class="wp-color-picker__popover"
+        role="dialog"
+        :aria-label="swatchAriaLabel"
+      >
+        <div class="wp-color-picker__row">
+          <Input
+            :model-value="hexDraft"
+            aria-label="Hex color value"
+            class="wp-color-picker__hex font-mono"
+            data-test="color-hex-input"
+            @update:model-value="(v) => onHexInput(String(v ?? ''))"
+          />
+          <input
+            type="color"
+            :value="nativeColor"
+            aria-label="Native color picker"
+            class="wp-color-picker__native"
+            data-test="color-native"
+            @input="onNativeInput"
+          >
+        </div>
+        <div class="wp-color-picker__palette" role="listbox" aria-label="Preset colors">
+          <button
+            v-for="preset in props.presets"
+            :key="preset"
+            type="button"
+            class="wp-color-picker__chip"
+            :style="{ background: preset }"
+            :title="preset"
+            :data-active="isActivePreset(preset)"
+            :aria-label="`Use preset ${preset}`"
+            data-test="color-preset"
+            @click="selectPreset(preset)"
+          />
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -156,6 +214,31 @@ function isActivePreset(preset: string): boolean {
   position: relative;
   display: inline-flex;
   align-items: center;
+}
+.wp-color-picker[data-inline="true"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.wp-color-picker__swatch--inline {
+  width: var(--wp-input-h, 34px);
+  height: var(--wp-input-h, 34px);
+  border-radius: 6px;
+  border: 1px solid var(--wp-border-strong);
+  flex-shrink: 0;
+}
+.wp-color-picker__palette--inline {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  grid-template-columns: none;
+  gap: 6px;
+}
+.wp-color-picker__palette--inline .wp-color-picker__chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
 }
 
 .wp-color-picker__swatch {

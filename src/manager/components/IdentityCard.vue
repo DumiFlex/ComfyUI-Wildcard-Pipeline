@@ -178,7 +178,6 @@ function removeTag(t: string) {
           />
           <Button
             variant="secondary"
-            size="sm"
             icon="pi-plus"
             data-test="identity-tag-add"
             @click="addTag"
