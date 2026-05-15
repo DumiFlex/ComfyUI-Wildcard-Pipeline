@@ -18,6 +18,9 @@ import { computed } from "vue";
 import WildcardIdentitySection from "../../components/context/editors/wildcard/sections/IdentitySection.vue";
 import WildcardPoolSection from "../../components/context/editors/wildcard/sections/PoolSection.vue";
 import WildcardRuntimeSection from "../../components/context/editors/wildcard/sections/RuntimeSection.vue";
+import CombineIdentitySection from "../../components/context/editors/combine/sections/IdentitySection.vue";
+import CombineTemplateSection from "../../components/context/editors/combine/sections/TemplateSection.vue";
+import CombineRuntimeSection from "../../components/context/editors/combine/sections/RuntimeSection.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { ModuleEntry } from "../../widgets/_shared";
 
@@ -114,6 +117,16 @@ function onUpdate(patch: Partial<ModuleEntry>) {
         />
         <WildcardPoolSection :module="moduleEntry" @update="onUpdate" />
         <WildcardRuntimeSection :module="moduleEntry" @update="onUpdate" />
+      </div>
+
+      <div
+        v-else-if="kind === 'combine' && moduleEntry"
+        data-test="bundle-pane-sections-combine"
+        class="wp-bpane__sections"
+      >
+        <CombineIdentitySection :module="moduleEntry" @update="onUpdate" />
+        <CombineTemplateSection :module="moduleEntry" @update="onUpdate" />
+        <CombineRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
       <div

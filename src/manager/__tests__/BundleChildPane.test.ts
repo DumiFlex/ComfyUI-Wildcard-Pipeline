@@ -83,6 +83,21 @@ describe("BundleChildPane.vue", () => {
     expect(wrap.find('[data-test="bundle-pane-sections-wildcard"]').exists()).toBe(true);
   });
 
+  it("mounts combine sections when child.type === 'combine'", () => {
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: {
+          id: "cb_a",
+          type: "combine",
+          meta: { name: "subject" },
+          payload: { template: "", output_var: "subject", input_vars: [] },
+          instance: {},
+        },
+      },
+    });
+    expect(wrap.find('[data-test="bundle-pane-sections-combine"]').exists()).toBe(true);
+  });
+
   it("renders unsupported-kind placeholder for unknown types", () => {
     const wrap = mount(BundleChildPane, {
       props: {
