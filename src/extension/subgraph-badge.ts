@@ -118,7 +118,12 @@ function pulseBadge(
 
   function tick(now: number) {
     if (nodeBadgePulseToken.get(node as object) !== token) return;
-    const t = Math.min(1, (now - startedAt) / duration);
+    // Clamp on both ends. rAF's `now` is the frame-start timestamp, which
+    // can predate the `performance.now()` we captured synchronously before
+    // scheduling — yielding `now < startedAt` and a negative `t`. The cubic
+    // easing then produces a negative scale and litegraph's `roundRect`
+    // throws "Radius can not be negative".
+    const t = Math.max(0, Math.min(1, (now - startedAt) / duration));
     let scale: number;
     if (t < 0.4) {
       const u = t / 0.4;
@@ -127,10 +132,12 @@ function pulseBadge(
       const u = (t - 0.4) / 0.6;
       scale = peakScale + (1 - peakScale) * easeOut(u);
     }
-    badge.height = BASE_BADGE_HEIGHT * scale;
-    badge.fontSize = BASE_BADGE_FONT_SIZE * scale;
-    badge.padding = BASE_BADGE_PADDING * scale;
-    badge.cornerRadius = BASE_BADGE_CORNER * scale;
+    // Defense-in-depth: clamp final geometry. Cheap, and protects against
+    // future curve changes or upstream rAF quirks we haven't anticipated.
+    badge.height = Math.max(0, BASE_BADGE_HEIGHT * scale);
+    badge.fontSize = Math.max(0, BASE_BADGE_FONT_SIZE * scale);
+    badge.padding = Math.max(0, BASE_BADGE_PADDING * scale);
+    badge.cornerRadius = Math.max(0, BASE_BADGE_CORNER * scale);
     node.setDirtyCanvas?.(true, true);
     if (t < 1) requestAnimationFrame(tick);
     else resetBadgeGeometry(badge);
