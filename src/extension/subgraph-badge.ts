@@ -2,7 +2,7 @@ import { walkAllNodes, collectUpstreamVariables, type LiteGraphLike, type LiteNo
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
-import { nodeBadge, nodeBadgeCleanup, nodeBadgeSeverity } from "./_stashes";
+import { nodeBadge, nodeBadgeCleanup, nodeBadgePulseToken, nodeBadgeSeverity } from "./_stashes";
 
 // ── Subgraph conflict badge ────────────────────────────────────────────
 // Users can drop our nodes inside a subgraph. From the parent graph, the
@@ -34,6 +34,13 @@ interface LGraphBadgeInstance {
   text: string;
   fgColor: string;
   bgColor: string;
+  /** Geometry fields are passed to the ctor but LiteGraph stores them
+   *  as plain instance props, so the pulse helper can mutate them
+   *  per rAF tick to animate a momentary scale. */
+  fontSize: number;
+  padding: number;
+  height: number;
+  cornerRadius: number;
 }
 
 interface LGraphBadgeCtor {
@@ -61,6 +68,76 @@ const SEVERITY_COLORS: Record<Severity, SeverityColors> = {
   error:   { bg: "#f87171", fg: "#ffffff" }, // red, --wp-red
 };
 
+// Base geometry kept in sync with `applyBadge`'s ctor call. The pulse
+// helper multiplies these by a per-frame `scale` to animate a momentary
+// grow-then-settle effect on appear/severity-escalation. Resetting to
+// these values at scale=1 keeps the badge visually stable between pulses.
+const BASE_BADGE_HEIGHT = 18;
+const BASE_BADGE_FONT_SIZE = 12;
+const BASE_BADGE_PADDING = 6;
+const BASE_BADGE_CORNER = 4;
+
+const SEVERITY_RANK: Record<Severity, number> = { info: 1, warning: 2, error: 3 };
+
+/** Read `--wp-motion-pulse` from theme.css; fall back to 420ms if the
+ *  custom-prop isn't computed yet (e.g. test env without DOM styles). */
+function readPulseDurationMs(): number {
+  const raw = typeof getComputedStyle === "function"
+    ? getComputedStyle(document.documentElement).getPropertyValue("--wp-motion-pulse").trim()
+    : "";
+  const ms = parseFloat(raw);
+  return Number.isFinite(ms) && ms > 0 ? ms : 420;
+}
+
+function resetBadgeGeometry(badge: LGraphBadgeInstance): void {
+  badge.height = BASE_BADGE_HEIGHT;
+  badge.fontSize = BASE_BADGE_FONT_SIZE;
+  badge.padding = BASE_BADGE_PADDING;
+  badge.cornerRadius = BASE_BADGE_CORNER;
+}
+
+/**
+ * Animate a brief grow-then-settle on the badge by mutating its geometry
+ * fields each rAF tick. Two-stage curve: ease-out grow to `peakScale`
+ * over the first 40% of the duration, then ease-out shrink back to 1.0
+ * over the remaining 60%. A monotonic token (stored on the node) lets a
+ * fresh pulse cancel any in-flight loop on its next tick — prevents
+ * two pulses fighting when severity changes back-to-back.
+ */
+function pulseBadge(
+  node: SubgraphNodeLike,
+  badge: LGraphBadgeInstance,
+  startScale: number,
+  peakScale: number,
+): void {
+  const duration = readPulseDurationMs();
+  const token = (nodeBadgePulseToken.get(node as object) ?? 0) + 1;
+  nodeBadgePulseToken.set(node as object, token);
+  const startedAt = (typeof performance !== "undefined" ? performance.now() : Date.now());
+  const easeOut = (u: number) => 1 - Math.pow(1 - u, 3);
+
+  function tick(now: number) {
+    if (nodeBadgePulseToken.get(node as object) !== token) return;
+    const t = Math.min(1, (now - startedAt) / duration);
+    let scale: number;
+    if (t < 0.4) {
+      const u = t / 0.4;
+      scale = startScale + (peakScale - startScale) * easeOut(u);
+    } else {
+      const u = (t - 0.4) / 0.6;
+      scale = peakScale + (1 - peakScale) * easeOut(u);
+    }
+    badge.height = BASE_BADGE_HEIGHT * scale;
+    badge.fontSize = BASE_BADGE_FONT_SIZE * scale;
+    badge.padding = BASE_BADGE_PADDING * scale;
+    badge.cornerRadius = BASE_BADGE_CORNER * scale;
+    node.setDirtyCanvas?.(true, true);
+    if (t < 1) requestAnimationFrame(tick);
+    else resetBadgeGeometry(badge);
+  }
+  requestAnimationFrame(tick);
+}
+
 interface BadgeState {
   severity: Severity;
   /** Human-readable label that explains the issue at a glance. */
@@ -84,8 +161,6 @@ function formatBadgeText(worst: Conflict, sameSeverityCount: number): string {
   // "shadows" — the wording was drifting per UX QA).
   return `${labelFor(worst.type)} $${worst.variable}`;
 }
-
-const SEVERITY_RANK: Record<Severity, number> = { info: 1, warning: 2, error: 3 };
 
 function widgetValue(node: LiteNodeLike, name: string): string {
   const w = node.widgets?.find((x) => x.name === name);
@@ -137,7 +212,16 @@ function readBadge(node: SubgraphNodeLike): LGraphBadgeInstance | null {
   return (nodeBadge.get(node as object) as LGraphBadgeInstance | undefined) ?? null;
 }
 
+/** Bump the pulse token so any in-flight rAF tween bails on its next tick.
+ *  Called both when the badge is removed (so we don't keep mutating a
+ *  detached instance) and from cleanup on node deletion. */
+function cancelPulse(node: SubgraphNodeLike): void {
+  const prev = nodeBadgePulseToken.get(node as object) ?? 0;
+  nodeBadgePulseToken.set(node as object, prev + 1);
+}
+
 function removeBadge(node: SubgraphNodeLike) {
+  cancelPulse(node);
   const current = readBadge(node);
   if (!current || !Array.isArray(node.badges)) return;
   const idx = node.badges.indexOf(current);
@@ -197,10 +281,21 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
       (next === null && prevSeverity === null) ||
       (!!next && next.severity === prevSeverity && next.text === readBadge(node)?.text);
     if (sameAsBefore) return;
+    // Pulse triggers: badge appears (null -> something) or severity worsens.
+    // Same-severity text changes (e.g. $foo -> $bar still warning) get a
+    // silent re-render — the wording change is informational, not urgent.
+    const isAppear = prevSeverity === null && next !== null;
+    const isEscalation =
+      !!next && !!prevSeverity && SEVERITY_RANK[next.severity] > SEVERITY_RANK[prevSeverity];
     nodeBadgeSeverity.set(node as object, next?.severity ?? null);
     if (!next) removeBadge(node);
     else applyBadge(node, next, Ctor);
     node.setDirtyCanvas?.(true, true);
+    if (next) {
+      const badge = readBadge(node);
+      if (badge && isAppear) pulseBadge(node, badge, 0.4, 1.12);
+      else if (badge && isEscalation) pulseBadge(node, badge, 1.0, 1.18);
+    }
   }
 
   // Initial compute happens on next tick — workflow may still be loading

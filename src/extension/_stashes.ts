@@ -58,7 +58,7 @@ export const nodeBadge: WeakMap<object, unknown> = new WeakMap();
 /** Last computed severity for the subgraph badge — used to skip
  *  unnecessary repaints when the inner-graph conflict scan returns
  *  the same severity twice in a row. Replaces `_wpBadgeSeverity`. */
-export const nodeBadgeSeverity: WeakMap<object, string | null> = new WeakMap();
+export const nodeBadgeSeverity: WeakMap<object, "info" | "warning" | "error" | null> = new WeakMap();
 
 /** Cleanup function returned by the badge syncer's onConnectionsChange
  *  override + interval, called on node removal to detach handlers.
@@ -71,3 +71,9 @@ export const nodeBadgeCleanup: WeakMap<object, () => void> = new WeakMap();
  *  it bails. Prevents "double animation" jitter when the user
  *  toggles rapidly. */
 export const nodeCollapseAnimToken: WeakMap<object, number> = new WeakMap();
+
+/** Active subgraph-badge pulse token. Same pattern as the collapse
+ *  token — bumped each time a fresh pulse starts so a previous in-flight
+ *  rAF loop bails on its next tick. Prevents two pulses fighting over
+ *  the same badge's geometry when severity changes back-to-back. */
+export const nodeBadgePulseToken: WeakMap<object, number> = new WeakMap();
