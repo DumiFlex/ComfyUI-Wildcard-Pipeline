@@ -300,11 +300,14 @@ function onDragEnd() {
         :title="`Children (${children.length})`"
         :subtitle="childrenSubtitle"
       >
-        <div v-if="!children.length" class="wp-dim wp-bundle-editor__empty">
-          This bundle has no children yet.
-        </div>
-        <div v-else class="wp-bundle-children-grid">
+        <div class="wp-bundle-children-grid">
           <div class="wp-bundle-children-stack" data-test="bundle-children-list">
+            <div
+              v-if="!children.length"
+              class="wp-dim wp-bundle-editor__empty"
+            >
+              This bundle has no children yet.
+            </div>
             <BundleChildRow
               v-for="(child, idx) in children"
               :key="`${(child.id as string) ?? ''}_${idx}`"
@@ -322,6 +325,15 @@ function onDragEnd() {
               @drop="(e) => onDrop(idx, e)"
               @drag-end="onDragEnd"
             />
+            <button
+              type="button"
+              class="wp-bundle-add-btn"
+              data-test="bundle-add-open"
+              @click="addModalOpen = true"
+            >
+              <i class="pi pi-plus" aria-hidden="true" />
+              add child from library
+            </button>
           </div>
           <BundleChildPane
             :child="selectedChild"
@@ -329,15 +341,6 @@ function onDragEnd() {
             @close="onPaneClose"
           />
         </div>
-        <button
-          type="button"
-          class="wp-bundle-add-btn"
-          data-test="bundle-add-open"
-          @click="addModalOpen = true"
-        >
-          <i class="pi pi-plus" aria-hidden="true" />
-          add child from library
-        </button>
       </Card>
 
       <BundleAddChildModal
@@ -375,13 +378,13 @@ function onDragEnd() {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 10px;
-  margin-top: 10px;
+  padding: 8px;
+  margin-top: 4px;
   border: 1px dashed var(--wp-border-strong, var(--wp-border));
   border-radius: var(--wp-radius, 4px);
   background: transparent;
   color: var(--wp-text-dim);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
