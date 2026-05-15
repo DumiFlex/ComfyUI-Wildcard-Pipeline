@@ -109,7 +109,10 @@ function isActivePreset(preset: string): boolean {
     :data-inline="inline ? 'true' : null"
     @keydown="handleKeydown"
   >
-    <!-- Inline layout: hex input + native picker + preset row, no toggle. -->
+    <!-- Inline layout: preview swatch + hex input on row 1, preset palette
+         flowing horizontally below. Native OS picker dropped here — presets
+         do the same job and a second visible color box reads as a duplicate
+         of the preview swatch. -->
     <template v-if="inline">
       <div class="wp-color-picker__row">
         <div
@@ -125,14 +128,6 @@ function isActivePreset(preset: string): boolean {
           data-test="color-hex-input"
           @update:model-value="(v) => onHexInput(String(v ?? ''))"
         />
-        <input
-          type="color"
-          :value="nativeColor"
-          aria-label="Native color picker"
-          class="wp-color-picker__native"
-          data-test="color-native"
-          @input="onNativeInput"
-        >
       </div>
       <div
         class="wp-color-picker__palette wp-color-picker__palette--inline"
@@ -143,7 +138,7 @@ function isActivePreset(preset: string): boolean {
           v-for="preset in props.presets"
           :key="preset"
           type="button"
-          class="wp-color-picker__chip"
+          class="wp-color-picker__chip wp-color-picker__chip--inline"
           :style="{ background: preset }"
           :title="preset"
           :data-active="isActivePreset(preset)"
@@ -214,31 +209,6 @@ function isActivePreset(preset: string): boolean {
   position: relative;
   display: inline-flex;
   align-items: center;
-}
-.wp-color-picker[data-inline="true"] {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-.wp-color-picker__swatch--inline {
-  width: var(--wp-input-h, 34px);
-  height: var(--wp-input-h, 34px);
-  border-radius: 6px;
-  border: 1px solid var(--wp-border-strong);
-  flex-shrink: 0;
-}
-.wp-color-picker__palette--inline {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  grid-template-columns: none;
-  gap: 6px;
-}
-.wp-color-picker__palette--inline .wp-color-picker__chip {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
 }
 
 .wp-color-picker__swatch {
@@ -311,5 +281,42 @@ function isActivePreset(preset: string): boolean {
 .wp-color-picker__chip:hover { transform: scale(1.08); }
 .wp-color-picker__chip[data-active="true"] {
   box-shadow: 0 0 0 2px var(--wp-bg-2), 0 0 0 4px var(--wp-accent-500);
+}
+
+/* ── Inline mode ──────────────────────────────────────────────────
+ *  Specificity bumped via `[data-inline="true"]` ancestor so these
+ *  win against the base single-class rules above without `!important`.
+ */
+.wp-color-picker[data-inline="true"] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+}
+.wp-color-picker[data-inline="true"] .wp-color-picker__row {
+  width: 100%;
+}
+.wp-color-picker[data-inline="true"] .wp-color-picker__swatch--inline {
+  width: var(--wp-input-h, 34px);
+  height: var(--wp-input-h, 34px);
+  border-radius: 6px;
+  border: 1px solid var(--wp-border-strong);
+  flex-shrink: 0;
+}
+.wp-color-picker[data-inline="true"] .wp-color-picker__hex {
+  flex: 1;
+  min-width: 0;
+}
+.wp-color-picker[data-inline="true"] .wp-color-picker__palette {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wp-color-picker[data-inline="true"] .wp-color-picker__chip--inline {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
 }
 </style>
