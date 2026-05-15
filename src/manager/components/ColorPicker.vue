@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Input from "./ui/Input.vue";
+import HsvPicker from "./HsvPicker.vue";
 
 interface Props {
   modelValue: string;
@@ -37,7 +38,6 @@ watch(() => props.modelValue, (v) => {
 });
 
 const swatchColor = computed(() => (HEX_RE.test(props.modelValue) ? props.modelValue : "#ffffff"));
-const nativeColor = computed(() => (HEX_RE.test(props.modelValue) ? props.modelValue : "#a78bfa"));
 
 const swatchAriaLabel = computed(
   () => props.ariaLabel ?? `Pick color, current ${props.modelValue}`,
@@ -86,13 +86,6 @@ function onHexInput(value: string) {
   }
 }
 
-function onNativeInput(e: Event) {
-  const value = (e.target as HTMLInputElement).value;
-  if (HEX_RE.test(value)) {
-    emit("update:modelValue", value);
-  }
-}
-
 onBeforeUnmount(() => {
   document.removeEventListener("mousedown", handleOutsideClick);
 });
@@ -109,10 +102,10 @@ function isActivePreset(preset: string): boolean {
     :data-inline="inline ? 'true' : null"
     @keydown="handleKeydown"
   >
-    <!-- Inline layout: preview swatch + hex input on row 1, preset palette
-         flowing horizontally below. Native OS picker dropped here — presets
-         do the same job and a second visible color box reads as a duplicate
-         of the preview swatch. -->
+    <!-- Inline layout: preview swatch + hex on row 1, custom HSV picker
+         (SV square + hue strip) on row 2, preset palette flowing
+         horizontally on row 3. Replaces the native browser color picker
+         so theming is consistent across platforms. -->
     <template v-if="inline">
       <div class="wp-color-picker__row">
         <div
@@ -129,6 +122,11 @@ function isActivePreset(preset: string): boolean {
           @update:model-value="(v) => onHexInput(String(v ?? ''))"
         />
       </div>
+      <HsvPicker
+        :model-value="props.modelValue"
+        :aria-label="swatchAriaLabel"
+        @update:model-value="(v) => emit('update:modelValue', v)"
+      />
       <div
         class="wp-color-picker__palette wp-color-picker__palette--inline"
         role="listbox"
@@ -176,15 +174,12 @@ function isActivePreset(preset: string): boolean {
             data-test="color-hex-input"
             @update:model-value="(v) => onHexInput(String(v ?? ''))"
           />
-          <input
-            type="color"
-            :value="nativeColor"
-            aria-label="Native color picker"
-            class="wp-color-picker__native"
-            data-test="color-native"
-            @input="onNativeInput"
-          >
         </div>
+        <HsvPicker
+          :model-value="props.modelValue"
+          :aria-label="swatchAriaLabel"
+          @update:model-value="(v) => emit('update:modelValue', v)"
+        />
         <div class="wp-color-picker__palette" role="listbox" aria-label="Preset colors">
           <button
             v-for="preset in props.presets"
@@ -236,7 +231,7 @@ function isActivePreset(preset: string): boolean {
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
   padding: 10px;
-  min-width: 200px;
+  width: 220px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -250,17 +245,8 @@ function isActivePreset(preset: string): boolean {
 
 .wp-color-picker__hex {
   flex: 1;
+  min-width: 0;
   font-size: 12px;
-}
-
-.wp-color-picker__native {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
 }
 
 .wp-color-picker__palette {
