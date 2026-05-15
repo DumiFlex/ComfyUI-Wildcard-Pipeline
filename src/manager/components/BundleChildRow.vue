@@ -9,6 +9,7 @@
  * state lives here.
  */
 import { computed } from "vue";
+import { kindIcon } from "../../components/shared/kind-icons";
 
 interface Props {
   child: Record<string, unknown>;
@@ -31,23 +32,26 @@ const emit = defineEmits<{
 
 interface KindMeta {
   label: string;
-  icon: string;
   color: string;
 }
 
+/** Display labels + kind tint per child type. Icon comes from the shared
+ *  `kindIcon()` map so every surface (Context widget, picker, assembler,
+ *  bundle editor) renders the same glyph for a given kind. */
 const KIND_META: Record<string, KindMeta> = {
-  wildcard:     { label: "Wildcard",   icon: "W",  color: "var(--wp-kind-wildcard, #34d399)" },
-  fixed_values: { label: "Fixed",      icon: "F",  color: "var(--wp-kind-fixed, #22d3ee)" },
-  combine:      { label: "Combine",    icon: "Cb", color: "var(--wp-kind-combine, #fbbf24)" },
-  derivation:   { label: "Derivation", icon: "D",  color: "var(--wp-kind-derivation, #a78bfa)" },
-  constraint:   { label: "Constraint", icon: "Cn", color: "var(--wp-kind-constraint, #f87171)" },
-  bundle:       { label: "Bundle",     icon: "B",  color: "var(--wp-bundle-default, #46566B)" },
+  wildcard:     { label: "Wildcard",   color: "var(--wp-kind-wildcard, #34d399)" },
+  fixed_values: { label: "Fixed",      color: "var(--wp-kind-fixed, #22d3ee)" },
+  combine:      { label: "Combine",    color: "var(--wp-kind-combine, #fbbf24)" },
+  derivation:   { label: "Derivation", color: "var(--wp-kind-derivation, #a78bfa)" },
+  constraint:   { label: "Constraint", color: "var(--wp-kind-constraint, #f87171)" },
+  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default, #46566B)" },
 };
 
 const kind = computed(() => String(props.child.type ?? "module"));
 const meta = computed<KindMeta>(
-  () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), icon: "?", color: "#8b949e" },
+  () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), color: "#8b949e" },
 );
+const iconClass = computed(() => (kind.value === "bundle" ? "pi pi-box" : kindIcon(kind.value)));
 const enabled = computed(() => props.child.enabled !== false);
 const displayName = computed(() => {
   const m = props.child.meta as { name?: string } | undefined;
@@ -83,6 +87,7 @@ const isEdited = computed(() => {
       type="button"
       class="wp-bchild__handle"
       :aria-label="`Drag to reorder ${displayName}`"
+      :title="`Drag to reorder ${displayName}`"
       :data-test="`bundle-child-handle-${idx}`"
     >
       <i class="pi pi-bars" aria-hidden="true" />
@@ -92,6 +97,7 @@ const isEdited = computed(() => {
       type="button"
       class="wp-bchild__toggle"
       :aria-label="enabled ? `Disable ${displayName}` : `Enable ${displayName}`"
+      :title="enabled ? `Disable ${displayName}` : `Enable ${displayName}`"
       :aria-pressed="enabled"
       data-test="bundle-child-toggle"
       @click="emit('toggle')"
@@ -99,7 +105,13 @@ const isEdited = computed(() => {
       <i :class="enabled ? 'pi pi-eye' : 'pi pi-eye-slash'" />
     </button>
 
-    <div class="wp-bchild__kindicon" aria-hidden="true">{{ meta.icon }}</div>
+    <div
+      class="wp-bchild__kindicon"
+      :title="meta.label"
+      aria-hidden="true"
+    >
+      <i :class="iconClass" />
+    </div>
 
     <div
       class="wp-bchild__main"
@@ -123,6 +135,7 @@ const isEdited = computed(() => {
         type="button"
         class="wp-bchild__act"
         aria-label="Duplicate child"
+        title="Duplicate"
         data-test="bundle-child-duplicate"
         @click="emit('duplicate')"
       >
@@ -132,6 +145,7 @@ const isEdited = computed(() => {
         type="button"
         class="wp-bchild__act wp-bchild__act--danger"
         aria-label="Remove child"
+        title="Remove"
         data-test="bundle-child-remove"
         @click="emit('remove')"
       >
@@ -193,8 +207,7 @@ const isEdited = computed(() => {
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in oklab, var(--row-kind) 18%, var(--wp-bg-3));
   color: var(--row-kind);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 12px;
 }
 
 .wp-bchild__main { min-width: 0; cursor: pointer; }
