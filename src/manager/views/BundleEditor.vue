@@ -18,10 +18,12 @@ import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
+import BundleChildPane from "../components/BundleChildPane.vue";
 import { useToast } from "../composables/useToast";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { BundleRow } from "../api/types";
+import type { ModuleEntry } from "../../widgets/_shared";
 
 const props = defineProps<{ id?: string }>();
 
@@ -61,7 +63,22 @@ const children = ref<Array<Record<string, unknown>>>([]);
 const dragSourceIdx = ref<number | null>(null);
 const dragOverIdx = ref<number | null>(null);
 
+/** Side-pane selection — null when no child is being edited. */
+const selectedChildId = ref<string | null>(null);
+
 const isEdit = computed(() => !!props.id);
+
+const selectedChild = computed<Record<string, unknown> | null>(() => {
+  const id = selectedChildId.value;
+  if (!id) return null;
+  return children.value.find((c) => (c.id as string) === id) ?? null;
+});
+
+const selectedChildIdx = computed<number>(() => {
+  const id = selectedChildId.value;
+  if (!id) return -1;
+  return children.value.findIndex((c) => (c.id as string) === id);
+});
 
 onMounted(async () => {
   await categoryStore.fetchAll();
@@ -147,13 +164,33 @@ function onDuplicateChild(idx: number) {
 }
 
 function onRemoveChild(idx: number) {
+  const removedId = children.value[idx]?.id as string | undefined;
+  if (removedId && removedId === selectedChildId.value) {
+    selectedChildId.value = null;
+  }
   const next = [...children.value];
   next.splice(idx, 1);
   children.value = next;
 }
 
-function onSelectChild(_idx: number) {
-  // Task 3 will set selectedChildId here.
+function onSelectChild(idx: number) {
+  const c = children.value[idx];
+  if (!c) return;
+  const id = (c.id as string) ?? null;
+  // Toggle off if clicking the already-selected row.
+  selectedChildId.value = id === selectedChildId.value ? null : id;
+}
+
+function onPaneClose() {
+  selectedChildId.value = null;
+}
+
+function onPaneUpdate(patch: Partial<ModuleEntry>) {
+  const idx = selectedChildIdx.value;
+  if (idx < 0) return;
+  const next = [...children.value];
+  next[idx] = { ...next[idx], ...(patch as Record<string, unknown>) };
+  children.value = next;
 }
 
 function onDragStart(idx: number, evt: DragEvent) {
@@ -224,28 +261,42 @@ function onDragEnd() {
 
       <Card
         :title="`Children (${children.length})`"
-        subtitle="Frozen snapshots — drag handle to reorder, eye to toggle, ⧉ to duplicate, × to remove."
+        :subtitle="selectedChildId
+          ? `Editing snapshot of ${selectedChild?.meta && (selectedChild.meta as { name?: string }).name || '(unnamed)'} — click × to close`
+          : 'Frozen snapshots — click row to edit on the right.'"
       >
         <div v-if="!children.length" class="wp-dim wp-bundle-editor__empty">
           This bundle has no children yet.
         </div>
-        <div v-else class="wp-bundle-children-stack" data-test="bundle-children-list">
-          <BundleChildRow
-            v-for="(child, idx) in children"
-            :key="`${(child.id as string) ?? ''}_${idx}`"
-            :child="child"
-            :idx="idx"
-            :selected="false"
-            :class="dragOverIdx === idx ? 'wp-bundle-children-stack__drag-over' : null"
-            @toggle="onToggleChild(idx)"
-            @duplicate="onDuplicateChild(idx)"
-            @remove="onRemoveChild(idx)"
-            @select="onSelectChild(idx)"
-            @drag-start="(e) => onDragStart(idx, e)"
-            @drag-over="(e) => onDragOver(idx, e)"
-            @drag-leave="onDragLeave"
-            @drop="(e) => onDrop(idx, e)"
-            @drag-end="onDragEnd"
+        <div
+          v-else
+          class="wp-bundle-children-grid"
+          :data-has-selection="selectedChildId ? 'true' : null"
+        >
+          <div class="wp-bundle-children-stack" data-test="bundle-children-list">
+            <BundleChildRow
+              v-for="(child, idx) in children"
+              :key="`${(child.id as string) ?? ''}_${idx}`"
+              :child="child"
+              :idx="idx"
+              :selected="(child.id as string) === selectedChildId"
+              :class="dragOverIdx === idx ? 'wp-bundle-children-stack__drag-over' : null"
+              @toggle="onToggleChild(idx)"
+              @duplicate="onDuplicateChild(idx)"
+              @remove="onRemoveChild(idx)"
+              @select="onSelectChild(idx)"
+              @drag-start="(e) => onDragStart(idx, e)"
+              @drag-over="(e) => onDragOver(idx, e)"
+              @drag-leave="onDragLeave"
+              @drop="(e) => onDrop(idx, e)"
+              @drag-end="onDragEnd"
+            />
+          </div>
+          <BundleChildPane
+            v-if="selectedChildId"
+            :child="selectedChild"
+            @update="onPaneUpdate"
+            @close="onPaneClose"
           />
         </div>
       </Card>
@@ -257,10 +308,20 @@ function onDragEnd() {
 .wp-bundle-editor__loading { padding: 32px 0; text-align: center; }
 .wp-bundle-editor__empty { padding: 16px 0; font-size: 13px; }
 
+.wp-bundle-children-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.wp-bundle-children-grid[data-has-selection] {
+  grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.4fr);
+}
 .wp-bundle-children-stack {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 .wp-bundle-children-stack__drag-over {
   box-shadow: 0 -2px 0 var(--wp-accent-500);

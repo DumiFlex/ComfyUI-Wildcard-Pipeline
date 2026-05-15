@@ -372,6 +372,69 @@ describe("BundleEditor.vue", () => {
     expect(payload.children).toHaveLength(1);
   });
 
+  it("clicking a child row reveals the pane with that child", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_sel",
+      name: "Sel",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        {
+          id: "wc_a",
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "alpha" },
+          payload: { options: [], sub_categories: [] },
+          instance: {},
+        },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_sel" });
+    await flushPromises();
+
+    // Pane absent before selection.
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(false);
+
+    await wrap.find('[data-test="bundle-child-main"]').trigger("click");
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(true);
+    expect(wrap.text()).toContain("alpha");
+  });
+
+  it("pane close clears selection", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_close",
+      name: "Close",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        {
+          id: "wc_a",
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "alpha" },
+          payload: { options: [], sub_categories: [] },
+          instance: {},
+        },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_close" });
+    await flushPromises();
+
+    await wrap.find('[data-test="bundle-child-main"]').trigger("click");
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(true);
+
+    await wrap.find('[data-test="bundle-pane-close"]').trigger("click");
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(false);
+  });
+
   it("duplicate inserts after source and persists on save", async () => {
     apiBundles.get.mockResolvedValue({
       id: "bn_dup", name: "Dup", description: "",
