@@ -177,6 +177,7 @@
   --wp-motion-pulse:    420ms;   /* drop landing pulse, existing keyframe */
   --wp-motion-collapse: 450ms;   /* frame height + children opacity */
   --wp-motion-stagger:   60ms;   /* per-row delay in multi-child drop pulse */
+  --wp-motion-shimmer: 1400ms;   /* skeleton-frame highlight sweep loop */
 
   --wp-motion-curve-collapse: cubic-bezier(0.4, 0, 0.2, 1);    /* Material standard */
   --wp-motion-curve-flip:     cubic-bezier(0.22, 1, 0.36, 1);  /* decel-heavy */

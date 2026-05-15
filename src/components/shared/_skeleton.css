@@ -1,0 +1,50 @@
+/* Skeleton loading frames.
+ *
+ * Used by modals + widgets that surface async API loads (bundle picker,
+ * module picker). The flat base background is token-driven so the
+ * frames track theme changes; a moving highlight gradient overlays
+ * via the `::after` pseudo so consumers don't need to mark up two
+ * elements. Animation loops on `--wp-motion-shimmer` (1400ms).
+ *
+ * Imported by each consumer's scoped style block — the `wp-skel`
+ * class names are intentionally global so a parent's scoped wrapper
+ * (`wp-bp__skel-row` etc.) can lay out the shapes while the base
+ * `wp-skel` rules drive the look. `prefers-reduced-motion` kills the
+ * sweep so reduced-motion users still get a flat placeholder.
+ */
+.wp-skel {
+  background: var(--wp-bg2);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.wp-skel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--wp-text) 8%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: wp-skel-shimmer var(--wp-motion-shimmer) ease-in-out infinite;
+}
+.wp-skel--text {
+  height: 11px;
+}
+.wp-skel--circle {
+  border-radius: 50%;
+}
+.wp-skel--pill {
+  border-radius: 999px;
+}
+
+@keyframes wp-skel-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-skel::after { animation: none; }
+}

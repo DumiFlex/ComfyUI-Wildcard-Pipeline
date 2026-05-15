@@ -195,9 +195,26 @@
 
       <!-- Body: scrollable list grouped by kind -->
       <div class="wp-picker__body">
-        <div v-if="loading" class="wp-picker__state">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true"></i>
-          Loading modules…
+        <div
+          v-if="loading"
+          class="wp-picker__skel"
+          aria-busy="true"
+          aria-live="polite"
+          aria-label="Loading modules"
+        >
+          <template v-for="g in 2" :key="g">
+            <div class="wp-picker__skel-head">
+              <span class="wp-skel wp-skel--text wp-picker__skel-label"></span>
+              <span class="wp-picker__skel-line"></span>
+              <span class="wp-skel wp-skel--text wp-picker__skel-tally"></span>
+            </div>
+            <div v-for="i in 4" :key="`${g}-${i}`" class="wp-picker__skel-row">
+              <span class="wp-skel wp-picker__skel-check"></span>
+              <span class="wp-skel wp-picker__skel-icon"></span>
+              <span class="wp-skel wp-skel--text wp-picker__skel-name"></span>
+              <span class="wp-skel wp-skel--text wp-picker__skel-uuid"></span>
+            </div>
+          </template>
         </div>
         <div v-else-if="loadError" class="wp-picker__state wp-picker__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
@@ -909,8 +926,40 @@ onBeforeUnmount(detachCaptureListeners);
 </script>
 
 <style scoped>
+@import "../shared/_skeleton.css";
+
 /* Tokens via global tokens.css. Keep selectors prefixed `wp-picker__`
  * so this component never collides with SPA Manager classes. */
+
+/* Skeleton frames — geometry mirrors `.wp-picker__row` + the section
+ * head pattern so the placeholder layout matches the loaded list and
+ * doesn't shift on resolve. */
+.wp-picker__skel { padding: 6px 8px 8px; }
+.wp-picker__skel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px 4px;
+}
+.wp-picker__skel-label { width: 70px; height: 10px; }
+.wp-picker__skel-line {
+  flex: 1;
+  height: 1px;
+  background: var(--wp-border);
+}
+.wp-picker__skel-tally { width: 22px; height: 10px; }
+.wp-picker__skel-row {
+  display: grid;
+  grid-template-columns: 18px 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 8px;
+}
+.wp-picker__skel-check { width: 16px; height: 16px; }
+.wp-picker__skel-icon { width: 22px; height: 22px; }
+.wp-picker__skel-name { max-width: 220px; height: 12px; }
+.wp-picker__skel-uuid { width: 64px; height: 10px; }
 
 .wp-picker {
   background: var(--wp-bg-2);
