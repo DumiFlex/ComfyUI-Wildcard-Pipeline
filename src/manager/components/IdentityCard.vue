@@ -32,6 +32,8 @@ interface Props {
   varBindingHint?: string;
   /** When true, render the description Textarea. */
   showDescription?: boolean;
+  /** Optional label shown above the `aside` slot. Defaults to "" (no label). */
+  asideLabel?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -39,6 +41,7 @@ const props = withDefaults(defineProps<Props>(), {
   varBindingError: "",
   varBindingHint: "Reference this in templates as $name. Auto-derived from the name unless you customize it.",
   showDescription: true,
+  asideLabel: "",
 });
 
 const emit = defineEmits<{
@@ -155,6 +158,14 @@ function removeTag(t: string) {
           data-test="identity-description"
           @update:model-value="(v) => emit('update:description', v)"
         />
+      </Field>
+
+      <Field
+        v-if="$slots.aside"
+        :label="asideLabel"
+        class="identity-grid__full"
+      >
+        <slot name="aside" />
       </Field>
 
       <Field label="Tags" class="identity-grid__full">

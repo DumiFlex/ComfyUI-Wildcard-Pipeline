@@ -53,7 +53,7 @@ describe("BundleEditor.vue", () => {
     const wrap = mountEditor();
     await flushPromises();
     expect(apiBundles.get).not.toHaveBeenCalled();
-    expect(wrap.text()).toContain("New Bundle");
+    expect(wrap.text()).toContain("New bundle");
   });
 
   it("edit-mode loads bundle and populates fields", async () => {
@@ -81,7 +81,7 @@ describe("BundleEditor.vue", () => {
     expect(apiBundles.get).toHaveBeenCalledWith("bn_test");
 
     // Name input gets populated.
-    const nameInput = wrap.find('input[aria-label="Bundle name"]');
+    const nameInput = wrap.find('[data-test="identity-name"]');
     expect((nameInput.element as HTMLInputElement).value).toBe("Char Pack");
 
     // Tag chips render.
@@ -183,7 +183,7 @@ describe("BundleEditor.vue", () => {
     const wrap = mountEditor({ id: "bn_save" });
     await flushPromises();
 
-    const nameInput = wrap.find('input[aria-label="Bundle name"]');
+    const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("Edited");
 
     // Click the Save button — find by text since icon-only would match
@@ -271,11 +271,19 @@ describe("BundleEditor.vue", () => {
     const wrap = mountEditor({ id: "bn_y" });
     await flushPromises();
 
-    const tagInput = wrap.find('input[aria-label="New tag"]');
+    const tagInput = wrap.find('[data-test="identity-tag-input"]');
     await tagInput.setValue("character");
-    await tagInput.trigger("keyup.enter");
+    await tagInput.trigger("keydown.enter");
 
     expect(wrap.text()).toContain("character");
     expect((tagInput.element as HTMLInputElement).value).toBe("");
+  });
+
+  it("renders EditorFrame breadcrumb back to /bundles", async () => {
+    const wrap = mountEditor();
+    await flushPromises();
+    const back = wrap.find('[data-test="editor-back"]');
+    expect(back.exists()).toBe(true);
+    expect(back.text()).toContain("Bundles");
   });
 });
