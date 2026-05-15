@@ -14,6 +14,7 @@ vi.mock("../api/client", () => ({
       favorite: vi.fn(),
     },
     categories: { list: vi.fn().mockResolvedValue({ items: [] }) },
+    modules: { list: vi.fn().mockResolvedValue({ items: [] }) },
   },
   ApiError: class extends Error {
     constructor(public status: number, message: string) { super(message); }
@@ -402,6 +403,47 @@ describe("BundleEditor.vue", () => {
     await wrap.find('[data-test="bundle-child-main"]').trigger("click");
     expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(true);
     expect(wrap.text()).toContain("alpha");
+  });
+
+  it("adding from library appends a snapshot to children", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_add",
+      name: "Add",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    const apiAny = api as unknown as { modules: { list: ReturnType<typeof vi.fn> } };
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        {
+          id: "wc_lib", type: "wildcard", name: "library_wc",
+          description: "", category_id: null, tags: [], is_favorite: false,
+          payload: { options: [], sub_categories: [] },
+          payload_hash: "lh1", version: 1, created_at: "", updated_at: "",
+        },
+      ],
+    });
+
+    const wrap = mountEditor({ id: "bn_add" });
+    await flushPromises();
+
+    await wrap.find('[data-test="bundle-add-open"]').trigger("click");
+    await flushPromises();
+
+    const row = document.body.querySelector('[data-test="bundle-add-row-wc_lib"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.click();
+    await flushPromises();
+
+    expect(wrap.text()).toContain("Children (1)");
+    expect(wrap.text()).toContain("library_wc");
+
+    wrap.unmount();
   });
 
   it("pane close clears selection", async () => {

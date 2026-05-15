@@ -19,10 +19,12 @@ import Card from "../components/ui/Card.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
+import BundleAddChildModal from "../components/BundleAddChildModal.vue";
 import { useToast } from "../composables/useToast";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import type { BundleRow } from "../api/types";
+import { useModuleStore } from "../stores/moduleStore";
+import type { BundleRow, ModuleRow } from "../api/types";
 import type { ModuleEntry } from "../../widgets/_shared";
 
 const props = defineProps<{ id?: string }>();
@@ -30,7 +32,10 @@ const props = defineProps<{ id?: string }>();
 const router = useRouter();
 const store = useBundleStore();
 const categoryStore = useCategoryStore();
+const moduleStore = useModuleStore();
 const toast = useToast();
+
+const addModalOpen = ref(false);
 
 /** Default bundle frame color when user hasn't picked one. Mirrors the
  *  `--wp-bundle-default` token + ContextWidget fallback so the editor
@@ -91,6 +96,13 @@ const childrenSubtitle = computed<string>(() => {
 
 onMounted(async () => {
   await categoryStore.fetchAll();
+  // Catalog load powers the add-child library picker AND
+  // ConstraintMatrixSection's sub-category lookups inside the pane.
+  try {
+    await moduleStore.fetchCatalog();
+  } catch (e) {
+    toast.push({ severity: "error", summary: "Failed to load module library", detail: String(e), life: 3000 });
+  }
   if (!props.id) return;
   loading.value = true;
   try {
@@ -154,6 +166,22 @@ async function save() {
 
 function freshId(prefix: string): string {
   return `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
+}
+
+/** Snapshot a library module into a bundle child entry. */
+function onAddPick(row: ModuleRow) {
+  const snapshot: Record<string, unknown> = {
+    id: freshId(row.type),
+    type: row.type,
+    enabled: true,
+    collapsed: false,
+    meta: { name: row.name },
+    payload: row.payload ?? {},
+    payload_hash: row.payload_hash,
+    instance: {},
+    entries: [],
+  };
+  children.value = [...children.value, snapshot];
 }
 
 function onToggleChild(idx: number) {
@@ -301,7 +329,23 @@ function onDragEnd() {
             @close="onPaneClose"
           />
         </div>
+        <button
+          type="button"
+          class="wp-bundle-add-btn"
+          data-test="bundle-add-open"
+          @click="addModalOpen = true"
+        >
+          <i class="pi pi-plus" aria-hidden="true" />
+          add child from library
+        </button>
       </Card>
+
+      <BundleAddChildModal
+        :visible="addModalOpen"
+        :modules="moduleStore.items"
+        @close="addModalOpen = false"
+        @pick="onAddPick"
+      />
     </template>
   </EditorFrame>
 </template>
@@ -324,5 +368,30 @@ function onDragEnd() {
 }
 .wp-bundle-children-stack__drag-over {
   box-shadow: 0 -2px 0 var(--wp-accent-500);
+}
+.wp-bundle-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border: 1px dashed var(--wp-border-strong, var(--wp-border));
+  border-radius: var(--wp-radius, 4px);
+  background: transparent;
+  color: var(--wp-text-dim);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.wp-bundle-add-btn:hover {
+  border-style: solid;
+  border-color: var(--wp-accent-500);
+  color: var(--wp-accent-500);
+  background: color-mix(in oklab, var(--wp-accent-500) 7%, transparent);
 }
 </style>
