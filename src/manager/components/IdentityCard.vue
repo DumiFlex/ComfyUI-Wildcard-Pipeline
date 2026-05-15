@@ -102,18 +102,19 @@ function removeTag(t: string) {
 <template>
   <Card title="Identity">
     <div class="identity-grid">
-      <Field label="Name">
-        <div v-if="$slots.nameLeading" class="identity-name-row">
-          <slot name="nameLeading" />
+      <div v-if="$slots.nameLeading" class="identity-name-row">
+        <slot name="nameLeading" />
+        <Field label="Name" class="identity-name-row__field">
           <Input
             :model-value="name"
             placeholder="e.g. Hair Color"
             data-test="identity-name"
             @update:model-value="onName"
           />
-        </div>
+        </Field>
+      </div>
+      <Field v-else label="Name">
         <Input
-          v-else
           :model-value="name"
           placeholder="e.g. Hair Color"
           data-test="identity-name"
@@ -211,12 +212,15 @@ function removeTag(t: string) {
   align-items: stretch;
 }
 .identity-tags > :first-child { flex: 1; }
+/* Name + leading slot — swatch aligns to the bottom (= input bottom)
+ * so the "Name" label above the input is not stretched over the
+ * swatch as well. */
 .identity-name-row {
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   gap: 8px;
 }
-.identity-name-row > :last-child { flex: 1; min-width: 0; }
+.identity-name-row__field { flex: 1; min-width: 0; }
 .identity-tag-list {
   display: flex;
   flex-wrap: wrap;
