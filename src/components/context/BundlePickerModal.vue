@@ -257,9 +257,15 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   </ModalShell>
 </template>
 
+<style>
+/* `wp-skel` family is shared with ModulePickerModal — import unscoped
+ * so the keyframe + base rules dedupe across consumers and aren't
+ * subject to per-component scoping rewrites. */
+@import "../shared/_skeleton.css";
+</style>
+
 <style scoped>
 @import "../shared/theme.css";
-@import "../shared/_skeleton.css";
 
 /* Skeleton frames — geometry mirrors `.wp-bp__row` so the placeholder
  * stack matches the loaded list layout (no jump on resolve). */

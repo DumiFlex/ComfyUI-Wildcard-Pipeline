@@ -925,9 +925,14 @@ watch(
 onBeforeUnmount(detachCaptureListeners);
 </script>
 
-<style scoped>
+<style>
+/* `wp-skel` family is shared with BundlePickerModal — import unscoped
+ * so the keyframe + base rules dedupe across consumers and aren't
+ * subject to per-component scoping rewrites. */
 @import "../shared/_skeleton.css";
+</style>
 
+<style scoped>
 /* Tokens via global tokens.css. Keep selectors prefixed `wp-picker__`
  * so this component never collides with SPA Manager classes. */
 
