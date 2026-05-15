@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import { kindIcon, type WpKind } from "../shared/kind-icons";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -36,6 +37,12 @@ const props = defineProps<{
   /** Clear the entire template string. Wired to the toolbar trash
    *  button; optional so headless mounts/tests can skip it. */
   onClearTemplate?: () => void;
+  /** Per-var module-kind lookup. When known, each chip renders a
+   *  small pi-icon matching the source module's kind (wildcard,
+   *  fixed_values, combine, derivation, constraint, pipeline,
+   *  injector). Missing entries fall back to no icon. Mount glue
+   *  builds this via `collectUpstreamKinds`. */
+  kindByVar?: Record<string, string>;
   /** Seed used by the server-side preview resolver. Optional; defaults
    *  to 42 for stable preview rolls. */
   previewSeed?: number;
@@ -211,6 +218,13 @@ const isResolved = computed(() => {
 const ripples = ref<Map<string, { x: number; y: number; t: number }>>(new Map());
 
 function onChipClick(ev: MouseEvent, v: string) {
+  // Ctrl/Cmd + click → remove from template instead of insert. Gives
+  // power users a one-handed way to drop a `$var` without opening
+  // the ctxmenu. Falls through to insert when modifier not held.
+  if ((ev.ctrlKey || ev.metaKey) && props.onRemoveVar && isInTemplate(v)) {
+    props.onRemoveVar(v);
+    return;
+  }
   const el = ev.currentTarget as HTMLElement;
   const rect = el.getBoundingClientRect();
   const x = ev.clientX - rect.left;
@@ -222,6 +236,17 @@ function onChipClick(ev: MouseEvent, v: string) {
   }, 420);
   if (props.onInsert) props.onInsert(`$${v}`);
   emit("insertVar", v);
+}
+
+/** Pi-icon class for the chip's source kind, or empty string when
+ *  the kind isn't known. Injector gets `pi-bolt` since the shared
+ *  KIND_ICON_MAP doesn't list it (it's a graph-side var source, not
+ *  a library module kind). */
+function chipKindIcon(v: string): string {
+  const k = props.kindByVar?.[v];
+  if (!k) return "";
+  if (k === "injector") return "pi pi-bolt";
+  return kindIcon(k as WpKind);
 }
 
 function rippleStyle(v: string): Record<string, string> {
@@ -337,11 +362,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           </template>
         </span>
         <button
-          v-if="onClearTemplate && props.template"
+          v-if="onClearTemplate"
           type="button"
           class="wp-asm-clear"
+          :disabled="!props.template"
           data-test="asm-clear-template"
-          title="Clear the entire template"
+          :title="props.template ? 'Clear the entire template' : 'Template already empty'"
           aria-label="Clear template"
           @click="onClearTemplate"
         ><i class="pi pi-trash" aria-hidden="true" /></button>
@@ -357,10 +383,17 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             'wp-asm-var--ctx-active': ctxActiveVar === v,
           }]"
           :style="rippleStyle(v)"
-          :title="`Click to insert $${v} at caret · Right-click for more`"
+          :title="`Click to insert $${v} at caret · Ctrl+Click to remove · Right-click for more`"
           @click="(ev) => onChipClick(ev, v)"
           @contextmenu="(ev) => openChipMenu(ev, v, false)"
-        ><span class="var-tok">{{ v }}</span></span>
+        >
+          <i
+            v-if="chipKindIcon(v)"
+            :class="['wp-asm-var__kind-icon', chipKindIcon(v)]"
+            aria-hidden="true"
+          />
+          <span class="var-tok">{{ v }}</span>
+        </span>
         <span
           v-for="v in missing"
           :key="`miss-${v}`"
@@ -382,8 +415,18 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           {{ isResolved ? "resolved" : "(template empty or unresolved)" }}
         </span>
       </div>
-      <div class="wp-asm-preview" data-test="asm-preview">
-        <template v-for="(tok, i) in previewTokens" :key="i">
+      <div
+        class="wp-asm-preview"
+        :class="{ 'wp-asm-preview--empty': !props.template }"
+        data-test="asm-preview"
+      >
+        <template v-if="!props.template">
+          <span class="wp-asm-preview__ghost" data-test="asm-preview-empty">
+            <i class="pi pi-pencil" aria-hidden="true" />
+            Template empty — click a chip above or type directly into the template field.
+          </span>
+        </template>
+        <template v-else v-for="(tok, i) in previewTokens" :key="i">
           <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
           <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
         </template>
@@ -391,7 +434,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 
       <!-- hint -->
       <div class="wp-asm-hint">
-        <span>click chip → insert <kbd>$var</kbd> · right-click for more</span>
+        <span>click → insert <kbd>$var</kbd> · <kbd>Ctrl</kbd>+click → remove · right-click → more</span>
         <span style="margin-left: auto;">click missing → remove</span>
       </div>
     </template>
@@ -460,10 +503,14 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   color: var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
 }
-.wp-asm-clear:hover {
+.wp-asm-clear:hover:not(:disabled) {
   color: var(--wp-danger);
   border-color: color-mix(in srgb, var(--wp-danger) 35%, transparent);
   background: color-mix(in srgb, var(--wp-danger) 8%, transparent);
+}
+.wp-asm-clear:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .wp-asm-clear .pi { font-size: 10px; }
 
@@ -489,6 +536,17 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-empty__hint {
   font: 11px var(--wp-font-sans);
   color: var(--wp-text3);
+}
+
+/* Source-kind icon inside upstream chips. Tiny pi-icon (9px) before
+ * the var name — tells the user at a glance whether the value comes
+ * from a wildcard ⚡, fixed value 🏷️, combine ⛓️, derivation 🔀,
+ * constraint 🔻, or an injector wire. Color inherits from the chip
+ * so it stays in the var-color palette. */
+.wp-asm-var__kind-icon {
+  font-size: 9px;
+  margin-right: 4px;
+  opacity: 0.75;
 }
 
 /* Chip in-template marker — subtle ring around chips whose name
@@ -573,6 +631,26 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-preview .literal { color: var(--wp-text); }
 .wp-asm-preview .res { font-weight: 600; }
+/* Empty-template ghost — same dim italic affordance as the
+ * wider empty-state ghost, but lives INSIDE the preview frame so
+ * the user reads "preview area exists, just nothing to preview yet"
+ * vs the wholly-empty-helper ghost which replaces everything. */
+.wp-asm-preview--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: italic;
+  min-height: 36px;
+}
+.wp-asm-preview__ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wp-text3);
+}
+.wp-asm-preview__ghost .pi {
+  color: color-mix(in srgb, var(--wp-accent) 60%, var(--wp-text3));
+}
 
 .wp-asm-hint {
   display: flex;

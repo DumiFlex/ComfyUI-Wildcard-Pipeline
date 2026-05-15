@@ -510,6 +510,115 @@ export function collectUpstreamChain(
 /** @deprecated — use {@link collectUpstreamResolved}. */
 export const collectUpstreamValues = collectUpstreamResolved;
 
+/**
+ * Walk the upstream chain like {@link collectUpstreamResolved} but
+ * record each binding's SOURCE MODULE KIND instead of its resolved
+ * value. Used by AssemblerHelper to render a kind icon inside each
+ * chip so the user reads "this var comes from a wildcard / fixed /
+ * combine / derivation / injector" at a glance.
+ *
+ * Kinds returned: "wildcard" | "fixed_values" | "combine" |
+ * "derivation" | "constraint" | "pipeline" | "injector".
+ *
+ * Last-write-wins: if two modules upstream both write to `$foo`, the
+ * downstream-most one's kind is what the assembler sees (matches
+ * runtime ctx ordering). Internal-flagged bindings are dropped on
+ * the way out — same public-socket semantics
+ * `collectUpstreamResolved` enforces.
+ */
+export function collectUpstreamKinds(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): Record<string, string> {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+
+  const kinds: Record<string, string> = {};
+  const internalKeys = new Set<string>();
+  // Walk furthest-upstream → closest, so later writes override
+  // earlier ones (last-write-wins matches runtime).
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const n = chain[i];
+    if (isSkippedMode(n)) continue;
+    if (n.type === "WP_ContextInjector") {
+      const inj = parseWidgetJson<{
+        version: 1;
+        rows?: Array<{ binding?: string; enabled?: boolean; internal?: boolean }>;
+      }>(widgetValue(n, "rows"), { version: 1, rows: [] });
+      for (const row of inj.rows ?? []) {
+        if (row.enabled !== true) continue;
+        const b = (row.binding ?? "").trim();
+        if (!b) continue;
+        kinds[b] = "injector";
+        if (row.internal === true) internalKeys.add(b);
+      }
+      continue;
+    }
+    if (n.type !== "WP_Context") continue;
+    const v = parseWidgetJson<ContextWidgetValue>(
+      widgetValue(n, "modules"),
+      { version: 1, modules: [] },
+    );
+    for (const m of v.modules) {
+      if (!m.enabled) continue;
+      // Per-kind binding emission — mirrors writeBindings, recording
+      // kind instead of value. fixed_values fans out per row; the
+      // others emit a single $output_var / $var_binding.
+      if (m.type === "fixed_values") {
+        const inst = (m.instance ?? {}) as {
+          values_overrides?: Array<{ id?: string; name?: string }>;
+          enabled_options?: string[] | null;
+        };
+        const enabledFilter = Array.isArray(inst.enabled_options)
+          ? new Set(inst.enabled_options)
+          : null;
+        const passes = (id: string | undefined): boolean =>
+          enabledFilter === null || (typeof id === "string" && enabledFilter.has(id));
+        const overrides = Array.isArray(inst.values_overrides) ? inst.values_overrides : null;
+        if (overrides && overrides.length > 0) {
+          for (const val of overrides) {
+            if (!passes(val.id)) continue;
+            const name = (val.name ?? "").replace(/^\$/, "").trim();
+            if (name) kinds[name] = "fixed_values";
+            if (name && m.instance?.internal) internalKeys.add(name);
+          }
+          continue;
+        }
+        const payload = (m.payload ?? {}) as { values?: Array<{ id?: string; name?: string }> };
+        for (const val of payload.values ?? []) {
+          if (!passes(val.id)) continue;
+          const name = (val.name ?? "").replace(/^\$/, "").trim();
+          if (name) kinds[name] = "fixed_values";
+          if (name && m.instance?.internal) internalKeys.add(name);
+        }
+        for (const e of m.entries ?? []) {
+          const name = (e.variable_name ?? "").replace(/^\$/, "").trim();
+          if (name) kinds[name] = "fixed_values";
+          if (name && m.instance?.internal) internalKeys.add(name);
+        }
+        continue;
+      }
+      // wildcard / combine — single binding from var_binding /
+      // output_var (instance.variable_binding wins when set).
+      const inst = (m.instance ?? {}) as { variable_binding?: string | null };
+      const payload = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
+      const raw = inst.variable_binding ?? payload.var_binding ?? payload.output_var ?? "";
+      const name = raw.replace(/^\$/, "").trim();
+      if (name) kinds[name] = m.type;
+      if (name && m.instance?.internal) internalKeys.add(name);
+    }
+  }
+  for (const k of internalKeys) delete kinds[k];
+  return kinds;
+}
+
 /* -------------------------------------------------------------------- *
  * Static chain resolution — builds the unified upstream-vars map
  * consumed by `collectUpstreamResolved`. Per-kind handling:

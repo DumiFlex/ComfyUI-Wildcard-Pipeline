@@ -5,6 +5,7 @@ import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectUpstreamChain,
   collectUpstreamInjectorBindings,
+  collectUpstreamKinds,
   collectUpstreamResolved,
   findRootGraph,
   type LiteGraphLike,
@@ -327,11 +328,22 @@ export function mountHelper(node: AssemblerNode) {
         // would otherwise mis-color across the embedded space).
         // -----------------------------------------------------------------
 
+        // Per-var module kind (wildcard/fixed_values/combine/derivation/
+        // constraint/pipeline/injector). Drives the chip type-icon so
+        // the user reads "this var comes from a wildcard / a fixed
+        // value / a combine / an injector" at a glance — visual parity
+        // with the kind chips used everywhere else in the extension.
+        const rootG2 = findRootGraph(node as unknown as Parameters<typeof findRootGraph>[0]);
+        const kindByVar = rootG2
+          ? collectUpstreamKinds(rootG2, node as unknown as LiteNodeLike)
+          : {};
+
         return h(AssemblerHelper, {
           upstreamVars,
           templateVars: templateVarsArr,
           template,
           resolvedMap: fresh,
+          kindByVar,
           previewSeed: PREVIEW_SEED,
           nodeMode: nodeMode.value,
           onInsert: (token: string) => insertIntoTemplate(node, token),

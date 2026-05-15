@@ -269,7 +269,7 @@ describe("AssemblerHelper var-color rendering", () => {
     expect(onClearTemplate).toHaveBeenCalledTimes(1);
   });
 
-  it("clear-template button hidden when template is empty", () => {
+  it("clear-template button visible but disabled when template is empty", () => {
     const wrapper = mount(AssemblerHelper, {
       props: {
         upstreamVars: ["mood"],
@@ -277,7 +277,66 @@ describe("AssemblerHelper var-color rendering", () => {
         onClearTemplate: () => {},
       },
     });
-    expect(wrapper.find('[data-test="asm-clear-template"]').exists()).toBe(false);
+    const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-clear-template"]');
+    expect(btn.exists()).toBe(true);
+    expect(btn.element.disabled).toBe(true);
+  });
+
+  it("preview area shows empty-state ghost when template is empty", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["mood"], template: "" },
+    });
+    expect(wrapper.find('[data-test="asm-preview-empty"]').exists()).toBe(true);
+  });
+
+  it("Ctrl+Click on upstream chip removes from template instead of inserting", async () => {
+    const onRemoveVar = vi.fn();
+    const onInsert = vi.fn();
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["mood"],
+        templateVars: ["mood"],
+        template: "$mood is fine",
+        onRemoveVar,
+        onInsert,
+      },
+    });
+    await wrapper.find('[data-test="asm-chip-mood"]').trigger("click", { ctrlKey: true });
+    expect(onRemoveVar).toHaveBeenCalledWith("mood");
+    expect(onInsert).not.toHaveBeenCalled();
+  });
+
+  it("plain click on upstream chip still inserts (no ctrl)", async () => {
+    const onRemoveVar = vi.fn();
+    const onInsert = vi.fn();
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["mood"],
+        template: "$mood",
+        onRemoveVar,
+        onInsert,
+      },
+    });
+    await wrapper.find('[data-test="asm-chip-mood"]').trigger("click");
+    expect(onInsert).toHaveBeenCalledWith("$mood");
+    expect(onRemoveVar).not.toHaveBeenCalled();
+  });
+
+  it("renders kind icon inside chips when kindByVar provided", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["seed_phrase", "outfit", "scene"],
+        template: "x",
+        kindByVar: {
+          seed_phrase: "wildcard",
+          outfit: "combine",
+          scene: "injector",
+        },
+      },
+    });
+    expect(wrapper.find('[data-test="asm-chip-seed_phrase"] .pi-sparkles').exists()).toBe(true);
+    expect(wrapper.find('[data-test="asm-chip-outfit"] .pi-link').exists()).toBe(true);
+    expect(wrapper.find('[data-test="asm-chip-scene"] .pi-bolt').exists()).toBe(true);
   });
 
   it("right-click on upstream chip opens ctxmenu with Copy / Insert / Remove", async () => {
