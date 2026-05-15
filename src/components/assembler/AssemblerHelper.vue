@@ -368,8 +368,18 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
            above can mode="out-in" cross-fade between ghost and
            populated states. -->
       <div v-else key="content" class="wp-asm-content">
-      <div class="wp-asm-section">
+      <div class="wp-asm-section wp-asm-section--vars">
         <span>variables</span>
+        <button
+          v-if="onClearTemplate"
+          type="button"
+          class="wp-asm-clear-icon"
+          :disabled="!props.template"
+          data-test="asm-clear-template-icon"
+          :title="props.template ? 'Clear the entire template' : 'Template already empty'"
+          aria-label="Clear template"
+          @click="onClearTemplate"
+        ><i class="pi pi-trash" aria-hidden="true" /></button>
         <span class="wp-asm-section-stat">
           {{ upstreamNames.length }} upstream
           <template v-if="missing.length">
@@ -412,24 +422,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
       </div>
 
-      <!-- Clear-template row — centered text button, only visible
-           when a clear handler is wired. Disabled when template is
-           already empty so the affordance stays discoverable
-           without being misleading. -->
-      <div v-if="onClearTemplate" class="wp-asm-clear-row">
-        <button
-          type="button"
-          class="wp-asm-clear"
-          :disabled="!props.template"
-          data-test="asm-clear-template"
-          :title="props.template ? 'Clear the entire template' : 'Template already empty'"
-          @click="onClearTemplate"
-        >
-          <i class="pi pi-trash" aria-hidden="true" />
-          Clear template
-        </button>
-      </div>
-
       <!-- preview section -->
       <div class="wp-asm-section">
         <span>preview</span>
@@ -452,12 +444,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             <i class="pi pi-pencil" aria-hidden="true" />
             Template empty — click a chip above or type directly into the template field.
           </span>
-          <div v-else key="tokens" class="wp-asm-preview__tokens">
+          <span v-else key="tokens" class="wp-asm-preview__tokens">
             <template v-for="(tok, i) in previewTokens" :key="i">
               <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
               <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
             </template>
-          </div>
+          </span>
         </Transition>
       </div>
 
@@ -515,40 +507,49 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
 
-/* Clear-template button — centered text button between the chip
- * strip and the preview. Wider hit area than an icon-only variant
- * and self-labeling ("Clear template") so the action reads at a
- * glance. Turns red on hover (destructive). Disabled when there's
- * no template to clear; stays visible so the affordance is
+/* Clear-template icon button — sits in the variables section header,
+ * centered between the label and the upstream-count stat. Compact
+ * 20x20 icon button (matches the row-primitives wp-btn--icon-sm
+ * family). Turns red on hover (destructive). Stays visible-but-
+ * disabled when the template is empty so the affordance is always
  * discoverable. */
-.wp-asm-clear-row {
-  display: flex;
-  justify-content: center;
-  margin: 6px 0;
+.wp-asm-section--vars {
+  /* Override the default flex layout so the clear button can sit
+   * centered. label hugs left, button auto-centers, stat hugs right. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
 }
-.wp-asm-clear {
+.wp-asm-section--vars > :first-child { justify-self: start; }
+.wp-asm-section--vars > .wp-asm-section-stat {
+  margin-left: 0;
+  justify-self: end;
+}
+.wp-asm-clear-icon {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 500 11px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
-.wp-asm-clear:hover:not(:disabled) {
+.wp-asm-clear-icon:hover:not(:disabled) {
   color: var(--wp-danger);
   border-color: color-mix(in srgb, var(--wp-danger) 45%, transparent);
   background: color-mix(in srgb, var(--wp-danger) 10%, transparent);
 }
-.wp-asm-clear:disabled {
+.wp-asm-clear-icon:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.wp-asm-clear .pi { font-size: 10px; }
+.wp-asm-clear-icon .pi { font-size: 10px; }
 
 /* Empty-state ghost — mirrors injector + debug ghosts. Stacked
  * icon + line + hint, dim color, centered. */
@@ -659,7 +660,13 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-preview .literal { color: var(--wp-text); }
 .wp-asm-preview .res { font-weight: 600; }
-.wp-asm-preview__tokens { display: contents; }
+/* Tokens wrapper is `<span>` (inline) — not `display: contents` —
+ * so the Vue Transition can apply transform/opacity to it. A
+ * `display: contents` element is transparent to layout and ignores
+ * those properties, which is why the empty→tokens swap appeared
+ * to animate (the ghost span participates) but the tokens→empty
+ * reverse didn't (the tokens element couldn't carry the leave
+ * animation). Inline keeps the existing pre-wrap flow. */
 
 /* Cross-fade between ghost ↔ populated state. Used twice: outer
  * (ghost ↔ helper content) + inner preview (ghost ↔ tokens). Same

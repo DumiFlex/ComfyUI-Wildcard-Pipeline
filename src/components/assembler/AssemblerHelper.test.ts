@@ -263,7 +263,7 @@ describe("AssemblerHelper var-color rendering", () => {
         onClearTemplate,
       },
     });
-    const btn = wrapper.find('[data-test="asm-clear-template"]');
+    const btn = wrapper.find('[data-test="asm-clear-template-icon"]');
     expect(btn.exists()).toBe(true);
     await btn.trigger("click");
     expect(onClearTemplate).toHaveBeenCalledTimes(1);
@@ -277,7 +277,7 @@ describe("AssemblerHelper var-color rendering", () => {
         onClearTemplate: () => {},
       },
     });
-    const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-clear-template"]');
+    const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-clear-template-icon"]');
     expect(btn.exists()).toBe(true);
     expect(btn.element.disabled).toBe(true);
   });
