@@ -63,12 +63,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="visible"
-      class="wp-confirm-overlay"
-      data-test="confirm-overlay"
-      @click="onCancel"
-    >
+    <Transition name="wp-modal" appear>
+      <div
+        v-if="visible"
+        class="wp-confirm-overlay"
+        data-test="confirm-overlay"
+        @click="onCancel"
+      >
       <div
         class="wp-confirm"
         role="alertdialog"
@@ -102,8 +103,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         </div>
       </div>
     </div>
+    </Transition>
   </Teleport>
 </template>
+
+<style>
+/* Shared modal open/close transition — overlay fade + panel scale.
+ * See `_modal-motion.css` for rules. Imported unscoped so the
+ * `wp-modal-*` transition class names match the Vue-emitted classes
+ * cleanly (named transitions don't survive Vue's `data-v-...`
+ * scoping). */
+@import "./_modal-motion.css";
+</style>
 
 <style scoped>
 .wp-confirm-overlay {

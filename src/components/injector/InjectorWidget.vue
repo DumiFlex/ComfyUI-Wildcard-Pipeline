@@ -722,15 +722,17 @@ defineExpose({ addRow, removeRow });
       @close="ctxMenu.visible = false"
     />
     <Teleport to="body">
-      <InjectorBindingModal
-        v-if="editingRow"
-        :row="editingRow"
-        :sibling-rows="value.rows"
-        :slot-types="slotTypes"
-        :slot-labels="slotLabels"
-        @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
-        @close="closeEditModal"
-      />
+      <Transition name="wp-modal" appear>
+        <InjectorBindingModal
+          v-if="editingRow"
+          :row="editingRow"
+          :sibling-rows="value.rows"
+          :slot-types="slotTypes"
+          :slot-labels="slotLabels"
+          @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
+          @close="closeEditModal"
+        />
+      </Transition>
     </Teleport>
   </div>
 </template>

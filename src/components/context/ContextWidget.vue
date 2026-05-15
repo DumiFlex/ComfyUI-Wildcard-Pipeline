@@ -3179,6 +3179,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 @import "../shared/row-primitives.css";
 @import "./editors/_modal-head.css";
 @import "./editors/_modal-template-ctrls.css";
+@import "../shared/_modal-motion.css";
 </style>
 
 <style>

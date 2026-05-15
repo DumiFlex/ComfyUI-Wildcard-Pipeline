@@ -1,0 +1,33 @@
+/* Shared modal open/close transition — drives every consumer that
+ * wraps its modal in `<Transition name="wp-modal">`. Two simultaneous
+ * legs:
+ *   1. Overlay: opacity fade across `--wp-motion-swap` (200ms).
+ *   2. Panel:   transform scale 0.96 → 1.0 with the decel curve so
+ *               the dialog grows into place.
+ *
+ * Selector for the panel is `> *` (immediate child of the overlay
+ * element). Works for ModalShell's `.wp-modal-wrapper`, ConfirmDialog's
+ * `.wp-confirm`, InjectorBindingModal's `.ibm`, and any future modal
+ * that follows the overlay-with-one-child layout.
+ *
+ * Imported globally via ContextWidget's unscoped style block — class
+ * names are namespaced (`wp-modal-*` for the transition, scoped per
+ * Vue's named-transition convention) so no leakage.
+ */
+.wp-modal-enter-active,
+.wp-modal-leave-active {
+  transition: opacity var(--wp-motion-swap) ease;
+}
+.wp-modal-enter-from,
+.wp-modal-leave-to {
+  opacity: 0;
+}
+.wp-modal-enter-active > *,
+.wp-modal-leave-active > * {
+  transition: transform var(--wp-motion-swap) var(--wp-motion-curve-flip);
+  transform-origin: center;
+}
+.wp-modal-enter-from > *,
+.wp-modal-leave-to > * {
+  transform: scale(0.96);
+}

@@ -1,10 +1,12 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="wp-modal-overlay" @click="$emit('close')">
-      <div class="wp-modal-wrapper" role="dialog" aria-modal="true" @click.stop>
-        <slot></slot>
+    <Transition name="wp-modal" appear>
+      <div v-if="visible" class="wp-modal-overlay" @click="$emit('close')">
+        <div class="wp-modal-wrapper" role="dialog" aria-modal="true" @click.stop>
+          <slot></slot>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -35,6 +37,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 <style>
 @import "./theme.css";
+@import "./_modal-motion.css";
 </style>
 
 <style scoped>
@@ -60,4 +63,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   width: 100%;
   max-height: 100%;
 }
+
+/* `wp-modal` open/close transition lives in
+ * src/components/shared/_modal-motion.css (imported globally via
+ * ContextWidget) so every modal — ModalShell consumers, ConfirmDialog,
+ * InjectorBindingModal — animates with the same rules. */
 </style>

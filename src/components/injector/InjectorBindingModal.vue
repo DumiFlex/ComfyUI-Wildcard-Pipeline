@@ -428,6 +428,7 @@ function onKeydown(ev: KeyboardEvent): void {
      leak-free regardless. -->
 <style>
 @import "../context/editors/_modal-template-ctrls.css";
+@import "../shared/_modal-motion.css";
 </style>
 
 <style scoped>
