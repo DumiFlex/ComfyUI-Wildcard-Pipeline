@@ -211,7 +211,10 @@
             <div v-for="i in 4" :key="`${g}-${i}`" class="wp-picker__skel-row">
               <span class="wp-skel wp-picker__skel-check"></span>
               <span class="wp-skel wp-picker__skel-icon"></span>
-              <span class="wp-skel wp-skel--text wp-picker__skel-name"></span>
+              <span class="wp-picker__skel-main">
+                <span class="wp-skel wp-skel--text wp-picker__skel-name"></span>
+                <span class="wp-skel wp-skel--text wp-picker__skel-var"></span>
+              </span>
               <span class="wp-skel wp-skel--text wp-picker__skel-uuid"></span>
             </div>
           </template>
@@ -938,33 +941,54 @@ onBeforeUnmount(detachCaptureListeners);
 
 /* Skeleton frames — geometry mirrors `.wp-picker__row` + the section
  * head pattern so the placeholder layout matches the loaded list and
- * doesn't shift on resolve. */
+ * doesn't shift on resolve. Rows get a faint translucent wash so each
+ * row reads as a distinct shape against the modal body (loaded rows
+ * are transparent until hover; the skeleton needs a touch more
+ * visual weight or the stack reads as floating bars). */
 .wp-picker__skel { padding: 6px 8px 8px; }
 .wp-picker__skel-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 8px 4px;
+  padding: 12px 8px 6px;
 }
-.wp-picker__skel-label { width: 70px; height: 10px; }
+.wp-picker__skel-label { width: 84px; height: 11px; }
 .wp-picker__skel-line {
   flex: 1;
   height: 1px;
   background: var(--wp-border);
 }
-.wp-picker__skel-tally { width: 22px; height: 10px; }
+.wp-picker__skel-tally { width: 22px; height: 11px; }
 .wp-picker__skel-row {
   display: grid;
   grid-template-columns: 18px 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  height: 36px;
-  padding: 0 8px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--wp-text) 3%, transparent);
+  margin-bottom: 2px;
 }
-.wp-picker__skel-check { width: 16px; height: 16px; }
-.wp-picker__skel-icon { width: 22px; height: 22px; }
-.wp-picker__skel-name { max-width: 220px; height: 12px; }
+.wp-picker__skel-check { width: 16px; height: 16px; border-radius: 4px; }
+.wp-picker__skel-icon { width: 22px; height: 22px; border-radius: 4px; }
+.wp-picker__skel-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.wp-picker__skel-name { width: 38%; min-width: 80px; max-width: 220px; height: 12px; }
+.wp-picker__skel-var { width: 60px; height: 9px; opacity: 0.7; }
 .wp-picker__skel-uuid { width: 64px; height: 10px; }
+
+/* Width variation so the rows don't read as a perfectly aligned grid —
+ * a real library has names of varying length, so a perfectly identical
+ * stack tells the eye "this is fake" instantly. */
+.wp-picker__skel-row:nth-child(3n) .wp-picker__skel-name { width: 28%; }
+.wp-picker__skel-row:nth-child(3n+1) .wp-picker__skel-name { width: 46%; }
+.wp-picker__skel-row:nth-child(4n) .wp-picker__skel-var { width: 80px; }
+.wp-picker__skel-row:nth-child(4n+2) .wp-picker__skel-var { width: 46px; }
 
 .wp-picker {
   background: var(--wp-bg-2);

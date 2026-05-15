@@ -290,6 +290,12 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 .wp-bp__skel-count { width: 48px; height: 10px; flex-shrink: 0; }
 .wp-bp__skel-pill { width: 28px; height: 14px; flex-shrink: 0; }
 
+/* Vary name widths so the column doesn't read as a perfectly aligned
+ * grid — real bundle names have organic length variation. */
+.wp-bp__skel-row:nth-child(3n) .wp-bp__skel-name { max-width: 130px; }
+.wp-bp__skel-row:nth-child(3n+1) .wp-bp__skel-name { max-width: 180px; }
+.wp-bp__skel-row:nth-child(4n+2) .wp-bp__skel-name { max-width: 100px; }
+
 .wp-bp {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
