@@ -15,8 +15,14 @@ interface Props {
   child: Record<string, unknown>;
   idx: number;
   selected: boolean;
+  /** JSON-stringified last-saved state of this child. EDITED pill shows
+   *  when the current child diverges from this baseline; the parent
+   *  recomputes the baseline after every successful save so the pill
+   *  resets to plain SNAPSHOT on round-trip. `null` (new-row case) ⇒
+   *  baseline absent ⇒ EDITED (any unsaved row is by definition edited). */
+  baseline?: string | null;
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { baseline: null });
 
 const emit = defineEmits<{
   (e: "toggle"): void;
@@ -58,13 +64,12 @@ const displayName = computed(() => {
   return m?.name ?? (props.child.name as string | undefined) ?? "(unnamed)";
 });
 
-// Snapshot is "edited" when an override exists in the child's `instance`
-// dict. The Context-side modal builds this on every user mutation; we
-// surface its presence so the row reads "SNAPSHOT · EDITED" instead of
-// just "SNAPSHOT".
+// Snapshot is "edited" when the current child diverges from the
+// last-saved baseline the parent supplied. Save resets this on every
+// successful PUT round-trip.
 const isEdited = computed(() => {
-  const inst = props.child.instance as Record<string, unknown> | undefined;
-  return Boolean(inst && Object.keys(inst).length > 0);
+  if (props.baseline === null) return true; // never saved → counts as edited
+  return JSON.stringify(props.child) !== props.baseline;
 });
 </script>
 

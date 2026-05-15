@@ -62,6 +62,21 @@ const tags = ref<string[]>([]);
  *  (and the side pane in Task 3) update this; Save persists it via PUT. */
 const children = ref<Array<Record<string, unknown>>>([]);
 
+/** Last-saved baseline state per child, keyed by id. Used by
+ *  BundleChildRow to decide whether to render SNAPSHOT or
+ *  SNAPSHOT · EDITED — the pill resets to plain SNAPSHOT after every
+ *  successful save (current children become the new baseline). */
+const baselineByChildId = ref<Map<string, string>>(new Map());
+
+function snapshotBaseline(rows: Array<Record<string, unknown>>): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const c of rows) {
+    const id = c.id as string | undefined;
+    if (id) m.set(id, JSON.stringify(c));
+  }
+  return m;
+}
+
 /** Drag-reorder state. Source index captured on dragstart, target on
  *  dragover. Cleared on drop / cancel. Drives the data-drag-over
  *  styling for the drop-line indicator. */
@@ -116,6 +131,7 @@ onMounted(async () => {
     children.value = Array.isArray(row.children)
       ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
       : [];
+    baselineByChildId.value = snapshotBaseline(children.value);
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   } finally {
@@ -156,6 +172,7 @@ async function save() {
     children.value = Array.isArray(updated.children)
       ? updated.children.map((c) => ({ ...(c as Record<string, unknown>) }))
       : [];
+    baselineByChildId.value = snapshotBaseline(children.value);
     toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -314,6 +331,7 @@ function onDragEnd() {
               :child="child"
               :idx="idx"
               :selected="(child.id as string) === selectedChildId"
+              :baseline="baselineByChildId.get((child.id as string) ?? '') ?? null"
               :class="dragOverIdx === idx ? 'wp-bundle-children-stack__drag-over' : null"
               @toggle="onToggleChild(idx)"
               @duplicate="onDuplicateChild(idx)"
