@@ -321,6 +321,17 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
       onSelect: () => { props.onRemoveVar?.(v); },
     },
   ];
+  // Header icon reads from the chip's source kind (wildcard /
+  // combine / injector / etc) so the menu surfaces the same visual
+  // identity the chip carries. Missing chips have no kind (the var
+  // isn't bound by anything upstream) — fall back to warning.
+  // `chipKindIcon` returns "pi pi-X" (two-class) per the shared
+  // KIND_ICON_MAP convention; ContextMenu's template prepends "pi"
+  // again so we strip the leading word.
+  const kindCls = chipKindIcon(v);
+  const headerIcon = kindCls
+    ? (kindCls.split(" ").pop() ?? "pi-tag")
+    : (isMissing ? "pi-exclamation-triangle" : "pi-tag");
   ctxActiveVar.value = v;
   ctxMenu.value = {
     visible: true,
@@ -328,7 +339,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
     y: Math.max(8, y),
     items,
     header: {
-      icon: isMissing ? "pi-exclamation-triangle" : "pi-at",
+      icon: headerIcon,
       label: `${isMissing ? "Missing" : "Upstream"} · $${v}`,
     },
   };
@@ -338,21 +349,25 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 
 <template>
   <div class="wp-asm-helper" :class="{ 'wp-asm-helper--skipped': isSkipped }">
-    <!-- Empty-state ghost — surfaces when there's nothing upstream
-         AND no template typed. Mirrors the injector ghost shape so
-         empty-states across the extension read uniformly. -->
-    <div
-      v-if="upstreamNames.length === 0 && !props.template"
-      class="wp-asm-empty"
-      data-test="asm-empty"
-    >
-      <i class="pi pi-puzzle-piece wp-asm-empty__icon" aria-hidden="true" />
-      <span class="wp-asm-empty__line">No upstream variables yet.</span>
-      <span class="wp-asm-empty__hint">Wire a Context / Injector node and type a template above.</span>
-    </div>
+    <Transition name="wp-asm-fade" mode="out-in">
+      <!-- Empty-state ghost — surfaces when there's nothing upstream
+           AND no template typed. Mirrors the injector ghost shape so
+           empty-states across the extension read uniformly. -->
+      <div
+        v-if="upstreamNames.length === 0 && !props.template"
+        key="empty"
+        class="wp-asm-empty"
+        data-test="asm-empty"
+      >
+        <i class="pi pi-puzzle-piece wp-asm-empty__icon" aria-hidden="true" />
+        <span class="wp-asm-empty__line">No upstream variables yet.</span>
+        <span class="wp-asm-empty__hint">Wire a Context / Injector node and type a template above.</span>
+      </div>
 
-    <!-- variables section -->
-    <template v-if="upstreamNames.length > 0 || props.template">
+      <!-- Main content — wrapped in a keyed div so the Transition
+           above can mode="out-in" cross-fade between ghost and
+           populated states. -->
+      <div v-else key="content" class="wp-asm-content">
       <div class="wp-asm-section">
         <span>variables</span>
         <span class="wp-asm-section-stat">
@@ -361,16 +376,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             · <span class="wp-asm-section-stat--warn">{{ missing.length }} missing</span>
           </template>
         </span>
-        <button
-          v-if="onClearTemplate"
-          type="button"
-          class="wp-asm-clear"
-          :disabled="!props.template"
-          data-test="asm-clear-template"
-          :title="props.template ? 'Clear the entire template' : 'Template already empty'"
-          aria-label="Clear template"
-          @click="onClearTemplate"
-        ><i class="pi pi-trash" aria-hidden="true" /></button>
       </div>
       <div class="wp-asm-vars">
         <span
@@ -379,7 +384,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           :data-test="`asm-chip-${v}`"
           :class="['wp-asm-var', varColorClass(v), {
             'wp-asm__chip--ripple': ripples.has(v),
-            'wp-asm-var--in-template': isInTemplate(v),
             'wp-asm-var--ctx-active': ctxActiveVar === v,
           }]"
           :style="rippleStyle(v)"
@@ -408,6 +412,24 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
       </div>
 
+      <!-- Clear-template row — centered text button, only visible
+           when a clear handler is wired. Disabled when template is
+           already empty so the affordance stays discoverable
+           without being misleading. -->
+      <div v-if="onClearTemplate" class="wp-asm-clear-row">
+        <button
+          type="button"
+          class="wp-asm-clear"
+          :disabled="!props.template"
+          data-test="asm-clear-template"
+          :title="props.template ? 'Clear the entire template' : 'Template already empty'"
+          @click="onClearTemplate"
+        >
+          <i class="pi pi-trash" aria-hidden="true" />
+          Clear template
+        </button>
+      </div>
+
       <!-- preview section -->
       <div class="wp-asm-section">
         <span>preview</span>
@@ -420,16 +442,23 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         :class="{ 'wp-asm-preview--empty': !props.template }"
         data-test="asm-preview"
       >
-        <template v-if="!props.template">
-          <span class="wp-asm-preview__ghost" data-test="asm-preview-empty">
+        <Transition name="wp-asm-fade" mode="out-in">
+          <span
+            v-if="!props.template"
+            key="empty"
+            class="wp-asm-preview__ghost"
+            data-test="asm-preview-empty"
+          >
             <i class="pi pi-pencil" aria-hidden="true" />
             Template empty — click a chip above or type directly into the template field.
           </span>
-        </template>
-        <template v-else v-for="(tok, i) in previewTokens" :key="i">
-          <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
-          <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
-        </template>
+          <div v-else key="tokens" class="wp-asm-preview__tokens">
+            <template v-for="(tok, i) in previewTokens" :key="i">
+              <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
+              <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
+            </template>
+          </div>
+        </Transition>
       </div>
 
       <!-- hint -->
@@ -437,7 +466,8 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         <span>click → insert <kbd>$var</kbd> · <kbd>Ctrl</kbd>+click → remove · right-click → more</span>
         <span style="margin-left: auto;">click missing → remove</span>
       </div>
-    </template>
+      </div>
+    </Transition>
 
     <ContextMenu
       :visible="ctxMenu.visible"
@@ -485,28 +515,34 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
 
-/* Clear-template trash button — sits at the right edge of the
- * variables section header. Tiny + dim by default; turns red on
- * hover so the destructive action is unmistakable. Only renders
- * when the template is non-empty (no point clearing an empty one). */
+/* Clear-template button — centered text button between the chip
+ * strip and the preview. Wider hit area than an icon-only variant
+ * and self-labeling ("Clear template") so the action reads at a
+ * glance. Turns red on hover (destructive). Disabled when there's
+ * no template to clear; stays visible so the affordance is
+ * discoverable. */
+.wp-asm-clear-row {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0;
+}
 .wp-asm-clear {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: 6px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
   border-radius: 3px;
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-muted, var(--wp-text2));
+  font: 500 11px var(--wp-font-sans);
   cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
 .wp-asm-clear:hover:not(:disabled) {
   color: var(--wp-danger);
-  border-color: color-mix(in srgb, var(--wp-danger) 35%, transparent);
-  background: color-mix(in srgb, var(--wp-danger) 8%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 10%, transparent);
 }
 .wp-asm-clear:disabled {
   opacity: 0.4;
@@ -549,14 +585,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   opacity: 0.75;
 }
 
-/* Chip in-template marker — subtle ring around chips whose name
- * the user has already typed into the template. Lets the user
- * scan which upstream vars are wired in without reading the
- * template. */
-.wp-asm-var--in-template {
-  outline: 1px dashed color-mix(in srgb, var(--wp-accent) 50%, transparent);
-  outline-offset: 1px;
-}
 /* Right-click target highlight — same accent ring used by Debug
  * + Module ctxmenu rows. */
 .wp-asm-var--ctx-active {
@@ -631,6 +659,20 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-preview .literal { color: var(--wp-text); }
 .wp-asm-preview .res { font-weight: 600; }
+.wp-asm-preview__tokens { display: contents; }
+
+/* Cross-fade between ghost ↔ populated state. Used twice: outer
+ * (ghost ↔ helper content) + inner preview (ghost ↔ tokens). Same
+ * timing on both for visual coherence. */
+.wp-asm-fade-enter-active,
+.wp-asm-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.wp-asm-fade-enter-from,
+.wp-asm-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
 /* Empty-template ghost — same dim italic affordance as the
  * wider empty-state ghost, but lives INSIDE the preview frame so
  * the user reads "preview area exists, just nothing to preview yet"
