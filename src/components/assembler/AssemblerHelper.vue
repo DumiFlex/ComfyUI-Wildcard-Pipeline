@@ -373,13 +373,16 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         <button
           v-if="onClearTemplate"
           type="button"
-          class="wp-asm-clear-icon"
+          class="wp-asm-clear"
           :disabled="!props.template"
           data-test="asm-clear-template-icon"
           :title="props.template ? 'Clear the entire template' : 'Template already empty'"
           aria-label="Clear template"
           @click="onClearTemplate"
-        ><i class="pi pi-trash" aria-hidden="true" /></button>
+        >
+          <i class="pi pi-trash" aria-hidden="true" />
+          <span>Clear template</span>
+        </button>
         <span class="wp-asm-section-stat">
           {{ upstreamNames.length }} upstream
           <template v-if="missing.length">
@@ -435,21 +438,21 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         data-test="asm-preview"
       >
         <Transition name="wp-asm-fade" mode="out-in">
-          <span
+          <div
             v-if="!props.template"
             key="empty"
             class="wp-asm-preview__ghost"
             data-test="asm-preview-empty"
           >
-            <i class="pi pi-pencil" aria-hidden="true" />
-            Template empty — click a chip above or type directly into the template field.
-          </span>
-          <span v-else key="tokens" class="wp-asm-preview__tokens">
+            <i class="pi pi-pencil wp-asm-preview__ghost-icon" aria-hidden="true" />
+            <span class="wp-asm-preview__ghost-text">Template empty — click a chip above or type directly into the template field.</span>
+          </div>
+          <div v-else key="tokens" class="wp-asm-preview__tokens">
             <template v-for="(tok, i) in previewTokens" :key="i">
               <span v-if="tok.kind === 'literal'" class="literal">{{ tok.text }}</span>
               <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
             </template>
-          </span>
+          </div>
         </Transition>
       </div>
 
@@ -507,15 +510,15 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
 
-/* Clear-template icon button — sits in the variables section header,
- * centered between the label and the upstream-count stat. Compact
- * 20x20 icon button (matches the row-primitives wp-btn--icon-sm
- * family). Turns red on hover (destructive). Stays visible-but-
- * disabled when the template is empty so the affordance is always
- * discoverable. */
+/* Clear-template button — sits in the variables section header,
+ * centered between the label and the upstream-count stat. Text +
+ * icon so the action reads at a glance ("Clear template"). Turns
+ * red on hover (destructive). Stays visible-but-disabled when the
+ * template is empty so the affordance is always discoverable. */
 .wp-asm-section--vars {
-  /* Override the default flex layout so the clear button can sit
-   * centered. label hugs left, button auto-centers, stat hugs right. */
+  /* 3-column grid lets the clear button center between label
+   * (left) and stat (right). Flex + auto-margin couldn't pull
+   * off true horizontal centering with two siblings. */
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -526,30 +529,30 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   margin-left: 0;
   justify-self: end;
 }
-.wp-asm-clear-icon {
+.wp-asm-clear {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
+  gap: 6px;
+  padding: 3px 10px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-muted, var(--wp-text2));
+  font: 500 10px var(--wp-font-sans);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
+  white-space: nowrap;
 }
-.wp-asm-clear-icon:hover:not(:disabled) {
+.wp-asm-clear:hover:not(:disabled) {
   color: var(--wp-danger);
   border-color: color-mix(in srgb, var(--wp-danger) 45%, transparent);
   background: color-mix(in srgb, var(--wp-danger) 10%, transparent);
 }
-.wp-asm-clear-icon:disabled {
+.wp-asm-clear:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.wp-asm-clear-icon .pi { font-size: 10px; }
+.wp-asm-clear .pi { font-size: 10px; }
 
 /* Empty-state ghost — mirrors injector + debug ghosts. Stacked
  * icon + line + hint, dim color, centered. */
@@ -660,13 +663,16 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-preview .literal { color: var(--wp-text); }
 .wp-asm-preview .res { font-weight: 600; }
-/* Tokens wrapper is `<span>` (inline) — not `display: contents` —
- * so the Vue Transition can apply transform/opacity to it. A
- * `display: contents` element is transparent to layout and ignores
- * those properties, which is why the empty→tokens swap appeared
- * to animate (the ghost span participates) but the tokens→empty
- * reverse didn't (the tokens element couldn't carry the leave
- * animation). Inline keeps the existing pre-wrap flow. */
+/* Tokens wrapper is a block `<div>` (not inline, not display:contents)
+ * so the Vue Transition can apply transform/opacity to it. Inline
+ * elements ignore transform per CSS spec; `display: contents` makes
+ * the element transparent to layout so transforms have nothing to
+ * attach to. Block keeps pre-wrap flow working since child spans
+ * are still inline inside it. */
+.wp-asm-preview__tokens {
+  display: block;
+  width: 100%;
+}
 
 /* Cross-fade between ghost ↔ populated state. Used twice: outer
  * (ghost ↔ helper content) + inner preview (ghost ↔ tokens). Same
@@ -691,14 +697,26 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   font-style: italic;
   min-height: 36px;
 }
+/* Ghost is a flex container with icon as a fixed-width column +
+ * text as a flex-grow column. `align-items: flex-start` keeps the
+ * icon pinned to the first line of wrapped text instead of vertically
+ * centering across the whole block (which made the icon float in
+ * the middle of multi-line text). */
 .wp-asm-preview__ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
   color: var(--wp-text3);
 }
-.wp-asm-preview__ghost .pi {
+.wp-asm-preview__ghost-icon {
+  flex-shrink: 0;
+  margin-top: 2px;  /* nudges icon down so it visually centers with the first text line */
   color: color-mix(in srgb, var(--wp-accent) 60%, var(--wp-text3));
+}
+.wp-asm-preview__ghost-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .wp-asm-hint {
