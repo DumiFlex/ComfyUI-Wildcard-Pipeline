@@ -151,13 +151,12 @@ function kindLabel(type: string): string {
         :description="description"
         :category-id="categoryId"
         :tags="tags"
-        aside-label="Frame color"
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
         @update:tags="(v) => (tags = v)"
       >
-        <template #aside>
+        <template #nameLeading>
           <ColorPicker
             v-model="color"
             :presets="COLOR_PRESETS"

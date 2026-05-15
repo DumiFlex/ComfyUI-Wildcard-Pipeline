@@ -5,8 +5,8 @@ import IdentityCard from "../../components/IdentityCard.vue";
 
 beforeEach(() => setActivePinia(createPinia()));
 
-describe("IdentityCard.vue · aside slot", () => {
-  it("renders the aside slot when provided", () => {
+describe("IdentityCard.vue · nameLeading slot", () => {
+  it("renders the nameLeading slot when provided", () => {
     const wrap = mount(IdentityCard, {
       props: {
         name: "Foo",
@@ -15,14 +15,14 @@ describe("IdentityCard.vue · aside slot", () => {
         tags: [],
       },
       slots: {
-        aside: '<div data-test="aside-marker">ASIDE_CONTENT</div>',
+        nameLeading: '<div data-test="nameLeading-marker">ASIDE_CONTENT</div>',
       },
     });
-    expect(wrap.find('[data-test="aside-marker"]').exists()).toBe(true);
+    expect(wrap.find('[data-test="nameLeading-marker"]').exists()).toBe(true);
     expect(wrap.text()).toContain("ASIDE_CONTENT");
   });
 
-  it("renders without aside slot when none provided", () => {
+  it("renders without nameLeading slot when none provided", () => {
     const wrap = mount(IdentityCard, {
       props: {
         name: "Foo",
@@ -31,7 +31,7 @@ describe("IdentityCard.vue · aside slot", () => {
         tags: [],
       },
     });
-    expect(wrap.find('[data-test="aside-marker"]').exists()).toBe(false);
+    expect(wrap.find('[data-test="nameLeading-marker"]').exists()).toBe(false);
     // Sanity: identity inputs still render.
     expect(wrap.find('[data-test="identity-name"]').exists()).toBe(true);
   });
