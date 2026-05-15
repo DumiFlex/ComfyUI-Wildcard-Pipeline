@@ -24,6 +24,9 @@ import CombineRuntimeSection from "../../components/context/editors/combine/sect
 import FixedIdentitySection from "../../components/context/editors/fixed-values/sections/IdentitySection.vue";
 import FixedValuesSection from "../../components/context/editors/fixed-values/sections/ValuesSection.vue";
 import FixedRuntimeSection from "../../components/context/editors/fixed-values/sections/RuntimeSection.vue";
+import DerivationIdentitySection from "../../components/context/editors/derivation/sections/IdentitySection.vue";
+import DerivationRulesSection from "../../components/context/editors/derivation/sections/RulesSection.vue";
+import DerivationRuntimeSection from "../../components/context/editors/derivation/sections/RuntimeSection.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { ModuleEntry } from "../../widgets/_shared";
 
@@ -140,6 +143,16 @@ function onUpdate(patch: Partial<ModuleEntry>) {
         <FixedIdentitySection :module="moduleEntry" @update="onUpdate" />
         <FixedValuesSection :module="moduleEntry" @update="onUpdate" />
         <FixedRuntimeSection :module="moduleEntry" @update="onUpdate" />
+      </div>
+
+      <div
+        v-else-if="kind === 'derivation' && moduleEntry"
+        data-test="bundle-pane-sections-derivation"
+        class="wp-bpane__sections"
+      >
+        <DerivationIdentitySection :module="moduleEntry" @update="onUpdate" />
+        <DerivationRulesSection :module="moduleEntry" @update="onUpdate" />
+        <DerivationRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
       <div

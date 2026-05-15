@@ -113,6 +113,21 @@ describe("BundleChildPane.vue", () => {
     expect(wrap.find('[data-test="bundle-pane-sections-fixed-values"]').exists()).toBe(true);
   });
 
+  it("mounts derivation sections when child.type === 'derivation'", () => {
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: {
+          id: "dv_a",
+          type: "derivation",
+          meta: { name: "mood_to_lighting" },
+          payload: { rules: [] },
+          instance: {},
+        },
+      },
+    });
+    expect(wrap.find('[data-test="bundle-pane-sections-derivation"]').exists()).toBe(true);
+  });
+
   it("renders unsupported-kind placeholder for unknown types", () => {
     const wrap = mount(BundleChildPane, {
       props: {
