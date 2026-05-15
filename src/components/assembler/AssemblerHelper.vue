@@ -444,7 +444,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             class="wp-asm-preview__ghost"
             data-test="asm-preview-empty"
           >
-            <i class="pi pi-pencil wp-asm-preview__ghost-icon" aria-hidden="true" />
             <span class="wp-asm-preview__ghost-text">Template empty — click a chip above or type directly into the template field.</span>
           </div>
           <div v-else key="tokens" class="wp-asm-preview__tokens">
@@ -697,27 +696,16 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   font-style: italic;
   min-height: 36px;
 }
-/* Ghost is a flex container with icon as a fixed-width column +
- * text as a flex-grow column. `align-items: flex-start` keeps the
- * icon pinned to the first line of wrapped text instead of vertically
- * centering across the whole block (which made the icon float in
- * the middle of multi-line text). */
+/* Ghost — plain dim italic text. No icon (intentional — preview is
+ * a passive read-only surface, the empty-state doesn't need an
+ * affordance glyph). */
 .wp-asm-preview__ghost {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: block;
   max-width: 100%;
   color: var(--wp-text3);
+  text-align: center;
 }
-.wp-asm-preview__ghost-icon {
-  flex-shrink: 0;
-  margin-top: 2px;  /* nudges icon down so it visually centers with the first text line */
-  color: color-mix(in srgb, var(--wp-accent) 60%, var(--wp-text3));
-}
-.wp-asm-preview__ghost-text {
-  flex: 1;
-  min-width: 0;
-}
+.wp-asm-preview__ghost-text { display: inline; }
 
 .wp-asm-hint {
   display: flex;
