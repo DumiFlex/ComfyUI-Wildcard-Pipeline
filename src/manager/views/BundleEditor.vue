@@ -68,11 +68,27 @@ const children = ref<Array<Record<string, unknown>>>([]);
  *  successful save (current children become the new baseline). */
 const baselineByChildId = ref<Map<string, string>>(new Map());
 
+/** `patchInstance` writes `null` to a field rather than deleting the key
+ *  when the user reverts a value back to library default. For the
+ *  EDITED diff we want those null overrides to be indistinguishable
+ *  from "field never set" — otherwise the pill never clears even when
+ *  the user manually returns every field to its starting value. Strip
+ *  null/undefined entries from `instance` before serializing. */
+function normalizeChild(c: Record<string, unknown>): Record<string, unknown> {
+  const inst = c.instance as Record<string, unknown> | undefined;
+  if (!inst) return c;
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(inst)) {
+    if (v !== null && v !== undefined) cleaned[k] = v;
+  }
+  return { ...c, instance: cleaned };
+}
+
 function snapshotBaseline(rows: Array<Record<string, unknown>>): Map<string, string> {
   const m = new Map<string, string>();
   for (const c of rows) {
     const id = c.id as string | undefined;
-    if (id) m.set(id, JSON.stringify(c));
+    if (id) m.set(id, JSON.stringify(normalizeChild(c)));
   }
   return m;
 }
@@ -98,6 +114,26 @@ const selectedChildIdx = computed<number>(() => {
   const id = selectedChildId.value;
   if (!id) return -1;
   return children.value.findIndex((c) => (c.id as string) === id);
+});
+
+/** Set of child ids whose current normalized state diverges from the
+ *  last-saved baseline. Drives the SNAPSHOT · EDITED pill on each row.
+ *  Recomputes reactively as children mutate, so reverting overrides
+ *  back to baseline (even via "no override" null writes) clears the
+ *  pill without an explicit reset. */
+const editedChildIds = computed<Set<string>>(() => {
+  const out = new Set<string>();
+  for (const c of children.value) {
+    const id = c.id as string | undefined;
+    if (!id) continue;
+    const base = baselineByChildId.value.get(id);
+    if (base === undefined) {
+      out.add(id); // new row, no baseline yet
+      continue;
+    }
+    if (JSON.stringify(normalizeChild(c)) !== base) out.add(id);
+  }
+  return out;
 });
 
 const childrenSubtitle = computed<string>(() => {
@@ -331,7 +367,7 @@ function onDragEnd() {
               :child="child"
               :idx="idx"
               :selected="(child.id as string) === selectedChildId"
-              :baseline="baselineByChildId.get((child.id as string) ?? '') ?? null"
+              :edited="editedChildIds.has((child.id as string) ?? '')"
               :class="dragOverIdx === idx ? 'wp-bundle-children-stack__drag-over' : null"
               @toggle="onToggleChild(idx)"
               @duplicate="onDuplicateChild(idx)"

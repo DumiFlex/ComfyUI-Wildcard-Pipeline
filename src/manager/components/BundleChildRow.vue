@@ -15,14 +15,12 @@ interface Props {
   child: Record<string, unknown>;
   idx: number;
   selected: boolean;
-  /** JSON-stringified last-saved state of this child. EDITED pill shows
-   *  when the current child diverges from this baseline; the parent
-   *  recomputes the baseline after every successful save so the pill
-   *  resets to plain SNAPSHOT on round-trip. `null` (new-row case) ⇒
-   *  baseline absent ⇒ EDITED (any unsaved row is by definition edited). */
-  baseline?: string | null;
+  /** Parent-computed dirty flag. Drives the SNAPSHOT · EDITED pill.
+   *  Parent diffs the row's normalized state against the last-saved
+   *  baseline so reverting overrides clears the pill cleanly. */
+  edited?: boolean;
 }
-const props = withDefaults(defineProps<Props>(), { baseline: null });
+const props = withDefaults(defineProps<Props>(), { edited: false });
 
 const emit = defineEmits<{
   (e: "toggle"): void;
@@ -64,13 +62,9 @@ const displayName = computed(() => {
   return m?.name ?? (props.child.name as string | undefined) ?? "(unnamed)";
 });
 
-// Snapshot is "edited" when the current child diverges from the
-// last-saved baseline the parent supplied. Save resets this on every
-// successful PUT round-trip.
-const isEdited = computed(() => {
-  if (props.baseline === null) return true; // never saved → counts as edited
-  return JSON.stringify(props.child) !== props.baseline;
-});
+// Parent owns the dirty diff (baseline lives there). This row just
+// surfaces the flag through the SNAPSHOT · EDITED pill rendering.
+const isEdited = computed(() => props.edited);
 </script>
 
 <template>
