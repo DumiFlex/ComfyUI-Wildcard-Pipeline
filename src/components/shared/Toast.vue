@@ -155,8 +155,18 @@ onBeforeUnmount(() => {
 }
 .wp-toast__close:hover { color: var(--wp-text); }
 
-/* Slide-in from the right; instant out for snappiness. */
+/* Slide-in from the right; quick fade-out on dismiss. The leave leg
+ * stays shorter than the enter so dismiss still feels snappy — the
+ * point of the fade is to soften the abrupt vanish, not stretch it.
+ * `move` keeps neighbouring toasts gliding into the freed slot rather
+ * than jumping. */
 .wp-toast-enter-active { transition: opacity var(--wp-motion-swap), transform var(--wp-motion-swap); }
 .wp-toast-enter-from { opacity: 0; transform: translateX(20px); }
+.wp-toast-leave-active {
+  transition: opacity var(--wp-motion-quick) ease, transform var(--wp-motion-quick) ease;
+  position: absolute;
+  right: 0;
+}
+.wp-toast-leave-to { opacity: 0; transform: translateX(12px); }
 .wp-toast-move { transition: transform var(--wp-motion-swap) ease-out; }
 </style>
