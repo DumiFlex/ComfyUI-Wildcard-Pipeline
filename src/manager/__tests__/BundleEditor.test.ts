@@ -286,4 +286,117 @@ describe("BundleEditor.vue", () => {
     expect(back.exists()).toBe(true);
     expect(back.text()).toContain("Bundles");
   });
+
+  it("save persists children array after toggle", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_kids",
+      name: "Kids",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        { id: "wc_a", type: "wildcard", enabled: true, meta: { name: "alpha" } },
+        { id: "wc_b", type: "wildcard", enabled: true, meta: { name: "beta" } },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_kids",
+      name: "Kids",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        { id: "wc_a", type: "wildcard", enabled: false, meta: { name: "alpha" } },
+        { id: "wc_b", type: "wildcard", enabled: true, meta: { name: "beta" } },
+      ],
+      payload_hash: "h1", version: 2, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_kids" });
+    await flushPromises();
+
+    const toggleBtns = wrap.findAll('[data-test="bundle-child-toggle"]');
+    expect(toggleBtns.length).toBe(2);
+    await toggleBtns[0].trigger("click");
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    expect(apiBundles.update).toHaveBeenCalled();
+    const callArgs = apiBundles.update.mock.calls[0];
+    expect(callArgs[0]).toBe("bn_kids");
+    const payload = callArgs[1] as { children?: Array<Record<string, unknown>> };
+    expect(payload.children).toBeDefined();
+    expect(payload.children![0].enabled).toBe(false);
+    expect(payload.children![1].enabled).toBe(true);
+  });
+
+  it("remove splices a child and persists on save", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_rm",
+      name: "Rm",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        { id: "wc_a", type: "wildcard", enabled: true, meta: { name: "alpha" } },
+        { id: "wc_b", type: "wildcard", enabled: true, meta: { name: "beta" } },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_rm", name: "Rm", description: "",
+      color: null, category_id: null, tags: [],
+      is_favorite: false, children: [], payload_hash: "h1",
+      version: 2, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_rm" });
+    await flushPromises();
+
+    await wrap.findAll('[data-test="bundle-child-remove"]')[0].trigger("click");
+    expect(wrap.text()).toContain("Children (1)");
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    const callArgs = apiBundles.update.mock.calls[0];
+    const payload = callArgs[1] as { children?: unknown[] };
+    expect(payload.children).toHaveLength(1);
+  });
+
+  it("duplicate inserts after source and persists on save", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_dup", name: "Dup", description: "",
+      color: null, category_id: null, tags: [], is_favorite: false,
+      children: [{ id: "wc_a", type: "wildcard", enabled: true, meta: { name: "alpha" } }],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_dup", name: "Dup", description: "",
+      color: null, category_id: null, tags: [], is_favorite: false,
+      children: [], payload_hash: "h1", version: 2, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_dup" });
+    await flushPromises();
+
+    await wrap.find('[data-test="bundle-child-duplicate"]').trigger("click");
+    expect(wrap.text()).toContain("Children (2)");
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    const payload = apiBundles.update.mock.calls[0][1] as { children?: Array<{ id: string }> };
+    expect(payload.children).toHaveLength(2);
+    expect(payload.children![0].id).toBe("wc_a");
+    expect(payload.children![1].id).not.toBe("wc_a");
+  });
 });

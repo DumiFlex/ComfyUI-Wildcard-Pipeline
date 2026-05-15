@@ -2,9 +2,10 @@
 /**
  * BundleEditor — SPA editor for library-tracked bundles.
  *
- * Scope (Task 1 — layout port): editable name, description, color,
- * category, tags via EditorFrame + IdentityCard + color slot. Children
- * are rendered read-only here; Task 2 makes them interactive.
+ * Task 2: interactive children list — drag reorder, enable/disable toggle,
+ * duplicate, remove. Children mutations live in a local ref and persist
+ * via a single bundles.update PUT on Save. Task 3 adds the right-side
+ * snapshot edit pane.
  *
  * Route shape mirrors the other kind editors:
  *   /bundles/new            → create-mode (disabled Save, points user to Context widget)
@@ -16,6 +17,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import ColorPicker from "../components/ColorPicker.vue";
+import BundleChildRow from "../components/BundleChildRow.vue";
 import { useToast } from "../composables/useToast";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -49,27 +51,17 @@ const color = ref<string>(DEFAULT_COLOR);
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 
+/** Mutable local copy of bundle children. Edits in the row stack
+ *  (and the side pane in Task 3) update this; Save persists it via PUT. */
+const children = ref<Array<Record<string, unknown>>>([]);
+
+/** Drag-reorder state. Source index captured on dragstart, target on
+ *  dragover. Cleared on drop / cancel. Drives the data-drag-over
+ *  styling for the drop-line indicator. */
+const dragSourceIdx = ref<number | null>(null);
+const dragOverIdx = ref<number | null>(null);
+
 const isEdit = computed(() => !!props.id);
-
-const children = computed(() => (original.value?.children ?? []) as Array<Record<string, unknown>>);
-
-interface ChildView {
-  id: string;
-  type: string;
-  name: string;
-}
-
-const childRows = computed<ChildView[]>(() =>
-  children.value.map((c, i) => {
-    const meta = (c.meta as { name?: string } | undefined) ?? undefined;
-    const displayName = meta?.name ?? (c.name as string | undefined) ?? "(unnamed)";
-    return {
-      id: String(c.id ?? `child_${i}`),
-      type: String(c.type ?? "module"),
-      name: String(displayName),
-    };
-  }),
-);
 
 onMounted(async () => {
   await categoryStore.fetchAll();
@@ -83,6 +75,9 @@ onMounted(async () => {
     color.value = row.color || DEFAULT_COLOR;
     categoryId.value = row.category_id;
     tags.value = [...(row.tags ?? [])];
+    children.value = Array.isArray(row.children)
+      ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
+      : [];
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   } finally {
@@ -117,8 +112,12 @@ async function save() {
       color: colorOut,
       category_id: categoryId.value,
       tags: [...tags.value],
+      children: children.value.map((c) => ({ ...c })),
     });
     original.value = updated;
+    children.value = Array.isArray(updated.children)
+      ? updated.children.map((c) => ({ ...(c as Record<string, unknown>) }))
+      : [];
     toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -127,9 +126,67 @@ async function save() {
   }
 }
 
-function kindLabel(type: string): string {
-  if (!type) return "Module";
-  return type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ");
+function freshId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function onToggleChild(idx: number) {
+  const next = [...children.value];
+  const current = next[idx];
+  next[idx] = { ...current, enabled: current.enabled === false };
+  children.value = next;
+}
+
+function onDuplicateChild(idx: number) {
+  const src = children.value[idx];
+  if (!src) return;
+  const copy = { ...src, id: freshId(String(src.type ?? "child")) };
+  const next = [...children.value];
+  next.splice(idx + 1, 0, copy);
+  children.value = next;
+}
+
+function onRemoveChild(idx: number) {
+  const next = [...children.value];
+  next.splice(idx, 1);
+  children.value = next;
+}
+
+function onSelectChild(_idx: number) {
+  // Task 3 will set selectedChildId here.
+}
+
+function onDragStart(idx: number, evt: DragEvent) {
+  dragSourceIdx.value = idx;
+  if (evt.dataTransfer) {
+    evt.dataTransfer.effectAllowed = "move";
+    // Firefox needs setData for the drag to fire at all.
+    evt.dataTransfer.setData("text/plain", String(idx));
+  }
+}
+function onDragOver(idx: number, evt: DragEvent) {
+  if (dragSourceIdx.value === null || dragSourceIdx.value === idx) return;
+  evt.preventDefault();
+  if (evt.dataTransfer) evt.dataTransfer.dropEffect = "move";
+  if (dragOverIdx.value !== idx) dragOverIdx.value = idx;
+}
+function onDragLeave() {
+  dragOverIdx.value = null;
+}
+function onDrop(idx: number, evt: DragEvent) {
+  evt.preventDefault();
+  const from = dragSourceIdx.value;
+  dragSourceIdx.value = null;
+  dragOverIdx.value = null;
+  if (from === null || from === idx) return;
+  const next = [...children.value];
+  const [moved] = next.splice(from, 1);
+  next.splice(idx, 0, moved);
+  children.value = next;
+}
+function onDragEnd() {
+  dragSourceIdx.value = null;
+  dragOverIdx.value = null;
 }
 </script>
 
@@ -166,24 +223,31 @@ function kindLabel(type: string): string {
       </IdentityCard>
 
       <Card
-        :title="`Children (${childRows.length})`"
-        subtitle="Frozen snapshots — full interactive editing lands in Task 2."
+        :title="`Children (${children.length})`"
+        subtitle="Frozen snapshots — drag handle to reorder, eye to toggle, ⧉ to duplicate, × to remove."
       >
-        <div v-if="!childRows.length" class="wp-dim wp-bundle-editor__empty">
+        <div v-if="!children.length" class="wp-dim wp-bundle-editor__empty">
           This bundle has no children yet.
         </div>
-        <ol v-else class="wp-bundle-children" data-test="bundle-children-list">
-          <li
-            v-for="(child, idx) in childRows"
-            :key="`${child.id}_${idx}`"
-            class="wp-bundle-children__row"
-            :data-test="`bundle-child-${idx}`"
-          >
-            <span class="wp-bundle-children__idx">{{ idx + 1 }}</span>
-            <span class="wp-bundle-children__kind">{{ kindLabel(child.type) }}</span>
-            <span class="wp-bundle-children__name">{{ child.name }}</span>
-          </li>
-        </ol>
+        <div v-else class="wp-bundle-children-stack" data-test="bundle-children-list">
+          <BundleChildRow
+            v-for="(child, idx) in children"
+            :key="`${(child.id as string) ?? ''}_${idx}`"
+            :child="child"
+            :idx="idx"
+            :selected="false"
+            :class="dragOverIdx === idx ? 'wp-bundle-children-stack__drag-over' : null"
+            @toggle="onToggleChild(idx)"
+            @duplicate="onDuplicateChild(idx)"
+            @remove="onRemoveChild(idx)"
+            @select="onSelectChild(idx)"
+            @drag-start="(e) => onDragStart(idx, e)"
+            @drag-over="(e) => onDragOver(idx, e)"
+            @drag-leave="onDragLeave"
+            @drop="(e) => onDrop(idx, e)"
+            @drag-end="onDragEnd"
+          />
+        </div>
       </Card>
     </template>
   </EditorFrame>
@@ -193,43 +257,12 @@ function kindLabel(type: string): string {
 .wp-bundle-editor__loading { padding: 32px 0; text-align: center; }
 .wp-bundle-editor__empty { padding: 16px 0; font-size: 13px; }
 
-.wp-bundle-children {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.wp-bundle-children-stack {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.wp-bundle-children__row {
-  display: grid;
-  grid-template-columns: 28px max-content 1fr;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  background: var(--wp-bg2);
-}
-.wp-bundle-children__idx {
-  font: 500 11px/1 var(--wp-font-mono);
-  color: var(--wp-text3);
-  text-align: right;
-}
-.wp-bundle-children__kind {
-  font: 600 9px/1 var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 3px 5px;
-  border-radius: 3px;
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
-  color: var(--wp-accent-text);
-}
-.wp-bundle-children__name {
-  font: 500 13px/1.2 var(--wp-font-sans);
-  color: var(--wp-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.wp-bundle-children-stack__drag-over {
+  box-shadow: 0 -2px 0 var(--wp-accent-500);
 }
 </style>
