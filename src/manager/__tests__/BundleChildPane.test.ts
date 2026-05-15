@@ -128,6 +128,26 @@ describe("BundleChildPane.vue", () => {
     expect(wrap.find('[data-test="bundle-pane-sections-derivation"]').exists()).toBe(true);
   });
 
+  it("mounts constraint sections when child.type === 'constraint'", () => {
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: {
+          id: "cn_a",
+          type: "constraint",
+          meta: { name: "hair_x_mood" },
+          payload: {
+            source_wildcard_id: "",
+            target_wildcard_id: "",
+            matrix: {},
+            exceptions: [],
+          },
+          instance: {},
+        },
+      },
+    });
+    expect(wrap.find('[data-test="bundle-pane-sections-constraint"]').exists()).toBe(true);
+  });
+
   it("renders unsupported-kind placeholder for unknown types", () => {
     const wrap = mount(BundleChildPane, {
       props: {

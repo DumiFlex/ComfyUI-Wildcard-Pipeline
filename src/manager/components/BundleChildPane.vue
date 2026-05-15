@@ -27,6 +27,9 @@ import FixedRuntimeSection from "../../components/context/editors/fixed-values/s
 import DerivationIdentitySection from "../../components/context/editors/derivation/sections/IdentitySection.vue";
 import DerivationRulesSection from "../../components/context/editors/derivation/sections/RulesSection.vue";
 import DerivationRuntimeSection from "../../components/context/editors/derivation/sections/RuntimeSection.vue";
+import ConstraintIdentitySection from "../../components/context/editors/constraint/sections/IdentitySection.vue";
+import ConstraintMatrixSection from "../../components/context/editors/constraint/sections/MatrixSection.vue";
+import ConstraintExceptionsSection from "../../components/context/editors/constraint/sections/ExceptionsSection.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { ModuleEntry } from "../../widgets/_shared";
 
@@ -153,6 +156,16 @@ function onUpdate(patch: Partial<ModuleEntry>) {
         <DerivationIdentitySection :module="moduleEntry" @update="onUpdate" />
         <DerivationRulesSection :module="moduleEntry" @update="onUpdate" />
         <DerivationRuntimeSection :module="moduleEntry" @update="onUpdate" />
+      </div>
+
+      <div
+        v-else-if="kind === 'constraint' && moduleEntry"
+        data-test="bundle-pane-sections-constraint"
+        class="wp-bpane__sections"
+      >
+        <ConstraintIdentitySection :module="moduleEntry" @update="onUpdate" />
+        <ConstraintMatrixSection :module="moduleEntry" @update="onUpdate" />
+        <ConstraintExceptionsSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
       <div
