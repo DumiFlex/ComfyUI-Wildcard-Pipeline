@@ -97,14 +97,60 @@ def _extract_static_meta(
             meta["constraint_source"] = src
         if isinstance(tgt, str) and tgt:
             meta["constraint_target"] = tgt
+    elif m_type == "combine":
+        # Combine writes to `payload.output_var` (instance may override
+        # via `variable_binding` for the picker-driven flow). Surface
+        # the resolved name so disabled-combine rows in the debug
+        # viewer show `$output_var (disabled)` instead of a uuid.
+        b = (
+            inst.get("variable_binding")
+            or payload.get("output_var")
+            or payload.get("var_binding")
+            or ""
+        )
+        if isinstance(b, str):
+            b = b.lstrip("$").strip()
+            if b:
+                meta["binding"] = b
+    elif m_type == "derivation":
+        # Derivation can write to MULTIPLE target_vars (one per branch
+        # `action.target_var`, plus the `else.action.target_var`).
+        # Collect every declared target so the disabled-derivation row
+        # shows all of them in the debug viewer instead of a uuid.
+        seen_targets: list[str] = []
+        rules = payload.get("rules")
+        if isinstance(rules, list):
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    continue
+                for branch in rule.get("branches", []) or []:
+                    if not isinstance(branch, dict):
+                        continue
+                    action = branch.get("action")
+                    if isinstance(action, dict):
+                        target = action.get("target_var")
+                        if isinstance(target, str):
+                            target = target.lstrip("$").strip()
+                            if target and target not in seen_targets:
+                                seen_targets.append(target)
+                else_block = rule.get("else")
+                if isinstance(else_block, dict):
+                    action = else_block.get("action")
+                    if isinstance(action, dict):
+                        target = action.get("target_var")
+                        if isinstance(target, str):
+                            target = target.lstrip("$").strip()
+                            if target and target not in seen_targets:
+                                seen_targets.append(target)
+        if seen_targets:
+            meta["bindings"] = seen_targets
     else:
-        # Single-binding modules — wildcard / combine / derivation /
-        # pipeline. Read both `instance.variable_binding` (preferred,
-        # picker writes there) and `payload.var_binding` (legacy /
-        # library default).
+        # Wildcard / pipeline / other single-binding modules. Picker
+        # writes `instance.variable_binding`; legacy snapshots may
+        # carry `payload.var_binding` instead.
         b = inst.get("variable_binding") or payload.get("var_binding") or ""
         if isinstance(b, str) and b:
-            meta["binding"] = b
+            meta["binding"] = b.lstrip("$").strip()
 
     return meta
 
