@@ -378,7 +378,8 @@ export function collectLocalResolvedForModule(
  * autocompletes) that only need the keys.
  */
 export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNodeLike): string[] {
-  return Object.keys(collectUpstreamResolved(rootGraph, node));
+  return Object.keys(collectUpstreamResolved(rootGraph, node))
+    .filter((k) => !k.startsWith("__"));
 }
 
 /**
@@ -615,7 +616,15 @@ export function collectUpstreamKinds(
       if (name && m.instance?.internal) internalKeys.add(name);
     }
   }
-  for (const k of internalKeys) delete kinds[k];
+  // Stash internal-flag map on the reserved slot (parallels
+  // resolveChainStatic). Consumers that mirror the prompt-render
+  // boundary (AssemblerHelper) drop these after reading the flags;
+  // consumers that need the full view (conflict scanner) keep them.
+  if (internalKeys.size > 0) {
+    const flags: Record<string, boolean> = {};
+    for (const k of internalKeys) flags[k] = true;
+    kinds["__wp_internal_flags__"] = JSON.stringify(flags);
+  }
   return kinds;
 }
 
@@ -670,14 +679,15 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
     }
   }
 
-  // Track keys produced by internal-flagged modules so we can strip
-  // them before returning. Mirrors `engine.context.strip_internals`
-  // — internal bindings are written into the working ctx (so
-  // downstream combines/derivations can READ them) but never surface
-  // on the public-facing map the assembler preview consumes.
-  // Without this, a collapse/expand causes a brief client-side
-  // fallback render that exposes those values until the API
-  // round-trips, producing the flicker users reported.
+  // Track keys produced by internal-flagged modules. Kept as an
+  // out-param attribute on the returned ctx (`__wp_internal_flags__`)
+  // so consumers that need to apply prompt-render filtering can do
+  // so themselves. Engine fix landed in commit a345bd4: internal vars
+  // now propagate across PIPELINE_CONTEXT sockets so downstream
+  // Combine / Derivation modules can compose them, and only the final
+  // PromptAssembler filters them at render time. Frontend walker
+  // mirrors that — return everything, let each consumer (assembler
+  // preview vs conflict scanner) decide whether to strip.
   const internalKeys = new Set<string>();
 
   // Discover `@{uuid}` refs inside chain wildcard options that aren't in
@@ -757,10 +767,17 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
       }
     }
   }
-  // Drop internal-flagged keys on the way out — they were written
-  // into ctx so downstream combines could expand `$var` references,
-  // but the assembler preview should mirror the public socket view.
-  for (const k of internalKeys) delete ctx[k];
+  // Internal-flagged keys stay in ctx — engine now propagates them
+  // across socket boundaries, so the static walker mirrors that.
+  // Stash the flag map on a reserved `__wp_internal_flags__` slot so
+  // any consumer that needs the prompt-render filter (assembler) can
+  // call `strip_internals` to drop them, while consumers that need
+  // the full view (conflict scanner, Combine preview) get every var.
+  if (internalKeys.size > 0) {
+    const flags: Record<string, boolean> = {};
+    for (const k of internalKeys) flags[k] = true;
+    ctx["__wp_internal_flags__"] = JSON.stringify(flags);
+  }
   return ctx;
 }
 
