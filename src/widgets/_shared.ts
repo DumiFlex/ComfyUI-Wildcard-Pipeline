@@ -104,7 +104,12 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   host.appendChild(inner);
 
   let state = options.initialValue ?? "";
-  const baseMin = options.minHeight ?? 80;
+  // baseMin pre-snapped so the initial `getMinHeight` answer + every
+  // subsequent floor enforcement land on the LiteGraph grid. Without
+  // this, the first paint reports a raw min, ComfyUI sizes the node
+  // to it, then our autosize snaps a moment later — visible as a
+  // two-step resize.
+  const baseMin = snapToGrid(options.minHeight ?? 80);
   let minHeight = baseMin;
 
   const widgetOpts: Record<string, unknown> = {
@@ -138,7 +143,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   }
   if (minWidthGetter) {
     const getter = minWidthGetter;
-    widget.computeLayoutSize = () => ({ minWidth: getter(), minHeight });
+    // Snap the reported minWidth so ComfyUI's first layout pass already
+    // sees a grid-aligned value. If we returned the raw getter result,
+    // litegraph would size to that, then our setSize call below would
+    // round to the next grid step — perceived as a two-step resize.
+    widget.computeLayoutSize = () => ({ minWidth: snapToGrid(getter()), minHeight });
   }
   // createApp's prop overload requires the second arg's keys to extend the
   // component's prop keys. With componentProps?: P (defaulting to {}), TS
@@ -162,7 +171,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
-      const next = Math.max(baseMin, measured);
+      // Snap before storing: minHeight feeds both ComfyUI's
+      // getMinHeight callback AND our own min[1] read below. Keeping
+      // it grid-aligned at the source means setSize never has to
+      // correct an off-grid value after the fact.
+      const next = snapToGrid(Math.max(baseMin, measured));
       if (next !== minHeight) minHeight = next;
 
       const min = resizable.computeSize?.();
