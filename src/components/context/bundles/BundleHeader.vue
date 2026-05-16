@@ -18,8 +18,16 @@ const props = withDefaults(
      *  by the caller from per-child drift state — bundle-level UX
      *  doesn't introspect children itself. */
     driftedCount?: number;
+    /** True when the bundle's `inserted_at_hash` differs from the
+     *  library entry's current `payload_hash` — i.e. the library
+     *  entry has been edited since this bundle was inserted. Distinct
+     *  from per-child drift (`driftedCount`): a bundle can be
+     *  library-drifted with zero drifted children if a library edit
+     *  hasn't yet propagated locally via reset. Resolved by the
+     *  caller using the polled `bundleHashes` map. */
+    libraryDrifted?: boolean;
   }>(),
-  { color: null, driftedCount: 0 },
+  { color: null, driftedCount: 0, libraryDrifted: false },
 );
 
 const emit = defineEmits<{
@@ -39,10 +47,18 @@ const frameColor = computed(() =>
 
 const summary = computed(() => {
   const word = props.childCount === 1 ? "mod" : "mods";
-  const base = `${props.childCount} ${word}`;
-  if (props.driftedCount > 0) return `${base} · ${props.driftedCount} drifted`;
-  return base;
+  const parts = [`${props.childCount} ${word}`];
+  if (props.driftedCount > 0) parts.push(`${props.driftedCount} drifted`);
+  if (props.libraryDrifted) parts.push("library updated");
+  return parts.join(" · ");
 });
+
+// Drives the warning dot on the header that highlights either per-
+// child drift OR library-side drift. Hides itself when both are
+// clean so non-drifted bundles stay quiet.
+const hasDrift = computed(
+  () => props.driftedCount > 0 || props.libraryDrifted,
+);
 </script>
 
 <template>
@@ -113,6 +129,22 @@ const summary = computed(() => {
     </span>
     <span class="wp-bundle-chip">bundle</span>
     <span class="wp-bundle-name">{{ name }}</span>
+    <!-- Drift indicator: small amber dot when either per-child drift
+         OR library-side drift is detected. Tooltip names the kind so
+         users know whether to "Refresh drifted" individual rows or
+         "Reset to library" the whole bundle (both actions live in the
+         bundle ctxmenu). Hides when neither is true so non-drifted
+         bundles stay visually quiet. -->
+    <span
+      v-if="hasDrift"
+      class="wp-bundle-drift-dot"
+      :title="libraryDrifted && driftedCount > 0
+        ? `Library updated since insert + ${driftedCount} child(ren) drifted. Right-click for reset options.`
+        : libraryDrifted
+          ? 'Library entry has been edited since this bundle was inserted. Right-click → Reset to library.'
+          : `${driftedCount} child(ren) drifted from their library snapshot. Right-click for reset options.`"
+      aria-hidden="true"
+    ></span>
     <span class="wp-bundle-summary">{{ summary }}</span>
     <button
       type="button"
@@ -245,6 +277,27 @@ const summary = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.wp-bundle-drift-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--wp-amber, #f1a23a);
+  /* Subtle outer ring uses the bundle's frame color (--b) at low alpha
+   * so the dot reads as part of the bundle's identity, not a generic
+   * warning sticker. Falls back to a neutral border if the bundle has
+   * no custom color. */
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--b, var(--wp-bundle-default)) 35%, transparent);
+  flex: 0 0 auto;
+  /* Subtle pulse on first appear so the user notices when state flips
+   * from clean → drifted mid-session (e.g. another user edits the
+   * library in a parallel SPA tab). 1 cycle then idle. */
+  animation: wp-bundle-drift-pulse 1.4s ease-out 1;
+}
+@keyframes wp-bundle-drift-pulse {
+  0%   { transform: scale(0.7); opacity: 0; }
+  40%  { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 .wp-bundle-summary {
   font: 500 10px/1.3 var(--wp-font-sans);

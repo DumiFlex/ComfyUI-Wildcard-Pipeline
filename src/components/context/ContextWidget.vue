@@ -52,6 +52,7 @@ import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
   forceRefresh as forceRefreshHashes,
   hashes as libraryHashes,
+  bundleHashes,
   refreshMany,
   refreshModule,
   subscribe as subscribeDrift,
@@ -1446,6 +1447,38 @@ async function refreshAllDrifted(): Promise<void> {
 
 /** Surfaced as a computed for the bulk-button visibility + label. */
 const driftedCount = computed(() => value.value.modules.filter(isDrifted).length);
+
+// Per-bundle drift count — sums isDrifted over the bundle's child
+// range. Drives the `${count} drifted` suffix on the bundle header
+// subtitle so users can glance-spot bundles whose children fell out
+// of sync with their library snapshots. Read at render time so the
+// libraryHashes poll naturally feeds updates without a watcher.
+function bundleChildDriftCount(bundle: BundleInstance): number {
+  const mods = value.value.modules;
+  let n = 0;
+  for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+    if (isDrifted(mods[i])) n++;
+  }
+  return n;
+}
+
+/** True when the bundle library entry has changed since this bundle
+ *  was inserted: compare the locally captured `inserted_at_hash` with
+ *  the freshest hash from the polled `bundleHashes` map. Returns false
+ *  until first poll lands so the UI doesn't flash a drift state before
+ *  the truth is known. Distinct from per-child drift — a library may
+ *  have a new payload_hash even when every embedded child still
+ *  matches its individual snapshot (e.g. the library author only
+ *  reordered children, or swapped a child the user previously
+ *  detached locally). */
+function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
+  const map = bundleHashes.value;
+  if (map === null) return false;
+  const live = map[bundle.library_id];
+  if (live === undefined) return false;
+  if (!bundle.inserted_at_hash) return false;
+  return live !== bundle.inserted_at_hash;
+}
 
 /** Non-empty array helper — null/undefined/empty all read as "no override". */
 function nonEmptyArr(v: unknown): boolean {
@@ -3270,6 +3303,8 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             :name="item.bundle!.name ?? 'Bundle'"
             :color="item.bundle!.color"
             :child-count="item.children!.length"
+            :drifted-count="bundleChildDriftCount(item.bundle!)"
+            :library-drifted="isBundleLibraryDrifted(item.bundle!)"
             @toggle-collapse="toggleBundleCollapsed(item.bundle!._uid)"
             @toggle-enabled="(next) => toggleBundleEnabled(item.bundle!._uid, next)"
             @remove="removeBundle(item.bundle!._uid)"
