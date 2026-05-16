@@ -479,7 +479,14 @@ export function setCollapsed(
   // still get the property flip + repaint, just no extras.
   if (readConfig(node)) {
     applyCollapsedLabels(node);
-    forceResize(node);
+    // Snap-resize, no tween. The wires themselves snap instantly when
+    // their labels flip, and tweening the node's height while the
+    // inner content is already in its post-collapse shape produced a
+    // visible "wires merged but the rows overflow the smaller body
+    // for 200ms" flash. The autosize machinery picks up the new
+    // content height a microtask later anyway, but doing the snap
+    // here too keeps the wire side instantaneous.
+    forceResize(node, { animate: false });
   }
 
   // Prefer the graph-level repaint (covers wires + node body in one
