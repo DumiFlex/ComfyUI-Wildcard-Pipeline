@@ -293,7 +293,12 @@ export function _resetDisplayStateForTesting(): void {
   state.newModuleDisabled = false;
   state.collapseMode = "independent";
   state.colorIntensity = "standard";
-  state.confirmDestructiveBundle = true;
+  // Tests default to skipping the confirm dialog so the existing
+  // ctxmenu-driven destructive-op suites don't have to thread a click
+  // through a Promise. Production default is `true` (set in the
+  // top-level reactive() initialiser + the buildSettings entry's
+  // defaultValue); this reset is test-scoped.
+  state.confirmDestructiveBundle = false;
   state.bundleMasterScope = "applicable-only";
 }
 

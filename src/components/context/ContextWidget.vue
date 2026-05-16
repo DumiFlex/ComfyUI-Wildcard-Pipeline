@@ -58,7 +58,8 @@ import {
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
-import { getBundleMasterScope } from "../../extension/settings";
+import { getBundleMasterScope, getConfirmDestructiveBundle } from "../../extension/settings";
+import ConfirmDialog from "../shared/ConfirmDialog.vue";
 
 const props = withDefaults(defineProps<{
   nodeId: number;
@@ -644,6 +645,12 @@ async function removeBundle(uid: string): Promise<void> {
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
   const bundleName = target.name || "bundle";
+  if (!(await maybeConfirm({
+    title: `Remove "${bundleName}"?`,
+    body: `Removes the bundle frame and all ${target.end_idx - target.start_idx + 1} child(ren) from this Context. Toast Undo will restore them if clicked before it expires.`,
+    variant: "danger",
+    confirmLabel: "Remove",
+  }))) return;
   // Delta-undo capture: keep the actual child refs (with bundle_origin
   // intact) so re-insertion restores complete module shape, plus an
   // anchor `_uid` for the module that NOW sits immediately after the
@@ -822,10 +829,17 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   // click; delta-undo composes.
   const restoredBundleUid = target._uid;
   const oldChildren = value.value.modules.slice(target.start_idx, target.end_idx + 1);
-  // No `window.confirm` — ComfyUI's host suppresses native modal APIs
-  // in some runtimes (returns false silently → silent no-op). Same
-  // failure mode as wrap's prompt. The op is recoverable: users can
-  // resave via "Save changes to library" if they regret it.
+  if (!(await maybeConfirm({
+    title: `Reset "${target.name || "bundle"}" to library?`,
+    body: "Drops every local edit on this bundle's children and replaces them with the library snapshot. Toast Undo restores your edits if clicked in time.",
+    variant: "danger",
+    confirmLabel: "Reset",
+  }))) return;
+  // Themed confirm above replaces the legacy `window.confirm` path —
+  // ComfyUI hosts can suppress the native dialog AND it looked out of
+  // place against the WP styling. The op is recoverable via Undo, but
+  // the confirm gates accidental resets on bundles with significant
+  // local work.
   try {
     const entry = await api.bundles.get(target.library_id);
     const libEntry: BundleLibraryEntry = {
@@ -998,9 +1012,16 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  // No `window.confirm` — ComfyUI host suppresses it in some runtimes.
-  // Op is library-side; users can revert by re-saving an older instance
-  // or editing in the SPA library editor.
+  if (!(await maybeConfirm({
+    title: `Save "${target.name || "bundle"}" to library?`,
+    body: "Overwrites the bundle library entry with this instance's current children. Other inserts of this bundle elsewhere will read as drifted until reset. This op has no Undo (it writes to the library DB).",
+    variant: "default",
+    confirmLabel: "Save to library",
+  }))) return;
+  // Library-side write — no Undo because there's no DB delete API
+  // surfaced here. The confirm dialog above gates accidental
+  // overwrites when the local instance has speculative edits the
+  // user didn't intend to publish.
   const childrenOut = value.value.modules
     .slice(target.start_idx, target.end_idx + 1)
     .map(toChildSnapshot);
@@ -1479,6 +1500,57 @@ function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
   if (live === undefined) return false;
   if (!bundle.inserted_at_hash) return false;
   return live !== bundle.inserted_at_hash;
+}
+
+// Pending confirm-dialog state. Single slot — only one destructive op
+// can be in flight at a time, and the bundle ctxmenu / header buttons
+// are synchronous enough that overlapping calls don't happen in
+// practice. `maybeConfirm` resolves through a Promise so the call site
+// can await it and decide whether to proceed.
+const pendingConfirm = ref<{
+  title: string;
+  body: string;
+  variant: "default" | "danger";
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+} | null>(null);
+
+interface MaybeConfirmOpts {
+  title: string;
+  body: string;
+  variant?: "default" | "danger";
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+/** Show the themed ConfirmDialog if the user has the
+ *  "Confirm destructive bundle actions" setting enabled, otherwise
+ *  resolve immediately to `true`. Returned Promise resolves to the
+ *  user's choice (true = proceed, false = cancel). Call sites pattern:
+ *
+ *      if (!(await maybeConfirm({ title, body, variant: "danger" }))) return;
+ */
+function maybeConfirm(opts: MaybeConfirmOpts): Promise<boolean> {
+  if (!getConfirmDestructiveBundle()) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    pendingConfirm.value = {
+      title: opts.title,
+      body: opts.body,
+      variant: opts.variant ?? "default",
+      confirmLabel: opts.confirmLabel ?? "Confirm",
+      cancelLabel: opts.cancelLabel ?? "Cancel",
+      onConfirm: () => {
+        pendingConfirm.value = null;
+        resolve(true);
+      },
+      onCancel: () => {
+        pendingConfirm.value = null;
+        resolve(false);
+      },
+    };
+  });
 }
 
 /** Tri-state aggregation of `instance.internal` across a bundle's
@@ -3641,6 +3713,22 @@ provide(ModuleRowCtxKey, moduleRowCtx);
       :items="ctxMenu.items"
       :header="ctxMenu.header"
       @close="ctxMenu.visible = false"
+    />
+    <!-- Shared confirm dialog for destructive bundle ops. `pendingConfirm`
+         is set by `maybeConfirm()` when the user has the relevant
+         setting enabled; resolves the awaited Promise via the
+         onConfirm / onCancel callbacks the helper stamped on the
+         state object. -->
+    <ConfirmDialog
+      v-if="pendingConfirm"
+      :visible="true"
+      :title="pendingConfirm.title"
+      :body="pendingConfirm.body"
+      :variant="pendingConfirm.variant"
+      :confirm-label="pendingConfirm.confirmLabel"
+      :cancel-label="pendingConfirm.cancelLabel"
+      @confirm="pendingConfirm.onConfirm"
+      @cancel="pendingConfirm.onCancel"
     />
   </div>
 </template>
