@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
+import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
 
@@ -89,21 +90,54 @@ function kindCompositionPills(b: BundleRow): Array<{ label: string; cls: string 
   return out;
 }
 
+// Pending re-insert confirmation. Set when the user clicks a row
+// that's already in this Context — opens the themed ConfirmDialog
+// and parks the row here until the dialog resolves. Cleared on both
+// confirm + cancel. Replaces a synchronous window.confirm which
+// ComfyUI hosts can suppress AND looked out-of-place against the WP
+// modal styling.
+const pendingReinsert = ref<BundleRow | null>(null);
+const confirmTitle = computed(() =>
+  pendingReinsert.value ? `Re-insert "${pendingReinsert.value.name}"?` : "",
+);
+const confirmBody = computed(() => {
+  const b = pendingReinsert.value;
+  if (!b) return "";
+  const childCount = Array.isArray(b.children) ? b.children.length : 0;
+  // Singular/plural shaping so a 1-child bundle doesn't read as
+  // "Children will share..." when there is only one child.
+  const childWord = childCount === 1 ? "Its child will" : "Its children will";
+  const idWord = childCount === 1 ? "library id" : "library ids";
+  return (
+    `"${b.name}" is already inserted in this Context. ` +
+    `Insert another copy? ${childWord} share ${idWord} ` +
+    "with the existing instance (siblings)."
+  );
+});
+
 function pickRow(b: BundleRow) {
   // Re-insert guard — bundles inserted twice produce children that
   // share library ids (intentional, per spec) but the duplicate
   // wildcard sibling pattern can confuse users. Prompt before doing
   // a second insert so it's an explicit choice.
   if (alreadyAddedSet.value.has(b.id)) {
-    const ok = window.confirm(
-      `"${b.name}" is already inserted in this Context. ` +
-      "Insert another copy? Children will share library ids with " +
-      "the existing instance (siblings).",
-    );
-    if (!ok) return;
+    pendingReinsert.value = b;
+    return;
   }
   emit("pick", b.id);
   emit("close");
+}
+
+function onConfirmReinsert() {
+  const b = pendingReinsert.value;
+  pendingReinsert.value = null;
+  if (!b) return;
+  emit("pick", b.id);
+  emit("close");
+}
+
+function onCancelReinsert() {
+  pendingReinsert.value = null;
 }
 
 function onKeydown(ev: KeyboardEvent) {
@@ -255,6 +289,15 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
       </div>
     </div>
   </ModalShell>
+    <ConfirmDialog
+      :visible="pendingReinsert !== null"
+      :title="confirmTitle"
+      :body="confirmBody"
+      confirm-label="Insert"
+      cancel-label="Cancel"
+      @confirm="onConfirmReinsert"
+      @cancel="onCancelReinsert"
+    />
 </template>
 
 <style>
