@@ -67,6 +67,17 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   host.classList.add("wp-widget");
   host.style.width = "100%";
   host.style.boxSizing = "border-box";
+  // Initially non-interactive: when the user picks our node via
+  // ComfyUI's Add Node menu, LiteGraph drops it into "place mode" — the
+  // node follows the cursor until a canvas click finalizes the drop.
+  // Our DOM widget sits inside the node body and would normally swallow
+  // that click (its descendants have `pointer-events: auto`), leaving
+  // the node ghosted on the cursor forever. Disable pointer-events on
+  // the host until LiteGraph fires `onAdded` (node entered a graph), so
+  // place-mode clicks fall through to the canvas. Workflow restore
+  // takes the same path: `addDOMWidget` then `graph.add` → `onAdded`
+  // fires immediately and the widget becomes interactive.
+  host.style.pointerEvents = "none";
 
   // Inner element receives Vue's mount. Its natural (content) height is what
   // we feed back as the node's required height. Observing the outer host
@@ -102,6 +113,23 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   };
 
   const widget = node.addDOMWidget(widgetName, "wp-dom", host, widgetOpts);
+
+  // Re-enable pointer events once the node lands in a graph. Wrap any
+  // existing onAdded so other extensions / litegraph internals still
+  // get called. `node.graph` may also be set synchronously for nodes
+  // restored from a saved workflow before this code path runs, in which
+  // case onAdded won't fire — handle that case eagerly here.
+  type AddedNode = { onAdded?: (this: unknown, graph: unknown) => void; graph?: unknown };
+  const addedNode = node as unknown as AddedNode;
+  if (addedNode.graph != null) {
+    host.style.pointerEvents = "";
+  } else {
+    const origOnAdded = addedNode.onAdded;
+    addedNode.onAdded = function (this: unknown, graph: unknown): void {
+      host.style.pointerEvents = "";
+      if (typeof origOnAdded === "function") origOnAdded.call(this, graph);
+    };
+  }
   // Force a minimum node width if requested. LoRA Manager docs §4.3 —
   // only way to widen the node from a DOM widget is overriding
   // computeLayoutSize. `minWidth` accepts either a static number or
