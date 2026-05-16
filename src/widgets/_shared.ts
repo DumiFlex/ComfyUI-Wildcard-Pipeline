@@ -165,6 +165,30 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // fire would (a) override the user's manual drag-larger, and (b) override
   // the saved-workflow size when ComfyUI restores it on page load.
   const resizable = node as unknown as ResizableNode;
+  // Wrap `computeSize` + `setSize` once so every node-size value
+  // litegraph reads OR writes is grid-aligned. ComfyUI's internal
+  // auto-layout calls `setSize(computeSize())` whenever a widget
+  // claims more height than the current node body. `computeSize`
+  // sums node-header + slot + widget pixels — even with a snapped
+  // `getMinHeight`, the total lands off-grid (e.g. header=24 +
+  // widget=120 + slots=22 = 166). Litegraph would set the node to
+  // 166, then our `pushSize` would snap to 170 a microtask later
+  // — the visible two-step resize. Wrapping at the source keeps
+  // litegraph's internal pathway grid-aligned without us having to
+  // intercept every code path. Idempotent: snap-on-snap = noop.
+  const originalComputeSize = resizable.computeSize?.bind(resizable);
+  if (originalComputeSize) {
+    resizable.computeSize = () => {
+      const sz = originalComputeSize();
+      return [snapToGrid(sz[0]), snapToGrid(sz[1])];
+    };
+  }
+  const originalSetSize = resizable.setSize?.bind(resizable);
+  if (originalSetSize) {
+    resizable.setSize = (size: [number, number] | number[]) => {
+      originalSetSize([snapToGrid(size[0]), snapToGrid(size[1])]);
+    };
+  }
   let scheduled = false;
   function pushSize(measured: number) {
     if (scheduled) return;
