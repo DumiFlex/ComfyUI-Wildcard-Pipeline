@@ -1955,7 +1955,16 @@ async function duplicateModule(idx: number): Promise<void> {
     };
   }
   list.splice(i + 1, 0, copy);
-  value.value = { ...value.value, modules: list };
+  // Reconcile bundle ranges — without this, any BundleInstance whose
+  // `start_idx`/`end_idx` sits at or beyond the insertion point still
+  // points at its old indices, and the `topLevelItems` walker slurps
+  // the wrong modules into the bundle (the duplicate gets sucked in,
+  // the bundle's tail child gets ejected as standalone).
+  value.value = {
+    ...value.value,
+    modules: list,
+    bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
+  };
   await nextTick();
   // Sibling rows below the inserted slot shift down via FLIP; the new
   // row itself fades + slides in via animateEnterBatch.
@@ -2027,7 +2036,13 @@ function moveToEdge(idx: number, edge: "top" | "bottom") {
   const [m] = list.splice(idx, 1);
   if (edge === "top") list.unshift(m);
   else list.push(m);
-  value.value = { ...value.value, modules: list };
+  // Move-to-edge shifts every module between idx and the new position
+  // by one slot; bundle ranges follow.
+  value.value = {
+    ...value.value,
+    modules: list,
+    bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
+  };
   // Vue reorders the DOM by detach+reattach; focus is dropped.
   // Refocus the moved card by its new position.
   const newIdx = edge === "top" ? 0 : list.length - 1;
@@ -2199,7 +2214,14 @@ function moveModule(idx: number, dir: -1 | 1) {
   const j = idx + dir;
   if (idx < 0 || idx >= list.length || j < 0 || j >= list.length) return;
   [list[idx], list[j]] = [list[j], list[idx]];
-  value.value = { ...value.value, modules: list };
+  // Reconcile bundle ranges: when the swapped pair straddles a bundle
+  // boundary, the bundle's children shift by one slot and the start/
+  // end indices have to follow.
+  value.value = {
+    ...value.value,
+    modules: list,
+    bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
+  };
   // Vue reorders the DOM by detach+reattach even with :key; focus is dropped.
   // Refocus the moved card by its new idx (composite key includes idx).
   nextTick(() => {
@@ -2387,13 +2409,26 @@ function onDragEnd() {
     if (consumedByOther) {
       if (ds.kind === "module") {
         // Cross-node consumption — remove source by recorded sourceIdx.
+        // Reconcile bundle ranges on the sender side so any bundle
+        // beyond `srcIdx` shifts down by one and any bundle that
+        // owned the removed row drops it from its children.
         const srcIdx = ds.sourceIdx;
+        const curBundles = value.value.bundles ?? [];
         if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
           const list = [...value.value.modules];
           list.splice(srcIdx, 1);
-          value.value = { ...value.value, modules: list };
+          value.value = {
+            ...value.value,
+            modules: list,
+            bundles: reconcileBundleRanges(list, curBundles),
+          };
         } else {
-          value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+          const filtered = value.value.modules.filter((m) => m.id !== ds.module.id);
+          value.value = {
+            ...value.value,
+            modules: filtered,
+            bundles: reconcileBundleRanges(filtered, curBundles),
+          };
         }
       } else if (ds.kind === "bundle") {
         // Cross-node bundle drop — remove the bundle's range from source
