@@ -759,12 +759,12 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     },
     {
       id: SETTING_ID_KIND_STYLE,
-      name: "Module type style",
+      name: "Type style",
       type: "combo",
       options: KIND_STYLE_OPTIONS,
       defaultValue: "chip",
-      tooltip: "How module type shows: chip text, icon glyph, or both.",
-      category: ["Wildcard Pipeline", "Display", "Module type style"],
+      tooltip: "How the kind indicator shows on module rows AND bundle headers: chip text, icon glyph, or both.",
+      category: ["Wildcard Pipeline", "Display", "Type style"],
       onChange: (newVal) => {
         const next = asKindStyle(newVal, "chip");
         const changed = next !== state.kindStyle;
