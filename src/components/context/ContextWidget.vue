@@ -356,6 +356,46 @@ const initialParse = parseWidgetJsonWithRecovery(props.initialJson, emptyContext
 ensureRowUids(initialParse.value.modules);
 const value = ref<ContextWidgetValue>(initialParse.value);
 
+/**
+ * Atomic write to `value.value` whenever the modules array changes
+ * shape (insert, remove, reorder) AND for in-place updates that don't
+ * shift indices. Always pipes through `reconcileBundleRanges` so the
+ * bundles[] cache (start_idx / end_idx per BundleInstance) stays in
+ * lock-step with each child's `bundle_origin` field — the canonical
+ * source of truth for bundle membership.
+ *
+ * - `nextModules` is the post-mutation array. Pass it as a fresh
+ *   reference (already spread / mapped / sliced); the helper does not
+ *   clone it.
+ * - `bundlesOverride` is for callers that have hand-computed the
+ *   post-mutation bundles[] (e.g. removeBundle adjusting sibling
+ *   indices, picker insertion appending a fresh BundleInstance). The
+ *   override is the INPUT to reconcile, not the final write — the
+ *   helper will still groom the result so a hand-computed bundle that
+ *   no longer has any children with matching `bundle_origin` gets
+ *   dropped, and a contiguous run that the override missed gets its
+ *   start/end recomputed.
+ *
+ * Reconcile is idempotent, so calling this helper at sites that
+ * didn't change indices (instance toggle, modal save, bulk collapse)
+ * is a no-op on the bundles[] side and free from the perspective of
+ * correctness. Routing every mutation through the helper means
+ * "every modules write also writes bundles" is enforced by the call
+ * site shape, not by author memory.
+ */
+function commitModules(
+  nextModules: ModuleEntry[],
+  bundlesOverride?: BundleInstance[],
+): void {
+  const sourceBundles = bundlesOverride ?? value.value.bundles ?? [];
+  value.value = {
+    ...value.value,
+    modules: nextModules,
+    bundles: reconcileBundleRanges(nextModules, sourceBundles),
+  };
+}
+
+
 /** Stamp `_uid` on any module missing one. Phase B: each row needs a
  *  per-instance stable Vue v-for key that survives reorders + inserts —
  *  siblings share `m.id` (library uuid), so id alone isn't unique, and
@@ -457,11 +497,10 @@ async function onPickBundle(bundleId: string): Promise<void> {
         bundle_origin: c.bundle_origin,
       } as ModuleEntry;
     });
-    value.value = {
-      ...value.value,
-      modules: [...value.value.modules, ...splice],
-      bundles: [...(value.value.bundles ?? []), bundleInstance],
-    };
+    commitModules(
+      [...value.value.modules, ...splice],
+      [...(value.value.bundles ?? []), bundleInstance],
+    );
     // Phase B.6: animate the new bundle wrapper + its children with
     // the same fade-slide as picker-add. Bundle wrapper carries the
     // same --arriving/--arrived classes thanks to the .wp-bundle CSS
@@ -523,11 +562,7 @@ function toggleBundleEnabled(uid: string, enabled: boolean): void {
     }
     return m;
   });
-  value.value = {
-    ...value.value,
-    modules: nextModules,
-    bundles: nextBundles,
-  };
+  commitModules(nextModules, nextBundles);
 }
 
 // Container ref for list-level drag handlers + bar positioning.
@@ -637,11 +672,7 @@ async function removeBundle(uid: string): Promise<void> {
       }
       return b;
     });
-  value.value = {
-    ...value.value,
-    modules: [...before, ...after],
-    bundles: remainingBundles,
-  };
+  commitModules([...before, ...after], remainingBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
   pushToast(`Removed bundle "${bundleName}"`, {
@@ -687,11 +718,7 @@ async function detachBundle(uid: string): Promise<void> {
     return next;
   });
   const remainingBundles = bundles.filter((b) => b._uid !== uid);
-  value.value = {
-    ...value.value,
-    modules: nextModules,
-    bundles: remainingBundles,
-  };
+  commitModules(nextModules, remainingBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
   pushToast(`Detached bundle "${bundleName}"`, {
@@ -789,11 +816,7 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       }
       return b;
     });
-    value.value = {
-      ...value.value,
-      modules: [...before, ...newChildren, ...after],
-      bundles: nextBundles,
-    };
+    commitModules([...before, ...newChildren, ...after], nextBundles);
     await nextTick();
     // Flash every fresh child + the bundle wrapper so the user sees
     // which rows just got replaced with the library snapshot.
@@ -854,7 +877,7 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
         payload_hash: snapshot.payload_hash as string | undefined,
       } as ModuleEntry;
     });
-    value.value = { ...value.value, modules: nextModules };
+    commitModules(nextModules);
     pushToast(`Reset "${childName}" to bundle snapshot`, {
       severity: "success",
       lifeMs: 5000,
@@ -946,10 +969,10 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
     const nextModules = value.value.modules.map((existing, i) =>
       i === idx ? { ...existing, bundle_origin: bundleInstance._uid } as ModuleEntry : existing,
     );
-    value.value = {
-      ...value.value, modules: nextModules,
-      bundles: [...(value.value.bundles ?? []), bundleInstance],
-    };
+    commitModules(
+      nextModules,
+      [...(value.value.bundles ?? []), bundleInstance],
+    );
     await nextTick();
     // Sibling rows shift to accommodate the new bundle wrapper around
     // the wrapped row. Bundle wrapper fades-slides in; the wrapped
@@ -1500,7 +1523,7 @@ function toggleLockOnCard(idx: number) {
   // the array hits the specific instance the user clicked.
   const list = [...value.value.modules];
   list[idx] = { ...m, instance: nextInst };
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 /** In-card internal toggle. Drops the field on toggle-off so the
@@ -1519,7 +1542,7 @@ function toggleInternalOnCard(idx: number) {
   }
   const list = [...value.value.modules];
   list[idx] = { ...m, instance: nextInst };
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 /** Tooltip listing what's been overridden on the module — surfaced
@@ -1899,10 +1922,7 @@ async function onLibraryPick(uuids: string[]) {
       return;
     }
 
-    value.value = {
-      ...value.value,
-      modules: [...value.value.modules, ...newEntries],
-    };
+    commitModules([...value.value.modules, ...newEntries]);
 
     // Phase B.6: fade-in + slide-X each newly added row. No FLIP capture
     // here — new rows are appended at the tail so existing rows don't
@@ -1987,7 +2007,7 @@ async function removeModule(idx: number): Promise<void> {
     })
     .filter((b): b is NonNullable<typeof b> => b !== null);
 
-  value.value = { ...value.value, modules: next, bundles: nextBundles };
+  commitModules(next, nextBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
   pushToast(`Removed “${moduleLabel}”`, {
@@ -2007,20 +2027,12 @@ async function removeModule(idx: number): Promise<void> {
           await withEnterAnimation(restoreUid, scope, () => {
             const list = [...value.value.modules];
             list.splice(Math.min(idx, list.length), 0, removed);
-            value.value = {
-              ...value.value,
-              modules: list,
-              bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
-            };
+            commitModules(list);
           });
         } else {
           const list = [...value.value.modules];
           list.splice(Math.min(idx, list.length), 0, removed);
-          value.value = {
-            ...value.value,
-            modules: list,
-            bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
-          };
+          commitModules(list);
         }
       },
     },
@@ -2056,11 +2068,7 @@ async function duplicateModule(idx: number): Promise<void> {
   // points at its old indices, and the `topLevelItems` walker slurps
   // the wrong modules into the bundle (the duplicate gets sucked in,
   // the bundle's tail child gets ejected as standalone).
-  value.value = {
-    ...value.value,
-    modules: list,
-    bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
-  };
+  commitModules(list);
   await nextTick();
   // Sibling rows below the inserted slot shift down via FLIP; the new
   // row itself fades + slides in via animateEnterBatch.
@@ -2085,20 +2093,12 @@ async function duplicateModule(idx: number): Promise<void> {
           await withLeaveAnimation(dupUid, scope, () => {
             const cur = [...value.value.modules];
             cur.splice(i + 1, 1);
-            value.value = {
-              ...value.value,
-              modules: cur,
-              bundles: reconcileBundleRanges(cur, value.value.bundles ?? []),
-            };
+            commitModules(cur);
           });
         } else {
           const cur = [...value.value.modules];
           cur.splice(i + 1, 1);
-          value.value = {
-            ...value.value,
-            modules: cur,
-            bundles: reconcileBundleRanges(cur, value.value.bundles ?? []),
-          };
+          commitModules(cur);
         }
       },
     },
@@ -2147,11 +2147,7 @@ function moveToEdge(idx: number, edge: "top" | "bottom") {
   else list.push(m);
   // Move-to-edge shifts every module between idx and the new position
   // by one slot; bundle ranges follow.
-  value.value = {
-    ...value.value,
-    modules: list,
-    bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
-  };
+  commitModules(list);
   // Vue reorders the DOM by detach+reattach; focus is dropped.
   // Refocus the moved card by its new position.
   const newIdx = edge === "top" ? 0 : list.length - 1;
@@ -2165,7 +2161,7 @@ function toggleEnabled(idx: number) {
   if (idx < 0 || idx >= value.value.modules.length) return;
   const list = [...value.value.modules];
   list[idx] = { ...list[idx], enabled: !list[idx].enabled };
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 function toggleCollapsed(idx: number) {
@@ -2181,7 +2177,7 @@ function toggleCollapsed(idx: number) {
     if (accordion) return { ...m, collapsed: true };
     return m;
   });
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 /** Bulk collapse/expand. Used by the section-header chevron — one
@@ -2189,10 +2185,7 @@ function toggleCollapsed(idx: number) {
  *  cards already match the target state (the deep watcher will
  *  diff-eq and skip the onChange emit). */
 function setAllCollapsed(collapsed: boolean) {
-  value.value = {
-    ...value.value,
-    modules: value.value.modules.map((m) => ({ ...m, collapsed })),
-  };
+  commitModules(value.value.modules.map((m) => ({ ...m, collapsed })));
 }
 
 /** Toolbar counts — total modules + how many are enabled. */
@@ -2205,10 +2198,7 @@ function expandAll(): void { setAllCollapsed(false); }
 function toggleAllEnabled(): void {
   const anyEnabled = value.value.modules.some((m) => m.enabled);
   // If any are enabled, disable all; otherwise enable all.
-  value.value = {
-    ...value.value,
-    modules: value.value.modules.map((m) => ({ ...m, enabled: !anyEnabled })),
-  };
+  commitModules(value.value.modules.map((m) => ({ ...m, enabled: !anyEnabled })));
 }
 
 /** Open the SPA dashboard in a new tab. Mirrors `extension/topbar.ts`'s
@@ -2250,7 +2240,7 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
   delete (cleaned as { _originalId?: string })._originalId;
   const list = [...value.value.modules];
   list[targetIdx] = cleaned;
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
   if (updated._originalId && updated._originalId !== updated.id) {
     nextTick(() => {
       const el = document.querySelector<HTMLElement>(
@@ -2326,11 +2316,7 @@ function moveModule(idx: number, dir: -1 | 1) {
   // Reconcile bundle ranges: when the swapped pair straddles a bundle
   // boundary, the bundle's children shift by one slot and the start/
   // end indices have to follow.
-  value.value = {
-    ...value.value,
-    modules: list,
-    bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
-  };
+  commitModules(list);
   // Vue reorders the DOM by detach+reattach even with :key; focus is dropped.
   // Refocus the moved card by its new idx (composite key includes idx).
   nextTick(() => {
@@ -2526,11 +2512,7 @@ function onDragEnd() {
         if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
           const list = [...value.value.modules];
           list.splice(srcIdx, 1);
-          value.value = {
-            ...value.value,
-            modules: list,
-            bundles: reconcileBundleRanges(list, curBundles),
-          };
+          commitModules(list, curBundles);
         } else {
           // Fallback when sourceIdx was invalidated. Target the
           // specific row by _uid — `m.id` is the library uuid shared
@@ -2541,11 +2523,7 @@ function onDragEnd() {
           const filtered = dragUid
             ? value.value.modules.filter((m) => m._uid !== dragUid)
             : value.value.modules.filter((m) => m.id !== ds.module.id);
-          value.value = {
-            ...value.value,
-            modules: filtered,
-            bundles: reconcileBundleRanges(filtered, curBundles),
-          };
+          commitModules(filtered, curBundles);
         }
       } else if (ds.kind === "bundle") {
         // Cross-node bundle drop — remove the bundle's range from source
@@ -2558,11 +2536,7 @@ function onDragEnd() {
           .map((b) => (b.start_idx > ds.sourceEndIdx
             ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
             : b));
-        value.value = {
-          ...value.value,
-          modules: [...before, ...after],
-          bundles: remainingBundles,
-        };
+        commitModules([...before, ...after], remainingBundles);
       }
     }
   }
@@ -2794,7 +2768,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     }
     list.splice(ii, 0, ...range);
     holdSuppressMove();
-    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
+    commitModules(list, bundles);
     await nextTick();
     playFlipSnapshot(flipSnap);
     // Pulse the bundle wrapper AND every child so a collapsed bundle
@@ -2859,7 +2833,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     const crossScope = (ds.sourceBundleUid ?? null) !== (stamp ?? null);
     if (crossScope && m._uid) excludeFromFlipSnapshot(flipSnap, m._uid);
 
-    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, preBundles) };
+    commitModules(list, preBundles);
     await nextTick();
     playFlipSnapshot(flipSnap);
     if (crossScope && m._uid && modulesContainer.value) {
@@ -2907,11 +2881,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
       return fresh;
     });
     list.splice(insertIdx, 0, ...newChildren);
-    value.value = {
-      ...value.value,
-      modules: list,
-      bundles: reconcileBundleRanges(list, [...bundles, newBundle]),
-    };
+    commitModules(list, [...bundles, newBundle]);
     await nextTick();
     playFlipSnapshot(flipSnap);
     // Phase B.4: pulse the bundle wrapper AND every newly-inserted
@@ -2992,11 +2962,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   const preBundles = bundles.map((b) =>
     stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
   );
-  value.value = {
-    ...value.value,
-    modules: list,
-    bundles: reconcileBundleRanges(list, preBundles),
-  };
+  commitModules(list, preBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
   pulseDrop(inserted._uid);
