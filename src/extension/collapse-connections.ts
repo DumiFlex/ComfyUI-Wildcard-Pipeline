@@ -33,6 +33,14 @@ import {
 
 const DEFAULT_PROPERTY_KEY = "collapse_connections";
 const FALLBACK_SLOT_HEIGHT = 20;
+/** LiteGraph default node-size grid. Mirrored from `_shared.ts` —
+ *  duplicated rather than imported because this module is pure
+ *  extension logic with no Vue dependency, and the constant is one
+ *  number. Bumping here means bumping there too. */
+const NODE_SIZE_GRID = 10;
+function snapToGrid(n: number): number {
+  return Math.round(n / NODE_SIZE_GRID) * NODE_SIZE_GRID;
+}
 
 type Slot = { name?: string; label?: string; [k: string]: unknown };
 
@@ -269,11 +277,18 @@ function snapToSize(node: CollapseTargetNode, targetH: number): void {
   // Preserve the current width — collapse should only affect height.
   // Some hosts (ComfyUI) widen nodes manually past computeSize's
   // suggested width; respecting that avoids visible width snap-back.
-  const targetW = node.size[0];
+  // Snap both axes: targetH (from forceResize) is already snapped, but
+  // the current width can drift off-grid via cumulative setSize calls
+  // or restored workflow JSON. Snapping here lands the collapse end
+  // on the same lattice the widget autosize uses, so pushSize won't
+  // fire a second corrective setSize a moment later — the visible
+  // "size then snap" two-step the user reported.
+  const targetW = snapToGrid(node.size[0]);
+  const snappedH = snapToGrid(targetH);
   if (typeof node.setSize === "function") {
-    node.setSize([targetW, targetH]);
+    node.setSize([targetW, snappedH]);
   } else {
-    node.size[1] = targetH;
+    node.size[1] = snappedH;
   }
   node.setDirtyCanvas?.(true, true);
 }
@@ -286,7 +301,12 @@ function snapToSize(node: CollapseTargetNode, targetH: number): void {
 function forceResize(node: CollapseTargetNode, opts: { animate?: boolean } = {}): void {
   if (!node.computeSize) return;
   const next = node.computeSize();
-  const h = (next as { 1: number })[1];
+  // Snap the height target at source so the animation tween ends on
+  // the same 10px grid the widget's autosize lands on. Otherwise the
+  // tween would settle at an off-grid pixel, pushSize would fire a
+  // corrective setSize a microtask later, and the user would see
+  // "animation finishes here, then jumps to grid."
+  const h = snapToGrid((next as { 1: number })[1]);
   if (opts.animate === false) snapToSize(node, h);
   else animateResize(node, h);
 }
