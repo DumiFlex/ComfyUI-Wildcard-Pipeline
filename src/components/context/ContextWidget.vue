@@ -2423,7 +2423,15 @@ function onDragEnd() {
             bundles: reconcileBundleRanges(list, curBundles),
           };
         } else {
-          const filtered = value.value.modules.filter((m) => m.id !== ds.module.id);
+          // Fallback when sourceIdx was invalidated. Target the
+          // specific row by _uid — `m.id` is the library uuid shared
+          // by siblings, so filtering by it would erase every sibling
+          // sharing the dragged module's library entry. Library-id
+          // fallback only for pre-_uid migration entries.
+          const dragUid = ds.module._uid;
+          const filtered = dragUid
+            ? value.value.modules.filter((m) => m._uid !== dragUid)
+            : value.value.modules.filter((m) => m.id !== ds.module.id);
           value.value = {
             ...value.value,
             modules: filtered,
@@ -2690,9 +2698,18 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
 
   if (ds.kind === "module" && ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
+    // Fallback resolution when sourceIdx was invalidated (e.g. a
+    // sibling above the dragged row was removed mid-drag). Prefer
+    // matching the per-instance _uid so the right sibling moves —
+    // matching `m.id` (library uuid) would hit the FIRST sibling and
+    // silently move the wrong row. Library-id fallback kept for
+    // pre-_uid migration entries.
+    const dragUid = ds.module._uid;
     const fromIdx = ds.sourceIdx >= 0 && ds.sourceIdx < list.length
       ? ds.sourceIdx
-      : list.findIndex((m) => m.id === ds.module.id);
+      : dragUid
+        ? list.findIndex((m) => m._uid === dragUid)
+        : list.findIndex((m) => m.id === ds.module.id);
     if (fromIdx < 0) return;
     const [moved] = list.splice(fromIdx, 1);
     let ii: number;
