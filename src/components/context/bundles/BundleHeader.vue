@@ -26,13 +26,29 @@ const props = withDefaults(
      *  hasn't yet propagated locally via reset. Resolved by the
      *  caller using the polled `bundleHashes` map. */
     libraryDrifted?: boolean;
+    /** Master-toggle state for the children's `instance.internal`
+     *  flag. "all" → every child is internal (button shows pressed).
+     *  "none" → no child is internal (button shows neutral).
+     *  "partial" → mixed; button shows half-pressed and resolving the
+     *  click sets all to internal. Caller (ContextWidget) computes
+     *  this by scanning the bundle's child range. */
+    internalState?: "all" | "none" | "partial";
+    /** Master-toggle state for `instance.locked_seed` over the
+     *  bundle's seed-lockable children (wildcards + pipelines).
+     *  Same tri-state semantics as `internalState`. `null` when the
+     *  bundle has no lockable children — the lock button stays
+     *  hidden in that case so non-applicable bundles don't show a
+     *  control that would no-op. */
+    lockState?: "all" | "none" | "partial" | null;
   }>(),
-  { color: null, driftedCount: 0, libraryDrifted: false },
+  { color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null },
 );
 
 const emit = defineEmits<{
   (e: "toggle-collapse"): void;
   (e: "toggle-enabled", next: boolean): void;
+  (e: "toggle-internal"): void;
+  (e: "toggle-lock"): void;
   (e: "remove"): void;
   (e: "contextmenu", ev: MouseEvent): void;
   (e: "dragstart", ev: DragEvent): void;
@@ -142,6 +158,47 @@ const summary = computed(() => {
         title="Library entry has been edited since this bundle was inserted. Right-click → Reset to library.">library updated</span>
     </span>
     <span class="wp-bundle-summary">{{ summary }}</span>
+    <!-- Master toggles: cascade the per-child internal / seed-lock
+         flag across every child in the bundle. Tri-state visual:
+         pressed = "all", neutral = "none", half-pressed = "partial".
+         Click semantics: anything-other-than-all → set all on;
+         all → clear all (matches the "click pulls everything to the
+         lit state, click again to clear" pattern users already know
+         from per-card toggles). Lock button hides when the bundle
+         has no lockable children. -->
+    <button
+      type="button"
+      class="wp-btn--icon-sm wp-btn--accent wp-bundle-action"
+      :class="{
+        'is-active': internalState === 'all',
+        'is-partial': internalState === 'partial',
+      }"
+      draggable="false"
+      :title="internalState === 'all'
+        ? 'Clear internal on all children'
+        : internalState === 'partial'
+          ? 'Mark all children internal (some are already)'
+          : 'Mark all children internal — hides them from PromptAssembler'"
+      :aria-label="`toggle internal on all children of ${name}`"
+      @click.stop="emit('toggle-internal')"
+    ><i class="pi pi-globe" aria-hidden="true" /></button>
+    <button
+      v-if="lockState !== null"
+      type="button"
+      class="wp-btn--icon-sm wp-btn--warn wp-bundle-action"
+      :class="{
+        'is-locked': lockState === 'all',
+        'is-partial': lockState === 'partial',
+      }"
+      draggable="false"
+      :title="lockState === 'all'
+        ? 'Unlock seeds on all lockable children'
+        : lockState === 'partial'
+          ? 'Lock seeds on all lockable children (some are already locked)'
+          : 'Lock seeds on all lockable children — freezes each at its current roll'"
+      :aria-label="`toggle seed lock on all lockable children of ${name}`"
+      @click.stop="emit('toggle-lock')"
+    ><i class="pi pi-lock" aria-hidden="true" /></button>
     <button
       type="button"
       class="wp-btn--icon-sm wp-btn--danger wp-bundle-action"
@@ -273,6 +330,22 @@ const summary = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Master-toggle partial state: bundle has SOME but not all children
+ * with the flag on. Reads as "in between" — half-strength accent/warn
+ * tint + dashed border. Click resolves the partial state by lighting
+ * everyone up; second click clears all. */
+.wp-btn--icon-sm.is-partial {
+  border-style: dashed !important;
+  opacity: 0.75;
+}
+.wp-btn--icon-sm.wp-btn--accent.is-partial {
+  color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 7%, transparent);
+}
+.wp-btn--icon-sm.wp-btn--warn.is-partial {
+  color: var(--wp-warn);
+  background: color-mix(in srgb, var(--wp-warn) 7%, transparent);
 }
 .wp-bundle-summary {
   font: 500 10px/1.3 var(--wp-font-sans);

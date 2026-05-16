@@ -1480,6 +1480,114 @@ function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
   return live !== bundle.inserted_at_hash;
 }
 
+/** Tri-state aggregation of `instance.internal` across a bundle's
+ *  children. Drives the master-toggle visual in BundleHeader:
+ *    - "all"     → every child has internal=true (button pressed)
+ *    - "none"    → no child has internal (button neutral)
+ *    - "partial" → mixed (button half-pressed, dashed border)
+ *
+ *  Empty bundle defaults to "none" — the button is harmless to show
+ *  but clicking it does nothing (no children to flip). */
+function bundleInternalState(bundle: BundleInstance): "all" | "none" | "partial" {
+  const mods = value.value.modules;
+  let on = 0;
+  let total = 0;
+  for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+    total++;
+    if (isInternal(mods[i])) on++;
+  }
+  if (total === 0 || on === 0) return "none";
+  if (on === total) return "all";
+  return "partial";
+}
+
+/** Same shape over `locked_seed`, but only the seed-lockable
+ *  children count. Returns `null` when the bundle has zero lockable
+ *  children — BundleHeader uses that to hide the lock button so a
+ *  bundle of fixed_values + constraints (which can't be seed-locked)
+ *  doesn't render a no-op control. */
+function bundleLockState(
+  bundle: BundleInstance,
+): "all" | "none" | "partial" | null {
+  const mods = value.value.modules;
+  let on = 0;
+  let total = 0;
+  for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+    if (!isSeedLockable(mods[i])) continue;
+    total++;
+    if (isLocked(mods[i])) on++;
+  }
+  if (total === 0) return null;
+  if (on === 0) return "none";
+  if (on === total) return "all";
+  return "partial";
+}
+
+/** Cascade `instance.internal` across every child of a bundle.
+ *  Click semantics: anything-other-than-all → set all on; all → clear
+ *  all. Mirrors the per-card toggle pattern (toggleInternalOnCard)
+ *  but applied to a range. The internal flag itself is dropped on
+ *  toggle-off so persisted JSON stays minimal, matching the per-card
+ *  fn's behaviour. */
+function toggleBundleInternal(uid: string): void {
+  const bundle = (value.value.bundles ?? []).find((b) => b._uid === uid);
+  if (!bundle) return;
+  const state = bundleInternalState(bundle);
+  const turnOn = state !== "all";
+  const list = value.value.modules.map((m, i) => {
+    if (i < bundle.start_idx || i > bundle.end_idx) return m;
+    const inst = m.instance ?? {};
+    if (turnOn) {
+      if (inst.internal) return m;
+      return { ...m, instance: { ...inst, internal: true } };
+    } else {
+      if (!inst.internal) return m;
+      const { internal: _drop, ...rest } = inst;
+      void _drop;
+      return { ...m, instance: rest };
+    }
+  });
+  commitModules(list);
+}
+
+/** Cascade seed lock across every seed-lockable child of a bundle.
+ *  Lock uses the same fallback chain as toggleLockOnCard: the
+ *  per-instance last-used seed (`lastUsedSeedReader(_uid)`), the
+ *  cold-start `_ui.last_locked_seed`, then 0. Non-lockable children
+ *  are passed through untouched. */
+function toggleBundleLock(uid: string): void {
+  const bundle = (value.value.bundles ?? []).find((b) => b._uid === uid);
+  if (!bundle) return;
+  const state = bundleLockState(bundle);
+  if (state === null) return;
+  const turnOn = state !== "all";
+  const list = value.value.modules.map((m, i) => {
+    if (i < bundle.start_idx || i > bundle.end_idx) return m;
+    if (!isSeedLockable(m)) return m;
+    const inst = m.instance ?? {};
+    if (turnOn) {
+      if (typeof inst.locked_seed === "number") return m;
+      let fallback: number;
+      const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
+      if (typeof lastUsed === "number") fallback = lastUsed;
+      else if (typeof inst._ui?.last_locked_seed === "number") fallback = inst._ui.last_locked_seed;
+      else fallback = 0;
+      return {
+        ...m,
+        instance: {
+          ...inst,
+          locked_seed: fallback,
+          _ui: { ...inst._ui, last_locked_seed: fallback },
+        },
+      };
+    } else {
+      if (typeof inst.locked_seed !== "number") return m;
+      return { ...m, instance: { ...inst, locked_seed: null } };
+    }
+  });
+  commitModules(list);
+}
+
 /** Non-empty array helper — null/undefined/empty all read as "no override". */
 function nonEmptyArr(v: unknown): boolean {
   return Array.isArray(v) && v.length > 0;
@@ -3305,8 +3413,12 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             :child-count="item.children!.length"
             :drifted-count="bundleChildDriftCount(item.bundle!)"
             :library-drifted="isBundleLibraryDrifted(item.bundle!)"
+            :internal-state="bundleInternalState(item.bundle!)"
+            :lock-state="bundleLockState(item.bundle!)"
             @toggle-collapse="toggleBundleCollapsed(item.bundle!._uid)"
             @toggle-enabled="(next) => toggleBundleEnabled(item.bundle!._uid, next)"
+            @toggle-internal="toggleBundleInternal(item.bundle!._uid)"
+            @toggle-lock="toggleBundleLock(item.bundle!._uid)"
             @remove="removeBundle(item.bundle!._uid)"
             @contextmenu="(ev) => openBundleContextMenu(ev, item.bundle!._uid)"
             @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
