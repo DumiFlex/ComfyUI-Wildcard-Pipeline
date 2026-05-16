@@ -109,6 +109,7 @@ const SETTING_ID_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 const SETTING_ID_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
 const SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE = "wildcardPipeline.behavior.confirmDestructiveBundle";
 const SETTING_ID_BUNDLE_MASTER_SCOPE = "wildcardPipeline.behavior.bundleMasterScope";
+const SETTING_ID_BUNDLE_COLLAPSED = "wildcardPipeline.display.bundleCollapsedByDefault";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -210,6 +211,12 @@ const state = reactive<{
    *  committing. When false, the op runs immediately and falls back
    *  to the toast Undo for recovery. */
   confirmDestructiveBundle: boolean;
+  /** When true, bundles inserted from the library start with their
+   *  `collapsed` flag set so the frame renders header-only. Companion
+   *  to `collapsedByDefault` (modules) — kept separate because bundles
+   *  are usually 3-8 children deep and users tend to want a different
+   *  default for them than for individual modules. */
+  bundleCollapsedByDefault: boolean;
   /** "applicable-only" — bundle master toggles only flip children
    *  whose kind supports the flag (default). "cascade-all" — flip
    *  every child regardless; lets advanced users force the flag onto
@@ -233,6 +240,7 @@ const state = reactive<{
   colorIntensity: "standard",
   confirmDestructiveBundle: true,
   bundleMasterScope: "applicable-only",
+  bundleCollapsedByDefault: false,
 });
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -300,6 +308,7 @@ export function _resetDisplayStateForTesting(): void {
   // defaultValue); this reset is test-scoped.
   state.confirmDestructiveBundle = false;
   state.bundleMasterScope = "applicable-only";
+  state.bundleCollapsedByDefault = false;
 }
 
 /**
@@ -374,6 +383,10 @@ export function getConfirmDestructiveBundle(): boolean {
 
 export function getBundleMasterScope(): BundleMasterScope {
   return state.bundleMasterScope;
+}
+
+export function getBundleCollapsedByDefault(): boolean {
+  return state.bundleCollapsedByDefault;
 }
 
 export function getCollapseMode(): CollapseMode {
@@ -573,6 +586,8 @@ export function applyDisplayPrefs(app: AppLike): void {
     app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_MASTER_SCOPE),
     "applicable-only",
   );
+  state.bundleCollapsedByDefault =
+    app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_COLLAPSED) === true;
   // Phase 3b — collapse-stack mode. Pure Vue state (no body class) since
   // the behavior is JS-driven (toggleCollapsed reads via getCollapseMode).
   state.collapseMode = asCollapseMode(app.extensionManager?.setting?.get(SETTING_ID_COLLAPSE_MODE), "independent");
@@ -867,8 +882,8 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       name: "Collapse new modules by default",
       type: "boolean",
       defaultValue: false,
-      tooltip: "New modules render with body hidden (header only).",
-      category: ["Wildcard Pipeline", "Display", "Collapse default"],
+      tooltip: "Modules added via the picker render with body hidden (header only). Bundles have their own setting below.",
+      category: ["Wildcard Pipeline", "Display", "Collapse modules default"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.collapsedByDefault;
@@ -879,6 +894,27 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             severity: "info",
             singletonKey: "wp-collapsed-default",
           });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_BUNDLE_COLLAPSED,
+      name: "Collapse new bundles by default",
+      type: "boolean",
+      defaultValue: false,
+      tooltip: "Bundles inserted from the library render with the frame collapsed (header only). Independent from the modules collapse-default since bundles usually carry 3-8 children and users often want a different default there.",
+      category: ["Wildcard Pipeline", "Display", "Collapse bundles default"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.bundleCollapsedByDefault;
+        state.bundleCollapsedByDefault = next;
+        if (bootCompleted && changed) {
+          pushToast(
+            next
+              ? "New bundles will start collapsed."
+              : "New bundles will start expanded.",
+            { severity: "info", singletonKey: "wp-bundle-collapsed-default" },
+          );
         }
       },
     },

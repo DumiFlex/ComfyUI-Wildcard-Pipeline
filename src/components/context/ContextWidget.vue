@@ -58,7 +58,11 @@ import {
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
-import { getBundleMasterScope, getConfirmDestructiveBundle } from "../../extension/settings";
+import {
+  getBundleCollapsedByDefault,
+  getBundleMasterScope,
+  getConfirmDestructiveBundle,
+} from "../../extension/settings";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 
 const props = withDefaults(defineProps<{
@@ -464,6 +468,10 @@ async function onPickBundle(bundleId: string): Promise<void> {
     };
     const insertIdx = value.value.modules.length;
     const { modulesToSplice, bundleInstance } = buildBundleInsertion(libEntry, insertIdx);
+    // Honor "Collapse new bundles by default". Default false keeps
+    // bundles open on insert (existing behaviour); when true, stamp
+    // the collapsed flag so the frame mounts header-only.
+    if (getBundleCollapsedByDefault()) bundleInstance.collapsed = true;
     // Mutate via spread to keep the ref's identity stable + trigger
     // Vue reactivity. modules[] gets the new rows at the tail, bundles[]
     // gets the new instance.

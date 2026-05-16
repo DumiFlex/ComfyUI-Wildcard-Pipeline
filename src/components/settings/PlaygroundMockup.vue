@@ -42,25 +42,43 @@ interface ModuleState {
   collapsed: boolean;
 }
 
+interface BundleState {
+  enabled: boolean;
+  collapsed: boolean;
+  /** Master-toggle ON state for the lock cascade. Mockup-only — the
+   *  real bundle aggregates across children. */
+  lockAll: boolean;
+  /** Master-toggle ON state for the internal cascade. */
+  internalAll: boolean;
+}
+
 type ModuleKey = "m1" | "m2" | "m3" | "m4";
 
 // Per-module enable + collapse state. Defaults match the original
 // static markup: first three start enabled + expanded; the fourth
 // starts disabled + collapsed so the user immediately sees both
-// styles side-by-side.
+// styles side-by-side. Bundle starts expanded with the library-drift
+// chip showing so the bundle-side surface (drift indicator + master
+// toggle row) is visible without interaction.
 const state = reactive<{
   m1: ModuleState;
   m2: ModuleState;
   m3: ModuleState;
   m4: ModuleState;
+  bundle: BundleState;
 }>({
   m1: { enabled: true,  collapsed: false },
   m2: { enabled: true,  collapsed: false },
   m3: { enabled: true,  collapsed: false },
   m4: { enabled: false, collapsed: true },
+  bundle: { enabled: true, collapsed: false, lockAll: false, internalAll: false },
 });
 
 const allKeys: ModuleKey[] = ["m1", "m2", "m3", "m4"];
+
+function toggleBundleCollapsed(): void {
+  state.bundle.collapsed = !state.bundle.collapsed;
+}
 
 /**
  * Mirrors ContextWidget.toggleCollapsed accordion logic so the mockup
@@ -304,13 +322,89 @@ function toggleCollapsed(key: ModuleKey): void {
           </div>
         </Transition>
       </div>
+
+      <!-- 4. Bundle frame — shows the bundle-side surface so users
+           can see how the Type style / Color intensity / drift dot
+           settings render in the bundle scope. Uses a `--collapsed`
+           toggle parallel to the module rows above so flipping it
+           folds the children just like the real canvas one. -->
+      <div
+        class="wp-bundle"
+        :class="{ 'wp-bundle--collapsed': state.bundle.collapsed }"
+        style="--wp-bundle-color: #6366f1;"
+        data-bundle-header
+      >
+        <div class="wp-bundle-header">
+          <span class="wp-drag-handle" aria-hidden="true">
+            <svg
+              class="wp-drag-handle__grip"
+              viewBox="0 0 6 12"
+              width="6"
+              height="12"
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="1.5" cy="2" r="1" />
+              <circle cx="4.5" cy="2" r="1" />
+              <circle cx="1.5" cy="6" r="1" />
+              <circle cx="4.5" cy="6" r="1" />
+              <circle cx="1.5" cy="10" r="1" />
+              <circle cx="4.5" cy="10" r="1" />
+            </svg>
+          </span>
+          <button
+            class="wp-bundle-collapse"
+            type="button"
+            :title="state.bundle.collapsed ? 'Expand' : 'Collapse'"
+            @click="toggleBundleCollapsed()"
+          ><i :class="['pi', state.bundle.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
+          <label class="wp-bundle-enabled">
+            <input v-model="state.bundle.enabled" type="checkbox" />
+            <span class="wp-bundle-enabled-mark"></span>
+          </label>
+          <span class="wp-row-type-icon wp-bundle-icon" aria-hidden="true">
+            <i class="pi pi-box"></i>
+          </span>
+          <span class="wp-bundle-chip">bundle</span>
+          <span class="wp-bundle-name">Subject phrase</span>
+          <span class="wp-mod-dots">
+            <span class="wp-mod-dot wp-mod-dot--drift" aria-hidden="true"></span>
+            <span class="wp-mod-badge wp-mod-badge--drift">library updated</span>
+          </span>
+          <span class="wp-bundle-summary">3 mods</span>
+          <!-- Master toggles: lock → internal → remove (mirrors module
+               row order). Click flips the visual state for the
+               preview only; production master uses tri-state
+               aggregation across the bundle's actual children. -->
+          <button
+            class="wp-btn--icon-sm wp-btn--warn"
+            :class="{ 'is-locked': state.bundle.lockAll }"
+            type="button"
+            title="Lock all lockable children"
+            @click="state.bundle.lockAll = !state.bundle.lockAll"
+          ><i class="pi pi-lock" aria-hidden="true"></i></button>
+          <button
+            class="wp-btn--icon-sm wp-btn--accent"
+            :class="{ 'is-active': state.bundle.internalAll }"
+            type="button"
+            title="Mark all children internal"
+            @click="state.bundle.internalAll = !state.bundle.internalAll"
+          ><i class="pi pi-globe" aria-hidden="true"></i></button>
+          <button
+            class="wp-btn--icon-sm wp-btn--danger"
+            type="button"
+            title="Remove bundle"
+          ><i class="pi pi-trash" aria-hidden="true"></i></button>
+        </div>
+      </div>
     </div>
     <p class="wp-pg-mockup__hint">
       Try the toggles + chevrons — flipping enable/disable shows the
       stripe pattern and dim text; collapsing slides via the same
       transition reduce-motion neutralizes. Every density / indicator
-      / kind-style change applies live to these mockups AND your real
-      canvas modules.
+      / kind-style / type-style change applies live to these mockups
+      (modules AND bundle) AND your real canvas modules.
     </p>
   </div>
 </template>
