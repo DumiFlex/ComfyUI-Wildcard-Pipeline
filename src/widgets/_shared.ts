@@ -1,5 +1,26 @@
 import { createApp, type App, type Component } from "vue";
 
+/** One-shot style tag used by the `wp-widget--placing` class. Per
+ *  CSS spec, `pointer-events: none` on a parent only stops the parent
+ *  itself from catching events — descendants with the default `auto`
+ *  still receive them. So we need a rule that targets the host AND
+ *  every descendant during place mode. Injected once on first widget
+ *  mount; idempotent guarded by id. */
+const PLACING_STYLE_ID = "wp-widget-placing-style";
+function ensurePlacingStyle(): void {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(PLACING_STYLE_ID)) return;
+  const s = document.createElement("style");
+  s.id = PLACING_STYLE_ID;
+  s.textContent = `
+.wp-widget--placing,
+.wp-widget--placing * {
+  pointer-events: none !important;
+}
+`;
+  document.head.appendChild(s);
+}
+
 export interface DomWidget {
   element: HTMLElement;
   options?: Record<string, unknown>;
@@ -63,6 +84,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   component: Component<P>,
   options: CreateDomWidgetHostOptions<P> = {},
 ): DomWidgetHost {
+  ensurePlacingStyle();
+
   const host = document.createElement("div");
   host.classList.add("wp-widget");
   host.style.width = "100%";
@@ -71,13 +94,13 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // ComfyUI's Add Node menu, LiteGraph drops it into "place mode" — the
   // node follows the cursor until a canvas click finalizes the drop.
   // Our DOM widget sits inside the node body and would normally swallow
-  // that click (its descendants have `pointer-events: auto`), leaving
-  // the node ghosted on the cursor forever. Disable pointer-events on
-  // the host until LiteGraph fires `onAdded` (node entered a graph), so
-  // place-mode clicks fall through to the canvas. Workflow restore
-  // takes the same path: `addDOMWidget` then `graph.add` → `onAdded`
-  // fires immediately and the widget becomes interactive.
-  host.style.pointerEvents = "none";
+  // that click (its descendants get `pointer-events: auto` by default),
+  // leaving the node ghosted on the cursor forever. The `--placing`
+  // class disables pointer events on the host AND every descendant
+  // (CSS spec: pointer-events: none on a parent does NOT cascade to
+  // children that have any non-none value). Removed on `onAdded` so
+  // the widget becomes interactive once the node is placed.
+  host.classList.add("wp-widget--placing");
 
   // Inner element receives Vue's mount. Its natural (content) height is what
   // we feed back as the node's required height. Observing the outer host
@@ -122,11 +145,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   type AddedNode = { onAdded?: (this: unknown, graph: unknown) => void; graph?: unknown };
   const addedNode = node as unknown as AddedNode;
   if (addedNode.graph != null) {
-    host.style.pointerEvents = "";
+    host.classList.remove("wp-widget--placing");
   } else {
     const origOnAdded = addedNode.onAdded;
     addedNode.onAdded = function (this: unknown, graph: unknown): void {
-      host.style.pointerEvents = "";
+      host.classList.remove("wp-widget--placing");
       if (typeof origOnAdded === "function") origOnAdded.call(this, graph);
     };
   }
