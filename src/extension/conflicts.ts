@@ -391,7 +391,7 @@ export function scanConflicts(
       if (upstream.has(v) || written.has(v)) return;
       if (seenMissing.has(v)) return;
       seenMissing.add(v);
-      out.push({ moduleId: m.id, variable: v, type: "missing_template_variable", severity: "warning" });
+      out.push({ moduleId: m._uid ?? m.id, variable: v, type: "missing_template_variable", severity: "warning" });
     };
     for (const v of varReadsOf(m)) flagMissing(v);
     for (const tpl of templatesOf(m)) {
@@ -403,7 +403,7 @@ export function scanConflicts(
     for (const name of writesOf(m)) {
       if (upstream.has(name)) {
         // Intended override — surface it but don't scream.
-        out.push({ moduleId: m.id, variable: name, type: "shadows_upstream", severity: "info" });
+        out.push({ moduleId: m._uid ?? m.id, variable: name, type: "shadows_upstream", severity: "info" });
       } else if (written.has(name)) {
         const prevKind = firstWriterKind.get(name);
         const prevId = firstWriterId.get(name);
@@ -412,18 +412,18 @@ export function scanConflicts(
           // Intentional last-write-wins (like alternate rolls of the
           // same wildcard). Emit info-level shadows so the user sees
           // the layering without the false-alarm duplicate warning.
-          out.push({ moduleId: m.id, variable: name, type: "shadows_upstream", severity: "info" });
+          out.push({ moduleId: m._uid ?? m.id, variable: name, type: "shadows_upstream", severity: "info" });
         } else if (prevKind && prevKind !== m.type) {
           // Cross-kind same-node override — e.g. wildcard `$test`
           // after fixed_values `$test`. Last-write-wins by design;
           // surface as info so the user sees the layering without
           // the duplicate-variable warning.
-          out.push({ moduleId: m.id, variable: name, type: "shadows_upstream", severity: "info" });
+          out.push({ moduleId: m._uid ?? m.id, variable: name, type: "shadows_upstream", severity: "info" });
         } else {
           // Same-kind same-node duplicate (two wildcards both
           // writing `$color`, two fixed_values rows etc.) — almost
           // always a config bug. Keep the warning.
-          out.push({ moduleId: m.id, variable: name, type: "duplicate_variable", severity: "warning" });
+          out.push({ moduleId: m._uid ?? m.id, variable: name, type: "duplicate_variable", severity: "warning" });
         }
       } else {
         written.add(name);
@@ -462,7 +462,7 @@ export function scanConflicts(
         const inDownstream = downstreamUuids.has(srcId);
         if (inLocal && (localIdx as number) >= i) {
           out.push({
-            moduleId: m.id,
+            moduleId: m._uid ?? m.id,
             variable: srcId,
             type: "constraint_source_after_self",
             severity: "warning",
@@ -472,14 +472,14 @@ export function scanConflicts(
           // a more specific signal than the catch-all "missing" so
           // the user knows where to look.
           out.push({
-            moduleId: m.id,
+            moduleId: m._uid ?? m.id,
             variable: srcId,
             type: "constraint_source_in_downstream",
             severity: "warning",
           });
         } else if (!inLocal && !inUpstream && !inDownstream) {
           out.push({
-            moduleId: m.id,
+            moduleId: m._uid ?? m.id,
             variable: srcId,
             type: "constraint_source_missing",
             severity: "warning",
@@ -498,14 +498,14 @@ export function scanConflicts(
         const inDownstream = downstreamUuids.has(tgtId);
         if (inLocal && (localIdx as number) <= i) {
           out.push({
-            moduleId: m.id,
+            moduleId: m._uid ?? m.id,
             variable: tgtId,
             type: "constraint_target_before_self",
             severity: "warning",
           });
         } else if (inUpstream) {
           out.push({
-            moduleId: m.id,
+            moduleId: m._uid ?? m.id,
             variable: tgtId,
             type: "constraint_target_in_upstream",
             severity: "warning",
@@ -516,7 +516,7 @@ export function scanConflicts(
           // downstream walker now lets us distinguish — only flag
           // when truly unfindable.
           out.push({
-            moduleId: m.id,
+            moduleId: m._uid ?? m.id,
             variable: tgtId,
             type: "constraint_target_missing",
             severity: "warning",
