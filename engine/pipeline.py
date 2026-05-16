@@ -176,10 +176,18 @@ class PipelineEngine:
             # Normalise id/type/enabled reads to work for both dicts and objects.
             if isinstance(module, dict):
                 _module_id = module.get("id", "")
+                # Per-instance uid distinct from the library uuid `id`.
+                # Siblings (same library entry instantiated twice) share
+                # `id` but each has its own `_uid`; trace consumers that
+                # need per-row state (lock-fallback, per-instance seed
+                # display) key by `_uid`. Defaults to empty string when
+                # the entry pre-dates the `_uid` migration.
+                _module_uid = module.get("_uid", "") or ""
                 _module_type_raw = module.get("type", None) or ""
                 _module_enabled = module.get("enabled", True)
             else:
                 _module_id = getattr(module, "id", "")
+                _module_uid = getattr(module, "_uid", "") or ""
                 _module_type_raw = getattr(module, "type", None) or ""
                 _module_enabled = getattr(module, "enabled", True)
 
@@ -191,6 +199,7 @@ class PipelineEngine:
                 meta = _extract_static_meta(module)
                 ctx["__wp_trace__"].append({
                     "id": _module_id,
+                    "_uid": _module_uid,
                     "type": _module_type_raw,
                     "enabled": False,
                     "status": "skipped_disabled",
@@ -229,6 +238,7 @@ class PipelineEngine:
                 meta = _extract_static_meta(module)
                 ctx["__wp_trace__"].append({
                     "id": _module_id,
+                    "_uid": _module_uid,
                     "type": module_type,
                     "enabled": True,
                     "status": "failed",
@@ -256,6 +266,7 @@ class PipelineEngine:
                 )
                 ctx["__wp_trace__"].append({
                     "id": _module_id,
+                    "_uid": _module_uid,
                     "type": module_type,
                     "enabled": True,
                     "status": "skipped_unknown_type",
@@ -286,6 +297,7 @@ class PipelineEngine:
                 })
                 ctx["__wp_trace__"].append({
                     "id": _module_id,
+                    "_uid": _module_uid,
                     "type": module_type,
                     "enabled": True,
                     "status": "failed",
@@ -332,6 +344,7 @@ class PipelineEngine:
                 effective_seed = int(ctx.get("__wp_node_seed__", 0) or 0)
             ctx["__wp_trace__"].append({
                 "id": _module_id,
+                "_uid": _module_uid,
                 "type": module_type,
                 "enabled": True,
                 "status": "ok",

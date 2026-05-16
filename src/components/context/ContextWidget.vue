@@ -1385,8 +1385,10 @@ watch(
  *  `_ui.last_locked_seed` so the next toggle-on has a fallback.
  *  On → fallback chain (per-module priority so re-locking captures
  *  what THIS specific wildcard actually rolled with):
- *    1. lastUsedSeedReader(m.id) — seed THIS wildcard used last
+ *    1. lastUsedSeedReader(m._uid) — seed THIS instance used last
  *       run (locked_seed if it was locked, else chain seed).
+ *       Keyed by per-instance _uid so siblings sharing m.id don't
+ *       collapse to one value.
  *       Refreshes after every queue. Handles the
  *       lock→run→unlock→lock case correctly: the locked-and-then-
  *       unlocked wildcard restores to ITS locked seed, not the
@@ -1403,7 +1405,12 @@ function toggleLockOnCard(idx: number) {
     nextInst = { ...inst, locked_seed: null };
   } else {
     let fallback: number;
-    const lastUsed = props.lastUsedSeedReader?.(m.id);
+    // Read by per-instance `_uid` — sibling rows share `m.id` (library
+    // uuid) so id-keyed reads would return the same value for every
+    // sibling regardless of which one rolled last. Engine trace now
+    // emits `_uid` per entry; `module_seeds` is keyed by it. Falls back
+    // to `m.id` for pre-`_uid` migration entries.
+    const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
     if (typeof lastUsed === "number") {
       fallback = lastUsed;
     } else if (typeof inst._ui?.last_locked_seed === "number") {
