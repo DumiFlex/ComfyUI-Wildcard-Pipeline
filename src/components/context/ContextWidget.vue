@@ -450,11 +450,6 @@ function openBundlePicker() {
  *  `value` ref triggers the standard write-back + assembler refresh
  *  path. */
 async function onPickBundle(bundleId: string): Promise<void> {
-  // Snapshot the full widget value before mutating so the Undo toast
-  // below can restore in a single assignment. `value.value` is a
-  // shallow object; modules/bundles are array refs that we always
-  // replace immutably elsewhere, so the captured ref stays valid.
-  const prevValue = value.value;
   try {
     const entry = await api.bundles.get(bundleId);
     const libEntry: BundleLibraryEntry = {
@@ -512,13 +507,27 @@ async function onPickBundle(bundleId: string): Promise<void> {
         modulesContainer.value,
       );
     }
+    // Delta-undo capture: just the _uids we added. Undo filters
+    // them out of whatever modules/bundles arrays look like at click
+    // time. Composes correctly with any other op's Undo regardless of
+    // click order — full-snapshot restore would overwrite a sibling
+    // op's state.
+    const insertedModuleUids = new Set(splice.map((c) => c._uid).filter((u): u is string => !!u));
+    const insertedBundleUid = bundleInstance._uid;
     pushToast(`Inserted bundle "${entry.name}"`, {
       severity: "success",
       lifeMs: 5000,
       action: {
         label: "Undo",
         onSelect: () => {
-          value.value = prevValue;
+          const list = value.value.modules.filter(
+            (m) => !m._uid || !insertedModuleUids.has(m._uid),
+          );
+          const curBundles = value.value.bundles ?? [];
+          const nextBundlesArr = curBundles.filter(
+            (b) => b._uid !== insertedBundleUid,
+          );
+          commitModules(list, nextBundlesArr);
         },
       },
     });
@@ -632,12 +641,18 @@ async function removeBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  // Snapshot pre-mutation so the toast Undo can restore the bundle +
-  // its children in a single immutable assignment. Captures the
-  // bundle name too because the bundle instance is gone by the time
-  // the toast renders.
-  const prevValue = value.value;
   const bundleName = target.name || "bundle";
+  // Delta-undo capture: keep the actual child refs (with bundle_origin
+  // intact) so re-insertion restores complete module shape, plus an
+  // anchor `_uid` for the module that NOW sits immediately after the
+  // bundle. Splicing relative to that anchor on undo lands the
+  // restored children near their original position even if a sibling
+  // op moved things around between remove and Undo. Full-snapshot
+  // restore breaks composition: undoing two removes out of order
+  // would leave only the last-clicked snapshot's effect intact.
+  const removedChildren = value.value.modules.slice(target.start_idx, target.end_idx + 1);
+  const anchorAfter = value.value.modules[target.end_idx + 1]?._uid ?? null;
+  const restoredBundle = target;
 
   // Suppress legacy wp-list-move + leave-active CSS immediately so any
   // downstream layout shifts during the fade don't double-animate via
@@ -681,7 +696,25 @@ async function removeBundle(uid: string): Promise<void> {
     action: {
       label: "Undo",
       onSelect: () => {
-        value.value = prevValue;
+        // Find the anchor in current state. If it moved or vanished,
+        // fall back to end-of-list. Splice children + restore the
+        // BundleInstance; reconcile pins the new range via the
+        // children's bundle_origin field.
+        const current = value.value.modules;
+        const anchorIdx = anchorAfter
+          ? current.findIndex((m) => m._uid === anchorAfter)
+          : -1;
+        const insertAt = anchorIdx >= 0 ? anchorIdx : current.length;
+        const list = [
+          ...current.slice(0, insertAt),
+          ...removedChildren,
+          ...current.slice(insertAt),
+        ];
+        const curBundles = value.value.bundles ?? [];
+        const nextBundlesArr = curBundles.some((b) => b._uid === restoredBundle._uid)
+          ? curBundles
+          : [...curBundles, restoredBundle];
+        commitModules(list, nextBundlesArr);
       },
     },
   });
@@ -695,11 +728,6 @@ async function detachBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  // Snapshot pre-detach so the Undo toast restores the bundle frame
-  // + each child's bundle_origin field. We replace modules immutably
-  // (map → ... ) so the captured ref's children retain their original
-  // bundle_origin values.
-  const prevValue = value.value;
   const bundleName = target.name || "bundle";
   // Phase B.6 polish: fade the bundle wrapper out via --leaving before
   // the splice. Symmetry with removeBundle — wrapper disappears with a
@@ -709,8 +737,19 @@ async function detachBundle(uid: string): Promise<void> {
     await withLeaveAnimation(uid, scope, () => {});
   }
   const flipSnap = captureFlipSnapshot();
+  // Track which children we cleared `bundle_origin` on. Keyed by
+  // per-instance _uid so the Undo path can find the same rows even
+  // if they've moved since detach — full-snapshot restore breaks the
+  // moment a sibling op (another detach, a row move, a remove) lands
+  // between the detach and its Undo: the snapshot reflects that
+  // sibling's pre-state too and the user loses the sibling op's
+  // effect. Delta-undo only re-stamps these specific children, so
+  // each detach's Undo composes with any other op's Undo regardless
+  // of the click order.
+  const detachedChildUids = new Set<string>();
   const nextModules = value.value.modules.map((m, idx) => {
     if (idx < target.start_idx || idx > target.end_idx) return m;
+    if (m._uid) detachedChildUids.add(m._uid);
     // Strip bundle_origin from this child; spread so other fields
     // survive untouched.
     const next = { ...m } as ModuleEntry & { bundle_origin?: string };
@@ -718,6 +757,10 @@ async function detachBundle(uid: string): Promise<void> {
     return next;
   });
   const remainingBundles = bundles.filter((b) => b._uid !== uid);
+  // Capture the BundleInstance as it was BEFORE the strip so Undo can
+  // reinsert the original library_id, color, name, collapsed flag,
+  // inserted_at_hash, etc. without re-fetching from the library API.
+  const detachedBundle = target;
   commitModules(nextModules, remainingBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
@@ -727,7 +770,23 @@ async function detachBundle(uid: string): Promise<void> {
     action: {
       label: "Undo",
       onSelect: () => {
-        value.value = prevValue;
+        // Re-stamp bundle_origin on the children currently matching
+        // the tracked _uids — operates on whatever state the widget is
+        // in now, NOT on a snapshot. If some children have been moved
+        // apart since detach, reconcile will see them as non-contiguous
+        // and dissolve the bundle naturally. That's a degradation, not
+        // a corruption — sibling ops keep their effects.
+        const list = value.value.modules.map((m) => {
+          if (!m._uid || !detachedChildUids.has(m._uid)) return m;
+          return { ...m, bundle_origin: detachedBundle._uid } as ModuleEntry & { bundle_origin?: string };
+        });
+        const currentBundles = value.value.bundles ?? [];
+        // Re-insert the BundleInstance only if it isn't already back
+        // (idempotent — guards against double-click Undo).
+        const nextBundlesArr = currentBundles.some((b) => b._uid === detachedBundle._uid)
+          ? currentBundles
+          : [...currentBundles, detachedBundle];
+        commitModules(list, nextBundlesArr);
       },
     },
   });
@@ -1991,6 +2050,13 @@ async function removeModule(idx: number): Promise<void> {
   // current bundles[]; a dissolved single-child bundle would leave
   // the restored module orphaned outside the frame.
   const prevBundles = value.value.bundles ?? [];
+  // Anchor for Undo: the _uid of the module that NOW sits at
+  // `idx + 1` (i.e. the neighbor immediately after the row we're
+  // about to remove). Splicing relative to this anchor on Undo lands
+  // the restored row in the right slot even if sibling ops shifted
+  // things between remove and click. Falls back to clamped idx when
+  // the anchor is gone too — degrades gracefully rather than failing.
+  const anchorAfter = value.value.modules[idx + 1]?._uid ?? null;
   const flipSnap = captureFlipSnapshot();
   const next = [...value.value.modules];
   next.splice(idx, 1);
@@ -2029,10 +2095,20 @@ async function removeModule(idx: number): Promise<void> {
         // that happened above a bundle would leave bundles[] stale
         // and `topLevelItems` would slurp the wrong children — the
         // same shift bug the drag-drop paths had.
+        // Resolve insert point via the anchor _uid; fall back to the
+        // captured idx (clamped). Splicing here works regardless of
+        // sibling ops that may have shifted modules since remove.
+        const findAnchor = (): number => {
+          if (anchorAfter) {
+            const i = value.value.modules.findIndex((m) => m._uid === anchorAfter);
+            if (i >= 0) return i;
+          }
+          return Math.min(idx, value.value.modules.length);
+        };
         if (restoreUid && scope) {
           await withEnterAnimation(restoreUid, scope, () => {
             const list = [...value.value.modules];
-            list.splice(Math.min(idx, list.length), 0, removed);
+            list.splice(findAnchor(), 0, removed);
             // Pass prevBundles so a single-child bundle that dissolved
             // when this module left gets re-added by reconcile — the
             // restored module's bundle_origin field still points at
@@ -2042,7 +2118,7 @@ async function removeModule(idx: number): Promise<void> {
           });
         } else {
           const list = [...value.value.modules];
-          list.splice(Math.min(idx, list.length), 0, removed);
+          list.splice(findAnchor(), 0, removed);
           commitModules(list, prevBundles);
         }
       },
@@ -2095,18 +2171,22 @@ async function duplicateModule(idx: number): Promise<void> {
       onSelect: async () => {
         const scope = modulesContainer.value;
         const dupUid = copy._uid;
-        // Splice the duplicate back out + reconcile so bundles below
-        // the removal point shift back by one. Without reconcile,
-        // their start_idx/end_idx would still claim the post-insert
-        // indices and the top-level walker would mis-render bundle
-        // membership — same class of bug as the drag/drop paths.
+        // Filter by the duplicate's _uid instead of splicing at the
+        // captured idx. The captured `i + 1` would point at the wrong
+        // row if another op (a sibling Undo, a row move, a remove)
+        // shifted modules between the duplicate and its Undo. _uid is
+        // stable per instance, so the undo composes with any sibling
+        // op regardless of click order.
         if (dupUid && scope) {
           await withLeaveAnimation(dupUid, scope, () => {
-            const cur = [...value.value.modules];
-            cur.splice(i + 1, 1);
-            commitModules(cur);
+            commitModules(value.value.modules.filter((m) => m._uid !== dupUid));
           });
+        } else if (dupUid) {
+          commitModules(value.value.modules.filter((m) => m._uid !== dupUid));
         } else {
+          // No _uid → pre-migration entry. Best-effort: splice at the
+          // recorded idx, accepting that sibling ops may have shifted
+          // things. Same risk as before; we degrade rather than fail.
           const cur = [...value.value.modules];
           cur.splice(i + 1, 1);
           commitModules(cur);
