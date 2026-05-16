@@ -1997,16 +1997,30 @@ async function removeModule(idx: number): Promise<void> {
       onSelect: async () => {
         const restoreUid = removed._uid;
         const scope = modulesContainer.value;
+        // Re-insert at idx + reconcile so any BundleInstance whose
+        // start_idx/end_idx sits at or beyond the restored position
+        // tracks the index shift. Without this, undo of a remove
+        // that happened above a bundle would leave bundles[] stale
+        // and `topLevelItems` would slurp the wrong children — the
+        // same shift bug the drag-drop paths had.
         if (restoreUid && scope) {
           await withEnterAnimation(restoreUid, scope, () => {
             const list = [...value.value.modules];
             list.splice(Math.min(idx, list.length), 0, removed);
-            value.value = { ...value.value, modules: list };
+            value.value = {
+              ...value.value,
+              modules: list,
+              bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
+            };
           });
         } else {
           const list = [...value.value.modules];
           list.splice(Math.min(idx, list.length), 0, removed);
-          value.value = { ...value.value, modules: list };
+          value.value = {
+            ...value.value,
+            modules: list,
+            bundles: reconcileBundleRanges(list, value.value.bundles ?? []),
+          };
         }
       },
     },
@@ -2062,16 +2076,29 @@ async function duplicateModule(idx: number): Promise<void> {
       onSelect: async () => {
         const scope = modulesContainer.value;
         const dupUid = copy._uid;
+        // Splice the duplicate back out + reconcile so bundles below
+        // the removal point shift back by one. Without reconcile,
+        // their start_idx/end_idx would still claim the post-insert
+        // indices and the top-level walker would mis-render bundle
+        // membership — same class of bug as the drag/drop paths.
         if (dupUid && scope) {
           await withLeaveAnimation(dupUid, scope, () => {
             const cur = [...value.value.modules];
             cur.splice(i + 1, 1);
-            value.value = { ...value.value, modules: cur };
+            value.value = {
+              ...value.value,
+              modules: cur,
+              bundles: reconcileBundleRanges(cur, value.value.bundles ?? []),
+            };
           });
         } else {
           const cur = [...value.value.modules];
           cur.splice(i + 1, 1);
-          value.value = { ...value.value, modules: cur };
+          value.value = {
+            ...value.value,
+            modules: cur,
+            bundles: reconcileBundleRanges(cur, value.value.bundles ?? []),
+          };
         }
       },
     },
