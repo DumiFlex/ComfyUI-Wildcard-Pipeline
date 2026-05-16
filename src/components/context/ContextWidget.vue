@@ -1551,14 +1551,36 @@ function toggleBundleInternal(uid: string): void {
     // onto its instance.
     if (!isInternalable(m)) return m;
     const inst = m.instance ?? {};
+    const ui = inst._ui ?? {};
     if (turnOn) {
+      // Already internal → leave it alone AND don't claim it via the
+      // master marker. The row was internal before this click; the
+      // user wants it to stay internal regardless of what the master
+      // does next. Skipping the marker means a later master OFF won't
+      // revert this row.
       if (inst.internal) return m;
-      return { ...m, instance: { ...inst, internal: true } };
+      return {
+        ...m,
+        instance: {
+          ...inst,
+          internal: true,
+          _ui: { ...ui, master_internal: true },
+        },
+      };
     } else {
-      if (!inst.internal) return m;
-      const { internal: _drop, ...rest } = inst;
+      // Master OFF: clear ONLY the rows this master previously turned
+      // on (i.e. those carrying `_ui.master_internal === true`). Rows
+      // the user marked internal individually have no marker and
+      // survive untouched. The marker itself is cleared on revert.
+      if (!ui.master_internal) return m;
+      const { internal: _drop, ...restInst } = inst;
       void _drop;
-      return { ...m, instance: rest };
+      const { master_internal: _drop2, ...restUi } = ui;
+      void _drop2;
+      return {
+        ...m,
+        instance: { ...restInst, _ui: restUi },
+      };
     }
   });
   commitModules(list);
@@ -1579,24 +1601,34 @@ function toggleBundleLock(uid: string): void {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
     if (!isSeedLockable(m)) return m;
     const inst = m.instance ?? {};
+    const ui = inst._ui ?? {};
     if (turnOn) {
+      // Already locked → don't claim via marker; the user's existing
+      // lock survives any future master OFF.
       if (typeof inst.locked_seed === "number") return m;
       let fallback: number;
       const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
       if (typeof lastUsed === "number") fallback = lastUsed;
-      else if (typeof inst._ui?.last_locked_seed === "number") fallback = inst._ui.last_locked_seed;
+      else if (typeof ui.last_locked_seed === "number") fallback = ui.last_locked_seed;
       else fallback = 0;
       return {
         ...m,
         instance: {
           ...inst,
           locked_seed: fallback,
-          _ui: { ...inst._ui, last_locked_seed: fallback },
+          _ui: { ...ui, last_locked_seed: fallback, master_lock: true },
         },
       };
     } else {
-      if (typeof inst.locked_seed !== "number") return m;
-      return { ...m, instance: { ...inst, locked_seed: null } };
+      // Only unlock rows the master previously locked. Individually-
+      // locked rows have no marker and stay locked.
+      if (!ui.master_lock) return m;
+      const { master_lock: _drop, ...restUi } = ui;
+      void _drop;
+      return {
+        ...m,
+        instance: { ...inst, locked_seed: null, _ui: restUi },
+      };
     }
   });
   commitModules(list);
@@ -1768,6 +1800,14 @@ function toggleLockOnCard(idx: number) {
     }
     nextInst = { ...inst, locked_seed: fallback, _ui: { ...inst._ui, last_locked_seed: fallback } };
   }
+  // Drop the bundle master_lock marker — the user is now hand-
+  // managing this row's lock state, so a future master OFF on the
+  // bundle should leave it alone.
+  if (nextInst._ui && nextInst._ui.master_lock) {
+    const { master_lock: _drop, ...restUi } = nextInst._ui;
+    void _drop;
+    nextInst = { ...nextInst, _ui: restUi };
+  }
   // Phase B: index-based mutation — sibling rows share `m.id`, so a
   // map-by-id pass would toggle every sibling at once. Indexing into
   // the array hits the specific instance the user clicked.
@@ -1782,13 +1822,21 @@ function toggleInternalOnCard(idx: number) {
   const m = value.value.modules[idx];
   if (!m) return;
   const inst = m.instance ?? {};
+  // Dropping the `master_internal` marker means the bundle master's
+  // OFF cascade won't revert this row — the user is now hand-managing
+  // it. Whether they're turning it on for the first time or off after
+  // the master had set it, ownership transfers here.
+  const ui = inst._ui ?? {};
+  const { master_internal: _dropMarker, ...restUi } = ui;
+  void _dropMarker;
+  const nextUi = restUi;
   let nextInst: NonNullable<ModuleEntry["instance"]>;
   if (inst.internal) {
     const { internal: _drop, ...rest } = inst;
     void _drop;
-    nextInst = rest;
+    nextInst = { ...rest, _ui: nextUi };
   } else {
-    nextInst = { ...inst, internal: true };
+    nextInst = { ...inst, internal: true, _ui: nextUi };
   }
   const list = [...value.value.modules];
   list[idx] = { ...m, instance: nextInst };

@@ -642,6 +642,19 @@ export interface ModuleEntry {
     _ui?: {
       /** Restore-on-toggle-on memory for the lock seed input. */
       last_locked_seed?: number;
+      /** True when the bundle master internal toggle was the thing
+       *  that turned `instance.internal` on for this child. Lets the
+       *  master OFF action revert ONLY the children it turned on —
+       *  rows the user had marked internal individually keep their
+       *  state. Cleared by any per-card internal toggle (the user is
+       *  now hand-managing this row) and by the master OFF op itself.
+       *  Belongs in `_ui` because it's a session/UX marker, not
+       *  semantic engine state. */
+      master_internal?: boolean;
+      /** Mirror of `master_internal` for the seed-lock master toggle.
+       *  Same lifecycle: set by master ON for rows it locked, cleared
+       *  by individual lock toggles or master OFF. */
+      master_lock?: boolean;
     };
   };
 }
