@@ -48,8 +48,12 @@ const frameColor = computed(() =>
 const summary = computed(() => {
   const word = props.childCount === 1 ? "mod" : "mods";
   const parts = [`${props.childCount} ${word}`];
+  // Library-side drift is surfaced via the `.wp-mod-badge--drift`
+  // chip ("library updated") in the markup — re-stating it here would
+  // duplicate the same signal. Per-child drift stays in the subtitle
+  // because there's no header-level dot for it (each child row owns
+  // its own).
   if (props.driftedCount > 0) parts.push(`${props.driftedCount} drifted`);
-  if (props.libraryDrifted) parts.push("library updated");
   return parts.join(" · ");
 });
 
