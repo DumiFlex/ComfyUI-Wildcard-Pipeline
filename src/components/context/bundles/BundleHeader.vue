@@ -217,7 +217,13 @@ const summary = computed(() => {
   </div>
 </template>
 
-<style scoped>
+<style>
+/* Unscoped — same rationale as ContextWidget.vue's main style block.
+ * Every selector here is `.wp-bundle-*` prefixed so collision risk
+ * with host CSS or other custom nodes is negligible, and going
+ * unscoped means the PlaygroundMockup (settings preview) can render
+ * a real-looking bundle header without us replicating the rules in
+ * another file. */
 @import "../../shared/theme.css";
 @import "../../shared/row-primitives.css";
 
