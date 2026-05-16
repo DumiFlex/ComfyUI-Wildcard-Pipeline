@@ -2,6 +2,7 @@
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
+from engine.context import strip_internals
 from engine.template import resolve_variables
 from wp_nodes.types import PipelineContext
 
@@ -34,5 +35,20 @@ class WPPromptAssembler(io.ComfyNode):
 
     @classmethod
     def execute(cls, context, template):
-        resolved = resolve_variables(template, context.context)
+        # Build the render context from the socket payload. `context.context`
+        # holds user-named vars including those flagged internal (the
+        # PIPELINE_CONTEXT socket now propagates internal vars across
+        # nodes so Combine / Derivation downstream of an internal var
+        # can still read it). `__wp_internal_flags__` rides in
+        # `context.internals` as a cross-node-survivor so this assembler
+        # can re-apply the user's "hide from prompt" intent. Merge the
+        # flag map back into the render dict, then strip_internals
+        # drops both engine `__` keys AND user-flagged internal vars
+        # before resolution — net effect: `$var` for an internal var
+        # never substitutes in the rendered prompt.
+        render_ctx = dict(context.context)
+        flags = (context.internals or {}).get("__wp_internal_flags__")
+        if isinstance(flags, dict):
+            render_ctx["__wp_internal_flags__"] = flags
+        resolved = resolve_variables(template, strip_internals(render_ctx))
         return io.NodeOutput(resolved)

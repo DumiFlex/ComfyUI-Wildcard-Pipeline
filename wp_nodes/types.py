@@ -10,7 +10,7 @@ from comfy_api.latest._io import (  # pyright: ignore[reportMissingImports]
     comfytype,
 )
 
-from engine.context import strip_internals
+from engine.context import strip_engine_internals
 from engine.modules import Module, module_from_dict
 
 
@@ -257,7 +257,16 @@ def deserialize_node_input(
 #: source's pick recorded in Context A. Listed here explicitly so
 #: future cross-node internals are an opt-in addition rather than a
 #: default-leak.
-_CROSS_NODE_INTERNAL_KEYS = ("__wp_picks__", "__wp_constraints__")
+_CROSS_NODE_INTERNAL_KEYS = (
+    "__wp_picks__",
+    "__wp_constraints__",
+    # User-marked-internal vars propagate across nodes as regular keys
+    # in `context`, but downstream PromptAssemblers need to know WHICH
+    # of those are internal so they can skip them at render time. Carry
+    # the flag map alongside picks/constraints so the next node's
+    # PromptAssembler can call `strip_internals` and re-apply the filter.
+    "__wp_internal_flags__",
+)
 
 
 def build_payload(
@@ -285,7 +294,7 @@ def build_payload(
     this_trace = ctx.get("__wp_trace__", [])
     this_warnings = ctx.get("__wp_warnings__", [])
     return ContextPayload(
-        context=strip_internals(ctx),
+        context=strip_engine_internals(ctx),
         debug={
             "upstream": upstream_debug,
             "node_seed": seed,
