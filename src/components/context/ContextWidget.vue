@@ -3584,12 +3584,18 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-bg-deep, var(--wp-bg)));
 }
 .wp-empty-hero-glyph {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0.85;
+  /* Defensive: SVG paths default to `pointer-events: visiblePainted` and
+   * the logo's painted area extends to the very edges of its 1024×1024
+   * viewBox. Keep hit-testing off the glyph regardless of layout
+   * surprises (overflow, sibling stacking, etc.) so place-mode clicks
+   * always fall through to the canvas. */
+  pointer-events: none;
 }
 .wp-empty-hero-glyph :deep(svg) {
   width: 100%;

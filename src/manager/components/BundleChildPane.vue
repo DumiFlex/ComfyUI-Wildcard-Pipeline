@@ -76,6 +76,50 @@ const headerColor = computed<string>(() => KIND_COLOR[kind.value] ?? "var(--wp-a
 function onUpdate(patch: Partial<ModuleEntry>) {
   emit("update", patch);
 }
+
+/**
+ * Constraint matrix axes + exception value suggestions derived from the
+ * snapshot's payload alone — no sibling-modules lookup here since the
+ * bundle pane doesn't have a Context-graph to scan. Mirrors the fallback
+ * path ConstraintInstanceModal already uses for cross-Context constraints.
+ */
+interface ConstraintPayload {
+  source_wildcard_id?: string;
+  target_wildcard_id?: string;
+  matrix?: Record<string, Record<string, unknown>>;
+  exceptions?: Array<{ source_value?: string; target_value?: string; source?: string; target?: string }>;
+}
+
+const constraintPayload = computed<ConstraintPayload>(
+  () => ((moduleEntry.value?.payload ?? {}) as ConstraintPayload),
+);
+
+const constraintSourceSubs = computed<string[]>(
+  () => Object.keys(constraintPayload.value.matrix ?? {}),
+);
+const constraintTargetSubs = computed<string[]>(() => {
+  const set = new Set<string>();
+  for (const row of Object.values(constraintPayload.value.matrix ?? {})) {
+    for (const k of Object.keys(row ?? {})) set.add(k);
+  }
+  return Array.from(set);
+});
+const constraintSourceValues = computed<string[]>(() => {
+  const set = new Set<string>();
+  for (const e of constraintPayload.value.exceptions ?? []) {
+    const v = e.source_value ?? e.source ?? "";
+    if (v) set.add(v);
+  }
+  return Array.from(set);
+});
+const constraintTargetValues = computed<string[]>(() => {
+  const set = new Set<string>();
+  for (const e of constraintPayload.value.exceptions ?? []) {
+    const v = e.target_value ?? e.target ?? "";
+    if (v) set.add(v);
+  }
+  return Array.from(set);
+});
 </script>
 
 <template>
@@ -164,8 +208,18 @@ function onUpdate(patch: Partial<ModuleEntry>) {
         class="wp-bpane__sections"
       >
         <ConstraintIdentitySection :module="moduleEntry" @update="onUpdate" />
-        <ConstraintMatrixSection :module="moduleEntry" @update="onUpdate" />
-        <ConstraintExceptionsSection :module="moduleEntry" @update="onUpdate" />
+        <ConstraintMatrixSection
+          :module="moduleEntry"
+          :source-subs="constraintSourceSubs"
+          :target-subs="constraintTargetSubs"
+          @update="onUpdate"
+        />
+        <ConstraintExceptionsSection
+          :module="moduleEntry"
+          :source-values="constraintSourceValues"
+          :target-values="constraintTargetValues"
+          @update="onUpdate"
+        />
       </div>
 
       <div
