@@ -1985,6 +1985,12 @@ async function removeModule(idx: number): Promise<void> {
     });
   }
 
+  // Snapshot bundles BEFORE the remove so the Undo path can restore
+  // a bundle that dissolved when its last child left. Without this,
+  // reconcile on undo can only revive bundles still present in the
+  // current bundles[]; a dissolved single-child bundle would leave
+  // the restored module orphaned outside the frame.
+  const prevBundles = value.value.bundles ?? [];
   const flipSnap = captureFlipSnapshot();
   const next = [...value.value.modules];
   next.splice(idx, 1);
@@ -2027,12 +2033,17 @@ async function removeModule(idx: number): Promise<void> {
           await withEnterAnimation(restoreUid, scope, () => {
             const list = [...value.value.modules];
             list.splice(Math.min(idx, list.length), 0, removed);
-            commitModules(list);
+            // Pass prevBundles so a single-child bundle that dissolved
+            // when this module left gets re-added by reconcile — the
+            // restored module's bundle_origin field still points at
+            // its old BundleInstance _uid, and reconcile matches it
+            // against the snapshotted entry to rebuild the range.
+            commitModules(list, prevBundles);
           });
         } else {
           const list = [...value.value.modules];
           list.splice(Math.min(idx, list.length), 0, removed);
-          commitModules(list);
+          commitModules(list, prevBundles);
         }
       },
     },
