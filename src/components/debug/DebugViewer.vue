@@ -1725,7 +1725,14 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
   margin-bottom: 2px;
 }
 .wp-dbg-trace-row:not(.wp-dbg-trace-row--head):nth-child(odd) {
-  background: color-mix(in srgb, var(--wp-bg2) 50%, transparent);
+  /* `background-color` (not the `background` shorthand) so the
+   * disabled-row diagonal stripes below (declared as `background-image`)
+   * layer on top instead of getting cleared by the shorthand reset.
+   * Specificity here is (0,3,0) vs (0,1,0) on the disabled rule, so
+   * without splitting properties zebra would win the cascade on every
+   * odd disabled row and the slashes would disappear in a 1-on-1-off
+   * pattern. */
+  background-color: color-mix(in srgb, var(--wp-bg2) 50%, transparent);
 }
 /* Status-aware row tint — error rows get a soft red wash + red strip,
  * skipped rows dim slightly so the eye snaps to "ok" rows. */
@@ -1738,13 +1745,18 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
 /* Disabled module — same dim as `--skipped` (it IS a skip variant)
  * but with a diagonal stripe pattern matching ContextWidget's
  * `.wp-module--disabled` so the user instantly recognises the row as
- * the module they manually toggled off. */
+ * the module they manually toggled off. Uses `background-image` so the
+ * zebra `background-color` above remains visible on odd rows (see
+ * specificity comment on the zebra rule). Bumped contrast: stripes
+ * use `--wp-bg4`/`--wp-bg2` (16-level diff in dark theme) instead of
+ * `--wp-bg3`/`--wp-bg2` (7-level diff) because the old pair was so
+ * subtle the slashes read as zebra striping. */
 .wp-dbg-trace-row--disabled {
   opacity: 0.55;
-  background: repeating-linear-gradient(
+  background-image: repeating-linear-gradient(
     45deg,
-    var(--wp-bg3),
-    var(--wp-bg3) 6px,
+    var(--wp-bg4),
+    var(--wp-bg4) 6px,
     var(--wp-bg2) 6px,
     var(--wp-bg2) 8px
   );
