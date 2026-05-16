@@ -26,7 +26,7 @@ export type ValidationMode = "strict" | "relaxed" | "permissive";
 export type ToastLifetime = "short" | "default" | "long" | "sticky";
 export type CollapseMode = "independent" | "accordion";
 export type ColorIntensity = "muted" | "standard" | "vivid";
-export type BundleMasterScope = "applicable-only" | "cascade-all";
+export type BundleMasterOffBehavior = "preserve-manual" | "cascade-all";
 
 /**
  * Setting widget types ComfyUI's settings panel can render natively.
@@ -108,7 +108,7 @@ const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
 const SETTING_ID_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 const SETTING_ID_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
 const SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE = "wildcardPipeline.behavior.confirmDestructiveBundle";
-const SETTING_ID_BUNDLE_MASTER_SCOPE = "wildcardPipeline.behavior.bundleMasterScope";
+const SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR = "wildcardPipeline.behavior.bundleMasterOffBehavior";
 const SETTING_ID_BUNDLE_COLLAPSED = "wildcardPipeline.display.bundleCollapsedByDefault";
 
 const MOTION_OPTIONS = [
@@ -217,11 +217,16 @@ const state = reactive<{
    *  are usually 3-8 children deep and users tend to want a different
    *  default for them than for individual modules. */
   bundleCollapsedByDefault: boolean;
-  /** "applicable-only" — bundle master toggles only flip children
-   *  whose kind supports the flag (default). "cascade-all" — flip
-   *  every child regardless; lets advanced users force the flag onto
-   *  every instance even when the engine ignores it for that kind. */
-  bundleMasterScope: BundleMasterScope;
+  /** Master-OFF cascade behaviour. "preserve-manual" — only revert
+   *  rows the master itself turned on (tracked via `_ui.master_*`
+   *  markers); rows the user marked individually keep their state.
+   *  "cascade-all" — clear every applicable row regardless of marker
+   *  (full sweep). Applicability filter (skip constraint for
+   *  internal, skip non-lockable for lock) is hardcoded and not
+   *  user-configurable — writing those flags onto kinds that don't
+   *  surface them is dead data and would only confuse downstream
+   *  tooling. */
+  bundleMasterOffBehavior: BundleMasterOffBehavior;
 }>({
   reduceMotion: "auto",
   contrast: "auto",
@@ -239,7 +244,7 @@ const state = reactive<{
   collapseMode: "independent",
   colorIntensity: "standard",
   confirmDestructiveBundle: true,
-  bundleMasterScope: "applicable-only",
+  bundleMasterOffBehavior: "preserve-manual",
   bundleCollapsedByDefault: false,
 });
 
@@ -279,11 +284,11 @@ function asColorIntensity(v: unknown, fallback: ColorIntensity): ColorIntensity 
   return v === "muted" || v === "standard" || v === "vivid" ? v : fallback;
 }
 
-function asBundleMasterScope(
+function asBundleMasterOffBehavior(
   v: unknown,
-  fallback: BundleMasterScope,
-): BundleMasterScope {
-  return v === "applicable-only" || v === "cascade-all" ? v : fallback;
+  fallback: BundleMasterOffBehavior,
+): BundleMasterOffBehavior {
+  return v === "preserve-manual" || v === "cascade-all" ? v : fallback;
 }
 
 /** Test-only: reset display preferences state to defaults. */
@@ -307,7 +312,7 @@ export function _resetDisplayStateForTesting(): void {
   // top-level reactive() initialiser + the buildSettings entry's
   // defaultValue); this reset is test-scoped.
   state.confirmDestructiveBundle = false;
-  state.bundleMasterScope = "applicable-only";
+  state.bundleMasterOffBehavior = "preserve-manual";
   state.bundleCollapsedByDefault = false;
 }
 
@@ -381,8 +386,8 @@ export function getConfirmDestructiveBundle(): boolean {
   return state.confirmDestructiveBundle;
 }
 
-export function getBundleMasterScope(): BundleMasterScope {
-  return state.bundleMasterScope;
+export function getBundleMasterOffBehavior(): BundleMasterOffBehavior {
+  return state.bundleMasterOffBehavior;
 }
 
 export function getBundleCollapsedByDefault(): boolean {
@@ -582,9 +587,9 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.newModuleDisabled = app.extensionManager?.setting?.get(SETTING_ID_NEW_DISABLED) === true;
   state.confirmDestructiveBundle =
     app.extensionManager?.setting?.get(SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE) !== false;
-  state.bundleMasterScope = asBundleMasterScope(
-    app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_MASTER_SCOPE),
-    "applicable-only",
+  state.bundleMasterOffBehavior = asBundleMasterOffBehavior(
+    app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR),
+    "preserve-manual",
   );
   state.bundleCollapsedByDefault =
     app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_COLLAPSED) === true;
@@ -1138,30 +1143,33 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
     },
     {
-      id: SETTING_ID_BUNDLE_MASTER_SCOPE,
-      name: "Bundle master toggle scope",
+      id: SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR,
+      name: "Bundle master toggle: clear behavior",
       type: "combo",
       options: [
-        { text: "Applicable only (recommended)", value: "applicable-only" },
-        { text: "Cascade to all children", value: "cascade-all" },
+        { text: "Preserve manual (recommended)", value: "preserve-manual" },
+        { text: "Cascade — clear everyone", value: "cascade-all" },
       ],
-      defaultValue: "applicable-only",
+      defaultValue: "preserve-manual",
       tooltip:
-        "Whether bundle master internal / seed-lock toggles skip kinds " +
-        "that don't support the flag (constraint for internal, " +
-        "non-wildcards for lock). Cascade-all writes the flag onto every " +
-        "child even when the engine ignores it.",
-      category: ["Wildcard Pipeline", "Runtime", "Bundle master scope"],
+        "What the bundle master ON->OFF click clears. " +
+        "Preserve manual: only revert rows the master itself turned on; " +
+        "rows the user marked internal / locked individually stay put. " +
+        "Cascade: clear every applicable row regardless of how it got " +
+        "set. Applicability (skip constraint for internal, " +
+        "skip non-lockable for lock) is hardcoded — the engine ignores " +
+        "the flag on those kinds, so writing it would be dead data.",
+      category: ["Wildcard Pipeline", "Runtime", "Bundle master clear behavior"],
       onChange: (newVal) => {
-        const next = asBundleMasterScope(newVal, "applicable-only");
-        const changed = next !== state.bundleMasterScope;
-        state.bundleMasterScope = next;
+        const next = asBundleMasterOffBehavior(newVal, "preserve-manual");
+        const changed = next !== state.bundleMasterOffBehavior;
+        state.bundleMasterOffBehavior = next;
         if (bootCompleted && changed) {
           pushToast(
             next === "cascade-all"
-              ? "Bundle master toggles will write to every child."
-              : "Bundle master toggles will skip non-applicable kinds.",
-            { severity: "info", singletonKey: "wp-bundle-master-scope" },
+              ? "Bundle master OFF will clear every applicable child."
+              : "Bundle master OFF will only revert rows it turned on.",
+            { severity: "info", singletonKey: "wp-bundle-master-off-behavior" },
           );
         }
       },

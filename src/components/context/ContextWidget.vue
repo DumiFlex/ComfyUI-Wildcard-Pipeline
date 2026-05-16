@@ -60,7 +60,7 @@ import {
 } from "./drift-store";
 import {
   getBundleCollapsedByDefault,
-  getBundleMasterScope,
+  getBundleMasterOffBehavior,
   getConfirmDestructiveBundle,
 } from "../../extension/settings";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
@@ -1625,14 +1625,14 @@ function toggleBundleInternal(uid: string): void {
   const state = bundleInternalState(bundle);
   if (state === null) return;
   const turnOn = state !== "all";
-  // Honor the "Bundle master toggle scope" setting: applicable-only
-  // skips constraint (which can't surface internal); cascade-all
-  // writes the flag regardless, which the engine ignores but lets
-  // the user blanket-mark for downstream tooling consistency.
-  const scope = getBundleMasterScope();
+  // Applicability filter is hardcoded — constraint never gets internal,
+  // and the engine ignores the flag on kinds that don't produce a
+  // binding, so writing it would be dead data. The user-configurable
+  // axis is the master-OFF behaviour below.
+  const offBehavior = getBundleMasterOffBehavior();
   const list = value.value.modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
-    if (scope !== "cascade-all" && !isInternalable(m)) return m;
+    if (!isInternalable(m)) return m;
     const inst = m.instance ?? {};
     const ui = inst._ui ?? {};
     if (turnOn) {
@@ -1640,7 +1640,7 @@ function toggleBundleInternal(uid: string): void {
       // master marker. The row was internal before this click; the
       // user wants it to stay internal regardless of what the master
       // does next. Skipping the marker means a later master OFF won't
-      // revert this row.
+      // revert this row (in preserve-manual mode).
       if (inst.internal) return m;
       return {
         ...m,
@@ -1651,11 +1651,15 @@ function toggleBundleInternal(uid: string): void {
         },
       };
     } else {
-      // Master OFF: clear ONLY the rows this master previously turned
-      // on (i.e. those carrying `_ui.master_internal === true`). Rows
-      // the user marked internal individually have no marker and
-      // survive untouched. The marker itself is cleared on revert.
-      if (!ui.master_internal) return m;
+      // Master OFF behaviour:
+      //   - preserve-manual (default): clear ONLY rows carrying
+      //     `_ui.master_internal === true`. Manual-internal rows have
+      //     no marker and survive untouched.
+      //   - cascade-all: clear every internal row regardless of
+      //     marker. User explicitly opted into the destructive sweep
+      //     via the setting.
+      if (offBehavior === "preserve-manual" && !ui.master_internal) return m;
+      if (!inst.internal) return m;
       const { internal: _drop, ...restInst } = inst;
       void _drop;
       const { master_internal: _drop2, ...restUi } = ui;
@@ -1680,19 +1684,18 @@ function toggleBundleLock(uid: string): void {
   const state = bundleLockState(bundle);
   if (state === null) return;
   const turnOn = state !== "all";
-  // Same scope honoring as toggleBundleInternal. cascade-all sets
-  // locked_seed on every child including kinds where the engine
-  // ignores it — useful for one-shot library exports where the user
-  // wants the flag stamped uniformly.
-  const scope = getBundleMasterScope();
+  // Applicability hardcoded — non-lockable kinds (constraint, pipeline)
+  // can't surface a locked_seed and the engine ignores the field on
+  // them. Master-OFF behaviour mirrors toggleBundleInternal.
+  const offBehavior = getBundleMasterOffBehavior();
   const list = value.value.modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
-    if (scope !== "cascade-all" && !isSeedLockable(m)) return m;
+    if (!isSeedLockable(m)) return m;
     const inst = m.instance ?? {};
     const ui = inst._ui ?? {};
     if (turnOn) {
       // Already locked → don't claim via marker; the user's existing
-      // lock survives any future master OFF.
+      // lock survives any future master OFF in preserve-manual mode.
       if (typeof inst.locked_seed === "number") return m;
       let fallback: number;
       const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
@@ -1708,9 +1711,10 @@ function toggleBundleLock(uid: string): void {
         },
       };
     } else {
-      // Only unlock rows the master previously locked. Individually-
-      // locked rows have no marker and stay locked.
-      if (!ui.master_lock) return m;
+      // Same dual-mode as toggleBundleInternal. cascade-all sweeps
+      // every locked row; preserve-manual only un-locks marker rows.
+      if (offBehavior === "preserve-manual" && !ui.master_lock) return m;
+      if (typeof inst.locked_seed !== "number") return m;
       const { master_lock: _drop, ...restUi } = ui;
       void _drop;
       return {
