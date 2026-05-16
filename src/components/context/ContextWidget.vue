@@ -410,6 +410,11 @@ function openBundlePicker() {
  *  `value` ref triggers the standard write-back + assembler refresh
  *  path. */
 async function onPickBundle(bundleId: string): Promise<void> {
+  // Snapshot the full widget value before mutating so the Undo toast
+  // below can restore in a single assignment. `value.value` is a
+  // shallow object; modules/bundles are array refs that we always
+  // replace immutably elsewhere, so the captured ref stays valid.
+  const prevValue = value.value;
   try {
     const entry = await api.bundles.get(bundleId);
     const libEntry: BundleLibraryEntry = {
@@ -468,6 +473,16 @@ async function onPickBundle(bundleId: string): Promise<void> {
         modulesContainer.value,
       );
     }
+    pushToast(`Inserted bundle "${entry.name}"`, {
+      severity: "success",
+      lifeMs: 5000,
+      action: {
+        label: "Undo",
+        onSelect: () => {
+          value.value = prevValue;
+        },
+      },
+    });
   } catch (e) {
     // Surface fetch / parse errors via the existing toast channel so
     // users see what went wrong without diving into devtools.
@@ -582,6 +597,12 @@ async function removeBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  // Snapshot pre-mutation so the toast Undo can restore the bundle +
+  // its children in a single immutable assignment. Captures the
+  // bundle name too because the bundle instance is gone by the time
+  // the toast renders.
+  const prevValue = value.value;
+  const bundleName = target.name || "bundle";
 
   // Suppress legacy wp-list-move + leave-active CSS immediately so any
   // downstream layout shifts during the fade don't double-animate via
@@ -623,6 +644,16 @@ async function removeBundle(uid: string): Promise<void> {
   };
   await nextTick();
   playFlipSnapshot(flipSnap);
+  pushToast(`Removed bundle "${bundleName}"`, {
+    severity: "info",
+    lifeMs: 6000,
+    action: {
+      label: "Undo",
+      onSelect: () => {
+        value.value = prevValue;
+      },
+    },
+  });
 }
 
 /** Detach bundle frame — keep children as standalone modules but
@@ -633,6 +664,12 @@ async function detachBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  // Snapshot pre-detach so the Undo toast restores the bundle frame
+  // + each child's bundle_origin field. We replace modules immutably
+  // (map → ... ) so the captured ref's children retain their original
+  // bundle_origin values.
+  const prevValue = value.value;
+  const bundleName = target.name || "bundle";
   // Phase B.6 polish: fade the bundle wrapper out via --leaving before
   // the splice. Symmetry with removeBundle — wrapper disappears with a
   // visual exit, children stay (they will rise via FLIP into the gap).
@@ -657,6 +694,16 @@ async function detachBundle(uid: string): Promise<void> {
   };
   await nextTick();
   playFlipSnapshot(flipSnap);
+  pushToast(`Detached bundle "${bundleName}"`, {
+    severity: "info",
+    lifeMs: 5000,
+    action: {
+      label: "Undo",
+      onSelect: () => {
+        value.value = prevValue;
+      },
+    },
+  });
 }
 
 /** Duplicate bundle — re-fetch the library entry + run insert
@@ -677,6 +724,10 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  // Snapshot pre-reset so the Undo toast restores any per-instance
+  // edits the user had made to children before the reset replaced
+  // them with the frozen library snapshot.
+  const prevValue = value.value;
   // No `window.confirm` — ComfyUI's host suppresses native modal APIs
   // in some runtimes (returns false silently → silent no-op). Same
   // failure mode as wrap's prompt. The op is recoverable: users can
@@ -752,6 +803,16 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
         modulesContainer.value,
       );
     }
+    pushToast(`Reset "${entry.name}" to library`, {
+      severity: "success",
+      lifeMs: 6000,
+      action: {
+        label: "Undo",
+        onSelect: () => {
+          value.value = prevValue;
+        },
+      },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushToast(`Reset failed: ${msg}`, { severity: "error" });
@@ -773,6 +834,10 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   if (!bundle) return;
   const posInBundle = idx - bundle.start_idx;
   if (posInBundle < 0) return;
+  // Snapshot pre-reset so Undo restores the child's local edits the
+  // library snapshot overwrote.
+  const prevValue = value.value;
+  const childName = m.meta?.name?.trim() || m.type;
   try {
     const entry = await api.bundles.get(bundle.library_id);
     const snapshot = entry.children[posInBundle] as Record<string, unknown> | undefined;
@@ -790,6 +855,16 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
       } as ModuleEntry;
     });
     value.value = { ...value.value, modules: nextModules };
+    pushToast(`Reset "${childName}" to bundle snapshot`, {
+      severity: "success",
+      lifeMs: 5000,
+      action: {
+        label: "Undo",
+        onSelect: () => {
+          value.value = prevValue;
+        },
+      },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushToast(`Reset failed: ${msg}`, { severity: "error" });
