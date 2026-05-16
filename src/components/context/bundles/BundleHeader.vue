@@ -30,9 +30,10 @@ const props = withDefaults(
      *  flag. "all" → every child is internal (button shows pressed).
      *  "none" → no child is internal (button shows neutral).
      *  "partial" → mixed; button shows half-pressed and resolving the
-     *  click sets all to internal. Caller (ContextWidget) computes
-     *  this by scanning the bundle's child range. */
-    internalState?: "all" | "none" | "partial";
+     *  click sets all to internal. `null` when the bundle has no
+     *  internal-applicable children (e.g. constraint-only bundle) —
+     *  the button stays hidden, same pattern as `lockState`. */
+    internalState?: "all" | "none" | "partial" | null;
     /** Master-toggle state for `instance.locked_seed` over the
      *  bundle's seed-lockable children (wildcards + pipelines).
      *  Same tri-state semantics as `internalState`. `null` when the
@@ -167,6 +168,7 @@ const summary = computed(() => {
          from per-card toggles). Lock button hides when the bundle
          has no lockable children. -->
     <button
+      v-if="internalState !== null"
       type="button"
       class="wp-btn--icon-sm wp-btn--accent wp-bundle-action"
       :class="{

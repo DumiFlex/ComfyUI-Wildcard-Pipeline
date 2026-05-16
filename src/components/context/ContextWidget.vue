@@ -1488,15 +1488,24 @@ function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
  *
  *  Empty bundle defaults to "none" — the button is harmless to show
  *  but clicking it does nothing (no children to flip). */
-function bundleInternalState(bundle: BundleInstance): "all" | "none" | "partial" {
+function bundleInternalState(
+  bundle: BundleInstance,
+): "all" | "none" | "partial" | null {
   const mods = value.value.modules;
   let on = 0;
   let total = 0;
   for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+    // Skip kinds that don't support the internal flag (constraint).
+    // Otherwise a bundle of one constraint + N internal wildcards
+    // would read "partial" forever — the constraint is non-applicable,
+    // not "not internal yet." Same skip applied in
+    // `toggleBundleInternal` so the cascade matches the aggregation.
+    if (!isInternalable(mods[i])) continue;
     total++;
     if (isInternal(mods[i])) on++;
   }
-  if (total === 0 || on === 0) return "none";
+  if (total === 0) return null;
+  if (on === 0) return "none";
   if (on === total) return "all";
   return "partial";
 }
@@ -1533,9 +1542,14 @@ function toggleBundleInternal(uid: string): void {
   const bundle = (value.value.bundles ?? []).find((b) => b._uid === uid);
   if (!bundle) return;
   const state = bundleInternalState(bundle);
+  if (state === null) return;
   const turnOn = state !== "all";
   const list = value.value.modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
+    // Constraint kind passes through untouched — it doesn't carry an
+    // internal surface, so a flip would write a meaningless field
+    // onto its instance.
+    if (!isInternalable(m)) return m;
     const inst = m.instance ?? {};
     if (turnOn) {
       if (inst.internal) return m;
@@ -1662,6 +1676,16 @@ const SEED_LOCKABLE_KINDS: ReadonlySet<string> = new Set([
 ]);
 function isSeedLockable(m: ModuleEntry): boolean {
   return SEED_LOCKABLE_KINDS.has(m.type);
+}
+
+/** True for kinds that produce bindings — i.e. everything EXCEPT
+ *  constraint. Constraint modules don't write any `$var`; they only
+ *  constrain the relationship between two existing wildcards, so the
+ *  `instance.internal` flag has no surface to hide and toggling it
+ *  would be a no-op. Bundle master-toggle aggregation and the
+ *  per-card internal button both gate on this. */
+function isInternalable(m: ModuleEntry): boolean {
+  return m.type !== "constraint";
 }
 
 function isLocked(m: ModuleEntry): boolean {
