@@ -24,6 +24,7 @@
  */
 
 import {
+  nodeCollapseAnimating,
   nodeCollapseAnimToken,
   nodeCollapseAttached,
   nodeCollapseConfig,
@@ -249,6 +250,15 @@ function animateResize(node: CollapseTargetNode, targetH: number): void {
   const prevToken = nodeCollapseAnimToken.get(node as object) ?? 0;
   const myToken = prevToken + 1;
   nodeCollapseAnimToken.set(node as object, myToken);
+  // Tell the widget autosize machinery to pause: `pushSize` and
+  // `requestRelayout` in `widgets/_shared.ts` would otherwise fire
+  // a setSize the moment Vue removes the collapsed rows from the DOM,
+  // overriding our captured `startH` and leaving the tween to start
+  // from the already-collapsed height (visible as: instant snap to
+  // target, then an animation that bounces back to the start before
+  // tweening down). Cleared in the `else` branch when the tween
+  // finishes — or implicitly garbage-collected with the node.
+  nodeCollapseAnimating.add(node as object);
 
   const start = performance.now();
   function step(now: number): void {
@@ -264,6 +274,11 @@ function animateResize(node: CollapseTargetNode, targetH: number): void {
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
+      // Tween finished. Clear the autosize-suppression flag BEFORE
+      // calling snapToSize so the final setSize lands through the
+      // normal pipeline + any deferred pushSize fires once on the
+      // next observer tick to land on the now-snapped target.
+      nodeCollapseAnimating.delete(node as object);
       // Snap to exact target at end + go through setSize so any
       // host-side layout hooks fire on completion.
       snapToSize(node, targetH);

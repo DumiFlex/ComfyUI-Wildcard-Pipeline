@@ -1,5 +1,7 @@
 import { createApp, type App, type Component } from "vue";
 
+import { nodeCollapseAnimating } from "../extension/_stashes";
+
 export interface DomWidget {
   element: HTMLElement;
   options?: Record<string, unknown>;
@@ -171,6 +173,16 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
+      // While a collapse animation is tweening node.size[1], skip
+      // observer-driven setSize. The tween captured startH before
+      // Vue's v-if removed the rows; a setSize here would snap the
+      // node to the collapsed target instantly, the tween's next rAF
+      // would override back to start, and the user would see a
+      // snap-then-animate two-step. Resuming after the tween (the
+      // animation clears the flag in its final rAF) is safe because
+      // snapToSize at the tween's end already lands the node at the
+      // correct target.
+      if (nodeCollapseAnimating.has(node as object)) return;
       // Snap before storing: minHeight feeds both ComfyUI's
       // getMinHeight callback AND our own min[1] read below. Keeping
       // it grid-aligned at the source means setSize never has to
@@ -247,6 +259,9 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     if (relayouting) return;
     relayouting = true;
     try {
+      // See pushSize comment — same reason: skip while the collapse
+      // tween owns node.size[1].
+      if (nodeCollapseAnimating.has(node as object)) return;
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
