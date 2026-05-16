@@ -217,18 +217,25 @@ async function save() {
   }
 }
 
-function freshId(prefix: string): string {
-  return `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
-}
-
-/** Snapshot a library module into a bundle child entry. */
+/** Snapshot a library module into a bundle child entry.
+ *
+ *  Critical: the snapshot's `id` MUST be the library uuid (`row.id`),
+ *  NOT a fresh local id. Bundle insertion at runtime treats the child's
+ *  `id` as the library link — Context-side `buildBundleInsertion`
+ *  preserves it verbatim, and the engine's drift / missing-from-library
+ *  scanners match against it. A random id surfaces every child as
+ *  "missing in library" on the ComfyUI side. `meta.library_name`
+ *  carries the canonical name so "reset overrides" can restore the
+ *  display name without hitting the server (denormalized at snapshot
+ *  time). Matches `toChildSnapshot` in ContextWidget for in-graph
+ *  Wrap-in-bundle. */
 function onAddPick(row: ModuleRow) {
   const snapshot: Record<string, unknown> = {
-    id: freshId(row.type),
+    id: row.id,
     type: row.type,
     enabled: true,
     collapsed: false,
-    meta: { name: row.name },
+    meta: { name: row.name, library_name: row.name },
     payload: row.payload ?? {},
     payload_hash: row.payload_hash,
     instance: {},
@@ -247,7 +254,11 @@ function onToggleChild(idx: number) {
 function onDuplicateChild(idx: number) {
   const src = children.value[idx];
   if (!src) return;
-  const copy = { ...src, id: freshId(String(src.type ?? "child")) };
+  // Keep the library uuid — multi-instance bundles intentionally share
+  // `id` across siblings (per buildBundleInsertion docs). Per-instance
+  // disambiguation lives in `_uid`, which gets stamped on insert into
+  // a Context node, not here at bundle-edit time.
+  const copy = { ...src };
   const next = [...children.value];
   next.splice(idx + 1, 0, copy);
   children.value = next;

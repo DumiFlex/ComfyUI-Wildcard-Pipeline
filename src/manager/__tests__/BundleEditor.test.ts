@@ -501,7 +501,10 @@ describe("BundleEditor.vue", () => {
 
     const payload = apiBundles.update.mock.calls[0][1] as { children?: Array<{ id: string }> };
     expect(payload.children).toHaveLength(2);
+    // Both rows keep the source library uuid — multi-instance bundles
+    // intentionally share `id`. Per-instance disambiguation lives in
+    // `_uid`, stamped at Context-insert time, not at edit time.
     expect(payload.children![0].id).toBe("wc_a");
-    expect(payload.children![1].id).not.toBe("wc_a");
+    expect(payload.children![1].id).toBe("wc_a");
   });
 });
