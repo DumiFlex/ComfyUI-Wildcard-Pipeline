@@ -810,10 +810,16 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  // Snapshot pre-reset so the Undo toast restores any per-instance
-  // edits the user had made to children before the reset replaced
-  // them with the frozen library snapshot.
-  const prevValue = value.value;
+  // Delta-undo capture: keep the old child refs (their _uids will be
+  // discarded by the reset since the new library snapshot stamps
+  // fresh ones, but the BundleInstance _uid we re-find by below
+  // stays stable). The bundle's `_uid` is the join key — Undo finds
+  // the BundleInstance currently bearing it (whatever its range is
+  // now) and replaces the live child range with our captured slice.
+  // Full-snapshot restore would overwrite any sibling op's state on
+  // click; delta-undo composes.
+  const restoredBundleUid = target._uid;
+  const oldChildren = value.value.modules.slice(target.start_idx, target.end_idx + 1);
   // No `window.confirm` — ComfyUI's host suppresses native modal APIs
   // in some runtimes (returns false silently → silent no-op). Same
   // failure mode as wrap's prompt. The op is recoverable: users can
@@ -891,7 +897,20 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       action: {
         label: "Undo",
         onSelect: () => {
-          value.value = prevValue;
+          // Find the BundleInstance in current state (may have moved
+          // since reset). If it's gone, do nothing — sibling ops kept
+          // their effects, but the bundle frame can't be restored
+          // without it.
+          const liveBundles = value.value.bundles ?? [];
+          const live = liveBundles.find((b) => b._uid === restoredBundleUid);
+          if (!live) return;
+          const liveModules = value.value.modules;
+          const list = [
+            ...liveModules.slice(0, live.start_idx),
+            ...oldChildren,
+            ...liveModules.slice(live.end_idx + 1),
+          ];
+          commitModules(list, liveBundles);
         },
       },
     });
@@ -916,9 +935,12 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   if (!bundle) return;
   const posInBundle = idx - bundle.start_idx;
   if (posInBundle < 0) return;
-  // Snapshot pre-reset so Undo restores the child's local edits the
-  // library snapshot overwrote.
-  const prevValue = value.value;
+  // Delta-undo capture: the original module ref keeps its `_uid` so
+  // Undo can find it in live state regardless of position. Reset
+  // only swaps payload/instance/payload_hash; the _uid stays put,
+  // so re-applying the captured ref by uid is a clean inverse.
+  const originalModule = m;
+  const targetUid = m._uid;
   const childName = m.meta?.name?.trim() || m.type;
   try {
     const entry = await api.bundles.get(bundle.library_id);
@@ -943,7 +965,11 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
       action: {
         label: "Undo",
         onSelect: () => {
-          value.value = prevValue;
+          if (!targetUid) return;
+          const list = value.value.modules.map((live) =>
+            live._uid === targetUid ? originalModule : live,
+          );
+          commitModules(list);
         },
       },
     });
