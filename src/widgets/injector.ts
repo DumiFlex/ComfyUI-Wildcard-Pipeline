@@ -482,6 +482,10 @@ export function create(node: InjectorNode, inputName: string) {
     // `dynamicMinWidth` and call host.requestRelayout() so litegraph
     // re-reads the getter.
     minWidth: () => dynamicMinWidth,
+    // Height tracks content. Caret-collapse toggles the rows list +
+    // shrinks the widget; a user-dragged tall height would otherwise
+    // keep the node body large with empty space below the header.
+    autoHeight: true,
     onValueRestored: (v: string) => {
       if (v !== currentJson.value) currentJson.value = v;
     },

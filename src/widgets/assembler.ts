@@ -410,6 +410,9 @@ export function mountHelper(node: AssemblerNode) {
     // updates the var + calls assemblerHost.requestRelayout when
     // missing-var presence changes.
     minWidth: () => dynamicMinWidth,
+    // Chip rows reflow → content min-height shrinks; without this the
+    // user-stuck tall size kept a dead band below the template input.
+    autoHeight: true,
   });
   attachThemeDetector(assemblerHost.widget.element, app);
 }

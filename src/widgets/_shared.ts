@@ -48,6 +48,24 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    * observation; component CSS should set `height: 100%` on its root.
    */
   fillHost?: boolean;
+  /**
+   * When true, ignore user height-drag and ALWAYS follow content min
+   * height. Width still preserves user drag (per-axis policy). Use for
+   * widgets where the content has a well-defined natural height that
+   * the user shouldn't override — collapse/expand animations break when
+   * the node is stuck at a manually-set tall height. Defaults to
+   * `false` (current behavior: preserve user height drag).
+   */
+  autoHeight?: boolean;
+}
+
+/** LiteGraph snaps node size to this grid by default. Mirror it when
+ *  we set sizes programmatically so auto-grow lands on the same grid
+ *  the user gets when they drag, rather than off-by-a-pixel drift. */
+const NODE_SIZE_GRID = 10;
+
+function snapToGrid(n: number): number {
+  return Math.round(n / NODE_SIZE_GRID) * NODE_SIZE_GRID;
 }
 
 interface ResizableNode {
@@ -150,22 +168,28 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      // Delta-check the height axis too: if cur[1] matches what WE
-      // last set, the change came from us → safe to follow min[1] up
-      // OR down (content shrank, collapse modules, etc). If cur[1]
-      // differs, the user dragged taller — preserve their value, only
-      // grow if content demands more room.
+      // Height axis policy:
+      //  - `autoHeight` option set → always follow content min. User
+      //    drag is ignored (use case: Context / Injector / Assembler
+      //    where the natural height matters more than a user-stuck
+      //    tall size that breaks collapse autosizing).
+      //  - default → delta-check user's drag and preserve it. Only
+      //    grow when content demands more room.
       const userControlsHeight =
-        lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1;
-      const targetH = userControlsHeight
-        ? Math.max(cur[1], min[1])  // preserve drag; grow only if content demands
-        : min[1];                    // we own height; follow min up OR down
-      // Width axis: same delta-check pattern. requestRelayout sets
-      // lastAutoSetWidth too, so a width-grow there is preserved by
-      // pushSize here when it fires shortly after.
+        !options.autoHeight
+        && lastAutoSetHeight !== 0
+        && Math.abs(cur[1] - lastAutoSetHeight) > 1;
+      const rawTargetH = userControlsHeight
+        ? Math.max(cur[1], min[1])
+        : min[1];
+      // Width axis: always preserve user drag (current behavior).
       const userControlsWidth =
         lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
-      const targetW = userControlsWidth ? Math.max(cur[0], min[0]) : Math.max(cur[0], min[0]);
+      const rawTargetW = userControlsWidth ? Math.max(cur[0], min[0]) : Math.max(cur[0], min[0]);
+      // Snap both axes to LiteGraph's 10px node-size grid so auto-grow
+      // lands on the same grid the user gets when they drag the corner.
+      const targetW = snapToGrid(rawTargetW);
+      const targetH = snapToGrid(rawTargetH);
       if (Math.abs(cur[0] - targetW) < 1 && Math.abs(cur[1] - targetH) < 1) return;
       resizable.setSize([targetW, targetH]);
       lastAutoSetWidth = targetW;
@@ -215,25 +239,32 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       if (!min || !cur || !resizable.setSize) return;
       const userControlsWidth =
         lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
-      const targetW = userControlsWidth
+      const rawTargetW = userControlsWidth
         ? Math.max(cur[0], min[0])  // preserve drag; grow only if needed
         : min[0];                    // we own width; follow min up OR down
-      // Height policy depends on autosize mode:
+      // Height policy:
+      //   - autoHeight option (Context / Injector / Assembler) →
+      //     always follow content min. Never preserve drag.
       //   - fillHost (Debug): height is 100% user-controlled. No
       //     ResizeObserver fires to seed `lastAutoSetHeight`, so the
       //     delta-check would always read "we own height" on first
       //     call and snap the node back to min. Preserve cur[1] but
-      //     respect the floor — never shrink the user's drag.
-      //   - normal mode: pushSize observer drives height; this path
-      //     is rarely the height-mover, but if it does fire (an
-      //     explicit width-state change emit), preserve user drags
-      //     via the delta-check.
-      const userControlsHeight =
-        options.fillHost
-        || (lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1);
-      const targetH = userControlsHeight
+      //     respect the floor.
+      //   - default: delta-check user drag, preserve when matched.
+      let userControlsHeight: boolean;
+      if (options.autoHeight) {
+        userControlsHeight = false;
+      } else if (options.fillHost) {
+        userControlsHeight = true;
+      } else {
+        userControlsHeight =
+          lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1;
+      }
+      const rawTargetH = userControlsHeight
         ? Math.max(cur[1], min[1])
         : min[1];
+      const targetW = snapToGrid(rawTargetW);
+      const targetH = snapToGrid(rawTargetH);
       if (Math.abs(cur[0] - targetW) < 1 && Math.abs(cur[1] - targetH) < 1) return;
       resizable.setSize([targetW, targetH]);
       // Record what WE asked for on both axes. Even if litegraph

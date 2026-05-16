@@ -222,6 +222,10 @@ export function create(node: ContextNode, inputName: string) {
     // the var + calls host.requestRelayout when conflict / state-badge
     // presence changes.
     minWidth: () => dynamicMinWidth,
+    // Height tracks content. Without this, a user-dragged tall node
+    // sticks at that height and the collapse-modules animation can't
+    // shrink the node back down. Width still preserves user drag.
+    autoHeight: true,
     onValueRestored: (v: string) => {
       // Workflow load — push the restored value into the reactive prop so the
       // SFC picks it up whether it has already mounted or not.
