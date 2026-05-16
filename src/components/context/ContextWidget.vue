@@ -58,6 +58,7 @@ import {
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
+import { getBundleMasterScope } from "../../extension/settings";
 
 const props = withDefaults(defineProps<{
   nodeId: number;
@@ -1544,12 +1545,14 @@ function toggleBundleInternal(uid: string): void {
   const state = bundleInternalState(bundle);
   if (state === null) return;
   const turnOn = state !== "all";
+  // Honor the "Bundle master toggle scope" setting: applicable-only
+  // skips constraint (which can't surface internal); cascade-all
+  // writes the flag regardless, which the engine ignores but lets
+  // the user blanket-mark for downstream tooling consistency.
+  const scope = getBundleMasterScope();
   const list = value.value.modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
-    // Constraint kind passes through untouched — it doesn't carry an
-    // internal surface, so a flip would write a meaningless field
-    // onto its instance.
-    if (!isInternalable(m)) return m;
+    if (scope !== "cascade-all" && !isInternalable(m)) return m;
     const inst = m.instance ?? {};
     const ui = inst._ui ?? {};
     if (turnOn) {
@@ -1597,9 +1600,14 @@ function toggleBundleLock(uid: string): void {
   const state = bundleLockState(bundle);
   if (state === null) return;
   const turnOn = state !== "all";
+  // Same scope honoring as toggleBundleInternal. cascade-all sets
+  // locked_seed on every child including kinds where the engine
+  // ignores it — useful for one-shot library exports where the user
+  // wants the flag stamped uniformly.
+  const scope = getBundleMasterScope();
   const list = value.value.modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
-    if (!isSeedLockable(m)) return m;
+    if (scope !== "cascade-all" && !isSeedLockable(m)) return m;
     const inst = m.instance ?? {};
     const ui = inst._ui ?? {};
     if (turnOn) {

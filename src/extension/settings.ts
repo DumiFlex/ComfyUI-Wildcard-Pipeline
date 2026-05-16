@@ -26,6 +26,7 @@ export type ValidationMode = "strict" | "relaxed" | "permissive";
 export type ToastLifetime = "short" | "default" | "long" | "sticky";
 export type CollapseMode = "independent" | "accordion";
 export type ColorIntensity = "muted" | "standard" | "vivid";
+export type BundleMasterScope = "applicable-only" | "cascade-all";
 
 /**
  * Setting widget types ComfyUI's settings panel can render natively.
@@ -106,6 +107,8 @@ const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
 const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
 const SETTING_ID_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 const SETTING_ID_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
+const SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE = "wildcardPipeline.behavior.confirmDestructiveBundle";
+const SETTING_ID_BUNDLE_MASTER_SCOPE = "wildcardPipeline.behavior.bundleMasterScope";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -202,6 +205,16 @@ const state = reactive<{
   newModuleDisabled: boolean;
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
+  /** When true, destructive bundle ops (remove / reset-to-library /
+   *  save-to-library) prompt via the themed ConfirmDialog before
+   *  committing. When false, the op runs immediately and falls back
+   *  to the toast Undo for recovery. */
+  confirmDestructiveBundle: boolean;
+  /** "applicable-only" — bundle master toggles only flip children
+   *  whose kind supports the flag (default). "cascade-all" — flip
+   *  every child regardless; lets advanced users force the flag onto
+   *  every instance even when the engine ignores it for that kind. */
+  bundleMasterScope: BundleMasterScope;
 }>({
   reduceMotion: "auto",
   contrast: "auto",
@@ -218,6 +231,8 @@ const state = reactive<{
   newModuleDisabled: false,
   collapseMode: "independent",
   colorIntensity: "standard",
+  confirmDestructiveBundle: true,
+  bundleMasterScope: "applicable-only",
 });
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -256,6 +271,13 @@ function asColorIntensity(v: unknown, fallback: ColorIntensity): ColorIntensity 
   return v === "muted" || v === "standard" || v === "vivid" ? v : fallback;
 }
 
+function asBundleMasterScope(
+  v: unknown,
+  fallback: BundleMasterScope,
+): BundleMasterScope {
+  return v === "applicable-only" || v === "cascade-all" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
@@ -271,6 +293,8 @@ export function _resetDisplayStateForTesting(): void {
   state.newModuleDisabled = false;
   state.collapseMode = "independent";
   state.colorIntensity = "standard";
+  state.confirmDestructiveBundle = true;
+  state.bundleMasterScope = "applicable-only";
 }
 
 /**
@@ -339,6 +363,14 @@ export function getNewModuleDisabled(): boolean {
  *   - "accordion"   → only one module can be expanded at a time;
  *                     expanding any module collapses every other one
  */
+export function getConfirmDestructiveBundle(): boolean {
+  return state.confirmDestructiveBundle;
+}
+
+export function getBundleMasterScope(): BundleMasterScope {
+  return state.bundleMasterScope;
+}
+
 export function getCollapseMode(): CollapseMode {
   return state.collapseMode;
 }
@@ -530,6 +562,12 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.toastLifetime = asToastLifetime(app.extensionManager?.setting?.get(SETTING_ID_TOAST_LIFETIME), "default");
   state.suppressInfoToasts = app.extensionManager?.setting?.get(SETTING_ID_SUPPRESS_INFO) === true;
   state.newModuleDisabled = app.extensionManager?.setting?.get(SETTING_ID_NEW_DISABLED) === true;
+  state.confirmDestructiveBundle =
+    app.extensionManager?.setting?.get(SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE) !== false;
+  state.bundleMasterScope = asBundleMasterScope(
+    app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_MASTER_SCOPE),
+    "applicable-only",
+  );
   // Phase 3b — collapse-stack mode. Pure Vue state (no body class) since
   // the behavior is JS-driven (toggleCollapsed reads via getCollapseMode).
   state.collapseMode = asCollapseMode(app.extensionManager?.setting?.get(SETTING_ID_COLLAPSE_MODE), "independent");
@@ -1031,6 +1069,59 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             severity: "info",
             singletonKey: "wp-new-module-disabled",
           });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE,
+      name: "Confirm destructive bundle actions",
+      type: "boolean",
+      defaultValue: true,
+      tooltip:
+        "Show a confirm dialog before remove / reset-to-library / " +
+        "save-to-library on bundles. Turn off if you trust the Undo " +
+        "toast as the only safety net.",
+      category: ["Wildcard Pipeline", "Runtime", "Confirm destructive bundle"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.confirmDestructiveBundle;
+        state.confirmDestructiveBundle = next;
+        if (bootCompleted && changed) {
+          pushToast(
+            next
+              ? "Confirm dialog will show for destructive bundle ops."
+              : "Confirm dialog disabled — undo via the toast.",
+            { severity: "info", singletonKey: "wp-confirm-destructive-bundle" },
+          );
+        }
+      },
+    },
+    {
+      id: SETTING_ID_BUNDLE_MASTER_SCOPE,
+      name: "Bundle master toggle scope",
+      type: "combo",
+      options: [
+        { text: "Applicable only (recommended)", value: "applicable-only" },
+        { text: "Cascade to all children", value: "cascade-all" },
+      ],
+      defaultValue: "applicable-only",
+      tooltip:
+        "Whether bundle master internal / seed-lock toggles skip kinds " +
+        "that don't support the flag (constraint for internal, " +
+        "non-wildcards for lock). Cascade-all writes the flag onto every " +
+        "child even when the engine ignores it.",
+      category: ["Wildcard Pipeline", "Runtime", "Bundle master scope"],
+      onChange: (newVal) => {
+        const next = asBundleMasterScope(newVal, "applicable-only");
+        const changed = next !== state.bundleMasterScope;
+        state.bundleMasterScope = next;
+        if (bootCompleted && changed) {
+          pushToast(
+            next === "cascade-all"
+              ? "Bundle master toggles will write to every child."
+              : "Bundle master toggles will skip non-applicable kinds.",
+            { severity: "info", singletonKey: "wp-bundle-master-scope" },
+          );
         }
       },
     },
