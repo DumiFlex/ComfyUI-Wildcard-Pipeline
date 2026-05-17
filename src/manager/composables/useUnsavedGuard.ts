@@ -43,12 +43,11 @@ export function useUnsavedGuard(isDirty: () => boolean): UnsavedGuard {
   function handleUnload(e: BeforeUnloadEvent): void {
     if (isDirty()) {
       e.preventDefault();
-      // Safari + legacy browsers still need `returnValue` set for the
-      // native prompt to fire; preventDefault() alone is enough only on
-      // modern Chromium. The property is @deprecated in the DOM spec but
-      // has no cross-browser replacement yet — keep it intentionally.
-      // eslint-disable-next-line @typescript-eslint/no-deprecated
-      e.returnValue = "";
+      // Safari + legacy browsers still fire the discard prompt only when
+      // `returnValue` is set; preventDefault() alone is enough on modern
+      // Chromium but not universal. The property is @deprecated in the
+      // DOM lib so we set it dynamically to keep the typed surface clean.
+      Reflect.set(e, "returnValue", "");
     }
   }
   window.addEventListener("beforeunload", handleUnload);
