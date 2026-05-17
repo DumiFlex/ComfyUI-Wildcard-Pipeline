@@ -70,9 +70,6 @@
    * Dark: lighter tint than the base status color (red-300 vs red-500) for dark-bg legibility.
    * Light overrides below cascade through --wp-danger etc. which flip to -700 shades. */
   --wp-danger-text:  #fca5a5;            /* red-300; light override → var(--wp-danger) = red-700 */
-  --wp-success-text: #86efac;            /* green-300; light override → var(--wp-success) = green-700 */
-  --wp-warn-text:    #fcd34d;            /* yellow-300; light override → var(--wp-warn) = amber-700 */
-  --wp-info-text:    #93c5fd;            /* blue-300;  light override → var(--wp-info)  = blue-700 */
 
   /* Syntax @ref pill color — pink/magenta, distinct from wildcard KIND violet */
   --wp-kind-ref:    #f0abfc;            /* fuchsia-300; light override → fuchsia-800 */
@@ -232,9 +229,6 @@
   /* Status-text: in light mode, override to the same -700 shade as the base token
    * (dark has lighter pastels; light has deeper shades — both are correct for their surface) */
   --wp-danger-text:  var(--wp-danger);   /* red-700 via cascade */
-  --wp-success-text: var(--wp-success);  /* green-700 via cascade */
-  --wp-warn-text:    var(--wp-warn);     /* amber-700 via cascade */
-  --wp-info-text:    var(--wp-info);     /* blue-700 via cascade */
 
   /* Overlay — lighter scrim so light bg beneath still registers as dimmed */
   --wp-overlay-bg: rgba(15, 15, 30, 0.35);
@@ -569,7 +563,7 @@ input, textarea, select { font: inherit; }
 .wp-btn--lg { height: 40px; padding: 0 16px; font-size: 13.5px; border-radius: 8px; }
 .wp-btn--md { /* alias of default size */ }
 .wp-btn--danger { color: var(--wp-danger); }
-.wp-btn--danger:hover { background: color-mix(in oklab, var(--wp-danger) 14%, transparent); border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent); color: #fff; }
+.wp-btn--danger:hover { background: color-mix(in oklab, var(--wp-danger) 14%, transparent); border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent); color: #fff; /* audit-exempt: white on dark-tinted hover bg (17:1 dark); light override at line 942 uses var(--wp-danger) */ }
 
 /* ---------- Inputs ---------- */
 .wp-input,
