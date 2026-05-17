@@ -52,11 +52,18 @@ import wpLogoSvg from "../shared/wp-logo.svg?raw";
 import {
   forceRefresh as forceRefreshHashes,
   hashes as libraryHashes,
+  bundleHashes,
   refreshMany,
   refreshModule,
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
+import {
+  getBundleCollapsedByDefault,
+  getBundleMasterOffBehavior,
+  getConfirmDestructiveBundle,
+} from "../../extension/settings";
+import ConfirmDialog from "../shared/ConfirmDialog.vue";
 
 const props = withDefaults(defineProps<{
   nodeId: number;
@@ -356,6 +363,46 @@ const initialParse = parseWidgetJsonWithRecovery(props.initialJson, emptyContext
 ensureRowUids(initialParse.value.modules);
 const value = ref<ContextWidgetValue>(initialParse.value);
 
+/**
+ * Atomic write to `value.value` whenever the modules array changes
+ * shape (insert, remove, reorder) AND for in-place updates that don't
+ * shift indices. Always pipes through `reconcileBundleRanges` so the
+ * bundles[] cache (start_idx / end_idx per BundleInstance) stays in
+ * lock-step with each child's `bundle_origin` field — the canonical
+ * source of truth for bundle membership.
+ *
+ * - `nextModules` is the post-mutation array. Pass it as a fresh
+ *   reference (already spread / mapped / sliced); the helper does not
+ *   clone it.
+ * - `bundlesOverride` is for callers that have hand-computed the
+ *   post-mutation bundles[] (e.g. removeBundle adjusting sibling
+ *   indices, picker insertion appending a fresh BundleInstance). The
+ *   override is the INPUT to reconcile, not the final write — the
+ *   helper will still groom the result so a hand-computed bundle that
+ *   no longer has any children with matching `bundle_origin` gets
+ *   dropped, and a contiguous run that the override missed gets its
+ *   start/end recomputed.
+ *
+ * Reconcile is idempotent, so calling this helper at sites that
+ * didn't change indices (instance toggle, modal save, bulk collapse)
+ * is a no-op on the bundles[] side and free from the perspective of
+ * correctness. Routing every mutation through the helper means
+ * "every modules write also writes bundles" is enforced by the call
+ * site shape, not by author memory.
+ */
+function commitModules(
+  nextModules: ModuleEntry[],
+  bundlesOverride?: BundleInstance[],
+): void {
+  const sourceBundles = bundlesOverride ?? value.value.bundles ?? [];
+  value.value = {
+    ...value.value,
+    modules: nextModules,
+    bundles: reconcileBundleRanges(nextModules, sourceBundles),
+  };
+}
+
+
 /** Stamp `_uid` on any module missing one. Phase B: each row needs a
  *  per-instance stable Vue v-for key that survives reorders + inserts —
  *  siblings share `m.id` (library uuid), so id alone isn't unique, and
@@ -421,6 +468,10 @@ async function onPickBundle(bundleId: string): Promise<void> {
     };
     const insertIdx = value.value.modules.length;
     const { modulesToSplice, bundleInstance } = buildBundleInsertion(libEntry, insertIdx);
+    // Honor "Collapse new bundles by default". Default false keeps
+    // bundles open on insert (existing behaviour); when true, stamp
+    // the collapsed flag so the frame mounts header-only.
+    if (getBundleCollapsedByDefault()) bundleInstance.collapsed = true;
     // Mutate via spread to keep the ref's identity stable + trigger
     // Vue reactivity. modules[] gets the new rows at the tail, bundles[]
     // gets the new instance.
@@ -452,11 +503,10 @@ async function onPickBundle(bundleId: string): Promise<void> {
         bundle_origin: c.bundle_origin,
       } as ModuleEntry;
     });
-    value.value = {
-      ...value.value,
-      modules: [...value.value.modules, ...splice],
-      bundles: [...(value.value.bundles ?? []), bundleInstance],
-    };
+    commitModules(
+      [...value.value.modules, ...splice],
+      [...(value.value.bundles ?? []), bundleInstance],
+    );
     // Phase B.6: animate the new bundle wrapper + its children with
     // the same fade-slide as picker-add. Bundle wrapper carries the
     // same --arriving/--arrived classes thanks to the .wp-bundle CSS
@@ -468,6 +518,30 @@ async function onPickBundle(bundleId: string): Promise<void> {
         modulesContainer.value,
       );
     }
+    // Delta-undo capture: just the _uids we added. Undo filters
+    // them out of whatever modules/bundles arrays look like at click
+    // time. Composes correctly with any other op's Undo regardless of
+    // click order — full-snapshot restore would overwrite a sibling
+    // op's state.
+    const insertedModuleUids = new Set(splice.map((c) => c._uid).filter((u): u is string => !!u));
+    const insertedBundleUid = bundleInstance._uid;
+    pushToast(`Inserted bundle "${entry.name}"`, {
+      severity: "success",
+      lifeMs: 5000,
+      action: {
+        label: "Undo",
+        onSelect: () => {
+          const list = value.value.modules.filter(
+            (m) => !m._uid || !insertedModuleUids.has(m._uid),
+          );
+          const curBundles = value.value.bundles ?? [];
+          const nextBundlesArr = curBundles.filter(
+            (b) => b._uid !== insertedBundleUid,
+          );
+          commitModules(list, nextBundlesArr);
+        },
+      },
+    });
   } catch (e) {
     // Surface fetch / parse errors via the existing toast channel so
     // users see what went wrong without diving into devtools.
@@ -508,11 +582,7 @@ function toggleBundleEnabled(uid: string, enabled: boolean): void {
     }
     return m;
   });
-  value.value = {
-    ...value.value,
-    modules: nextModules,
-    bundles: nextBundles,
-  };
+  commitModules(nextModules, nextBundles);
 }
 
 // Container ref for list-level drag handlers + bar positioning.
@@ -582,6 +652,24 @@ async function removeBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  const bundleName = target.name || "bundle";
+  if (!(await maybeConfirm({
+    title: `Remove "${bundleName}"?`,
+    body: `Removes the bundle frame and all ${target.end_idx - target.start_idx + 1} child(ren) from this Context. Toast Undo will restore them if clicked before it expires.`,
+    variant: "danger",
+    confirmLabel: "Remove",
+  }))) return;
+  // Delta-undo capture: keep the actual child refs (with bundle_origin
+  // intact) so re-insertion restores complete module shape, plus an
+  // anchor `_uid` for the module that NOW sits immediately after the
+  // bundle. Splicing relative to that anchor on undo lands the
+  // restored children near their original position even if a sibling
+  // op moved things around between remove and Undo. Full-snapshot
+  // restore breaks composition: undoing two removes out of order
+  // would leave only the last-clicked snapshot's effect intact.
+  const removedChildren = value.value.modules.slice(target.start_idx, target.end_idx + 1);
+  const anchorAfter = value.value.modules[target.end_idx + 1]?._uid ?? null;
+  const restoredBundle = target;
 
   // Suppress legacy wp-list-move + leave-active CSS immediately so any
   // downstream layout shifts during the fade don't double-animate via
@@ -616,13 +704,37 @@ async function removeBundle(uid: string): Promise<void> {
       }
       return b;
     });
-  value.value = {
-    ...value.value,
-    modules: [...before, ...after],
-    bundles: remainingBundles,
-  };
+  commitModules([...before, ...after], remainingBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
+  pushToast(`Removed bundle "${bundleName}"`, {
+    severity: "info",
+    lifeMs: 6000,
+    action: {
+      label: "Undo",
+      onSelect: () => {
+        // Find the anchor in current state. If it moved or vanished,
+        // fall back to end-of-list. Splice children + restore the
+        // BundleInstance; reconcile pins the new range via the
+        // children's bundle_origin field.
+        const current = value.value.modules;
+        const anchorIdx = anchorAfter
+          ? current.findIndex((m) => m._uid === anchorAfter)
+          : -1;
+        const insertAt = anchorIdx >= 0 ? anchorIdx : current.length;
+        const list = [
+          ...current.slice(0, insertAt),
+          ...removedChildren,
+          ...current.slice(insertAt),
+        ];
+        const curBundles = value.value.bundles ?? [];
+        const nextBundlesArr = curBundles.some((b) => b._uid === restoredBundle._uid)
+          ? curBundles
+          : [...curBundles, restoredBundle];
+        commitModules(list, nextBundlesArr);
+      },
+    },
+  });
 }
 
 /** Detach bundle frame — keep children as standalone modules but
@@ -633,6 +745,7 @@ async function detachBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  const bundleName = target.name || "bundle";
   // Phase B.6 polish: fade the bundle wrapper out via --leaving before
   // the splice. Symmetry with removeBundle — wrapper disappears with a
   // visual exit, children stay (they will rise via FLIP into the gap).
@@ -641,8 +754,19 @@ async function detachBundle(uid: string): Promise<void> {
     await withLeaveAnimation(uid, scope, () => {});
   }
   const flipSnap = captureFlipSnapshot();
+  // Track which children we cleared `bundle_origin` on. Keyed by
+  // per-instance _uid so the Undo path can find the same rows even
+  // if they've moved since detach — full-snapshot restore breaks the
+  // moment a sibling op (another detach, a row move, a remove) lands
+  // between the detach and its Undo: the snapshot reflects that
+  // sibling's pre-state too and the user loses the sibling op's
+  // effect. Delta-undo only re-stamps these specific children, so
+  // each detach's Undo composes with any other op's Undo regardless
+  // of the click order.
+  const detachedChildUids = new Set<string>();
   const nextModules = value.value.modules.map((m, idx) => {
     if (idx < target.start_idx || idx > target.end_idx) return m;
+    if (m._uid) detachedChildUids.add(m._uid);
     // Strip bundle_origin from this child; spread so other fields
     // survive untouched.
     const next = { ...m } as ModuleEntry & { bundle_origin?: string };
@@ -650,13 +774,39 @@ async function detachBundle(uid: string): Promise<void> {
     return next;
   });
   const remainingBundles = bundles.filter((b) => b._uid !== uid);
-  value.value = {
-    ...value.value,
-    modules: nextModules,
-    bundles: remainingBundles,
-  };
+  // Capture the BundleInstance as it was BEFORE the strip so Undo can
+  // reinsert the original library_id, color, name, collapsed flag,
+  // inserted_at_hash, etc. without re-fetching from the library API.
+  const detachedBundle = target;
+  commitModules(nextModules, remainingBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
+  pushToast(`Detached bundle "${bundleName}"`, {
+    severity: "info",
+    lifeMs: 5000,
+    action: {
+      label: "Undo",
+      onSelect: () => {
+        // Re-stamp bundle_origin on the children currently matching
+        // the tracked _uids — operates on whatever state the widget is
+        // in now, NOT on a snapshot. If some children have been moved
+        // apart since detach, reconcile will see them as non-contiguous
+        // and dissolve the bundle naturally. That's a degradation, not
+        // a corruption — sibling ops keep their effects.
+        const list = value.value.modules.map((m) => {
+          if (!m._uid || !detachedChildUids.has(m._uid)) return m;
+          return { ...m, bundle_origin: detachedBundle._uid } as ModuleEntry & { bundle_origin?: string };
+        });
+        const currentBundles = value.value.bundles ?? [];
+        // Re-insert the BundleInstance only if it isn't already back
+        // (idempotent — guards against double-click Undo).
+        const nextBundlesArr = currentBundles.some((b) => b._uid === detachedBundle._uid)
+          ? currentBundles
+          : [...currentBundles, detachedBundle];
+        commitModules(list, nextBundlesArr);
+      },
+    },
+  });
 }
 
 /** Duplicate bundle — re-fetch the library entry + run insert
@@ -677,10 +827,27 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  // No `window.confirm` — ComfyUI's host suppresses native modal APIs
-  // in some runtimes (returns false silently → silent no-op). Same
-  // failure mode as wrap's prompt. The op is recoverable: users can
-  // resave via "Save changes to library" if they regret it.
+  // Delta-undo capture: keep the old child refs (their _uids will be
+  // discarded by the reset since the new library snapshot stamps
+  // fresh ones, but the BundleInstance _uid we re-find by below
+  // stays stable). The bundle's `_uid` is the join key — Undo finds
+  // the BundleInstance currently bearing it (whatever its range is
+  // now) and replaces the live child range with our captured slice.
+  // Full-snapshot restore would overwrite any sibling op's state on
+  // click; delta-undo composes.
+  const restoredBundleUid = target._uid;
+  const oldChildren = value.value.modules.slice(target.start_idx, target.end_idx + 1);
+  if (!(await maybeConfirm({
+    title: `Reset "${target.name || "bundle"}" to library?`,
+    body: "Drops every local edit on this bundle's children and replaces them with the library snapshot. Toast Undo restores your edits if clicked in time.",
+    variant: "danger",
+    confirmLabel: "Reset",
+  }))) return;
+  // Themed confirm above replaces the legacy `window.confirm` path —
+  // ComfyUI hosts can suppress the native dialog AND it looked out of
+  // place against the WP styling. The op is recoverable via Undo, but
+  // the confirm gates accidental resets on bundles with significant
+  // local work.
   try {
     const entry = await api.bundles.get(target.library_id);
     const libEntry: BundleLibraryEntry = {
@@ -738,11 +905,7 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       }
       return b;
     });
-    value.value = {
-      ...value.value,
-      modules: [...before, ...newChildren, ...after],
-      bundles: nextBundles,
-    };
+    commitModules([...before, ...newChildren, ...after], nextBundles);
     await nextTick();
     // Flash every fresh child + the bundle wrapper so the user sees
     // which rows just got replaced with the library snapshot.
@@ -752,6 +915,29 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
         modulesContainer.value,
       );
     }
+    pushToast(`Reset "${entry.name}" to library`, {
+      severity: "success",
+      lifeMs: 6000,
+      action: {
+        label: "Undo",
+        onSelect: () => {
+          // Find the BundleInstance in current state (may have moved
+          // since reset). If it's gone, do nothing — sibling ops kept
+          // their effects, but the bundle frame can't be restored
+          // without it.
+          const liveBundles = value.value.bundles ?? [];
+          const live = liveBundles.find((b) => b._uid === restoredBundleUid);
+          if (!live) return;
+          const liveModules = value.value.modules;
+          const list = [
+            ...liveModules.slice(0, live.start_idx),
+            ...oldChildren,
+            ...liveModules.slice(live.end_idx + 1),
+          ];
+          commitModules(list, liveBundles);
+        },
+      },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushToast(`Reset failed: ${msg}`, { severity: "error" });
@@ -773,6 +959,13 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   if (!bundle) return;
   const posInBundle = idx - bundle.start_idx;
   if (posInBundle < 0) return;
+  // Delta-undo capture: the original module ref keeps its `_uid` so
+  // Undo can find it in live state regardless of position. Reset
+  // only swaps payload/instance/payload_hash; the _uid stays put,
+  // so re-applying the captured ref by uid is a clean inverse.
+  const originalModule = m;
+  const targetUid = m._uid;
+  const childName = m.meta?.name?.trim() || m.type;
   try {
     const entry = await api.bundles.get(bundle.library_id);
     const snapshot = entry.children[posInBundle] as Record<string, unknown> | undefined;
@@ -789,7 +982,21 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
         payload_hash: snapshot.payload_hash as string | undefined,
       } as ModuleEntry;
     });
-    value.value = { ...value.value, modules: nextModules };
+    commitModules(nextModules);
+    pushToast(`Reset "${childName}" to bundle snapshot`, {
+      severity: "success",
+      lifeMs: 5000,
+      action: {
+        label: "Undo",
+        onSelect: () => {
+          if (!targetUid) return;
+          const list = value.value.modules.map((live) =>
+            live._uid === targetUid ? originalModule : live,
+          );
+          commitModules(list);
+        },
+      },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushToast(`Reset failed: ${msg}`, { severity: "error" });
@@ -813,9 +1020,16 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  // No `window.confirm` — ComfyUI host suppresses it in some runtimes.
-  // Op is library-side; users can revert by re-saving an older instance
-  // or editing in the SPA library editor.
+  if (!(await maybeConfirm({
+    title: `Save "${target.name || "bundle"}" to library?`,
+    body: "Overwrites the bundle library entry with this instance's current children. Other inserts of this bundle elsewhere will read as drifted until reset. This op has no Undo (it writes to the library DB).",
+    variant: "default",
+    confirmLabel: "Save to library",
+  }))) return;
+  // Library-side write — no Undo because there's no DB delete API
+  // surfaced here. The confirm dialog above gates accidental
+  // overwrites when the local instance has speculative edits the
+  // user didn't intend to publish.
   const childrenOut = value.value.modules
     .slice(target.start_idx, target.end_idx + 1)
     .map(toChildSnapshot);
@@ -871,10 +1085,10 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
     const nextModules = value.value.modules.map((existing, i) =>
       i === idx ? { ...existing, bundle_origin: bundleInstance._uid } as ModuleEntry : existing,
     );
-    value.value = {
-      ...value.value, modules: nextModules,
-      bundles: [...(value.value.bundles ?? []), bundleInstance],
-    };
+    commitModules(
+      nextModules,
+      [...(value.value.bundles ?? []), bundleInstance],
+    );
     await nextTick();
     // Sibling rows shift to accommodate the new bundle wrapper around
     // the wrapped row. Bundle wrapper fades-slides in; the wrapped
@@ -1264,6 +1478,254 @@ async function refreshAllDrifted(): Promise<void> {
 /** Surfaced as a computed for the bulk-button visibility + label. */
 const driftedCount = computed(() => value.value.modules.filter(isDrifted).length);
 
+// Per-bundle drift count — sums isDrifted over the bundle's child
+// range. Drives the `${count} drifted` suffix on the bundle header
+// subtitle so users can glance-spot bundles whose children fell out
+// of sync with their library snapshots. Read at render time so the
+// libraryHashes poll naturally feeds updates without a watcher.
+function bundleChildDriftCount(bundle: BundleInstance): number {
+  const mods = value.value.modules;
+  let n = 0;
+  for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+    if (isDrifted(mods[i])) n++;
+  }
+  return n;
+}
+
+/** True when the bundle library entry has changed since this bundle
+ *  was inserted: compare the locally captured `inserted_at_hash` with
+ *  the freshest hash from the polled `bundleHashes` map. Returns false
+ *  until first poll lands so the UI doesn't flash a drift state before
+ *  the truth is known. Distinct from per-child drift — a library may
+ *  have a new payload_hash even when every embedded child still
+ *  matches its individual snapshot (e.g. the library author only
+ *  reordered children, or swapped a child the user previously
+ *  detached locally). */
+function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
+  const map = bundleHashes.value;
+  if (map === null) return false;
+  const live = map[bundle.library_id];
+  if (live === undefined) return false;
+  if (!bundle.inserted_at_hash) return false;
+  return live !== bundle.inserted_at_hash;
+}
+
+// Pending confirm-dialog state. Single slot — only one destructive op
+// can be in flight at a time, and the bundle ctxmenu / header buttons
+// are synchronous enough that overlapping calls don't happen in
+// practice. `maybeConfirm` resolves through a Promise so the call site
+// can await it and decide whether to proceed.
+const pendingConfirm = ref<{
+  title: string;
+  body: string;
+  variant: "default" | "danger";
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+} | null>(null);
+
+interface MaybeConfirmOpts {
+  title: string;
+  body: string;
+  variant?: "default" | "danger";
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+/** Show the themed ConfirmDialog if the user has the
+ *  "Confirm destructive bundle actions" setting enabled, otherwise
+ *  resolve immediately to `true`. Returned Promise resolves to the
+ *  user's choice (true = proceed, false = cancel). Call sites pattern:
+ *
+ *      if (!(await maybeConfirm({ title, body, variant: "danger" }))) return;
+ */
+function maybeConfirm(opts: MaybeConfirmOpts): Promise<boolean> {
+  if (!getConfirmDestructiveBundle()) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    pendingConfirm.value = {
+      title: opts.title,
+      body: opts.body,
+      variant: opts.variant ?? "default",
+      confirmLabel: opts.confirmLabel ?? "Confirm",
+      cancelLabel: opts.cancelLabel ?? "Cancel",
+      onConfirm: () => {
+        pendingConfirm.value = null;
+        resolve(true);
+      },
+      onCancel: () => {
+        pendingConfirm.value = null;
+        resolve(false);
+      },
+    };
+  });
+}
+
+/** Tri-state aggregation of `instance.internal` across a bundle's
+ *  children. Drives the master-toggle visual in BundleHeader:
+ *    - "all"     → every child has internal=true (button pressed)
+ *    - "none"    → no child has internal (button neutral)
+ *    - "partial" → mixed (button half-pressed, dashed border)
+ *
+ *  Empty bundle defaults to "none" — the button is harmless to show
+ *  but clicking it does nothing (no children to flip). */
+function bundleInternalState(
+  bundle: BundleInstance,
+): "all" | "none" | "partial" | null {
+  const mods = value.value.modules;
+  let on = 0;
+  let total = 0;
+  for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+    // Skip kinds that don't support the internal flag (constraint).
+    // Otherwise a bundle of one constraint + N internal wildcards
+    // would read "partial" forever — the constraint is non-applicable,
+    // not "not internal yet." Same skip applied in
+    // `toggleBundleInternal` so the cascade matches the aggregation.
+    if (!isInternalable(mods[i])) continue;
+    total++;
+    if (isInternal(mods[i])) on++;
+  }
+  if (total === 0) return null;
+  if (on === 0) return "none";
+  if (on === total) return "all";
+  return "partial";
+}
+
+/** Same shape over `locked_seed`, but only the seed-lockable
+ *  children count. Returns `null` when the bundle has zero lockable
+ *  children — BundleHeader uses that to hide the lock button so a
+ *  bundle of fixed_values + constraints (which can't be seed-locked)
+ *  doesn't render a no-op control. */
+function bundleLockState(
+  bundle: BundleInstance,
+): "all" | "none" | "partial" | null {
+  const mods = value.value.modules;
+  let on = 0;
+  let total = 0;
+  for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+    if (!isSeedLockable(mods[i])) continue;
+    total++;
+    if (isLocked(mods[i])) on++;
+  }
+  if (total === 0) return null;
+  if (on === 0) return "none";
+  if (on === total) return "all";
+  return "partial";
+}
+
+/** Cascade `instance.internal` across every child of a bundle.
+ *  Click semantics: anything-other-than-all → set all on; all → clear
+ *  all. Mirrors the per-card toggle pattern (toggleInternalOnCard)
+ *  but applied to a range. The internal flag itself is dropped on
+ *  toggle-off so persisted JSON stays minimal, matching the per-card
+ *  fn's behaviour. */
+function toggleBundleInternal(uid: string): void {
+  const bundle = (value.value.bundles ?? []).find((b) => b._uid === uid);
+  if (!bundle) return;
+  const state = bundleInternalState(bundle);
+  if (state === null) return;
+  const turnOn = state !== "all";
+  // Applicability filter is hardcoded — constraint never gets internal,
+  // and the engine ignores the flag on kinds that don't produce a
+  // binding, so writing it would be dead data. The user-configurable
+  // axis is the master-OFF behaviour below.
+  const offBehavior = getBundleMasterOffBehavior();
+  const list = value.value.modules.map((m, i) => {
+    if (i < bundle.start_idx || i > bundle.end_idx) return m;
+    if (!isInternalable(m)) return m;
+    const inst = m.instance ?? {};
+    const ui = inst._ui ?? {};
+    if (turnOn) {
+      // Already internal → leave it alone AND don't claim it via the
+      // master marker. The row was internal before this click; the
+      // user wants it to stay internal regardless of what the master
+      // does next. Skipping the marker means a later master OFF won't
+      // revert this row (in preserve-manual mode).
+      if (inst.internal) return m;
+      return {
+        ...m,
+        instance: {
+          ...inst,
+          internal: true,
+          _ui: { ...ui, master_internal: true },
+        },
+      };
+    } else {
+      // Master OFF behaviour:
+      //   - preserve-manual (default): clear ONLY rows carrying
+      //     `_ui.master_internal === true`. Manual-internal rows have
+      //     no marker and survive untouched.
+      //   - cascade-all: clear every internal row regardless of
+      //     marker. User explicitly opted into the destructive sweep
+      //     via the setting.
+      if (offBehavior === "preserve-manual" && !ui.master_internal) return m;
+      if (!inst.internal) return m;
+      const { internal: _drop, ...restInst } = inst;
+      void _drop;
+      const { master_internal: _drop2, ...restUi } = ui;
+      void _drop2;
+      return {
+        ...m,
+        instance: { ...restInst, _ui: restUi },
+      };
+    }
+  });
+  commitModules(list);
+}
+
+/** Cascade seed lock across every seed-lockable child of a bundle.
+ *  Lock uses the same fallback chain as toggleLockOnCard: the
+ *  per-instance last-used seed (`lastUsedSeedReader(_uid)`), the
+ *  cold-start `_ui.last_locked_seed`, then 0. Non-lockable children
+ *  are passed through untouched. */
+function toggleBundleLock(uid: string): void {
+  const bundle = (value.value.bundles ?? []).find((b) => b._uid === uid);
+  if (!bundle) return;
+  const state = bundleLockState(bundle);
+  if (state === null) return;
+  const turnOn = state !== "all";
+  // Applicability hardcoded — non-lockable kinds (constraint, pipeline)
+  // can't surface a locked_seed and the engine ignores the field on
+  // them. Master-OFF behaviour mirrors toggleBundleInternal.
+  const offBehavior = getBundleMasterOffBehavior();
+  const list = value.value.modules.map((m, i) => {
+    if (i < bundle.start_idx || i > bundle.end_idx) return m;
+    if (!isSeedLockable(m)) return m;
+    const inst = m.instance ?? {};
+    const ui = inst._ui ?? {};
+    if (turnOn) {
+      // Already locked → don't claim via marker; the user's existing
+      // lock survives any future master OFF in preserve-manual mode.
+      if (typeof inst.locked_seed === "number") return m;
+      let fallback: number;
+      const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
+      if (typeof lastUsed === "number") fallback = lastUsed;
+      else if (typeof ui.last_locked_seed === "number") fallback = ui.last_locked_seed;
+      else fallback = 0;
+      return {
+        ...m,
+        instance: {
+          ...inst,
+          locked_seed: fallback,
+          _ui: { ...ui, last_locked_seed: fallback, master_lock: true },
+        },
+      };
+    } else {
+      // Same dual-mode as toggleBundleInternal. cascade-all sweeps
+      // every locked row; preserve-manual only un-locks marker rows.
+      if (offBehavior === "preserve-manual" && !ui.master_lock) return m;
+      if (typeof inst.locked_seed !== "number") return m;
+      const { master_lock: _drop, ...restUi } = ui;
+      void _drop;
+      return {
+        ...m,
+        instance: { ...inst, locked_seed: null, _ui: restUi },
+      };
+    }
+  });
+  commitModules(list);
+}
+
 /** Non-empty array helper — null/undefined/empty all read as "no override". */
 function nonEmptyArr(v: unknown): boolean {
   return Array.isArray(v) && v.length > 0;
@@ -1340,6 +1802,16 @@ function isSeedLockable(m: ModuleEntry): boolean {
   return SEED_LOCKABLE_KINDS.has(m.type);
 }
 
+/** True for kinds that produce bindings — i.e. everything EXCEPT
+ *  constraint. Constraint modules don't write any `$var`; they only
+ *  constrain the relationship between two existing wildcards, so the
+ *  `instance.internal` flag has no surface to hide and toggling it
+ *  would be a no-op. Bundle master-toggle aggregation and the
+ *  per-card internal button both gate on this. */
+function isInternalable(m: ModuleEntry): boolean {
+  return m.type !== "constraint";
+}
+
 function isLocked(m: ModuleEntry): boolean {
   return typeof m.instance?.locked_seed === "number";
 }
@@ -1385,8 +1857,10 @@ watch(
  *  `_ui.last_locked_seed` so the next toggle-on has a fallback.
  *  On → fallback chain (per-module priority so re-locking captures
  *  what THIS specific wildcard actually rolled with):
- *    1. lastUsedSeedReader(m.id) — seed THIS wildcard used last
+ *    1. lastUsedSeedReader(m._uid) — seed THIS instance used last
  *       run (locked_seed if it was locked, else chain seed).
+ *       Keyed by per-instance _uid so siblings sharing m.id don't
+ *       collapse to one value.
  *       Refreshes after every queue. Handles the
  *       lock→run→unlock→lock case correctly: the locked-and-then-
  *       unlocked wildcard restores to ITS locked seed, not the
@@ -1403,7 +1877,12 @@ function toggleLockOnCard(idx: number) {
     nextInst = { ...inst, locked_seed: null };
   } else {
     let fallback: number;
-    const lastUsed = props.lastUsedSeedReader?.(m.id);
+    // Read by per-instance `_uid` — sibling rows share `m.id` (library
+    // uuid) so id-keyed reads would return the same value for every
+    // sibling regardless of which one rolled last. Engine trace now
+    // emits `_uid` per entry; `module_seeds` is keyed by it. Falls back
+    // to `m.id` for pre-`_uid` migration entries.
+    const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
     if (typeof lastUsed === "number") {
       fallback = lastUsed;
     } else if (typeof inst._ui?.last_locked_seed === "number") {
@@ -1413,12 +1892,20 @@ function toggleLockOnCard(idx: number) {
     }
     nextInst = { ...inst, locked_seed: fallback, _ui: { ...inst._ui, last_locked_seed: fallback } };
   }
+  // Drop the bundle master_lock marker — the user is now hand-
+  // managing this row's lock state, so a future master OFF on the
+  // bundle should leave it alone.
+  if (nextInst._ui && nextInst._ui.master_lock) {
+    const { master_lock: _drop, ...restUi } = nextInst._ui;
+    void _drop;
+    nextInst = { ...nextInst, _ui: restUi };
+  }
   // Phase B: index-based mutation — sibling rows share `m.id`, so a
   // map-by-id pass would toggle every sibling at once. Indexing into
   // the array hits the specific instance the user clicked.
   const list = [...value.value.modules];
   list[idx] = { ...m, instance: nextInst };
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 /** In-card internal toggle. Drops the field on toggle-off so the
@@ -1427,17 +1914,25 @@ function toggleInternalOnCard(idx: number) {
   const m = value.value.modules[idx];
   if (!m) return;
   const inst = m.instance ?? {};
+  // Dropping the `master_internal` marker means the bundle master's
+  // OFF cascade won't revert this row — the user is now hand-managing
+  // it. Whether they're turning it on for the first time or off after
+  // the master had set it, ownership transfers here.
+  const ui = inst._ui ?? {};
+  const { master_internal: _dropMarker, ...restUi } = ui;
+  void _dropMarker;
+  const nextUi = restUi;
   let nextInst: NonNullable<ModuleEntry["instance"]>;
   if (inst.internal) {
     const { internal: _drop, ...rest } = inst;
     void _drop;
-    nextInst = rest;
+    nextInst = { ...rest, _ui: nextUi };
   } else {
-    nextInst = { ...inst, internal: true };
+    nextInst = { ...inst, internal: true, _ui: nextUi };
   }
   const list = [...value.value.modules];
   list[idx] = { ...m, instance: nextInst };
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 /** Tooltip listing what's been overridden on the module — surfaced
@@ -1817,10 +2312,7 @@ async function onLibraryPick(uuids: string[]) {
       return;
     }
 
-    value.value = {
-      ...value.value,
-      modules: [...value.value.modules, ...newEntries],
-    };
+    commitModules([...value.value.modules, ...newEntries]);
 
     // Phase B.6: fade-in + slide-X each newly added row. No FLIP capture
     // here — new rows are appended at the tail so existing rows don't
@@ -1883,6 +2375,19 @@ async function removeModule(idx: number): Promise<void> {
     });
   }
 
+  // Snapshot bundles BEFORE the remove so the Undo path can restore
+  // a bundle that dissolved when its last child left. Without this,
+  // reconcile on undo can only revive bundles still present in the
+  // current bundles[]; a dissolved single-child bundle would leave
+  // the restored module orphaned outside the frame.
+  const prevBundles = value.value.bundles ?? [];
+  // Anchor for Undo: the _uid of the module that NOW sits at
+  // `idx + 1` (i.e. the neighbor immediately after the row we're
+  // about to remove). Splicing relative to this anchor on Undo lands
+  // the restored row in the right slot even if sibling ops shifted
+  // things between remove and click. Falls back to clamped idx when
+  // the anchor is gone too — degrades gracefully rather than failing.
+  const anchorAfter = value.value.modules[idx + 1]?._uid ?? null;
   const flipSnap = captureFlipSnapshot();
   const next = [...value.value.modules];
   next.splice(idx, 1);
@@ -1905,7 +2410,7 @@ async function removeModule(idx: number): Promise<void> {
     })
     .filter((b): b is NonNullable<typeof b> => b !== null);
 
-  value.value = { ...value.value, modules: next, bundles: nextBundles };
+  commitModules(next, nextBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
   pushToast(`Removed “${moduleLabel}”`, {
@@ -1915,16 +2420,37 @@ async function removeModule(idx: number): Promise<void> {
       onSelect: async () => {
         const restoreUid = removed._uid;
         const scope = modulesContainer.value;
+        // Re-insert at idx + reconcile so any BundleInstance whose
+        // start_idx/end_idx sits at or beyond the restored position
+        // tracks the index shift. Without this, undo of a remove
+        // that happened above a bundle would leave bundles[] stale
+        // and `topLevelItems` would slurp the wrong children — the
+        // same shift bug the drag-drop paths had.
+        // Resolve insert point via the anchor _uid; fall back to the
+        // captured idx (clamped). Splicing here works regardless of
+        // sibling ops that may have shifted modules since remove.
+        const findAnchor = (): number => {
+          if (anchorAfter) {
+            const i = value.value.modules.findIndex((m) => m._uid === anchorAfter);
+            if (i >= 0) return i;
+          }
+          return Math.min(idx, value.value.modules.length);
+        };
         if (restoreUid && scope) {
           await withEnterAnimation(restoreUid, scope, () => {
             const list = [...value.value.modules];
-            list.splice(Math.min(idx, list.length), 0, removed);
-            value.value = { ...value.value, modules: list };
+            list.splice(findAnchor(), 0, removed);
+            // Pass prevBundles so a single-child bundle that dissolved
+            // when this module left gets re-added by reconcile — the
+            // restored module's bundle_origin field still points at
+            // its old BundleInstance _uid, and reconcile matches it
+            // against the snapshotted entry to rebuild the range.
+            commitModules(list, prevBundles);
           });
         } else {
           const list = [...value.value.modules];
-          list.splice(Math.min(idx, list.length), 0, removed);
-          value.value = { ...value.value, modules: list };
+          list.splice(findAnchor(), 0, removed);
+          commitModules(list, prevBundles);
         }
       },
     },
@@ -1955,7 +2481,12 @@ async function duplicateModule(idx: number): Promise<void> {
     };
   }
   list.splice(i + 1, 0, copy);
-  value.value = { ...value.value, modules: list };
+  // Reconcile bundle ranges — without this, any BundleInstance whose
+  // `start_idx`/`end_idx` sits at or beyond the insertion point still
+  // points at its old indices, and the `topLevelItems` walker slurps
+  // the wrong modules into the bundle (the duplicate gets sucked in,
+  // the bundle's tail child gets ejected as standalone).
+  commitModules(list);
   await nextTick();
   // Sibling rows below the inserted slot shift down via FLIP; the new
   // row itself fades + slides in via animateEnterBatch.
@@ -1971,16 +2502,25 @@ async function duplicateModule(idx: number): Promise<void> {
       onSelect: async () => {
         const scope = modulesContainer.value;
         const dupUid = copy._uid;
+        // Filter by the duplicate's _uid instead of splicing at the
+        // captured idx. The captured `i + 1` would point at the wrong
+        // row if another op (a sibling Undo, a row move, a remove)
+        // shifted modules between the duplicate and its Undo. _uid is
+        // stable per instance, so the undo composes with any sibling
+        // op regardless of click order.
         if (dupUid && scope) {
           await withLeaveAnimation(dupUid, scope, () => {
-            const cur = [...value.value.modules];
-            cur.splice(i + 1, 1);
-            value.value = { ...value.value, modules: cur };
+            commitModules(value.value.modules.filter((m) => m._uid !== dupUid));
           });
+        } else if (dupUid) {
+          commitModules(value.value.modules.filter((m) => m._uid !== dupUid));
         } else {
+          // No _uid → pre-migration entry. Best-effort: splice at the
+          // recorded idx, accepting that sibling ops may have shifted
+          // things. Same risk as before; we degrade rather than fail.
           const cur = [...value.value.modules];
           cur.splice(i + 1, 1);
-          value.value = { ...value.value, modules: cur };
+          commitModules(cur);
         }
       },
     },
@@ -2027,7 +2567,9 @@ function moveToEdge(idx: number, edge: "top" | "bottom") {
   const [m] = list.splice(idx, 1);
   if (edge === "top") list.unshift(m);
   else list.push(m);
-  value.value = { ...value.value, modules: list };
+  // Move-to-edge shifts every module between idx and the new position
+  // by one slot; bundle ranges follow.
+  commitModules(list);
   // Vue reorders the DOM by detach+reattach; focus is dropped.
   // Refocus the moved card by its new position.
   const newIdx = edge === "top" ? 0 : list.length - 1;
@@ -2041,7 +2583,7 @@ function toggleEnabled(idx: number) {
   if (idx < 0 || idx >= value.value.modules.length) return;
   const list = [...value.value.modules];
   list[idx] = { ...list[idx], enabled: !list[idx].enabled };
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 function toggleCollapsed(idx: number) {
@@ -2057,7 +2599,7 @@ function toggleCollapsed(idx: number) {
     if (accordion) return { ...m, collapsed: true };
     return m;
   });
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
 }
 
 /** Bulk collapse/expand. Used by the section-header chevron — one
@@ -2065,10 +2607,7 @@ function toggleCollapsed(idx: number) {
  *  cards already match the target state (the deep watcher will
  *  diff-eq and skip the onChange emit). */
 function setAllCollapsed(collapsed: boolean) {
-  value.value = {
-    ...value.value,
-    modules: value.value.modules.map((m) => ({ ...m, collapsed })),
-  };
+  commitModules(value.value.modules.map((m) => ({ ...m, collapsed })));
 }
 
 /** Toolbar counts — total modules + how many are enabled. */
@@ -2081,10 +2620,7 @@ function expandAll(): void { setAllCollapsed(false); }
 function toggleAllEnabled(): void {
   const anyEnabled = value.value.modules.some((m) => m.enabled);
   // If any are enabled, disable all; otherwise enable all.
-  value.value = {
-    ...value.value,
-    modules: value.value.modules.map((m) => ({ ...m, enabled: !anyEnabled })),
-  };
+  commitModules(value.value.modules.map((m) => ({ ...m, enabled: !anyEnabled })));
 }
 
 /** Open the SPA dashboard in a new tab. Mirrors `extension/topbar.ts`'s
@@ -2126,7 +2662,7 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
   delete (cleaned as { _originalId?: string })._originalId;
   const list = [...value.value.modules];
   list[targetIdx] = cleaned;
-  value.value = { ...value.value, modules: list };
+  commitModules(list);
   if (updated._originalId && updated._originalId !== updated.id) {
     nextTick(() => {
       const el = document.querySelector<HTMLElement>(
@@ -2199,7 +2735,10 @@ function moveModule(idx: number, dir: -1 | 1) {
   const j = idx + dir;
   if (idx < 0 || idx >= list.length || j < 0 || j >= list.length) return;
   [list[idx], list[j]] = [list[j], list[idx]];
-  value.value = { ...value.value, modules: list };
+  // Reconcile bundle ranges: when the swapped pair straddles a bundle
+  // boundary, the bundle's children shift by one slot and the start/
+  // end indices have to follow.
+  commitModules(list);
   // Vue reorders the DOM by detach+reattach even with :key; focus is dropped.
   // Refocus the moved card by its new idx (composite key includes idx).
   nextTick(() => {
@@ -2387,13 +2926,26 @@ function onDragEnd() {
     if (consumedByOther) {
       if (ds.kind === "module") {
         // Cross-node consumption — remove source by recorded sourceIdx.
+        // Reconcile bundle ranges on the sender side so any bundle
+        // beyond `srcIdx` shifts down by one and any bundle that
+        // owned the removed row drops it from its children.
         const srcIdx = ds.sourceIdx;
+        const curBundles = value.value.bundles ?? [];
         if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
           const list = [...value.value.modules];
           list.splice(srcIdx, 1);
-          value.value = { ...value.value, modules: list };
+          commitModules(list, curBundles);
         } else {
-          value.value = { ...value.value, modules: value.value.modules.filter((m) => m.id !== ds.module.id) };
+          // Fallback when sourceIdx was invalidated. Target the
+          // specific row by _uid — `m.id` is the library uuid shared
+          // by siblings, so filtering by it would erase every sibling
+          // sharing the dragged module's library entry. Library-id
+          // fallback only for pre-_uid migration entries.
+          const dragUid = ds.module._uid;
+          const filtered = dragUid
+            ? value.value.modules.filter((m) => m._uid !== dragUid)
+            : value.value.modules.filter((m) => m.id !== ds.module.id);
+          commitModules(filtered, curBundles);
         }
       } else if (ds.kind === "bundle") {
         // Cross-node bundle drop — remove the bundle's range from source
@@ -2406,11 +2958,7 @@ function onDragEnd() {
           .map((b) => (b.start_idx > ds.sourceEndIdx
             ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
             : b));
-        value.value = {
-          ...value.value,
-          modules: [...before, ...after],
-          bundles: remainingBundles,
-        };
+        commitModules([...before, ...after], remainingBundles);
       }
     }
   }
@@ -2642,7 +3190,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     }
     list.splice(ii, 0, ...range);
     holdSuppressMove();
-    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, bundles) };
+    commitModules(list, bundles);
     await nextTick();
     playFlipSnapshot(flipSnap);
     // Pulse the bundle wrapper AND every child so a collapsed bundle
@@ -2655,9 +3203,18 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
 
   if (ds.kind === "module" && ds.sourceNodeId === props.nodeId) {
     const list = [...value.value.modules];
+    // Fallback resolution when sourceIdx was invalidated (e.g. a
+    // sibling above the dragged row was removed mid-drag). Prefer
+    // matching the per-instance _uid so the right sibling moves —
+    // matching `m.id` (library uuid) would hit the FIRST sibling and
+    // silently move the wrong row. Library-id fallback kept for
+    // pre-_uid migration entries.
+    const dragUid = ds.module._uid;
     const fromIdx = ds.sourceIdx >= 0 && ds.sourceIdx < list.length
       ? ds.sourceIdx
-      : list.findIndex((m) => m.id === ds.module.id);
+      : dragUid
+        ? list.findIndex((m) => m._uid === dragUid)
+        : list.findIndex((m) => m.id === ds.module.id);
     if (fromIdx < 0) return;
     const [moved] = list.splice(fromIdx, 1);
     let ii: number;
@@ -2698,7 +3255,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     const crossScope = (ds.sourceBundleUid ?? null) !== (stamp ?? null);
     if (crossScope && m._uid) excludeFromFlipSnapshot(flipSnap, m._uid);
 
-    value.value = { ...value.value, modules: list, bundles: reconcileBundleRanges(list, preBundles) };
+    commitModules(list, preBundles);
     await nextTick();
     playFlipSnapshot(flipSnap);
     if (crossScope && m._uid && modulesContainer.value) {
@@ -2746,11 +3303,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
       return fresh;
     });
     list.splice(insertIdx, 0, ...newChildren);
-    value.value = {
-      ...value.value,
-      modules: list,
-      bundles: reconcileBundleRanges(list, [...bundles, newBundle]),
-    };
+    commitModules(list, [...bundles, newBundle]);
     await nextTick();
     playFlipSnapshot(flipSnap);
     // Phase B.4: pulse the bundle wrapper AND every newly-inserted
@@ -2831,11 +3384,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   const preBundles = bundles.map((b) =>
     stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
   );
-  value.value = {
-    ...value.value,
-    modules: list,
-    bundles: reconcileBundleRanges(list, preBundles),
-  };
+  commitModules(list, preBundles);
   await nextTick();
   playFlipSnapshot(flipSnap);
   pulseDrop(inserted._uid);
@@ -3026,8 +3575,14 @@ provide(ModuleRowCtxKey, moduleRowCtx);
             :name="item.bundle!.name ?? 'Bundle'"
             :color="item.bundle!.color"
             :child-count="item.children!.length"
+            :drifted-count="bundleChildDriftCount(item.bundle!)"
+            :library-drifted="isBundleLibraryDrifted(item.bundle!)"
+            :internal-state="bundleInternalState(item.bundle!)"
+            :lock-state="bundleLockState(item.bundle!)"
             @toggle-collapse="toggleBundleCollapsed(item.bundle!._uid)"
             @toggle-enabled="(next) => toggleBundleEnabled(item.bundle!._uid, next)"
+            @toggle-internal="toggleBundleInternal(item.bundle!._uid)"
+            @toggle-lock="toggleBundleLock(item.bundle!._uid)"
             @remove="removeBundle(item.bundle!._uid)"
             @contextmenu="(ev) => openBundleContextMenu(ev, item.bundle!._uid)"
             @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
@@ -3170,6 +3725,22 @@ provide(ModuleRowCtxKey, moduleRowCtx);
       :items="ctxMenu.items"
       :header="ctxMenu.header"
       @close="ctxMenu.visible = false"
+    />
+    <!-- Shared confirm dialog for destructive bundle ops. `pendingConfirm`
+         is set by `maybeConfirm()` when the user has the relevant
+         setting enabled; resolves the awaited Promise via the
+         onConfirm / onCancel callbacks the helper stamped on the
+         state object. -->
+    <ConfirmDialog
+      v-if="pendingConfirm"
+      :visible="true"
+      :title="pendingConfirm.title"
+      :body="pendingConfirm.body"
+      :variant="pendingConfirm.variant"
+      :confirm-label="pendingConfirm.confirmLabel"
+      :cancel-label="pendingConfirm.cancelLabel"
+      @confirm="pendingConfirm.onConfirm"
+      @cancel="pendingConfirm.onCancel"
     />
   </div>
 </template>
@@ -3584,12 +4155,18 @@ provide(ModuleRowCtxKey, moduleRowCtx);
   background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-bg-deep, var(--wp-bg)));
 }
 .wp-empty-hero-glyph {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0.85;
+  /* Defensive: SVG paths default to `pointer-events: visiblePainted` and
+   * the logo's painted area extends to the very edges of its 1024×1024
+   * viewBox. Keep hit-testing off the glyph regardless of layout
+   * surprises (overflow, sibling stacking, etc.) so place-mode clicks
+   * always fall through to the canvas. */
+  pointer-events: none;
 }
 .wp-empty-hero-glyph :deep(svg) {
   width: 100%;

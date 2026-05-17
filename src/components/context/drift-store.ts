@@ -31,6 +31,13 @@ export interface RefreshResult {
  *  `ContextWidget.vue` need to be tightened together. */
 export const hashes: Ref<Record<string, string> | null> = ref(null);
 
+/** Same shape as `hashes` but keyed by bundle library uuid. Polled
+ *  in parallel with module hashes so bundle drift detection
+ *  (`BundleInstance.inserted_at_hash` vs current `payload_hash`)
+ *  has a fresh source of truth. `null` until first fetch lands so
+ *  the UI doesn't flash a drift state before the truth is known. */
+export const bundleHashes: Ref<Record<string, string> | null> = ref(null);
+
 let refCount = 0;
 let pollHandle: number | undefined;
 const POLL_MS = 5000;
@@ -59,6 +66,14 @@ function stopPolling(): void {
 }
 
 async function fetchHashes(): Promise<void> {
+  // Fetch modules + bundles in parallel — both poll on the same
+  // interval and a delay on one shouldn't slow the other. Each
+  // catches its own errors so a 500 on bundles doesn't blank out
+  // module drift state (or vice versa).
+  await Promise.all([fetchModuleHashes(), fetchBundleHashes()]);
+}
+
+async function fetchModuleHashes(): Promise<void> {
   try {
     const res = await fetch("/wp/api/modules/hashes");
     if (!res.ok) return;
@@ -68,6 +83,19 @@ async function fetchHashes(): Promise<void> {
     }
   } catch {
     // Silent — leave whatever we last had so transient errors don't flicker UI.
+  }
+}
+
+async function fetchBundleHashes(): Promise<void> {
+  try {
+    const res = await fetch("/wp/api/bundles/hashes");
+    if (!res.ok) return;
+    const body = (await res.json()) as { hashes?: Record<string, string> };
+    if (body && body.hashes && typeof body.hashes === "object") {
+      bundleHashes.value = body.hashes;
+    }
+  } catch {
+    // Silent — same pattern as fetchModuleHashes.
   }
 }
 

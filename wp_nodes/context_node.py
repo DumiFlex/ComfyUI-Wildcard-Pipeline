@@ -144,12 +144,22 @@ class WPContext(io.ComfyNode):
         #     for every module that ran. Effective = `locked_seed`
         #     when locked, chain seed otherwise. Wrapped in a list
         #     because ComfyUI's UI payload convention is value-as-array.
+        # Key by per-instance `_uid` when present, falling back to the
+        # library `id`. Without this, sibling rows (same library entry
+        # instantiated twice in one Context) collapsed into a single
+        # map entry — last sibling overwrote the others — and the
+        # lock-toggle defaulted every sibling's locked_seed to the
+        # last-executed sibling's roll, not its own. Pre-`_uid`
+        # entries still get keyed by `id`, matching the old behaviour
+        # for unmigrated workflows.
         module_seeds: dict[str, int] = {}
         for entry in ctx.get("__wp_trace__", []):
+            uid = entry.get("_uid")
             mid = entry.get("id")
+            key = uid if isinstance(uid, str) and uid else mid
             es = entry.get("seed")
-            if isinstance(mid, str) and isinstance(es, int):
-                module_seeds[mid] = es
+            if isinstance(key, str) and key and isinstance(es, int):
+                module_seeds[key] = es
         return io.NodeOutput(
             payload,
             ui={"seed": [int(seed)], "module_seeds": [module_seeds]},

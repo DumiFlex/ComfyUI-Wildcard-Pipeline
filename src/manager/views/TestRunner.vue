@@ -49,12 +49,12 @@ const router = useRouter();
 
 interface KindOption { value: ModuleType; label: string; icon: string; color: string }
 const KINDS: KindOption[] = [
-  { value: "pipeline",     label: "Pipeline",   icon: "pi-list",       color: "var(--wp-kind-pipeline)" },
-  { value: "wildcard",     label: "Wildcard",   icon: "pi-th-large",   color: "var(--wp-kind-wildcard)" },
-  { value: "combine",      label: "Combine",    icon: "pi-share-alt",  color: "var(--wp-kind-combine)" },
-  { value: "constraint",   label: "Constraint", icon: "pi-sitemap",    color: "var(--wp-kind-constraint)" },
-  { value: "derivation",   label: "Derivation", icon: "pi-code",       color: "var(--wp-kind-derivation)" },
-  { value: "fixed_values", label: "Fixed",      icon: "pi-tag",        color: "var(--wp-kind-fixed)" },
+  { value: "pipeline",     label: "Pipeline",   icon: "pi-list",                    color: "var(--wp-kind-pipeline)" },
+  { value: "wildcard",     label: "Wildcard",   icon: "pi-sparkles",                color: "var(--wp-kind-wildcard)" },
+  { value: "combine",      label: "Combine",    icon: "pi-link",                    color: "var(--wp-kind-combine)" },
+  { value: "constraint",   label: "Constraint", icon: "pi-filter",                  color: "var(--wp-kind-constraint)" },
+  { value: "derivation",   label: "Derivation", icon: "pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)" },
+  { value: "fixed_values", label: "Fixed",      icon: "pi-tag",                     color: "var(--wp-kind-fixed)" },
 ];
 
 const KIND_HINT: Record<ModuleType, string> = {

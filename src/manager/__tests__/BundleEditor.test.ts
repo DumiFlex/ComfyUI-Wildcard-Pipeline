@@ -14,6 +14,7 @@ vi.mock("../api/client", () => ({
       favorite: vi.fn(),
     },
     categories: { list: vi.fn().mockResolvedValue({ items: [] }) },
+    modules: { list: vi.fn().mockResolvedValue({ items: [] }) },
   },
   ApiError: class extends Error {
     constructor(public status: number, message: string) { super(message); }
@@ -53,7 +54,7 @@ describe("BundleEditor.vue", () => {
     const wrap = mountEditor();
     await flushPromises();
     expect(apiBundles.get).not.toHaveBeenCalled();
-    expect(wrap.text()).toContain("New Bundle");
+    expect(wrap.text()).toContain("New bundle");
   });
 
   it("edit-mode loads bundle and populates fields", async () => {
@@ -81,7 +82,7 @@ describe("BundleEditor.vue", () => {
     expect(apiBundles.get).toHaveBeenCalledWith("bn_test");
 
     // Name input gets populated.
-    const nameInput = wrap.find('input[aria-label="Bundle name"]');
+    const nameInput = wrap.find('[data-test="identity-name"]');
     expect((nameInput.element as HTMLInputElement).value).toBe("Char Pack");
 
     // Tag chips render.
@@ -183,7 +184,7 @@ describe("BundleEditor.vue", () => {
     const wrap = mountEditor({ id: "bn_save" });
     await flushPromises();
 
-    const nameInput = wrap.find('input[aria-label="Bundle name"]');
+    const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("Edited");
 
     // Click the Save button — find by text since icon-only would match
@@ -271,11 +272,239 @@ describe("BundleEditor.vue", () => {
     const wrap = mountEditor({ id: "bn_y" });
     await flushPromises();
 
-    const tagInput = wrap.find('input[aria-label="New tag"]');
+    const tagInput = wrap.find('[data-test="identity-tag-input"]');
     await tagInput.setValue("character");
-    await tagInput.trigger("keyup.enter");
+    await tagInput.trigger("keydown.enter");
 
     expect(wrap.text()).toContain("character");
     expect((tagInput.element as HTMLInputElement).value).toBe("");
+  });
+
+  it("renders EditorFrame breadcrumb back to /bundles", async () => {
+    const wrap = mountEditor();
+    await flushPromises();
+    const back = wrap.find('[data-test="editor-back"]');
+    expect(back.exists()).toBe(true);
+    expect(back.text()).toContain("Bundles");
+  });
+
+  it("save persists children array after toggle", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_kids",
+      name: "Kids",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        { id: "wc_a", type: "wildcard", enabled: true, meta: { name: "alpha" } },
+        { id: "wc_b", type: "wildcard", enabled: true, meta: { name: "beta" } },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_kids",
+      name: "Kids",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        { id: "wc_a", type: "wildcard", enabled: false, meta: { name: "alpha" } },
+        { id: "wc_b", type: "wildcard", enabled: true, meta: { name: "beta" } },
+      ],
+      payload_hash: "h1", version: 2, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_kids" });
+    await flushPromises();
+
+    const toggleBtns = wrap.findAll('[data-test="bundle-child-toggle"]');
+    expect(toggleBtns.length).toBe(2);
+    await toggleBtns[0].trigger("click");
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    expect(apiBundles.update).toHaveBeenCalled();
+    const callArgs = apiBundles.update.mock.calls[0];
+    expect(callArgs[0]).toBe("bn_kids");
+    const payload = callArgs[1] as { children?: Array<Record<string, unknown>> };
+    expect(payload.children).toBeDefined();
+    expect(payload.children![0].enabled).toBe(false);
+    expect(payload.children![1].enabled).toBe(true);
+  });
+
+  it("remove splices a child and persists on save", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_rm",
+      name: "Rm",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        { id: "wc_a", type: "wildcard", enabled: true, meta: { name: "alpha" } },
+        { id: "wc_b", type: "wildcard", enabled: true, meta: { name: "beta" } },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_rm", name: "Rm", description: "",
+      color: null, category_id: null, tags: [],
+      is_favorite: false, children: [], payload_hash: "h1",
+      version: 2, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_rm" });
+    await flushPromises();
+
+    await wrap.findAll('[data-test="bundle-child-remove"]')[0].trigger("click");
+    expect(wrap.text()).toContain("Children (1)");
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    const callArgs = apiBundles.update.mock.calls[0];
+    const payload = callArgs[1] as { children?: unknown[] };
+    expect(payload.children).toHaveLength(1);
+  });
+
+  it("clicking a child row reveals the pane with that child", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_sel",
+      name: "Sel",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        {
+          id: "wc_a",
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "alpha" },
+          payload: { options: [], sub_categories: [] },
+          instance: {},
+        },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_sel" });
+    await flushPromises();
+
+    // Pane absent before selection.
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(false);
+
+    await wrap.find('[data-test="bundle-child-main"]').trigger("click");
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(true);
+    expect(wrap.text()).toContain("alpha");
+  });
+
+  it("adding from library appends a snapshot to children", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_add",
+      name: "Add",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    const apiAny = api as unknown as { modules: { list: ReturnType<typeof vi.fn> } };
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        {
+          id: "wc_lib", type: "wildcard", name: "library_wc",
+          description: "", category_id: null, tags: [], is_favorite: false,
+          payload: { options: [], sub_categories: [] },
+          payload_hash: "lh1", version: 1, created_at: "", updated_at: "",
+        },
+      ],
+    });
+
+    const wrap = mountEditor({ id: "bn_add" });
+    await flushPromises();
+
+    await wrap.find('[data-test="bundle-add-open"]').trigger("click");
+    await flushPromises();
+
+    const row = document.body.querySelector('[data-test="bundle-add-row-wc_lib"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.click();
+    await flushPromises();
+
+    expect(wrap.text()).toContain("Children (1)");
+    expect(wrap.text()).toContain("library_wc");
+
+    wrap.unmount();
+  });
+
+  it("pane close clears selection", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_close",
+      name: "Close",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        {
+          id: "wc_a",
+          type: "wildcard",
+          enabled: true,
+          meta: { name: "alpha" },
+          payload: { options: [], sub_categories: [] },
+          instance: {},
+        },
+      ],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_close" });
+    await flushPromises();
+
+    await wrap.find('[data-test="bundle-child-main"]').trigger("click");
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(true);
+
+    await wrap.find('[data-test="bundle-pane-close"]').trigger("click");
+    expect(wrap.find('[data-test="bundle-pane-header"]').exists()).toBe(false);
+  });
+
+  it("duplicate inserts after source and persists on save", async () => {
+    apiBundles.get.mockResolvedValue({
+      id: "bn_dup", name: "Dup", description: "",
+      color: null, category_id: null, tags: [], is_favorite: false,
+      children: [{ id: "wc_a", type: "wildcard", enabled: true, meta: { name: "alpha" } }],
+      payload_hash: "h0", version: 1, created_at: "", updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_dup", name: "Dup", description: "",
+      color: null, category_id: null, tags: [], is_favorite: false,
+      children: [], payload_hash: "h1", version: 2, created_at: "", updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_dup" });
+    await flushPromises();
+
+    await wrap.find('[data-test="bundle-child-duplicate"]').trigger("click");
+    expect(wrap.text()).toContain("Children (2)");
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    const payload = apiBundles.update.mock.calls[0][1] as { children?: Array<{ id: string }> };
+    expect(payload.children).toHaveLength(2);
+    // Both rows keep the source library uuid — multi-instance bundles
+    // intentionally share `id`. Per-instance disambiguation lives in
+    // `_uid`, stamped at Context-insert time, not at edit time.
+    expect(payload.children![0].id).toBe("wc_a");
+    expect(payload.children![1].id).toBe("wc_a");
   });
 });

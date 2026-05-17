@@ -22,18 +22,26 @@ Context = dict[str, Any]
 
 
 def strip_internals(ctx: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy of ``ctx`` without engine-only keys.
+    """Return a copy of ``ctx`` with engine-only + user-flagged-internal keys removed.
 
-    Two layers of "internal" get removed:
+    Use at the *prompt render* boundary (PromptAssembler) — both engine
+    bookkeeping AND user-marked-internal vars are filtered:
+
       1. ``__``-prefixed keys: engine bookkeeping (``__wp_node_seed__``,
          ``__wp_trace__``, ``__wp_internal_flags__``, …).
       2. Keys whose name appears with ``True`` in the
          ``__wp_internal_flags__`` map: user-marked-internal bindings
-         from modules with ``instance.internal == True``. These keys
-         stay in ctx during pipeline execution so downstream modules
-         can read them, but never surface on the public socket
-         payload — handy for "scratch" vars that drive a derivation
-         but should not become prompt-text noise.
+         from modules with ``instance.internal == True``. These vars
+         drive composition (other modules can read them) but must not
+         appear as standalone ``$var`` substitutions in the rendered
+         prompt — that's the "internal" UX promise.
+
+    For the *socket* boundary (PIPELINE_CONTEXT carrying state between
+    Context nodes), use ``strip_engine_internals`` instead — it drops
+    only the ``__``-prefixed engine keys so user-flagged internal vars
+    continue to propagate through downstream Context / Combine / etc.
+    until they reach a PromptAssembler that filters them at render
+    time.
     """
     flags = ctx.get("__wp_internal_flags__")
     internal_names: set[str] = set()
@@ -43,3 +51,16 @@ def strip_internals(ctx: dict[str, Any]) -> dict[str, Any]:
         k: v for k, v in ctx.items()
         if not k.startswith("__") and k not in internal_names
     }
+
+
+def strip_engine_internals(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``ctx`` with only the ``__``-prefixed engine keys removed.
+
+    User-flagged internal vars stay in the result — they need to
+    propagate across Context-node boundaries so downstream Combine /
+    Derivation / Constraint modules can read them. Only the final
+    PromptAssembler filters them out at render time (via
+    ``strip_internals``) so they don't appear as standalone ``$var``
+    substitutions in the prompt text.
+    """
+    return {k: v for k, v in ctx.items() if not k.startswith("__")}

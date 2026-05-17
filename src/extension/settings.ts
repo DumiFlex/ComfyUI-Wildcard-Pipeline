@@ -26,6 +26,7 @@ export type ValidationMode = "strict" | "relaxed" | "permissive";
 export type ToastLifetime = "short" | "default" | "long" | "sticky";
 export type CollapseMode = "independent" | "accordion";
 export type ColorIntensity = "muted" | "standard" | "vivid";
+export type BundleMasterOffBehavior = "preserve-manual" | "cascade-all";
 
 /**
  * Setting widget types ComfyUI's settings panel can render natively.
@@ -106,6 +107,9 @@ const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
 const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
 const SETTING_ID_SUPPRESS_INFO = "wildcardPipeline.behavior.suppressInfoToasts";
 const SETTING_ID_NEW_DISABLED = "wildcardPipeline.behavior.newModuleDisabled";
+const SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE = "wildcardPipeline.behavior.confirmDestructiveBundle";
+const SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR = "wildcardPipeline.behavior.bundleMasterOffBehavior";
+const SETTING_ID_BUNDLE_COLLAPSED = "wildcardPipeline.display.bundleCollapsedByDefault";
 
 const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -202,6 +206,27 @@ const state = reactive<{
   newModuleDisabled: boolean;
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
+  /** When true, destructive bundle ops (remove / reset-to-library /
+   *  save-to-library) prompt via the themed ConfirmDialog before
+   *  committing. When false, the op runs immediately and falls back
+   *  to the toast Undo for recovery. */
+  confirmDestructiveBundle: boolean;
+  /** When true, bundles inserted from the library start with their
+   *  `collapsed` flag set so the frame renders header-only. Companion
+   *  to `collapsedByDefault` (modules) — kept separate because bundles
+   *  are usually 3-8 children deep and users tend to want a different
+   *  default for them than for individual modules. */
+  bundleCollapsedByDefault: boolean;
+  /** Master-OFF cascade behaviour. "preserve-manual" — only revert
+   *  rows the master itself turned on (tracked via `_ui.master_*`
+   *  markers); rows the user marked individually keep their state.
+   *  "cascade-all" — clear every applicable row regardless of marker
+   *  (full sweep). Applicability filter (skip constraint for
+   *  internal, skip non-lockable for lock) is hardcoded and not
+   *  user-configurable — writing those flags onto kinds that don't
+   *  surface them is dead data and would only confuse downstream
+   *  tooling. */
+  bundleMasterOffBehavior: BundleMasterOffBehavior;
 }>({
   reduceMotion: "auto",
   contrast: "auto",
@@ -218,6 +243,9 @@ const state = reactive<{
   newModuleDisabled: false,
   collapseMode: "independent",
   colorIntensity: "standard",
+  confirmDestructiveBundle: true,
+  bundleMasterOffBehavior: "preserve-manual",
+  bundleCollapsedByDefault: false,
 });
 
 function asMode(v: unknown, fallback: A11yMode): A11yMode {
@@ -256,6 +284,13 @@ function asColorIntensity(v: unknown, fallback: ColorIntensity): ColorIntensity 
   return v === "muted" || v === "standard" || v === "vivid" ? v : fallback;
 }
 
+function asBundleMasterOffBehavior(
+  v: unknown,
+  fallback: BundleMasterOffBehavior,
+): BundleMasterOffBehavior {
+  return v === "preserve-manual" || v === "cascade-all" ? v : fallback;
+}
+
 /** Test-only: reset display preferences state to defaults. */
 export function _resetDisplayStateForTesting(): void {
   state.density = "comfortable";
@@ -271,6 +306,14 @@ export function _resetDisplayStateForTesting(): void {
   state.newModuleDisabled = false;
   state.collapseMode = "independent";
   state.colorIntensity = "standard";
+  // Tests default to skipping the confirm dialog so the existing
+  // ctxmenu-driven destructive-op suites don't have to thread a click
+  // through a Promise. Production default is `true` (set in the
+  // top-level reactive() initialiser + the buildSettings entry's
+  // defaultValue); this reset is test-scoped.
+  state.confirmDestructiveBundle = false;
+  state.bundleMasterOffBehavior = "preserve-manual";
+  state.bundleCollapsedByDefault = false;
 }
 
 /**
@@ -339,6 +382,18 @@ export function getNewModuleDisabled(): boolean {
  *   - "accordion"   → only one module can be expanded at a time;
  *                     expanding any module collapses every other one
  */
+export function getConfirmDestructiveBundle(): boolean {
+  return state.confirmDestructiveBundle;
+}
+
+export function getBundleMasterOffBehavior(): BundleMasterOffBehavior {
+  return state.bundleMasterOffBehavior;
+}
+
+export function getBundleCollapsedByDefault(): boolean {
+  return state.bundleCollapsedByDefault;
+}
+
 export function getCollapseMode(): CollapseMode {
   return state.collapseMode;
 }
@@ -530,6 +585,14 @@ export function applyDisplayPrefs(app: AppLike): void {
   state.toastLifetime = asToastLifetime(app.extensionManager?.setting?.get(SETTING_ID_TOAST_LIFETIME), "default");
   state.suppressInfoToasts = app.extensionManager?.setting?.get(SETTING_ID_SUPPRESS_INFO) === true;
   state.newModuleDisabled = app.extensionManager?.setting?.get(SETTING_ID_NEW_DISABLED) === true;
+  state.confirmDestructiveBundle =
+    app.extensionManager?.setting?.get(SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE) !== false;
+  state.bundleMasterOffBehavior = asBundleMasterOffBehavior(
+    app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR),
+    "preserve-manual",
+  );
+  state.bundleCollapsedByDefault =
+    app.extensionManager?.setting?.get(SETTING_ID_BUNDLE_COLLAPSED) === true;
   // Phase 3b — collapse-stack mode. Pure Vue state (no body class) since
   // the behavior is JS-driven (toggleCollapsed reads via getCollapseMode).
   state.collapseMode = asCollapseMode(app.extensionManager?.setting?.get(SETTING_ID_COLLAPSE_MODE), "independent");
@@ -629,26 +692,26 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
   // renders entries in REVERSE array order within each section
   // (last in source = first in panel — verified empirically against
   // the live frontend, the registration store appears to render
-  // bottom-up). Two sections:
+  // bottom-up).
   //
-  //   - "Display"  — visual axes (sorts first because D < R)
-  //   - "Runtime"  — behavior gates (sorts second; renamed from
-  //                  "Behavior" because B < D would push Runtime
-  //                  ABOVE Display and shove the playground out of
-  //                  the top slot)
+  // Section names mirror the `<fieldset>` legends from
+  // DisplayPlaygroundModal.vue so the panel and the modal show the
+  // same buckets. Each section name is prefixed with a digit + dot
+  // ("1. Playground", "2. Sizing", ...) so ComfyUI's alphabetical
+  // sort lands them in the playground's logical order — without the
+  // prefix, "Accessibility" / "Collapse & focus" / etc. would sort
+  // by their natural letters and bury the launcher mid-list.
+  //
+  // 3rd-level category MUST be unique per setting. ComfyUI treats the
+  // full `category` path as the setting's unique identifier — two
+  // entries sharing the same 3-tuple collapse to a single row in the
+  // panel (one wins, the other disappears).
   //
   // Source order below reads top-to-bottom in the SAME order users
   // see in the panel — playground first, sizing next, etc. The
   // `.reverse()` at the bottom of the function flips the literal
-  // into ComfyUI's expected order so what we write matches what
-  // users see, instead of reading in confusing reverse logical order.
-  //
-  // Within Display, array order forms logical clusters that the user
-  // can scan top-to-bottom: playground → sizing (density / decoration /
-  // color-intensity) → identity (module-type) → state markers →
-  // collapse + focus → accessibility. ComfyUI doesn't render
-  // separators, but the array order makes the clusters obvious as
-  // adjacent rows.
+  // into ComfyUI's expected per-section render order so what we
+  // write matches what users see.
   const entries: ComfySetting[] = [
     // Launcher row — uses the SettingCustomRenderer escape hatch
     // (`type: function`) to render a button styled like a PrimeVue
@@ -689,7 +752,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
       defaultValue: null,
       tooltip: "Live preview of every display + a11y setting in one place.",
-      category: ["Wildcard Pipeline", "Display", "Playground"],
+      category: ["Wildcard Pipeline", "1. Playground", "Open"],
     },
     // Visual axes — sizing, embellishment, identity
     {
@@ -699,7 +762,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       options: DENSITY_OPTIONS,
       defaultValue: "comfortable",
       tooltip: "Module spacing and chip sizes.",
-      category: ["Wildcard Pipeline", "Display", "Density"],
+      category: ["Wildcard Pipeline", "2. Sizing", "Density"],
       onChange: (newVal) => {
         const next = asDensity(newVal, "comfortable");
         const changed = next !== state.density;
@@ -720,7 +783,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       options: DECORATION_OPTIONS,
       defaultValue: "full",
       tooltip: "Gradients & shadows. Off = flat (weak GPU / remote desktop).",
-      category: ["Wildcard Pipeline", "Display", "Decoration"],
+      category: ["Wildcard Pipeline", "2. Sizing", "Decoration"],
       onChange: (newVal) => {
         const next = asDecoration(newVal, "full");
         const changed = next !== state.decoration;
@@ -743,7 +806,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "How saturated accent / kind / status colors render. " +
         "Muted reduces chroma for a calmer palette; vivid bumps it for pop.",
-      category: ["Wildcard Pipeline", "Display", "Color intensity"],
+      category: ["Wildcard Pipeline", "2. Sizing", "Color intensity"],
       onChange: (newVal) => {
         const next = asColorIntensity(newVal, "standard");
         const changed = next !== state.colorIntensity;
@@ -759,12 +822,12 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     },
     {
       id: SETTING_ID_KIND_STYLE,
-      name: "Module type style",
+      name: "Type style",
       type: "combo",
       options: KIND_STYLE_OPTIONS,
       defaultValue: "chip",
-      tooltip: "How module type shows: chip text, icon glyph, or both.",
-      category: ["Wildcard Pipeline", "Display", "Module type style"],
+      tooltip: "How the kind indicator shows on module rows AND bundle headers: chip text, icon glyph, or both.",
+      category: ["Wildcard Pipeline", "3. Module identity", "Type style"],
       onChange: (newVal) => {
         const next = asKindStyle(newVal, "chip");
         const changed = next !== state.kindStyle;
@@ -785,7 +848,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       options: INDICATOR_OPTIONS,
       defaultValue: "badge",
       tooltip: "How mod / missing / drift / conflict markers appear.",
-      category: ["Wildcard Pipeline", "Display", "State indicator style"],
+      category: ["Wildcard Pipeline", "4. State markers", "State indicator style"],
       onChange: (newVal) => {
         const next = asIndicator(newVal, "badge");
         const changed = next !== state.indicatorStyle;
@@ -805,7 +868,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       type: "boolean",
       defaultValue: true,
       tooltip: "Color the module border by its state.",
-      category: ["Wildcard Pipeline", "Display", "State border highlights"],
+      category: ["Wildcard Pipeline", "4. State markers", "State border highlights"],
       onChange: (newVal) => {
         const next = newVal !== false;
         const changed = next !== state.borderHighlight;
@@ -824,8 +887,8 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       name: "Collapse new modules by default",
       type: "boolean",
       defaultValue: false,
-      tooltip: "New modules render with body hidden (header only).",
-      category: ["Wildcard Pipeline", "Display", "Collapse default"],
+      tooltip: "Modules added via the picker render with body hidden (header only). Bundles have their own setting below.",
+      category: ["Wildcard Pipeline", "5. Collapse & focus", "Collapse modules default"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.collapsedByDefault;
@@ -840,6 +903,27 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
     },
     {
+      id: SETTING_ID_BUNDLE_COLLAPSED,
+      name: "Collapse new bundles by default",
+      type: "boolean",
+      defaultValue: false,
+      tooltip: "Bundles inserted from the library render with the frame collapsed (header only). Independent from the modules collapse-default since bundles usually carry 3-8 children and users often want a different default there.",
+      category: ["Wildcard Pipeline", "5. Collapse & focus", "Collapse bundles default"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.bundleCollapsedByDefault;
+        state.bundleCollapsedByDefault = next;
+        if (bootCompleted && changed) {
+          pushToast(
+            next
+              ? "New bundles will start collapsed."
+              : "New bundles will start expanded.",
+            { severity: "info", singletonKey: "wp-bundle-collapsed-default" },
+          );
+        }
+      },
+    },
+    {
       id: SETTING_ID_COLLAPSE_MODE,
       name: "Collapse stack mode",
       type: "combo",
@@ -848,7 +932,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "Independent: each module collapses on its own. " +
         "Accordion: expanding a module collapses all others.",
-      category: ["Wildcard Pipeline", "Display", "Collapse stack mode"],
+      category: ["Wildcard Pipeline", "5. Collapse & focus", "Collapse stack mode"],
       onChange: (newVal) => {
         const next = asCollapseMode(newVal, "independent");
         const changed = next !== state.collapseMode;
@@ -868,7 +952,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       type: "boolean",
       defaultValue: false,
       tooltip: "Hover a module to dim the others.",
-      category: ["Wildcard Pipeline", "Display", "Focus mode"],
+      category: ["Wildcard Pipeline", "5. Collapse & focus", "Focus mode"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.focusMode;
@@ -903,7 +987,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "Disables Wildcard Pipeline animations. " +
         "Match system honors prefers-reduced-motion.",
-      category: ["Wildcard Pipeline", "Display", "Reduce motion"],
+      category: ["Wildcard Pipeline", "6. Accessibility", "Reduce motion"],
       onChange: (newVal) => {
         const next = asMode(newVal, "auto");
         const changed = next !== state.reduceMotion;
@@ -926,7 +1010,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "Bumps borders + text contrast. " +
         "Match system honors prefers-contrast.",
-      category: ["Wildcard Pipeline", "Display", "Contrast"],
+      category: ["Wildcard Pipeline", "6. Accessibility", "Contrast"],
       onChange: (newVal) => {
         const next = asMode(newVal, "auto");
         const changed = next !== state.contrast;
@@ -955,7 +1039,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "How aggressively the conflict scanner surfaces issues. " +
         "Permissive turns it off — use only if you know what you're doing.",
-      category: ["Wildcard Pipeline", "Runtime", "Validation"],
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Validation"],
       onChange: (newVal) => {
         const next = asValidation(newVal, "strict");
         const changed = next !== state.validation;
@@ -975,7 +1059,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       options: TOAST_LIFETIME_OPTIONS,
       defaultValue: "default",
       tooltip: "How long status toasts stay on screen before auto-dismissing.",
-      category: ["Wildcard Pipeline", "Runtime", "Toast lifetime"],
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Toast lifetime"],
       onChange: (newVal) => {
         const next = asToastLifetime(newVal, "default");
         const changed = next !== state.toastLifetime;
@@ -996,7 +1080,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "When on, info toasts (status confirmations) are filtered out. " +
         "Warnings + errors still show.",
-      category: ["Wildcard Pipeline", "Runtime", "Suppress info toasts"],
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Suppress info toasts"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.suppressInfoToasts;
@@ -1021,7 +1105,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       tooltip:
         "When on, modules added from the picker start with their toggle off. " +
         "Useful when configuring before letting them run.",
-      category: ["Wildcard Pipeline", "Runtime", "New module default"],
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "New module default"],
       onChange: (newVal) => {
         const next = newVal === true;
         const changed = next !== state.newModuleDisabled;
@@ -1031,6 +1115,62 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             severity: "info",
             singletonKey: "wp-new-module-disabled",
           });
+        }
+      },
+    },
+    {
+      id: SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE,
+      name: "Confirm destructive bundle actions",
+      type: "boolean",
+      defaultValue: true,
+      tooltip:
+        "Show a confirm dialog before remove / reset-to-library / " +
+        "save-to-library on bundles. Turn off if you trust the Undo " +
+        "toast as the only safety net.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Confirm destructive bundle"],
+      onChange: (newVal) => {
+        const next = newVal === true;
+        const changed = next !== state.confirmDestructiveBundle;
+        state.confirmDestructiveBundle = next;
+        if (bootCompleted && changed) {
+          pushToast(
+            next
+              ? "Confirm dialog will show for destructive bundle ops."
+              : "Confirm dialog disabled — undo via the toast.",
+            { severity: "info", singletonKey: "wp-confirm-destructive-bundle" },
+          );
+        }
+      },
+    },
+    {
+      id: SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR,
+      name: "Bundle master toggle: clear behavior",
+      type: "combo",
+      options: [
+        { text: "Preserve manual (recommended)", value: "preserve-manual" },
+        { text: "Cascade — clear everyone", value: "cascade-all" },
+      ],
+      defaultValue: "preserve-manual",
+      tooltip:
+        "What the bundle master ON->OFF click clears. " +
+        "Preserve manual: only revert rows the master itself turned on; " +
+        "rows the user marked internal / locked individually stay put. " +
+        "Cascade: clear every applicable row regardless of how it got " +
+        "set. Applicability (skip constraint for internal, " +
+        "skip non-lockable for lock) is hardcoded — the engine ignores " +
+        "the flag on those kinds, so writing it would be dead data.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Bundle master clear behavior"],
+      onChange: (newVal) => {
+        const next = asBundleMasterOffBehavior(newVal, "preserve-manual");
+        const changed = next !== state.bundleMasterOffBehavior;
+        state.bundleMasterOffBehavior = next;
+        if (bootCompleted && changed) {
+          pushToast(
+            next === "cascade-all"
+              ? "Bundle master OFF will clear every applicable child."
+              : "Bundle master OFF will only revert rows it turned on.",
+            { severity: "info", singletonKey: "wp-bundle-master-off-behavior" },
+          );
         }
       },
     },

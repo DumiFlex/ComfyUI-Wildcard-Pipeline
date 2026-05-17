@@ -166,7 +166,23 @@ async def toggle_favorite(request: web.Request) -> web.Response:
     return json_ok(row)
 
 
+async def list_hashes(request: web.Request) -> web.Response:
+    """GET /wp/api/bundles/hashes — bulk hash fetch for bundle-drift
+    detection. Mirrors `/wp/api/modules/hashes` shape so the SPA's
+    drift-store can poll both endpoints with the same handler. Used
+    by the in-graph WP_Context widget to compare each BundleInstance's
+    `inserted_at_hash` against the library's current `payload_hash`,
+    surfacing a "library updated" indicator on bundle headers whose
+    library entry has changed since insert."""
+    with db_session(request) as conn:
+        rows = BundleRepository(conn).list()
+    return json_ok({
+        "hashes": {row["id"]: row["payload_hash"] for row in rows},
+    })
+
+
 def register(router) -> None:
+    router.add_get("/wp/api/bundles/hashes", list_hashes)
     router.add_get("/wp/api/bundles", list_bundles)
     router.add_post("/wp/api/bundles", create_bundle)
     router.add_get("/wp/api/bundles/{id}", get_bundle)

@@ -1,5 +1,7 @@
 import { createApp, type App, type Component } from "vue";
 
+import { nodeCollapseAnimating } from "../extension/_stashes";
+
 export interface DomWidget {
   element: HTMLElement;
   options?: Record<string, unknown>;
@@ -48,6 +50,24 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    * observation; component CSS should set `height: 100%` on its root.
    */
   fillHost?: boolean;
+  /**
+   * When true, ignore user height-drag and ALWAYS follow content min
+   * height. Width still preserves user drag (per-axis policy). Use for
+   * widgets where the content has a well-defined natural height that
+   * the user shouldn't override — collapse/expand animations break when
+   * the node is stuck at a manually-set tall height. Defaults to
+   * `false` (current behavior: preserve user height drag).
+   */
+  autoHeight?: boolean;
+}
+
+/** LiteGraph snaps node size to this grid by default. Mirror it when
+ *  we set sizes programmatically so auto-grow lands on the same grid
+ *  the user gets when they drag, rather than off-by-a-pixel drift. */
+const NODE_SIZE_GRID = 10;
+
+function snapToGrid(n: number): number {
+  return Math.round(n / NODE_SIZE_GRID) * NODE_SIZE_GRID;
 }
 
 interface ResizableNode {
@@ -86,7 +106,12 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   host.appendChild(inner);
 
   let state = options.initialValue ?? "";
-  const baseMin = options.minHeight ?? 80;
+  // baseMin pre-snapped so the initial `getMinHeight` answer + every
+  // subsequent floor enforcement land on the LiteGraph grid. Without
+  // this, the first paint reports a raw min, ComfyUI sizes the node
+  // to it, then our autosize snaps a moment later — visible as a
+  // two-step resize.
+  const baseMin = snapToGrid(options.minHeight ?? 80);
   let minHeight = baseMin;
 
   const widgetOpts: Record<string, unknown> = {
@@ -120,7 +145,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   }
   if (minWidthGetter) {
     const getter = minWidthGetter;
-    widget.computeLayoutSize = () => ({ minWidth: getter(), minHeight });
+    // Snap the reported minWidth so ComfyUI's first layout pass already
+    // sees a grid-aligned value. If we returned the raw getter result,
+    // litegraph would size to that, then our setSize call below would
+    // round to the next grid step — perceived as a two-step resize.
+    widget.computeLayoutSize = () => ({ minWidth: snapToGrid(getter()), minHeight });
   }
   // createApp's prop overload requires the second arg's keys to extend the
   // component's prop keys. With componentProps?: P (defaulting to {}), TS
@@ -144,28 +173,48 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
-      const next = Math.max(baseMin, measured);
+      // While a collapse animation is tweening node.size[1], skip
+      // observer-driven setSize. The tween captured startH before
+      // Vue's v-if removed the rows; a setSize here would snap the
+      // node to the collapsed target instantly, the tween's next rAF
+      // would override back to start, and the user would see a
+      // snap-then-animate two-step. Resuming after the tween (the
+      // animation clears the flag in its final rAF) is safe because
+      // snapToSize at the tween's end already lands the node at the
+      // correct target.
+      if (nodeCollapseAnimating.has(node as object)) return;
+      // Snap before storing: minHeight feeds both ComfyUI's
+      // getMinHeight callback AND our own min[1] read below. Keeping
+      // it grid-aligned at the source means setSize never has to
+      // correct an off-grid value after the fact.
+      const next = snapToGrid(Math.max(baseMin, measured));
       if (next !== minHeight) minHeight = next;
 
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      // Delta-check the height axis too: if cur[1] matches what WE
-      // last set, the change came from us → safe to follow min[1] up
-      // OR down (content shrank, collapse modules, etc). If cur[1]
-      // differs, the user dragged taller — preserve their value, only
-      // grow if content demands more room.
+      // Height axis policy:
+      //  - `autoHeight` option set → always follow content min. User
+      //    drag is ignored (use case: Context / Injector / Assembler
+      //    where the natural height matters more than a user-stuck
+      //    tall size that breaks collapse autosizing).
+      //  - default → delta-check user's drag and preserve it. Only
+      //    grow when content demands more room.
       const userControlsHeight =
-        lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1;
-      const targetH = userControlsHeight
-        ? Math.max(cur[1], min[1])  // preserve drag; grow only if content demands
-        : min[1];                    // we own height; follow min up OR down
-      // Width axis: same delta-check pattern. requestRelayout sets
-      // lastAutoSetWidth too, so a width-grow there is preserved by
-      // pushSize here when it fires shortly after.
+        !options.autoHeight
+        && lastAutoSetHeight !== 0
+        && Math.abs(cur[1] - lastAutoSetHeight) > 1;
+      const rawTargetH = userControlsHeight
+        ? Math.max(cur[1], min[1])
+        : min[1];
+      // Width axis: always preserve user drag (current behavior).
       const userControlsWidth =
         lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
-      const targetW = userControlsWidth ? Math.max(cur[0], min[0]) : Math.max(cur[0], min[0]);
+      const rawTargetW = userControlsWidth ? Math.max(cur[0], min[0]) : Math.max(cur[0], min[0]);
+      // Snap both axes to LiteGraph's 10px node-size grid so auto-grow
+      // lands on the same grid the user gets when they drag the corner.
+      const targetW = snapToGrid(rawTargetW);
+      const targetH = snapToGrid(rawTargetH);
       if (Math.abs(cur[0] - targetW) < 1 && Math.abs(cur[1] - targetH) < 1) return;
       resizable.setSize([targetW, targetH]);
       lastAutoSetWidth = targetW;
@@ -210,30 +259,40 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     if (relayouting) return;
     relayouting = true;
     try {
+      // See pushSize comment — same reason: skip while the collapse
+      // tween owns node.size[1].
+      if (nodeCollapseAnimating.has(node as object)) return;
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
       const userControlsWidth =
         lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
-      const targetW = userControlsWidth
+      const rawTargetW = userControlsWidth
         ? Math.max(cur[0], min[0])  // preserve drag; grow only if needed
         : min[0];                    // we own width; follow min up OR down
-      // Height policy depends on autosize mode:
+      // Height policy:
+      //   - autoHeight option (Context / Injector / Assembler) →
+      //     always follow content min. Never preserve drag.
       //   - fillHost (Debug): height is 100% user-controlled. No
       //     ResizeObserver fires to seed `lastAutoSetHeight`, so the
       //     delta-check would always read "we own height" on first
       //     call and snap the node back to min. Preserve cur[1] but
-      //     respect the floor — never shrink the user's drag.
-      //   - normal mode: pushSize observer drives height; this path
-      //     is rarely the height-mover, but if it does fire (an
-      //     explicit width-state change emit), preserve user drags
-      //     via the delta-check.
-      const userControlsHeight =
-        options.fillHost
-        || (lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1);
-      const targetH = userControlsHeight
+      //     respect the floor.
+      //   - default: delta-check user drag, preserve when matched.
+      let userControlsHeight: boolean;
+      if (options.autoHeight) {
+        userControlsHeight = false;
+      } else if (options.fillHost) {
+        userControlsHeight = true;
+      } else {
+        userControlsHeight =
+          lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1;
+      }
+      const rawTargetH = userControlsHeight
         ? Math.max(cur[1], min[1])
         : min[1];
+      const targetW = snapToGrid(rawTargetW);
+      const targetH = snapToGrid(rawTargetH);
       if (Math.abs(cur[0] - targetW) < 1 && Math.abs(cur[1] - targetH) < 1) return;
       resizable.setSize([targetW, targetH]);
       // Record what WE asked for on both axes. Even if litegraph
@@ -583,6 +642,19 @@ export interface ModuleEntry {
     _ui?: {
       /** Restore-on-toggle-on memory for the lock seed input. */
       last_locked_seed?: number;
+      /** True when the bundle master internal toggle was the thing
+       *  that turned `instance.internal` on for this child. Lets the
+       *  master OFF action revert ONLY the children it turned on —
+       *  rows the user had marked internal individually keep their
+       *  state. Cleared by any per-card internal toggle (the user is
+       *  now hand-managing this row) and by the master OFF op itself.
+       *  Belongs in `_ui` because it's a session/UX marker, not
+       *  semantic engine state. */
+      master_internal?: boolean;
+      /** Mirror of `master_internal` for the seed-lock master toggle.
+       *  Same lifecycle: set by master ON for rows it locked, cleared
+       *  by individual lock toggles or master OFF. */
+      master_lock?: boolean;
     };
   };
 }

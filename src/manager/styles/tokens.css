@@ -8,6 +8,21 @@
    ========================================================= */
 
 :root {
+  /* Variable color palette — kept in sync with
+   * src/components/shared/theme.css (extension surface). The bundle
+   * editor mounts Context-side section components (CombineTemplateSection
+   * detected pills + preview tokens etc.) which call `varColorClass()`
+   * to emit `.var-1`..`.var-8`; without these rules in the manager
+   * surface the highlight collapses to default text color. */
+  --wp-var-1: #93c5fd;
+  --wp-var-2: #fcd34d;
+  --wp-var-3: #86efac;
+  --wp-var-4: #f9a8d4;
+  --wp-var-5: #fdba74;
+  --wp-var-6: #c4b5fd;
+  --wp-var-7: #67e8f9;
+  --wp-var-8: #fda4af;
+
   /* Brand gradient (from logo) */
   --wp-brand-1: #6c4cff;
   --wp-brand-2: #a371ff;
@@ -110,6 +125,19 @@
   /* Accent gradient (used by progress bars, hero strokes, etc.) */
   --wp-accent-gradient: linear-gradient(90deg, var(--wp-accent-500), var(--wp-accent-400));
 }
+
+/* `.var-N` color classes — emitted by `varColorClass(name)` in
+ * src/components/shared/var-color.ts. Same definitions live in
+ * extension theme.css; mirrored here so the manager surface paints
+ * them when mounting Context-side section components. */
+.var-1 { color: var(--wp-var-1); }
+.var-2 { color: var(--wp-var-2); }
+.var-3 { color: var(--wp-var-3); }
+.var-4 { color: var(--wp-var-4); }
+.var-5 { color: var(--wp-var-5); }
+.var-6 { color: var(--wp-var-6); }
+.var-7 { color: var(--wp-var-7); }
+.var-8 { color: var(--wp-var-8); }
 
 * { box-sizing: border-box; }
 

@@ -72,7 +72,10 @@ describe("drift-store: forceRefresh", () => {
 
     const { forceRefresh } = await import("./drift-store");
     await forceRefresh();
-    expect(fetchSpy.mock.calls.length).toBe(before + 1);
+    // forceRefresh fans out to both `/wp/api/modules/hashes` and
+    // `/wp/api/bundles/hashes` in parallel, so each invocation
+    // produces TWO fetch calls.
+    expect(fetchSpy.mock.calls.length).toBe(before + 2);
     unsubscribe();
   });
 });

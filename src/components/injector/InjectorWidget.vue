@@ -680,7 +680,10 @@ defineExpose({ addRow, removeRow });
     </div>
 
     <div
-      v-if="!collapsed"
+      class="wp-inj-rows-wrap"
+      :class="{ 'wp-inj-rows-wrap--collapsed': collapsed }"
+    >
+    <div
       ref="listEl"
       class="wp-inj-list"
       @dragover.prevent="onListDragOver"
@@ -712,6 +715,7 @@ defineExpose({ addRow, removeRow });
       >
         ↓ Wire an upstream node's output into this node's input pin — a variable row appears here.
       </div>
+    </div>
     </div>
     <ContextMenu
       :visible="ctxMenu.visible"
@@ -812,12 +816,42 @@ defineExpose({ addRow, removeRow });
 }
 .wp-inj-collapse-conns .pi { font-size: 10px; line-height: 1; }
 .wp-inj-collapse-conns__label { line-height: 1; }
+/* Collapse animation wrapper around .wp-inj-list. Mirrors the
+ * `.wp-bundle` grid-template-rows pattern: container transitions
+ * from 1fr → 0fr, inner list keeps `min-height: 0 + overflow: hidden`
+ * so its rendered height can collapse to zero, opacity + padding on
+ * the inner list fade together with the wrapper shrink so the
+ * effect reads as "rows fold up" rather than "rows clip from above."
+ * Caret toggle drives the `--collapsed` modifier; the autosize
+ * machinery on the widget host shrinks the node body alongside. */
+.wp-inj-rows-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
+}
+.wp-inj-rows-wrap--collapsed {
+  grid-template-rows: 0fr;
+}
 .wp-inj-list {
   display: flex;
   flex-direction: column;
   /* Match Context's .wp-modules padding so rows have breathing room
    * on all sides of the list, not just between each other. */
   padding: 6px 8px;
+  /* Required for the grid-row collapse to actually clip the content
+   * (without `min-height: 0`, the flex children would override the
+   * grid track's 0fr) and to keep the row content from spilling out
+   * during the tween. */
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              padding var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
+}
+.wp-inj-rows-wrap--collapsed .wp-inj-list {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 .wp-inj-ghost {
   display: flex;

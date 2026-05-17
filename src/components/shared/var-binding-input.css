@@ -61,5 +61,5 @@
   outline: none;
 }
 .wp-vbind-input--mod { color: var(--wp-accent-text, var(--wp-text)); }
-.wp-vbind-input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); font-style: italic; }
+.wp-vbind-input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-vbind-wrap--empty .wp-vbind-input::placeholder { color: var(--wp-warn); }

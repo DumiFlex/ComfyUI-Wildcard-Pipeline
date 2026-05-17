@@ -7,7 +7,7 @@ const props = defineProps<{ type: ModuleType | "constraint" | "combine" | "deriv
 const meta = computed(() => {
   switch (props.type) {
     case "wildcard":
-      return { icon: "pi pi-th-large", label: "Wildcard", cls: "type-pill--wildcard" };
+      return { icon: "pi pi-sparkles", label: "Wildcard", cls: "type-pill--wildcard" };
     case "fixed_values":
       return { icon: "pi pi-tag", label: "Fixed values", cls: "type-pill--fixed" };
     case "constraint":
@@ -15,7 +15,7 @@ const meta = computed(() => {
     case "combine":
       return { icon: "pi pi-link", label: "Combine", cls: "type-pill--combine" };
     case "derive":
-      return { icon: "pi pi-code", label: "Derive", cls: "type-pill--derive" };
+      return { icon: "pi pi-arrow-right-arrow-left", label: "Derive", cls: "type-pill--derive" };
     default:
       return { icon: "pi pi-question", label: String(props.type), cls: "" };
   }

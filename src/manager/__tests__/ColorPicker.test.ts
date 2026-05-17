@@ -69,4 +69,5 @@ describe("ColorPicker.vue", () => {
     await openPopover(wrap);
     expect(wrap.findAll('[data-test="color-preset"]').length).toBe(2);
   });
+
 });

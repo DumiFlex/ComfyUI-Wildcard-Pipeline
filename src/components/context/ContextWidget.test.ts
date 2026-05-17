@@ -436,6 +436,16 @@ describe("ContextWidget bulk refresh", () => {
 });
 
 describe("ContextWidget bundle ops via ctxmenu", () => {
+  // Destructive bundle ops (remove / reset / save-to-library) gate on
+  // a confirm dialog when `confirmDestructiveBundle` is true (production
+  // default). These tests assert the underlying op fires, not the
+  // dialog UX, so reset the settings state to test defaults (confirm
+  // disabled) before each test.
+  beforeEach(async () => {
+    const { _resetDisplayStateForTesting } = await import("../../extension/settings");
+    _resetDisplayStateForTesting();
+  });
+
   it("Wrap into new bundle creates bundle named after the module + stamps bundle_origin", async () => {
     resetDriftStore();
     const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
@@ -1604,6 +1614,15 @@ describe("ContextWidget — Phase B: duplicate keeps uuid + auto-suffixes bindin
 // Batch 2 bug list so future regressions surface here.
 
 describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
+  // Same confirm-dialog reset as the ctxmenu ops describe — the #8
+  // removeBundle test asserts the suppressMove flag flips and the
+  // modules/bundles arrays clear atomically, neither of which fires
+  // if the confirm dialog blocks the op.
+  beforeEach(async () => {
+    const { _resetDisplayStateForTesting } = await import("../../extension/settings");
+    _resetDisplayStateForTesting();
+  });
+
   function makeDataTransfer() {
     return { effectAllowed: "", dropEffect: "", setData: () => {}, getData: () => "" };
   }

@@ -23,19 +23,19 @@ interface KindMeta {
 
 const KIND_TABS: KindMeta[] = [
   { type: "all",          label: "All",           icon: "pi pi-objects-column" },
-  { type: "wildcard",     label: "Wildcards",     icon: "pi pi-th-large" },
+  { type: "wildcard",     label: "Wildcards",     icon: "pi pi-sparkles" },
   { type: "fixed_values", label: "Fixed Values",  icon: "pi pi-tag" },
-  { type: "combine",      label: "Combines",      icon: "pi pi-share-alt" },
-  { type: "derivation",   label: "Derivations",   icon: "pi pi-code" },
-  { type: "constraint",   label: "Constraints",   icon: "pi pi-sitemap" },
+  { type: "combine",      label: "Combines",      icon: "pi pi-link" },
+  { type: "derivation",   label: "Derivations",   icon: "pi pi-arrow-right-arrow-left" },
+  { type: "constraint",   label: "Constraints",   icon: "pi pi-filter" },
 ];
 
 const KIND_ICON: Record<ModuleType, string> = {
-  wildcard: "pi pi-th-large",
+  wildcard: "pi pi-sparkles",
   fixed_values: "pi pi-tag",
-  combine: "pi pi-share-alt",
-  derivation: "pi pi-code",
-  constraint: "pi pi-sitemap",
+  combine: "pi pi-link",
+  derivation: "pi pi-arrow-right-arrow-left",
+  constraint: "pi pi-filter",
   pipeline: "pi pi-list",
 };
 

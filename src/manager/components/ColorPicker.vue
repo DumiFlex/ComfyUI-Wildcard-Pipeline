@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Input from "./ui/Input.vue";
+import HsvPicker from "./HsvPicker.vue";
 
 interface Props {
   modelValue: string;
@@ -32,7 +33,6 @@ watch(() => props.modelValue, (v) => {
 });
 
 const swatchColor = computed(() => (HEX_RE.test(props.modelValue) ? props.modelValue : "#ffffff"));
-const nativeColor = computed(() => (HEX_RE.test(props.modelValue) ? props.modelValue : "#a78bfa"));
 
 const swatchAriaLabel = computed(
   () => props.ariaLabel ?? `Pick color, current ${props.modelValue}`,
@@ -81,13 +81,6 @@ function onHexInput(value: string) {
   }
 }
 
-function onNativeInput(e: Event) {
-  const value = (e.target as HTMLInputElement).value;
-  if (HEX_RE.test(value)) {
-    emit("update:modelValue", value);
-  }
-}
-
 onBeforeUnmount(() => {
   document.removeEventListener("mousedown", handleOutsideClick);
 });
@@ -124,15 +117,12 @@ function isActivePreset(preset: string): boolean {
           data-test="color-hex-input"
           @update:model-value="(v) => onHexInput(String(v ?? ''))"
         />
-        <input
-          type="color"
-          :value="nativeColor"
-          aria-label="Native color picker"
-          class="wp-color-picker__native"
-          data-test="color-native"
-          @input="onNativeInput"
-        >
       </div>
+      <HsvPicker
+        :model-value="props.modelValue"
+        :aria-label="swatchAriaLabel"
+        @update:model-value="(v) => emit('update:modelValue', v)"
+      />
       <div class="wp-color-picker__palette" role="listbox" aria-label="Preset colors">
         <button
           v-for="preset in props.presets"
@@ -183,7 +173,7 @@ function isActivePreset(preset: string): boolean {
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
   padding: 10px;
-  min-width: 200px;
+  width: 220px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -197,17 +187,8 @@ function isActivePreset(preset: string): boolean {
 
 .wp-color-picker__hex {
   flex: 1;
+  min-width: 0;
   font-size: 12px;
-}
-
-.wp-color-picker__native {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
 }
 
 .wp-color-picker__palette {

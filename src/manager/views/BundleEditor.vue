@@ -2,47 +2,46 @@
 /**
  * BundleEditor — SPA editor for library-tracked bundles.
  *
- * Scope (post Task 23): editable name, color, category, tags, and a
- * read-only ordered children list. Save handler comes in Task 24.
+ * Task 2: interactive children list — drag reorder, enable/disable toggle,
+ * duplicate, remove. Children mutations live in a local ref and persist
+ * via a single bundles.update PUT on Save. Task 3 adds the right-side
+ * snapshot edit pane.
  *
  * Route shape mirrors the other kind editors:
- *   /bundles/new            → create-mode (no `id` prop, empty form)
- *   /bundles/:id/edit       → edit-mode (`id` injected as prop)
- *
- * Children are displayed read-only with kind chip + name. The library
- * surface of a bundle is its name + color + classification metadata —
- * the children themselves are frozen snapshots, edited via the Context
- * widget (use "Save changes to library" there to push edits back).
+ *   /bundles/new            → create-mode (disabled Save, points user to Context widget)
+ *   /bundles/:id/edit       → edit-mode
  */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { useToast } from "../composables/useToast";
-import Button from "../components/ui/Button.vue";
+import EditorFrame from "../components/EditorFrame.vue";
+import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
 import ColorPicker from "../components/ColorPicker.vue";
+import BundleChildRow from "../components/BundleChildRow.vue";
+import BundleChildPane from "../components/BundleChildPane.vue";
+import BundleAddChildModal from "../components/BundleAddChildModal.vue";
+import { useToast } from "../composables/useToast";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import type { BundleRow } from "../api/types";
+import { useModuleStore } from "../stores/moduleStore";
+import type { BundleRow, ModuleRow } from "../api/types";
+import type { ModuleEntry } from "../../widgets/_shared";
 
 const props = defineProps<{ id?: string }>();
 
 const router = useRouter();
 const store = useBundleStore();
 const categoryStore = useCategoryStore();
+const moduleStore = useModuleStore();
 const toast = useToast();
+
+const addModalOpen = ref(false);
 
 /** Default bundle frame color when user hasn't picked one. Mirrors the
  *  `--wp-bundle-default` token + ContextWidget fallback so the editor
  *  preview matches the canvas. */
 const DEFAULT_COLOR = "#46566B";
 
-/** Color swatches surfaced in the picker. These mirror the BundlePicker
- *  defaults the user sees when first creating a bundle from Context, so
- *  the SPA and the picker stay visually aligned. The ColorPicker still
- *  accepts arbitrary hex via the input field — these are just one-tap
- *  presets. */
 const COLOR_PRESETS = [
   "#46566B", "#7c3aed", "#a78bfa", "#22d3ee", "#34d399",
   "#fbbf24", "#f472b6", "#fb7185", "#ef4444", "#6366f1",
@@ -53,48 +52,108 @@ const loading = ref(false);
 const saving = ref(false);
 const original = ref<BundleRow | null>(null);
 
-// Editable fields — bound to inputs. Saved as a single PUT in Task 24.
 const name = ref("");
 const description = ref("");
 const color = ref<string>(DEFAULT_COLOR);
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
-const tagDraft = ref("");
+
+/** Mutable local copy of bundle children. Edits in the row stack
+ *  (and the side pane in Task 3) update this; Save persists it via PUT. */
+const children = ref<Array<Record<string, unknown>>>([]);
+
+/** Last-saved baseline state per child, keyed by id. Used by
+ *  BundleChildRow to decide whether to render SNAPSHOT or
+ *  SNAPSHOT · EDITED — the pill resets to plain SNAPSHOT after every
+ *  successful save (current children become the new baseline). */
+const baselineByChildId = ref<Map<string, string>>(new Map());
+
+/** `patchInstance` writes `null` to a field rather than deleting the key
+ *  when the user reverts a value back to library default. For the
+ *  EDITED diff we want those null overrides to be indistinguishable
+ *  from "field never set" — otherwise the pill never clears even when
+ *  the user manually returns every field to its starting value. Strip
+ *  null/undefined entries from `instance` before serializing. */
+function normalizeChild(c: Record<string, unknown>): Record<string, unknown> {
+  const inst = c.instance as Record<string, unknown> | undefined;
+  if (!inst) return c;
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(inst)) {
+    if (v !== null && v !== undefined) cleaned[k] = v;
+  }
+  return { ...c, instance: cleaned };
+}
+
+function snapshotBaseline(rows: Array<Record<string, unknown>>): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const c of rows) {
+    const id = c.id as string | undefined;
+    if (id) m.set(id, JSON.stringify(normalizeChild(c)));
+  }
+  return m;
+}
+
+/** Drag-reorder state. Source index captured on dragstart, target on
+ *  dragover. Cleared on drop / cancel. Drives the data-drag-over
+ *  styling for the drop-line indicator. */
+const dragSourceIdx = ref<number | null>(null);
+const dragOverIdx = ref<number | null>(null);
+
+/** Side-pane selection — null when no child is being edited. */
+const selectedChildId = ref<string | null>(null);
 
 const isEdit = computed(() => !!props.id);
 
-const categoryOptions = computed(() => [
-  { value: null, label: "No category" },
-  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
-]);
+const selectedChild = computed<Record<string, unknown> | null>(() => {
+  const id = selectedChildId.value;
+  if (!id) return null;
+  return children.value.find((c) => (c.id as string) === id) ?? null;
+});
 
-const children = computed(() => (original.value?.children ?? []) as Array<Record<string, unknown>>);
+const selectedChildIdx = computed<number>(() => {
+  const id = selectedChildId.value;
+  if (!id) return -1;
+  return children.value.findIndex((c) => (c.id as string) === id);
+});
 
-interface ChildView {
-  id: string;
-  type: string;
-  name: string;
-}
+/** Set of child ids whose current normalized state diverges from the
+ *  last-saved baseline. Drives the SNAPSHOT · EDITED pill on each row.
+ *  Recomputes reactively as children mutate, so reverting overrides
+ *  back to baseline (even via "no override" null writes) clears the
+ *  pill without an explicit reset. */
+const editedChildIds = computed<Set<string>>(() => {
+  const out = new Set<string>();
+  for (const c of children.value) {
+    const id = c.id as string | undefined;
+    if (!id) continue;
+    const base = baselineByChildId.value.get(id);
+    if (base === undefined) {
+      out.add(id); // new row, no baseline yet
+      continue;
+    }
+    if (JSON.stringify(normalizeChild(c)) !== base) out.add(id);
+  }
+  return out;
+});
 
-/** Project library-side child snapshot to a display row. Children are
- *  the canonical `toChildSnapshot` shape from ContextWidget — name
- *  lives at `meta.name` (mirrors ModuleEntry). Falls back to top-level
- *  `name` for forward-compat with any caller that builds children
- *  differently, then "(unnamed)". */
-const childRows = computed<ChildView[]>(() =>
-  children.value.map((c, i) => {
-    const meta = (c.meta as { name?: string } | undefined) ?? undefined;
-    const displayName = meta?.name ?? (c.name as string | undefined) ?? "(unnamed)";
-    return {
-      id: String(c.id ?? `child_${i}`),
-      type: String(c.type ?? "module"),
-      name: String(displayName),
-    };
-  }),
-);
+const childrenSubtitle = computed<string>(() => {
+  if (!selectedChildId.value || !selectedChild.value) {
+    return "Frozen snapshots — click row to edit on the right.";
+  }
+  const meta = selectedChild.value.meta as { name?: string } | undefined;
+  const name = meta?.name ?? "(unnamed)";
+  return `Editing snapshot of ${name} — click × on the pane to close`;
+});
 
 onMounted(async () => {
   await categoryStore.fetchAll();
+  // Catalog load powers the add-child library picker AND
+  // ConstraintMatrixSection's sub-category lookups inside the pane.
+  try {
+    await moduleStore.fetchCatalog();
+  } catch (e) {
+    toast.push({ severity: "error", summary: "Failed to load module library", detail: String(e), life: 3000 });
+  }
   if (!props.id) return;
   loading.value = true;
   try {
@@ -105,6 +164,10 @@ onMounted(async () => {
     color.value = row.color || DEFAULT_COLOR;
     categoryId.value = row.category_id;
     tags.value = [...(row.tags ?? [])];
+    children.value = Array.isArray(row.children)
+      ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
+      : [];
+    baselineByChildId.value = snapshotBaseline(children.value);
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   } finally {
@@ -112,21 +175,10 @@ onMounted(async () => {
   }
 });
 
-function back() {
+function cancel() {
   router.push("/bundles");
 }
 
-/** Persist the form to the library entry. Save is metadata-only here
- *  — name, description, color, category, tags. Children are NOT
- *  re-snapshotted by the editor; that's the Context widget's "Save
- *  changes to library" action (which operates on a live in-graph
- *  bundle, not the library entry itself).
- *
- *  Create-mode without children disallowed for now: the SPA "+ New
- *  Bundle" path is intentionally limited — the canonical creation
- *  flow is Wrap-in-bundle from the Context multi-select. The Save
- *  button is disabled in create-mode to surface that constraint
- *  before the user types anything. */
 async function save() {
   if (!isEdit.value || !props.id) {
     toast.push({
@@ -143,10 +195,6 @@ async function save() {
   }
   saving.value = true;
   try {
-    // Color stored as null when user chose the default — keeps the
-    // library entry free of a hard-coded value if we ever change the
-    // default token, and matches the "color is optional" semantics
-    // the BundleRow type encodes.
     const colorOut = color.value === DEFAULT_COLOR ? null : color.value;
     const updated = await store.update(props.id, {
       name: name.value.trim(),
@@ -154,8 +202,13 @@ async function save() {
       color: colorOut,
       category_id: categoryId.value,
       tags: [...tags.value],
+      children: children.value.map((c) => ({ ...c })),
     });
     original.value = updated;
+    children.value = Array.isArray(updated.children)
+      ? updated.children.map((c) => ({ ...(c as Record<string, unknown>) }))
+      : [];
+    baselineByChildId.value = snapshotBaseline(children.value);
     toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -164,254 +217,249 @@ async function save() {
   }
 }
 
-function addTag() {
-  const t = tagDraft.value.trim();
-  if (!t) return;
-  if (!tags.value.includes(t)) tags.value.push(t);
-  tagDraft.value = "";
+/** Snapshot a library module into a bundle child entry.
+ *
+ *  Critical: the snapshot's `id` MUST be the library uuid (`row.id`),
+ *  NOT a fresh local id. Bundle insertion at runtime treats the child's
+ *  `id` as the library link — Context-side `buildBundleInsertion`
+ *  preserves it verbatim, and the engine's drift / missing-from-library
+ *  scanners match against it. A random id surfaces every child as
+ *  "missing in library" on the ComfyUI side. `meta.library_name`
+ *  carries the canonical name so "reset overrides" can restore the
+ *  display name without hitting the server (denormalized at snapshot
+ *  time). Matches `toChildSnapshot` in ContextWidget for in-graph
+ *  Wrap-in-bundle. */
+function onAddPick(row: ModuleRow) {
+  const snapshot: Record<string, unknown> = {
+    id: row.id,
+    type: row.type,
+    enabled: true,
+    collapsed: false,
+    meta: { name: row.name, library_name: row.name },
+    payload: row.payload ?? {},
+    payload_hash: row.payload_hash,
+    instance: {},
+    entries: [],
+  };
+  children.value = [...children.value, snapshot];
 }
 
-function removeTag(t: string) {
-  tags.value = tags.value.filter((x) => x !== t);
+function onToggleChild(idx: number) {
+  const next = [...children.value];
+  const current = next[idx];
+  next[idx] = { ...current, enabled: current.enabled === false };
+  children.value = next;
 }
 
-/** Display label for the kind chip — capitalize the lowercase engine
- *  type so the list reads naturally without forcing a separate label
- *  table. */
-function kindLabel(type: string): string {
-  if (!type) return "Module";
-  return type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ");
+function onDuplicateChild(idx: number) {
+  const src = children.value[idx];
+  if (!src) return;
+  // Keep the library uuid — multi-instance bundles intentionally share
+  // `id` across siblings (per buildBundleInsertion docs). Per-instance
+  // disambiguation lives in `_uid`, which gets stamped on insert into
+  // a Context node, not here at bundle-edit time.
+  const copy = { ...src };
+  const next = [...children.value];
+  next.splice(idx + 1, 0, copy);
+  children.value = next;
+}
+
+function onRemoveChild(idx: number) {
+  const removedId = children.value[idx]?.id as string | undefined;
+  if (removedId && removedId === selectedChildId.value) {
+    selectedChildId.value = null;
+  }
+  const next = [...children.value];
+  next.splice(idx, 1);
+  children.value = next;
+}
+
+function onSelectChild(idx: number) {
+  const c = children.value[idx];
+  if (!c) return;
+  const id = (c.id as string) ?? null;
+  // Toggle off if clicking the already-selected row.
+  selectedChildId.value = id === selectedChildId.value ? null : id;
+}
+
+function onPaneClose() {
+  selectedChildId.value = null;
+}
+
+function onPaneUpdate(patch: Partial<ModuleEntry>) {
+  const idx = selectedChildIdx.value;
+  if (idx < 0) return;
+  const next = [...children.value];
+  next[idx] = { ...next[idx], ...(patch as Record<string, unknown>) };
+  children.value = next;
+}
+
+function onDragStart(idx: number, evt: DragEvent) {
+  dragSourceIdx.value = idx;
+  if (evt.dataTransfer) {
+    evt.dataTransfer.effectAllowed = "move";
+    // Firefox needs setData for the drag to fire at all.
+    evt.dataTransfer.setData("text/plain", String(idx));
+  }
+}
+function onDragOver(idx: number, evt: DragEvent) {
+  if (dragSourceIdx.value === null || dragSourceIdx.value === idx) return;
+  evt.preventDefault();
+  if (evt.dataTransfer) evt.dataTransfer.dropEffect = "move";
+  if (dragOverIdx.value !== idx) dragOverIdx.value = idx;
+}
+function onDragLeave() {
+  dragOverIdx.value = null;
+}
+function onDrop(idx: number, evt: DragEvent) {
+  evt.preventDefault();
+  const from = dragSourceIdx.value;
+  dragSourceIdx.value = null;
+  dragOverIdx.value = null;
+  if (from === null || from === idx) return;
+  const next = [...children.value];
+  const [moved] = next.splice(from, 1);
+  next.splice(idx, 0, moved);
+  children.value = next;
+}
+function onDragEnd() {
+  dragSourceIdx.value = null;
+  dragOverIdx.value = null;
 }
 </script>
 
 <template>
-  <div class="wp-bundle-editor">
-    <div class="wp-bundle-editor__header">
-      <Button variant="ghost" icon="pi-arrow-left" @click="back">Back</Button>
-      <h2 class="wp-bundle-editor__title">
-        {{ isEdit ? (original?.name || "Loading…") : "New Bundle" }}
-      </h2>
-      <span class="wp-spacer" />
-      <Button
-        variant="primary"
-        icon="pi-save"
-        :disabled="saving || !isEdit"
-        :title="isEdit ? 'Save changes' : 'New bundles are created from the Context widget'"
-        @click="save"
-      >
-        {{ saving ? "Saving…" : "Save" }}
-      </Button>
-    </div>
-
+  <EditorFrame
+    :title="isEdit ? (original?.name || 'Loading…') : 'New bundle'"
+    back-route="/bundles"
+    back-label="Bundles"
+    :saving="saving"
+    :save-disabled="!isEdit"
+    @save="save"
+    @cancel="cancel"
+  >
     <div v-if="loading" class="wp-dim wp-bundle-editor__loading">Loading bundle…</div>
 
-    <div v-else class="wp-bundle-editor__body">
-      <Card title="Identity" subtitle="Bundle metadata stored on the library entry.">
-        <div class="wp-bundle-form">
-          <label class="wp-field">
-            <span class="wp-field__label">Name</span>
-            <Input v-model="name" placeholder="e.g. Character Pack" aria-label="Bundle name" />
-          </label>
-
-          <label class="wp-field">
-            <span class="wp-field__label">Description</span>
-            <textarea
-              v-model="description"
-              class="wp-textarea"
-              rows="2"
-              placeholder="Optional short summary."
-              aria-label="Bundle description"
-            />
-          </label>
-
-          <div class="wp-field-row">
-            <label class="wp-field">
-              <span class="wp-field__label">Category</span>
-              <Select
-                :model-value="categoryId"
-                :options="categoryOptions"
-                placeholder="No category"
-                aria-label="Bundle category"
-                @update:model-value="(v) => (categoryId = v as string | null)"
-              />
-            </label>
-
-            <label class="wp-field">
-              <span class="wp-field__label">Frame color</span>
-              <ColorPicker
-                v-model="color"
-                :presets="COLOR_PRESETS"
-                aria-label="Bundle frame color"
-              />
-            </label>
-          </div>
-
-          <div class="wp-field">
-            <span class="wp-field__label">Tags</span>
-            <div class="wp-tags-row">
-              <span
-                v-for="t in tags"
-                :key="t"
-                class="wp-tag-chip wp-tag-chip--removable"
-              >
-                {{ t }}
-                <button
-                  type="button"
-                  class="wp-tag-chip__x"
-                  :aria-label="`Remove tag ${t}`"
-                  @click="removeTag(t)"
-                >×</button>
-              </span>
-              <Input
-                v-model="tagDraft"
-                placeholder="Add tag + Enter"
-                aria-label="New tag"
-                @keyup.enter="addTag"
-              />
-            </div>
-          </div>
-        </div>
-      </Card>
+    <template v-else>
+      <IdentityCard
+        :name="name"
+        :description="description"
+        :category-id="categoryId"
+        :tags="tags"
+        @update:name="(v) => (name = v)"
+        @update:description="(v) => (description = v)"
+        @update:category-id="(v) => (categoryId = v)"
+        @update:tags="(v) => (tags = v)"
+      >
+        <template #nameLeading>
+          <ColorPicker
+            v-model="color"
+            :presets="COLOR_PRESETS"
+            aria-label="Bundle frame color"
+          />
+        </template>
+      </IdentityCard>
 
       <Card
-        :title="`Children (${childRows.length})`"
-        subtitle="Frozen snapshots — edit children from the Context widget then use Save changes to library."
+        :title="`Children (${children.length})`"
+        :subtitle="childrenSubtitle"
       >
-        <div v-if="!childRows.length" class="wp-dim wp-bundle-editor__empty">
-          This bundle has no children yet.
+        <div class="wp-bundle-children-grid">
+          <div class="wp-bundle-children-stack" data-test="bundle-children-list">
+            <div
+              v-if="!children.length"
+              class="wp-dim wp-bundle-editor__empty"
+            >
+              This bundle has no children yet.
+            </div>
+            <BundleChildRow
+              v-for="(child, idx) in children"
+              :key="`${(child.id as string) ?? ''}_${idx}`"
+              :child="child"
+              :idx="idx"
+              :selected="(child.id as string) === selectedChildId"
+              :edited="editedChildIds.has((child.id as string) ?? '')"
+              :class="dragOverIdx === idx ? 'wp-bundle-children-stack__drag-over' : null"
+              @toggle="onToggleChild(idx)"
+              @duplicate="onDuplicateChild(idx)"
+              @remove="onRemoveChild(idx)"
+              @select="onSelectChild(idx)"
+              @drag-start="(e) => onDragStart(idx, e)"
+              @drag-over="(e) => onDragOver(idx, e)"
+              @drag-leave="onDragLeave"
+              @drop="(e) => onDrop(idx, e)"
+              @drag-end="onDragEnd"
+            />
+            <button
+              type="button"
+              class="wp-bundle-add-btn"
+              data-test="bundle-add-open"
+              @click="addModalOpen = true"
+            >
+              <i class="pi pi-plus" aria-hidden="true" />
+              add child from library
+            </button>
+          </div>
+          <BundleChildPane
+            :child="selectedChild"
+            @update="onPaneUpdate"
+            @close="onPaneClose"
+          />
         </div>
-        <ol v-else class="wp-bundle-children">
-          <li
-            v-for="(child, idx) in childRows"
-            :key="`${child.id}_${idx}`"
-            class="wp-bundle-children__row"
-          >
-            <span class="wp-bundle-children__idx">{{ idx + 1 }}</span>
-            <span class="wp-bundle-children__kind">{{ kindLabel(child.type) }}</span>
-            <span class="wp-bundle-children__name">{{ child.name }}</span>
-            <span class="wp-id wp-bundle-children__id">{{ child.id }}</span>
-          </li>
-        </ol>
       </Card>
-    </div>
-  </div>
+
+      <BundleAddChildModal
+        :visible="addModalOpen"
+        :modules="moduleStore.items"
+        @close="addModalOpen = false"
+        @pick="onAddPick"
+      />
+    </template>
+  </EditorFrame>
 </template>
 
 <style scoped>
-.wp-bundle-editor {
-  padding: 16px 20px;
-  max-width: 900px;
-}
-.wp-bundle-editor__header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.wp-bundle-editor__title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-.wp-spacer { flex: 1; }
 .wp-bundle-editor__loading { padding: 32px 0; text-align: center; }
-.wp-bundle-editor__body { display: flex; flex-direction: column; gap: 16px; }
 .wp-bundle-editor__empty { padding: 16px 0; font-size: 13px; }
 
-.wp-bundle-form { display: flex; flex-direction: column; gap: 14px; }
-.wp-field { display: flex; flex-direction: column; gap: 4px; }
-.wp-field__label { font-size: 12px; color: var(--wp-text2); }
-.wp-field-row {
+.wp-bundle-children-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.4fr);
+  gap: 12px;
+  align-items: start;
 }
-.wp-textarea {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-  padding: 6px 8px;
-  border-radius: 4px;
-  font: 13px/1.4 var(--wp-font-sans);
-  resize: vertical;
-  min-height: 40px;
-}
-.wp-textarea:focus { outline: 1px solid var(--wp-accent-500); }
-
-.wp-tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.wp-tags-row :deep(.wp-input) {
-  flex: 1;
-  min-width: 140px;
-}
-.wp-tag-chip--removable {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px 2px 8px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
-  color: var(--wp-accent-text);
-  font-size: 11.5px;
-}
-.wp-tag-chip__x {
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
-}
-.wp-tag-chip__x:hover { color: var(--wp-danger, #ef4444); }
-
-.wp-bundle-children {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.wp-bundle-children-stack {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
-.wp-bundle-children__row {
-  display: grid;
-  grid-template-columns: 28px max-content 1fr max-content;
+.wp-bundle-children-stack__drag-over {
+  box-shadow: 0 -2px 0 var(--wp-accent-500);
+}
+.wp-bundle-add-btn {
+  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  background: var(--wp-bg2);
-}
-.wp-bundle-children__idx {
-  font: 500 11px/1 var(--wp-font-mono);
-  color: var(--wp-text3);
-  text-align: right;
-}
-.wp-bundle-children__kind {
-  font: 600 9px/1 var(--wp-font-sans);
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border: 1px dashed var(--wp-border-strong, var(--wp-border));
+  border-radius: var(--wp-radius, 4px);
+  background: transparent;
+  color: var(--wp-text-dim);
+  font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 3px 5px;
-  border-radius: 3px;
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
-  color: var(--wp-accent-text);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
 }
-.wp-bundle-children__name {
-  font: 500 13px/1.2 var(--wp-font-sans);
-  color: var(--wp-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.wp-bundle-children__id {
-  font-family: var(--wp-font-mono);
-  font-size: 10.5px;
-  color: var(--wp-text3);
+.wp-bundle-add-btn:hover {
+  border-style: solid;
+  border-color: var(--wp-accent-500);
+  color: var(--wp-accent-500);
+  background: color-mix(in oklab, var(--wp-accent-500) 7%, transparent);
 }
 </style>

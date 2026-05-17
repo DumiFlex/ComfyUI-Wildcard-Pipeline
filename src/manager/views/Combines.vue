@@ -254,7 +254,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
           v-for="(v, i) in inputVars(row)" :key="i"
           class="wp-input-var-chip"
         >
-          <i :class="v.startsWith('@') ? 'pi pi-th-large' : 'pi pi-tag'" />
+          <i :class="v.startsWith('@') ? 'pi pi-sparkles' : 'pi pi-tag'" />
           {{ v }}
         </span>
       </div>

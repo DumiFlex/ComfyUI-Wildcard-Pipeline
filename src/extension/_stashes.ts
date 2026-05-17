@@ -77,3 +77,16 @@ export const nodeCollapseAnimToken: WeakMap<object, number> = new WeakMap();
  *  rAF loop bails on its next tick. Prevents two pulses fighting over
  *  the same badge's geometry when severity changes back-to-back. */
 export const nodeBadgePulseToken: WeakMap<object, number> = new WeakMap();
+/** Set membership during an active collapse animation. Added when
+ *  `animateResize` schedules its first rAF, deleted when the final
+ *  rAF tick falls through to `snapToSize`. Read by the widget
+ *  autosize machinery (`pushSize`, `requestRelayout` in
+ *  `widgets/_shared.ts`) to suppress observer-driven setSize while
+ *  the node height is being tweened — otherwise pushSize would
+ *  instantly snap the node to its collapsed target the moment Vue
+ *  removes the rows from the DOM, and the animation would visibly
+ *  start from the collapsed state instead of tweening down from the
+ *  expanded one. The token map alone can't carry this signal: tokens
+ *  persist across animations (last value retained), so `.has(node)`
+ *  is true forever after the first collapse. */
+export const nodeCollapseAnimating: WeakSet<object> = new WeakSet();

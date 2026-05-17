@@ -223,6 +223,18 @@
   opacity: 0.55;
   transition: opacity var(--wp-motion-quick) ease;
 }
+/* Focus mode targets MODULES only — hovering a bundle header doesn't
+ * trigger the dim (no `.wp-module:hover` exists in that case, so
+ * neither rule fires). When the user hovers a module INSIDE a
+ * bundle, every OTHER bundle gets dimmed alongside the sibling
+ * modules; when the hovered module is standalone, every bundle
+ * dims because none contains the hovered module. The
+ * `:has(.wp-module:hover)` selector resolves both cases without
+ * branching. */
+.wp-focus-mode .wp-modules:has(.wp-module:hover) .wp-bundle:not(:has(.wp-module:hover)) {
+  opacity: 0.55;
+  transition: opacity var(--wp-motion-quick) ease;
+}
 
 /* Same focus-mode dim for injector row siblings. */
 .wp-focus-mode .wp-inj-list:has(.wp-inj-row:hover) .wp-inj-row:not(:hover) {

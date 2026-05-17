@@ -33,9 +33,9 @@ const {
     draggable="true"
     :class="{
       'wp-disabled': !module.enabled,
-      'wp-conflict-error': severityFor(module.id) === 'error',
-      'wp-conflict-warning': severityFor(module.id) === 'warning',
-      'wp-conflict-info': severityFor(module.id) === 'info',
+      'wp-conflict-error': severityFor(module._uid ?? module.id) === 'error',
+      'wp-conflict-warning': severityFor(module._uid ?? module.id) === 'warning',
+      'wp-conflict-info': severityFor(module._uid ?? module.id) === 'info',
       'wp-state-modified': isModified(module),
       'wp-state-drift': isDrifted(module),
       'wp-state-missing': isMissingFromLibrary(module),
@@ -95,12 +95,12 @@ const {
           title="Not in library — right-click → Save to library to add it" aria-hidden="true"></span>
         <span v-if="isMissingFromLibrary(module)" class="wp-mod-badge wp-mod-badge--missing"
           title="Not in library — right-click → Save to library to add it">missing</span>
-        <span v-if="severityFor(module.id)" class="wp-conflict-dot"
-          :class="`wp-conflict-dot--${severityFor(module.id)}`" :title="conflictTooltip(module.id)" aria-hidden="true"></span>
-        <span v-if="severityFor(module.id) && conflictBadgeText(module.id)"
+        <span v-if="severityFor(module._uid ?? module.id)" class="wp-conflict-dot"
+          :class="`wp-conflict-dot--${severityFor(module._uid ?? module.id)}`" :title="conflictTooltip(module._uid ?? module.id)" aria-hidden="true"></span>
+        <span v-if="severityFor(module._uid ?? module.id) && conflictBadgeText(module._uid ?? module.id)"
           class="wp-conflict-badge"
-          :class="`wp-conflict-badge--${severityFor(module.id)}`"
-          :title="conflictTooltip(module.id)">{{ conflictBadgeText(module.id) }}</span>
+          :class="`wp-conflict-badge--${severityFor(module._uid ?? module.id)}`"
+          :title="conflictTooltip(module._uid ?? module.id)">{{ conflictBadgeText(module._uid ?? module.id) }}</span>
       </span>
       <div class="wp-mod-actions" draggable="false">
         <button v-if="isSeedLockable(module)" type="button" class="wp-btn--icon-sm wp-btn--warn"

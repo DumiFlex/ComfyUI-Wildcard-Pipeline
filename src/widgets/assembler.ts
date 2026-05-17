@@ -198,10 +198,34 @@ export function mountHelper(node: AssemblerNode) {
             ?? (app.graph as unknown as LiteGraphLike);
           const g = findRootGraph(startGraph);
           const chain = collectUpstreamChain(g, node);
+          // `collectUpstreamResolved` now returns the full ctx,
+          // including user-flagged internal vars (engine commit a345bd4
+          // propagates them across socket boundaries; only the prompt
+          // render filters them). For the assembler fallback preview
+          // we mirror runtime: drop user-flagged internal vars + the
+          // engine flag map itself so chip strip + preview match the
+          // server-side resolve result.
+          const rawResolved = collectUpstreamResolved(g, node);
+          const flagsBlob = rawResolved["__wp_internal_flags__"];
+          const internalNames = new Set<string>();
+          if (typeof flagsBlob === "string") {
+            try {
+              const parsed = JSON.parse(flagsBlob) as Record<string, boolean>;
+              for (const [k, v] of Object.entries(parsed)) {
+                if (v) internalNames.add(k);
+              }
+            } catch { /* malformed, treat as empty */ }
+          }
+          const fallbackResolved: Record<string, string> = {};
+          for (const [k, v] of Object.entries(rawResolved)) {
+            if (k.startsWith("__")) continue;
+            if (internalNames.has(k)) continue;
+            fallbackResolved[k] = v;
+          }
           return {
             chainKey: hashChain(chain),
             chain,
-            fallbackResolved: collectUpstreamResolved(g, node),
+            fallbackResolved,
             injectorKeys: collectUpstreamInjectorBindings(g, node),
             template: templateOf(node),
           };
@@ -334,9 +358,30 @@ export function mountHelper(node: AssemblerNode) {
         // value / a combine / an injector" at a glance — visual parity
         // with the kind chips used everywhere else in the extension.
         const rootG2 = findRootGraph(node as unknown as Parameters<typeof findRootGraph>[0]);
-        const kindByVar = rootG2
+        const rawKindByVar = rootG2
           ? collectUpstreamKinds(rootG2, node as unknown as LiteNodeLike)
           : {};
+        // Mirror render-boundary strip: drop user-flagged internal vars
+        // + the engine flag map so chip strip matches what
+        // PromptAssembler will resolve at runtime. Walker stashes the
+        // flag map on `__wp_internal_flags__` per the new propagation
+        // contract (engine commit a345bd4).
+        const kindFlagsBlob = rawKindByVar["__wp_internal_flags__"];
+        const kindInternal = new Set<string>();
+        if (typeof kindFlagsBlob === "string") {
+          try {
+            const parsed = JSON.parse(kindFlagsBlob) as Record<string, boolean>;
+            for (const [k, v] of Object.entries(parsed)) {
+              if (v) kindInternal.add(k);
+            }
+          } catch { /* malformed, treat as empty */ }
+        }
+        const kindByVar: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rawKindByVar)) {
+          if (k.startsWith("__")) continue;
+          if (kindInternal.has(k)) continue;
+          kindByVar[k] = v;
+        }
 
         return h(AssemblerHelper, {
           upstreamVars,
@@ -365,6 +410,9 @@ export function mountHelper(node: AssemblerNode) {
     // updates the var + calls assemblerHost.requestRelayout when
     // missing-var presence changes.
     minWidth: () => dynamicMinWidth,
+    // Chip rows reflow → content min-height shrinks; without this the
+    // user-stuck tall size kept a dead band below the template input.
+    autoHeight: true,
   });
   attachThemeDetector(assemblerHost.widget.element, app);
 }
