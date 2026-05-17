@@ -379,7 +379,7 @@ onMounted(refresh);
   background: none;
   border: 1px solid transparent;
   color: var(--wp-text-muted);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   font-weight: 500;
   cursor: pointer;
   border-radius: 6px;
@@ -392,7 +392,7 @@ onMounted(refresh);
 }
 .dashboard__view-all {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-accent-text);
   text-decoration: none;
   display: inline-flex;
@@ -407,20 +407,20 @@ onMounted(refresh);
   border-radius: 6px;
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   flex-shrink: 0;
 }
 .dashboard__row-name {
   flex: 1;
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--wp-text-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
 .dashboard__empty {
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-text-muted);
   margin: var(--wp-space-5) var(--wp-space-2) var(--wp-space-3);
 }

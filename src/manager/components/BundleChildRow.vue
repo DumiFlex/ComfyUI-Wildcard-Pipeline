@@ -185,7 +185,7 @@ const isEdited = computed(() => props.edited);
   color: var(--wp-text-dim);
   cursor: pointer;
   padding: 0;
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
 }
 .wp-bchild__handle { cursor: grab; }
 .wp-bchild__handle:active { cursor: grabbing; }
@@ -206,13 +206,13 @@ const isEdited = computed(() => props.edited);
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in oklab, var(--row-kind) 18%, var(--wp-bg-3));
   color: var(--row-kind);
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 
 .wp-bchild__main { min-width: 0; cursor: pointer; }
 .wp-bchild__top {
   display: flex; align-items: center; gap: var(--wp-space-4);
-  font-size: 9px;
+  font-size: 9px; /* audit-exempt: micro uppercase kind label — below scale floor */
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--row-kind);
@@ -221,7 +221,7 @@ const isEdited = computed(() => props.edited);
 .wp-bchild__idx {
   margin-left: auto;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 9px; /* audit-exempt: micro mono index badge — below scale floor */
   padding: 1px var(--wp-space-3);
   border-radius: 3px;
   background: var(--wp-bg);
@@ -237,7 +237,7 @@ const isEdited = computed(() => props.edited);
   white-space: nowrap;
 }
 .wp-bchild__frozen {
-  font-size: 8.5px;
+  font-size: 8.5px; /* audit-exempt: micro frozen badge — below scale floor */
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 1px var(--wp-space-3);

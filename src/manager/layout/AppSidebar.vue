@@ -260,7 +260,7 @@ function onItemClick(item: NavItem) {
 }
 .wp-nav--child {
   padding-left: var(--wp-space-7);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
 }
 .wp-nav--child .wp-nav__icon {
   opacity: 0.75;

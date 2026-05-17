@@ -491,7 +491,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   box-sizing: border-box;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
 }
 .wp-rt--focused {
   border-color: var(--wp-accent-500, #8b5cf6);
@@ -606,7 +606,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 1px;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   animation: wp-rt-suggestions-in 0.12s ease-out;
 }
 .wp-rt-suggestions--up {
@@ -626,7 +626,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--wp-space-4);
   padding: var(--wp-space-3) var(--wp-space-5);
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-dim, #6e6e7c);
   background: var(--wp-bg-3, #1e1e2a);
   border-bottom: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
@@ -652,7 +652,7 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps items compact */
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-text, #e7e7ee);
   cursor: pointer;
 }

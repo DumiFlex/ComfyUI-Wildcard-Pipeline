@@ -34,7 +34,7 @@ const meta = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px; /* audit-exempt: 5px optical icon+text gap inside compact pill */
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   font-weight: 600;
   padding: var(--wp-space-1) var(--wp-space-4);
   border-radius: 9px;

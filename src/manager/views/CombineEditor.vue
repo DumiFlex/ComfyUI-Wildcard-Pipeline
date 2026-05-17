@@ -306,7 +306,7 @@ function cancel() { router.push("/combines"); }
   margin-top: var(--wp-space-5);
 }
 .cb-detected__label { margin-bottom: var(--wp-space-3); }
-.cb-detected__hint { font-size: 12px; }
+.cb-detected__hint { font-size: var(--wp-text-sm); }
 .cb-detected__chips {
   display: flex;
   gap: var(--wp-space-3);

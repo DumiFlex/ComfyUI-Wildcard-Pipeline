@@ -295,14 +295,14 @@ defineExpose({ cellAt, cycleCell });
 .wp-matrix {
   border-collapse: separate;
   border-spacing: 4px;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 .wp-matrix__corner {
   padding: 0 var(--wp-space-4);
   text-align: left;
   color: var(--wp-text-dim);
   font-weight: 500;
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
@@ -336,7 +336,7 @@ defineExpose({ cellAt, cycleCell });
   text-align: center;
   color: var(--wp-text-dim);
   padding: var(--wp-space-7) var(--wp-space-5);
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 .wp-matrix-cell-wrap {
   position: relative;
@@ -390,13 +390,13 @@ defineExpose({ cellAt, cycleCell });
 .wp-theme-light .wp-matrix-cell[data-mode="boost"]   { color: #166534; }
 .wp-theme-light .wp-matrix-cell[data-mode="reduce"]  { color: #92400e; }
 .wp-matrix-cell__icon {
-  font-size: 14px;
+  font-size: var(--wp-text-md);
   font-weight: 600;
   line-height: 1;
 }
 .wp-matrix-cell__factor {
   font-family: var(--wp-font-mono, monospace);
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   font-weight: 500;
   opacity: 0.85;
 }
@@ -414,7 +414,7 @@ defineExpose({ cellAt, cycleCell });
   color: var(--wp-text-muted);
   cursor: pointer;
   padding: 0;
-  font-size: 9px;
+  font-size: 9px; /* audit-exempt: micro tune button icon — below scale floor */
   box-shadow: var(--wp-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.4));
   transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
@@ -459,7 +459,7 @@ defineExpose({ cellAt, cycleCell });
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);
   color: var(--wp-text-muted);
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   font-family: var(--wp-font-mono, monospace);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s, background 0.12s;

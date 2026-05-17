@@ -132,7 +132,7 @@ function onKey(e: KeyboardEvent): void {
 .wp-rt-preview {
   display: inline;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

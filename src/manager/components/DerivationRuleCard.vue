@@ -530,14 +530,14 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .rule-head[aria-expanded="true"] { margin-bottom: var(--wp-space-5); }
 .rule-head__chev {
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
   width: 12px;
   text-align: center;
   transition: transform 0.15s ease;
 }
 .rule-meta {
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted, #9ca3af);
 }
 .spacer { flex: 1; }
@@ -571,7 +571,7 @@ const branchCount = computed(() => rule.value.branches.length);
 
 .branch-tag {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 10px; /* audit-exempt: micro branch-tag uppercase — below scale floor */
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 2px 7px; /* audit-exempt: 2px vertical hairline, 7px horiz compact badge */
@@ -623,7 +623,7 @@ const branchCount = computed(() => rule.value.branches.length);
   margin-bottom: var(--wp-space-2);
 }
 .dvr-label {
-  font-size: 10px;
+  font-size: 10px; /* audit-exempt: micro grid row-label — below scale floor */
   color: var(--wp-text-muted, #9ca3af);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -748,7 +748,7 @@ const branchCount = computed(() => rule.value.branches.length);
   color: var(--wp-accent, #6366f1);
   border-color: color-mix(in oklab, var(--wp-accent, #6366f1) 40%, transparent);
 }
-.dvr-regex-help .pi { font-size: 11px; }
+.dvr-regex-help .pi { font-size: var(--wp-text-xs); }
 .dvr-hint {
   margin-top: 3px; /* audit-exempt: 3px hairline nudge */
   margin-left: 68px; /* audit-exempt: 68px = 60px label col + 4+4px gap; aligns under value input column */

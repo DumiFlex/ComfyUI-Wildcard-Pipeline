@@ -163,7 +163,7 @@ function onDensity(d: Density) {
 }
 .wp-tweaks__header h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--wp-text-md);
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--wp-text);
@@ -199,7 +199,7 @@ function onDensity(d: Density) {
 .wp-tweaks__section { display: flex; flex-direction: column; gap: var(--wp-space-4); }
 .wp-tweaks__section-title {
   margin: 0;
-  font-size: 10px;
+  font-size: 10px; /* audit-exempt: micro uppercase section header — below scale floor */
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -232,7 +232,7 @@ function onDensity(d: Density) {
   padding: var(--wp-space-3) var(--wp-space-5);
   border-radius: var(--wp-radius-sm);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   text-transform: capitalize;
   color: var(--wp-text-muted);
   user-select: none;

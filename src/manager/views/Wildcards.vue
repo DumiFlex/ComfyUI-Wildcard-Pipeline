@@ -356,7 +356,7 @@ function isValid(row: ModuleRow): boolean {
   flex-wrap: wrap;
   gap: var(--wp-space-3);
 }
-.wp-tags-empty { font-size: 12px; }
+.wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
@@ -376,14 +376,14 @@ function isValid(row: ModuleRow): boolean {
   height: 20px;
   padding: 0 var(--wp-space-3);
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   font-weight: 600;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   border: 1px solid transparent;
   white-space: nowrap;
   line-height: 1;
 }
-.wp-syntax-pill .pi { font-size: 9.5px; }
+.wp-syntax-pill .pi { font-size: 9.5px; } /* audit-exempt: micro icon inside a pill — below scale floor */
 .wp-syntax-pill--ref {
   /* @ref token color — pink/magenta, intentionally distinct from wildcard KIND violet */
   color: #f0abfc;
@@ -428,7 +428,7 @@ function isValid(row: ModuleRow): boolean {
   grid-template-columns: 30px 1fr 120px;
   gap: var(--wp-space-2) var(--wp-space-5);
   max-width: 760px;
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   align-items: center;
 }
 .wp-opts-grid__val {
@@ -446,5 +446,5 @@ function isValid(row: ModuleRow): boolean {
   height: 100%;
   background: var(--wp-accent-gradient);
 }
-.wp-opts-more { margin-top: var(--wp-space-4); font-size: 11.5px; }
+.wp-opts-more { margin-top: var(--wp-space-4); font-size: var(--wp-text-xs); }
 </style>

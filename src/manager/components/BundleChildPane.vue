@@ -253,9 +253,9 @@ const constraintTargetValues = computed<string[]>(() => {
   color: var(--wp-text-dim);
   text-align: center;
 }
-.wp-bpane__empty-icon { font-size: 26px; color: var(--wp-border-strong, var(--wp-border)); }
-.wp-bpane__empty-title { font-size: 12px; margin: 0; }
-.wp-bpane__empty-hint { font-size: 11px; margin: 0; color: var(--wp-text-dim); }
+.wp-bpane__empty-icon { font-size: var(--wp-text-2xl); color: var(--wp-border-strong, var(--wp-border)); }
+.wp-bpane__empty-title { font-size: var(--wp-text-sm); margin: 0; }
+.wp-bpane__empty-hint { font-size: var(--wp-text-xs); margin: 0; color: var(--wp-text-dim); }
 
 .wp-bpane__head {
   display: flex; align-items: center; gap: var(--wp-space-4);
@@ -269,12 +269,12 @@ const constraintTargetValues = computed<string[]>(() => {
   border-radius: 4px;
   background: color-mix(in oklab, var(--pane-kind, var(--wp-accent-500)) 18%, var(--wp-bg-3));
   color: var(--pane-kind, var(--wp-accent-500));
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   flex-shrink: 0;
 }
 .wp-bpane__name { font: 600 13px/1.2 var(--wp-font-sans); color: var(--wp-text); }
 .wp-bpane__kind {
-  font-size: 9px;
+  font-size: 9px; /* audit-exempt: micro uppercase kind label — below scale floor */
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -300,7 +300,7 @@ const constraintTargetValues = computed<string[]>(() => {
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline, 10px horiz rounded to 12px */
   border-radius: 3px;
   margin-bottom: var(--wp-space-5);
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   line-height: 1.45;
 }
 .wp-bpane__banner .pi { color: var(--wp-amber, #fbbf24); margin-top: 2px; flex-shrink: 0; }
@@ -314,7 +314,7 @@ const constraintTargetValues = computed<string[]>(() => {
 .wp-bpane__unsupported {
   display: flex; align-items: center; gap: var(--wp-space-4);
   padding: var(--wp-space-6);
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-text-dim);
   background: var(--wp-bg-2);
   border-radius: 4px;

@@ -420,7 +420,7 @@ function onDragEnd() {
 
 <style scoped>
 .wp-bundle-editor__loading { padding: var(--wp-space-8) 0; text-align: center; }
-.wp-bundle-editor__empty { padding: var(--wp-space-6) 0; font-size: 13px; }
+.wp-bundle-editor__empty { padding: var(--wp-space-6) 0; font-size: var(--wp-text-base); }
 
 .wp-bundle-children-grid {
   display: grid;
@@ -449,7 +449,7 @@ function onDragEnd() {
   border-radius: var(--wp-radius, 4px);
   background: transparent;
   color: var(--wp-text-dim);
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;

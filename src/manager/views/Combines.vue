@@ -264,7 +264,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
 
 <style scoped>
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
-.wp-tags-empty { font-size: 12px; }
+.wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
@@ -278,18 +278,18 @@ function templateParts(row: ModuleRow): TemplatePart[] {
   align-items: center;
   margin-top: var(--wp-space-4);
 }
-.wp-input-vars__label { font-size: 11.5px; margin-right: var(--wp-space-2); }
+.wp-input-vars__label { font-size: var(--wp-text-xs); margin-right: var(--wp-space-2); }
 .wp-input-var-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--wp-space-2);
   padding: var(--wp-space-1) var(--wp-space-4);
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
   color: var(--wp-accent-text);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
   font-family: var(--wp-font-mono);
 }
-.wp-input-var-chip .pi { font-size: 9.5px; }
+.wp-input-var-chip .pi { font-size: 9.5px; } /* audit-exempt: micro icon inside a pill — below scale floor */
 </style>

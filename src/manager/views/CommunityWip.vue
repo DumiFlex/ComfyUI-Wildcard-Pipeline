@@ -56,13 +56,13 @@ const branchUrl =
 }
 .wp-community-wip__lead {
   margin: 0 0 var(--wp-space-3);
-  font-size: 13.5px;
+  font-size: var(--wp-text-base);
   font-weight: 500;
   color: var(--wp-text);
 }
 .wp-community-wip__hint {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
 }
 .wp-community-wip__link {
   color: var(--wp-accent-text);

@@ -271,7 +271,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 
 <style scoped>
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
-.wp-tags-empty { font-size: 12px; }
+.wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
@@ -285,7 +285,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 .wp-rule-block { margin-bottom: var(--wp-space-3); }
 .wp-rule-block:last-child { margin-bottom: 0; }
 .wp-rule-block__head {
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }

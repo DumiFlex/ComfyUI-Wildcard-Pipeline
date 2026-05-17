@@ -304,19 +304,19 @@ function formatFactor(f: number): string {
 
 <style scoped>
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
-.wp-tags-empty { font-size: 12px; }
+.wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
   color: var(--wp-accent-text);
 }
 
-.wp-cn-name { font-size: 12px; color: var(--wp-text); }
+.wp-cn-name { font-size: var(--wp-text-sm); color: var(--wp-text); }
 .wp-matrix-list {
   list-style: none; padding: 0; margin: 0;
   display: flex; flex-direction: column; gap: 2px;
 }
-.wp-matrix-item { font-family: var(--wp-font-mono); font-size: 11.5px; }
+.wp-matrix-item { font-family: var(--wp-font-mono); font-size: var(--wp-text-xs); }
 .wp-matrix-arrow, .wp-matrix-sep { margin: 0 var(--wp-space-3); }
-.wp-matrix-meta { margin-top: var(--wp-space-4); font-size: 11px; }
+.wp-matrix-meta { margin-top: var(--wp-space-4); font-size: var(--wp-text-xs); }
 </style>

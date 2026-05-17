@@ -86,6 +86,22 @@
    * Other off-grid values (3px, 5px, 7px, etc.) stay raw only when
    * tagged `audit-exempt` with a justifying comment. */
 
+  /* Typography scale. line-height paired per step. */
+  --wp-text-xs:   11px;  --wp-line-xs:   16px;
+  --wp-text-sm:   12px;  --wp-line-sm:   16px;
+  --wp-text-base: 13px;  --wp-line-base: 20px;
+  --wp-text-md:   14px;  --wp-line-md:   20px;
+  --wp-text-lg:   16px;  --wp-line-lg:   22px;
+  --wp-text-xl:   20px;  --wp-line-xl:   28px;
+  --wp-text-2xl:  24px;  --wp-line-2xl:  32px;
+  --wp-text-3xl:  30px;  --wp-line-3xl:  38px;
+
+  /* Weights */
+  --wp-weight-normal: 400;
+  --wp-weight-medium: 500;
+  --wp-weight-semibold: 600;
+  --wp-weight-bold: 700;
+
   /* Sizing — 4/8 grid */
   --wp-radius-sm: 6px;
   --wp-radius:    8px;

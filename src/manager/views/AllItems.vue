@@ -453,7 +453,7 @@ function refresh() {
   border-radius: 6px;
   background: var(--wp-bg-2);
   color: var(--wp-text);
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
@@ -463,7 +463,7 @@ function refresh() {
   display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: 5px matches icon+label optical balance */
   padding: 3px var(--wp-space-4); /* audit-exempt: 3px hairline vertical padding */
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   font-weight: 500;
   /* Single-line — `Fixed Values` was wrapping onto a second line in
    * the narrow Kind column and looked twice as tall as the other
@@ -474,7 +474,7 @@ function refresh() {
 
 .wp-tags-slot { min-height: 28px; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
-.wp-tags-empty { font-size: 12px; }
+.wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);

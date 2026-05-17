@@ -482,5 +482,5 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 .cn-col-mode { width: 130px; }
 .cn-col-factor { width: 120px; }
 .cn-col-trash { width: 40px; }
-.cn-dash { font-size: 11.5px; }
+.cn-dash { font-size: var(--wp-text-xs); }
 </style>

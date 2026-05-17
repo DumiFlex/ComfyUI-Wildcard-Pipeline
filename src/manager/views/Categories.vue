@@ -260,5 +260,5 @@ async function saveEdit() {
 .wp-cat-col--actions { width: 110px; text-align: right; white-space: nowrap; }
 .wp-cat-col--actions .wp-btn + .wp-btn { margin-left: var(--wp-space-2); }
 
-.wp-cat-hex { font-size: 11.5px; }
+.wp-cat-hex { font-size: var(--wp-text-xs); }
 </style>

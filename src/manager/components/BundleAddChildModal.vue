@@ -202,7 +202,7 @@ function pick(row: ModuleRow) {
 }
 .wp-bundle-add__title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--wp-text-base);
 }
 .wp-bundle-add__close {
   margin-left: auto;
@@ -239,7 +239,7 @@ function pick(row: ModuleRow) {
   border-radius: 999px;
   background: var(--wp-bg);
   color: var(--wp-text-dim);
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   cursor: pointer;
 }
 .wp-bundle-add__tab[data-active] {
@@ -248,7 +248,7 @@ function pick(row: ModuleRow) {
   color: var(--wp-accent-500);
 }
 .wp-bundle-add__tab-count {
-  font-size: 9.5px;
+  font-size: 9.5px; /* audit-exempt: micro count badge inside pill — below scale floor */
   padding: 0 var(--wp-space-3);
   border-radius: 999px;
   background: color-mix(in oklab, currentColor 16%, transparent);
@@ -264,7 +264,7 @@ function pick(row: ModuleRow) {
   left: 8px;
   color: var(--wp-text-dim);
   pointer-events: none;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 .wp-bundle-add__searchinput :deep(.wp-input) { padding-left: 26px; } /* audit-exempt: 26px = search icon width + gap offset */
 .wp-bundle-add__searchinput { flex: 1; }
@@ -280,7 +280,7 @@ function pick(row: ModuleRow) {
   padding: var(--wp-space-6);
   text-align: center;
   color: var(--wp-text-dim);
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 .wp-bundle-add__row {
   display: grid;
@@ -306,7 +306,7 @@ function pick(row: ModuleRow) {
   border-radius: 4px;
   background: var(--wp-bg-3);
   color: var(--wp-text-dim);
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 .wp-bundle-add__row[data-kind="wildcard"]     .wp-bundle-add__rowicon { color: var(--wp-kind-wildcard); }
 .wp-bundle-add__row[data-kind="fixed_values"] .wp-bundle-add__rowicon { color: var(--wp-kind-fixed); }
@@ -321,13 +321,13 @@ function pick(row: ModuleRow) {
   white-space: nowrap;
 }
 .wp-bundle-add__rowsub {
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
   font-family: var(--wp-font-mono, ui-monospace, monospace);
 }
 .wp-bundle-add__rowadd {
   color: var(--wp-text-dim);
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
 }
 .wp-bundle-add__row:hover .wp-bundle-add__rowadd { color: var(--wp-accent-500); }
 </style>

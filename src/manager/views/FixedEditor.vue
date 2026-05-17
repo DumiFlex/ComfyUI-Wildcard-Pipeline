@@ -264,7 +264,7 @@ function cancel() { router.push("/fixed-values"); }
 .fv-col-var { width: 220px; }
 .fv-col-trash { width: 40px; }
 .fv-row__err {
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-danger);
   margin: var(--wp-space-2) 0 0;
 }

@@ -139,7 +139,7 @@ function resetPreferences() {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: var(--wp-space-3) var(--wp-space-6);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   align-items: center;
 }
 .wp-settings__link {
@@ -152,7 +152,7 @@ function resetPreferences() {
 .wp-settings__link:hover { color: var(--wp-text); }
 
 .wp-settings__hint {
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   margin: 0 0 var(--wp-space-5);
 }
 
@@ -169,7 +169,7 @@ function resetPreferences() {
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);
   color: var(--wp-text-muted);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   font-weight: 500;
   cursor: pointer;
 }

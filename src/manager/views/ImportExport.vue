@@ -955,12 +955,12 @@ watch(
   width: 22px; height: 22px;
   border-radius: 6px;
   display: grid; place-items: center;
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
 }
-.wp-io-group__label { font-weight: 500; font-size: 13px; }
+.wp-io-group__label { font-weight: 500; font-size: var(--wp-text-base); }
 .wp-io-group__count {
   color: var(--wp-text-muted);
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   font-family: var(--wp-font-mono);
 }
 
@@ -971,13 +971,13 @@ watch(
   padding: 7px var(--wp-space-5) 7px 36px; /* audit-exempt: 7px/36px match group-head vertical rhythm */
   border-top: 1px solid var(--wp-border);
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
 }
 .wp-io-row:hover { background: var(--wp-bg-2); }
 .wp-io-row__name { flex: 1; font-weight: 500; }
 .wp-io-row__empty {
   padding: var(--wp-space-5) var(--wp-space-5) var(--wp-space-5) 36px; /* audit-exempt: 36px indent matches row indent */
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 
 .wp-io-side {
@@ -993,7 +993,7 @@ watch(
   grid-template-columns: 1fr auto;
   row-gap: var(--wp-space-3);
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
 }
 .wp-io-stats dt { color: var(--wp-text-muted); }
 .wp-io-stats dd {
@@ -1011,14 +1011,14 @@ watch(
 }
 
 .wp-io-help {
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   margin: 0 0 var(--wp-space-4);
 }
 .wp-io-help code {
   background: var(--wp-bg-3);
   padding: 1px var(--wp-space-3);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 
 .wp-io-file-hidden { display: none; }
@@ -1038,12 +1038,12 @@ watch(
   border-color: var(--wp-accent-500);
 }
 .wp-io-drop__title {
-  font-size: 13px;
+  font-size: var(--wp-text-base);
   color: var(--wp-text);
   margin-top: var(--wp-space-3);
 }
 .wp-io-drop__hint {
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   margin-top: var(--wp-space-2);
 }
 
@@ -1053,7 +1053,7 @@ watch(
   border-radius: 6px;
   background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
   color: var(--wp-danger);
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
   display: flex;
   align-items: center;
   gap: var(--wp-space-3);
@@ -1069,7 +1069,7 @@ watch(
   padding: 1px var(--wp-space-4);
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   font-weight: 500;
   text-transform: lowercase;
 }

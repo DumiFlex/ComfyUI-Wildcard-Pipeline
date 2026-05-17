@@ -232,13 +232,13 @@ watch(
 }
 .wp-history-panel__title {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--wp-text-md);
   font-weight: 600;
   color: var(--wp-text);
 }
 .wp-history-panel__sub {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-text-muted);
 }
 
@@ -284,7 +284,7 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
   margin-bottom: var(--wp-space-2);
 }
@@ -297,7 +297,7 @@ watch(
   font-family: var(--wp-font-mono, ui-monospace, monospace);
 }
 .wp-history-item__name {
-  font-size: 13px;
+  font-size: var(--wp-text-base);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -321,13 +321,13 @@ watch(
   flex-shrink: 0;
 }
 .wp-history-preview__snapshot-label {
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 .wp-history-preview__name {
-  font-size: 14px;
+  font-size: var(--wp-text-md);
   font-weight: 600;
   margin-top: 2px;
   color: var(--wp-text);
@@ -338,7 +338,7 @@ watch(
   padding: var(--wp-space-6) var(--wp-space-6);
   overflow: auto;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
   background: var(--wp-bg);
   white-space: pre-wrap;
@@ -346,7 +346,7 @@ watch(
 }
 .wp-history-preview__placeholder {
   padding: var(--wp-space-7);
-  font-size: 13px;
+  font-size: var(--wp-text-base);
 }
 
 /* Empty state */
@@ -361,17 +361,17 @@ watch(
   color: var(--wp-text-muted);
 }
 .wp-history-empty i {
-  font-size: 28px;
+  font-size: var(--wp-text-3xl);
   color: var(--wp-text-dim, #6e6e7c);
   margin-bottom: var(--wp-space-5);
 }
 .wp-history-empty p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--wp-text-base);
 }
 .wp-history-empty__hint {
   margin-top: var(--wp-space-2) !important;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-text-dim, #6e6e7c);
 }
 </style>

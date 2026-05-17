@@ -632,7 +632,7 @@ defineExpose({
   height: 18px;
   padding: 0 var(--wp-space-3);
   border-radius: 9px;
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   background: var(--wp-accent-500);
   color: #fff;
   margin-left: var(--wp-space-2);
@@ -649,7 +649,7 @@ defineExpose({
 }
 .wp-filter-panel__extra-label {
   display: block;
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
   margin-bottom: var(--wp-space-3);
 }
@@ -679,7 +679,7 @@ defineExpose({
   color: var(--wp-accent-text);
 }
 .wp-chip__count {
-  font-size: 10.5px;
+  font-size: var(--wp-text-xs);
   margin-left: 2px;
 }
 
@@ -692,7 +692,7 @@ defineExpose({
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
   border-radius: var(--wp-radius);
 }
-.wp-bulk-bar__count { font-size: 12.5px; }
+.wp-bulk-bar__count { font-size: var(--wp-text-sm); }
 
 .wp-active-filters {
   display: flex;
@@ -701,7 +701,7 @@ defineExpose({
   gap: var(--wp-space-3);
 }
 .wp-active-filters__label {
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
 }
 
@@ -709,7 +709,7 @@ defineExpose({
   background: transparent;
   border: none;
   padding: 0;
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-accent-text);
   cursor: pointer;
   text-decoration: underline;
@@ -734,7 +734,7 @@ defineExpose({
   justify-content: center;
 }
 .wp-row-expand-btn:hover { color: var(--wp-text); }
-.wp-row-expand-btn .pi { font-size: 11px; }
+.wp-row-expand-btn .pi { font-size: var(--wp-text-xs); }
 
 .wp-row-fav-btn {
   background: transparent;
@@ -747,7 +747,7 @@ defineExpose({
   justify-content: center;
 }
 .wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
-.wp-row-fav-btn .pi { font-size: 13px; }
+.wp-row-fav-btn .pi { font-size: var(--wp-text-base); }
 
 .wp-row-name {
   display: flex;
@@ -763,7 +763,7 @@ defineExpose({
   gap: var(--wp-space-2);
 }
 .wp-row-tag-more {
-  font-size: 10px;
+  font-size: 10px; /* audit-exempt: micro "+N more" indicator — below scale floor */
   color: var(--wp-text-dim);
 }
 
@@ -781,7 +781,7 @@ defineExpose({
   border-radius: 999px;
   background: var(--wp-bg-2);
   color: var(--wp-text);
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   cursor: pointer;
   transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
@@ -818,7 +818,7 @@ defineExpose({
   border-radius: 999px;
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
-  font-size: 18px;
+  font-size: var(--wp-text-xl);
   margin-bottom: var(--wp-space-3);
 }
 .wp-empty__msg { color: var(--wp-text-muted); margin: 0 0 var(--wp-space-3); }
@@ -833,12 +833,12 @@ defineExpose({
   border-radius: var(--wp-radius);
 }
 .wp-pagination__range {
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-text-dim);
   font-variant-numeric: tabular-nums;
 }
 .wp-pagination__per-page-label {
-  font-size: 11.5px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
 }
 .wp-pagination__per-page { width: 92px; }

@@ -225,7 +225,7 @@ function frameColor(row: BundleRow): string {
 
 <style scoped>
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
-.wp-tags-empty { font-size: 12px; }
+.wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
@@ -239,5 +239,5 @@ function frameColor(row: BundleRow): string {
   border: 1px solid var(--wp-border);
   vertical-align: middle;
 }
-.wp-children-summary { font-size: 12px; }
+.wp-children-summary { font-size: var(--wp-text-sm); }
 </style>

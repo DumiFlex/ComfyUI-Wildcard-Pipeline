@@ -383,7 +383,7 @@ defineExpose({ historyEntries, applyRestore });
   gap: var(--wp-space-3);
 }
 .wp-options-table {
-  font-size: 12.5px;
+  font-size: var(--wp-text-sm);
 }
 .opt-col-weight { width: 90px; }
 .opt-col-sub { width: 200px; }
@@ -413,7 +413,7 @@ defineExpose({ historyEntries, applyRestore });
 .opt-prob__value {
   width: 32px;
   text-align: right;
-  font-size: 11px;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
 }
 </style>

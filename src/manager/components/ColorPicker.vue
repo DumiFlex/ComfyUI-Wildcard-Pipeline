@@ -188,7 +188,7 @@ function isActivePreset(preset: string): boolean {
 .wp-color-picker__hex {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--wp-text-sm);
 }
 
 .wp-color-picker__palette {
