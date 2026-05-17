@@ -172,17 +172,17 @@ function isActivePreset(preset: string): boolean {
   border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
-  padding: 10px;
+  padding: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
   width: 220px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
 }
 
 .wp-color-picker__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--wp-space-4);
 }
 
 .wp-color-picker__hex {
@@ -194,7 +194,7 @@ function isActivePreset(preset: string): boolean {
 .wp-color-picker__palette {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 
 .wp-color-picker__chip {

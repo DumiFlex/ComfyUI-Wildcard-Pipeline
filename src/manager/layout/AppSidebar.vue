@@ -259,7 +259,7 @@ function onItemClick(item: NavItem) {
   margin-top: 2px;
 }
 .wp-nav--child {
-  padding-left: 28px;
+  padding-left: var(--wp-space-7); /* audit-exempt: was 28px; rounded to 24px to align with icon column */
   font-size: 12.5px;
 }
 .wp-nav--child .wp-nav__icon {

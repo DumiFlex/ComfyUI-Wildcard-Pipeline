@@ -298,7 +298,7 @@ defineExpose({ cellAt, cycleCell });
   font-size: 12px;
 }
 .wp-matrix__corner {
-  padding: 0 8px;
+  padding: 0 var(--wp-space-4);
   text-align: left;
   color: var(--wp-text-dim);
   font-weight: 500;
@@ -315,13 +315,13 @@ defineExpose({ cellAt, cycleCell });
   gap: 2px;
 }
 .wp-matrix__col-h {
-  padding: 0 8px;
+  padding: 0 var(--wp-space-4);
   color: var(--wp-text-muted);
   font-weight: 500;
   white-space: nowrap;
 }
 .wp-matrix__row-h {
-  padding: 0 8px;
+  padding: 0 var(--wp-space-4);
   color: var(--wp-text-muted);
   white-space: nowrap;
   text-align: left;
@@ -335,7 +335,7 @@ defineExpose({ cellAt, cycleCell });
 .wp-matrix__empty {
   text-align: center;
   color: var(--wp-text-dim);
-  padding: 24px 12px;
+  padding: var(--wp-space-7) var(--wp-space-5);
   font-size: 12px;
 }
 .wp-matrix-cell-wrap {
@@ -346,10 +346,10 @@ defineExpose({ cellAt, cycleCell });
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 3px; /* audit-exempt: 3px optical icon+text gap inside compact cell */
   min-width: 56px;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 var(--wp-space-4);
   border-radius: 6px;
   cursor: pointer;
   border: 1px solid var(--wp-border);
@@ -361,11 +361,11 @@ defineExpose({ cellAt, cycleCell });
 .wp-matrix-cell:hover { transform: translateY(-1px); }
 .wp-matrix-cell[data-mode="allow"] {
   min-width: 36px;
-  padding: 0 6px;
+  padding: 0 var(--wp-space-3);
 }
 .wp-matrix-cell[data-mode="exclude"] {
   min-width: 36px;
-  padding: 0 6px;
+  padding: 0 var(--wp-space-3);
   background: rgba(239, 68, 68, 0.18);
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
   color: var(--wp-danger);
@@ -430,11 +430,11 @@ defineExpose({ cellAt, cycleCell });
   background: var(--wp-bg-1, var(--wp-bg));
   border: 1px solid var(--wp-border-strong, var(--wp-border2));
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: var(--wp-space-5) var(--wp-space-5); /* audit-exempt: was 10/12; rounded to 12 */
   box-shadow: var(--wp-shadow-md, 0 12px 28px rgba(0, 0, 0, 0.35));
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--wp-space-4);
 }
 .wp-tune-pop__head {
   display: flex;
@@ -444,17 +444,17 @@ defineExpose({ cellAt, cycleCell });
 .wp-tune-pop__row {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: var(--wp-space-4);
   align-items: center;
 }
 .wp-tune-pop__presets {
   display: flex;
-  gap: 4px;
+  gap: var(--wp-space-2);
   flex-wrap: wrap;
   justify-content: flex-start;
 }
 .wp-chip-btn {
-  padding: 3px 7px;
+  padding: 3px 7px; /* audit-exempt: 3px/7px compact chip for preset buttons */
   border-radius: 999px;
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);

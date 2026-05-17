@@ -303,7 +303,7 @@ function formatFactor(f: number): string {
 </template>
 
 <style scoped>
-.wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: 12px; }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
@@ -317,6 +317,6 @@ function formatFactor(f: number): string {
   display: flex; flex-direction: column; gap: 2px;
 }
 .wp-matrix-item { font-family: var(--wp-font-mono); font-size: 11.5px; }
-.wp-matrix-arrow, .wp-matrix-sep { margin: 0 6px; }
-.wp-matrix-meta { margin-top: 8px; font-size: 11px; }
+.wp-matrix-arrow, .wp-matrix-sep { margin: 0 var(--wp-space-3); }
+.wp-matrix-meta { margin-top: var(--wp-space-4); font-size: 11px; }
 </style>

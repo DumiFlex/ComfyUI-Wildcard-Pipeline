@@ -201,14 +201,14 @@ function removeTag(t: string) {
 .identity-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--wp-space-5);
 }
 .identity-grid__full {
   grid-column: 1 / -1;
 }
 .identity-tags {
   display: flex;
-  gap: 6px;
+  gap: var(--wp-space-3);
   align-items: stretch;
 }
 .identity-tags > :first-child { flex: 1; }
@@ -218,13 +218,13 @@ function removeTag(t: string) {
 .identity-name-row {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: var(--wp-space-4);
 }
 .identity-name-row__field { flex: 1; min-width: 0; }
 .identity-tag-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  gap: var(--wp-space-3);
+  margin-top: var(--wp-space-3);
 }
 </style>

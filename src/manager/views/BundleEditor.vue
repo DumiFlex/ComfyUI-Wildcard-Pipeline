@@ -419,19 +419,19 @@ function onDragEnd() {
 </template>
 
 <style scoped>
-.wp-bundle-editor__loading { padding: 32px 0; text-align: center; }
-.wp-bundle-editor__empty { padding: 16px 0; font-size: 13px; }
+.wp-bundle-editor__loading { padding: var(--wp-space-8) 0; text-align: center; }
+.wp-bundle-editor__empty { padding: var(--wp-space-6) 0; font-size: 13px; }
 
 .wp-bundle-children-grid {
   display: grid;
   grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.4fr);
-  gap: 12px;
+  gap: var(--wp-space-5);
   align-items: start;
 }
 .wp-bundle-children-stack {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--wp-space-2);
   min-width: 0;
 }
 .wp-bundle-children-stack__drag-over {
@@ -441,10 +441,10 @@ function onDragEnd() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--wp-space-4);
   width: 100%;
-  padding: 8px;
-  margin-top: 4px;
+  padding: var(--wp-space-4);
+  margin-top: var(--wp-space-2);
   border: 1px dashed var(--wp-border-strong, var(--wp-border));
   border-radius: var(--wp-radius, 4px);
   background: transparent;

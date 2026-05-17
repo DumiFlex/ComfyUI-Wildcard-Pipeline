@@ -357,25 +357,25 @@ onMounted(refresh);
 
 <style scoped>
 .dashboard__hero-text { flex: 1; min-width: 0; }
-.dashboard__hero-actions { gap: 8px; }
+.dashboard__hero-actions { gap: var(--wp-space-4); }
 
 .dashboard__quick {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--wp-space-4);
 }
 
 .wp-recent__tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--wp-space-2);
   border-bottom: none;
 }
 .wp-tabs__btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-3) var(--wp-space-5);
   background: none;
   border: 1px solid transparent;
   color: var(--wp-text-muted);
@@ -397,7 +397,7 @@ onMounted(refresh);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--wp-space-2);
 }
 .dashboard__view-all:hover { color: var(--wp-text); }
 
@@ -422,7 +422,7 @@ onMounted(refresh);
 .dashboard__empty {
   font-size: 12.5px;
   color: var(--wp-text-muted);
-  margin: 12px 4px 6px;
+  margin: var(--wp-space-5) var(--wp-space-2) var(--wp-space-3);
 }
 
 .dashboard__stat { cursor: pointer; text-align: left; font: inherit; color: inherit; }

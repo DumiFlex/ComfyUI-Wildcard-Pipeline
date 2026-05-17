@@ -373,14 +373,14 @@ defineExpose({ historyEntries, applyRestore });
 <style scoped>
 .sub-add-row {
   display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: var(--wp-space-4);
+  margin-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
 }
 .sub-add-row > :first-child { flex: 1; }
 .sub-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .wp-options-table {
   font-size: 12.5px;
@@ -391,13 +391,13 @@ defineExpose({ historyEntries, applyRestore });
 .opt-col-trash { width: 40px; }
 .opt-empty {
   text-align: center;
-  padding: 16px;
+  padding: var(--wp-space-6);
   color: var(--wp-text-dim);
 }
 .opt-prob {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .opt-prob__bar {
   flex: 1;

@@ -33,10 +33,10 @@ const meta = computed(() => {
 .type-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 5px; /* audit-exempt: 5px optical icon+text gap inside compact pill */
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: var(--wp-space-1) var(--wp-space-4);
   border-radius: 9px;
   letter-spacing: 0.3px;
 }

@@ -231,12 +231,12 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
 </template>
 
 <style scoped>
-.wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: 12px; }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
   color: var(--wp-accent-text);
 }
-.wp-opts-more { margin-top: 8px; font-size: 11.5px; }
+.wp-opts-more { margin-top: var(--wp-space-4); font-size: 11.5px; }
 </style>

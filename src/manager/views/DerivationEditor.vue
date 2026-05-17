@@ -290,6 +290,6 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
 .rules-stack {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--wp-space-6); /* audit-exempt: was 14px; rounded to 16px */
 }
 </style>

@@ -159,8 +159,8 @@ const isEdited = computed(() => props.edited);
   display: grid;
   grid-template-columns: 22px 22px 28px 1fr auto;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: var(--wp-space-4);
+  padding: var(--wp-space-3) var(--wp-space-4);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--row-kind, var(--wp-accent-500));
@@ -211,7 +211,7 @@ const isEdited = computed(() => props.edited);
 
 .wp-bchild__main { min-width: 0; cursor: pointer; }
 .wp-bchild__top {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: var(--wp-space-4);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -222,14 +222,14 @@ const isEdited = computed(() => props.edited);
   margin-left: auto;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 9px;
-  padding: 1px 5px;
+  padding: 1px var(--wp-space-3); /* audit-exempt: 1px vertical hairline badge */
   border-radius: 3px;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);
 }
 .wp-bchild__name {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: var(--wp-space-3);
   font: 500 12.5px/1.3 var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
@@ -240,7 +240,7 @@ const isEdited = computed(() => props.edited);
   font-size: 8.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 1px 5px;
+  padding: 1px var(--wp-space-3); /* audit-exempt: 1px vertical hairline badge */
   border-radius: 999px;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);

@@ -17,6 +17,7 @@
     "lint": "eslint \"src/**/*.{ts,vue}\"",
     "size": "node scripts/check-bundle-size.mjs",
     "check:css-isolation": "node scripts/check-css-isolation.mjs",
+    "check:spacing": "node scripts/check-spacing-tokens.mjs",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --passWithNoTests",

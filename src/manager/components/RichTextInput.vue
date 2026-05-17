@@ -521,12 +521,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 .wp-rt__mirror--single {
-  padding: 0 10px;
+  padding: 0 var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px; matches input padding */
   line-height: var(--wp-input-h, 34px);
   white-space: pre;
 }
 .wp-rt__mirror--multi {
-  padding: 8px 10px;
+  padding: var(--wp-space-4) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -551,11 +551,11 @@ onBeforeUnmount(() => {
 }
 .wp-rt__input--single {
   height: var(--wp-input-h, 34px);
-  padding: 0 10px;
+  padding: 0 var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px; must match mirror */
   line-height: var(--wp-input-h, 34px);
 }
 .wp-rt__input--multi {
-  padding: 8px 10px;
+  padding: var(--wp-space-4) var(--wp-space-5); /* audit-exempt: was 10px horiz; must match mirror */
   line-height: 1.5;
   resize: vertical;
   min-height: 72px;
@@ -600,7 +600,7 @@ onBeforeUnmount(() => {
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border-strong, rgba(255, 255, 255, 0.14));
   border-radius: 8px;
-  padding: 0 4px 4px;
+  padding: 0 var(--wp-space-2) var(--wp-space-2);
   box-shadow: var(--wp-shadow-lg, var(--wp-shadow, 0 10px 30px rgba(0, 0, 0, 0.45)));
   display: flex;
   flex-direction: column;
@@ -624,13 +624,13 @@ onBeforeUnmount(() => {
 .wp-rt-suggestions__head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: var(--wp-space-4);
+  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
   font-size: 11px;
   color: var(--wp-text-dim, #6e6e7c);
   background: var(--wp-bg-3, #1e1e2a);
   border-bottom: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
-  margin: 0 -4px 4px;
+  margin: 0 -4px var(--wp-space-2); /* audit-exempt: -4px negative margin bleeds header to popover edges */
   border-radius: 7px 7px 0 0;
 }
 .wp-rt-suggestions__query {
@@ -650,7 +650,7 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: 4px;
-  padding: 7px 10px;
+  padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps items compact */
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 12.5px;
   color: var(--wp-text, #e7e7ee);

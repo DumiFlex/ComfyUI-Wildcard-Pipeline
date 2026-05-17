@@ -158,7 +158,7 @@ function onDensity(d: Density) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: var(--wp-space-6) var(--wp-space-6); /* audit-exempt: was 14px vertical; rounded to 16px */
   border-bottom: 1px solid var(--wp-border);
 }
 .wp-tweaks__header h2 {
@@ -190,13 +190,13 @@ function onDensity(d: Density) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: var(--wp-space-6);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--wp-space-6); /* audit-exempt: was 18px; rounded to 16px */
 }
 
-.wp-tweaks__section { display: flex; flex-direction: column; gap: 8px; }
+.wp-tweaks__section { display: flex; flex-direction: column; gap: var(--wp-space-4); }
 .wp-tweaks__section-title {
   margin: 0;
   font-size: 10px;
@@ -206,7 +206,7 @@ function onDensity(d: Density) {
   color: var(--wp-text-dim);
 }
 
-.wp-tweaks__swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.wp-tweaks__swatches { display: flex; gap: var(--wp-space-4); flex-wrap: wrap; }
 .wp-tweaks__swatch {
   appearance: none;
   width: 32px;
@@ -223,13 +223,13 @@ function onDensity(d: Density) {
   box-shadow: 0 0 0 2px var(--wp-bg-1), 0 0 0 4px var(--wp-accent-500);
 }
 
-.wp-tweaks__radio { display: flex; gap: 6px; padding: 2px; background: var(--wp-bg-3); border-radius: var(--wp-radius); }
+.wp-tweaks__radio { display: flex; gap: var(--wp-space-3); padding: 2px; background: var(--wp-bg-3); border-radius: var(--wp-radius); }
 .wp-tweaks__radio-item {
   flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
+  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
   border-radius: var(--wp-radius-sm);
   cursor: pointer;
   font-size: 12px;
@@ -240,7 +240,7 @@ function onDensity(d: Density) {
 .wp-tweaks__radio-item input { position: absolute; opacity: 0; pointer-events: none; }
 .wp-tweaks__radio-item.is-active { background: var(--wp-bg-1); color: var(--wp-text); box-shadow: var(--wp-shadow-sm); }
 
-.wp-tweaks__footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--wp-border); }
+.wp-tweaks__footer { margin-top: auto; padding-top: var(--wp-space-5); border-top: 1px solid var(--wp-border); }
 
 .wp-tweaks__backdrop {
   position: fixed;

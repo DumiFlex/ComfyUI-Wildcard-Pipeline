@@ -242,14 +242,14 @@ const constraintTargetValues = computed<string[]>(() => {
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--pane-kind, var(--wp-accent-500));
   border-radius: var(--wp-radius, 4px);
-  padding: 12px 14px;
+  padding: var(--wp-space-5) var(--wp-space-6); /* audit-exempt: was 14px horiz; rounded to 16px */
   align-self: start;
   min-width: 0;
 }
 .wp-bpane__empty {
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 6px;
-  padding: 48px 16px;
+  justify-content: center; gap: var(--wp-space-3);
+  padding: 48px var(--wp-space-6); /* audit-exempt: 48px = generous empty-state breathing room */
   color: var(--wp-text-dim);
   text-align: center;
 }
@@ -258,9 +258,9 @@ const constraintTargetValues = computed<string[]>(() => {
 .wp-bpane__empty-hint { font-size: 11px; margin: 0; color: var(--wp-text-dim); }
 
 .wp-bpane__head {
-  display: flex; align-items: center; gap: 8px;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
+  display: flex; align-items: center; gap: var(--wp-space-4);
+  padding-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  margin-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
   border-bottom: 1px solid var(--wp-border);
 }
 .wp-bpane__kindicon {
@@ -279,7 +279,7 @@ const constraintTargetValues = computed<string[]>(() => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--pane-kind, var(--wp-accent-500));
-  padding: 2px 6px;
+  padding: 2px var(--wp-space-3); /* audit-exempt: 2px vertical hairline badge */
   border-radius: 3px;
   background: color-mix(in oklab, var(--pane-kind, var(--wp-accent-500)) 14%, transparent);
 }
@@ -293,13 +293,13 @@ const constraintTargetValues = computed<string[]>(() => {
 .wp-bpane__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
 
 .wp-bpane__banner {
-  display: flex; align-items: flex-start; gap: 6px;
+  display: flex; align-items: flex-start; gap: var(--wp-space-3);
   background: color-mix(in oklab, var(--wp-amber, #fbbf24) 12%, transparent);
   border-left: 2px solid var(--wp-amber, #fbbf24);
   color: var(--wp-text);
-  padding: 7px 10px;
+  padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline, 10px horiz rounded to 12px */
   border-radius: 3px;
-  margin-bottom: 12px;
+  margin-bottom: var(--wp-space-5);
   font-size: 11.5px;
   line-height: 1.45;
 }
@@ -308,12 +308,12 @@ const constraintTargetValues = computed<string[]>(() => {
 .wp-bpane__sections {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
 }
 
 .wp-bpane__unsupported {
-  display: flex; align-items: center; gap: 8px;
-  padding: 14px;
+  display: flex; align-items: center; gap: var(--wp-space-4);
+  padding: var(--wp-space-6); /* audit-exempt: was 14px; rounded to 16px */
   font-size: 12px;
   color: var(--wp-text-dim);
   background: var(--wp-bg-2);

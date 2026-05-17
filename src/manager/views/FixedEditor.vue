@@ -266,11 +266,11 @@ function cancel() { router.push("/fixed-values"); }
 .fv-row__err {
   font-size: 11px;
   color: var(--wp-danger);
-  margin: 4px 0 0;
+  margin: var(--wp-space-2) 0 0;
 }
 .opt-empty {
   text-align: center;
-  padding: 16px;
+  padding: var(--wp-space-6);
   color: var(--wp-text-dim);
 }
 </style>

@@ -354,7 +354,7 @@ function isValid(row: ModuleRow): boolean {
 .wp-tags-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .wp-tags-empty { font-size: 12px; }
 .wp-tag-chip[data-active="true"] {
@@ -365,16 +365,16 @@ function isValid(row: ModuleRow): boolean {
 
 .wp-syntax-cell {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--wp-space-2);
   align-items: center;
   flex-wrap: nowrap;
 }
 .wp-syntax-pill {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 3px; /* audit-exempt: 3px optical gap between icon and text inside pill */
   height: 20px;
-  padding: 0 6px;
+  padding: 0 var(--wp-space-3);
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 600;
@@ -426,7 +426,7 @@ function isValid(row: ModuleRow): boolean {
 .wp-opts-grid {
   display: grid;
   grid-template-columns: 30px 1fr 120px;
-  gap: 4px 12px;
+  gap: var(--wp-space-2) var(--wp-space-5);
   max-width: 760px;
   font-size: 12.5px;
   align-items: center;
@@ -446,5 +446,5 @@ function isValid(row: ModuleRow): boolean {
   height: 100%;
   background: var(--wp-accent-gradient);
 }
-.wp-opts-more { margin-top: 8px; font-size: 11.5px; }
+.wp-opts-more { margin-top: var(--wp-space-4); font-size: 11.5px; }
 </style>

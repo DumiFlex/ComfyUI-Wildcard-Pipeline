@@ -445,10 +445,10 @@ function refresh() {
 </template>
 
 <style scoped>
-.wp-kind-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-kind-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-kind-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px;
+  display: inline-flex; align-items: center; gap: var(--wp-space-3);
+  padding: var(--wp-space-2) 10px; /* audit-exempt: 10px matches PrimeVue chip horizontal rhythm */
   border: 1px solid var(--wp-border);
   border-radius: 6px;
   background: var(--wp-bg-2);
@@ -460,8 +460,8 @@ function refresh() {
 .wp-kind-chip:hover { border-color: var(--wp-border-strong); }
 
 .wp-kind-cell {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 8px;
+  display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: 5px matches icon+label optical balance */
+  padding: 3px var(--wp-space-4); /* audit-exempt: 3px hairline vertical padding */
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 500;
@@ -473,7 +473,7 @@ function refresh() {
 }
 
 .wp-tags-slot { min-height: 28px; }
-.wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: 12px; }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);

@@ -158,7 +158,7 @@ const hueCursorStyle = computed(() => ({
 .wp-hsv-picker {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--wp-space-4);
   width: 100%;
 }
 

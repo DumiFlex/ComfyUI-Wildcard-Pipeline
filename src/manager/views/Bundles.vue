@@ -224,7 +224,7 @@ function frameColor(row: BundleRow): string {
 </template>
 
 <style scoped>
-.wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: 12px; }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);

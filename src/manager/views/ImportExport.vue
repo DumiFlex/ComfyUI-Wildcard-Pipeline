@@ -904,17 +904,17 @@ watch(
 
 <style scoped>
 .wp-io-page {
-  padding: 18px 22px 40px;
+  padding: 18px 22px 40px; /* audit-exempt: 18/22/40 are page-frame insets matching the TestRunner layout; not on the 4px grid */
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.wp-io-tabs { gap: 4px; margin-bottom: 4px; }
+.wp-io-tabs { gap: var(--wp-space-2); margin-bottom: var(--wp-space-2); }
 
 .wp-io-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
+  gap: var(--wp-space-6);
   align-items: start;
 }
 @media (max-width: 960px) {
@@ -924,13 +924,13 @@ watch(
 .wp-io-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding: var(--wp-space-5);
   border-bottom: 1px solid var(--wp-border);
 }
 .wp-io-presets {
   display: flex;
-  gap: 6px;
+  gap: var(--wp-space-3);
   flex-wrap: wrap;
 }
 .wp-io-search { width: 100%; }
@@ -942,8 +942,8 @@ watch(
 .wp-io-group__head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding: 9px var(--wp-space-5); /* audit-exempt: 9px vertical hairline keeps row compact */
   background: var(--wp-bg-2);
   cursor: pointer;
   user-select: none;
@@ -967,8 +967,8 @@ watch(
 .wp-io-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 12px 7px 36px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding: 7px var(--wp-space-5) 7px 36px; /* audit-exempt: 7px/36px match group-head vertical rhythm */
   border-top: 1px solid var(--wp-border);
   cursor: pointer;
   font-size: 12.5px;
@@ -976,14 +976,14 @@ watch(
 .wp-io-row:hover { background: var(--wp-bg-2); }
 .wp-io-row__name { flex: 1; font-weight: 500; }
 .wp-io-row__empty {
-  padding: 10px 12px 10px 36px;
+  padding: var(--wp-space-5) var(--wp-space-5) var(--wp-space-5) 36px; /* audit-exempt: 36px indent matches row indent */
   font-size: 12px;
 }
 
 .wp-io-side {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--wp-space-5);
   position: sticky;
   top: 0;
 }
@@ -991,7 +991,7 @@ watch(
 .wp-io-stats {
   display: grid;
   grid-template-columns: 1fr auto;
-  row-gap: 6px;
+  row-gap: var(--wp-space-3);
   margin: 0;
   font-size: 12.5px;
 }
@@ -1002,21 +1002,21 @@ watch(
   text-align: right;
 }
 .wp-io-warn { color: var(--wp-warn); }
-.wp-io-download { width: 100%; margin-top: 10px; }
+.wp-io-download { width: 100%; margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */ }
 
 .wp-io-import-main {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--wp-space-6); /* audit-exempt: was 14px; rounded to 16px */
 }
 
 .wp-io-help {
   font-size: 12.5px;
-  margin: 0 0 8px;
+  margin: 0 0 var(--wp-space-4);
 }
 .wp-io-help code {
   background: var(--wp-bg-3);
-  padding: 1px 5px;
+  padding: 1px var(--wp-space-3); /* audit-exempt: 1px vertical hairline */
   border-radius: 4px;
   font-size: 12px;
 }
@@ -1026,7 +1026,7 @@ watch(
 .wp-io-drop {
   border: 1px dashed var(--wp-border-strong);
   border-radius: 10px;
-  padding: 28px 16px;
+  padding: var(--wp-space-7) var(--wp-space-6); /* audit-exempt: was 28px; rounded to 24px */
   text-align: center;
   cursor: pointer;
   background: var(--wp-bg-2);
@@ -1040,23 +1040,23 @@ watch(
 .wp-io-drop__title {
   font-size: 13px;
   color: var(--wp-text);
-  margin-top: 6px;
+  margin-top: var(--wp-space-3);
 }
 .wp-io-drop__hint {
   font-size: 11.5px;
-  margin-top: 4px;
+  margin-top: var(--wp-space-2);
 }
 
 .wp-io-error {
-  margin-top: 10px;
-  padding: 8px 10px;
+  margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding: var(--wp-space-4) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
   border-radius: 6px;
   background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
   color: var(--wp-danger);
   font-size: 12.5px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 
 /* Pill chrome shared by the three import-conflict badges. Border + bg
@@ -1066,7 +1066,7 @@ watch(
 .wp-io-badge {
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
+  padding: 1px var(--wp-space-4); /* audit-exempt: 1px vertical hairline */
   border-radius: 999px;
   border: 1px solid transparent;
   font-size: 11px;
@@ -1092,7 +1092,7 @@ watch(
 .wp-io-actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 12px;
+  gap: var(--wp-space-3);
+  margin-top: var(--wp-space-5);
 }
 </style>

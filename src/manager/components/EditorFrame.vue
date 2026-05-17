@@ -112,7 +112,7 @@ function onRestore(entry: ModuleHistoryEntry) {
 .wp-editor {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--wp-space-6);
 }
 .wp-editor__body {
   flex: 1 1 auto;
@@ -120,8 +120,8 @@ function onRestore(entry: ModuleHistoryEntry) {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--wp-space-6); /* audit-exempt: was 14px; rounded to 16px */
   /* Buffer so the last card clears the gradient + sticky footer top. */
-  padding-bottom: 24px;
+  padding-bottom: var(--wp-space-7);
 }
 </style>

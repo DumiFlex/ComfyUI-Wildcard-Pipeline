@@ -614,7 +614,7 @@ defineExpose({
 .wp-page-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--wp-space-4);
   flex-wrap: wrap;
 }
 .wp-page-toolbar__search {
@@ -623,40 +623,40 @@ defineExpose({
   max-width: 440px;
 }
 .wp-page-toolbar__sort { width: 180px; }
-.wp-page-toolbar__filters-label { display: inline-flex; align-items: center; gap: 4px; }
+.wp-page-toolbar__filters-label { display: inline-flex; align-items: center; gap: var(--wp-space-2); }
 .wp-filter-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 var(--wp-space-3); /* audit-exempt: 0 vertical keeps badge inline */
   border-radius: 9px;
   font-size: 10.5px;
   background: var(--wp-accent-500);
   color: #fff;
-  margin-left: 4px;
+  margin-left: var(--wp-space-2);
 }
 
 .wp-filter-panel {
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  padding: 12px;
+  padding: var(--wp-space-5);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
 }
 .wp-filter-panel__extra-label {
   display: block;
   font-size: 11px;
   color: var(--wp-text-muted);
-  margin-bottom: 6px;
+  margin-bottom: var(--wp-space-3);
 }
 .wp-filter-panel__extra-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .wp-filter-panel__footer {
   display: flex;
@@ -686,8 +686,8 @@ defineExpose({
 .wp-bulk-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding: var(--wp-space-4) var(--wp-space-5);
   background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
   border-radius: var(--wp-radius);
@@ -698,7 +698,7 @@ defineExpose({
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .wp-active-filters__label {
   font-size: 11.5px;
@@ -727,7 +727,7 @@ defineExpose({
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 4px;
+  padding: var(--wp-space-2);
   color: var(--wp-text-muted);
   display: inline-flex;
   align-items: center;
@@ -740,7 +740,7 @@ defineExpose({
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 4px;
+  padding: var(--wp-space-2);
   color: var(--wp-text-dim);
   display: inline-flex;
   align-items: center;
@@ -760,7 +760,7 @@ defineExpose({
 .wp-row-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--wp-space-2);
 }
 .wp-row-tag-more {
   font-size: 10px;
@@ -776,7 +776,7 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   height: 20px;
-  padding: 0 8px;
+  padding: 0 var(--wp-space-4);
   border: 1px solid var(--wp-border);
   border-radius: 999px;
   background: var(--wp-bg-2);
@@ -806,8 +806,8 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 32px 16px;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-8) var(--wp-space-6);
   text-align: center;
 }
 .wp-empty__icon {
@@ -819,15 +819,15 @@ defineExpose({
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
   font-size: 18px;
-  margin-bottom: 6px;
+  margin-bottom: var(--wp-space-3);
 }
-.wp-empty__msg { color: var(--wp-text-muted); margin: 0 0 6px; }
+.wp-empty__msg { color: var(--wp-text-muted); margin: 0 0 var(--wp-space-3); }
 
 .wp-page-pager {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding: var(--wp-space-4) var(--wp-space-5);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);

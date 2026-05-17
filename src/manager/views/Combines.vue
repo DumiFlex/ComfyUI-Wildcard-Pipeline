@@ -263,7 +263,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
 </template>
 
 <style scoped>
-.wp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: 12px; }
 .wp-tag-chip[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
@@ -273,17 +273,17 @@ function templateParts(row: ModuleRow): TemplatePart[] {
 
 .wp-input-vars {
   display: flex;
-  gap: 6px;
+  gap: var(--wp-space-3);
   flex-wrap: wrap;
   align-items: center;
-  margin-top: 8px;
+  margin-top: var(--wp-space-4);
 }
-.wp-input-vars__label { font-size: 11.5px; margin-right: 4px; }
+.wp-input-vars__label { font-size: 11.5px; margin-right: var(--wp-space-2); }
 .wp-input-var-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-1) var(--wp-space-4);
   border-radius: 999px;
   font-size: 11px;
   background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);

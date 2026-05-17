@@ -138,7 +138,7 @@ function resetPreferences() {
 .wp-settings__about {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 16px;
+  gap: var(--wp-space-3) var(--wp-space-6);
   font-size: 12.5px;
   align-items: center;
 }
@@ -147,24 +147,24 @@ function resetPreferences() {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .wp-settings__link:hover { color: var(--wp-text); }
 
 .wp-settings__hint {
   font-size: 12.5px;
-  margin: 0 0 10px;
+  margin: 0 0 var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
 }
 
 .wp-settings__radio {
   display: inline-flex;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .wp-settings__chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
+  gap: var(--wp-space-3);
+  padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps chip height */
   border-radius: 7px;
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);

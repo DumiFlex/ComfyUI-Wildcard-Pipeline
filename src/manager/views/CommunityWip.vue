@@ -51,11 +51,11 @@ const branchUrl =
 .wp-community-wip__body {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding: 4px 0;
+  gap: var(--wp-space-6); /* audit-exempt: 14px rounded to 16px for icon+text optical balance */
+  padding: var(--wp-space-2) 0;
 }
 .wp-community-wip__lead {
-  margin: 0 0 6px;
+  margin: 0 0 var(--wp-space-3);
   font-size: 13.5px;
   font-weight: 500;
   color: var(--wp-text);
@@ -69,7 +69,7 @@ const branchUrl =
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--wp-space-2);
 }
 .wp-community-wip__link:hover { color: var(--wp-text); }
 </style>

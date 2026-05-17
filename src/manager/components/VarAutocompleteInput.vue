@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
   flex: 1;
   background: transparent;
   border: 0;
-  padding: 6px 10px;
+  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px; mirrors DerivationRuleCard */
   font: 600 11px var(--wp-font-mono, ui-monospace, monospace);
   min-width: 0;
   color: var(--wp-kind-derivation, #fbbf24);

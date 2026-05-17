@@ -460,8 +460,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     "src-label .     tgt-label"
     "src-input cross tgt-input"
     "src-hint  .     tgt-hint";
-  column-gap: 12px;
-  row-gap: 4px;
+  column-gap: var(--wp-space-5);
+  row-gap: var(--wp-space-2);
   align-items: center;
 }
 .cn-pair-label {

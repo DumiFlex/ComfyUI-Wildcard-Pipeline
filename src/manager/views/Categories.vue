@@ -250,7 +250,7 @@ async function saveEdit() {
 .wp-cat-newrow {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: var(--wp-space-5);
   flex-wrap: wrap;
 }
 .wp-cat-newrow__name { flex: 1; min-width: 200px; }
@@ -258,7 +258,7 @@ async function saveEdit() {
 .wp-cat-col--color   { width: 360px; }
 .wp-cat-col--count   { width: 110px; }
 .wp-cat-col--actions { width: 110px; text-align: right; white-space: nowrap; }
-.wp-cat-col--actions .wp-btn + .wp-btn { margin-left: 4px; }
+.wp-cat-col--actions .wp-btn + .wp-btn { margin-left: var(--wp-space-2); }
 
 .wp-cat-hex { font-size: 11.5px; }
 </style>

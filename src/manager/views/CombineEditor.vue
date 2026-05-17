@@ -300,21 +300,21 @@ function cancel() { router.push("/combines"); }
 .cb-grid {
   display: grid;
   grid-template-columns: 1fr 220px;
-  gap: 12px;
+  gap: var(--wp-space-5);
 }
 .cb-detected {
-  margin-top: 12px;
+  margin-top: var(--wp-space-5);
 }
-.cb-detected__label { margin-bottom: 6px; }
+.cb-detected__label { margin-bottom: var(--wp-space-3); }
 .cb-detected__hint { font-size: 12px; }
 .cb-detected__chips {
   display: flex;
-  gap: 6px;
+  gap: var(--wp-space-3);
   flex-wrap: wrap;
 }
-.cb-detected__warn { color: var(--wp-warn); margin-left: 4px; }
+.cb-detected__warn { color: var(--wp-warn); margin-left: var(--wp-space-2); }
 .cb-preview__row {
-  margin-top: 4px;
-  margin-bottom: 8px;
+  margin-top: var(--wp-space-2);
+  margin-bottom: var(--wp-space-4);
 }
 </style>

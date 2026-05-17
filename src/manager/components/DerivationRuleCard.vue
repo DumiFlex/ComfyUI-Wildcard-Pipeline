@@ -517,7 +517,7 @@ const branchCount = computed(() => rule.value.branches.length);
 .rule-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--wp-space-4);
   margin-bottom: 0;
   width: 100%;
   text-align: left;
@@ -528,7 +528,7 @@ const branchCount = computed(() => rule.value.branches.length);
   font: inherit;
   color: var(--wp-text);
 }
-.rule-head[aria-expanded="true"] { margin-bottom: 10px; }
+.rule-head[aria-expanded="true"] { margin-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */ }
 .rule-head__chev {
   font-size: 11px;
   color: var(--wp-text-muted);
@@ -545,8 +545,8 @@ const branchCount = computed(() => rule.value.branches.length);
 .branches {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-left: 10px;
+  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding-left: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
   border-left: 2px solid color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 30%, transparent);
 }
 
@@ -554,10 +554,10 @@ const branchCount = computed(() => rule.value.branches.length);
   background: var(--wp-bg-2, #18181b);
   border: 1px solid var(--wp-border, #2c2c34);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: var(--wp-space-5) var(--wp-space-5); /* audit-exempt: was 10/12; rounded to 12 */
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--wp-space-4);
 }
 .branch--else {
   border-style: dashed;
@@ -566,7 +566,7 @@ const branchCount = computed(() => rule.value.branches.length);
 .branch-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--wp-space-4);
 }
 
 .branch-tag {
@@ -574,7 +574,7 @@ const branchCount = computed(() => rule.value.branches.length);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  padding: 2px 7px;
+  padding: 2px 7px; /* audit-exempt: 2px vertical hairline, 7px horiz compact badge */
   border-radius: 4px;
   text-transform: uppercase;
 }
@@ -608,19 +608,19 @@ const branchCount = computed(() => rule.value.branches.length);
 .dvr-grid {
   display: grid;
   grid-template-columns: 60px 1fr 60px 1fr;
-  gap: 6px 8px;
+  gap: var(--wp-space-3) var(--wp-space-4);
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: var(--wp-space-2);
 }
 .dvr-grid--then {
-  margin-top: 10px;
+  margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
 }
 .dvr-value-row {
   display: grid;
   grid-template-columns: 60px 1fr;
-  gap: 8px;
+  gap: var(--wp-space-4);
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: var(--wp-space-2);
 }
 .dvr-label {
   font-size: 10px;
@@ -648,7 +648,7 @@ const branchCount = computed(() => rule.value.branches.length);
 .dvr-prefix {
   display: flex;
   align-items: center;
-  padding: 0 9px;
+  padding: 0 9px; /* audit-exempt: 9px compact prefix inset */
   background: var(--wp-bg-3, #2a2a2a);
   color: var(--wp-text-muted, #9ca3af);
   border-right: 1px solid var(--wp-border, #3a3a3a);
@@ -658,7 +658,7 @@ const branchCount = computed(() => rule.value.branches.length);
   flex: 1;
   background: transparent;
   border: 0;
-  padding: 6px 10px;
+  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
   color: var(--wp-kind-derivation, #fbbf24);
   font: 600 11px var(--wp-font-mono, ui-monospace, monospace);
   min-width: 0;
@@ -689,11 +689,11 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .dvr-tick {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + var(--wp-space-2));
   right: 0;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 5px; /* audit-exempt: 5px optical icon+text gap inside compact tick */
   font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, #9ca3af);
   cursor: pointer;
@@ -716,12 +716,12 @@ const branchCount = computed(() => rule.value.branches.length);
  * VALUE row beneath. Bumps the value-row's top margin only when the
  * grid has the `--has-tick` modifier set by the template. */
 .dvr-grid--has-tick + .dvr-value-row {
-  margin-top: 16px;
+  margin-top: var(--wp-space-6);
 }
 .dvr-value-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--wp-space-3);
 }
 .dvr-value-input {
   flex: 1;
@@ -750,8 +750,8 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .dvr-regex-help .pi { font-size: 11px; }
 .dvr-hint {
-  margin-top: 3px;
-  margin-left: 68px; /* align under the value input column */
+  margin-top: 3px; /* audit-exempt: 3px hairline nudge */
+  margin-left: 68px; /* audit-exempt: 68px = 60px label col + 4+4px gap; aligns under value input column */
   font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, #9ca3af);
   font-style: italic;
@@ -759,8 +759,8 @@ const branchCount = computed(() => rule.value.branches.length);
 
 .addbar {
   display: flex;
-  gap: 6px;
-  margin-top: 10px;
-  padding-left: 12px;
+  gap: var(--wp-space-3);
+  margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding-left: var(--wp-space-5);
 }
 </style>
