@@ -371,12 +371,19 @@ const summary = computed(() => {
  * bundle (instead of looking like a generic row-level icon button).
  * Hover bumps the bundle-color tint; shared `.wp-btn--danger:hover`
  * adds the red icon + red-tinted border without overriding the
- * bundle's bg — same hover behavior every other danger button gets. */
-.wp-bundle-action {
+ * bundle's bg — same hover behavior every other danger button gets.
+ *
+ * Selector chains `.wp-btn--icon-sm.wp-bundle-action` (instead of bare
+ * `.wp-bundle-action`) so override specificity beats the shared
+ * `.wp-btn--icon-sm:hover` base rule. Without the chain, both rules
+ * tie at 0,0,2,0 and source order decides — fine when this block was
+ * `<style scoped>` (scoper attribute bumped us to 0,0,3,0) but the
+ * scope flip for PlaygroundMockup parity collapsed that margin. */
+.wp-btn--icon-sm.wp-bundle-action {
   background: color-mix(in srgb, var(--b) 18%, transparent);
   border-color: var(--b);
 }
-.wp-bundle-action:hover {
+.wp-btn--icon-sm.wp-bundle-action:hover {
   background: color-mix(in srgb, var(--b) 32%, transparent);
 }
 </style>
