@@ -402,17 +402,12 @@ input, textarea, select { font: inherit; }
   position: relative;
 }
 .wp-nav:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-nav[data-active="true"] {
+.wp-nav[data-active] {
   background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
   color: var(--wp-text);
   border-color: color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
 }
-.wp-nav[data-active="true"]::before {
-  content: "";
-  position: absolute; left: -8px; top: 8px; bottom: 8px; width: 2px;
-  background: var(--wp-accent-400);
-  border-radius: 2px;
-}
+/* Active-row gradient strip lives in AppSidebar.vue scoped CSS (presence selector). */
 .wp-nav__icon { width: 16px; flex: 0 0 16px; display: grid; place-items: center; color: inherit; }
 .wp-nav__label { flex: 1; white-space: nowrap; }
 .wp-nav__badge {
