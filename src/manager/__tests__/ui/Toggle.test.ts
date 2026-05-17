@@ -13,4 +13,9 @@ describe("Toggle.vue", () => {
     const wrap = mount(Toggle, { props: { modelValue: true } });
     expect(wrap.get("button.wp-toggle").attributes("data-on")).toBe("true");
   });
+
+  it("reflects error state via aria-invalid on the switch button", () => {
+    const wrap = mount(Toggle, { props: { modelValue: false, error: true } });
+    expect(wrap.get("button.wp-toggle").attributes("aria-invalid")).toBe("true");
+  });
 });

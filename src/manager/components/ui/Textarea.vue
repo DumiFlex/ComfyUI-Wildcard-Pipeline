@@ -7,6 +7,7 @@ interface Props {
   placeholder?: string;
   autoResize?: boolean;
   disabled?: boolean;
+  error?: boolean;
   id?: string;
   ariaLabel?: string;
 }
@@ -48,6 +49,7 @@ watch(() => props.modelValue, () => {
     :placeholder="placeholder"
     :disabled="disabled"
     :aria-label="ariaLabel"
+    :aria-invalid="error || undefined"
     @input="onInput"
     @blur="(e) => emit('blur', e)"
     @focus="(e) => emit('focus', e)"

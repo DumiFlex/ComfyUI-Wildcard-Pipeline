@@ -3,6 +3,7 @@ interface Props {
   modelValue: boolean;
   label?: string;
   disabled?: boolean;
+  error?: boolean;
   ariaLabel?: string;
 }
 const props = defineProps<Props>();
@@ -25,6 +26,7 @@ function toggle() {
       :data-on="modelValue ? 'true' : 'false'"
       :aria-checked="modelValue"
       :aria-label="ariaLabel ?? label"
+      :aria-invalid="error || undefined"
       :disabled="disabled"
       role="switch"
       @click="toggle"

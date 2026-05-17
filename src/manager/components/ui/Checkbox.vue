@@ -3,6 +3,7 @@ interface Props {
   modelValue: boolean;
   label?: string;
   disabled?: boolean;
+  error?: boolean;
   id?: string;
   ariaLabel?: string;
 }
@@ -26,6 +27,7 @@ function toggle() {
       :data-checked="modelValue ? 'true' : 'false'"
       :aria-checked="modelValue"
       :aria-label="ariaLabel ?? label"
+      :aria-invalid="error || undefined"
       :disabled="disabled"
       role="checkbox"
       @click="toggle"

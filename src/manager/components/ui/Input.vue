@@ -7,6 +7,7 @@ interface Props {
   type?: string;
   placeholder?: string;
   disabled?: boolean;
+  error?: boolean;
   size?: "sm" | "md";
   icon?: string;
   addon?: string;
@@ -58,6 +59,7 @@ function onInput(e: Event) {
       :placeholder="placeholder"
       :disabled="disabled"
       :aria-label="ariaLabel"
+      :aria-invalid="error || undefined"
       :min="min"
       :max="max"
       :step="step"
@@ -76,6 +78,7 @@ function onInput(e: Event) {
     :placeholder="placeholder"
     :disabled="disabled"
     :aria-label="ariaLabel"
+    :aria-invalid="error || undefined"
     :min="min"
     :max="max"
     :step="step"

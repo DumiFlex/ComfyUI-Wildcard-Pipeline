@@ -57,4 +57,13 @@ describe("Select.vue", () => {
     expect(document.querySelector(".wp-select__menu")).toBeNull();
     wrap.unmount();
   });
+
+  it("reflects error state via aria-invalid on trigger", () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts, error: true },
+      attachTo: document.body,
+    });
+    expect(wrap.get("[data-test='select-trigger']").attributes("aria-invalid")).toBe("true");
+    wrap.unmount();
+  });
 });

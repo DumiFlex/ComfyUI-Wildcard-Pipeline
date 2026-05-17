@@ -17,4 +17,14 @@ describe("Input.vue", () => {
     expect(wrap.find(".wp-input-group").exists()).toBe(true);
     expect(wrap.find(".wp-input-group__addon .pi-search").exists()).toBe(true);
   });
+
+  it("reflects error state via aria-invalid", () => {
+    const wrap = mount(Input, { props: { modelValue: "", error: true } });
+    expect(wrap.get("input").attributes("aria-invalid")).toBe("true");
+  });
+
+  it("omits aria-invalid when error is false", () => {
+    const wrap = mount(Input, { props: { modelValue: "" } });
+    expect(wrap.get("input").attributes("aria-invalid")).toBeUndefined();
+  });
 });

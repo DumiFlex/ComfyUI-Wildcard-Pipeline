@@ -119,10 +119,22 @@
   /* Alias used by some prototype rules */
   --wp-radius-md: var(--wp-radius);
 
-  --wp-input-h:  34px;     /* unified input height */
-  --wp-input-h-sm: 28px;
-  --wp-btn-h:    34px;
-  --wp-btn-h-sm: 28px;
+  /* Form-control sizing — single canonical scale. */
+  --wp-control-h-sm: 28px;
+  --wp-control-h-md: 32px;
+  --wp-control-h-lg: 40px;
+
+  --wp-input-h:    var(--wp-control-h-md);  /* unified input height */
+  --wp-input-h-sm: var(--wp-control-h-sm);
+  --wp-btn-h:      var(--wp-control-h-md);
+  --wp-btn-h-sm:   var(--wp-control-h-sm);
+
+  /* Focus ring — single declaration reused across all controls. */
+  --wp-focus-ring: 0 0 0 3px rgba(139, 92, 246, 0.35);
+
+  /* Error treatment */
+  --wp-error-border: var(--wp-danger);
+  --wp-error-text:   var(--wp-danger);
 
   --wp-sidebar-w: 232px;
   --wp-topbar-h:  48px;
@@ -280,6 +292,12 @@
   --wp-kind-derivation-bg:   rgba(146, 64, 14, 0.12);
   --wp-kind-constraint:      #9d174d;                       /* pink-800    — chip 5.29:1 on white */
   --wp-kind-constraint-bg:   rgba(157, 23, 77, 0.12);
+}
+
+.wp-theme-light {
+  /* Slightly tighter alpha on light surfaces keeps the ring at the same
+   * perceived intensity as dark-mode's 0.35 on dark bg. */
+  --wp-focus-ring: 0 0 0 3px rgba(139, 92, 246, 0.25);
 }
 
 .wp-theme-light ::-webkit-scrollbar-thumb { background: rgba(15,15,30,0.14); }
@@ -532,7 +550,7 @@ input, textarea, select { font: inherit; }
 .wp-btn[aria-busy="true"] { opacity: 0.45; cursor: not-allowed; }
 .wp-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
+  box-shadow: var(--wp-focus-ring);
 }
 .wp-btn .pi, .wp-btn svg { font-size: 13px; }
 
@@ -553,7 +571,7 @@ input, textarea, select { font: inherit; }
 .wp-btn--primary:active { box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-700, #5b21b6) 60%, transparent) inset; }
 .wp-btn--primary:focus-visible {
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 40%, transparent) inset,
-              0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
+              var(--wp-focus-ring);
 }
 .wp-btn--ghost { background: transparent; border-color: transparent; color: var(--wp-text-muted); }
 .wp-btn--ghost:hover { background: var(--wp-bg-3); color: var(--wp-text); }
@@ -588,7 +606,7 @@ input, textarea, select { font: inherit; }
 .wp-btn--danger:hover { background: color-mix(in oklab, var(--wp-danger) 14%, transparent); border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent); color: #fff; /* audit-exempt: white on dark-tinted hover bg (17:1 dark); light override at line 942 uses var(--wp-danger) */ }
 .wp-btn--danger:active { background: color-mix(in oklab, var(--wp-danger) 22%, transparent); }
 .wp-btn--danger:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-danger) 35%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-danger) 35%, transparent); /* danger uses its own ring color */
 }
 
 /* ---------- Inputs ---------- */
@@ -600,7 +618,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-2);
   color: var(--wp-text);
   border: 1px solid var(--wp-border);
-  border-radius: 7px;
+  border-radius: var(--wp-radius-sm);
   padding: 0 10px;
   font-size: 12.5px;
   outline: none;
@@ -610,15 +628,29 @@ input, textarea, select { font: inherit; }
   height: auto;
   padding: 8px 10px;
   resize: vertical;
-  min-height: 72px;
+  min-height: var(--wp-input-h);
   line-height: 1.5;
 }
+.wp-input:focus-visible,
+.wp-select:focus-visible,
+.wp-textarea:focus-visible {
+  border-color: var(--wp-accent-500);
+  box-shadow: var(--wp-focus-ring);
+  background: var(--wp-bg-1);
+}
+/* Retain :focus fallback for browsers/contexts that don't support :focus-visible */
 .wp-input:focus,
 .wp-select:focus,
 .wp-textarea:focus {
   border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
+  box-shadow: var(--wp-focus-ring);
   background: var(--wp-bg-1);
+}
+/* Error state on standalone controls (when not wrapped in .wp-field) */
+.wp-input[aria-invalid="true"],
+.wp-select[aria-invalid="true"],
+.wp-textarea[aria-invalid="true"] {
+  border-color: var(--wp-error-border);
 }
 .wp-input::placeholder, .wp-textarea::placeholder { color: var(--wp-text-dim); }
 .wp-input--sm, .wp-select--sm { height: var(--wp-input-h-sm); font-size: 12px; padding: 0 8px; }
@@ -643,17 +675,17 @@ input, textarea, select { font: inherit; }
   font-weight: 600;
 }
 .wp-field__hint { font-size: 11.5px; color: var(--wp-text-dim); }
-.wp-field__error { font-size: 11.5px; color: var(--wp-danger); }
+.wp-field__error { font-size: 11.5px; color: var(--wp-error-text); }
 .wp-field--error .wp-input,
 .wp-field--error .wp-textarea,
 .wp-field--error .wp-select,
 .wp-field--error .wp-input-group {
-  border-color: var(--wp-danger);
+  border-color: var(--wp-error-border);
 }
 
 .wp-input-group {
   display: inline-flex; align-items: stretch; width: 100%;
-  border: 1px solid var(--wp-border); border-radius: 7px;
+  border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
   background: var(--wp-bg-2);
   overflow: hidden;
   height: var(--wp-input-h);
@@ -663,7 +695,7 @@ input, textarea, select { font: inherit; }
 }
 .wp-input-group:focus-within {
   border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
+  box-shadow: var(--wp-focus-ring);
 }
 .wp-input-group__addon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1383,10 +1415,12 @@ input, textarea, select { font: inherit; }
 .wp-toggle[data-on="true"] { background: var(--wp-accent-600); border-color: var(--wp-accent-500); }
 .wp-toggle[data-on="true"]::after { transform: translateX(14px); }
 .wp-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-toggle:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 
-/* Inline toggle wrapper (label + switch) */
+/* Inline toggle wrapper (label + switch) — min-height fills canonical hit-target. */
 .wp-toggle-row {
   display: inline-flex; align-items: center; gap: 8px;
+  min-height: var(--wp-input-h);
   cursor: pointer;
   user-select: none;
   font-size: 12.5px;
@@ -1415,10 +1449,12 @@ input, textarea, select { font: inherit; }
 }
 .wp-check svg { width: 12px; height: 12px; display: block; }
 .wp-check:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-check:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 
-/* Inline checkbox wrapper (label + box) */
+/* Inline checkbox wrapper (label + box) — min-height fills canonical hit-target. */
 .wp-checkbox {
   display: inline-flex; align-items: center; gap: 8px;
+  min-height: var(--wp-input-h);
   cursor: pointer;
   user-select: none;
   font-size: 12.5px;

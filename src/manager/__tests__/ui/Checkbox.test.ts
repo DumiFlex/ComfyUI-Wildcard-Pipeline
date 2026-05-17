@@ -14,4 +14,9 @@ describe("Checkbox.vue", () => {
     await wrap.get("button.wp-check").trigger("click");
     expect(wrap.emitted("update:modelValue")).toBeFalsy();
   });
+
+  it("reflects error state via aria-invalid on the check button", () => {
+    const wrap = mount(Checkbox, { props: { modelValue: false, error: true } });
+    expect(wrap.get("button.wp-check").attributes("aria-invalid")).toBe("true");
+  });
 });

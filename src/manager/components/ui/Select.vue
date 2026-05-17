@@ -20,6 +20,7 @@ interface Props {
   clearable?: boolean;
   size?: "sm" | "md";
   disabled?: boolean;
+  error?: boolean;
   ariaLabel?: string;
 }
 const props = withDefaults(defineProps<Props>(), { size: "md", placeholder: "Select…" });
@@ -193,6 +194,7 @@ function onKeydown(e: KeyboardEvent) {
       :aria-label="ariaLabel"
       :aria-expanded="open"
       :aria-haspopup="'listbox'"
+      :aria-invalid="error || undefined"
       data-test="select-trigger"
       @click="toggle"
       @keydown="onKeydown"
