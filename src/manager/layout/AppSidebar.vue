@@ -184,6 +184,10 @@ function onItemClick(item: NavItem) {
           >
             <span class="wp-nav__icon"><Icon :name="item.icon" /></span>
             <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
+            <!-- Was 9px historically (very subordinate); promoted to ICON_SM (12)
+                 so the caret reads at the same weight as wp-text-sm in the row.
+                 If the caret needs to feel subordinate, lower opacity rather
+                 than reverting size. -->
             <Icon
               v-if="!ui.sidebarCollapsed"
               name="pi-chevron-right"

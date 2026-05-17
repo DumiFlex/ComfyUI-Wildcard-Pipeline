@@ -45,6 +45,8 @@ function onRemove(e: MouseEvent) {
 
 <template>
   <span :class="classes" :style="colorStyle">
+    <!-- Was ~10px historically; promoted to ICON_SM (12) for parity with the
+         close icon and consistency with the project-wide icon scale. -->
     <Icon v-if="icon" :name="icon" :size="ICON_SM" />
     <slot />
     <button
@@ -54,6 +56,8 @@ function onRemove(e: MouseEvent) {
       aria-label="Remove"
       @click="onRemove"
     >
+      <!-- Was 9px historically; promoted to ICON_SM (12) intentionally —
+           close button now matches the prefix icon for visual balance. -->
       <Icon name="times" :size="ICON_SM" />
     </button>
   </span>
