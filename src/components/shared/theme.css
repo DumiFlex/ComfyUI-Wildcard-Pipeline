@@ -185,9 +185,9 @@
 
 /* ── Phase 5.5.7 — light theme overrides + canvas/node namespace ───────
  * The graph-side widgets need to react to ComfyUI's `Comfy.ColorPalette`
- * setting. Dark tokens stay on `:root`; `.wp-theme-light` overrides only
- * surface / text / border tokens (brand accent, kind colors, var palette
- * cascade unchanged). The `--wp-canvas-*` / `--wp-node-*` namespace
+ * setting. Dark tokens stay on `:root`; `.wp-theme-light` overrides
+ * surface / text / border tokens, kind colors (WCAG-adjusted darker shades),
+ * and canvas/node tokens. Var palette and accent ramp cascade unchanged. The `--wp-canvas-*` / `--wp-node-*` namespace
  * mirrors ComfyUI's own canvas + node interior colors so the widget
  * frame visually matches the surrounding ComfyUI chrome regardless of
  * theme. */
@@ -269,6 +269,15 @@
   /* Input shade — soft warm grey so inset inputs read as recessed
    * surfaces instead of black bars on near-white modals. */
   --wp-input-shade: rgba(15, 15, 30, 0.06);
+
+  /* Kind colors — dark-theme values are pastel and fail WCAG AA on near-white.
+   * Darker shades keep the same hue family while passing AA as both page-surface
+   * elements (≥3.0) and chip text on 22% tint backgrounds (≥4.5). */
+  --wp-kind-wildcard:    #6d28d9;  /* violet-700  — chip 4.91:1 on white */
+  --wp-kind-combine:     #065f46;  /* emerald-800 — chip 5.37:1 on white */
+  --wp-kind-derivation:  #92400e;  /* amber-800   — chip 4.99:1 on white */
+  --wp-kind-constraint:  #9d174d;  /* pink-800    — chip 5.29:1 on white */
+  --wp-kind-fixed:       #155e75;  /* cyan-800    — chip 5.15:1 on white */
 }
 
 /* Variable color palette — hash output (var-1..var-8) paints chips +

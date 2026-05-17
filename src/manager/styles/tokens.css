@@ -211,6 +211,24 @@
   --wp-accent-text-strong: var(--wp-accent-800);
 }
 
+/* ---------- Light-theme kind-color overrides ----------
+   Dark-theme kind values are high-chroma pastels that fail WCAG AA on white/near-white.
+   These darker shades pass AA for both page-surface usage (icons, borders, dots ≥3.0)
+   and chip-text usage (color on 22% tint background ≥4.5). Verified 2026-05-18.
+   See docs/superpowers/specs/2026-05-18-kind-color-audit.md. */
+.wp-theme-light {
+  --wp-kind-wildcard:        #6d28d9;                       /* violet-700  — chip 4.91:1 on white */
+  --wp-kind-wildcard-bg:     rgba(109, 40, 217, 0.12);
+  --wp-kind-fixed:           #155e75;                       /* cyan-800    — chip 5.15:1 on white */
+  --wp-kind-fixed-bg:        rgba(21, 94, 117, 0.12);
+  --wp-kind-combine:         #065f46;                       /* emerald-800 — chip 5.37:1 on white */
+  --wp-kind-combine-bg:      rgba(6, 95, 70, 0.12);
+  --wp-kind-derivation:      #92400e;                       /* amber-800   — chip 4.99:1 on white */
+  --wp-kind-derivation-bg:   rgba(146, 64, 14, 0.12);
+  --wp-kind-constraint:      #9d174d;                       /* pink-800    — chip 5.29:1 on white */
+  --wp-kind-constraint-bg:   rgba(157, 23, 77, 0.12);
+}
+
 .wp-theme-light ::-webkit-scrollbar-thumb { background: rgba(15,15,30,0.14); }
 .wp-theme-light ::-webkit-scrollbar-thumb:hover { background: rgba(15,15,30,0.22); }
 
@@ -2456,7 +2474,9 @@ input, textarea, select { font: inherit; }
 
 /* ---------- Module-kind palette (icon + bg pairs) ----------
    Source: docs/design-handoff/wildcardpipeline/project/data.jsx KIND_META.
-   Backgrounds use the same 12% rgba mix the prototype applies inline. */
+   Dark-theme values (bright, high-chroma) — all pass WCAG AA on dark surfaces.
+   Light-theme overrides in .wp-theme-light below use darker shades so the
+   same tokens pass AA on white/near-white surfaces and as chip text on 22% tint. */
 :root {
   --wp-kind-wildcard:        #a78bfa;                       /* violet */
   --wp-kind-wildcard-bg:     rgba(167, 139, 250, 0.12);
