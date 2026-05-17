@@ -10,6 +10,10 @@
  * Run: pnpm check:radius
  * Exits 0 if clean, 1 with violation list if not.
  *
+ * NOT audited: src/manager/styles/*.css (tokens.css + rich-text.css
+ * still contain ~88 raw border-radius values; tracked as separate debt —
+ * the *.vue sweep is complete). A future task may extend coverage.
+ *
  * NOT audited: corner-specific shorthand inside the `border` shorthand
  * (rare; out of scope). Use longhand `border-radius:` for the audit
  * to see your value.
@@ -22,6 +26,11 @@ const ROOT = resolve(import.meta.dirname, "..");
 const SCAN_GLOBS = [
   "src/manager/**/*.vue",
 ];
+
+// Shares structure with check-spacing-tokens.mjs and check-typography-tokens.mjs.
+// When a fourth audit script lands (e.g. elevation tokens), extract shared
+// logic — extract-style-blocks, per-piece validation, violation reporting —
+// into scripts/_audit-utils.mjs. Premature now at three scripts.
 
 // Covers border-radius plus all directional/logical-property variants:
 //   border-top-left-radius, border-top-right-radius,
