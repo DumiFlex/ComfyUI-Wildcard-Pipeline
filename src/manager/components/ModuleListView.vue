@@ -407,7 +407,7 @@ defineExpose({
             </div>
           </div>
           <div v-if="hasActiveFilters" class="wp-filter-panel__footer">
-            <button type="button" class="wp-link" @click="clearFilters">Clear filters</button>
+            <Button variant="link" size="sm" @click="clearFilters">Clear filters</Button>
           </div>
         </div>
       </div>
@@ -466,7 +466,7 @@ defineExpose({
       >
         {{ ef.label }}
       </Chip>
-      <button type="button" class="wp-link" @click="clearFilters">Clear all</button>
+      <Button variant="link" size="sm" @click="clearFilters">Clear all</Button>
     </div>
 
     <!-- Table -->
@@ -561,7 +561,7 @@ defineExpose({
               <div v-else class="wp-empty wp-empty--no-match">
                 <div class="wp-empty__icon"><i class="pi pi-search" /></div>
                 <p class="wp-empty__msg">No matches.</p>
-                <button type="button" class="wp-link" @click="clearFilters">Clear filters</button>
+                <Button variant="link" size="sm" @click="clearFilters">Clear filters</Button>
               </div>
             </td>
           </tr>
@@ -580,31 +580,35 @@ defineExpose({
         <Select v-model="pageSizeModel" :options="PAGE_SIZE_OPTIONS" aria-label="Items per page" size="sm" />
       </div>
       <div class="wp-pager">
-        <button
-          type="button" class="wp-icon-btn"
+        <Button
+          variant="ghost" size="sm"
+          icon="pi-angle-double-left"
           aria-label="First page"
           :disabled="safePage === 1"
           @click="goToPage(1)"
-        ><i class="pi pi-angle-double-left" /></button>
-        <button
-          type="button" class="wp-icon-btn"
+        />
+        <Button
+          variant="ghost" size="sm"
+          icon="pi-angle-left"
           aria-label="Previous page"
           :disabled="safePage === 1"
           @click="goToPage(safePage - 1)"
-        ><i class="pi pi-angle-left" /></button>
+        />
         <span class="wp-pager__label">Page {{ safePage }} / {{ totalPages }}</span>
-        <button
-          type="button" class="wp-icon-btn"
+        <Button
+          variant="ghost" size="sm"
+          icon="pi-angle-right"
           aria-label="Next page"
           :disabled="safePage === totalPages"
           @click="goToPage(safePage + 1)"
-        ><i class="pi pi-angle-right" /></button>
-        <button
-          type="button" class="wp-icon-btn"
+        />
+        <Button
+          variant="ghost" size="sm"
+          icon="pi-angle-double-right"
           aria-label="Last page"
           :disabled="safePage === totalPages"
           @click="goToPage(totalPages)"
-        ><i class="pi pi-angle-double-right" /></button>
+        />
       </div>
     </div>
   </div>
@@ -704,17 +708,6 @@ defineExpose({
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
 }
-
-.wp-link {
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-size: var(--wp-text-xs);
-  color: var(--wp-accent-text);
-  cursor: pointer;
-  text-decoration: underline;
-}
-.wp-link:hover { color: var(--wp-accent-text-strong); }
 
 .wp-table__select { width: 32px; padding-right: 0; }
 .wp-table__expand-col { width: 28px; padding: 0; }
@@ -842,27 +835,6 @@ defineExpose({
   color: var(--wp-text-dim);
 }
 .wp-pagination__per-page { width: 92px; }
-
-.wp-icon-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.wp-icon-btn:hover:not(:disabled) {
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-}
-.wp-icon-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
 
 /* Outer shell is a 1-row grid. Animating `grid-template-rows`
  * between `0fr` and `1fr` tweens the rendered height of the inner

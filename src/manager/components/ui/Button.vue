@@ -1,4 +1,38 @@
 <script setup lang="ts">
+/**
+ * Button — single source of truth for app buttons.
+ *
+ * Variants:
+ *   primary   — solid accent; main CTA per surface
+ *   secondary — subtle filled; default (alias of the base .wp-btn style)
+ *   ghost     — transparent with hover bg; tertiary
+ *   danger    — red-tinted; destructive actions
+ *   link      — text-only; inline CTAs
+ *   outline   — bordered ghost; "neutral but visible"
+ *
+ * Sizes: sm (28px) / md (32px, default) / lg (40px).
+ *
+ * States: default · hover · active · focus-visible · disabled · loading.
+ * Loading state replaces the lead icon with a spinner, sets
+ * aria-busy="true", and disables click events. Disabled and loading
+ * apply the same visual treatment (opacity 0.45, cursor: not-allowed).
+ *
+ * Icon-only mode auto-engages when no slot content is provided (.wp-btn--icon).
+ * Pass `aria-label` for screen reader text when using icon-only mode.
+ *
+ * Variant × State matrix (CSS coverage in tokens.css .wp-btn block):
+ *
+ *              default  hover  active  focus-visible  disabled  loading
+ *   primary      ✓       ✓      ✓         ✓*           ✓†        ✓†
+ *   secondary    ✓       ✓      ✓         ✓            ✓†        ✓†
+ *   ghost        ✓       ✓      ✓         ✓            ✓†        ✓†
+ *   danger       ✓       ✓      ✓         ✓*           ✓†        ✓†
+ *   link         ✓       ✓      ✓         ✓*           ✓†        ✓†
+ *   outline      ✓       ✓      ✓         ✓            ✓†        ✓†
+ *
+ *   * variant-specific focus-visible override (different ring color/shadow)
+ *   † shared via base .wp-btn:disabled / .wp-btn[aria-busy="true"] rule
+ */
 import { computed, useSlots } from "vue";
 import Icon from "./Icon.vue";
 

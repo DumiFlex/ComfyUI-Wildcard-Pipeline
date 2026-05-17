@@ -528,7 +528,12 @@ input, textarea, select { font: inherit; }
 }
 .wp-btn:hover { background: var(--wp-bg-4); border-color: var(--wp-border-strong); }
 .wp-btn:active { transform: translateY(0.5px); }
-.wp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-btn:disabled,
+.wp-btn[aria-busy="true"] { opacity: 0.45; cursor: not-allowed; }
+.wp-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
+}
 .wp-btn .pi, .wp-btn svg { font-size: 13px; }
 
 .wp-btn--sm { height: var(--wp-btn-h-sm); padding: 0 10px; font-size: 12px; border-radius: 6px; }
@@ -545,8 +550,14 @@ input, textarea, select { font: inherit; }
   background: linear-gradient(180deg, var(--wp-accent-400), var(--wp-accent-500));
   border-color: var(--wp-accent-500);
 }
+.wp-btn--primary:active { box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-700, #5b21b6) 60%, transparent) inset; }
+.wp-btn--primary:focus-visible {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 40%, transparent) inset,
+              0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
+}
 .wp-btn--ghost { background: transparent; border-color: transparent; color: var(--wp-text-muted); }
 .wp-btn--ghost:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wp-btn--ghost:active { background: var(--wp-bg-4); }
 .wp-btn--outline {
   background: transparent;
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 40%, transparent);
@@ -556,6 +567,7 @@ input, textarea, select { font: inherit; }
   background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
   color: var(--wp-accent-text-strong);
 }
+.wp-btn--outline:active { background: color-mix(in oklab, var(--wp-accent-500) 20%, transparent); }
 .wp-btn--secondary { /* alias of default — explicit for the Vue port */ }
 .wp-btn--link {
   background: transparent;
@@ -569,10 +581,15 @@ input, textarea, select { font: inherit; }
   color: var(--wp-accent-text-strong);
   text-decoration: underline;
 }
+.wp-btn--link:focus-visible { box-shadow: none; text-decoration: underline; }
 .wp-btn--lg { height: 40px; padding: 0 16px; font-size: 13.5px; border-radius: 8px; }
 .wp-btn--md { /* alias of default size */ }
 .wp-btn--danger { color: var(--wp-danger); }
 .wp-btn--danger:hover { background: color-mix(in oklab, var(--wp-danger) 14%, transparent); border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent); color: #fff; /* audit-exempt: white on dark-tinted hover bg (17:1 dark); light override at line 942 uses var(--wp-danger) */ }
+.wp-btn--danger:active { background: color-mix(in oklab, var(--wp-danger) 22%, transparent); }
+.wp-btn--danger:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-danger) 35%, transparent);
+}
 
 /* ---------- Inputs ---------- */
 .wp-input,

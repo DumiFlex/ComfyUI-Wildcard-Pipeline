@@ -30,3 +30,51 @@ describe("Button.vue", () => {
     expect(wrap.emitted("click")).toBeFalsy();
   });
 });
+
+// ---------- Variant × State matrix ----------
+
+const VARIANTS = ["primary", "secondary", "ghost", "danger", "link", "outline"] as const;
+
+describe("Button variants × states", () => {
+  for (const variant of VARIANTS) {
+    describe(variant, () => {
+      it("renders default state", () => {
+        const wrap = mount(Button, { props: { variant }, slots: { default: "X" } });
+        const btn = wrap.get("button");
+        expect(btn.classes()).toContain(`wp-btn--${variant}`);
+        expect(btn.attributes("disabled")).toBeUndefined();
+        expect(btn.attributes("aria-busy")).toBeUndefined();
+      });
+
+      it("renders disabled state", () => {
+        const wrap = mount(Button, { props: { variant, disabled: true }, slots: { default: "X" } });
+        const btn = wrap.get("button");
+        expect(btn.attributes("disabled")).toBeDefined();
+        expect(btn.attributes("aria-busy")).toBeUndefined();
+      });
+
+      it("renders loading state (aria-busy + disabled + spinner)", () => {
+        const wrap = mount(Button, { props: { variant, loading: true }, slots: { default: "X" } });
+        const btn = wrap.get("button");
+        expect(btn.attributes("aria-busy")).toBe("true");
+        expect(btn.attributes("disabled")).toBeDefined();
+        expect(btn.find(".pi-spinner").exists()).toBe(true);
+      });
+
+      it("does not emit click when loading", async () => {
+        const wrap = mount(Button, { props: { variant, loading: true }, slots: { default: "X" } });
+        await wrap.get("button").trigger("click");
+        expect(wrap.emitted("click")).toBeFalsy();
+      });
+
+      it("forwards icon prop and aria-label", () => {
+        const wrap = mount(Button, {
+          props: { variant, icon: "pi-plus", ariaLabel: `${variant} action` },
+        });
+        const btn = wrap.get("button");
+        expect(btn.attributes("aria-label")).toBe(`${variant} action`);
+        expect(btn.find(".pi-plus").exists()).toBe(true);
+      });
+    });
+  }
+});
