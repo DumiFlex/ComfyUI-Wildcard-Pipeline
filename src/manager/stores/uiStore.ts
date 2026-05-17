@@ -4,7 +4,11 @@ import { computed, ref, watch } from "vue";
 /** User-selected theme mode. `"auto"` follows the OS `prefers-color-scheme`. */
 export type ThemeMode = "dark" | "light" | "auto";
 
+/** Spacing/height density mode. `"comfortable"` is the default (multiplier 1). */
+export type DensityMode = "comfortable" | "compact";
+
 const STORAGE_KEY = "wp-theme-mode";
+const STORAGE_KEY_DENSITY = "wp-density-mode";
 const STORAGE_KEY_MAX_REF_DEPTH = "wp-wildcard-max-ref-depth";
 const FLASH_SUPPRESS_MS = 120;
 const DEFAULT_MAX_REF_DEPTH = 8;
@@ -19,6 +23,16 @@ function readStoredTheme(): ThemeMode {
     /* localStorage unavailable */
   }
   return "dark";
+}
+
+function readStoredDensity(): DensityMode {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_DENSITY);
+    if (v === "comfortable" || v === "compact") return v;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return "comfortable";
 }
 
 function readStoredMaxRefDepth(): number {
@@ -44,6 +58,7 @@ function systemPrefersDark(): boolean {
 
 export const useUiStore = defineStore("ui", () => {
   const themeMode = ref<ThemeMode>(readStoredTheme());
+  const density = ref<DensityMode>(readStoredDensity());
   const sidebarCollapsed = ref(false);
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
 
@@ -68,6 +83,21 @@ export const useUiStore = defineStore("ui", () => {
     try { localStorage.setItem(STORAGE_KEY, mode); } catch { /* ignore */ }
   }
 
+  function applyDensityToDocument(mode: DensityMode): void {
+    const html = document.documentElement;
+    html.classList.toggle("wp-density-compact", mode === "compact");
+  }
+
+  function setDensity(mode: DensityMode): void {
+    density.value = mode;
+    try { localStorage.setItem(STORAGE_KEY_DENSITY, mode); } catch { /* ignore */ }
+    applyDensityToDocument(mode);
+  }
+
+  function toggleDensity(): void {
+    setDensity(density.value === "comfortable" ? "compact" : "comfortable");
+  }
+
   function setMaxRefDepth(depth: number) {
     const clamped = Math.max(MIN_MAX_REF_DEPTH, Math.min(MAX_MAX_REF_DEPTH, Math.floor(depth)));
     maxRefDepth.value = clamped;
@@ -85,6 +115,7 @@ export const useUiStore = defineStore("ui", () => {
 
   function initializeTheme() {
     applyThemeToDocument(resolvedTheme.value);
+    applyDensityToDocument(density.value);
     // React to OS theme changes when in auto mode.
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -103,10 +134,13 @@ export const useUiStore = defineStore("ui", () => {
   return {
     themeMode,
     resolvedTheme,
+    density,
     sidebarCollapsed,
     maxRefDepth,
     cycleTheme,
     setThemeMode,
+    setDensity,
+    toggleDensity,
     setMaxRefDepth,
     initializeTheme,
     toggleSidebar,

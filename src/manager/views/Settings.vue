@@ -9,6 +9,7 @@ import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
 import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
+import Toggle from "../components/ui/Toggle.vue";
 import { useUiStore, type ThemeMode } from "../stores/uiStore";
 
 const uiStore = useUiStore();
@@ -88,6 +89,20 @@ function resetPreferences() {
           <Icon :name="t.icon" /> {{ t.label }}
         </button>
       </div>
+    </Card>
+
+    <Card title="Display">
+      <Field
+        label="Density"
+        hint="Compact reduces spacing for long lists."
+      >
+        <Toggle
+          :model-value="uiStore.density === 'compact'"
+          label="Compact mode"
+          data-test="settings-density-compact"
+          @update:model-value="uiStore.setDensity($event ? 'compact' : 'comfortable')"
+        />
+      </Field>
     </Card>
 
     <Card title="Storage">

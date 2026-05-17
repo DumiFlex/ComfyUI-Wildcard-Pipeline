@@ -80,15 +80,33 @@
   --wp-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Spacing — 4/8 grid. All padding/margin/gap in src/manager/** routes through these. */
+
+  /* Base spacing (pre-density). The scale a designer reasons about. */
+  --wp-space-1-base: 2px;
+  --wp-space-2-base: 4px;
+  --wp-space-3-base: 6px;
+  --wp-space-4-base: 8px;
+  --wp-space-5-base: 12px;
+  --wp-space-6-base: 16px;
+  --wp-space-7-base: 24px;
+  --wp-space-8-base: 32px;
+
+  /* Density multiplier — comfortable=1, compact=0.85. Set on <html>
+   * via uiStore.setDensity. Defaults to 1 here so a fresh boot before
+   * the store applies its class reads as comfortable. */
+  --wp-density: 1;
+
+  /* Applied spacing — what consumers reference. Multiplied by density. */
   --wp-space-0: 0;
-  --wp-space-1: 2px;
-  --wp-space-2: 4px;
-  --wp-space-3: 6px;
-  --wp-space-4: 8px;
-  --wp-space-5: 12px;
-  --wp-space-6: 16px;
-  --wp-space-7: 24px;
-  --wp-space-8: 32px;
+  --wp-space-1: calc(var(--wp-space-1-base) * var(--wp-density));
+  --wp-space-2: calc(var(--wp-space-2-base) * var(--wp-density));
+  --wp-space-3: calc(var(--wp-space-3-base) * var(--wp-density));
+  --wp-space-4: calc(var(--wp-space-4-base) * var(--wp-density));
+  --wp-space-5: calc(var(--wp-space-5-base) * var(--wp-density));
+  --wp-space-6: calc(var(--wp-space-6-base) * var(--wp-density));
+  --wp-space-7: calc(var(--wp-space-7-base) * var(--wp-density));
+  --wp-space-8: calc(var(--wp-space-8-base) * var(--wp-density));
+
   /* Mapping rule: prefer the closest token. The audit allows raw 0
    * (= --wp-space-0) and 2px (= --wp-space-1) as direct token values,
    * plus 1px as an off-grid hairline exemption (e.g. 1px borders).
@@ -120,9 +138,16 @@
   --wp-radius-md: var(--wp-radius);
 
   /* Form-control sizing — single canonical scale. */
-  --wp-control-h-sm: 28px;
-  --wp-control-h-md: 32px;
-  --wp-control-h-lg: 40px;
+
+  /* Base control heights (pre-density). */
+  --wp-control-h-sm-base: 28px;
+  --wp-control-h-md-base: 32px;
+  --wp-control-h-lg-base: 40px;
+
+  /* Applied — multiplied by density. */
+  --wp-control-h-sm: calc(var(--wp-control-h-sm-base) * var(--wp-density));
+  --wp-control-h-md: calc(var(--wp-control-h-md-base) * var(--wp-density));
+  --wp-control-h-lg: calc(var(--wp-control-h-lg-base) * var(--wp-density));
 
   --wp-input-h:    var(--wp-control-h-md);  /* unified input height */
   --wp-input-h-sm: var(--wp-control-h-sm);
@@ -2649,10 +2674,10 @@ input, textarea, select { font: inherit; }
   --wp-accent-900: #78350f;
 }
 
-/* Comfortable density modifier — opt-in via class on a container */
-.wp-density-comfortable {
-  --wp-input-h: 38px;
-  --wp-btn-h:   38px;
+/* Compact density — applied to <html> by uiStore.setDensity("compact").
+ * Comfortable is the default (--wp-density: 1 in :root); only compact needs an override. */
+html.wp-density-compact {
+  --wp-density: 0.85;
 }
 
 /* ---------- Brand gradient utility ---------- */

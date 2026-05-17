@@ -10,6 +10,48 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
+describe("uiStore · density", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.className = "";
+    setActivePinia(createPinia());
+  });
+
+  it("defaults to comfortable", () => {
+    const ui = useUiStore();
+    expect(ui.density).toBe("comfortable");
+  });
+
+  it("persists density to localStorage", () => {
+    const ui = useUiStore();
+    ui.setDensity("compact");
+    expect(localStorage.getItem("wp-density-mode")).toBe("compact");
+  });
+
+  it("toggles html class", () => {
+    const ui = useUiStore();
+    ui.setDensity("compact");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(true);
+    ui.setDensity("comfortable");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(false);
+  });
+
+  it("reads stored density on init", () => {
+    localStorage.setItem("wp-density-mode", "compact");
+    setActivePinia(createPinia());
+    const ui = useUiStore();
+    expect(ui.density).toBe("compact");
+  });
+
+  it("toggleDensity flips between modes", () => {
+    const ui = useUiStore();
+    ui.toggleDensity();
+    expect(ui.density).toBe("compact");
+    ui.toggleDensity();
+    expect(ui.density).toBe("comfortable");
+  });
+});
+
 describe("uiStore — theme cycle", () => {
   it("defaults to dark when no preference is stored", () => {
     const ui = useUiStore();
