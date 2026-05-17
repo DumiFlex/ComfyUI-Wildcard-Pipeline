@@ -20,7 +20,9 @@ import ColorPicker from "../components/ColorPicker.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
 import BundleAddChildModal from "../components/BundleAddChildModal.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
+import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useModuleStore } from "../stores/moduleStore";
@@ -104,6 +106,24 @@ const selectedChildId = ref<string | null>(null);
 
 const isEdit = computed(() => !!props.id);
 
+// Unsaved-changes guard
+const bundleBaseline = ref<string>("");
+
+function bundleSnapshot(): string {
+  return JSON.stringify({
+    name: name.value,
+    description: description.value,
+    color: color.value,
+    categoryId: categoryId.value,
+    tags: tags.value,
+    children: children.value.map(normalizeChild),
+  });
+}
+
+const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+  () => bundleSnapshot() !== bundleBaseline.value,
+);
+
 const selectedChild = computed<Record<string, unknown> | null>(() => {
   const id = selectedChildId.value;
   if (!id) return null;
@@ -154,7 +174,10 @@ onMounted(async () => {
   } catch (e) {
     toast.push({ severity: "error", summary: "Failed to load module library", detail: String(e), life: 3000 });
   }
-  if (!props.id) return;
+  if (!props.id) {
+    bundleBaseline.value = bundleSnapshot();
+    return;
+  }
   loading.value = true;
   try {
     const row = await store.get(props.id);
@@ -173,6 +196,7 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+  bundleBaseline.value = bundleSnapshot();
 });
 
 function cancel() {
@@ -209,6 +233,7 @@ async function save() {
       ? updated.children.map((c) => ({ ...(c as Record<string, unknown>) }))
       : [];
     baselineByChildId.value = snapshotBaseline(children.value);
+    bundleBaseline.value = bundleSnapshot();
     toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -416,6 +441,16 @@ function onDragEnd() {
       />
     </template>
   </EditorFrame>
+  <ConfirmDialog
+    :visible="showConfirm"
+    title="Discard unsaved changes?"
+    body="You have unsaved edits. Leaving this page will discard them."
+    confirm-label="Discard & leave"
+    cancel-label="Stay"
+    variant="danger"
+    @confirm="onConfirmLeave"
+    @cancel="onCancelLeave"
+  />
 </template>
 
 <style scoped>

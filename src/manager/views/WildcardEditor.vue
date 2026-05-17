@@ -20,7 +20,9 @@ import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Chip from "../components/ui/Chip.vue";
 import RichTextInput from "../components/RichTextInput.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
+import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
@@ -54,6 +56,25 @@ const options = ref<WildcardOption[]>([
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
+
+// Unsaved-changes guard
+const baseline = ref<string>("");
+
+function snapshot(): string {
+  return JSON.stringify({
+    name: name.value,
+    description: description.value,
+    categoryId: categoryId.value,
+    tags: tags.value,
+    varBinding: varBinding.value,
+    subCategories: subCategories.value,
+    options: options.value,
+  });
+}
+
+const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+  () => snapshot() !== baseline.value,
+);
 
 // Suggestions: every other wildcard's id (= 8-hex uuid post DB
 // migration 004) for the `@`-trigger nested-reference autocomplete.
@@ -141,6 +162,7 @@ onMounted(async () => {
       router.replace("/wildcards");
     }
   }
+  baseline.value = snapshot();
 });
 
 function addSub() {
@@ -232,6 +254,7 @@ async function save() {
       });
     }
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
+    baseline.value = snapshot();
     router.push("/wildcards");
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -368,6 +391,16 @@ defineExpose({ historyEntries, applyRestore });
       </table>
     </Card>
   </EditorFrame>
+  <ConfirmDialog
+    :visible="showConfirm"
+    title="Discard unsaved changes?"
+    body="You have unsaved edits. Leaving this page will discard them."
+    confirm-label="Discard & leave"
+    cancel-label="Stay"
+    variant="danger"
+    @confirm="onConfirmLeave"
+    @cancel="onCancelLeave"
+  />
 </template>
 
 <style scoped>

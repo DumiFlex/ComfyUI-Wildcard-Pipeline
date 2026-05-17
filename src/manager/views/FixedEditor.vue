@@ -15,7 +15,9 @@ import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import Textarea from "../components/ui/Textarea.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
+import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { VALID_IDENTIFIER_RE } from "../utils/slug";
@@ -42,6 +44,23 @@ const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
+// Unsaved-changes guard
+const baseline = ref<string>("");
+
+function snapshot(): string {
+  return JSON.stringify({
+    name: name.value,
+    description: description.value,
+    categoryId: categoryId.value,
+    tags: tags.value,
+    values: values.value,
+  });
+}
+
+const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+  () => snapshot() !== baseline.value,
+);
+
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
@@ -63,6 +82,7 @@ onMounted(async () => {
       router.replace("/fixed-values");
     }
   }
+  baseline.value = snapshot();
 });
 
 function addValue() {
@@ -158,6 +178,7 @@ async function save() {
       });
     }
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
+    baseline.value = snapshot();
     router.push("/fixed-values");
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -258,6 +279,16 @@ function cancel() { router.push("/fixed-values"); }
       </table>
     </Card>
   </EditorFrame>
+  <ConfirmDialog
+    :visible="showConfirm"
+    title="Discard unsaved changes?"
+    body="You have unsaved edits. Leaving this page will discard them."
+    confirm-label="Discard & leave"
+    cancel-label="Stay"
+    variant="danger"
+    @confirm="onConfirmLeave"
+    @cancel="onCancelLeave"
+  />
 </template>
 
 <style scoped>

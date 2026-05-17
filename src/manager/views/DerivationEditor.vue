@@ -13,7 +13,9 @@ import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
+import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
@@ -42,6 +44,23 @@ const rules = ref<DerivationRule[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
+
+// Unsaved-changes guard
+const baseline = ref<string>("");
+
+function snapshot(): string {
+  return JSON.stringify({
+    name: name.value,
+    description: description.value,
+    categoryId: categoryId.value,
+    tags: tags.value,
+    rules: rules.value,
+  });
+}
+
+const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+  () => snapshot() !== baseline.value,
+);
 
 // Library var hints for the `$`-trigger autocomplete dropdown — pulls
 // from every wildcard / fixed_values / combine in the catalog except
@@ -151,6 +170,7 @@ onMounted(async () => {
       router.replace("/derivations");
     }
   }
+  baseline.value = snapshot();
 });
 
 function addRule() {
@@ -219,6 +239,7 @@ async function save() {
       });
     }
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
+    baseline.value = snapshot();
     router.push("/derivations");
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -284,6 +305,16 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       </div>
     </Card>
   </EditorFrame>
+  <ConfirmDialog
+    :visible="showConfirm"
+    title="Discard unsaved changes?"
+    body="You have unsaved edits. Leaving this page will discard them."
+    confirm-label="Discard & leave"
+    cancel-label="Stay"
+    variant="danger"
+    @confirm="onConfirmLeave"
+    @cancel="onCancelLeave"
+  />
 </template>
 
 <style scoped>

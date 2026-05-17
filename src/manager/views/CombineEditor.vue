@@ -18,7 +18,9 @@ import Chip from "../components/ui/Chip.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import { tokenizeRich } from "../../widgets/richTokenize";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
+import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
@@ -47,6 +49,24 @@ const outputVarError = ref("");
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
+
+// Unsaved-changes guard
+const baseline = ref<string>("");
+
+function snapshot(): string {
+  return JSON.stringify({
+    name: name.value,
+    description: description.value,
+    categoryId: categoryId.value,
+    tags: tags.value,
+    template: template.value,
+    outputVar: outputVar.value,
+  });
+}
+
+const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+  () => snapshot() !== baseline.value,
+);
 
 const PLACEHOLDER = "$first_name, a $age-year-old with $hair_color hair";
 
@@ -117,6 +137,7 @@ onMounted(async () => {
       router.replace("/combines");
     }
   }
+  baseline.value = snapshot();
 });
 
 function applyRestore(entry: ModuleHistoryEntry): void {
@@ -193,6 +214,7 @@ async function save() {
       });
     }
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
+    baseline.value = snapshot();
     router.push("/combines");
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -294,6 +316,16 @@ function cancel() { router.push("/combines"); }
       </div>
     </Card>
   </EditorFrame>
+  <ConfirmDialog
+    :visible="showConfirm"
+    title="Discard unsaved changes?"
+    body="You have unsaved edits. Leaving this page will discard them."
+    confirm-label="Discard & leave"
+    cancel-label="Stay"
+    variant="danger"
+    @confirm="onConfirmLeave"
+    @cancel="onCancelLeave"
+  />
 </template>
 
 <style scoped>

@@ -17,7 +17,9 @@ import Button from "../components/ui/Button.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
+import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
@@ -54,6 +56,26 @@ const exceptions = ref<ConstraintException[]>([]);
 const saving = ref(false);
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
+
+// Unsaved-changes guard
+const baseline = ref<string>("");
+
+function snapshot(): string {
+  return JSON.stringify({
+    name: name.value,
+    description: description.value,
+    categoryId: categoryId.value,
+    tags: tags.value,
+    sourceWildcardId: sourceWildcardId.value,
+    targetWildcardId: targetWildcardId.value,
+    matrix: matrix.value,
+    exceptions: exceptions.value,
+  });
+}
+
+const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+  () => snapshot() !== baseline.value,
+);
 
 const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   allow: 1,
@@ -178,6 +200,7 @@ onMounted(async () => {
       router.replace("/constraints");
     }
   }
+  baseline.value = snapshot();
 });
 
 function onMatrixUpdate(next: ConstraintMatrix) {
@@ -267,6 +290,7 @@ async function save() {
       });
     }
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
+    baseline.value = snapshot();
     router.push("/constraints");
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -449,6 +473,16 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
       </table>
     </Card>
   </EditorFrame>
+  <ConfirmDialog
+    :visible="showConfirm"
+    title="Discard unsaved changes?"
+    body="You have unsaved edits. Leaving this page will discard them."
+    confirm-label="Discard & leave"
+    cancel-label="Stay"
+    variant="danger"
+    @confirm="onConfirmLeave"
+    @cancel="onCancelLeave"
+  />
 </template>
 
 <style scoped>
