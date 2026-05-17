@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
  * BundleAddChildModal — library picker for adding a frozen snapshot of
- * a module to the bundle's children. Modeled on PipelineStepPicker:
- * teleport-based overlay, kind-filter tabs + search, click a row to
- * pick. Pipelines are excluded — bundles flatten module instances, not
- * pipeline references.
+ * a module to the bundle's children. Teleport-based overlay, kind-filter
+ * tabs + search, click a row to pick.
  *
  * Parent (BundleEditor) takes the emitted ModuleRow, builds a snapshot,
  * and appends to `children[]`.
@@ -46,7 +44,6 @@ const KIND_LABEL: Record<ModuleType, string> = {
   combine:      "Combine",
   derivation:   "Derivation",
   constraint:   "Constraint",
-  pipeline:     "Pipeline",
 };
 
 const activeTab = ref<ModuleType | "all">("all");
@@ -62,7 +59,6 @@ watch(() => props.visible, (v) => {
 const filtered = computed<ModuleRow[]>(() => {
   const q = search.value.trim().toLowerCase();
   return props.modules.filter((m) => {
-    if (m.type === "pipeline") return false;
     if (activeTab.value !== "all" && m.type !== activeTab.value) return false;
     if (!q) return true;
     if (m.name.toLowerCase().includes(q)) return true;
@@ -76,7 +72,6 @@ const counts = computed<Record<string, number>>(() => {
   const c: Record<string, number> = { all: 0 };
   for (const t of KIND_TABS) c[t.type] = 0;
   for (const m of props.modules) {
-    if (m.type === "pipeline") continue;
     c.all += 1;
     c[m.type] = (c[m.type] ?? 0) + 1;
   }

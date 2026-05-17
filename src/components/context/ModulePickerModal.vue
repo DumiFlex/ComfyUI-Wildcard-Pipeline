@@ -345,10 +345,8 @@
  * a selection drawer appears above the footer when ≥1 module is
  * selected. Press "Add N modules" (or Cmd/Ctrl+Enter) to confirm.
  *
- * Every embeddable kind with a payload is pickable. Pipeline is
- * intentionally hidden until the modal grows a pipeline preview.
- * Rows render disabled only when their payload is missing (broken
- * library entry).
+ * Every embeddable kind with a payload is pickable. Rows render
+ * disabled only when their payload is missing (broken library entry).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -564,10 +562,6 @@ const byId = computed(() => {
   return m;
 });
 
-// Pipeline kind is intentionally absent from the picker — the modal
-// has no read-only preview for pipelines yet (deferred from 5.5.6
-// pending cross-kind step lookup design), so embedding one would
-// give the user no way to inspect it from the graph.
 const KIND_LABELS: Record<string, string> = {
   wildcard:     "Wildcards",
   fixed_values: "Fixed",
@@ -576,20 +570,7 @@ const KIND_LABELS: Record<string, string> = {
   constraint:   "Constraints",
 };
 
-/** Pipelines are hidden from the picker until preview support ships.
- *  Rows from this set never reach the visible list, so neither the tab
- *  list nor the "All" filter shows them. Also gates `isPickable`
- *  defensively for any path that bypasses the filter. */
-const HIDDEN_KINDS = new Set<string>(["pipeline"]);
-
-/** Modules visible to the picker. Excludes hidden kinds (pipeline at
- *  the moment) so they're absent from every tab — including "All" —
- *  AND from the kind-count badges. Library row is still in the DB
- *  and reachable via the SPA Manager; the picker just doesn't surface
- *  it for graph-side embed. */
-const visibleModules = computed<PickerModule[]>(() =>
-  modules.value.filter((m) => !HIDDEN_KINDS.has(m.type)),
-);
+const visibleModules = computed<PickerModule[]>(() => modules.value);
 
 function countByKind(kind: string): number {
   return visibleModules.value.filter((m) => m.type === kind).length;
@@ -647,7 +628,7 @@ const filteredModules = computed(() => {
   });
 });
 
-const KIND_ORDER = ["wildcard", "combine", "derivation", "constraint", "pipeline", "fixed_values"];
+const KIND_ORDER = ["wildcard", "combine", "derivation", "constraint", "fixed_values"];
 const groupedFiltered = computed<{ kind: string; items: PickerModule[] }[]>(() => {
   const groups: Record<string, PickerModule[]> = {};
   for (const m of filteredModules.value) (groups[m.type] ??= []).push(m);
@@ -668,7 +649,6 @@ function kindLabel(kind: string): string {
     case "combine":      return "Combines";
     case "derivation":   return "Derivations";
     case "constraint":   return "Constraints";
-    case "pipeline":     return "Pipelines";
     case "fixed_values": return "Fixed values";
     default:             return kind;
   }
@@ -698,7 +678,6 @@ function subtitleFor(m: PickerModule): string {
       return `${rules} rule${rules === 1 ? "" : "s"}`;
     }
     case "constraint":   return "constraint matrix";
-    case "pipeline":     return `${(p.steps as unknown[])?.length ?? 0} steps`;
     case "fixed_values": return `${(p.values as unknown[])?.length ?? 0} vars`;
     default:             return m.type;
   }
@@ -706,15 +685,10 @@ function subtitleFor(m: PickerModule): string {
 
 // ── Pickability gate ───────────────────────────────────────────────
 //
-// Defensive guard against bad rows. The visible list is already
-// pre-filtered to exclude `HIDDEN_KINDS` (pipeline) at the
-// `visibleModules` step, so non-pipeline rows reaching this function
-// only fail the gate when their `payload` is falsy (broken library
-// entry). Pipeline kept here too as belt-and-braces in case any
-// future code path bypasses `visibleModules`.
+// Defensive guard against bad rows — rows with a falsy `payload` are
+// broken library entries and not pickable.
 function isPickable(m: PickerModule): boolean {
   if (!m.payload) return false;
-  if (HIDDEN_KINDS.has(m.type)) return false;
   return true;
 }
 
@@ -1290,7 +1264,6 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__row-icon[data-kind="combine"]     { background: rgba(52,211,153,0.14);  color: var(--wp-kind-combine); }
 .wp-picker__row-icon[data-kind="derivation"]  { background: rgba(251,191,36,0.14);  color: var(--wp-kind-derivation); }
 .wp-picker__row-icon[data-kind="constraint"]  { background: rgba(244,114,182,0.14); color: var(--wp-kind-constraint); }
-.wp-picker__row-icon[data-kind="pipeline"]    { background: rgba(251,113,133,0.14); color: var(--wp-kind-pipeline); }
 .wp-picker__row-icon[data-kind="fixed_values"]{ background: rgba(34,211,238,0.14);  color: var(--wp-kind-fixed); }
 
 .wp-picker__row-main {
@@ -1387,7 +1360,6 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__sel-chip[data-kind="combine"]     .wp-picker__sel-dot { background: var(--wp-kind-combine); }
 .wp-picker__sel-chip[data-kind="derivation"]  .wp-picker__sel-dot { background: var(--wp-kind-derivation); }
 .wp-picker__sel-chip[data-kind="constraint"]  .wp-picker__sel-dot { background: var(--wp-kind-constraint); }
-.wp-picker__sel-chip[data-kind="pipeline"]    .wp-picker__sel-dot { background: var(--wp-kind-pipeline); }
 .wp-picker__sel-chip[data-kind="fixed_values"] .wp-picker__sel-dot { background: var(--wp-kind-fixed); }
 .wp-picker__sel-close {
   width: 16px; height: 16px;

@@ -71,5 +71,4 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     "exception_factor_overrides",
     "extra_exceptions",
   ],
-  pipeline: [],
 };

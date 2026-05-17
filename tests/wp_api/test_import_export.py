@@ -39,7 +39,12 @@ async def test_import_creates_modules_and_categories(wp_client):
     resp = await wp_client.post("/wp/api/import", json=bundle)
     assert resp.status == 200
     body = await resp.json()
-    assert body == {"modules_imported": 1, "categories_imported": 1, "skipped": []}
+    assert body == {
+        "modules_imported": 1,
+        "categories_imported": 1,
+        "bundles_imported": 0,
+        "skipped": [],
+    }
 
     listing = await (await wp_client.get("/wp/api/modules")).json()
     assert listing["total"] == 1

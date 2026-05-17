@@ -10,11 +10,10 @@ function makeRouter(start = "/wildcards"): Router {
   return createRouter({
     history: createMemoryHistory(start),
     routes: [
-      { path: "/", redirect: "/wildcards" },
+      { path: "/", redirect: "/dashboard" },
       { path: "/dashboard", name: "dashboard", component: { template: "<div/>" } },
       { path: "/wildcards", name: "wildcards", component: { template: "<div/>" } },
       { path: "/wildcards/:id/edit", name: "wildcards-edit", component: { template: "<div/>" } },
-      { path: "/pipelines", name: "pipelines", component: { template: "<div/>" } },
       { path: "/fixed-values", name: "fixed-values", component: { template: "<div/>" } },
       { path: "/combines", name: "combines", component: { template: "<div/>" } },
       { path: "/derivations", name: "derivations", component: { template: "<div/>" } },
@@ -53,12 +52,12 @@ describe("AppSidebar.vue", () => {
     const { wrap } = await mountSidebar();
     const labels = wrap.findAll(".wp-nav__label").map((n) => n.text());
     // Modules
-    expect(labels).toContain("Pipelines");
     expect(labels).toContain("Wildcards");
     expect(labels).toContain("Fixed Values");
     expect(labels).toContain("Combines");
     expect(labels).toContain("Derivations");
     expect(labels).toContain("Constraints");
+    expect(labels).toContain("Bundles");
     // Library
     expect(labels).toContain("Categories");
     expect(labels).toContain("Import / Export");
@@ -77,7 +76,7 @@ describe("AppSidebar.vue", () => {
     expect(active.exists()).toBe(true);
     expect(active.attributes("data-active")).toBe("true");
     // Sibling not active
-    const sib = wrap.find('[data-nav-id="pipelines"]');
+    const sib = wrap.find('[data-nav-id="combines"]');
     expect(sib.attributes("data-active")).toBeUndefined();
   });
 

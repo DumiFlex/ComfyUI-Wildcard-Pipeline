@@ -9,6 +9,9 @@ vi.mock("../api/client", () => ({
     categories: {
       list: vi.fn(),
     },
+    bundles: {
+      list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    },
     exportBundle: vi.fn(),
     importBundle: vi.fn(),
   },
@@ -22,6 +25,7 @@ import type { CategoryRow, ModuleRow } from "../api/types";
 const apiAny = api as unknown as {
   modules: { list: ReturnType<typeof vi.fn> };
   categories: { list: ReturnType<typeof vi.fn> };
+  bundles: { list: ReturnType<typeof vi.fn> };
   importBundle: ReturnType<typeof vi.fn>;
   exportBundle: ReturnType<typeof vi.fn>;
 };

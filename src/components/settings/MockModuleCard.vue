@@ -44,7 +44,7 @@ export interface MockModule {
   summary: SummaryToken[];
   /** Which state markers to display in the dots+badges cluster. */
   states?: ModuleStates;
-  /** Show the lock master button (wildcards + pipelines on canvas). */
+  /** Show the lock master button (seed-lockable kinds on canvas). */
   lockable?: boolean;
   /** Show the internal master button (wildcards, fixed_values,
    *  combines, derivations on canvas). */

@@ -3,8 +3,7 @@ export type ModuleType =
   | "fixed_values"
   | "combine"
   | "derivation"
-  | "constraint"
-  | "pipeline";
+  | "constraint";
 
 // ----- Per-type payload shapes (cross-referenced from data.jsx prototype) -----
 
@@ -105,17 +104,6 @@ export interface ConstraintPayload {
   target_wildcard_id: string | null;
   matrix: ConstraintMatrix;
   exceptions: ConstraintException[];
-}
-
-export interface PipelineStep {
-  id: string;
-  module_id: string;
-  enabled: boolean;
-  instance?: Record<string, unknown>;
-}
-
-export interface PipelinePayload {
-  steps: PipelineStep[];
 }
 
 export interface ModuleRow {
@@ -281,11 +269,18 @@ export interface ImportBundle {
   exported_at?: string;
   modules: ModuleRow[];
   categories: CategoryRow[];
+  /** Bundle library entries — optional for back-compat with pre-bundle
+   *  snapshots. Newer exports always include it (possibly empty). */
+  bundles?: BundleRow[];
 }
 
 export interface ImportResult {
   modules_imported: number;
   categories_imported: number;
+  /** Number of bundle library entries successfully imported. Optional
+   *  so older backends (that don't yet handle bundles) can still
+   *  return a valid result. */
+  bundles_imported?: number;
   skipped: string[];
 }
 

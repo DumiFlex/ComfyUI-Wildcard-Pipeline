@@ -259,11 +259,8 @@ describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
   /**
    * Lock the post-5.5.6 contract: every embeddable kind with a payload
    * is pickable. Pre-5.5.6 the picker hard-gated to wildcard-only.
-   * Pipeline is intentionally excluded from the picker until the modal
-   * grows a pipeline preview (deferred sub-task) — assert it's filtered
-   * out of the visible list rather than rendered as a disabled row.
    */
-  it("renders every embeddable kind enabled and hides pipelines", async () => {
+  it("renders every embeddable kind enabled", async () => {
     vi.unstubAllGlobals();
     vi.stubGlobal(
       "fetch",
@@ -275,7 +272,6 @@ describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
             { id: "cccccccc", type: "derivation",   name: "der",  payload: { rules: [] }, tags: [], is_favorite: false, category_id: null },
             { id: "dddddddd", type: "constraint",   name: "con",  payload: { matrix: {} }, tags: [], is_favorite: false, category_id: null },
             { id: "eeeeeeee", type: "fixed_values", name: "fv",   payload: { values: [] }, tags: [], is_favorite: false, category_id: null },
-            { id: "ffffffff", type: "pipeline",     name: "pipe", payload: { steps: [] }, tags: [], is_favorite: false, category_id: null },
           ],
         },
         "/wp/api/categories": { items: [] },
@@ -291,15 +287,11 @@ describe("ModulePickerModal — multi-kind picking (post 5.5.6)", () => {
 
     const rows = wrapper.findAll(".wp-picker__row");
     // 5 visible — wildcard, combine, derivation, constraint, fixed_values.
-    // Pipeline filtered out of the visible list entirely.
     expect(rows.length).toBe(5);
-    expect(wrapper.text()).not.toContain("pipe");
     // Every visible row should be enabled — no `data-disabled` attribute.
     for (const row of rows) {
       expect(row.attributes("data-disabled")).toBeUndefined();
     }
-    // No "Pipelines" tab in the strip.
-    expect(wrapper.text()).not.toContain("Pipelines");
   });
 
   it("disables a row whose payload is missing", async () => {

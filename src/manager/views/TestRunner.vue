@@ -25,59 +25,66 @@ import {
   fillTemplate,
   pickWeightedOption,
   resolveWildcard,
-  runStep,
+  runBundleChild,
   wildcardVar,
+  type BundleChildLike,
 } from "../utils/resolver";
 import { toIdentifier } from "../utils/slug";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import type {
+  BundleRow,
   CombinePayload,
   ConstraintPayload,
   DerivationPayload,
   DerivationRule,
   ModuleRow,
   ModuleType,
-  PipelinePayload,
   WildcardOption,
   WildcardPayload,
 } from "../api/types";
+
+/** Selector kind — module kinds + a "bundle" pseudo-kind that runs
+ *  every child sequentially against a shared ctx. */
+type SelectorKind = ModuleType | "bundle";
 
 const toast = useToast();
 const router = useRouter();
 
 /* -------------------------- kind metadata -------------------------- */
 
-interface KindOption { value: ModuleType; label: string; icon: string; color: string }
+interface KindOption { value: SelectorKind; label: string; icon: string; color: string }
 const KINDS: KindOption[] = [
-  { value: "pipeline",     label: "Pipeline",   icon: "pi-list",                    color: "var(--wp-kind-pipeline)" },
   { value: "wildcard",     label: "Wildcard",   icon: "pi-sparkles",                color: "var(--wp-kind-wildcard)" },
   { value: "combine",      label: "Combine",    icon: "pi-link",                    color: "var(--wp-kind-combine)" },
   { value: "constraint",   label: "Constraint", icon: "pi-filter",                  color: "var(--wp-kind-constraint)" },
   { value: "derivation",   label: "Derivation", icon: "pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)" },
   { value: "fixed_values", label: "Fixed",      icon: "pi-tag",                     color: "var(--wp-kind-fixed)" },
+  { value: "bundle",       label: "Bundle",     icon: "pi-box",                     color: "var(--wp-bundle-default, #6366f1)" },
 ];
 
-const KIND_HINT: Record<ModuleType, string> = {
-  pipeline:     "Runs the pipeline top-to-bottom for N samples and traces every step.",
+const KIND_HINT: Record<SelectorKind, string> = {
   wildcard:     "Resolves the wildcard N times, expanding {a|b|c} choices and @refs.",
   combine:      "Fills the template against upstream wildcards for N samples.",
   constraint:   "Computes the adjusted weight matrix per source value (deterministic).",
   derivation:   "Runs each rule for N samples and reports per-rule fire rate.",
   fixed_values: "Resolves 1 sample showing all $var = value bindings.",
+  bundle:       "Runs every bundle child top-to-bottom for N samples and traces each step. Same flow as embedding the bundle into a Context.",
 };
 
-const KIND_DEFAULT_SAMPLES: Record<ModuleType, number> = {
-  pipeline: 25, wildcard: 100, combine: 100,
+const KIND_DEFAULT_SAMPLES: Record<SelectorKind, number> = {
+  wildcard: 100, combine: 100,
   constraint: 1, derivation: 100, fixed_values: 1,
+  bundle: 25,
 };
 
 /* ------------------------------ state ------------------------------ */
 
-const kind = ref<ModuleType>("wildcard");
+const kind = ref<SelectorKind>("wildcard");
 const moduleId = ref<string | null>(null);
 const samples = ref<number>(KIND_DEFAULT_SAMPLES.wildcard);
 const running = ref(false);
 const allModules = ref<ModuleRow[]>([]);
+const allBundles = ref<BundleRow[]>([]);
 
 // 8-hex UUID → human var-name. Drives `@{uuid}` chip labels in every
 // RichTextPreview below (histogram templates, combine renderings).
@@ -115,25 +122,40 @@ interface DerivationSampleTrace { ruleId: string; fired: "branch" | "else" | "sk
 interface DerivationResult { type: "derivation"; samples: number; rules: DerivationRule[]; perSample: { trace: DerivationSampleTrace[]; before: Record<string, string>; after: Record<string, string> }[]; fireCounts: Record<string, { branch: number; else: number; skip: number }> }
 interface ConstraintRow { value: string; before: number; after: { source: string; weight: number; mode: "allow"|"exclude"|"boost"|"reduce" }[] }
 interface ConstraintResult { type: "constraint"; targetName: string; sourceName: string; sourceValues: string[]; rows: ConstraintRow[] }
-interface PipelineRunTrace { steps: { kind: string; name: string; note: string }[]; ctx: Record<string, string>; primary: string }
-interface PipelineResult { type: "pipeline"; samples: number; runs: PipelineRunTrace[]; finalCounts: { value: string; count: number; pct: number }[] }
-type RunResult = WildcardResult | FixedResult | CombineResult | DerivationResult | ConstraintResult | PipelineResult;
+interface BundleRunTrace { steps: { kind: string; name: string; note: string }[]; ctx: Record<string, string>; primary: string }
+interface BundleResult { type: "bundle"; samples: number; runs: BundleRunTrace[]; finalCounts: { value: string; count: number; pct: number }[] }
+type RunResult = WildcardResult | FixedResult | CombineResult | DerivationResult | ConstraintResult | BundleResult;
 
 const result = ref<RunResult | null>(null);
 const traceIndex = ref(0);
 
 /* ------------------------- derived helpers ------------------------- */
 
-const filteredModules = computed(() =>
-  allModules.value.filter((m) => m.type === kind.value),
-);
+/** Items available in the picker — modules filtered by kind, or all
+ *  bundles when the bundle pseudo-kind is selected. */
+const filteredItems = computed<{ id: string; name: string }[]>(() => {
+  if (kind.value === "bundle") {
+    return allBundles.value.map((b) => ({ id: b.id, name: b.name }));
+  }
+  return allModules.value
+    .filter((m) => m.type === kind.value)
+    .map((m) => ({ id: m.id, name: m.name }));
+});
 
 const moduleOptions = computed(() =>
-  filteredModules.value.map((m) => ({ value: m.id, label: m.name })),
+  filteredItems.value.map((m) => ({ value: m.id, label: m.name })),
 );
 
 const selectedModule = computed(() =>
-  allModules.value.find((m) => m.id === moduleId.value) ?? null,
+  kind.value === "bundle"
+    ? null
+    : allModules.value.find((m) => m.id === moduleId.value) ?? null,
+);
+
+const selectedBundle = computed(() =>
+  kind.value === "bundle"
+    ? allBundles.value.find((b) => b.id === moduleId.value) ?? null
+    : null,
 );
 
 const wildcards = computed(() => allModules.value.filter((m) => m.type === "wildcard"));
@@ -141,8 +163,12 @@ const wildcards = computed(() => allModules.value.filter((m) => m.type === "wild
 watch(kind, (k) => {
   result.value = null;
   traceIndex.value = 0;
-  const first = allModules.value.find((m) => m.type === k);
-  moduleId.value = first?.id ?? null;
+  if (k === "bundle") {
+    moduleId.value = allBundles.value[0]?.id ?? null;
+  } else {
+    const first = allModules.value.find((m) => m.type === k);
+    moduleId.value = first?.id ?? null;
+  }
   samples.value = KIND_DEFAULT_SAMPLES[k];
 });
 
@@ -155,14 +181,22 @@ const refreshing = ref(false);
 async function refresh() {
   refreshing.value = true;
   try {
-    const res = await api.modules.list({});
-    allModules.value = res.items;
-    if (!moduleId.value || !allModules.value.some((m) => m.id === moduleId.value)) {
-      const first = allModules.value.find((m) => m.type === kind.value);
-      moduleId.value = first?.id ?? null;
+    const [modRes, bundleRes] = await Promise.all([
+      api.modules.list({}),
+      api.bundles.list({}),
+    ]);
+    allModules.value = modRes.items;
+    allBundles.value = bundleRes.items;
+    // Re-seed selection if the current id no longer exists in the
+    // active kind's pool (e.g. after a refresh that removed it).
+    const pool = kind.value === "bundle"
+      ? allBundles.value.map((b) => b.id)
+      : allModules.value.filter((m) => m.type === kind.value).map((m) => m.id);
+    if (!moduleId.value || !pool.includes(moduleId.value)) {
+      moduleId.value = pool[0] ?? null;
     }
   } catch (e) {
-    toast.push({ severity: "error", summary: "Failed to load modules", detail: String(e), life: 3000 });
+    toast.push({ severity: "error", summary: "Failed to load library", detail: String(e), life: 3000 });
   } finally {
     refreshing.value = false;
   }
@@ -305,46 +339,47 @@ function runConstraintMatrix(mod: ModuleRow): ConstraintResult {
   return { type: "constraint", targetName, sourceName, sourceValues, rows };
 }
 
-function runPipeline(mod: ModuleRow, n: number): PipelineResult {
-  const payload = mod.payload as unknown as PipelinePayload;
-  const runs: PipelineRunTrace[] = [];
+function runBundle(b: BundleRow, n: number): BundleResult {
+  const wcs = wildcards.value;
+  const runs: BundleRunTrace[] = [];
   const finalCounts = new Map<string, number>();
+  const children = (b.children ?? []) as unknown as BundleChildLike[];
   for (let i = 0; i < n; i++) {
     const ctx: Record<string, string> = {};
-    const stepTrace: PipelineRunTrace["steps"] = [];
-    for (const step of payload.steps ?? []) {
-      const trace = runStep(step, allModules.value, ctx);
-      stepTrace.push({ kind: trace.kind, name: trace.name, note: trace.note });
+    const stepTrace: BundleRunTrace["steps"] = [];
+    for (const child of children) {
+      const t = runBundleChild(child, wcs, ctx);
+      stepTrace.push({ kind: t.kind, name: t.name, note: t.note });
     }
+    // Primary output preference: last combine's `output_var` (matches
+    // how a real Context's PROMPT slot pulls from the trailing combine);
+    // fall back to the longest ctx value as a heuristic.
     let primary = "";
-    for (let s = (payload.steps ?? []).length - 1; s >= 0; s--) {
-      const stp = payload.steps[s];
-      const m = allModules.value.find((x) => x.id === stp.module_id);
-      if (m && m.type === "combine") {
-        const out = ((m.payload as Partial<CombinePayload>).output_var ?? "").replace(/^\$/, "");
+    for (let s = children.length - 1; s >= 0; s--) {
+      const ch = children[s];
+      if (ch?.type === "combine") {
+        const out = ((ch.payload as Partial<CombinePayload> | undefined)?.output_var ?? "").replace(/^\$/, "");
         if (out && ctx[out] !== undefined) { primary = ctx[out]; break; }
       }
     }
     if (!primary) {
       primary = Object.values(ctx).reduce(
-        (a, b) => (String(b).length > String(a).length ? b : a),
+        (a, c) => (String(c).length > String(a).length ? c : a),
         "",
       );
     }
     finalCounts.set(primary || "(empty)", (finalCounts.get(primary || "(empty)") ?? 0) + 1);
     runs.push({ steps: stepTrace, ctx: { ...ctx }, primary });
   }
-  const total = Array.from(finalCounts.values()).reduce((a, b) => a + b, 0) || 1;
+  const total = Array.from(finalCounts.values()).reduce((a, c) => a + c, 0) || 1;
   const sorted = Array.from(finalCounts.entries())
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, c) => c[1] - a[1])
     .slice(0, 10)
     .map(([value, count]) => ({ value, count, pct: count / total * 100 }));
-  return { type: "pipeline", samples: n, runs, finalCounts: sorted };
+  return { type: "bundle", samples: n, runs, finalCounts: sorted };
 }
 
 async function run() {
-  const mod = selectedModule.value;
-  if (!mod) return;
   running.value = true;
   result.value = null;
   traceIndex.value = 0;
@@ -352,12 +387,19 @@ async function run() {
   await Promise.resolve();
   try {
     const n = Math.max(1, samples.value || 1);
-    if (mod.type === "wildcard")          result.value = runWildcardHistogram(mod, n);
-    else if (mod.type === "fixed_values") result.value = runFixed(mod);
-    else if (mod.type === "combine")      result.value = runCombine(mod, n);
-    else if (mod.type === "constraint")   result.value = runConstraintMatrix(mod);
-    else if (mod.type === "derivation")   result.value = runDerivation(mod, n);
-    else if (mod.type === "pipeline")     result.value = runPipeline(mod, n);
+    if (kind.value === "bundle") {
+      const b = selectedBundle.value;
+      if (!b) return;
+      result.value = runBundle(b, n);
+    } else {
+      const mod = selectedModule.value;
+      if (!mod) return;
+      if (mod.type === "wildcard")          result.value = runWildcardHistogram(mod, n);
+      else if (mod.type === "fixed_values") result.value = runFixed(mod);
+      else if (mod.type === "combine")      result.value = runCombine(mod, n);
+      else if (mod.type === "constraint")   result.value = runConstraintMatrix(mod);
+      else if (mod.type === "derivation")   result.value = runDerivation(mod, n);
+    }
   } catch (e) {
     toast.push({ severity: "error", summary: "Run failed", detail: String(e), life: 4000 });
   } finally {
@@ -385,7 +427,7 @@ function modeColor(mode: "allow" | "exclude" | "boost" | "reduce"): string {
 const sampleCursor = computed(() => {
   const r = result.value;
   if (!r) return null;
-  if (r.type === "pipeline")  return { count: r.runs.length };
+  if (r.type === "bundle")     return { count: r.runs.length };
   if (r.type === "derivation") return { count: r.perSample.length };
   return null;
 });
@@ -407,7 +449,7 @@ const wildcardVarPreview = computed(() => {
   return (payload.var_binding ?? "").trim() || toIdentifier(mod.name);
 });
 
-function pickKind(k: ModuleType) {
+function pickKind(k: SelectorKind) {
   kind.value = k;
 }
 </script>
@@ -418,7 +460,7 @@ function pickKind(k: ModuleType) {
       <div class="wp-page__title-wrap">
         <h1 class="wp-page__title">Test runner</h1>
         <p class="wp-page__subtitle">
-          Resolve any module against the engine and inspect the output. Pipelines run end-to-end with a per-step trace.
+          Resolve any module against the engine and inspect the output.
         </p>
       </div>
       <div class="wp-page__actions">
@@ -692,16 +734,16 @@ function pickKind(k: ModuleType) {
       </Card>
     </template>
 
-    <!-- Pipeline panel -->
-    <template v-else-if="result?.type === 'pipeline'">
-      <Card data-test="result-pipeline"
-        :title="`Pipeline trace — sample ${traceIndex + 1} of ${result.runs.length}`">
+    <!-- Bundle panel -->
+    <template v-else-if="result?.type === 'bundle'">
+      <Card data-test="result-bundle"
+        :title="`Bundle trace — sample ${traceIndex + 1} of ${result.runs.length}`">
         <template #actions>
           <Button variant="ghost" size="sm" icon="pi-chevron-left" :disabled="traceIndex <= 0" @click="prevSample" />
           <Button variant="ghost" size="sm" icon="pi-chevron-right" :disabled="traceIndex >= result.runs.length - 1" @click="nextSample" />
           <Button variant="ghost" size="sm" icon="pi-refresh" @click="run">Re-run</Button>
         </template>
-        <div class="wp-tr-step-trace">
+        <div class="wp-tr-step-trace wp-tr-step-trace--bundle">
           <div
             v-for="(s, i) in result.runs[traceIndex].steps"
             :key="i"
@@ -716,21 +758,21 @@ function pickKind(k: ModuleType) {
         </div>
       </Card>
       <Card title="Resolved context (final)">
-        <div class="wp-tr-fixed-grid">
+        <div class="wp-tr-fixed-grid wp-tr-fixed-grid--bundle">
           <template v-for="(v, k) in result.runs[traceIndex].ctx" :key="k">
             <code class="wp-tr-var wp-mono">${{ k }}</code>
-            <span class="wp-mono wp-truncate">{{ v }}</span>
+            <span class="wp-mono wp-tr-ctx-val">{{ v }}</span>
           </template>
         </div>
       </Card>
       <Card :title="`Output distribution — ${result.samples} run(s) · ${result.finalCounts.length} unique`">
-        <div class="wp-hist">
+        <div class="wp-hist wp-hist--bundle">
           <div v-for="entry in result.finalCounts" :key="entry.value" class="wp-hist__row">
-            <div class="wp-hist__template wp-mono wp-truncate">{{ entry.value || '(empty)' }}</div>
+            <div class="wp-hist__template wp-mono">{{ entry.value || '(empty)' }}</div>
             <div class="wp-bar">
               <div
                 class="wp-bar__fill"
-                :style="{ width: entry.pct + '%', background: 'var(--wp-kind-pipeline)' }"
+                :style="{ width: entry.pct + '%', background: 'var(--wp-bundle-default, #6366f1)' }"
               />
             </div>
             <div class="wp-mono wp-hist__count">{{ entry.count }}</div>
@@ -738,6 +780,7 @@ function pickKind(k: ModuleType) {
         </div>
       </Card>
     </template>
+
   </div>
 </template>
 
@@ -925,7 +968,6 @@ function pickKind(k: ModuleType) {
 .wp-tr-step-row[data-kind="combine"]      { --step-color: var(--wp-kind-combine); }
 .wp-tr-step-row[data-kind="derivation"]   { --step-color: var(--wp-kind-derivation); }
 .wp-tr-step-row[data-kind="constraint"]   { --step-color: var(--wp-kind-constraint); }
-.wp-tr-step-row[data-kind="pipeline"]     { --step-color: var(--wp-kind-pipeline); }
 .wp-tr-step-idx { font-size: 11px; color: var(--wp-text-dim); }
 .wp-tr-step-kind {
   font-size: 11px;
@@ -945,5 +987,35 @@ function pickKind(k: ModuleType) {
   .wp-tr-rule-row { grid-template-columns: 1fr; }
   .wp-tr-step-row { grid-template-columns: 28px 90px 1fr; }
   .wp-tr-step-row > .wp-tr-step-note { grid-column: 1 / -1; padding-left: 130px; }
+}
+
+/* Bundle panel — drop truncation everywhere so users can read full
+ * resolved values, brace-expanded combine outputs, and long ctx
+ * contents without ellipsis. The bar+count columns in the output
+ * distribution stay aligned because the grid template fixes their
+ * widths; only the template column flexes to fit wrapped text.
+ *
+ * Step rows align to the top once content can wrap — otherwise a
+ * three-line note next to a one-line kind chip vertically-centers
+ * everything and the kind label drifts off the first line of the
+ * value, which makes the trace harder to scan top-to-bottom. */
+.wp-tr-step-trace--bundle .wp-tr-step-row { align-items: start; }
+.wp-tr-step-trace--bundle .wp-tr-step-name,
+.wp-tr-step-trace--bundle .wp-tr-step-note {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+.wp-tr-fixed-grid--bundle .wp-tr-ctx-val {
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+}
+.wp-hist--bundle .wp-hist__template {
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
 }
 </style>

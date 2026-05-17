@@ -16,6 +16,7 @@ function makeRouter(start = "/wildcards"): Router {
     history: createMemoryHistory(),
     routes: [
       { path: "/", component: { template: "<div/>" } },
+      { path: "/dashboard", name: "dashboard", component: { template: "<div/>" } },
       { path: "/wildcards", name: "wildcards", component: { template: "<div/>" } },
       { path: "/settings", name: "settings", component: { template: "<div/>" } },
     ],

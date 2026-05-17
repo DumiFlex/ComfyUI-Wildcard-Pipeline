@@ -10,6 +10,9 @@ vi.mock("../api/client", () => ({
       duplicate: vi.fn(),
       favorite: vi.fn(),
     },
+    bundles: {
+      list: vi.fn(),
+    },
     categories: { list: vi.fn().mockResolvedValue({ items: [] }) },
   },
   ApiError: class extends Error {
@@ -21,10 +24,13 @@ import { api } from "../api/client";
 import Dashboard from "../views/Dashboard.vue";
 
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;
+const apiBundles = api.bundles as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
 beforeEach(() => {
   setActivePinia(createPinia());
   Object.values(apiMod).forEach((fn) => fn.mockReset());
+  Object.values(apiBundles).forEach((fn) => fn.mockReset());
+  apiBundles.list.mockResolvedValue({ items: [], total: 0 });
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -44,8 +50,8 @@ function makeRouter() {
       { path: "/derivations/new", component: { template: "<div/>" } },
       { path: "/constraints", name: "constraints", component: { template: "<div/>" } },
       { path: "/constraints/new", component: { template: "<div/>" } },
-      { path: "/pipelines", name: "pipelines", component: { template: "<div/>" } },
-      { path: "/pipelines/new", component: { template: "<div/>" } },
+      { path: "/bundles", name: "bundles", component: { template: "<div/>" } },
+      { path: "/bundles/new", component: { template: "<div/>" } },
       { path: "/categories", component: { template: "<div/>" } },
       { path: "/import-export", component: { template: "<div/>" } },
       { path: "/test", component: { template: "<div/>" } },
@@ -79,7 +85,7 @@ describe("Dashboard.vue", () => {
     expect(text).toContain("Combines");
     expect(text).toContain("Derivations");
     expect(text).toContain("Constraints");
-    expect(text).toContain("Pipelines");
+    expect(text).toContain("Bundles");
   });
 
   it("renders without crashing when API returns empty arrays", async () => {

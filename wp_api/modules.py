@@ -221,7 +221,7 @@ async def list_hashes(request: web.Request) -> web.Response:
     SPA Manager AND by the in-graph WP_Context widget to drive the
     drift / missing dots — both surfaces need the full set since
     post-5.5.6 a WP_Context can embed any kind (wildcard, fixed_values,
-    combine, derivation, constraint, pipeline). The pre-5.5.6 endpoint
+    combine, derivation, constraint). The pre-5.5.6 endpoint
     filtered to wildcards-only because that was the only embeddable
     kind; lifting the filter fixes the false-positive missing dot on
     every non-wildcard card.

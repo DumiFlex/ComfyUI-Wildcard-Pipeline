@@ -407,7 +407,6 @@ function kindAlias(type: string, node?: string): KindInfo {
     case "combine":      return { label: "combine",    cls: "wp-kind-chip--combine" };
     case "derivation":   return { label: "derivation", cls: "wp-kind-chip--derivation" };
     case "constraint":   return { label: "constraint", cls: "wp-kind-chip--constraint" };
-    case "pipeline":     return { label: "pipeline",   cls: "wp-kind-chip--pipeline" };
     default:             return { label: type || "—",  cls: "wp-kind-chip--unknown" };
   }
 }

@@ -199,7 +199,7 @@ def test_list_offset_without_limit(wp_db):
 
 @pytest.mark.parametrize(
     "type_",
-    ["combine", "derivation", "constraint", "pipeline"],
+    ["combine", "derivation", "constraint"],
 )
 def test_create_accepts_new_module_types(wp_db, type_):
     """All module kinds get the same 8-hex `id` shape — the type

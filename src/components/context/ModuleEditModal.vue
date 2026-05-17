@@ -157,7 +157,6 @@ const RESET_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]
     "exception_factor_overrides",
     "extra_exceptions",
   ],
-  pipeline: [],
 };
 
 function onClearAllOverrides(): void {

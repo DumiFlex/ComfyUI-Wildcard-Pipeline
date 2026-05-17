@@ -10,10 +10,11 @@ import Select from "../components/ui/Select.vue";
 import { useToast } from "../composables/useToast";
 import { catChipStyle } from "../utils/catChip";
 import { api } from "../api/client";
-import type { CategoryRow, ImportBundle, ModuleRow } from "../api/types";
+import type { BundleRow, CategoryRow, ImportBundle, ModuleRow } from "../api/types";
 import {
   buildFilteredBundle,
   bundleSizeBytes,
+  classifyBundle,
   classifyCategory,
   classifyModule,
   formatBytes,
@@ -40,18 +41,21 @@ const mode = ref<Mode>("export");
 
 const localModules = ref<ModuleRow[]>([]);
 const localCategories = ref<CategoryRow[]>([]);
+const localBundles = ref<BundleRow[]>([]);
 
 const refreshing = ref(false);
 
 async function loadLibrary() {
   refreshing.value = true;
   try {
-    const [mods, cats] = await Promise.all([
+    const [mods, cats, buns] = await Promise.all([
       api.modules.list({ limit: 1000 }),
       api.categories.list(),
+      api.bundles.list({ limit: 1000 }),
     ]);
     localModules.value = mods.items;
     localCategories.value = cats.items;
+    localBundles.value = buns.items;
   } catch (e) {
     toast.push({
       severity: "error",
@@ -77,11 +81,19 @@ const exportOpenGroups = ref<Set<GroupKey>>(
 let didSeedExport = false;
 function seedExportIfReady() {
   if (didSeedExport) return;
-  if (localModules.value.length === 0 && localCategories.value.length === 0) return;
-  exportSelected.value = presetFull(localModules.value, localCategories.value);
+  if (
+    localModules.value.length === 0
+    && localCategories.value.length === 0
+    && localBundles.value.length === 0
+  ) return;
+  exportSelected.value = presetFull(
+    localModules.value, localCategories.value, localBundles.value,
+  );
   didSeedExport = true;
 }
-const seedWatcher = computed(() => localModules.value.length + localCategories.value.length);
+const seedWatcher = computed(() =>
+  localModules.value.length + localCategories.value.length + localBundles.value.length,
+);
 
 function modulesForGroup(g: GroupMeta, list: ModuleRow[]): ModuleRow[] {
   if (g.type === null) return [];
@@ -103,10 +115,19 @@ interface RowItem {
 }
 
 function rowsForGroup(g: GroupMeta, q: string): RowItem[] {
-  if (g.type === null) {
+  if (g.key === "category") {
     return localCategories.value
       .filter((c) => matchesSearch(c.name, c.id, q))
       .map((c) => ({ id: c.id, name: c.name }));
+  }
+  if (g.key === "bundle") {
+    return localBundles.value
+      .filter((b) => matchesSearch(b.name, b.id, q))
+      .map((b) => ({
+        id: b.id, name: b.name,
+        category_id: b.category_id, is_favorite: b.is_favorite,
+        tags: b.tags,
+      }));
   }
   return modulesForGroup(g, localModules.value)
     .filter((m) => matchesSearch(m.name, m.id, q))
@@ -167,6 +188,7 @@ const filteredBundle = computed<ImportBundle>(() =>
   buildFilteredBundle({
     modules: localModules.value,
     categories: localCategories.value,
+    bundles: localBundles.value,
     selected: exportSelected.value,
   }),
 );
@@ -179,18 +201,25 @@ const categoryById = computed(() => {
 });
 
 function presetApplyFull() {
-  exportSelected.value = presetFull(localModules.value, localCategories.value);
+  exportSelected.value = presetFull(
+    localModules.value, localCategories.value, localBundles.value,
+  );
 }
 function presetApplyWildcards() {
   exportSelected.value = presetWildcardsOnly(localModules.value);
 }
 function presetApplyFavorites() {
-  exportSelected.value = presetFavoritesOnly(localModules.value);
+  exportSelected.value = presetFavoritesOnly(localModules.value, localBundles.value);
 }
 
 function downloadBundle() {
   const bundle = filteredBundle.value;
-  if (bundle.modules.length === 0 && bundle.categories.length === 0) return;
+  const bundleCount = bundle.bundles?.length ?? 0;
+  if (
+    bundle.modules.length === 0
+    && bundle.categories.length === 0
+    && bundleCount === 0
+  ) return;
   const blob = new Blob([JSON.stringify(bundle, null, 2)], {
     type: "application/json",
   });
@@ -202,9 +231,14 @@ function downloadBundle() {
   a.download = `wildcard-pipeline-${bundle.modules.length}-modules-${yyyymmdd}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  const parts = [
+    `${bundle.modules.length} modules`,
+    `${bundleCount} bundles`,
+    `${bundle.categories.length} categories`,
+  ];
   toast.push({
     severity: "success", summary: "Exported",
-    detail: `${bundle.modules.length} modules · ${bundle.categories.length} categories`,
+    detail: parts.join(" · "),
     life: 2500,
   });
 }
@@ -220,7 +254,7 @@ const parsedFileSizeKb = ref<string>("");
 
 const importSelected = ref<Set<string>>(new Set());
 const importOpenGroups = ref<Set<GroupKey>>(new Set([
-  "wildcard", "fixed_values", "combine", "derivation", "constraint", "pipeline", "category",
+  "wildcard", "fixed_values", "combine", "derivation", "constraint", "bundle", "category",
 ]));
 
 type ConflictMode = "rename" | "overwrite" | "skip";
@@ -243,6 +277,11 @@ const localCategoriesById = computed(() => {
   for (const x of localCategories.value) m.set(x.id, x);
   return m;
 });
+const localBundlesById = computed(() => {
+  const m = new Map<string, BundleRow>();
+  for (const x of localBundles.value) m.set(x.id, x);
+  return m;
+});
 
 interface ImportRow {
   id: string;
@@ -260,6 +299,13 @@ const parsedRows = computed<ImportRow[]>(() => {
       id: m.id, name: m.name,
       group: groupForModule(m.type),
       conflict: classifyModule(m, localModulesById.value),
+    });
+  }
+  for (const bun of b.bundles ?? []) {
+    out.push({
+      id: bun.id, name: bun.name,
+      group: "bundle",
+      conflict: classifyBundle(bun, localBundlesById.value),
     });
   }
   for (const c of b.categories ?? []) {
@@ -395,6 +441,7 @@ async function handleFile(file: File) {
       exported_at: data.exported_at,
       modules: Array.isArray(data.modules) ? data.modules : [],
       categories: Array.isArray(data.categories) ? data.categories : [],
+      bundles: Array.isArray(data.bundles) ? data.bundles : [],
     };
     parsedBundle.value = bundle;
     selectAllParsed();
@@ -420,6 +467,7 @@ async function runImport() {
 
   const pickedModules: ModuleRow[] = [];
   const pickedCategories: CategoryRow[] = [];
+  const pickedBundles: BundleRow[] = [];
 
   for (const r of parsedRows.value) {
     if (!isImportSelected(r.group, r.id)) continue;
@@ -427,6 +475,23 @@ async function runImport() {
     if (r.group === "category") {
       const cat = b.categories.find((c) => c.id === r.id);
       if (cat) pickedCategories.push(cat);
+    } else if (r.group === "bundle") {
+      const bun = (b.bundles ?? []).find((x) => x.id === r.id);
+      if (!bun) continue;
+      // Rename strategy: stamp a fresh id + "(imported)" suffix so the
+      // existing local bundle is left untouched. Overwrite mode is
+      // deferred — backend currently rejects ON CONFLICT and we don't
+      // ship an UPDATE path through /wp/api/import, so for now both
+      // rename and overwrite use the rename-keep-both behavior.
+      if (r.conflict.kind !== "new") {
+        pickedBundles.push({
+          ...bun,
+          id: `${bun.id}${shortRand().slice(0, 4)}`.slice(0, 8),
+          name: `${bun.name} (imported)`,
+        });
+      } else {
+        pickedBundles.push(bun);
+      }
     } else {
       const mod = b.modules.find((m) => m.id === r.id);
       if (!mod) continue;
@@ -449,16 +514,20 @@ async function runImport() {
     exported_at: b.exported_at,
     modules: pickedModules,
     categories: pickedCategories,
+    bundles: pickedBundles,
   };
 
   importing.value = true;
   try {
     const result = await api.importBundle(partial);
+    const parts = [`${result.modules_imported} modules`];
+    if (result.bundles_imported !== undefined) parts.push(`${result.bundles_imported} bundles`);
+    parts.push(`${result.categories_imported} categories`);
+    if (result.skipped.length) parts.push(`${result.skipped.length} skipped`);
     toast.push({
       severity: "success",
       summary: "Imported",
-      detail: `${result.modules_imported} modules · ${result.categories_imported} categories`
-        + (result.skipped.length ? ` · ${result.skipped.length} skipped` : ""),
+      detail: parts.join(" · "),
       life: 4000,
     });
     clearImport();
@@ -647,7 +716,7 @@ watch(
             <dt>Combines</dt><dd>{{ exportCounts.combine }}</dd>
             <dt>Derivations</dt><dd>{{ exportCounts.derivation }}</dd>
             <dt>Constraints</dt><dd>{{ exportCounts.constraint }}</dd>
-            <dt>Pipelines</dt><dd>{{ exportCounts.pipeline }}</dd>
+            <dt>Bundles</dt><dd>{{ exportCounts.bundle }}</dd>
             <dt>Categories</dt><dd>{{ exportCounts.category }}</dd>
           </dl>
           <div class="wp-divider" />

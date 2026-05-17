@@ -129,18 +129,15 @@ __all__ += ["FixedValuesHandler"]
 from engine.modules.combine_handler import CombineHandler  # noqa: E402
 from engine.modules.constraint_handler import ConstraintHandler  # noqa: E402
 from engine.modules.derivation_handler import DerivationHandler  # noqa: E402
-from engine.modules.pipeline_handler import PipelineHandler  # noqa: E402
 
 register_handler(CombineHandler)
 register_handler(DerivationHandler)
 register_handler(ConstraintHandler)
-register_handler(PipelineHandler)
 
 __all__ += [
     "CombineHandler",
     "ConstraintHandler",
     "DerivationHandler",
-    "PipelineHandler",
 ]
 
 __all__ += ["build_resolve_ctx"]

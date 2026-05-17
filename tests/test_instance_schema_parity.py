@@ -43,9 +43,8 @@ def _parse_ts_registry() -> dict[str, list[str]]:
 def test_ts_and_python_kinds_match():
     ts_kinds = set(_parse_ts_registry().keys())
     py_kinds = set(INSTANCE_SCHEMAS.keys())
-    py_kinds_with_pipeline = py_kinds | {"pipeline"}
-    assert ts_kinds == py_kinds_with_pipeline, (
-        f"TS kinds: {ts_kinds}, Python kinds (+pipeline): {py_kinds_with_pipeline}"
+    assert ts_kinds == py_kinds, (
+        f"TS kinds: {ts_kinds}, Python kinds: {py_kinds}"
     )
 
 

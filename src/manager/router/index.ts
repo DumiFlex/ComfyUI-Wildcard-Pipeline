@@ -6,8 +6,9 @@ const routes: RouteRecordRaw[] = [
     path: "/",
     component: AppLayout,
     children: [
-      { path: "", redirect: "/wildcards" },
+      { path: "", redirect: "/dashboard" },
       { path: "dashboard", name: "dashboard", component: () => import("../views/Dashboard.vue") },
+      { path: "all", name: "all", component: () => import("../views/AllItems.vue") },
       { path: "wildcards", name: "wildcards", component: () => import("../views/Wildcards.vue") },
       { path: "wildcards/new", name: "wildcards-new", component: () => import("../views/WildcardEditor.vue") },
       { path: "wildcards/:id/edit", name: "wildcards-edit", component: () => import("../views/WildcardEditor.vue"), props: true },
@@ -26,9 +27,6 @@ const routes: RouteRecordRaw[] = [
       { path: "bundles", name: "bundles", component: () => import("../views/Bundles.vue") },
       { path: "bundles/new", name: "bundles-new", component: () => import("../views/BundleEditor.vue") },
       { path: "bundles/:id/edit", name: "bundles-edit", component: () => import("../views/BundleEditor.vue"), props: true },
-      { path: "pipelines", name: "pipelines", component: () => import("../views/Pipelines.vue") },
-      { path: "pipelines/new", name: "pipelines-new", component: () => import("../views/PipelineEditor.vue") },
-      { path: "pipelines/:id/edit", name: "pipelines-edit", component: () => import("../views/PipelineEditor.vue"), props: true },
       { path: "categories", name: "categories", component: () => import("../views/Categories.vue") },
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
@@ -41,7 +39,7 @@ const routes: RouteRecordRaw[] = [
       { path: "community/:rest(.*)*", redirect: "/community" },
     ],
   },
-  { path: "/:pathMatch(.*)*", redirect: "/wildcards" },
+  { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
 ];
 
 export default createRouter({ history: createWebHistory("/wp/"), routes });

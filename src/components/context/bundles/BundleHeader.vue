@@ -35,7 +35,7 @@ const props = withDefaults(
      *  the button stays hidden, same pattern as `lockState`. */
     internalState?: "all" | "none" | "partial" | null;
     /** Master-toggle state for `instance.locked_seed` over the
-     *  bundle's seed-lockable children (wildcards + pipelines).
+     *  bundle's seed-lockable children.
      *  Same tri-state semantics as `internalState`. `null` when the
      *  bundle has no lockable children — the lock button stays
      *  hidden in that case so non-applicable bundles don't show a

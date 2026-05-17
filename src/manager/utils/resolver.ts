@@ -22,7 +22,6 @@ import type {
   DerivationPayload,
   DerivationRule,
   ModuleRow,
-  PipelineStep,
   WildcardOption,
   WildcardPayload,
 } from "../api/types";
@@ -332,113 +331,146 @@ export function evalDerivation(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Pipeline step runner                                                        */
+/* Bundle child runner                                                         */
 /* -------------------------------------------------------------------------- */
 
-export interface StepTraceEntry {
-  kind: ModuleRow["type"] | "missing";
+/** Bundle child snapshot — same fields a top-level module carries
+ *  (id, type, payload, instance), passed through here as a loosely-typed
+ *  dict because `BundleRow.children` is stored as `Record<string, unknown>[]`
+ *  and we don't have a static guarantee on shape beyond `id` + `type`.
+ *
+ *  Name lives under `meta.name` in the saved snapshot (see
+ *  BundleEditor.vue's `snapshot()` helper) — not on the top-level row
+ *  the way ModuleRow surfaces it. Snapshots also stash `meta.library_name`
+ *  as a frozen rename-safe label. */
+export interface BundleChildLike {
+  id: string;
+  type: string;
+  meta?: { name?: string; library_name?: string };
+  payload?: Record<string, unknown>;
+  instance?: Record<string, unknown>;
+}
+
+/** Trace entry produced by `runBundleChild`. Mirrors the per-step
+ *  shape the TestRunner pipeline panel used to render. */
+export interface BundleChildTrace {
+  kind: string;
   name: string;
   note: string;
   delta: Record<string, string>;
 }
 
-/** Run a single pipeline step against `ctx` and return the variables it
- *  produced/mutated. The step can reference a module of any kind. */
-export function runStep(
-  step: PipelineStep,
-  allModules: ModuleRow[],
+/** Resolve a single bundle child against `ctx` and return what it
+ *  produced. Mirrors per-kind handling in the canvas-side bundle
+ *  insert flow but only does preview-grade simulation (option [0] vs.
+ *  weighted-random for wildcards is controlled by the caller via
+ *  `Math.random` mocking, same trick as the wildcard histogram).
+ *
+ *  `instance.variable_binding` (when set) overrides the wildcard's
+ *  library-default `$var` so users see the same binding the bundle
+ *  produces on canvas. Other instance overrides (locked_seed,
+ *  enabled_options, etc.) are NOT honored here — preview-grade. */
+export function runBundleChild(
+  child: BundleChildLike,
+  allWildcards: ModuleRow[],
   ctx: Record<string, string>,
-): StepTraceEntry {
-  const mod = allModules.find((m) => m.id === step.module_id);
-  if (!mod) {
-    return { kind: "missing", name: "(missing module)", note: "", delta: {} };
-  }
-  if (step.enabled === false) {
-    return { kind: mod.type, name: mod.name, note: "skipped (disabled)", delta: {} };
-  }
-  const wildcards = allModules.filter((m) => m.type === "wildcard");
-  if (mod.type === "wildcard") {
-    const v = resolveWildcard(mod, ctx, wildcards);
-    const inst = (step.instance ?? {}) as { variable_binding?: string };
-    const varName = (inst.variable_binding?.replace(/^\$/, "").trim()) || wildcardVar(mod);
-    ctx[varName] = v;
+): BundleChildTrace {
+  const name = child.meta?.name ?? child.meta?.library_name ?? "(unnamed)";
+  const payload = (child.payload ?? {}) as Record<string, unknown>;
+  const instance = (child.instance ?? {}) as Record<string, unknown>;
+
+  if (child.type === "wildcard") {
+    const fakeRow = { ...child, payload, type: "wildcard" } as unknown as ModuleRow;
+    const value = resolveWildcard(fakeRow, ctx, allWildcards);
+    const bindingOverride = typeof instance.variable_binding === "string"
+      ? instance.variable_binding.replace(/^\$/, "").trim()
+      : "";
+    const varName = bindingOverride || wildcardVar(fakeRow);
+    ctx[varName] = value;
     return {
       kind: "wildcard",
-      name: mod.name,
-      note: `$${varName} = ${v}`,
-      delta: { [varName]: v },
+      name,
+      note: `$${varName} = ${value}`,
+      delta: { [varName]: value },
     };
   }
-  if (mod.type === "fixed_values") {
-    const payload = mod.payload as { values?: { var?: string; name?: string; value?: string }[] };
+
+  if (child.type === "fixed_values") {
+    const values = (payload.values as { var?: string; name?: string; value?: string }[]) ?? [];
     const delta: Record<string, string> = {};
-    for (const row of payload.values ?? []) {
-      const name = (row.var || row.name || "").replace(/^\$/, "");
-      if (!name) continue;
+    for (const row of values) {
+      const key = (row.var || row.name || "").replace(/^\$/, "");
+      if (!key) continue;
       const value = (row.value ?? "").toString();
-      ctx[name] = value;
-      delta[name] = value;
+      ctx[key] = value;
+      delta[key] = value;
     }
     return {
       kind: "fixed_values",
-      name: mod.name,
+      name,
       note: Object.keys(delta).map((k) => `$${k}`).join(", ") || "(no bindings)",
       delta,
     };
   }
-  if (mod.type === "combine") {
-    const payload = mod.payload as Partial<CombinePayload>;
-    const out = (payload.output_var ?? "").replace(/^\$/, "") || "output";
-    const filled = fillTemplate(payload.template ?? "", ctx, wildcards);
+
+  if (child.type === "combine") {
+    const cp = payload as Partial<CombinePayload>;
+    const out = (cp.output_var ?? "").replace(/^\$/, "") || "output";
+    // Two-phase resolve: substitute `$var` / `@{ref}` first via
+    // fillTemplate, THEN run the result through `expandInlineChoices`
+    // so any `{a|b|c}` literals (whether from the template itself or
+    // dropped in by an upstream wildcard value) get picked. Skipping
+    // the second pass left brace-blocks unresolved in the trace.
+    const substituted = fillTemplate(cp.template ?? "", ctx, allWildcards);
+    const filled = expandInlineChoices(substituted);
     ctx[out] = filled;
-    const trim = filled.length > 60 ? `${filled.slice(0, 60)}…` : filled;
     return {
       kind: "combine",
-      name: mod.name,
-      note: `$${out} = "${trim}"`,
+      name,
+      note: `$${out} = "${filled}"`,
       delta: { [out]: filled },
     };
   }
-  if (mod.type === "constraint") {
-    const payload = mod.payload as unknown as ConstraintPayload;
-    const target = allModules.find((m) => m.id === payload.target_wildcard_id);
-    const source = allModules.find((m) => m.id === payload.source_wildcard_id);
+
+  if (child.type === "constraint") {
+    // Engine-side constraint is config-only: it appends meta to
+    // `ctx["__wp_constraints__"]` and returns `{}` (see
+    // `engine/modules/constraint_handler.py:_ctx_set_constraint`).
+    // The downstream wildcard reads the bias bucket when picking. So
+    // the trace entry should describe the bias, not assign a value —
+    // an earlier draft mistakenly picked + wrote $target which produced
+    // a spurious "$mood = serene" line that got overwritten by the
+    // wildcard step that followed.
+    const cp = payload as unknown as ConstraintPayload;
+    const target = allWildcards.find((m) => m.id === cp.target_wildcard_id);
+    const source = allWildcards.find((m) => m.id === cp.source_wildcard_id);
     if (!target || !source) {
-      return { kind: "constraint", name: mod.name, note: "missing target/source", delta: {} };
+      return { kind: "constraint", name, note: "missing target/source", delta: {} };
     }
-    const sourceVar = wildcardVar(source);
-    const targetVar = wildcardVar(target);
-    const sv = ctx[sourceVar] ?? resolveWildcard(source, ctx, wildcards);
-    if (ctx[sourceVar] === undefined) ctx[sourceVar] = sv;
-    const adjusted = applyConstraint(payload, sv, wildcards);
-    const picked = pickWeightedOption(adjusted) ?? null;
-    const newVal = picked ? expandRefs(expandInlineChoices(picked.value || ""), ctx, wildcards) : "";
-    const oldVal = ctx[targetVar] ?? "";
-    ctx[targetVar] = newVal;
     return {
       kind: "constraint",
-      name: mod.name,
-      note: oldVal && oldVal !== newVal
-        ? `$${targetVar}: ${oldVal} → ${newVal}`
-        : `$${targetVar} = ${newVal}`,
-      delta: { [targetVar]: newVal },
+      name,
+      note: `biases $${wildcardVar(target)} from $${wildcardVar(source)}`,
+      delta: {},
     };
   }
-  if (mod.type === "derivation") {
-    const payload = mod.payload as unknown as DerivationPayload;
+
+  if (child.type === "derivation") {
+    const dp = payload as unknown as DerivationPayload;
     const before = JSON.stringify(ctx);
-    const trace = evalDerivation(payload, ctx);
+    const trace = evalDerivation(dp, ctx);
     const fired = trace.filter((t) => t.fired !== "skip").length;
     const delta: Record<string, string> = {};
     for (const t of trace) Object.assign(delta, t.delta);
     return {
       kind: "derivation",
-      name: mod.name,
+      name,
       note: `${fired}/${trace.length} rule(s) fired${before !== JSON.stringify(ctx) ? "" : " (no change)"}`,
       delta,
     };
   }
-  return { kind: mod.type, name: mod.name, note: "(unsupported step)", delta: {} };
+
+  return { kind: child.type, name, note: "(unsupported kind)", delta: {} };
 }
 
 /** Public re-export — the wildcard `$var` name resolver. */

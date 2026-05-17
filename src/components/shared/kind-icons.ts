@@ -6,9 +6,9 @@
  * chip, conflict tooltip) imports from here. Changing an icon means
  * touching one map, not 8 files.
  *
- * Pipeline kind intentionally omitted — pipelines are out of scope for
- * the current redesign. Adding pipeline support later means adding the
- * row + a test, not refactoring callers.
+ * Pipeline kind removed in the bundle cleanup pass — bundles replace
+ * the legacy step-composition use case. Reintroducing pipelines later
+ * means adding the row + a test, not refactoring callers.
  */
 export const KIND_ICON_MAP = {
   wildcard:     "pi pi-sparkles",

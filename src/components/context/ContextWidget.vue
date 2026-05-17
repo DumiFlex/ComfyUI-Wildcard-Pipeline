@@ -1684,9 +1684,9 @@ function toggleBundleLock(uid: string): void {
   const state = bundleLockState(bundle);
   if (state === null) return;
   const turnOn = state !== "all";
-  // Applicability hardcoded — non-lockable kinds (constraint, pipeline)
-  // can't surface a locked_seed and the engine ignores the field on
-  // them. Master-OFF behaviour mirrors toggleBundleInternal.
+  // Applicability hardcoded — non-lockable kinds (constraint) can't
+  // surface a locked_seed and the engine ignores the field on them.
+  // Master-OFF behaviour mirrors toggleBundleInternal.
   const offBehavior = getBundleMasterOffBehavior();
   const list = value.value.modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
@@ -1792,7 +1792,7 @@ function isModified(m: ModuleEntry): boolean {
  *  fixed_values pins per-value alternation; derivation pins inline
  *  syntax resolution inside `action.value` (`{a|b|c}` + nested
  *  wildcards) — see derivation_handler.resolve. Other kinds
- *  (constraint, pipeline) ignore the field — engine doesn't read it.
+ *  (constraint) ignore the field — engine doesn't read it.
  *  Inline lock action gates on this set so the icon only appears
  *  where it actually does something. */
 const SEED_LOCKABLE_KINDS: ReadonlySet<string> = new Set([
@@ -2134,7 +2134,6 @@ function summaryTokens(m: ModuleEntry): SummaryToken[] {
       const colKeys = Object.keys(Object.values(cp.matrix ?? {})[0] ?? {});
       return [v(src), lit(" → "), v(tgt), lit(` · ${rowKeys.length}×${colKeys.length}`)];
     }
-    case "pipeline":     return [lit(`${Array.isArray(p.steps) ? p.steps.length : 0} steps`)];
     default:             return [lit(m.type)];
   }
 }
@@ -4373,7 +4372,6 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 .wp-type-icon.type-combine      { color: var(--wp-kind-combine); }
 .wp-type-icon.type-derivation   { color: var(--wp-kind-derivation); }
 .wp-type-icon.type-constraint   { color: var(--wp-kind-constraint); }
-.wp-type-icon.type-pipeline     { color: var(--wp-kind-pipeline); }
 
 /* Kind icon — canonical PrimeIcons per module type (Task 8).
  * Base styles live in src/components/shared/row-primitives.css under

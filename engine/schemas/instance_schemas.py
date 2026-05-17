@@ -87,7 +87,6 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "exception_factor_overrides":  "dict[string,number]",
         "extra_exceptions":            "list[dict]",
     },
-    # pipeline: no instance fields (scoped out)
 }
 
 

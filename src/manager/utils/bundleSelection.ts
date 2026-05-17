@@ -7,20 +7,23 @@
  */
 
 import type {
+  BundleRow,
   CategoryRow,
   ImportBundle,
   ModuleRow,
   ModuleType,
 } from "../api/types";
 
-/** Selection group keys ↔ module types (categories are a pseudo-group). */
+/** Selection group keys ↔ module types. Bundles + categories are
+ *  pseudo-groups (no `type` field on the row — bundles have their own
+ *  shape, categories are not modules at all). */
 export type GroupKey =
   | "wildcard"
   | "fixed_values"
   | "combine"
   | "derivation"
   | "constraint"
-  | "pipeline"
+  | "bundle"
   | "category";
 
 export interface GroupMeta {
@@ -28,13 +31,16 @@ export interface GroupMeta {
   label: string;
   icon: string;
   color: string;
-  /** Module type this group represents — `null` for the categories group. */
+  /** Module type this group represents — `null` for groups that don't
+   *  live in the modules table (bundle, category). */
   type: ModuleType | null;
 }
 
 /**
  * Display order mirrors the prototype's MODULE_GROUPS in
- * docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx.
+ * docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx,
+ * with bundles slotted just before categories so the library-side
+ * group sits next to its categories counterpart in the selection tree.
  */
 export const GROUPS: GroupMeta[] = [
   { key: "wildcard",     label: "Wildcards",    icon: "pi pi-sparkles",                color: "var(--wp-kind-wildcard)",   type: "wildcard" },
@@ -42,8 +48,8 @@ export const GROUPS: GroupMeta[] = [
   { key: "combine",      label: "Combines",     icon: "pi pi-link",                    color: "var(--wp-kind-combine)",    type: "combine" },
   { key: "derivation",   label: "Derivations",  icon: "pi pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)", type: "derivation" },
   { key: "constraint",   label: "Constraints",  icon: "pi pi-filter",                  color: "var(--wp-kind-constraint)", type: "constraint" },
-  { key: "pipeline",     label: "Pipelines",    icon: "pi pi-list",      color: "var(--wp-kind-pipeline)",   type: "pipeline" },
-  { key: "category",     label: "Categories",   icon: "pi pi-bookmark",  color: "var(--wp-kind-category, #60a5fa)", type: null },
+  { key: "bundle",       label: "Bundles",      icon: "pi pi-box",                     color: "var(--wp-bundle-default, #6366f1)", type: null },
+  { key: "category",     label: "Categories",   icon: "pi pi-bookmark",                color: "var(--wp-kind-category, #60a5fa)", type: null },
 ];
 
 /** Stable selection key — `<group>:<id>`. */
@@ -98,6 +104,10 @@ export function hashPayload(payload: Record<string, unknown> | undefined): strin
 export interface FilteredBundleInput {
   modules: ModuleRow[];
   categories: CategoryRow[];
+  /** Bundle library entries. Optional so existing callers that pre-date
+   *  bundle support continue to compile; new callers should always pass
+   *  the array (possibly empty). */
+  bundles?: BundleRow[];
   /** Selection key set — see `selectionKey()`. */
   selected: Set<string>;
 }
@@ -105,24 +115,33 @@ export interface FilteredBundleInput {
 /**
  * Build a partial ImportBundle from the source library + a selection set.
  *
- * Modules are filtered by their per-row checkbox. Categories are kept if:
+ * Modules and bundles are filtered by their per-row checkbox.
+ * Categories are kept if:
  *   - they are explicitly checked in the categories group, OR
- *   - they are referenced by any selected module (`category_id` match).
+ *   - they are referenced by any selected module / bundle
+ *     (`category_id` match).
  *
- * The second rule guarantees the imported bundle is self-consistent: every
- * module that mentions a category brings that category along, even when the
- * user only ticked module rows.
+ * The second rule guarantees the imported bundle is self-consistent:
+ * every module / bundle that mentions a category brings that category
+ * along, even when the user only ticked the parent row.
  */
 export function buildFilteredBundle(input: FilteredBundleInput): ImportBundle {
-  const { modules, categories, selected } = input;
+  const { modules, categories, bundles = [], selected } = input;
 
   const pickedModules = modules.filter((m) =>
     selected.has(selectionKey(groupForModule(m.type), m.id)),
   );
 
+  const pickedBundles = bundles.filter((b) =>
+    selected.has(selectionKey("bundle", b.id)),
+  );
+
   const referenced = new Set<string>();
   for (const m of pickedModules) {
     if (m.category_id) referenced.add(m.category_id);
+  }
+  for (const b of pickedBundles) {
+    if (b.category_id) referenced.add(b.category_id);
   }
 
   const pickedCategories = categories.filter(
@@ -134,6 +153,7 @@ export function buildFilteredBundle(input: FilteredBundleInput): ImportBundle {
     exported_at: new Date().toISOString(),
     modules: pickedModules,
     categories: pickedCategories,
+    bundles: pickedBundles,
   };
 }
 
@@ -156,7 +176,7 @@ export function selectionCounts(
 ): Record<GroupKey, number> & { total: number } {
   const counts: Record<GroupKey, number> & { total: number } = {
     wildcard: 0, fixed_values: 0, combine: 0,
-    derivation: 0, constraint: 0, pipeline: 0,
+    derivation: 0, constraint: 0, bundle: 0,
     category: 0, total: 0,
   };
   for (const key of selected) {
@@ -174,13 +194,14 @@ export function selectionCounts(
 // ---------- Presets ----------
 
 /**
- * "Full library" — every module + every category.
+ * "Full library" — every module + every bundle + every category.
  */
 export function presetFull(
-  modules: ModuleRow[], categories: CategoryRow[],
+  modules: ModuleRow[], categories: CategoryRow[], bundles: BundleRow[] = [],
 ): Set<string> {
   const s = new Set<string>();
   for (const m of modules) s.add(selectionKey(groupForModule(m.type), m.id));
+  for (const b of bundles) s.add(selectionKey("bundle", b.id));
   for (const c of categories) s.add(selectionKey("category", c.id));
   return s;
 }
@@ -194,11 +215,16 @@ export function presetWildcardsOnly(modules: ModuleRow[]): Set<string> {
   return s;
 }
 
-/** "Favorites only" — every favorited module across all kinds. */
-export function presetFavoritesOnly(modules: ModuleRow[]): Set<string> {
+/** "Favorites only" — every favorited module + bundle across all kinds. */
+export function presetFavoritesOnly(
+  modules: ModuleRow[], bundles: BundleRow[] = [],
+): Set<string> {
   const s = new Set<string>();
   for (const m of modules) {
     if (m.is_favorite) s.add(selectionKey(groupForModule(m.type), m.id));
+  }
+  for (const b of bundles) {
+    if (b.is_favorite) s.add(selectionKey("bundle", b.id));
   }
   return s;
 }
@@ -239,6 +265,25 @@ export function classifyCategory(
   const local = localById.get(incoming.id);
   if (!local) return { kind: "new" };
   if (local.name === incoming.name && local.color === incoming.color) {
+    return { kind: "exists", existingId: local.id };
+  }
+  return { kind: "modified", existingId: local.id };
+}
+
+/**
+ * Classify an incoming bundle row against the current local library.
+ * Compares the server-supplied `payload_hash` — which covers the
+ * children blob — instead of re-hashing locally, since the children
+ * array is heavier than a module payload and the hash is already
+ * stable across exports.
+ */
+export function classifyBundle(
+  incoming: BundleRow,
+  localById: Map<string, BundleRow>,
+): ConflictResult {
+  const local = localById.get(incoming.id);
+  if (!local) return { kind: "new" };
+  if (local.payload_hash === incoming.payload_hash) {
     return { kind: "exists", existingId: local.id };
   }
   return { kind: "modified", existingId: local.id };

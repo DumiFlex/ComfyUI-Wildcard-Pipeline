@@ -98,7 +98,6 @@
   --wp-kind-combine:     #34d399;
   --wp-kind-derivation:  #fbbf24;
   --wp-kind-constraint:  #f472b6;
-  --wp-kind-pipeline:    #fb7185;
   --wp-kind-fixed:       #22d3ee;
   /* Injector — variables wired in from arbitrary upstream node
    * outputs (not part of the wildcard / fixed / combine / etc
@@ -325,5 +324,4 @@
 .wp-kind-chip--combine    { background: color-mix(in oklab, var(--wp-kind-combine)    22%, transparent); color: var(--wp-kind-combine);    }
 .wp-kind-chip--derivation { background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent); color: var(--wp-kind-derivation); }
 .wp-kind-chip--constraint { background: color-mix(in oklab, var(--wp-kind-constraint) 22%, transparent); color: var(--wp-kind-constraint); }
-.wp-kind-chip--pipeline   { background: color-mix(in oklab, var(--wp-kind-pipeline)   22%, transparent); color: var(--wp-kind-pipeline);   }
 .wp-kind-chip--injector   { background: color-mix(in oklab, var(--wp-kind-injector)   22%, transparent); color: var(--wp-kind-injector);   }

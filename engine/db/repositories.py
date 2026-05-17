@@ -16,7 +16,7 @@ from engine._utils import now_iso as _now
 from engine.modules.snapshot import payload_hash
 
 _VALID_TYPES: frozenset[str] = frozenset({
-    "wildcard", "fixed_values", "combine", "derivation", "constraint", "pipeline",
+    "wildcard", "fixed_values", "combine", "derivation", "constraint",
 })
 # Module ids are 8-hex short uuids — same shape the tokenizer's
 # `@{8hex}` ref token captures and the engine catalog keys by. Slug

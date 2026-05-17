@@ -47,6 +47,5 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "exception_factor_overrides",
       "extra_exceptions",
     ]);
-    expect(INSTANCE_FIELDS_PER_KIND.pipeline).toEqual([]);
   });
 });

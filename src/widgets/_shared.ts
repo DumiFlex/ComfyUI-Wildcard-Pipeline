@@ -403,14 +403,13 @@ export interface BundleInstance {
   color?: string | null;
 }
 
-/** Module kind discriminator. Same six kinds the SPA library carries. */
+/** Module kind discriminator — the five kinds the SPA library carries. */
 export type ModuleEntryKind =
   | "wildcard"
   | "fixed_values"
   | "combine"
   | "derivation"
-  | "constraint"
-  | "pipeline";
+  | "constraint";
 
 export interface ModuleEntry {
   /**

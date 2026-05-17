@@ -39,7 +39,7 @@ const props = defineProps<{
   onClearTemplate?: () => void;
   /** Per-var module-kind lookup. When known, each chip renders a
    *  small pi-icon matching the source module's kind (wildcard,
-   *  fixed_values, combine, derivation, constraint, pipeline,
+   *  fixed_values, combine, derivation, constraint,
    *  injector). Missing entries fall back to no icon. Mount glue
    *  builds this via `collectUpstreamKinds`. */
   kindByVar?: Record<string, string>;

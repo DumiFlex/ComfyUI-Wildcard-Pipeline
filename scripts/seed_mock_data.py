@@ -522,65 +522,6 @@ CONSTRAINTS = [
 ]
 
 
-# ── Pipelines ──────────────────────────────────────────────────────────
-
-
-PIPELINES = [
-    {
-        "name": "portrait_pipeline",
-        "category": "Composition",
-        "tags": ["pipeline", "portrait", "core"],
-        "is_favorite": True,
-        # Full end-to-end orchestration: presets → fixed-value packs →
-        # base wildcards → derivations → combines, in dependency order so
-        # `$var` consumers see their producers.
-        "step_module_names": [
-            "presets",
-            "model_settings",
-            "negatives_extended",
-            "color",
-            "mood",
-            "hair_style",
-            "shirt",
-            "outfit",
-            "backdrop",
-            "mood_to_lighting",
-            "color_modifiers",
-            "subject_phrase",
-            "framing",
-            "scene_phrase",
-            "final_prompt",
-        ],
-    },
-    # Minimal smoke pipeline — just enough modules to make Test Runner
-    # produce a non-empty output without dragging in the whole library.
-    {
-        "name": "smoke_pipeline",
-        "category": "Composition",
-        "tags": ["pipeline", "smoke-test"],
-        "step_module_names": [
-            "color",
-            "mood",
-            "outfit",
-        ],
-    },
-    # Walker-stress pipeline — exercises the deep chain + cycle pair so
-    # you can watch warnings + walkOverflow surface in the Test Runner.
-    {
-        "name": "walker_stress_pipeline",
-        "category": "Edge cases",
-        "tags": ["pipeline", "walker-test"],
-        "step_module_names": [
-            "chain_a",  # 4-deep chain, well under max_ref_depth=8
-            "cycle_a",  # cycle pair → expect cycle_detected overflow
-            "self_ref",  # self-cycle
-            "weighted_demo",
-            "signature",
-        ],
-    },
-]
-
-
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
@@ -809,48 +750,6 @@ def _ensure_constraint(
     return row
 
 
-def _ensure_pipeline(
-    mod_repo: ModuleRepository, cat_repo: CategoryRepository,
-    by_name: dict[str, dict], spec: dict,
-) -> dict:
-    steps: list[dict] = []
-    for i, mod_name in enumerate(spec["step_module_names"]):
-        if mod_name not in by_name:
-            print(f"    ! pipeline step '{mod_name}' not found — skipping")
-            continue
-        mod = by_name[mod_name]
-        steps.append({
-            "id": f"step_{i:02d}",
-            "module_id": mod["id"],
-            "enabled": True,
-        })
-    payload = {"steps": steps}
-    existing = _existing_module_by_name(mod_repo, spec["name"], "pipeline")
-    if existing is not None:
-        updated = mod_repo.update(
-            existing["id"],
-            name=spec["name"],
-            category_id=_category_id_for(cat_repo, spec.get("category")),
-            tags=spec.get("tags", []),
-            payload=payload,
-            is_favorite=bool(spec.get("is_favorite", False)),
-        )
-        print(f"  ~ pipeline '{spec['name']}' updated "
-              f"(uuid={updated['id']}, steps={len(steps)})")
-        return updated
-    row = mod_repo.create(
-        type="pipeline",
-        name=spec["name"],
-        description="",
-        category_id=_category_id_for(cat_repo, spec.get("category")),
-        tags=spec.get("tags", []),
-        payload=payload,
-        is_favorite=bool(spec.get("is_favorite", False)),
-    )
-    print(f"  + pipeline '{row['name']}' (uuid={row['id']}, steps={len(steps)})")
-    return row
-
-
 def main() -> int:
     db_path = resolve_db_path()
     print(f"Seeding mock data into: {db_path}")
@@ -898,11 +797,6 @@ def main() -> int:
     for spec in CONSTRAINTS:
         _ensure_constraint(mod_repo, cat_repo, wildcards, spec)
 
-    print("\n[Pipelines]")
-    by_name = {**wildcards, **fixed, **combines, **derivations}
-    for spec in PIPELINES:
-        _ensure_pipeline(mod_repo, cat_repo, by_name, spec)
-
     print("\nDone. Seeded uuids worth poking at:")
     for name, row in wildcards.items():
         print(f"  wildcard '{name}': @{{{row['id']}}}")
@@ -911,7 +805,6 @@ def main() -> int:
     print("  · Test Runner on 'outfit' → samples should resolve nested refs")
     print("    (outfit → shirt → color, max chain depth 2)")
     print("  · Test Runner on 'scene_phrase' (combine) → uses upstream $vars")
-    print("  · Pipeline runner on 'portrait_pipeline' → end-to-end orchestration")
 
     return 0
 

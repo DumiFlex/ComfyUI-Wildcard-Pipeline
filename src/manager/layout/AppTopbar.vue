@@ -35,7 +35,7 @@ const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
       <Icon name="pi-bars" />
     </button>
 
-    <RouterLink to="/" class="wp-topbar__brand" data-test="topbar-brand">
+    <RouterLink to="/dashboard" class="wp-topbar__brand" data-test="topbar-brand">
       <img :src="logoSrc" alt="" />
       <span>Wildcard Pipeline</span>
       <span class="wp-topbar__version">v{{ version }}</span>

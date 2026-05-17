@@ -79,21 +79,14 @@ vi.mock("../api/client", () => {
       payload_hash: "0".repeat(64),
       version: 1, created_at: "", updated_at: "",
     },
-    {
-      id: "11111111", type: "pipeline", name: "Quick Portrait",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: { steps: [
-        { id: "s1", module_id: "cccccccc", enabled: true },
-        { id: "s2", module_id: "aabbccdd", enabled: true },
-      ] },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    },
   ];
   return {
     api: {
       modules: {
         list: vi.fn().mockResolvedValue({ items: MOCK_MODULES, total: MOCK_MODULES.length }),
+      },
+      bundles: {
+        list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
       },
       test: vi.fn(),
     },
@@ -188,22 +181,6 @@ describe("TestRunner.vue", () => {
     expect(wrap.find('[data-test="result-fixed"]').exists()).toBe(true);
     expect(wrap.text()).toContain("$name");
     expect(wrap.text()).toContain("Mira");
-  });
-
-  it("runs pipeline kind producing the trace panel", async () => {
-    const wrap = mountRunner();
-    await flushPromises();
-    const kindSelector = wrap.find('[data-test="kind-selector"]');
-    const plOpt = kindSelector
-      .findAll("button")
-      .find((el) => el.text().trim() === "Pipeline");
-    await plOpt!.trigger("click");
-    await flushPromises();
-    const runBtn = wrap.findAll("button").find((b) => b.text().includes("Run"));
-    await runBtn!.trigger("click");
-    await flushPromises();
-    await flushPromises();
-    expect(wrap.find('[data-test="result-pipeline"]').exists()).toBe(true);
   });
 
   it("runs derivation kind producing rule trace", async () => {

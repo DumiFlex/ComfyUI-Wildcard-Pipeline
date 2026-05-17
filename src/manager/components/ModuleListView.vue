@@ -36,6 +36,11 @@ interface ExtraFilter<R> {
   key: string;
   label: string;
   check: (item: R) => boolean;
+  /** Optional extra class on the filter chip — used by Wildcards to
+   *  color the Syntax chips so they match the colored pills in the
+   *  body's Syntax column. Same `wp-chip--syntax-*` token set keeps
+   *  the colors consistent across both surfaces. */
+  chipClass?: string;
 }
 
 interface Props {
@@ -256,6 +261,22 @@ function removeTag(t: string) {
   emit("fetch");
 }
 
+/** Toggle a tag in the active filter set from any in-row click —
+ *  the body's tag column uses this so users can dial in a tag
+ *  filter without opening the filter panel. Adds if missing,
+ *  removes if already present. */
+function toggleTagFilter(t: string) {
+  const current = props.filter.tags ?? [];
+  props.filter.tags = current.includes(t)
+    ? current.filter((x) => x !== t)
+    : [...current, t];
+  emit("fetch");
+}
+
+function isTagActive(t: string): boolean {
+  return (props.filter.tags ?? []).includes(t);
+}
+
 function emitFetch() {
   emit("fetch");
 }
@@ -358,27 +379,36 @@ defineExpose({
       <span class="wp-toolbar__count">{{ filteredItems.length }} / {{ items.length }} items</span>
     </div>
 
-    <!-- Filter panel -->
+    <!-- Filter panel. The outer shell uses the grid-template-rows
+         `0fr ↔ 1fr` trick instead of max-height interpolation so the
+         transition tracks the panel's natural content height — async
+         content arriving during the open animation (categories,
+         tags, etc) reflows inside the animation rather than after
+         it, killing the "expands in two increments" stutter users
+         saw on the kind list views. -->
     <Transition name="filter-collapse">
-      <div v-if="filtersOpen" class="wp-filter-panel">
-        <slot name="filter-panel" :filter="filter" :emit-fetch="emitFetch" />
-        <div v-if="extraFilters?.length" class="wp-filter-panel__extra">
-          <span class="wp-filter-panel__extra-label">Syntax</span>
-          <div class="wp-filter-panel__extra-chips">
-            <button
-              v-for="ef in extraFilters" :key="ef.key"
-              type="button"
-              class="wp-chip wp-chip--toggle"
-              :data-active="extraActive[ef.key] ? '' : null"
-              @click="extraActive[ef.key] = !extraActive[ef.key]"
-            >
-              {{ ef.label }}
-              <span class="wp-dim wp-chip__count">{{ matchCount(ef) }}</span>
-            </button>
+      <div v-if="filtersOpen" class="wp-filter-panel-shell">
+        <div class="wp-filter-panel">
+          <slot name="filter-panel" :filter="filter" :emit-fetch="emitFetch" />
+          <div v-if="extraFilters?.length" class="wp-filter-panel__extra">
+            <span class="wp-filter-panel__extra-label">Syntax</span>
+            <div class="wp-filter-panel__extra-chips">
+              <button
+                v-for="ef in extraFilters" :key="ef.key"
+                type="button"
+                class="wp-chip wp-chip--toggle"
+                :class="ef.chipClass"
+                :data-active="extraActive[ef.key] ? '' : null"
+                @click="extraActive[ef.key] = !extraActive[ef.key]"
+              >
+                {{ ef.label }}
+                <span class="wp-dim wp-chip__count">{{ matchCount(ef) }}</span>
+              </button>
+            </div>
           </div>
-        </div>
-        <div v-if="hasActiveFilters" class="wp-filter-panel__footer">
-          <button type="button" class="wp-link" @click="clearFilters">Clear filters</button>
+          <div v-if="hasActiveFilters" class="wp-filter-panel__footer">
+            <button type="button" class="wp-link" @click="clearFilters">Clear filters</button>
+          </div>
         </div>
       </div>
     </Transition>
@@ -490,9 +520,16 @@ defineExpose({
                 </slot>
               </td>
               <slot name="columns" :row="row" />
-              <td v-if="showTags">
+              <td v-if="showTags" @click.stop>
                 <div v-if="(row.tags ?? []).length" class="wp-row-tags">
-                  <Chip v-for="(t, i) in (row.tags ?? []).slice(0, 3)" :key="i">{{ t }}</Chip>
+                  <button
+                    v-for="(t, i) in (row.tags ?? []).slice(0, 3)" :key="i"
+                    type="button"
+                    class="wp-row-tag-btn"
+                    :data-active="isTagActive(t) || undefined"
+                    :title="isTagActive(t) ? `Remove tag filter '${t}'` : `Filter by tag '${t}'`"
+                    @click.stop="toggleTagFilter(t)"
+                  >{{ t }}</button>
                   <span v-if="(row.tags ?? []).length > 3" class="wp-row-tag-more">+{{ (row.tags ?? []).length - 3 }}</span>
                 </div>
                 <span v-else class="wp-dim">—</span>
@@ -730,6 +767,34 @@ defineExpose({
   color: var(--wp-text-dim);
 }
 
+/* In-row tag chip button. Visually mirrors the regular Chip component
+ * (same padding + radius + font scale) but renders as a button so
+ * users can toggle a tag into the active filter set without opening
+ * the filter panel. Active state mirrors the chip selection in the
+ * filter-panel's tag row. */
+.wp-row-tag-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--wp-border);
+  border-radius: 999px;
+  background: var(--wp-bg-2);
+  color: var(--wp-text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+}
+.wp-row-tag-btn:hover {
+  border-color: var(--wp-border-strong, var(--wp-border));
+  color: var(--wp-text);
+}
+.wp-row-tag-btn[data-active] {
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
+  color: var(--wp-accent-text, #c4b5fd);
+}
+
 .wp-row-actions {
   display: inline-flex;
   gap: 2px;
@@ -799,17 +864,33 @@ defineExpose({
   cursor: not-allowed;
 }
 
+/* Outer shell is a 1-row grid. Animating `grid-template-rows`
+ * between `0fr` and `1fr` tweens the rendered height of the inner
+ * row to its natural content size — without max-height clipping or
+ * post-animation reflow jump.
+ *
+ * Inner `.wp-filter-panel` carries `min-height: 0` + `overflow:
+ * hidden` so it can shrink below intrinsic size during the
+ * collapsed phase. Without `min-height: 0` the grid child refuses
+ * to go below its content's min content size and the animation
+ * snaps to 0 abruptly at the end. */
+.wp-filter-panel-shell {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+.wp-filter-panel-shell > .wp-filter-panel {
+  min-height: 0;
+  overflow: hidden;
+}
 .filter-collapse-enter-active,
 .filter-collapse-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease, max-height 0.22s ease;
-  overflow: hidden;
-  max-height: 600px;
+  transition: grid-template-rows 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 .filter-collapse-enter-from,
 .filter-collapse-leave-to {
+  grid-template-rows: 0fr;
   opacity: 0;
   transform: translateY(-6px);
-  max-height: 0;
 }
 
 .wp-row-favorite > td:first-child {

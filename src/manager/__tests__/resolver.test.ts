@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   applyConstraint,
   evalDerivation,
@@ -7,13 +7,11 @@ import {
   fillTemplate,
   pickWeightedOption,
   resolveWildcard,
-  runStep,
 } from "../utils/resolver";
 import type {
   ConstraintPayload,
   DerivationPayload,
   ModuleRow,
-  PipelineStep,
   WildcardOption,
 } from "../api/types";
 
@@ -267,49 +265,3 @@ describe("evalDerivation", () => {
   });
 });
 
-describe("runStep", () => {
-  beforeEach(() => {
-    vi.spyOn(Math, "random").mockReturnValue(0.0);
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("runs a wildcard step and writes its $var binding into ctx", () => {
-    const w = makeWildcard("Hair Color", [{ value: "auburn", weight: 1 }], { var_binding: "hair_color" });
-    const step: PipelineStep = { id: "s1", module_id: w.id, enabled: true };
-    const ctx: Record<string, string> = {};
-    const out = runStep(step, [w], ctx);
-    expect(out.kind).toBe("wildcard");
-    expect(ctx.hair_color).toBe("auburn");
-  });
-
-  it("runs a fixed_values step writing every binding into ctx", () => {
-    const f: ModuleRow = {
-      id: "aabbccdd", type: "fixed_values", name: "Pack",
-      description: "", category_id: null, tags: [], is_favorite: false,
-      payload: { values: [{ var: "city", value: "Tokyo" }, { name: "$ward", value: "Shibuya" }] },
-      payload_hash: "0".repeat(64),
-      version: 1, created_at: "", updated_at: "",
-    };
-    const step: PipelineStep = { id: "s1", module_id: f.id, enabled: true };
-    const ctx: Record<string, string> = {};
-    runStep(step, [f], ctx);
-    expect(ctx).toEqual({ city: "Tokyo", ward: "Shibuya" });
-  });
-
-  it("returns a missing trace when module_id is unknown", () => {
-    const step: PipelineStep = { id: "s1", module_id: "nope", enabled: true };
-    const out = runStep(step, [], {});
-    expect(out.kind).toBe("missing");
-  });
-
-  it("respects enabled=false and emits a skipped note", () => {
-    const w = makeWildcard("X", [{ value: "v", weight: 1 }]);
-    const step: PipelineStep = { id: "s1", module_id: w.id, enabled: false };
-    const ctx: Record<string, string> = {};
-    const out = runStep(step, [w], ctx);
-    expect(out.note).toMatch(/skipped/);
-    expect(ctx).toEqual({});
-  });
-});

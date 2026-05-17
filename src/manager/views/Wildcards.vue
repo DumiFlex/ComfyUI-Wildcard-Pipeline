@@ -65,16 +65,19 @@ const extraFilters = computed(() => [
   {
     key: "has-refs",
     label: "Uses nested refs",
+    chipClass: "wp-chip--syntax-ref",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasRefs,
   },
   {
     key: "has-inline",
     label: "Has inline {a|b|c}",
+    chipClass: "wp-chip--syntax-dp",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasInline,
   },
   {
     key: "is-referenced",
     label: "Referenced by others",
+    chipClass: "wp-chip--syntax-in",
     check: (m: ModuleRow) => {
       // Graph keyed by `mod.id` (= 8-hex uuid). See syntaxView.
       const inc = wildcardGraph.value.incoming.get(m.id);
