@@ -272,4 +272,20 @@ function onItemClick(item: NavItem) {
 .wp-nav--child[data-active] .wp-nav__icon {
   opacity: 1;
 }
+
+/* Active-nav indicator — brand identity anchor #2.
+ * The ::before strip overrides the global tokens.css accent-colored strip
+ * (which also uses the wrong [data-active="true"] selector and never matches).
+ * 3 px gradient bar on the left edge; top/bottom inset keeps it from touching
+ * the row corners. Works in both collapsed (icon-only) and expanded modes. */
+.wp-nav[data-active]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--wp-brand-gradient);
+  border-radius: var(--wp-radius-sm, 2px);
+}
 </style>

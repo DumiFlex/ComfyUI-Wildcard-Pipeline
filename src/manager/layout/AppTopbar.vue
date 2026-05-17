@@ -37,7 +37,7 @@ const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
 
     <RouterLink to="/dashboard" class="wp-topbar__brand" data-test="topbar-brand">
       <img :src="logoSrc" alt="" />
-      <span>Wildcard Pipeline</span>
+      <span class="wp-topbar__brand-text">Wildcard Pipeline</span>
       <span class="wp-topbar__version">v{{ version }}</span>
     </RouterLink>
 
@@ -83,4 +83,18 @@ const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
    .wp-topbar__spacer, .wp-topbar__icon-btn — are all defined globally in
    tokens.css. Community status pill + user menu styles moved to the
    feat/community-tab branch alongside the views that use them. */
+
+/* Wordmark gradient text — brand identity anchor #1.
+ * Base color ensures legibility in browsers without background-clip: text. */
+.wp-topbar__brand-text {
+  color: var(--wp-text);
+}
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .wp-topbar__brand-text {
+    background: var(--wp-brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
 </style>
