@@ -46,6 +46,7 @@ type ValidationMode = "strict" | "relaxed" | "permissive";
 type ToastLifetime = "short" | "default" | "long" | "sticky";
 type CollapseMode = "independent" | "accordion";
 type ColorIntensity = "muted" | "standard" | "vivid";
+type BundleMasterOffBehavior = "preserve-manual" | "cascade-all";
 
 function asString(v: unknown, fallback: string): string {
   return typeof v === "string" ? v : fallback;
@@ -68,6 +69,7 @@ const indicatorStyle = ref<IndicatorStyle>("badge");
 const kindStyle = ref<KindStyle>("chip");
 const borderHighlight = ref<boolean>(true);
 const collapsedByDefault = ref<boolean>(false);
+const bundleCollapsedByDefault = ref<boolean>(false);
 const collapseMode = ref<CollapseMode>("independent");
 const colorIntensity = ref<ColorIntensity>("standard");
 const focusMode = ref<boolean>(false);
@@ -78,6 +80,8 @@ const validation = ref<ValidationMode>("strict");
 const toastLifetime = ref<ToastLifetime>("default");
 const suppressInfoToasts = ref<boolean>(false);
 const newModuleDisabled = ref<boolean>(false);
+const confirmDestructiveBundle = ref<boolean>(true);
+const bundleMasterOffBehavior = ref<BundleMasterOffBehavior>("preserve-manual");
 
 /**
  * Pull every value from the store into the local refs. Called on
@@ -91,6 +95,7 @@ function syncFromStore(): void {
   kindStyle.value = asString(getSettingValue("kindStyle"), "chip") as KindStyle;
   borderHighlight.value = asBool(getSettingValue("borderHighlight"), true);
   collapsedByDefault.value = asBool(getSettingValue("collapsedByDefault"), false);
+  bundleCollapsedByDefault.value = asBool(getSettingValue("bundleCollapsedByDefault"), false);
   collapseMode.value = asString(getSettingValue("collapseMode"), "independent") as CollapseMode;
   colorIntensity.value = asString(getSettingValue("colorIntensity"), "standard") as ColorIntensity;
   focusMode.value = asBool(getSettingValue("focusMode"), false);
@@ -100,6 +105,11 @@ function syncFromStore(): void {
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
   suppressInfoToasts.value = asBool(getSettingValue("suppressInfoToasts"), false);
   newModuleDisabled.value = asBool(getSettingValue("newModuleDisabled"), false);
+  confirmDestructiveBundle.value = asBool(getSettingValue("confirmDestructiveBundle"), true);
+  bundleMasterOffBehavior.value = asString(
+    getSettingValue("bundleMasterOffBehavior"),
+    "preserve-manual",
+  ) as BundleMasterOffBehavior;
 }
 
 // Per-ref watchers persist to extensionManager whenever a control
@@ -114,6 +124,7 @@ watch(indicatorStyle, (v) => applySetting("indicatorStyle", v));
 watch(kindStyle, (v) => applySetting("kindStyle", v));
 watch(borderHighlight, (v) => applySetting("borderHighlight", v));
 watch(collapsedByDefault, (v) => applySetting("collapsedByDefault", v));
+watch(bundleCollapsedByDefault, (v) => applySetting("bundleCollapsedByDefault", v));
 watch(collapseMode, (v) => applySetting("collapseMode", v));
 watch(colorIntensity, (v) => applySetting("colorIntensity", v));
 watch(focusMode, (v) => applySetting("focusMode", v));
@@ -123,6 +134,8 @@ watch(validation, (v) => applySetting("validation", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
 watch(suppressInfoToasts, (v) => applySetting("suppressInfoToasts", v));
 watch(newModuleDisabled, (v) => applySetting("newModuleDisabled", v));
+watch(confirmDestructiveBundle, (v) => applySetting("confirmDestructiveBundle", v));
+watch(bundleMasterOffBehavior, (v) => applySetting("bundleMasterOffBehavior", v));
 
 interface Defaults {
   density: Density;
@@ -131,6 +144,7 @@ interface Defaults {
   kindStyle: KindStyle;
   borderHighlight: boolean;
   collapsedByDefault: boolean;
+  bundleCollapsedByDefault: boolean;
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
   focusMode: boolean;
@@ -140,6 +154,8 @@ interface Defaults {
   toastLifetime: ToastLifetime;
   suppressInfoToasts: boolean;
   newModuleDisabled: boolean;
+  confirmDestructiveBundle: boolean;
+  bundleMasterOffBehavior: BundleMasterOffBehavior;
 }
 
 const defaults: Defaults = {
@@ -149,6 +165,7 @@ const defaults: Defaults = {
   kindStyle: "chip",
   borderHighlight: true,
   collapsedByDefault: false,
+  bundleCollapsedByDefault: false,
   collapseMode: "independent",
   colorIntensity: "standard",
   focusMode: false,
@@ -158,6 +175,8 @@ const defaults: Defaults = {
   toastLifetime: "default",
   suppressInfoToasts: false,
   newModuleDisabled: false,
+  confirmDestructiveBundle: true,
+  bundleMasterOffBehavior: "preserve-manual",
 };
 
 function onResetAll(): void {
@@ -318,6 +337,14 @@ onBeforeUnmount(() => {
                   class="wp-pg__check"
                 />
               </label>
+              <label class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">Collapse new bundles by default</span>
+                <input
+                  v-model="bundleCollapsedByDefault"
+                  type="checkbox"
+                  class="wp-pg__check"
+                />
+              </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Collapse stack mode</span>
                 <select v-model="collapseMode" class="wp-pg__select">
@@ -389,6 +416,21 @@ onBeforeUnmount(() => {
                   type="checkbox"
                   class="wp-pg__check"
                 />
+              </label>
+              <label class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">Confirm destructive bundle actions</span>
+                <input
+                  v-model="confirmDestructiveBundle"
+                  type="checkbox"
+                  class="wp-pg__check"
+                />
+              </label>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Bundle master OFF behavior</span>
+                <select v-model="bundleMasterOffBehavior" class="wp-pg__select">
+                  <option value="preserve-manual">Preserve manual (default)</option>
+                  <option value="cascade-all">Cascade — clear everyone</option>
+                </select>
               </label>
             </fieldset>
           </section>

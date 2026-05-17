@@ -45,6 +45,7 @@ export type DisplayKey =
   | "kindStyle"
   | "borderHighlight"
   | "collapsedByDefault"
+  | "bundleCollapsedByDefault"
   | "collapseMode"
   | "colorIntensity"
   | "focusMode";
@@ -57,7 +58,9 @@ export type BehaviorKey =
   | "validation"
   | "toastLifetime"
   | "suppressInfoToasts"
-  | "newModuleDisabled";
+  | "newModuleDisabled"
+  | "confirmDestructiveBundle"
+  | "bundleMasterOffBehavior";
 
 export type SettingKey = DisplayKey | A11yKey | BehaviorKey;
 
@@ -67,6 +70,8 @@ const BEHAVIOR_KEYS = new Set<string>([
   "toastLifetime",
   "suppressInfoToasts",
   "newModuleDisabled",
+  "confirmDestructiveBundle",
+  "bundleMasterOffBehavior",
 ]);
 
 function settingId(key: SettingKey): string {
