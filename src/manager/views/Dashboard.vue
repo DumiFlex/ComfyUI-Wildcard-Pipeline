@@ -382,7 +382,7 @@ onMounted(refresh);
   font-size: var(--wp-text-sm);
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
 }
 .wp-tabs__btn:hover { color: var(--wp-text); }
 .wp-tabs__btn[data-active="true"] {
@@ -404,7 +404,7 @@ onMounted(refresh);
 .dashboard__row-icon {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   display: grid;
   place-items: center;
   font-size: var(--wp-text-xs);

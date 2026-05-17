@@ -209,7 +209,7 @@ function pick(row: ModuleRow) {
   width: 26px; height: 26px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   color: var(--wp-text-dim);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
@@ -303,7 +303,7 @@ function pick(row: ModuleRow) {
 .wp-bundle-add__rowicon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 22px;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   background: var(--wp-bg-3);
   color: var(--wp-text-dim);
   font-size: var(--wp-text-sm);

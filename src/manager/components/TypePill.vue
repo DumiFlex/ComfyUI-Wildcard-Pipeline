@@ -37,7 +37,7 @@ const meta = computed(() => {
   font-size: var(--wp-text-xs);
   font-weight: 600;
   padding: var(--wp-space-1) var(--wp-space-4);
-  border-radius: 9px;
+  border-radius: 999px;
   letter-spacing: 0.3px;
 }
 .type-pill--wildcard   { color: var(--wp-violet); background: var(--wp-violet-bg); }

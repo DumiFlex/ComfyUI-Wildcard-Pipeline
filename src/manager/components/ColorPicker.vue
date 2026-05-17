@@ -151,7 +151,7 @@ function isActivePreset(preset: string): boolean {
 .wp-color-picker__swatch {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--wp-radius);
   border: 1px solid var(--wp-border-strong);
   cursor: pointer;
   padding: 0;
@@ -200,7 +200,7 @@ function isActivePreset(preset: string): boolean {
 .wp-color-picker__chip {
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   border: 1px solid var(--wp-border);
   cursor: pointer;
   padding: 0;

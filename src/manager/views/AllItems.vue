@@ -450,7 +450,7 @@ function refresh() {
   display: inline-flex; align-items: center; gap: var(--wp-space-3);
   padding: var(--wp-space-2) 10px; /* audit-exempt: 10px matches PrimeVue chip horizontal rhythm */
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   background: var(--wp-bg-2);
   color: var(--wp-text);
   font-size: var(--wp-text-sm);

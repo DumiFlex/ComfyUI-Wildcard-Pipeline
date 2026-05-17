@@ -181,7 +181,7 @@ const isEdited = computed(() => props.edited);
   width: 22px; height: 22px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   color: var(--wp-text-dim);
   cursor: pointer;
   padding: 0;
@@ -202,7 +202,7 @@ const isEdited = computed(() => props.edited);
 
 .wp-bchild__kindicon {
   width: 28px; height: 22px;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in oklab, var(--row-kind) 18%, var(--wp-bg-3));
   color: var(--row-kind);
@@ -223,7 +223,7 @@ const isEdited = computed(() => props.edited);
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 9px; /* audit-exempt: micro mono index badge — below scale floor */
   padding: 1px var(--wp-space-3);
-  border-radius: 3px;
+  border-radius: var(--wp-radius-sm);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);

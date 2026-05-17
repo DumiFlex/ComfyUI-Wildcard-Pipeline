@@ -265,7 +265,7 @@ watch(
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--wp-radius);
   padding: var(--wp-space-5) var(--wp-space-5);
   color: var(--wp-text);
   cursor: pointer;

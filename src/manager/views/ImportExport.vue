@@ -953,7 +953,7 @@ watch(
 .wp-io-group__check { display: inline-flex; }
 .wp-io-group__icon {
   width: 22px; height: 22px;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   display: grid; place-items: center;
   font-size: var(--wp-text-xs);
 }
@@ -1017,7 +1017,7 @@ watch(
 .wp-io-help code {
   background: var(--wp-bg-3);
   padding: 1px var(--wp-space-3);
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   font-size: var(--wp-text-sm);
 }
 
@@ -1025,7 +1025,7 @@ watch(
 
 .wp-io-drop {
   border: 1px dashed var(--wp-border-strong);
-  border-radius: 10px;
+  border-radius: var(--wp-radius-lg);
   padding: var(--wp-space-7) var(--wp-space-6);
   text-align: center;
   cursor: pointer;
@@ -1050,7 +1050,7 @@ watch(
 .wp-io-error {
   margin-top: var(--wp-space-5);
   padding: var(--wp-space-4) var(--wp-space-5);
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
   color: var(--wp-danger);
   font-size: var(--wp-text-sm);

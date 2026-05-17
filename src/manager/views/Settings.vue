@@ -165,7 +165,7 @@ function resetPreferences() {
   align-items: center;
   gap: var(--wp-space-3);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps chip height */
-  border-radius: 7px;
+  border-radius: var(--wp-radius);
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);
   color: var(--wp-text-muted);

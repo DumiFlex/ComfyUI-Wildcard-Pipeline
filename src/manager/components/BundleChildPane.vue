@@ -266,7 +266,7 @@ const constraintTargetValues = computed<string[]>(() => {
 .wp-bpane__kindicon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   background: color-mix(in oklab, var(--pane-kind, var(--wp-accent-500)) 18%, var(--wp-bg-3));
   color: var(--pane-kind, var(--wp-accent-500));
   font-size: var(--wp-text-sm);
@@ -280,14 +280,14 @@ const constraintTargetValues = computed<string[]>(() => {
   letter-spacing: 0.06em;
   color: var(--pane-kind, var(--wp-accent-500));
   padding: 2px var(--wp-space-3);
-  border-radius: 3px;
+  border-radius: var(--wp-radius-sm);
   background: color-mix(in oklab, var(--pane-kind, var(--wp-accent-500)) 14%, transparent);
 }
 .wp-bpane__close {
   margin-left: auto;
   width: 24px; height: 24px;
   background: transparent; border: 1px solid transparent;
-  border-radius: 4px; color: var(--wp-text-dim); cursor: pointer;
+  border-radius: var(--wp-radius-sm); color: var(--wp-text-dim); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .wp-bpane__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
@@ -298,7 +298,7 @@ const constraintTargetValues = computed<string[]>(() => {
   border-left: 2px solid var(--wp-amber, #fbbf24);
   color: var(--wp-text);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline, 10px horiz rounded to 12px */
-  border-radius: 3px;
+  border-radius: var(--wp-radius-sm);
   margin-bottom: var(--wp-space-5);
   font-size: var(--wp-text-xs);
   line-height: 1.45;
@@ -317,6 +317,6 @@ const constraintTargetValues = computed<string[]>(() => {
   font-size: var(--wp-text-sm);
   color: var(--wp-text-dim);
   background: var(--wp-bg-2);
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
 }
 </style>

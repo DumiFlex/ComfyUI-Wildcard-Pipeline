@@ -631,7 +631,7 @@ defineExpose({
   min-width: 18px;
   height: 18px;
   padding: 0 var(--wp-space-3);
-  border-radius: 9px;
+  border-radius: 999px;
   font-size: var(--wp-text-xs);
   background: var(--wp-accent-500);
   color: #fff;
@@ -849,7 +849,7 @@ defineExpose({
   cursor: pointer;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   color: var(--wp-text-muted);
   display: inline-flex;
   align-items: center;

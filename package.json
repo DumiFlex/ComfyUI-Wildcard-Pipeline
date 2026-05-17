@@ -19,6 +19,7 @@
     "check:css-isolation": "node scripts/check-css-isolation.mjs",
     "check:spacing": "node scripts/check-spacing-tokens.mjs",
     "check:typography": "node scripts/check-typography-tokens.mjs",
+    "check:radius": "node scripts/check-radius-tokens.mjs",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --passWithNoTests",

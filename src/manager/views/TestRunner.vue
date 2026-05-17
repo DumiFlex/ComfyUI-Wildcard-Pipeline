@@ -799,7 +799,7 @@ function pickKind(k: SelectorKind) {
 .wp-seg__btn {
   display: inline-flex; align-items: center; gap: var(--wp-space-3);
   padding: var(--wp-space-3) var(--wp-space-5);
-  border-radius: 6px; font-size: var(--wp-text-sm); cursor: pointer;
+  border-radius: var(--wp-radius-sm); font-size: var(--wp-text-sm); cursor: pointer;
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);
   color: var(--wp-text);
@@ -830,7 +830,7 @@ function pickKind(k: SelectorKind) {
   margin-bottom: var(--wp-space-5);
 }
 .wp-tr-flag-chip {
-  padding: 1px var(--wp-space-3); border-radius: 4px;
+  padding: 1px var(--wp-space-3); border-radius: var(--wp-radius-sm);
   background: var(--wp-bg-3);
   font-family: var(--wp-font-mono);
   font-size: var(--wp-text-xs);
@@ -860,12 +860,12 @@ function pickKind(k: SelectorKind) {
 .wp-bar {
   height: 18px;
   background: var(--wp-bg-3);
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   overflow: hidden;
 }
 .wp-bar__fill {
   height: 100%;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   transition: width .25s;
 }
 
@@ -888,7 +888,7 @@ function pickKind(k: SelectorKind) {
   padding: var(--wp-space-4) var(--wp-space-5);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
 }
 
 .wp-tr-cn-scroll { overflow-x: auto; }
@@ -925,12 +925,12 @@ function pickKind(k: SelectorKind) {
   padding: var(--wp-space-3) var(--wp-space-5);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   font-size: var(--wp-text-sm);
 }
 .wp-tr-rule-id { color: var(--wp-text); }
 .wp-tr-rule-status {
-  font-size: var(--wp-text-xs); padding: 2px var(--wp-space-4); border-radius: 4px;
+  font-size: var(--wp-text-xs); padding: 2px var(--wp-space-4); border-radius: var(--wp-radius-sm);
   background: var(--wp-bg-3); color: var(--wp-text-muted);
 }
 .wp-tr-rule-status[data-status="branch"] {
@@ -948,7 +948,7 @@ function pickKind(k: SelectorKind) {
 }
 .wp-tr-rule-delta code {
   background: var(--wp-bg-3);
-  padding: 1px var(--wp-space-3); border-radius: 4px;
+  padding: 1px var(--wp-space-3); border-radius: var(--wp-radius-sm);
 }
 .wp-tr-rule-fire-meta { font-size: var(--wp-text-xs); }
 
@@ -958,7 +958,7 @@ function pickKind(k: SelectorKind) {
   grid-template-columns: 32px 110px 180px 1fr;
   gap: var(--wp-space-5);
   padding: var(--wp-space-3) var(--wp-space-4);
-  border-radius: 5px;
+  border-radius: var(--wp-radius-sm);
   background: var(--wp-bg-2);
   border-left: 3px solid var(--step-color, var(--wp-border));
   align-items: center;

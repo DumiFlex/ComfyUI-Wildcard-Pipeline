@@ -553,7 +553,7 @@ const branchCount = computed(() => rule.value.branches.length);
 .branch {
   background: var(--wp-bg-2, #18181b);
   border: 1px solid var(--wp-border, #2c2c34);
-  border-radius: 8px;
+  border-radius: var(--wp-radius);
   padding: var(--wp-space-5) var(--wp-space-5);
   display: flex;
   flex-direction: column;
@@ -575,7 +575,7 @@ const branchCount = computed(() => rule.value.branches.length);
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 2px 7px; /* audit-exempt: 2px vertical hairline, 7px horiz compact badge */
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   text-transform: uppercase;
 }
 .branch-tag[data-kind="if"] {
@@ -639,7 +639,7 @@ const branchCount = computed(() => rule.value.branches.length);
   align-items: stretch;
   background: var(--wp-bg-2, #161616);
   border: 1px solid var(--wp-border, #3a3a3a);
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   overflow: hidden;
 }
 .dvr-var-wrap:focus-within {
@@ -738,7 +738,7 @@ const branchCount = computed(() => rule.value.branches.length);
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   color: var(--wp-text-muted, #9ca3af);
   background: var(--wp-bg-3, #2a2a2a);
   border: 1px solid var(--wp-border, #3a3a3a);

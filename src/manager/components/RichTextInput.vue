@@ -486,7 +486,7 @@ onBeforeUnmount(() => {
   width: 100%;
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
-  border-radius: 7px;
+  border-radius: var(--wp-radius);
   transition: border-color .12s, background .12s, box-shadow .12s;
   overflow: hidden;
   box-sizing: border-box;
@@ -599,7 +599,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border-strong, rgba(255, 255, 255, 0.14));
-  border-radius: 8px;
+  border-radius: var(--wp-radius);
   padding: 0 var(--wp-space-2) var(--wp-space-2);
   box-shadow: var(--wp-shadow-lg, var(--wp-shadow, 0 10px 30px rgba(0, 0, 0, 0.45)));
   display: flex;
@@ -631,7 +631,7 @@ onBeforeUnmount(() => {
   background: var(--wp-bg-3, #1e1e2a);
   border-bottom: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
   margin: 0 -4px var(--wp-space-2); /* audit-exempt: -4px negative margin bleeds header to popover edges */
-  border-radius: 7px 7px 0 0;
+  border-radius: var(--wp-radius) var(--wp-radius) 0 0;
 }
 .wp-rt-suggestions__query {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -649,7 +649,7 @@ onBeforeUnmount(() => {
   text-align: left;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps items compact */
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);

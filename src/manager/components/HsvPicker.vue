@@ -166,7 +166,7 @@ const hueCursorStyle = computed(() => ({
   position: relative;
   width: 100%;
   height: 120px;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   border: 1px solid var(--wp-border);
   cursor: crosshair;
   touch-action: none;
@@ -191,7 +191,7 @@ const hueCursorStyle = computed(() => ({
   position: relative;
   width: 100%;
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--wp-radius-sm);
   border: 1px solid var(--wp-border);
   cursor: ew-resize;
   touch-action: none;
@@ -212,7 +212,7 @@ const hueCursorStyle = computed(() => ({
   top: 50%;
   width: 12px;
   height: 16px;
-  border-radius: 3px;
+  border-radius: var(--wp-radius-sm);
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.45);
   transform: translate(-50%, -50%);

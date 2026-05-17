@@ -235,7 +235,7 @@ function frameColor(row: BundleRow): string {
   display: inline-block;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--wp-radius-sm);
   border: 1px solid var(--wp-border);
   vertical-align: middle;
 }
