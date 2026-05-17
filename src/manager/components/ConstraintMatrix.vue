@@ -386,9 +386,10 @@ defineExpose({ cellAt, cycleCell });
   border-color: rgba(245, 158, 11, 0.40);
   border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent);
 }
-.wp-theme-light .wp-matrix-cell[data-mode="exclude"] { color: #991b1b; }
-.wp-theme-light .wp-matrix-cell[data-mode="boost"]   { color: #166534; }
-.wp-theme-light .wp-matrix-cell[data-mode="reduce"]  { color: #92400e; }
+/* Status tokens flip to -700 shades in light mode; no raw hex needed */
+.wp-theme-light .wp-matrix-cell[data-mode="exclude"] { color: var(--wp-danger); }
+.wp-theme-light .wp-matrix-cell[data-mode="boost"]   { color: var(--wp-success); }
+.wp-theme-light .wp-matrix-cell[data-mode="reduce"]  { color: var(--wp-warn); }
 .wp-matrix-cell__icon {
   font-size: var(--wp-text-md);
   font-weight: 600;

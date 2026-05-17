@@ -196,7 +196,7 @@ const isEdited = computed(() => props.edited);
 }
 .wp-bchild__act--danger:hover {
   background: color-mix(in oklab, var(--wp-danger, #ef4444) 16%, transparent);
-  color: #fca5a5;
+  color: var(--wp-danger-text);
   border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 30%, transparent);
 }
 

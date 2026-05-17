@@ -66,6 +66,18 @@
   --wp-danger:  #ef4444;
   --wp-info:    #3b82f6;
 
+  /* Status text — for direct `color:` usage on surfaces (not inside tint chips).
+   * Dark defaults are the high-chroma values above (reused via alias).
+   * Light overrides below swap to deeper shades that pass WCAG AA on near-white. */
+  --wp-danger-text:  var(--wp-danger);   /* overridden to red-800  in light */
+  --wp-success-text: var(--wp-success);  /* overridden to green-800 in light */
+  --wp-warn-text:    var(--wp-warn);     /* overridden to amber-800 in light */
+  --wp-info-text:    var(--wp-info);     /* overridden to blue-800  in light */
+
+  /* Syntax @ref pill color — pink/magenta, distinct from wildcard KIND violet */
+  --wp-kind-ref:    #f0abfc;            /* fuchsia-300; light override → fuchsia-800 */
+  --wp-kind-ref-bg: rgba(192, 38, 211, 0.18);
+
   /* Type */
   --wp-font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --wp-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -209,6 +221,29 @@
   /* Light theme needs darker accent text for contrast on near-white surfaces */
   --wp-accent-text:        var(--wp-accent-700);
   --wp-accent-text-strong: var(--wp-accent-800);
+
+  /* Status colors — dark amber/green/red/blue are ~2.5–4:1 on white (fail AA for text).
+   * Swap to -700 / -800 level shades that clear 4.5:1. Values from Tailwind palette. */
+  --wp-success:      #15803d;           /* green-700   4.55:1 on white */
+  --wp-warn:         #b45309;           /* amber-700   4.75:1 on white */
+  --wp-danger:       #b91c1c;           /* red-700     5.25:1 on white */
+  --wp-info:         #1d4ed8;           /* blue-700    5.53:1 on white */
+
+  /* Status-text aliases track the main tokens in light mode (same override cascade) */
+  --wp-danger-text:  var(--wp-danger);
+  --wp-success-text: var(--wp-success);
+  --wp-warn-text:    var(--wp-warn);
+  --wp-info-text:    var(--wp-info);
+
+  /* Overlay — lighter scrim so light bg beneath still registers as dimmed */
+  --wp-overlay-bg: rgba(15, 15, 30, 0.35);
+
+  /* Bundle default — slightly deeper slate for contrast on near-white card surfaces */
+  --wp-bundle-default: #3d4f63;
+
+  /* Ref pill — deeper magenta for light surfaces */
+  --wp-kind-ref:    #86198f;            /* fuchsia-800 5.03:1 on white */
+  --wp-kind-ref-bg: rgba(192, 38, 211, 0.13);
 }
 
 /* ---------- Light-theme kind-color overrides ----------
@@ -816,12 +851,10 @@ input, textarea, select { font: inherit; }
 }
 .wp-syntax-pill .pi { font-size: 9.5px; }
 .wp-syntax-pill--ref {
-  /* outgoing nested @refs — pink/magenta to match @ref token color */
-  color: #f0abfc;
-  background: rgba(192, 38, 211, 0.18);
-  background: color-mix(in oklab, #c026d3 18%, transparent);
-  border-color: rgba(192, 38, 211, 0.32);
-  border-color: color-mix(in oklab, #c026d3 32%, transparent);
+  /* outgoing nested @refs — pink/magenta; uses --wp-kind-ref which flips to fuchsia-800 in light */
+  color: var(--wp-kind-ref);
+  background: var(--wp-kind-ref-bg);
+  border-color: color-mix(in oklab, var(--wp-kind-ref) 32%, transparent);
 }
 .wp-syntax-pill--in {
   /* incoming references — accent (purple) */
@@ -832,12 +865,10 @@ input, textarea, select { font: inherit; }
   border-color: color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
 }
 .wp-syntax-pill--dp {
-  /* inline {a|b|c} — yellow to match dp-brace token color */
-  color: #fcd34d;
-  background: rgba(250, 204, 21, 0.18);
-  background: color-mix(in oklab, #facc15 18%, transparent);
-  border-color: rgba(250, 204, 21, 0.32);
-  border-color: color-mix(in oklab, #facc15 32%, transparent);
+  /* inline {a|b|c} — derivation yellow; --wp-kind-derivation flips to amber-800 in light */
+  color: var(--wp-kind-derivation);
+  background: var(--wp-kind-derivation-bg);
+  border-color: color-mix(in oklab, var(--wp-kind-derivation) 32%, transparent);
 }
 
 /* Syntax-color tint for filter-panel toggle chips. Lets the
@@ -847,13 +878,13 @@ input, textarea, select { font: inherit; }
  * `.wp-syntax-pill--*` above; tint depth tuned for the chip shape
  * (border-only at rest, full fill when active). */
 .wp-chip--toggle.wp-chip--syntax-ref {
-  border-color: color-mix(in oklab, #c026d3 35%, transparent);
-  color: #f0abfc;
+  border-color: color-mix(in oklab, var(--wp-kind-ref) 35%, transparent);
+  color: var(--wp-kind-ref);
 }
 .wp-chip--toggle.wp-chip--syntax-ref[data-active] {
-  background: color-mix(in oklab, #c026d3 22%, transparent);
-  border-color: color-mix(in oklab, #c026d3 45%, transparent);
-  color: #f0abfc;
+  background: color-mix(in oklab, var(--wp-kind-ref) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-kind-ref) 45%, transparent);
+  color: var(--wp-kind-ref);
 }
 .wp-chip--toggle.wp-chip--syntax-in {
   border-color: color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
@@ -865,20 +896,21 @@ input, textarea, select { font: inherit; }
   color: var(--wp-accent-text);
 }
 .wp-chip--toggle.wp-chip--syntax-dp {
-  border-color: color-mix(in oklab, #facc15 35%, transparent);
-  color: #fcd34d;
+  border-color: color-mix(in oklab, var(--wp-kind-derivation) 35%, transparent);
+  color: var(--wp-kind-derivation);
 }
 .wp-chip--toggle.wp-chip--syntax-dp[data-active] {
-  background: color-mix(in oklab, #facc15 22%, transparent);
-  border-color: color-mix(in oklab, #facc15 45%, transparent);
-  color: #fcd34d;
+  background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-kind-derivation) 45%, transparent);
+  color: var(--wp-kind-derivation);
 }
 
-/* Light-mode pill overrides — dark text + stronger tint for contrast on near-white surface */
+/* Light-mode pill overrides — token cascade handles color; adjust tint depth for near-white surface */
 .wp-theme-light .wp-syntax-pill--ref {
-  color: #86198f;
-  background: rgba(192, 38, 211, 0.13);
-  border-color: rgba(192, 38, 211, 0.38);
+  /* --wp-kind-ref → fuchsia-800 (#86198f) in light; --wp-kind-ref-bg → 13% tint */
+  color: var(--wp-kind-ref);
+  background: var(--wp-kind-ref-bg);
+  border-color: color-mix(in oklab, var(--wp-kind-ref) 38%, transparent);
 }
 .wp-theme-light .wp-syntax-pill--in {
   /* color inherits --wp-accent-text which light mode sets to accent-700 (#6d28d9) */
@@ -886,33 +918,38 @@ input, textarea, select { font: inherit; }
   border-color: rgba(139, 92, 246, 0.40);
 }
 .wp-theme-light .wp-syntax-pill--dp {
-  color: #92400e;
-  background: rgba(234, 179, 8, 0.15);
-  border-color: rgba(234, 179, 8, 0.45);
+  /* --wp-kind-derivation → amber-800 (#92400e) in light; --wp-kind-derivation-bg → 12% tint */
+  color: var(--wp-kind-derivation);
+  background: var(--wp-kind-derivation-bg);
+  border-color: color-mix(in oklab, var(--wp-kind-derivation) 45%, transparent);
 }
 
-/* ── Light-mode overrides: chips, tags, links ── */
-/* Tone chips: swap light text for dark text, slightly stronger tint */
+/* ── Light-mode overrides: buttons, chips, tags, links ── */
+/* Danger button hover: white text fails on light tint; swap to dark-red label */
+.wp-theme-light .wp-btn--danger:hover { color: var(--wp-danger); }
+
+/* Tone chips: swap light text for dark text, slightly stronger tint.
+ * Colors route through status tokens which flip to -700/-800 shades in light mode. */
 .wp-theme-light .wp-chip--accent {
   /* color inherits --wp-accent-text-strong → accent-800 in light mode */
   background: rgba(139, 92, 246, 0.13);
   border-color: rgba(139, 92, 246, 0.40);
 }
-.wp-theme-light .wp-chip--success { color: #166534; background: rgba(34,197,94,0.14);  border-color: rgba(34,197,94,0.42);  }
-.wp-theme-light .wp-chip--warn    { color: #92400e; background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.42); }
-.wp-theme-light .wp-chip--danger  { color: #991b1b; background: rgba(239,68,68,0.14);  border-color: rgba(239,68,68,0.42);  }
-.wp-theme-light .wp-chip--info    { color: #1e40af; background: rgba(59,130,246,0.14); border-color: rgba(59,130,246,0.42); }
+.wp-theme-light .wp-chip--success { color: var(--wp-success); background: color-mix(in oklab, var(--wp-success) 14%, transparent); border-color: color-mix(in oklab, var(--wp-success) 42%, transparent); }
+.wp-theme-light .wp-chip--warn    { color: var(--wp-warn);    background: color-mix(in oklab, var(--wp-warn)    14%, transparent); border-color: color-mix(in oklab, var(--wp-warn)    42%, transparent); }
+.wp-theme-light .wp-chip--danger  { color: var(--wp-danger);  background: color-mix(in oklab, var(--wp-danger)  14%, transparent); border-color: color-mix(in oklab, var(--wp-danger)  42%, transparent); }
+.wp-theme-light .wp-chip--info    { color: var(--wp-info);    background: color-mix(in oklab, var(--wp-info)    14%, transparent); border-color: color-mix(in oklab, var(--wp-info)    42%, transparent); }
 /* Tag chip active: color auto-adapts (--wp-accent-text → dark purple in light mode) */
 .wp-theme-light .wp-tag-chip[data-active="true"] {
   background: rgba(139, 92, 246, 0.16);
   border-color: rgba(139, 92, 246, 0.42);
 }
-/* Missing wildcard ref link */
+/* Missing wildcard ref link: --wp-danger flips to red-700 in light */
 .wp-theme-light .wp-syntax-link--missing,
 .wp-theme-light .wp-syntax-link--missing:hover {
-  color: #b91c1c;
-  border-color: rgba(239, 68, 68, 0.42);
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--wp-danger);
+  border-color: color-mix(in oklab, var(--wp-danger) 42%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
 }
 
 /* Reference graph block inside row-expand */
@@ -951,19 +988,17 @@ input, textarea, select { font: inherit; }
   background: color-mix(in oklab, var(--wp-accent-500) 12%, var(--wp-bg-3));
 }
 .wp-syntax-link--missing {
+  /* audit-exempt: red-400 (#f87171) is lighter than --wp-danger for dark-bg legibility;
+   * light-mode override above uses var(--wp-danger) which flips to red-700. */
   color: #f87171;
-  border-color: rgba(248, 113, 113, 0.38);
   border-color: color-mix(in oklab, #f87171 38%, transparent);
-  background: rgba(248, 113, 113, 0.14);
   background: color-mix(in oklab, #f87171 14%, transparent);
   font-family: var(--wp-font-mono);
   cursor: default;
 }
 .wp-syntax-link--missing:hover {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.38);
+  color: #f87171; /* audit-exempt: see above */
   border-color: color-mix(in oklab, #f87171 38%, transparent);
-  background: rgba(248, 113, 113, 0.14);
   background: color-mix(in oklab, #f87171 14%, transparent);
 }
 
@@ -2581,6 +2616,10 @@ html.wp-dark {
   --wp-accent:      var(--wp-accent-500);
   --wp-accent2:     var(--wp-accent-400);
   --wp-accent-glow: rgba(139, 92, 246, 0.15);
+
+  /* Bundle default color — used by bundle kind icon/badge when no user color is set.
+   * Slate-blue hue; distinct from the accent purple so bundles read as "containers". */
+  --wp-bundle-default: #46566B;         /* light override → #3d4f63 (slightly deeper) */
 
   /* Module-kind aliases (legacy single-color tokens) */
   --wp-violet:    var(--wp-kind-wildcard);

@@ -385,12 +385,11 @@ function isValid(row: ModuleRow): boolean {
 }
 .wp-syntax-pill .pi { font-size: 9.5px; } /* audit-exempt: micro icon inside a pill — below scale floor */
 .wp-syntax-pill--ref {
-  /* @ref token color — pink/magenta, intentionally distinct from wildcard KIND violet */
-  color: #f0abfc;
-  background: rgba(192, 38, 211, 0.18);
-  background: color-mix(in oklab, #c026d3 18%, transparent);
-  border-color: rgba(192, 38, 211, 0.32);
-  border-color: color-mix(in oklab, #c026d3 32%, transparent);
+  /* @ref token color — pink/magenta, intentionally distinct from wildcard KIND violet.
+   * Uses --wp-kind-ref / --wp-kind-ref-bg which flip to deeper fuchsia in light mode. */
+  color: var(--wp-kind-ref);
+  background: var(--wp-kind-ref-bg);
+  border-color: color-mix(in oklab, var(--wp-kind-ref) 32%, transparent);
 }
 .wp-syntax-pill--in {
   color: var(--wp-accent-text, #c4b5fd);
@@ -407,20 +406,23 @@ function isValid(row: ModuleRow): boolean {
   border-color: color-mix(in oklab, var(--wp-warn, #facc15) 32%, transparent);
 }
 
-/* Light-mode overrides — must repeat here because scoped [data-v-xxx] wins specificity */
+/* Light-mode overrides — must repeat here because scoped [data-v-xxx] wins specificity
+ * over global tokens.css rules. Colors route through tokens so both files stay in sync. */
 .wp-theme-light .wp-syntax-pill--ref {
-  color: #86198f;
-  background: rgba(192, 38, 211, 0.13);
-  border-color: rgba(192, 38, 211, 0.38);
+  /* --wp-kind-ref / --wp-kind-ref-bg already flip to fuchsia-800 in light mode */
+  color: var(--wp-kind-ref);
+  background: var(--wp-kind-ref-bg);
+  border-color: color-mix(in oklab, var(--wp-kind-ref) 38%, transparent);
 }
 .wp-theme-light .wp-syntax-pill--in {
   background: rgba(139, 92, 246, 0.13);
   border-color: rgba(139, 92, 246, 0.40);
 }
 .wp-theme-light .wp-syntax-pill--dp {
-  color: #92400e;
-  background: rgba(234, 179, 8, 0.15);
-  border-color: rgba(234, 179, 8, 0.45);
+  /* --wp-kind-derivation flips to amber-800 (#92400e) in light mode */
+  color: var(--wp-kind-derivation);
+  background: color-mix(in oklab, var(--wp-kind-derivation) 15%, transparent);
+  border-color: color-mix(in oklab, var(--wp-kind-derivation) 45%, transparent);
 }
 
 .wp-opts-grid {

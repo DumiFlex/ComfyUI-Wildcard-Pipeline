@@ -172,8 +172,8 @@ const hueCursorStyle = computed(() => ({
   touch-action: none;
   user-select: none;
   background:
-    linear-gradient(to top, #000, transparent),
-    linear-gradient(to right, #fff, transparent),
+    linear-gradient(to top, #000, transparent),  /* audit-exempt: HSV model black point */
+    linear-gradient(to right, #fff, transparent), /* audit-exempt: HSV model white point */
     var(--wp-hsv-hue, hsl(0, 100%, 50%));
 }
 .wp-hsv-picker__sv-cursor {
@@ -181,7 +181,7 @@ const hueCursorStyle = computed(() => ({
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid #fff; /* audit-exempt: white ring on cursor for visibility against any hue */
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.45);
   transform: translate(-50%, -50%);
   pointer-events: none;
@@ -213,7 +213,7 @@ const hueCursorStyle = computed(() => ({
   width: 12px;
   height: 16px;
   border-radius: var(--wp-radius-sm);
-  border: 2px solid #fff;
+  border: 2px solid #fff; /* audit-exempt: white ring on cursor for visibility against any hue */
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.45);
   transform: translate(-50%, -50%);
   pointer-events: none;

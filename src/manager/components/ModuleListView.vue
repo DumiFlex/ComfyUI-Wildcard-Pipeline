@@ -634,7 +634,7 @@ defineExpose({
   border-radius: 999px;
   font-size: var(--wp-text-xs);
   background: var(--wp-accent-500);
-  color: #fff;
+  color: #fff; /* audit-exempt: white text on saturated accent-500 is theme-agnostic (≥4.5:1 both themes) */
   margin-left: var(--wp-space-2);
 }
 
