@@ -3,8 +3,9 @@
  * Spacing-token audit — flags raw `px` values in
  * padding / margin / gap / row-gap / column-gap inside manager SFCs.
  *
- * Allowed: 0, 1px, 2px hairlines (matches --wp-space-0..1) plus any
- * value already routed through a CSS variable.
+ * Allowed (raw): 0 (= var(--wp-space-0)), 2px (= var(--wp-space-1)),
+ * and 1px as an off-grid hairline exemption (no matching token).
+ * Plus any value already routed through a CSS variable.
  *
  * Scope:
  *   - src/manager/**\/*.vue   (scoped + global style blocks)
@@ -22,10 +23,16 @@ const ROOT = resolve(import.meta.dirname, "..");
 const SCAN_GLOBS = [
   "src/manager/**/*.vue",
 ];
-const RAW_PX_RE = /(padding|margin|gap|row-gap|column-gap)(-[a-z]+)?\s*:\s*([^;{}\n]+)/gi;
+const RAW_PX_RE = /(padding|margin|gap|row-gap|column-gap)(-[a-z]+(-[a-z]+)?)?\s*:\s*([^;{}\n]+)/gi;
 const TOKEN_RE = /var\(--wp-space-/;
 const ALLOWED_RAW = /^\s*(0|1px|2px)\s*$/;
-// Pieces that contain no px at all are non-spacing values (auto, inherit, etc.) — not flagged.
+// Performance guard: skip declarations with no `px` substring at all.
+// Catches three cases without entering the per-piece loop:
+//   - keyword values (margin: auto, margin: 0)
+//   - tokens-only values (gap: var(--wp-space-4))
+//   - zero shorthand (padding: 0; padding: 0 0)
+// The piece-by-piece loop still validates any declaration that does
+// contain `px`, including mixed shorthand like `var(...) 14px`.
 const HAS_PX_RE = /\d+px/;
 // After the match, the rest of the line may hold an audit-exempt comment.
 const AUDIT_EXEMPT_RE = /\/\*\s*audit-exempt/;
@@ -42,9 +49,8 @@ for await (const file of glob(SCAN_GLOBS, { cwd: ROOT })) {
   }));
   for (const { body, offset } of styleBlocks) {
     for (const match of body.matchAll(RAW_PX_RE)) {
-      const declValue = match[3];
-      // Skip declarations that contain no px values (e.g. margin: auto, margin: 0 auto).
-      if (!HAS_PX_RE.test(declValue)) continue;
+      const declValue = match[4];
+      if (!HAS_PX_RE.test(declValue)) continue; // see HAS_PX_RE comment above
       // Multi-token shorthand: split on whitespace, each piece either var() or allowed raw.
       const pieces = declValue.trim().split(/\s+/);
       const allOk = pieces.every(p => TOKEN_RE.test(p) || ALLOWED_RAW.test(p));

@@ -80,8 +80,11 @@
   --wp-space-6: 16px;
   --wp-space-7: 24px;
   --wp-space-8: 32px;
-  /* Mapping rule: prefer the closest token. Outliers (1px, 3px hairlines)
-   * stay raw and are exempt from the audit. */
+  /* Mapping rule: prefer the closest token. The audit allows raw 0
+   * (= --wp-space-0) and 2px (= --wp-space-1) as direct token values,
+   * plus 1px as an off-grid hairline exemption (e.g. 1px borders).
+   * Other off-grid values (3px, 5px, 7px, etc.) stay raw only when
+   * tagged `audit-exempt` with a justifying comment. */
 
   /* Sizing — 4/8 grid */
   --wp-radius-sm: 6px;
