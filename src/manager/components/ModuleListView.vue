@@ -630,7 +630,7 @@ defineExpose({
   justify-content: center;
   min-width: 18px;
   height: 18px;
-  padding: 0 var(--wp-space-3); /* audit-exempt: 0 vertical keeps badge inline */
+  padding: 0 var(--wp-space-3);
   border-radius: 9px;
   font-size: 10.5px;
   background: var(--wp-accent-500);
@@ -645,7 +645,7 @@ defineExpose({
   padding: var(--wp-space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
 }
 .wp-filter-panel__extra-label {
   display: block;
@@ -686,7 +686,7 @@ defineExpose({
 .wp-bulk-bar {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   padding: var(--wp-space-4) var(--wp-space-5);
   background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
@@ -826,7 +826,7 @@ defineExpose({
 .wp-page-pager {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   padding: var(--wp-space-4) var(--wp-space-5);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);

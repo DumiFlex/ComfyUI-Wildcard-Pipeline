@@ -528,7 +528,7 @@ const branchCount = computed(() => rule.value.branches.length);
   font: inherit;
   color: var(--wp-text);
 }
-.rule-head[aria-expanded="true"] { margin-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */ }
+.rule-head[aria-expanded="true"] { margin-bottom: var(--wp-space-5); }
 .rule-head__chev {
   font-size: 11px;
   color: var(--wp-text-muted);
@@ -545,8 +545,8 @@ const branchCount = computed(() => rule.value.branches.length);
 .branches {
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
-  padding-left: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
+  padding-left: var(--wp-space-5);
   border-left: 2px solid color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 30%, transparent);
 }
 
@@ -554,7 +554,7 @@ const branchCount = computed(() => rule.value.branches.length);
   background: var(--wp-bg-2, #18181b);
   border: 1px solid var(--wp-border, #2c2c34);
   border-radius: 8px;
-  padding: var(--wp-space-5) var(--wp-space-5); /* audit-exempt: was 10/12; rounded to 12 */
+  padding: var(--wp-space-5) var(--wp-space-5);
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-4);
@@ -613,7 +613,7 @@ const branchCount = computed(() => rule.value.branches.length);
   margin-bottom: var(--wp-space-2);
 }
 .dvr-grid--then {
-  margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  margin-top: var(--wp-space-5);
 }
 .dvr-value-row {
   display: grid;
@@ -658,7 +658,7 @@ const branchCount = computed(() => rule.value.branches.length);
   flex: 1;
   background: transparent;
   border: 0;
-  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  padding: var(--wp-space-3) var(--wp-space-5);
   color: var(--wp-kind-derivation, #fbbf24);
   font: 600 11px var(--wp-font-mono, ui-monospace, monospace);
   min-width: 0;
@@ -760,7 +760,7 @@ const branchCount = computed(() => rule.value.branches.length);
 .addbar {
   display: flex;
   gap: var(--wp-space-3);
-  margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  margin-top: var(--wp-space-5);
   padding-left: var(--wp-space-5);
 }
 </style>

@@ -158,7 +158,7 @@ function onDensity(d: Density) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--wp-space-6) var(--wp-space-6); /* audit-exempt: was 14px vertical; rounded to 16px */
+  padding: var(--wp-space-6) var(--wp-space-6);
   border-bottom: 1px solid var(--wp-border);
 }
 .wp-tweaks__header h2 {
@@ -193,7 +193,7 @@ function onDensity(d: Density) {
   padding: var(--wp-space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-6); /* audit-exempt: was 18px; rounded to 16px */
+  gap: var(--wp-space-6);
 }
 
 .wp-tweaks__section { display: flex; flex-direction: column; gap: var(--wp-space-4); }
@@ -229,7 +229,7 @@ function onDensity(d: Density) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  padding: var(--wp-space-3) var(--wp-space-5);
   border-radius: var(--wp-radius-sm);
   cursor: pointer;
   font-size: 12px;

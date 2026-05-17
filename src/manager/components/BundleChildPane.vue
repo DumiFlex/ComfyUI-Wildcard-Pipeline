@@ -242,7 +242,7 @@ const constraintTargetValues = computed<string[]>(() => {
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--pane-kind, var(--wp-accent-500));
   border-radius: var(--wp-radius, 4px);
-  padding: var(--wp-space-5) var(--wp-space-6); /* audit-exempt: was 14px horiz; rounded to 16px */
+  padding: var(--wp-space-5) var(--wp-space-6);
   align-self: start;
   min-width: 0;
 }
@@ -259,8 +259,8 @@ const constraintTargetValues = computed<string[]>(() => {
 
 .wp-bpane__head {
   display: flex; align-items: center; gap: var(--wp-space-4);
-  padding-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
-  margin-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding-bottom: var(--wp-space-5);
+  margin-bottom: var(--wp-space-5);
   border-bottom: 1px solid var(--wp-border);
 }
 .wp-bpane__kindicon {
@@ -279,7 +279,7 @@ const constraintTargetValues = computed<string[]>(() => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--pane-kind, var(--wp-accent-500));
-  padding: 2px var(--wp-space-3); /* audit-exempt: 2px vertical hairline badge */
+  padding: 2px var(--wp-space-3);
   border-radius: 3px;
   background: color-mix(in oklab, var(--pane-kind, var(--wp-accent-500)) 14%, transparent);
 }
@@ -308,12 +308,12 @@ const constraintTargetValues = computed<string[]>(() => {
 .wp-bpane__sections {
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
 }
 
 .wp-bpane__unsupported {
   display: flex; align-items: center; gap: var(--wp-space-4);
-  padding: var(--wp-space-6); /* audit-exempt: was 14px; rounded to 16px */
+  padding: var(--wp-space-6);
   font-size: 12px;
   color: var(--wp-text-dim);
   background: var(--wp-bg-2);

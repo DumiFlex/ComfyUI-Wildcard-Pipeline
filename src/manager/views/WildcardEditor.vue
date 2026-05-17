@@ -374,7 +374,7 @@ defineExpose({ historyEntries, applyRestore });
 .sub-add-row {
   display: flex;
   gap: var(--wp-space-4);
-  margin-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  margin-bottom: var(--wp-space-5);
 }
 .sub-add-row > :first-child { flex: 1; }
 .sub-list {

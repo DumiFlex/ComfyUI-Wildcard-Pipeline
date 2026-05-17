@@ -924,7 +924,7 @@ watch(
 .wp-io-toolbar {
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   padding: var(--wp-space-5);
   border-bottom: 1px solid var(--wp-border);
 }
@@ -942,7 +942,7 @@ watch(
 .wp-io-group__head {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   padding: 9px var(--wp-space-5); /* audit-exempt: 9px vertical hairline keeps row compact */
   background: var(--wp-bg-2);
   cursor: pointer;
@@ -967,7 +967,7 @@ watch(
 .wp-io-row {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   padding: 7px var(--wp-space-5) 7px 36px; /* audit-exempt: 7px/36px match group-head vertical rhythm */
   border-top: 1px solid var(--wp-border);
   cursor: pointer;
@@ -1002,12 +1002,12 @@ watch(
   text-align: right;
 }
 .wp-io-warn { color: var(--wp-warn); }
-.wp-io-download { width: 100%; margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */ }
+.wp-io-download { width: 100%; margin-top: var(--wp-space-5); }
 
 .wp-io-import-main {
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-6); /* audit-exempt: was 14px; rounded to 16px */
+  gap: var(--wp-space-6);
 }
 
 .wp-io-help {
@@ -1016,7 +1016,7 @@ watch(
 }
 .wp-io-help code {
   background: var(--wp-bg-3);
-  padding: 1px var(--wp-space-3); /* audit-exempt: 1px vertical hairline */
+  padding: 1px var(--wp-space-3);
   border-radius: 4px;
   font-size: 12px;
 }
@@ -1026,7 +1026,7 @@ watch(
 .wp-io-drop {
   border: 1px dashed var(--wp-border-strong);
   border-radius: 10px;
-  padding: var(--wp-space-7) var(--wp-space-6); /* audit-exempt: was 28px; rounded to 24px */
+  padding: var(--wp-space-7) var(--wp-space-6);
   text-align: center;
   cursor: pointer;
   background: var(--wp-bg-2);
@@ -1048,8 +1048,8 @@ watch(
 }
 
 .wp-io-error {
-  margin-top: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
-  padding: var(--wp-space-4) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  margin-top: var(--wp-space-5);
+  padding: var(--wp-space-4) var(--wp-space-5);
   border-radius: 6px;
   background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
   color: var(--wp-danger);
@@ -1066,7 +1066,7 @@ watch(
 .wp-io-badge {
   display: inline-flex;
   align-items: center;
-  padding: 1px var(--wp-space-4); /* audit-exempt: 1px vertical hairline */
+  padding: 1px var(--wp-space-4);
   border-radius: 999px;
   border: 1px solid transparent;
   font-size: 11px;

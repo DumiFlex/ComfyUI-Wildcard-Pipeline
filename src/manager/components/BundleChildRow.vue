@@ -222,7 +222,7 @@ const isEdited = computed(() => props.edited);
   margin-left: auto;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 9px;
-  padding: 1px var(--wp-space-3); /* audit-exempt: 1px vertical hairline badge */
+  padding: 1px var(--wp-space-3);
   border-radius: 3px;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
@@ -240,7 +240,7 @@ const isEdited = computed(() => props.edited);
   font-size: 8.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 1px var(--wp-space-3); /* audit-exempt: 1px vertical hairline badge */
+  padding: 1px var(--wp-space-3);
   border-radius: 999px;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);

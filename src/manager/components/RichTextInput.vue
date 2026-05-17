@@ -521,12 +521,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 .wp-rt__mirror--single {
-  padding: 0 var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px; matches input padding */
+  padding: 0 var(--wp-space-5);
   line-height: var(--wp-input-h, 34px);
   white-space: pre;
 }
 .wp-rt__mirror--multi {
-  padding: var(--wp-space-4) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  padding: var(--wp-space-4) var(--wp-space-5);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -551,11 +551,11 @@ onBeforeUnmount(() => {
 }
 .wp-rt__input--single {
   height: var(--wp-input-h, 34px);
-  padding: 0 var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px; must match mirror */
+  padding: 0 var(--wp-space-5);
   line-height: var(--wp-input-h, 34px);
 }
 .wp-rt__input--multi {
-  padding: var(--wp-space-4) var(--wp-space-5); /* audit-exempt: was 10px horiz; must match mirror */
+  padding: var(--wp-space-4) var(--wp-space-5);
   line-height: 1.5;
   resize: vertical;
   min-height: 72px;
@@ -625,7 +625,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: var(--wp-space-4);
-  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  padding: var(--wp-space-3) var(--wp-space-5);
   font-size: 11px;
   color: var(--wp-text-dim, #6e6e7c);
   background: var(--wp-bg-3, #1e1e2a);

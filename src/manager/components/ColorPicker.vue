@@ -172,11 +172,11 @@ function isActivePreset(preset: string): boolean {
   border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
-  padding: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  padding: var(--wp-space-5);
   width: 220px;
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
 }
 
 .wp-color-picker__row {

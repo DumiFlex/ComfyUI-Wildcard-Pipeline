@@ -153,7 +153,7 @@ function resetPreferences() {
 
 .wp-settings__hint {
   font-size: 12.5px;
-  margin: 0 0 var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  margin: 0 0 var(--wp-space-5);
 }
 
 .wp-settings__radio {

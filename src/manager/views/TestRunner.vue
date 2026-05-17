@@ -798,7 +798,7 @@ function pickKind(k: SelectorKind) {
 }
 .wp-seg__btn {
   display: inline-flex; align-items: center; gap: var(--wp-space-3);
-  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  padding: var(--wp-space-3) var(--wp-space-5);
   border-radius: 6px; font-size: 12.5px; cursor: pointer;
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);
@@ -827,10 +827,10 @@ function pickKind(k: SelectorKind) {
 .wp-tr-flags {
   font-size: 11.5px;
   display: flex; align-items: center; gap: var(--wp-space-4); flex-wrap: wrap;
-  margin-bottom: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  margin-bottom: var(--wp-space-5);
 }
 .wp-tr-flag-chip {
-  padding: 1px var(--wp-space-3); border-radius: 4px; /* audit-exempt: 1px vertical hairline */
+  padding: 1px var(--wp-space-3); border-radius: 4px;
   background: var(--wp-bg-3);
   font-family: var(--wp-font-mono);
   font-size: 11px;
@@ -838,14 +838,14 @@ function pickKind(k: SelectorKind) {
 
 .wp-tr-help {
   font-size: 11.5px;
-  margin: 0 0 var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  margin: 0 0 var(--wp-space-5);
 }
 
-.wp-hist { display: flex; flex-direction: column; gap: var(--wp-space-4); /* audit-exempt: was 7px; rounded to 8px */ }
+.wp-hist { display: flex; flex-direction: column; gap: var(--wp-space-4); }
 .wp-hist__row {
   display: grid;
   grid-template-columns: minmax(180px, 280px) 1fr 50px;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   align-items: center;
 }
 .wp-hist__template { min-width: 0; font-size: 12px; }
@@ -874,7 +874,7 @@ function pickKind(k: SelectorKind) {
 .wp-tr-fixed-grid {
   display: grid;
   grid-template-columns: 200px 1fr;
-  gap: var(--wp-space-3) var(--wp-space-6); /* audit-exempt: was 14px col-gap; rounded to 16px */
+  gap: var(--wp-space-3) var(--wp-space-6);
   font-size: 12.5px;
   align-items: center;
 }
@@ -885,7 +885,7 @@ function pickKind(k: SelectorKind) {
 
 .wp-tr-combine-list { display: flex; flex-direction: column; gap: var(--wp-space-3); }
 .wp-tr-combine-row {
-  padding: var(--wp-space-4) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  padding: var(--wp-space-4) var(--wp-space-5);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: 6px;
@@ -911,7 +911,7 @@ function pickKind(k: SelectorKind) {
 .wp-tr-cn-table td.wp-tr-cn-table__w,
 .wp-tr-cn-table td.wp-tr-cn-table__sv { text-align: right; }
 .wp-tr-cn-legend {
-  display: flex; gap: var(--wp-space-6); margin-top: var(--wp-space-5); /* audit-exempt: was 14px gap; rounded to 16px */
+  display: flex; gap: var(--wp-space-6); margin-top: var(--wp-space-5);
   font-size: 11px; color: var(--wp-text-muted);
 }
 .wp-tr-dot { color: var(--wp-text); }
@@ -920,9 +920,9 @@ function pickKind(k: SelectorKind) {
 .wp-tr-rule-row {
   display: grid;
   grid-template-columns: 220px auto 1fr;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   align-items: center;
-  padding: var(--wp-space-3) var(--wp-space-5); /* audit-exempt: was 10px horiz; rounded to 12px */
+  padding: var(--wp-space-3) var(--wp-space-5);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: 6px;
@@ -930,7 +930,7 @@ function pickKind(k: SelectorKind) {
 }
 .wp-tr-rule-id { color: var(--wp-text); }
 .wp-tr-rule-status {
-  font-size: 11px; padding: 2px var(--wp-space-4); border-radius: 4px; /* audit-exempt: 2px hairline vertical */
+  font-size: 11px; padding: 2px var(--wp-space-4); border-radius: 4px;
   background: var(--wp-bg-3); color: var(--wp-text-muted);
 }
 .wp-tr-rule-status[data-status="branch"] {
@@ -948,7 +948,7 @@ function pickKind(k: SelectorKind) {
 }
 .wp-tr-rule-delta code {
   background: var(--wp-bg-3);
-  padding: 1px var(--wp-space-3); border-radius: 4px; /* audit-exempt: 1px hairline vertical */
+  padding: 1px var(--wp-space-3); border-radius: 4px;
 }
 .wp-tr-rule-fire-meta { font-size: 11px; }
 
@@ -956,7 +956,7 @@ function pickKind(k: SelectorKind) {
 .wp-tr-step-row {
   display: grid;
   grid-template-columns: 32px 110px 180px 1fr;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   padding: var(--wp-space-3) var(--wp-space-4);
   border-radius: 5px;
   background: var(--wp-bg-2);

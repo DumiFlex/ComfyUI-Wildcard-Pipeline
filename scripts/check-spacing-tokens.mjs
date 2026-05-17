@@ -45,7 +45,6 @@ for await (const file of glob(SCAN_GLOBS, { cwd: ROOT })) {
       const declValue = match[3];
       // Skip declarations that contain no px values (e.g. margin: auto, margin: 0 auto).
       if (!HAS_PX_RE.test(declValue)) continue;
-      if (TOKEN_RE.test(declValue)) continue;
       // Multi-token shorthand: split on whitespace, each piece either var() or allowed raw.
       const pieces = declValue.trim().split(/\s+/);
       const allOk = pieces.every(p => TOKEN_RE.test(p) || ALLOWED_RAW.test(p));

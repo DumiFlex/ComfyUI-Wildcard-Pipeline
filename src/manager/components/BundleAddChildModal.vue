@@ -194,8 +194,8 @@ function pick(row: ModuleRow) {
 .wp-bundle-add__head {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
-  padding: var(--wp-space-5) var(--wp-space-6); /* audit-exempt: was 14px horiz; rounded to 16px */
+  gap: var(--wp-space-5);
+  padding: var(--wp-space-5) var(--wp-space-6);
   border-bottom: 1px solid var(--wp-border);
   background: var(--wp-bg-3);
   color: var(--wp-text);
@@ -219,8 +219,8 @@ function pick(row: ModuleRow) {
 .wp-bundle-add__body {
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
-  padding: var(--wp-space-5) var(--wp-space-6); /* audit-exempt: was 14px horiz; rounded to 16px */
+  gap: var(--wp-space-5);
+  padding: var(--wp-space-5) var(--wp-space-6);
   min-height: 0;
   flex: 1;
 }
@@ -249,7 +249,7 @@ function pick(row: ModuleRow) {
 }
 .wp-bundle-add__tab-count {
   font-size: 9.5px;
-  padding: 0 var(--wp-space-3); /* audit-exempt: 0 vertical keeps badge inline */
+  padding: 0 var(--wp-space-3);
   border-radius: 999px;
   background: color-mix(in oklab, currentColor 16%, transparent);
 }
@@ -277,7 +277,7 @@ function pick(row: ModuleRow) {
   min-height: 0;
 }
 .wp-bundle-add__empty {
-  padding: var(--wp-space-6); /* audit-exempt: was 18px; rounded to 16px */
+  padding: var(--wp-space-6);
   text-align: center;
   color: var(--wp-text-dim);
   font-size: 12px;
@@ -286,7 +286,7 @@ function pick(row: ModuleRow) {
   display: grid;
   grid-template-columns: 28px 1fr 22px;
   align-items: center;
-  gap: var(--wp-space-5); /* audit-exempt: was 10px; rounded to 12px */
+  gap: var(--wp-space-5);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps row compact */
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);

@@ -120,7 +120,7 @@ function onRestore(entry: ModuleHistoryEntry) {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-6); /* audit-exempt: was 14px; rounded to 16px */
+  gap: var(--wp-space-6);
   /* Buffer so the last card clears the gradient + sticky footer top. */
   padding-bottom: var(--wp-space-7);
 }

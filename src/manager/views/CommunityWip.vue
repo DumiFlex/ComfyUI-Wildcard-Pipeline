@@ -51,7 +51,7 @@ const branchUrl =
 .wp-community-wip__body {
   display: flex;
   align-items: flex-start;
-  gap: var(--wp-space-6); /* audit-exempt: 14px rounded to 16px for icon+text optical balance */
+  gap: var(--wp-space-6);
   padding: var(--wp-space-2) 0;
 }
 .wp-community-wip__lead {
