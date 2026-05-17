@@ -625,7 +625,7 @@ input, textarea, select { font: inherit; }
   text-decoration: underline;
 }
 .wp-btn--link:focus-visible { box-shadow: none; text-decoration: underline; }
-.wp-btn--lg { height: 40px; padding: 0 16px; font-size: 13.5px; border-radius: 8px; }
+.wp-btn--lg { height: var(--wp-control-h-lg); padding: 0 var(--wp-space-6); font-size: 13.5px; border-radius: var(--wp-radius); }
 .wp-btn--md { /* alias of default size */ }
 .wp-btn--danger { color: var(--wp-danger); }
 .wp-btn--danger:hover { background: color-mix(in oklab, var(--wp-danger) 14%, transparent); border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent); color: #fff; /* audit-exempt: white on dark-tinted hover bg (17:1 dark); light override at line 942 uses var(--wp-danger) */ }

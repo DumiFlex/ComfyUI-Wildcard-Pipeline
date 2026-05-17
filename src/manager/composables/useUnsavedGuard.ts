@@ -51,7 +51,11 @@ export function useUnsavedGuard(isDirty: () => boolean): UnsavedGuard {
     }
   }
   window.addEventListener("beforeunload", handleUnload);
-  onBeforeUnmount(() => window.removeEventListener("beforeunload", handleUnload));
+  onBeforeUnmount(() => {
+    window.removeEventListener("beforeunload", handleUnload);
+    pendingResolve?.(false);
+    pendingResolve = null;
+  });
 
   function onConfirmLeave(): void {
     showConfirm.value = false;
