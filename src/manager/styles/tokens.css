@@ -133,6 +133,20 @@
   --wp-shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
   --wp-shadow-xl: 0 20px 60px rgba(0,0,0,0.5);
 
+  /* Elevation — semantic aliases over the shadow scale. Pick by
+   * purpose (resting, popover, modal) rather than visual weight.
+   *   elev-0  flat (no shadow)
+   *   elev-1  resting cards, list items
+   *   elev-2  popovers, dropdowns, hover-lift
+   *   elev-3  modals
+   *   elev-4  full-page overlays (rare)
+   */
+  --wp-elev-0: none;
+  --wp-elev-1: var(--wp-shadow-sm);
+  --wp-elev-2: var(--wp-shadow);
+  --wp-elev-3: var(--wp-shadow-lg);
+  --wp-elev-4: var(--wp-shadow-xl);
+
   /* Overlays / drawers */
   --wp-overlay-bg: rgba(0, 0, 0, 0.45);
 
