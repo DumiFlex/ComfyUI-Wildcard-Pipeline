@@ -51,9 +51,56 @@ def test_get_connection_row_factory_supports_name_access(tmp_path):
     conn.close()
 
 
-def test_resolve_db_path_falls_back_to_home(monkeypatch):
-    from pathlib import Path
+def test_resolve_db_path_prefers_comfyui_user_dir(monkeypatch, tmp_path):
+    """When ComfyUI's user directory is detected AND no legacy DB
+    exists, the resolver should land in `<ComfyUI>/user/wildcard-pipeline.db`."""
+    from engine.db import connection as conn_mod
+
     monkeypatch.delenv("WP_DB_PATH", raising=False)
     monkeypatch.delenv("COMFYUI_USER_DIR", raising=False)
+    # Fix the detected ComfyUI user dir to a clean tmp path so we
+    # don't depend on whatever the path-traversal finds in the host
+    # ComfyUI install. Also point the legacy fallback at a path that
+    # doesn't exist so the backward-compat shortcut stays inert.
+    fake_comfy_user = tmp_path / "comfy-user"
+    monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_api", lambda: None)
+    monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_path", lambda: fake_comfy_user)
+    monkeypatch.setattr(conn_mod, "_legacy_home_path", lambda: tmp_path / "nonexistent.db")
+    result = resolve_db_path()
+    assert result == fake_comfy_user / "wildcard-pipeline.db"
+
+
+def test_resolve_db_path_prefers_legacy_when_new_empty_and_legacy_has_data(
+    monkeypatch, tmp_path,
+):
+    """Backward-compat path: when a DB already exists at the legacy
+    home location but not at the new ComfyUI user location, the
+    resolver returns the legacy path so existing installs keep
+    their data on upgrade."""
+    from engine.db import connection as conn_mod
+
+    monkeypatch.delenv("WP_DB_PATH", raising=False)
+    monkeypatch.delenv("COMFYUI_USER_DIR", raising=False)
+    fake_comfy_user = tmp_path / "comfy-user"
+    fake_legacy = tmp_path / "legacy.db"
+    fake_legacy.write_bytes(b"existing-db")
+    monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_api", lambda: None)
+    monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_path", lambda: fake_comfy_user)
+    monkeypatch.setattr(conn_mod, "_legacy_home_path", lambda: fake_legacy)
+    result = resolve_db_path()
+    assert result == fake_legacy
+
+
+def test_resolve_db_path_falls_back_to_home_when_no_comfyui_root(monkeypatch):
+    """Standalone install (no ComfyUI on the path). Both detectors
+    return None; we fall through to the legacy home path."""
+    from pathlib import Path
+
+    from engine.db import connection as conn_mod
+
+    monkeypatch.delenv("WP_DB_PATH", raising=False)
+    monkeypatch.delenv("COMFYUI_USER_DIR", raising=False)
+    monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_api", lambda: None)
+    monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_path", lambda: None)
     result = resolve_db_path()
     assert result == Path.home() / ".comfyui" / "wildcard-pipeline.db"
