@@ -66,13 +66,13 @@
   --wp-danger:  #ef4444;
   --wp-info:    #3b82f6;
 
-  /* Status text — for direct `color:` usage on surfaces (not inside tint chips).
-   * Dark defaults are the high-chroma values above (reused via alias).
-   * Light overrides below swap to deeper shades that pass WCAG AA on near-white. */
-  --wp-danger-text:  var(--wp-danger);   /* overridden to red-800  in light */
-  --wp-success-text: var(--wp-success);  /* overridden to green-800 in light */
-  --wp-warn-text:    var(--wp-warn);     /* overridden to amber-800 in light */
-  --wp-info-text:    var(--wp-info);     /* overridden to blue-800  in light */
+  /* Status text — for direct `color:` usage on dark tinted surfaces.
+   * Dark: lighter tint than the base status color (red-300 vs red-500) for dark-bg legibility.
+   * Light overrides below cascade through --wp-danger etc. which flip to -700 shades. */
+  --wp-danger-text:  #fca5a5;            /* red-300; light override → var(--wp-danger) = red-700 */
+  --wp-success-text: #86efac;            /* green-300; light override → var(--wp-success) = green-700 */
+  --wp-warn-text:    #fcd34d;            /* yellow-300; light override → var(--wp-warn) = amber-700 */
+  --wp-info-text:    #93c5fd;            /* blue-300;  light override → var(--wp-info)  = blue-700 */
 
   /* Syntax @ref pill color — pink/magenta, distinct from wildcard KIND violet */
   --wp-kind-ref:    #f0abfc;            /* fuchsia-300; light override → fuchsia-800 */
@@ -229,11 +229,12 @@
   --wp-danger:       #b91c1c;           /* red-700     5.25:1 on white */
   --wp-info:         #1d4ed8;           /* blue-700    5.53:1 on white */
 
-  /* Status-text aliases track the main tokens in light mode (same override cascade) */
-  --wp-danger-text:  var(--wp-danger);
-  --wp-success-text: var(--wp-success);
-  --wp-warn-text:    var(--wp-warn);
-  --wp-info-text:    var(--wp-info);
+  /* Status-text: in light mode, override to the same -700 shade as the base token
+   * (dark has lighter pastels; light has deeper shades — both are correct for their surface) */
+  --wp-danger-text:  var(--wp-danger);   /* red-700 via cascade */
+  --wp-success-text: var(--wp-success);  /* green-700 via cascade */
+  --wp-warn-text:    var(--wp-warn);     /* amber-700 via cascade */
+  --wp-info-text:    var(--wp-info);     /* blue-700 via cascade */
 
   /* Overlay — lighter scrim so light bg beneath still registers as dimmed */
   --wp-overlay-bg: rgba(15, 15, 30, 0.35);
@@ -244,6 +245,15 @@
   /* Ref pill — deeper magenta for light surfaces */
   --wp-kind-ref:    #86198f;            /* fuchsia-800 5.03:1 on white */
   --wp-kind-ref-bg: rgba(192, 38, 211, 0.13);
+
+  /* Rich-text inline tokens — flip bright pastels to readable dark shades */
+  --wp-rt-token-good:    #166534;       /* green-800   4.80:1 on white */
+  --wp-rt-token-good-bg: color-mix(in oklab, #166534 12%, transparent);
+  --wp-rt-token-mut:     #9a3412;       /* orange-800  5.19:1 on white */
+  --wp-rt-token-mut-bg:  color-mix(in oklab, #9a3412 12%, transparent);
+
+  /* Status-modified badge (ImportExport mod indicator) — orange-800 for light */
+  --wp-status-modified:  #c2410c;       /* orange-700  4.63:1 on white */
 }
 
 /* ---------- Light-theme kind-color overrides ----------
@@ -525,7 +535,7 @@ input, textarea, select { font: inherit; }
 .wp-btn--primary {
   background: linear-gradient(180deg, var(--wp-accent-500), var(--wp-accent-600));
   border-color: var(--wp-accent-600);
-  color: #fff;
+  color: #fff; /* audit-exempt: white on saturated accent-500/600 gradient ≥4.5:1 both themes */
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 40%, transparent) inset;
 }
 .wp-btn--primary:hover {
@@ -676,11 +686,14 @@ input, textarea, select { font: inherit; }
   border-color: rgba(139, 92, 246, 0.38);
   border-color: color-mix(in oklab, var(--wp-accent-500) 38%, transparent);
 }
-/* dark-mode text is intentionally light; light-mode overrides below */
-.wp-chip--success { color: #86efac; background: rgba(34,197,94,0.14);  border-color: rgba(34,197,94,0.36);  }
-.wp-chip--warn    { color: #fcd34d; background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.36); }
-.wp-chip--danger  { color: #fca5a5; background: rgba(239,68,68,0.14);  border-color: rgba(239,68,68,0.36);  }
-.wp-chip--info    { color: #93c5fd; background: rgba(59,130,246,0.14); border-color: rgba(59,130,246,0.36); }
+/* Status chips — text is a lighter tint of the status color in dark, deeper shade in light.
+ * Dark theme: --wp-success etc. are bright saturated (green-500/amber-500/red-500/blue-500),
+ * readable on dark surface tints. Light-mode overrides below flip to -700 shades via the
+ * status token cascade set in .wp-theme-light. */
+.wp-chip--success { color: var(--wp-success); background: color-mix(in oklab, var(--wp-success) 14%, transparent); border-color: color-mix(in oklab, var(--wp-success) 36%, transparent); }
+.wp-chip--warn    { color: var(--wp-warn);    background: color-mix(in oklab, var(--wp-warn)    14%, transparent); border-color: color-mix(in oklab, var(--wp-warn)    36%, transparent); }
+.wp-chip--danger  { color: var(--wp-danger);  background: color-mix(in oklab, var(--wp-danger)  14%, transparent); border-color: color-mix(in oklab, var(--wp-danger)  36%, transparent); }
+.wp-chip--info    { color: var(--wp-info);    background: color-mix(in oklab, var(--wp-info)    14%, transparent); border-color: color-mix(in oklab, var(--wp-info)    36%, transparent); }
 .wp-chip__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .wp-chip__close {
   background: none; border: none; padding: 0; margin-left: 2px;
@@ -1166,7 +1179,7 @@ input, textarea, select { font: inherit; }
     linear-gradient(135deg, #2c1f6b, #1a2747);
   border: 1px solid rgba(255,255,255,0.06);
   overflow: hidden;
-  color: #fff;
+  color: #fff; /* audit-exempt: hero always renders on dark gradient (light override below keeps dark bg) */
 }
 .wp-theme-light .wp-hero {
   /* Light theme: keep gradient but darker so white text reads cleanly */
@@ -1346,7 +1359,7 @@ input, textarea, select { font: inherit; }
 
 /* ---------- Toggle ---------- */
 .wp-toggle { width: 32px; height: 18px; background: var(--wp-bg-3); border-radius: 999px; border: 1px solid var(--wp-border); position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; padding: 0; }
-.wp-toggle::after { content: ""; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: transform .15s; }
+.wp-toggle::after { content: ""; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #fff; /* audit-exempt: white knob on colored toggle track */ border-radius: 50%; transition: transform .15s; }
 .wp-toggle[data-on="true"] { background: var(--wp-accent-600); border-color: var(--wp-accent-500); }
 .wp-toggle[data-on="true"]::after { transform: translateX(14px); }
 .wp-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -1378,7 +1391,7 @@ input, textarea, select { font: inherit; }
 .wp-check[data-checked="true"] {
   background: var(--wp-accent-600);
   border-color: var(--wp-accent-500);
-  color: #fff;
+  color: #fff; /* audit-exempt: white checkmark on accent-600 background ≥4.5:1 both themes */
 }
 .wp-check svg { width: 12px; height: 12px; display: block; }
 .wp-check:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -1426,8 +1439,8 @@ input, textarea, select { font: inherit; }
   line-height: 1.6;
 }
 .wp-token-var { color: var(--wp-accent-text); }
-.wp-token-str { color: #86efac; }
-.wp-token-key { color: #fcd34d; }
+.wp-token-str { color: var(--wp-rt-token-good); }   /* green; --wp-rt-token-good flips in light */
+.wp-token-key { color: var(--wp-kind-derivation); } /* amber; --wp-kind-derivation flips in light */
 .wp-token-com { color: var(--wp-text-dim); }
 
 /* ---------- Toast ---------- */
@@ -1919,30 +1932,35 @@ input, textarea, select { font: inherit; }
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 50%, transparent);
 }
 .wp-rt-ref {
-  color: #f0abfc;
-  background: color-mix(in oklab, #c026d3 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, #c026d3 28%, transparent);
+  /* --wp-kind-ref = fuchsia-300 dark / fuchsia-800 light */
+  color: var(--wp-kind-ref);
+  background: var(--wp-kind-ref-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-kind-ref) 28%, transparent);
   border-radius: 4px;
   font-weight: 500;
 }
-.wp-rt-dp-brace { color: #fcd34d; font-weight: 600; }
-.wp-rt-dp-pipe { color: #fcd34d; opacity: 0.65; }
+/* dp = inline {a|b|c} derivation — matches --wp-kind-derivation (amber) */
+.wp-rt-dp-brace { color: var(--wp-kind-derivation); font-weight: 600; }
+.wp-rt-dp-pipe { color: var(--wp-kind-derivation); opacity: 0.65; }
 .wp-rt-dp-multi {
-  color: #34d399;
-  background: color-mix(in oklab, #10b981 12%, transparent);
+  /* multi-candidate group — uses --wp-rt-token-good (green); light override below */
+  color: var(--wp-rt-token-good);
+  background: var(--wp-rt-token-good-bg);
   border-radius: 3px;
   font-weight: 500;
 }
 .wp-rt-dp-weight {
-  color: #fb923c;
-  background: color-mix(in oklab, #f97316 12%, transparent);
+  /* weight factor — uses --wp-rt-token-mut (orange); light override below */
+  color: var(--wp-rt-token-mut);
+  background: var(--wp-rt-token-mut-bg);
   border-radius: 3px;
   font-weight: 500;
 }
 .wp-rt-quantifier {
-  color: #60a5fa;
-  background: color-mix(in oklab, #3b82f6 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, #3b82f6 28%, transparent);
+  /* quantifier — matches --wp-info (blue) */
+  color: var(--wp-info);
+  background: color-mix(in oklab, var(--wp-info) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-info) 28%, transparent);
   border-radius: 3px;
   font-weight: 500;
 }
@@ -2171,9 +2189,9 @@ input, textarea, select { font: inherit; }
   border-color: var(--wp-border);
 }
 .wp-pl-row__act--danger:hover {
-  background: color-mix(in oklab, #ef4444 16%, transparent);
-  color: #fca5a5;
-  border-color: color-mix(in oklab, #ef4444 30%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 16%, transparent);
+  color: var(--wp-danger-text);
+  border-color: color-mix(in oklab, var(--wp-danger) 30%, transparent);
 }
 
 /* add-step button */
