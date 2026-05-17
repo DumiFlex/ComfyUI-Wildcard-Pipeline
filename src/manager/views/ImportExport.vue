@@ -4,7 +4,7 @@ import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import Field from "../components/ui/Field.vue";
-import Icon from "../components/ui/Icon.vue";
+import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useToast } from "../composables/useToast";
@@ -675,7 +675,7 @@ watch(
               <span class="wp-spacer" />
               <Icon
                 :name="isGroupOpen(g, exportSearch) ? 'pi-chevron-down' : 'pi-chevron-right'"
-                :size="11"
+                :size="ICON_SM"
               />
             </div>
             <div v-if="isGroupOpen(g, exportSearch)" class="wp-io-group__body">
@@ -763,7 +763,7 @@ watch(
             @dragleave="onDragLeave"
             @drop="onDrop"
           >
-            <Icon name="pi-cloud-upload" :size="22" />
+            <Icon name="pi-cloud-upload" :size="22" /><!-- outlier: 22px drop-zone hero icon -->
             <div class="wp-io-drop__title">
               {{ parsedFileName || "Drop a .json file or click to browse" }}
             </div>
@@ -817,7 +817,7 @@ watch(
                   <span class="wp-spacer" />
                   <Icon
                     :name="isImportGroupOpen(g.key) ? 'pi-chevron-down' : 'pi-chevron-right'"
-                    :size="11"
+                    :size="ICON_SM"
                   />
                 </div>
                 <div v-if="isImportGroupOpen(g.key)" class="wp-io-group__body">

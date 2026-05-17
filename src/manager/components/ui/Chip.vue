@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Icon from "./Icon.vue";
+import Icon, { ICON_SM } from "./Icon.vue";
 
 type Tone = "default" | "accent" | "success" | "warn" | "danger" | "info";
 
@@ -45,7 +45,7 @@ function onRemove(e: MouseEvent) {
 
 <template>
   <span :class="classes" :style="colorStyle">
-    <Icon v-if="icon" :name="icon" :size="10" />
+    <Icon v-if="icon" :name="icon" :size="ICON_SM" />
     <slot />
     <button
       v-if="removable"
@@ -54,7 +54,7 @@ function onRemove(e: MouseEvent) {
       aria-label="Remove"
       @click="onRemove"
     >
-      <Icon name="times" :size="9" />
+      <Icon name="times" :size="ICON_SM" />
     </button>
   </span>
 </template>

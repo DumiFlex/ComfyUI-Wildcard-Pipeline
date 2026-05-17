@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Icon from "../components/ui/Icon.vue";
+import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 
 interface NavItem {
@@ -164,7 +164,7 @@ function onItemClick(item: NavItem) {
         >
           <span class="wp-nav__icon"><Icon :name="item.icon" /></span>
           <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
-          <Icon v-if="!ui.sidebarCollapsed" name="pi-external-link" class="wp-nav__ext" :size="10" />
+          <Icon v-if="!ui.sidebarCollapsed" name="pi-external-link" class="wp-nav__ext" :size="ICON_SM" />
         </a>
 
         <!-- Parent with children — chevron + click toggles. The
@@ -188,7 +188,7 @@ function onItemClick(item: NavItem) {
               v-if="!ui.sidebarCollapsed"
               name="pi-chevron-right"
               class="wp-nav__caret"
-              :size="9"
+              :size="ICON_SM"
             />
           </button>
           <!-- Children rendered only when sidebar is expanded AND

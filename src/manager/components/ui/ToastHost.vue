@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useToast } from "../../composables/useToast";
-import Icon from "./Icon.vue";
+import Icon, { ICON_SM } from "./Icon.vue";
 
 const { toasts, dismiss } = useToast();
 
@@ -38,7 +38,7 @@ function severityIcon(s: string): string {
         aria-label="Dismiss"
         @click="dismiss(t.id)"
       >
-        <Icon name="times" :size="11" />
+        <Icon name="times" :size="ICON_SM" />
       </button>
     </div>
   </div>

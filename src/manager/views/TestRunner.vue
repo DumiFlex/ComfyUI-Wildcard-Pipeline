@@ -11,7 +11,7 @@ import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
-import Icon from "../components/ui/Icon.vue";
+import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useToast } from "../composables/useToast";
@@ -494,7 +494,7 @@ function pickKind(k: SelectorKind) {
               } : undefined"
               @click="pickKind(k.value)"
             >
-              <Icon :name="k.icon" :size="11" /> {{ k.label }}
+              <Icon :name="k.icon" :size="ICON_SM" /> {{ k.label }}
             </button>
           </div>
         </Field>
@@ -530,7 +530,7 @@ function pickKind(k: SelectorKind) {
         </div>
 
         <div class="wp-tr-hint" data-test="kind-hint">
-          <Icon :name="selectedKindMeta.icon" :size="11" />
+          <Icon :name="selectedKindMeta.icon" :size="ICON_SM" />
           <span>{{ subtitle }}</span>
           <span v-if="kind === 'wildcard' && wildcardVarPreview" class="wp-tr-hint__var">
             · resolves into <code class="wp-mono">${{ wildcardVarPreview }}</code>

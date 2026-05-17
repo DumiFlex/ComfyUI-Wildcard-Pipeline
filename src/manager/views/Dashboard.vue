@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import Icon from "../components/ui/Icon.vue";
+import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import RelativeDate from "../components/RelativeDate.vue";
 import { api } from "../api/client";
 import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
@@ -276,7 +276,7 @@ onMounted(refresh);
         <div class="wp-stat__label">{{ kind.label }}</div>
         <div class="wp-stat__value">{{ counts[kind.key] }}</div>
         <div class="wp-stat__delta">
-          <Icon name="pi-arrow-up-right" :size="9" /> View all
+          <Icon name="pi-arrow-up-right" :size="ICON_SM" /> View all
         </div>
       </button>
     </div>
@@ -314,7 +314,7 @@ onMounted(refresh);
             class="dashboard__view-all"
             href="#"
             @click.prevent="router.push('/all')"
-          >View all <Icon name="pi-arrow-right" :size="10" /></a>
+          >View all <Icon name="pi-arrow-right" :size="ICON_SM" /></a>
         </div>
       </template>
       <div v-if="visibleItems.length" class="wp-list wp-recent">

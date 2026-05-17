@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import Icon from "./Icon.vue";
+import Icon, { ICON_SM } from "./Icon.vue";
 
 export interface SelectOption {
   value: string | number | null;
@@ -210,7 +210,7 @@ function onKeydown(e: KeyboardEvent) {
         aria-label="Clear"
         @click="clear"
       >
-        <Icon name="times" :size="10" />
+        <Icon name="times" :size="ICON_SM" />
       </button>
       <Icon class="wp-select__chevron" name="chevron-down" />
     </button>
@@ -242,7 +242,7 @@ function onKeydown(e: KeyboardEvent) {
           <span v-if="opt.dot" class="wp-select__dot" :style="{ background: opt.dot }" />
           <span class="wp-select__option-label">{{ opt.label }}</span>
           <span class="wp-spacer" />
-          <Icon v-if="opt.value === modelValue" name="check" :size="11" />
+          <Icon v-if="opt.value === modelValue" name="check" :size="ICON_SM" />
         </li>
       </ul>
     </Teleport>

@@ -24,7 +24,7 @@ const branchUrl =
 
     <Card title="Work in progress">
       <div class="wp-community-wip__body">
-        <Icon name="pi-clock" :size="22" />
+        <Icon name="pi-clock" :size="22" /><!-- outlier: 22px empty-state placeholder icon -->
         <div>
           <p class="wp-community-wip__lead">
             Community hub is being designed. Not shipped on main yet.
