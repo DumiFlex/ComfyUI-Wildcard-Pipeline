@@ -1,100 +1,291 @@
 <script setup lang="ts">
 /**
  * Live preview mockup for the Display Playground modal — renders a
- * fake module list so users can see how density / decoration /
- * indicator-style / kind-style toggles change the rendering before
- * committing.
+ * 1:1 reproduction of the on-canvas ContextWidget layout (standalone
+ * modules + bundle frame + bundle children) so users can see how
+ * density / decoration / indicator-style / kind-style toggles change
+ * the rendering before committing.
  *
- * Four modules cover the most-noticed visual variations:
- *   1. wildcard module with stacked states (mod + drift + missing +
- *      override) — exercises the priority-filter + indicator/dot
- *      width
- *   2. fixed_values module with no state markers — clean kind-chip
- *      styling, different border-left color
- *   3. combine module (clean) — third kind-color contrast
- *   4. wildcard module starts disabled — shows the wp-disabled
- *      stripe pattern; user can flip it back on to test the toggle
+ * Composition:
+ *   - Top-level layout mirrors ContextWidget's `.wp-modules` flex
+ *     column: standalone module cards interleaved with `.wp-bundle`
+ *     wrappers.
+ *   - Standalone modules + bundle children render through
+ *     `MockModuleCard.vue` — a slimmed-down ModuleRow that exercises
+ *     the same class names + DOM order without depending on
+ *     ContextWidget's ModuleRowCtxKey provide chain.
+ *   - The bundle header uses the REAL `BundleHeader.vue` component
+ *     so the master-toggle row, drift indicator, summary text, and
+ *     bundle-color tinted action buttons stay in lockstep with the
+ *     canvas (no risk of duplicate-CSS drift on the surface users
+ *     most care about previewing).
  *
- * Each module's enable + collapse state is reactive so users can
- * actually interact with the mockup:
- *   - Click the checkbox to flip enable → see disabled stripe pattern
- *     toggle (and the no-motion sweep neutralizes the transition if
- *     reduce-motion is on)
- *   - Click the chevron to collapse/expand → see the summary line
- *     slide via the same wp-collapse Vue transition ContextWidget
- *     uses; reduce-motion off → smooth slide, on → instant snap
- *
- * The mockup uses the same class names ContextWidget uses, so the
- * body-class CSS rules in display-prefs.css (density tokens,
- * indicator hide rules, kind-style hide rules, border-highlight off,
- * etc.) apply automatically. Style rules below are a SUBSET of
- * ContextWidget's scoped styles — Vue's `<style scoped>` attaches a
- * `[data-v-*]` attribute that doesn't match across components, so we
- * duplicate just enough chrome to render presentable cards. Drift
- * risk: if ContextWidget's chrome changes substantially this mockup
- * gets stale; future refactor could extract a shared module-card.css.
+ * Per-card state (enabled / collapsed / locked / internal) is held in
+ * a reactive map keyed by `MockModule.key` so flipping a child's
+ * lock/internal flag immediately re-computes the bundle's tri-state
+ * master indicator — exactly how the canvas behaves.
  */
-import { reactive } from "vue";
+import { computed, reactive } from "vue";
+import BundleHeader from "../context/bundles/BundleHeader.vue";
+import MockModuleCard, { type MockModule, type ModRuntimeState } from "./MockModuleCard.vue";
+import type { BundleInstance } from "../../widgets/_shared";
 import { getCollapseMode } from "../../extension/settings";
 
-interface ModuleState {
-  enabled: boolean;
-  collapsed: boolean;
+interface MockBundle {
+  key: string;
+  name: string;
+  color: string;
+  libraryDrifted: boolean;
 }
 
-interface BundleState {
-  enabled: boolean;
-  collapsed: boolean;
-  /** Master-toggle ON state for the lock cascade. Mockup-only — the
-   *  real bundle aggregates across children. */
-  lockAll: boolean;
-  /** Master-toggle ON state for the internal cascade. */
-  internalAll: boolean;
-}
+type TopItem =
+  | { kind: "module"; mod: MockModule }
+  | { kind: "bundle"; bundle: MockBundle; children: MockModule[] };
 
-type ModuleKey = "m1" | "m2" | "m3" | "m4";
+const VAR = (text: string) => ({ isVar: true, text });
+const LIT = (text: string) => ({ isVar: false, text });
 
-// Per-module enable + collapse state. Defaults match the original
-// static markup: first three start enabled + expanded; the fourth
-// starts disabled + collapsed so the user immediately sees both
-// styles side-by-side. Bundle starts expanded with the library-drift
-// chip showing so the bundle-side surface (drift indicator + master
-// toggle row) is visible without interaction.
-const state = reactive<{
-  m1: ModuleState;
-  m2: ModuleState;
-  m3: ModuleState;
-  m4: ModuleState;
-  bundle: BundleState;
-}>({
-  m1: { enabled: true,  collapsed: false },
-  m2: { enabled: true,  collapsed: false },
-  m3: { enabled: true,  collapsed: false },
-  m4: { enabled: false, collapsed: true },
-  bundle: { enabled: true, collapsed: false, lockAll: false, internalAll: false },
-});
+// Top-level mockup composition mirrors a realistic ContextWidget
+// arrangement: a state-heavy wildcard, a bundle holding 3 children
+// (override + drift + clean), a clean combine output, and a disabled
+// wildcard. This covers every visual axis the playground exposes
+// (kind colors, state markers, override chip, library-drifted bundle,
+// disabled stripe, collapse motion, action-button tri-state).
+const topItems: TopItem[] = [
+  {
+    kind: "module",
+    mod: {
+      key: "m_backdrop",
+      kind: "wildcard",
+      chipLabel: "wildcard",
+      chipMod: "wildcard",
+      name: "Backdrop",
+      summary: [VAR("$backdrop"), LIT(" · 12 options")],
+      states: { mod: true, drift: true, missing: true, override: true },
+      lockable: true,
+      internalable: true,
+    },
+  },
+  {
+    kind: "bundle",
+    bundle: {
+      key: "b_subject",
+      name: "Subject phrase",
+      color: "#06b6d4",
+      libraryDrifted: true,
+    },
+    children: [
+      {
+        key: "b_subject__mood",
+        kind: "wildcard",
+        chipLabel: "wildcard",
+        chipMod: "wildcard",
+        name: "Mood",
+        summary: [VAR("$mood"), LIT(" · 5 options")],
+        states: { override: true },
+        lockable: true,
+        internalable: true,
+      },
+      {
+        key: "b_subject__outfit",
+        kind: "fixed_values",
+        chipLabel: "fixed",
+        chipMod: "fixed",
+        name: "Outfit",
+        summary: [VAR("$outfit"), LIT(", "), VAR("$accessories")],
+        states: { drift: true },
+        internalable: true,
+      },
+      {
+        key: "b_subject__phrase",
+        kind: "combine",
+        chipLabel: "combine",
+        chipMod: "combine",
+        name: "Subject phrase",
+        summary: [LIT("→ "), VAR("$subject_phrase")],
+        internalable: true,
+      },
+    ],
+  },
+  {
+    kind: "module",
+    mod: {
+      key: "m_model",
+      kind: "fixed_values",
+      chipLabel: "fixed",
+      chipMod: "fixed",
+      name: "Model settings",
+      summary: [VAR("$cfg"), LIT(", "), VAR("$steps"), LIT(", +1 more")],
+      internalable: true,
+    },
+  },
+  {
+    kind: "module",
+    mod: {
+      key: "m_final",
+      kind: "combine",
+      chipLabel: "combine",
+      chipMod: "combine",
+      name: "Final prompt",
+      summary: [LIT("→ "), VAR("$prompt")],
+      internalable: true,
+    },
+  },
+  {
+    kind: "module",
+    mod: {
+      key: "m_hair",
+      kind: "wildcard",
+      chipLabel: "wildcard",
+      chipMod: "wildcard",
+      name: "Hair style",
+      summary: [VAR("$hair_style"), LIT(" · 28 options")],
+      lockable: true,
+      internalable: true,
+    },
+  },
+];
 
-const allKeys: ModuleKey[] = ["m1", "m2", "m3", "m4"];
+const allModuleKeys: string[] = topItems.flatMap((it) =>
+  it.kind === "module" ? [it.mod.key] : it.children.map((c) => c.key),
+);
+const bundleKeys: string[] = topItems
+  .filter((it): it is Extract<TopItem, { kind: "bundle" }> => it.kind === "bundle")
+  .map((it) => it.bundle.key);
 
-function toggleBundleCollapsed(): void {
-  state.bundle.collapsed = !state.bundle.collapsed;
-}
+interface BundleRuntimeState { enabled: boolean; collapsed: boolean; }
 
-/**
- * Mirrors ContextWidget.toggleCollapsed accordion logic so the mockup
- * demonstrates the live behavior. Independent mode flips just the
- * targeted module; accordion mode collapses every sibling when the
- * user expands a module (collapsing never auto-expands siblings).
- */
-function toggleCollapsed(key: ModuleKey): void {
-  const target = state[key];
+const moduleStates = reactive<Record<string, ModRuntimeState>>(
+  Object.fromEntries(
+    allModuleKeys.map((k) => [k, { enabled: true, collapsed: false, locked: false, internal: false }]),
+  ),
+);
+const bundleStates = reactive<Record<string, BundleRuntimeState>>(
+  Object.fromEntries(bundleKeys.map((k) => [k, { enabled: true, collapsed: false }])),
+);
+
+// Defaults that match the original mockup's design: the last
+// standalone wildcard starts disabled + collapsed so users see the
+// stripe pattern next to live cards without interacting first.
+moduleStates.m_hair!.enabled = false;
+moduleStates.m_hair!.collapsed = true;
+
+function toggleModuleCollapsed(key: string): void {
+  const target = moduleStates[key];
+  if (!target) return;
   const willExpand = target.collapsed;
   const accordion = getCollapseMode() === "accordion" && willExpand;
   if (accordion) {
-    for (const k of allKeys) state[k].collapsed = k !== key;
+    for (const k of allModuleKeys) moduleStates[k]!.collapsed = k !== key;
   } else {
     target.collapsed = !target.collapsed;
   }
+}
+function toggleModuleEnabled(key: string): void {
+  const s = moduleStates[key];
+  if (s) s.enabled = !s.enabled;
+}
+function toggleModuleLock(key: string): void {
+  const s = moduleStates[key];
+  if (s) s.locked = !s.locked;
+}
+function toggleModuleInternal(key: string): void {
+  const s = moduleStates[key];
+  if (s) s.internal = !s.internal;
+}
+function toggleBundleCollapsed(key: string): void {
+  const s = bundleStates[key];
+  if (s) s.collapsed = !s.collapsed;
+}
+function toggleBundleEnabled(key: string, next: boolean): void {
+  const s = bundleStates[key];
+  if (s) s.enabled = next;
+}
+
+// Tri-state aggregation across a bundle's lockable children — mirrors
+// `bundleLockState()` from ContextWidget so the master-button visual
+// in the mockup reads exactly like canvas. Null when no child is
+// lockable (the lock button hides entirely in that case, same
+// pattern as on canvas).
+function bundleLockState(children: MockModule[]): "all" | "none" | "partial" | null {
+  const lockable = children.filter((c) => c.lockable);
+  if (lockable.length === 0) return null;
+  const on = lockable.filter((c) => moduleStates[c.key]?.locked).length;
+  if (on === 0) return "none";
+  if (on === lockable.length) return "all";
+  return "partial";
+}
+function bundleInternalState(children: MockModule[]): "all" | "none" | "partial" | null {
+  const eligible = children.filter((c) => c.internalable);
+  if (eligible.length === 0) return null;
+  const on = eligible.filter((c) => moduleStates[c.key]?.internal).length;
+  if (on === 0) return "none";
+  if (on === eligible.length) return "all";
+  return "partial";
+}
+function bundleDriftedCount(children: MockModule[]): number {
+  return children.filter((c) => c.states?.drift).length;
+}
+
+// Click-through behavior for the bundle master toggles: pulls every
+// child to the lit state, or clears all if everyone is already lit.
+// Same as the real BundleHeader emit handlers in ContextWidget.
+function bundleToggleLock(children: MockModule[]): void {
+  const lockable = children.filter((c) => c.lockable);
+  const allOn = lockable.every((c) => moduleStates[c.key]?.locked);
+  for (const c of lockable) {
+    const s = moduleStates[c.key];
+    if (s) s.locked = !allOn;
+  }
+}
+function bundleToggleInternal(children: MockModule[]): void {
+  const eligible = children.filter((c) => c.internalable);
+  const allOn = eligible.every((c) => moduleStates[c.key]?.internal);
+  for (const c of eligible) {
+    const s = moduleStates[c.key];
+    if (s) s.internal = !allOn;
+  }
+}
+
+// Synthetic BundleInstance shape — BundleHeader.vue reads `_uid`,
+// `enabled`, `collapsed` directly off `props.instance`, so we keep
+// a tiny computed object per mock bundle. The rest of the
+// BundleInstance fields (`library_id`, `inserted_at_hash`, etc.) are
+// unused by the header render path so we satisfy the type with safe
+// placeholders.
+function bundleInstance(b: MockBundle): BundleInstance {
+  const s = bundleStates[b.key]!;
+  return {
+    _uid: b.key,
+    library_id: b.key,
+    start_idx: 0,
+    end_idx: 0,
+    enabled: s.enabled,
+    collapsed: s.collapsed,
+    inserted_at_hash: "",
+    name: b.name,
+    color: b.color,
+  };
+}
+
+// Convenience: precompute the bundle metadata each frame so the
+// template stays readable. computed wrappers ensure tri-state +
+// drifted-count refresh whenever any child's runtime state flips.
+const bundleViews = computed(() =>
+  topItems
+    .filter((it): it is Extract<TopItem, { kind: "bundle" }> => it.kind === "bundle")
+    .map((it) => ({
+      key: it.bundle.key,
+      instance: bundleInstance(it.bundle),
+      bundle: it.bundle,
+      children: it.children,
+      driftedCount: bundleDriftedCount(it.children),
+      lockState: bundleLockState(it.children),
+      internalState: bundleInternalState(it.children),
+    })),
+);
+function viewForBundle(key: string) {
+  return bundleViews.value.find((v) => v.key === key);
 }
 </script>
 
@@ -102,302 +293,56 @@ function toggleCollapsed(key: ModuleKey): void {
   <div class="wp-pg-mockup">
     <div class="wp-pg-mockup__caption">Live preview</div>
     <div class="wp-modules">
-      <!-- Real module names mirror m.meta.name from ContextWidget — the
-           human-friendly library name, NOT the variable binding. The
-           summary uses summaryTokens() shape: `$binding · N options`
-           for wildcards, `$var, $var, +N more` for fixed_values, etc.
-           Icons match kindIcon() in shared/kind-icons.ts. -->
-
-      <!-- 1. Wildcard module with all the state markers active so
-           users see indicator-style + priority filter side-by-side -->
-      <div
-        class="wp-module"
-        :class="{ 'wp-disabled': !state.m1.enabled }"
-        data-kind="wildcard"
-      >
-        <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true">
-            <svg
-              class="wp-drag-handle__grip"
-              viewBox="0 0 6 12"
-              width="6"
-              height="12"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="1.5" cy="2" r="1" />
-              <circle cx="4.5" cy="2" r="1" />
-              <circle cx="1.5" cy="6" r="1" />
-              <circle cx="4.5" cy="6" r="1" />
-              <circle cx="1.5" cy="10" r="1" />
-              <circle cx="4.5" cy="10" r="1" />
-            </svg>
-          </span>
-          <button
-            class="wp-collapse-btn"
-            type="button"
-            :title="state.m1.collapsed ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed('m1')"
-          ><i :class="['pi', state.m1.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-          <label class="wp-toggle">
-            <input v-model="state.m1.enabled" type="checkbox" />
-            <span class="wp-toggle-mark"></span>
-          </label>
-          <span class="wp-mod-icon" aria-hidden="true"
-            ><i class="pi pi-sparkles" aria-hidden="true"></i
-          ></span>
-          <span class="wp-kind-chip wp-kind-chip--wildcard">wildcard</span>
-          <span class="wp-module-name">Backdrop</span>
-          <span class="wp-mod-dots">
-            <span class="wp-mod-dot wp-mod-dot--modified" aria-hidden="true"></span>
-            <span class="wp-mod-badge wp-mod-badge--mod">mod</span>
-            <span class="wp-mod-dot wp-mod-dot--drift" aria-hidden="true"></span>
-            <span class="wp-mod-badge wp-mod-badge--drift">drift</span>
-            <span class="wp-mod-dot wp-mod-dot--missing" aria-hidden="true"></span>
-            <span class="wp-mod-badge wp-mod-badge--missing">missing</span>
-            <span class="wp-conflict-dot wp-conflict-dot--info" aria-hidden="true"></span>
-            <span class="wp-conflict-badge wp-conflict-badge--info">override</span>
-          </span>
-        </div>
-        <Transition name="wp-collapse">
-          <div v-if="!state.m1.collapsed" class="wp-summary">
-            <span class="wp-pg-mockup__var">$backdrop</span>
-            <span class="wp-pg-mockup__lit"> · 12 options</span>
+      <template v-for="item in topItems" :key="item.kind === 'module' ? item.mod.key : item.bundle.key">
+        <!-- Bundle: real BundleHeader + .wp-bundle-children wrap mirror
+             ContextWidget's render so the frame, master-toggle row,
+             drift chip, and child indent stay in 1:1 sync with canvas. -->
+        <div
+          v-if="item.kind === 'bundle'"
+          class="wp-bundle"
+          :class="{ 'wp-bundle--collapsed': bundleStates[item.bundle.key]!.collapsed }"
+          :style="{ '--wp-bundle-color': item.bundle.color }"
+          :data-bundle-uid="item.bundle.key"
+        >
+          <BundleHeader
+            v-if="viewForBundle(item.bundle.key)"
+            :instance="viewForBundle(item.bundle.key)!.instance"
+            :name="item.bundle.name"
+            :color="item.bundle.color"
+            :child-count="item.children.length"
+            :drifted-count="viewForBundle(item.bundle.key)!.driftedCount"
+            :library-drifted="item.bundle.libraryDrifted"
+            :internal-state="viewForBundle(item.bundle.key)!.internalState"
+            :lock-state="viewForBundle(item.bundle.key)!.lockState"
+            @toggle-collapse="toggleBundleCollapsed(item.bundle.key)"
+            @toggle-enabled="(next) => toggleBundleEnabled(item.bundle.key, next)"
+            @toggle-lock="bundleToggleLock(item.children)"
+            @toggle-internal="bundleToggleInternal(item.children)"
+          />
+          <div class="wp-bundle-children">
+            <MockModuleCard
+              v-for="child in item.children"
+              :key="child.key"
+              :module="child"
+              :state="moduleStates[child.key]!"
+              @toggle-collapse="toggleModuleCollapsed(child.key)"
+              @toggle-enabled="toggleModuleEnabled(child.key)"
+              @toggle-lock="toggleModuleLock(child.key)"
+              @toggle-internal="toggleModuleInternal(child.key)"
+            />
           </div>
-        </Transition>
-      </div>
-
-      <!-- 2. Fixed-values module — different kind-color, no state markers
-           so users see the un-stacked default look -->
-      <div
-        class="wp-module"
-        :class="{ 'wp-disabled': !state.m2.enabled }"
-        data-kind="fixed_values"
-      >
-        <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true">
-            <svg
-              class="wp-drag-handle__grip"
-              viewBox="0 0 6 12"
-              width="6"
-              height="12"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="1.5" cy="2" r="1" />
-              <circle cx="4.5" cy="2" r="1" />
-              <circle cx="1.5" cy="6" r="1" />
-              <circle cx="4.5" cy="6" r="1" />
-              <circle cx="1.5" cy="10" r="1" />
-              <circle cx="4.5" cy="10" r="1" />
-            </svg>
-          </span>
-          <button
-            class="wp-collapse-btn"
-            type="button"
-            :title="state.m2.collapsed ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed('m2')"
-          ><i :class="['pi', state.m2.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-          <label class="wp-toggle">
-            <input v-model="state.m2.enabled" type="checkbox" />
-            <span class="wp-toggle-mark"></span>
-          </label>
-          <span class="wp-mod-icon" aria-hidden="true"
-            ><i class="pi pi-tag" aria-hidden="true"></i
-          ></span>
-          <span class="wp-kind-chip wp-kind-chip--fixed">fixed</span>
-          <span class="wp-module-name">Model settings</span>
-          <span class="wp-mod-dots"></span>
         </div>
-        <Transition name="wp-collapse">
-          <div v-if="!state.m2.collapsed" class="wp-summary">
-            <span class="wp-pg-mockup__var">$cfg</span>
-            <span class="wp-pg-mockup__lit">, </span>
-            <span class="wp-pg-mockup__var">$steps</span>
-            <span class="wp-pg-mockup__lit">, +1 more</span>
-          </div>
-        </Transition>
-      </div>
-
-      <!-- 3. Combine module — third kind-color, also clean -->
-      <div
-        class="wp-module"
-        :class="{ 'wp-disabled': !state.m3.enabled }"
-        data-kind="combine"
-      >
-        <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true">
-            <svg
-              class="wp-drag-handle__grip"
-              viewBox="0 0 6 12"
-              width="6"
-              height="12"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="1.5" cy="2" r="1" />
-              <circle cx="4.5" cy="2" r="1" />
-              <circle cx="1.5" cy="6" r="1" />
-              <circle cx="4.5" cy="6" r="1" />
-              <circle cx="1.5" cy="10" r="1" />
-              <circle cx="4.5" cy="10" r="1" />
-            </svg>
-          </span>
-          <button
-            class="wp-collapse-btn"
-            type="button"
-            :title="state.m3.collapsed ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed('m3')"
-          ><i :class="['pi', state.m3.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-          <label class="wp-toggle">
-            <input v-model="state.m3.enabled" type="checkbox" />
-            <span class="wp-toggle-mark"></span>
-          </label>
-          <span class="wp-mod-icon" aria-hidden="true"
-            ><i class="pi pi-link" aria-hidden="true"></i
-          ></span>
-          <span class="wp-kind-chip wp-kind-chip--combine">combine</span>
-          <span class="wp-module-name">Final prompt</span>
-          <span class="wp-mod-dots"></span>
-        </div>
-        <Transition name="wp-collapse">
-          <div v-if="!state.m3.collapsed" class="wp-summary">
-            <span class="wp-pg-mockup__lit">→ </span>
-            <span class="wp-pg-mockup__var">$prompt</span>
-          </div>
-        </Transition>
-      </div>
-
-      <!-- 4. Disabled wildcard — starts off + collapsed; user can flip
-           the toggle to see the disable→enable transition + stripe
-           pattern dropping. -->
-      <div
-        class="wp-module"
-        :class="{ 'wp-disabled': !state.m4.enabled }"
-        data-kind="wildcard"
-      >
-        <div class="wp-module-header">
-          <span class="wp-drag-handle" aria-hidden="true">
-            <svg
-              class="wp-drag-handle__grip"
-              viewBox="0 0 6 12"
-              width="6"
-              height="12"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="1.5" cy="2" r="1" />
-              <circle cx="4.5" cy="2" r="1" />
-              <circle cx="1.5" cy="6" r="1" />
-              <circle cx="4.5" cy="6" r="1" />
-              <circle cx="1.5" cy="10" r="1" />
-              <circle cx="4.5" cy="10" r="1" />
-            </svg>
-          </span>
-          <button
-            class="wp-collapse-btn"
-            type="button"
-            :title="state.m4.collapsed ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed('m4')"
-          ><i :class="['pi', state.m4.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-          <label class="wp-toggle">
-            <input v-model="state.m4.enabled" type="checkbox" />
-            <span class="wp-toggle-mark"></span>
-          </label>
-          <span class="wp-mod-icon" aria-hidden="true"
-            ><i class="pi pi-sparkles" aria-hidden="true"></i
-          ></span>
-          <span class="wp-kind-chip wp-kind-chip--wildcard">wildcard</span>
-          <span class="wp-module-name">Hair style</span>
-          <span class="wp-mod-dots"></span>
-        </div>
-        <Transition name="wp-collapse">
-          <div v-if="!state.m4.collapsed" class="wp-summary">
-            <span class="wp-pg-mockup__var">$hair_style</span>
-            <span class="wp-pg-mockup__lit"> · 28 options</span>
-          </div>
-        </Transition>
-      </div>
-
-      <!-- 4. Bundle frame — shows the bundle-side surface so users
-           can see how the Type style / Color intensity / drift dot
-           settings render in the bundle scope. Uses a `--collapsed`
-           toggle parallel to the module rows above so flipping it
-           folds the children just like the real canvas one. -->
-      <div
-        class="wp-bundle"
-        :class="{ 'wp-bundle--collapsed': state.bundle.collapsed }"
-        style="--wp-bundle-color: #6366f1;"
-        data-bundle-header
-      >
-        <div class="wp-bundle-header">
-          <span class="wp-drag-handle" aria-hidden="true">
-            <svg
-              class="wp-drag-handle__grip"
-              viewBox="0 0 6 12"
-              width="6"
-              height="12"
-              fill="currentColor"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="1.5" cy="2" r="1" />
-              <circle cx="4.5" cy="2" r="1" />
-              <circle cx="1.5" cy="6" r="1" />
-              <circle cx="4.5" cy="6" r="1" />
-              <circle cx="1.5" cy="10" r="1" />
-              <circle cx="4.5" cy="10" r="1" />
-            </svg>
-          </span>
-          <button
-            class="wp-bundle-collapse"
-            type="button"
-            :title="state.bundle.collapsed ? 'Expand' : 'Collapse'"
-            @click="toggleBundleCollapsed()"
-          ><i :class="['pi', state.bundle.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-          <label class="wp-bundle-enabled">
-            <input v-model="state.bundle.enabled" type="checkbox" />
-            <span class="wp-bundle-enabled-mark"></span>
-          </label>
-          <span class="wp-row-type-icon wp-bundle-icon" aria-hidden="true">
-            <i class="pi pi-box"></i>
-          </span>
-          <span class="wp-bundle-chip">bundle</span>
-          <span class="wp-bundle-name">Subject phrase</span>
-          <span class="wp-mod-dots">
-            <span class="wp-mod-dot wp-mod-dot--drift" aria-hidden="true"></span>
-            <span class="wp-mod-badge wp-mod-badge--drift">library updated</span>
-          </span>
-          <span class="wp-bundle-summary">3 mods</span>
-          <!-- Master toggles: lock → internal → remove (mirrors module
-               row order). Click flips the visual state for the
-               preview only; production master uses tri-state
-               aggregation across the bundle's actual children. -->
-          <button
-            class="wp-btn--icon-sm wp-btn--warn"
-            :class="{ 'is-locked': state.bundle.lockAll }"
-            type="button"
-            title="Lock all lockable children"
-            @click="state.bundle.lockAll = !state.bundle.lockAll"
-          ><i class="pi pi-lock" aria-hidden="true"></i></button>
-          <button
-            class="wp-btn--icon-sm wp-btn--accent"
-            :class="{ 'is-active': state.bundle.internalAll }"
-            type="button"
-            title="Mark all children internal"
-            @click="state.bundle.internalAll = !state.bundle.internalAll"
-          ><i class="pi pi-globe" aria-hidden="true"></i></button>
-          <button
-            class="wp-btn--icon-sm wp-btn--danger"
-            type="button"
-            title="Remove bundle"
-          ><i class="pi pi-trash" aria-hidden="true"></i></button>
-        </div>
-      </div>
+        <!-- Standalone module — same MockModuleCard as bundle children. -->
+        <MockModuleCard
+          v-else
+          :module="item.mod"
+          :state="moduleStates[item.mod.key]!"
+          @toggle-collapse="toggleModuleCollapsed(item.mod.key)"
+          @toggle-enabled="toggleModuleEnabled(item.mod.key)"
+          @toggle-lock="toggleModuleLock(item.mod.key)"
+          @toggle-internal="toggleModuleInternal(item.mod.key)"
+        />
+      </template>
     </div>
     <p class="wp-pg-mockup__hint">
       Try the toggles + chevrons — flipping enable/disable shows the
@@ -459,22 +404,22 @@ function toggleCollapsed(key: ModuleKey): void {
 /* Per-kind border-left + icon-color overrides — mirrors ContextWidget */
 .wp-pg-mockup .wp-module[data-kind="fixed_values"] { border-left-color: var(--wp-kind-fixed); }
 .wp-pg-mockup .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
-.wp-pg-mockup .wp-module[data-kind="fixed_values"] .wp-mod-icon { color: var(--wp-kind-fixed); }
-.wp-pg-mockup .wp-module[data-kind="combine"]      .wp-mod-icon { color: var(--wp-kind-combine); }
+.wp-pg-mockup .wp-module[data-kind="derivation"]   { border-left-color: var(--wp-kind-derivation, var(--wp-accent)); }
+.wp-pg-mockup .wp-module[data-kind="fixed_values"] .wp-row-type-icon { color: var(--wp-kind-fixed); }
+.wp-pg-mockup .wp-module[data-kind="combine"]      .wp-row-type-icon { color: var(--wp-kind-combine); }
+.wp-pg-mockup .wp-module[data-kind="wildcard"]     .wp-row-type-icon { color: var(--wp-kind-wildcard); }
 
-/* Stacked-states wildcard module (the first one) — set its full border
- * to red so the user sees border-highlight effect on the highest-tier
- * state (missing). The other modules stay neutral so the kind border-left
- * accent reads cleanly. */
-.wp-pg-mockup .wp-module:first-child {
-  border-color: var(--wp-danger);
-}
+/* State-tier border highlight — mirrors ContextWidget's tier classes
+ * so the same priority rules apply (missing > drift > mod). Settings
+ * panel's border-highlight toggle still flips these via the body
+ * class in display-prefs.css; declaring them locally just provides
+ * the baseline color when highlighting is enabled. */
+.wp-pg-mockup .wp-module.wp-state-modified { border-color: var(--wp-status-modified); }
+.wp-pg-mockup .wp-module.wp-state-drift    { border-color: var(--wp-warn); }
+.wp-pg-mockup .wp-module.wp-state-missing  { border-color: var(--wp-danger); }
 
 /* Disabled module styling — mirrors ContextWidget's `.wp-disabled`
- * exactly: stripe pattern + opacity dim + grey name text. The
- * stripe is a 45deg repeating-linear-gradient between bg3 and bg2
- * so it reads as "muted and offline" without losing kind-color
- * legibility. */
+ * exactly: stripe pattern + opacity dim + grey name text. */
 .wp-pg-mockup .wp-module.wp-disabled {
   opacity: 0.55;
   background: repeating-linear-gradient(
@@ -519,10 +464,12 @@ function toggleCollapsed(key: ModuleKey): void {
   flex-shrink: 0;
 }
 .wp-pg-mockup .wp-collapse-btn .pi { font-size: 10px; }
+.wp-pg-mockup .wp-collapse-btn:hover { color: var(--wp-text); }
 .wp-pg-mockup .wp-toggle {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  cursor: pointer;
 }
 .wp-pg-mockup .wp-toggle input {
   position: absolute;
@@ -537,24 +484,19 @@ function toggleCollapsed(key: ModuleKey): void {
   border: 1px solid var(--wp-border2);
   background: var(--wp-bg2);
 }
-/* Checked state — matches ContextWidget's `:checked + .wp-toggle-mark`
- * which fills the box with the brand accent. The disabled-toggle module
- * (4th in the mockup) leaves the input unchecked so the empty-box look
- * shows through. */
 .wp-pg-mockup .wp-toggle input:checked + .wp-toggle-mark {
   background: var(--wp-accent);
   border-color: var(--wp-accent);
 }
-.wp-pg-mockup .wp-mod-icon {
+.wp-pg-mockup .wp-row-type-icon {
   width: 16px;
   height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--wp-kind-wildcard);
 }
-.wp-pg-mockup .wp-mod-icon .pi { font-size: 12px; line-height: 1; }
+.wp-pg-mockup .wp-row-type-icon .pi { font-size: 12px; line-height: 1; }
 .wp-pg-mockup .wp-kind-chip {
   font-family: var(--wp-font-sans, sans-serif);
   font-weight: 600;
@@ -662,6 +604,15 @@ function toggleCollapsed(key: ModuleKey): void {
   background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
 }
+/* Action-button cluster — mirrors ContextWidget's `.wp-mod-actions`
+ * row so the trio reads with the same density as canvas. Base
+ * button styling comes from row-primitives.css (`.wp-btn--icon-sm`
+ * and variants), already loaded globally via ContextWidget. */
+.wp-pg-mockup .wp-mod-actions {
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
 .wp-pg-mockup .wp-summary {
   color: var(--wp-text2);
   font-family: var(--wp-font-mono, monospace);
@@ -672,10 +623,12 @@ function toggleCollapsed(key: ModuleKey): void {
   white-space: nowrap;
   width: 100%;
 }
-/* Variable tokens in the summary line — colored to match the var-color
- * hash used elsewhere (assembler chip strip + combine preview). Single
- * accent here since the mockup doesn't compute hash colors per name —
- * the visual cue (var-tok styling) is what matters for preview. */
+.wp-pg-mockup .wp-summary__main {
+  display: inline;
+}
+/* Variable tokens — single accent here; the real ContextWidget hashes
+ * `varColorClass()` across .var-1..8, but the preview only needs the
+ * visual cue, not the per-name uniqueness. */
 .wp-pg-mockup__var {
   color: var(--wp-violet);
   font-weight: 600;
@@ -686,8 +639,7 @@ function toggleCollapsed(key: ModuleKey): void {
 
 /* Collapse Vue transition — mirrors ContextWidget's `wp-collapse`
  * scoped styles so the slide reads identically here. The reduce-motion
- * sweep in a11y.css already targets `.wp-pg` (added by the
- * decoration-cleanup commit) so flipping reduce-motion to ON
+ * sweep in a11y.css already targets `.wp-pg` so flipping reduce-motion
  * collapses transition-duration to 0.01ms — instant snap, no fade. */
 .wp-pg-mockup .wp-collapse-enter-active,
 .wp-pg-mockup .wp-collapse-leave-active {
@@ -706,12 +658,5 @@ function toggleCollapsed(key: ModuleKey): void {
   max-height: 32px;
   opacity: 1;
 }
-
-/* Make the toggle + chevron actually clickable in the mockup —
- * remove the cursor: default that some UAs apply to disabled-feel
- * controls when there's no native interaction. */
-.wp-pg-mockup .wp-toggle { cursor: pointer; }
-.wp-pg-mockup .wp-collapse-btn { cursor: pointer; }
-.wp-pg-mockup .wp-collapse-btn:hover { color: var(--wp-text); }
 }  /* end @layer wp-extension */
 </style>
