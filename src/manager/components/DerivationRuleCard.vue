@@ -652,7 +652,7 @@ const branchCount = computed(() => rule.value.branches.length);
   background: var(--wp-bg-3, #2a2a2a);
   color: var(--wp-text-muted, #9ca3af);
   border-right: 1px solid var(--wp-border, #3a3a3a);
-  font: 11px var(--wp-font-mono, ui-monospace, monospace);
+  font: 11px var(--wp-font-mono, ui-monospace, monospace); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
 }
 .dvr-var-input {
   flex: 1;
@@ -660,7 +660,7 @@ const branchCount = computed(() => rule.value.branches.length);
   border: 0;
   padding: var(--wp-space-3) var(--wp-space-5);
   color: var(--wp-kind-derivation, #fbbf24);
-  font: 600 11px var(--wp-font-mono, ui-monospace, monospace);
+  font: 600 11px var(--wp-font-mono, ui-monospace, monospace); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   min-width: 0;
 }
 .dvr-var-input:focus {
@@ -694,7 +694,7 @@ const branchCount = computed(() => rule.value.branches.length);
   display: inline-flex;
   align-items: center;
   gap: 5px; /* audit-exempt: 5px optical icon+text gap inside compact tick */
-  font: 10px var(--wp-font-sans, sans-serif);
+  font: 10px var(--wp-font-sans, sans-serif); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   color: var(--wp-text-muted, #9ca3af);
   cursor: pointer;
   user-select: none;
@@ -752,7 +752,7 @@ const branchCount = computed(() => rule.value.branches.length);
 .dvr-hint {
   margin-top: 3px; /* audit-exempt: 3px hairline nudge */
   margin-left: 68px; /* audit-exempt: 68px = 60px label col + 4+4px gap; aligns under value input column */
-  font: 10px var(--wp-font-sans, sans-serif);
+  font: 10px var(--wp-font-sans, sans-serif); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   color: var(--wp-text-muted, #9ca3af);
   font-style: italic;
 }

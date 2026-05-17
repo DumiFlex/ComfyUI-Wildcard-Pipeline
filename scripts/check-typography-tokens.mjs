@@ -10,6 +10,14 @@
  *   - em/rem/% values (e.g. 1.4em, 1rem, 120%)
  *   - Unitless numbers (e.g. 1.45 — valid CSS line-height)
  *   - Lines with a trailing /* audit-exempt: … *\/ comment
+ *   - CSS relative-size keywords (smaller, larger, x-small, etc.) contain
+ *     no `px` substring and are silently skipped by the performance
+ *     guard — they are not used in this design system, so this is fine.
+ *
+ * NOT audited: CSS `font:` shorthand. Authors using the shorthand
+ * bypass this gate; existing instances are tagged `audit-exempt:
+ * font-shorthand` so a grep surfaces them as known debt. A future
+ * task may extend the parser; until then write the longhand form.
  *
  * Scope:
  *   - src/manager/**\/*.vue  (scoped + global style blocks)

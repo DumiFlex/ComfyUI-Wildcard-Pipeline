@@ -230,7 +230,7 @@ const isEdited = computed(() => props.edited);
 }
 .wp-bchild__name {
   display: flex; align-items: center; gap: var(--wp-space-3);
-  font: 500 12.5px/1.3 var(--wp-font-sans);
+  font: 500 12.5px/1.3 var(--wp-font-sans); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;

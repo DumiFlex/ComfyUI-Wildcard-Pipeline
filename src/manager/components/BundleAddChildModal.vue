@@ -315,7 +315,7 @@ function pick(row: ModuleRow) {
 .wp-bundle-add__row[data-kind="constraint"]   .wp-bundle-add__rowicon { color: var(--wp-kind-constraint); }
 .wp-bundle-add__rowmain { min-width: 0; }
 .wp-bundle-add__rowname {
-  font: 500 12.5px/1.2 var(--wp-font-sans);
+  font: 500 12.5px/1.2 var(--wp-font-sans); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -465,11 +465,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
   align-items: center;
 }
 .cn-pair-label {
-  font: 500 12px/1.2 var(--wp-font);
+  font: 500 12px/1.2 var(--wp-font); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   color: var(--wp-text-muted);
 }
 .cn-pair-hint {
-  font: 11px/1.3 var(--wp-font);
+  font: 11px/1.3 var(--wp-font); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   color: var(--wp-text-dim);
 }
 .cn-cross {

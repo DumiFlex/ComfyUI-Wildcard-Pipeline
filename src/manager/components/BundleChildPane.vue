@@ -272,7 +272,7 @@ const constraintTargetValues = computed<string[]>(() => {
   font-size: var(--wp-text-sm);
   flex-shrink: 0;
 }
-.wp-bpane__name { font: 600 13px/1.2 var(--wp-font-sans); color: var(--wp-text); }
+.wp-bpane__name { font: 600 13px/1.2 var(--wp-font-sans); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */ color: var(--wp-text); }
 .wp-bpane__kind {
   font-size: 9px; /* audit-exempt: micro uppercase kind label — below scale floor */
   font-weight: 600;
