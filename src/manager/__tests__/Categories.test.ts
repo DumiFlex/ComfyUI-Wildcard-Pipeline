@@ -42,7 +42,7 @@ describe("Categories.vue", () => {
     expect(wrap.text()).toContain("Categories");
     expect(wrap.text()).toContain("New category");
     // Empty-state row.
-    expect(wrap.text()).toContain("No categories yet.");
+    expect(wrap.text()).toContain("No categories yet");
   });
 
   it("renders existing rows from the mocked store", async () => {

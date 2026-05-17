@@ -23,6 +23,7 @@ import Checkbox from "./ui/Checkbox.vue";
 import Chip from "./ui/Chip.vue";
 import Select from "./ui/Select.vue";
 import RelativeDate from "./RelativeDate.vue";
+import EmptyState from "./ui/EmptyState.vue";
 
 interface Filter {
   q?: string;
@@ -553,16 +554,28 @@ defineExpose({
           </template>
           <tr v-if="!paged.length">
             <td :colspan="totalCols">
-              <div v-if="!hasActiveFilters" class="wp-empty">
-                <div class="wp-empty__icon"><i class="pi pi-inbox" /></div>
-                <p class="wp-empty__msg">{{ emptyMessage }}</p>
-                <Button variant="primary" :icon="newIcon" @click="onNew">{{ newLabel }}</Button>
-              </div>
-              <div v-else class="wp-empty wp-empty--no-match">
-                <div class="wp-empty__icon"><i class="pi pi-search" /></div>
-                <p class="wp-empty__msg">No matches.</p>
-                <Button variant="link" size="sm" @click="clearFilters">Clear filters</Button>
-              </div>
+              <slot v-if="!hasActiveFilters" name="empty">
+                <EmptyState
+                  icon="pi-inbox"
+                  :headline="emptyMessage"
+                  variant="library"
+                >
+                  <template #cta>
+                    <Button variant="primary" :icon="newIcon" @click="onNew">{{ newLabel }}</Button>
+                  </template>
+                </EmptyState>
+              </slot>
+              <EmptyState
+                v-else
+                icon="pi-search"
+                headline="No matches"
+                body="Try a different search term or clear the filter."
+                variant="no-results"
+              >
+                <template #cta>
+                  <Button variant="link" size="sm" @click="clearFilters">Clear filters</Button>
+                </template>
+              </EmptyState>
             </td>
           </tr>
         </tbody>
@@ -794,27 +807,6 @@ defineExpose({
   justify-content: flex-end;
 }
 
-.wp-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-8) var(--wp-space-6);
-  text-align: center;
-}
-.wp-empty__icon {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  background: var(--wp-bg-3);
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-xl);
-  margin-bottom: var(--wp-space-3);
-}
-.wp-empty__msg { color: var(--wp-text-muted); margin: 0 0 var(--wp-space-3); }
 
 .wp-page-pager {
   display: flex;

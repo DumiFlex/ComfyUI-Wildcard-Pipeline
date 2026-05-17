@@ -5,6 +5,7 @@ import { useToast } from "../composables/useToast";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
+import EmptyState from "../components/ui/EmptyState.vue";
 import { useBundleStore } from "../stores/bundleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -102,11 +103,20 @@ function frameColor(row: BundleRow): string {
     :loading="store.loading"
     :filter="store.filter"
     :mid-cols="3"
-    empty-message="No bundles yet. Use the +Bundle button on a Context node to create one from selected modules."
+    empty-message="No bundles yet"
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
+    <template #empty>
+      <EmptyState
+        icon="pi-box"
+        headline="No bundles yet"
+        body="Bundles group modules together for reuse. Create your first to package modules into a unit."
+        variant="library"
+      />
+    </template>
+
     <template #filter-panel="{ filter, emitFetch }">
       <div class="wp-filters-grid">
         <div class="wp-field">

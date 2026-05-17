@@ -5,6 +5,7 @@ import { useToast } from "../composables/useToast";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
+import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -110,11 +111,26 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
     :loading="store.loading"
     :filter="store.filter"
     :mid-cols="2"
-    empty-message="No fixed values yet. Use these to lock variables to specific strings."
+    empty-message="No fixed values yet"
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
+    <template #empty>
+      <EmptyState
+        icon="pi-tag"
+        headline="No fixed values yet"
+        body="Fixed values resolve to a single string. Create one to template static text."
+        variant="library"
+      >
+        <template #cta>
+          <Button variant="primary" icon="pi-plus" @click="$router.push('/fixed-values/new')">
+            New fixed value
+          </Button>
+        </template>
+      </EmptyState>
+    </template>
+
     <template #filter-panel="{ filter, emitFetch }">
       <div class="wp-filters-grid">
         <div class="wp-field">

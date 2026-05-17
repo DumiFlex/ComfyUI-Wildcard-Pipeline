@@ -2,8 +2,8 @@
 import { computed, nextTick, onMounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
+import EmptyState from "../components/ui/EmptyState.vue";
 import Field from "../components/ui/Field.vue";
-import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -157,10 +157,12 @@ async function saveEdit() {
         <tbody>
           <tr v-if="store.items.length === 0">
             <td colspan="4">
-              <div class="wp-empty">
-                <div class="wp-empty__icon"><Icon name="pi-bookmark" /></div>
-                <div class="wp-dim">No categories yet.</div>
-              </div>
+              <EmptyState
+                icon="pi-bookmark"
+                headline="No categories yet"
+                body="Categories group modules in the library sidebar. Create one to organize your work."
+                variant="library"
+              />
             </td>
           </tr>
           <tr

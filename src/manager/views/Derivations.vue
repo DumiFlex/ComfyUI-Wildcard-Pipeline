@@ -5,6 +5,7 @@ import { useToast } from "../composables/useToast";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
+import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -134,11 +135,26 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
     :loading="store.loading"
     :filter="store.filter"
     :mid-cols="2"
-    empty-message="No derivations yet. Use these to apply conditional post-processing rules."
+    empty-message="No derivations yet"
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
+    <template #empty>
+      <EmptyState
+        icon="pi-arrow-right-arrow-left"
+        headline="No derivations yet"
+        body="Derivations branch logic on conditions to produce values. Create one to add conditional flow."
+        variant="library"
+      >
+        <template #cta>
+          <Button variant="primary" icon="pi-plus" @click="$router.push('/derivations/new')">
+            New derivation
+          </Button>
+        </template>
+      </EmptyState>
+    </template>
+
     <template #filter-panel="{ filter, emitFetch }">
       <div class="wp-filters-grid">
         <div class="wp-field">

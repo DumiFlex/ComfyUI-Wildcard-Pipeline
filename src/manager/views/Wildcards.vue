@@ -6,6 +6,7 @@ import ModuleListView from "../components/ModuleListView.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
+import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -175,11 +176,26 @@ function isValid(row: ModuleRow): boolean {
     :filter="store.filter"
     :extra-filters="extraFilters"
     :mid-cols="4"
-    empty-message="No wildcards yet. Create your first to start building dynamic prompts."
+    empty-message="No wildcards yet"
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
+    <template #empty>
+      <EmptyState
+        icon="pi-sparkles"
+        headline="No wildcards yet"
+        body="Wildcards let you sample one option from a pool. Create your first to start composing prompts."
+        variant="library"
+      >
+        <template #cta>
+          <Button variant="primary" icon="pi-plus" @click="$router.push('/wildcards/new')">
+            New wildcard
+          </Button>
+        </template>
+      </EmptyState>
+    </template>
+
     <template #filter-panel="{ filter, emitFetch }">
       <div class="wp-filters-grid">
         <div class="wp-field">

@@ -5,6 +5,7 @@ import { useToast } from "../composables/useToast";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
+import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -170,11 +171,26 @@ function formatFactor(f: number): string {
     :loading="store.loading"
     :filter="store.filter"
     :mid-cols="4"
-    empty-message="No constraints yet. Use these to set rules between wildcards."
+    empty-message="No constraints yet"
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"
   >
+    <template #empty>
+      <EmptyState
+        icon="pi-filter"
+        headline="No constraints yet"
+        body="Constraints limit which combinations of values can co-occur. Create one to prune combinations."
+        variant="library"
+      >
+        <template #cta>
+          <Button variant="primary" icon="pi-plus" @click="$router.push('/constraints/new')">
+            New constraint
+          </Button>
+        </template>
+      </EmptyState>
+    </template>
+
     <template #filter-panel="{ filter, emitFetch }">
       <div class="wp-filters-grid">
         <div class="wp-field">

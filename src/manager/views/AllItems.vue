@@ -25,6 +25,7 @@ import { useRouter } from "vue-router";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
+import EmptyState from "../components/ui/EmptyState.vue";
 import { useToast } from "../composables/useToast";
 import { api } from "../api/client";
 import { catChipStyle } from "../utils/catChip";
@@ -294,11 +295,20 @@ function refresh() {
     :loading="loading"
     :filter="filter"
     :mid-cols="2"
-    empty-message="No items match these filters. Clear the kind selection or search box to broaden."
+    empty-message="Library is empty"
     @fetch="refresh"
     @delete="del"
     @bulk-delete="bulkDel"
   >
+    <template #empty>
+      <EmptyState
+        icon="pi-objects-column"
+        headline="Library is empty"
+        body="Create a module from any kind to populate your library."
+        variant="library"
+      />
+    </template>
+
     <template #filter-panel="{ filter: f, emitFetch }">
       <div class="wp-filters-grid">
         <div class="wp-field wp-field--full">
