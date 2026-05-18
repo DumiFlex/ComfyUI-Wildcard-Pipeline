@@ -16,11 +16,12 @@
  *   - `actions`               — trailing per-row action buttons
  *   - `expansion`             — body of the expanded-row drawer
  */
-import { computed, ref, watch, useSlots } from "vue";
+import { computed, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "./ui/Button.vue";
 import Checkbox from "./ui/Checkbox.vue";
 import Chip from "./ui/Chip.vue";
+import Modal from "./ui/Modal.vue";
 import Select from "./ui/Select.vue";
 import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
@@ -68,6 +69,12 @@ interface Props {
   page?: number;
   pageSize?: number;
   extraActive?: Record<string, boolean>;
+  /** Tag list available in the bulk-tag-add picker. Surfaced from parent so the picker can autocomplete. */
+  availableTags?: string[];
+  /** Category options for bulk-set-category. Mirror existing per-view Select option shape. */
+  categoryOptions?: { value: string | null; label: string; dot?: string }[];
+  /** Hide the bulk Set-category action — for kinds without a category field (bundles). */
+  hideBulkSetCategory?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -77,6 +84,9 @@ const props = withDefaults(defineProps<Props>(), {
   showFavorite: true,
   showTags: true,
   showUpdated: true,
+  availableTags: () => [],
+  categoryOptions: () => [],
+  hideBulkSetCategory: false,
 });
 
 const emit = defineEmits<{
@@ -86,6 +96,11 @@ const emit = defineEmits<{
   (e: "update:page", value: number): void;
   (e: "update:pageSize", value: number): void;
   (e: "update:extraActive", value: Record<string, boolean>): void;
+  (e: "bulk-favorite", items: T[], on: boolean): void;
+  (e: "bulk-duplicate", items: T[]): void;
+  (e: "bulk-tag-add", items: T[], tag: string): void;
+  (e: "bulk-tag-remove", items: T[], tag: string): void;
+  (e: "bulk-set-category", items: T[], categoryId: string | null): void;
 }>();
 
 const slots = useSlots();
@@ -318,10 +333,80 @@ function emitFetch() {
   emit("fetch");
 }
 
-function bulkDelete() {
-  const items = props.items.filter((i) => selected.value.has(i.id));
-  if (items.length === 0) return;
-  emit("bulk-delete", items);
+const tagAddOpen = ref(false);
+const tagAddValue = ref("");
+const tagAddInputRef = ref<HTMLInputElement | null>(null);
+
+const tagRemoveOpen = ref(false);
+const tagRemoveValue = ref("");
+
+const categoryOpen = ref(false);
+const categoryValue = ref<string | number | null>(null);
+
+const deleteOpen = ref(false);
+
+watch(tagAddOpen, async (open) => {
+  if (open) {
+    tagAddValue.value = "";
+    await nextTick();
+    tagAddInputRef.value?.focus();
+  }
+});
+
+watch(tagRemoveOpen, (open) => { if (open) tagRemoveValue.value = ""; });
+watch(categoryOpen, (open) => { if (open) categoryValue.value = null; });
+
+const selectedItems = computed(() => props.items.filter((i) => selected.value.has(i.id)));
+
+const tagsOnSelection = computed(() => {
+  const set = new Set<string>();
+  for (const i of selectedItems.value) for (const t of (i.tags ?? [])) set.add(t);
+  return [...set].sort();
+});
+
+const offPageSelectedCount = computed(() => {
+  let n = 0;
+  for (const id of selected.value) {
+    if (!paged.value.some((r) => r.id === id)) n += 1;
+  }
+  return n;
+});
+
+const canSelectAllMatching = computed(
+  () => filteredItems.value.length > paged.value.length &&
+        filteredItems.value.some((r) => !selected.value.has(r.id)),
+);
+
+function selectAllMatching() {
+  const next = new Set(selected.value);
+  for (const r of filteredItems.value) next.add(r.id);
+  selected.value = next;
+}
+
+function submitTagAdd() {
+  if (!tagAddValue.value.trim()) return;
+  emit("bulk-tag-add", selectedItems.value, tagAddValue.value.trim());
+  tagAddOpen.value = false;
+}
+
+function submitTagRemove() {
+  if (!tagRemoveValue.value) return;
+  emit("bulk-tag-remove", selectedItems.value, tagRemoveValue.value);
+  tagRemoveOpen.value = false;
+}
+
+function submitSetCategory() {
+  emit(
+    "bulk-set-category",
+    selectedItems.value,
+    typeof categoryValue.value === "string" ? categoryValue.value : null,
+  );
+  categoryOpen.value = false;
+}
+
+function confirmBulkDelete() {
+  emit("bulk-delete", selectedItems.value);
+  deleteOpen.value = false;
   selected.value = new Set();
 }
 
@@ -451,14 +536,131 @@ defineExpose({
     </Transition>
 
     <!-- Bulk-select bar -->
-    <div v-if="selected.size" class="wp-bulk-bar">
+    <div v-if="selected.size" class="wp-bulk-bar" data-test="bulk-bar">
       <span class="wp-bulk-bar__count">
         <strong>{{ selected.size }}</strong> selected
+        <span v-if="offPageSelectedCount > 0" class="wp-dim wp-bulk-bar__hint">
+          ({{ paged.filter((r) => selected.has(r.id)).length }} on page, {{ offPageSelectedCount }} elsewhere)
+        </span>
       </span>
+      <Button
+        v-if="canSelectAllMatching"
+        variant="link" size="sm"
+        data-test="bulk-select-all-matching"
+        @click="selectAllMatching"
+      >Select all {{ filteredItems.length }} matching</Button>
       <span class="wp-spacer" />
-      <Button variant="ghost" size="sm" @click="selected = new Set()">Clear</Button>
-      <Button variant="danger" size="sm" icon="pi-trash" @click="bulkDelete">Delete</Button>
+      <Button variant="ghost" size="sm" icon="pi-star" data-test="bulk-favorite-on"
+        @click="emit('bulk-favorite', selectedItems, true)">Favorite</Button>
+      <Button variant="ghost" size="sm" icon="pi-star-fill" data-test="bulk-favorite-off"
+        @click="emit('bulk-favorite', selectedItems, false)">Unfavorite</Button>
+      <Button variant="ghost" size="sm" icon="pi-clone" data-test="bulk-duplicate"
+        @click="emit('bulk-duplicate', selectedItems)">Duplicate</Button>
+      <Button variant="ghost" size="sm" icon="pi-plus" data-test="bulk-tag-add-open"
+        @click="tagAddOpen = true">Add tag</Button>
+      <Button variant="ghost" size="sm" icon="pi-minus" data-test="bulk-tag-remove-open"
+        @click="tagRemoveOpen = true">Remove tag</Button>
+      <Button v-if="!hideBulkSetCategory" variant="ghost" size="sm" icon="pi-folder" data-test="bulk-set-category-open"
+        @click="categoryOpen = true">Set category</Button>
+      <Button variant="ghost" size="sm" data-test="bulk-clear"
+        @click="selected = new Set()">Clear</Button>
+      <Button variant="danger" size="sm" icon="pi-trash" data-test="bulk-delete-open"
+        @click="deleteOpen = true">Delete</Button>
     </div>
+
+    <!-- Tag-add modal -->
+    <Modal :open="tagAddOpen" @update:open="tagAddOpen = $event">
+      <template #header>
+        <h3 class="wp-modal__title">Add tag to {{ selected.size }} items</h3>
+      </template>
+      <div class="wp-bulk-modal-body">
+        <input
+          ref="tagAddInputRef"
+          v-model="tagAddValue"
+          class="wp-input"
+          data-test="bulk-tag-input"
+          placeholder="Type tag name (or pick existing)"
+          @keydown.enter="submitTagAdd"
+        />
+        <div v-if="availableTags.length" class="wp-bulk-modal-suggestions">
+          <button
+            v-for="t in availableTags"
+            :key="t"
+            type="button"
+            class="wp-chip wp-chip--toggle"
+            @click="tagAddValue = t"
+          >{{ t }}</button>
+        </div>
+      </div>
+      <template #footer>
+        <Button variant="ghost" @click="tagAddOpen = false">Cancel</Button>
+        <Button
+          variant="primary"
+          :disabled="!tagAddValue.trim()"
+          data-test="bulk-tag-submit"
+          @click="submitTagAdd"
+        >Add</Button>
+      </template>
+    </Modal>
+
+    <!-- Tag-remove modal -->
+    <Modal :open="tagRemoveOpen" @update:open="tagRemoveOpen = $event">
+      <template #header>
+        <h3 class="wp-modal__title">Remove tag from {{ selected.size }} items</h3>
+      </template>
+      <div class="wp-bulk-modal-body">
+        <div class="wp-bulk-modal-suggestions">
+          <button
+            v-for="t in tagsOnSelection"
+            :key="t"
+            type="button"
+            class="wp-chip wp-chip--toggle"
+            :data-active="tagRemoveValue === t ? '' : null"
+            @click="tagRemoveValue = t"
+          >{{ t }}</button>
+          <span v-if="!tagsOnSelection.length" class="wp-dim">No tags on selected items.</span>
+        </div>
+      </div>
+      <template #footer>
+        <Button variant="ghost" @click="tagRemoveOpen = false">Cancel</Button>
+        <Button
+          variant="primary"
+          :disabled="!tagRemoveValue"
+          data-test="bulk-tag-remove-submit"
+          @click="submitTagRemove"
+        >Remove</Button>
+      </template>
+    </Modal>
+
+    <!-- Set-category modal -->
+    <Modal :open="categoryOpen" @update:open="categoryOpen = $event">
+      <template #header>
+        <h3 class="wp-modal__title">Set category for {{ selected.size }} items</h3>
+      </template>
+      <div class="wp-bulk-modal-body">
+        <Select v-model="categoryValue" :options="categoryOptions" aria-label="Category" />
+      </div>
+      <template #footer>
+        <Button variant="ghost" @click="categoryOpen = false">Cancel</Button>
+        <Button
+          variant="primary"
+          data-test="bulk-set-category-submit"
+          @click="submitSetCategory"
+        >Apply</Button>
+      </template>
+    </Modal>
+
+    <!-- Delete confirm -->
+    <Modal :open="deleteOpen" @update:open="deleteOpen = $event">
+      <template #header>
+        <h3 class="wp-modal__title">Delete {{ selected.size }} items?</h3>
+      </template>
+      <p>This cannot be undone.</p>
+      <template #footer>
+        <Button variant="ghost" @click="deleteOpen = false">Cancel</Button>
+        <Button variant="danger" data-test="bulk-delete-confirm" @click="confirmBulkDelete">Delete</Button>
+      </template>
+    </Modal>
 
     <!-- Active-filter chips row -->
     <div v-if="hasActiveFilters" class="wp-active-filters">
@@ -527,11 +729,11 @@ defineExpose({
               :data-expanded="isExpanded(row.id) ? 'true' : 'false'"
               :class="{ 'wp-table__row--selected': isSelected(row), 'wp-row-favorite': row.is_favorite }"
             >
-              <td @click.stop>
+              <td :data-test="`row-select-${row.id}`" @click.stop="toggleSelect(row)">
                 <Checkbox
                   :model-value="isSelected(row)"
                   aria-label="Select row"
-                  @update:model-value="() => toggleSelect(row)"
+                  @update:model-value="() => { /* td click handles toggle */ }"
                 />
               </td>
               <td>
@@ -895,6 +1097,22 @@ defineExpose({
 
 .wp-row-favorite > td:first-child {
   border-left: 2px solid var(--wp-warn, #f7b955);
+}
+
+.wp-bulk-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-4);
+  min-width: 320px;
+}
+.wp-bulk-modal-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wp-space-2);
+}
+.wp-bulk-bar__hint {
+  margin-left: var(--wp-space-3);
+  font-size: var(--wp-text-xs);
 }
 
 </style>
