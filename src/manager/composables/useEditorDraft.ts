@@ -3,6 +3,20 @@ import { computed, onBeforeUnmount, ref, watch, type ComputedRef, type Ref } fro
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DRAFT_DEBOUNCE_MS = 2000;
 
+/** Format a millisecond age as a short "X ago" string for the draft banner.
+ *  Shared so all 6 editors render identical age strings without redeclaring
+ *  the same 10-line helper. */
+export function formatDraftAge(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return "just now";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+
 export interface EditorDraftOptions {
   kind: string;
   id: string;
