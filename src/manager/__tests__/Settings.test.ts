@@ -54,7 +54,11 @@ describe("Settings.vue", () => {
   it("max_ref_depth field has correct type and default value", async () => {
     const wrap = mount(Settings);
     const store = useUiStore();
-    const input = wrap.get<HTMLInputElement>('[data-test="settings-wildcard-max-ref-depth"]');
+    // The Input component wraps number inputs in a <div> so the stepper
+    // can dock to the right edge. data-test lands on the wrapper —
+    // descend to the inner <input> for the typed assertions.
+    const wrapper = wrap.get('[data-test="settings-wildcard-max-ref-depth"]');
+    const input = wrapper.get<HTMLInputElement>("input");
     expect(input.attributes("type")).toBe("number");
     expect(Number(input.element.value)).toBe(store.maxRefDepth);
   });
@@ -62,7 +66,7 @@ describe("Settings.vue", () => {
   it("changing max_ref_depth updates store and localStorage", async () => {
     const wrap = mount(Settings);
     const store = useUiStore();
-    const input = wrap.get('[data-test="settings-wildcard-max-ref-depth"]');
+    const input = wrap.get('[data-test="settings-wildcard-max-ref-depth"]').get("input");
     await input.setValue("16");
     await input.trigger("blur");
     expect(store.maxRefDepth).toBe(16);
@@ -72,7 +76,7 @@ describe("Settings.vue", () => {
   it("max_ref_depth clamps to valid range (1-32)", async () => {
     const wrap = mount(Settings);
     const store = useUiStore();
-    const input = wrap.get('[data-test="settings-wildcard-max-ref-depth"]');
+    const input = wrap.get('[data-test="settings-wildcard-max-ref-depth"]').get("input");
 
     // Test clamping to min
     await input.setValue("0");
