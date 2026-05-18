@@ -28,6 +28,24 @@ const { canGoBack } = useBrowserHistory();
 function onBack(): void {
   router.back();
 }
+
+/** Click-to-open palette shortcut hint. Dispatching a synthetic
+ *  Ctrl+K keydown reuses the same handler AppLayout installs for the
+ *  keyboard shortcut — keeps palette ownership in one place. The
+ *  visible label adapts to mac (⌘K) / windows (Ctrl K). */
+const isMac = typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/i.test(navigator.platform);
+const paletteShortcut = computed(() => ({
+  kbd: isMac ? "⌘ K" : "Ctrl K",
+  tooltip: isMac ? "Search modules and commands (⌘ K)" : "Search modules and commands (Ctrl+K)",
+}));
+function openPalette(): void {
+  window.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "k",
+    ctrlKey: !isMac,
+    metaKey: isMac,
+    bubbles: true,
+  }));
+}
 </script>
 
 <template>
@@ -49,6 +67,18 @@ function onBack(): void {
     </RouterLink>
 
     <div class="wp-topbar__spacer" />
+
+    <button
+      type="button"
+      class="wp-topbar__palette-hint"
+      :title="paletteShortcut.tooltip"
+      data-test="topbar-palette"
+      @click="openPalette"
+    >
+      <Icon name="pi-search" :size="12" />
+      <span class="wp-topbar__palette-label">Search</span>
+      <kbd class="wp-kbd">{{ paletteShortcut.kbd }}</kbd>
+    </button>
 
     <button
       type="button"
@@ -114,5 +144,45 @@ function onBack(): void {
     background-clip: text;
     color: transparent;
   }
+}
+
+/* Command-palette discovery affordance. Lives just before the back
+ * arrow in the topbar so the global Cmd/Ctrl + K shortcut is
+ * visually advertised rather than hidden behind tribal knowledge.
+ * Click also opens the palette (synthetic keydown — see script). */
+.wp-topbar__palette-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 28px;
+  margin-right: 4px;
+  background: color-mix(in oklab, var(--wp-bg-3) 80%, transparent);
+  border: 1px solid var(--wp-border);
+  border-radius: 999px;
+  color: var(--wp-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.wp-topbar__palette-hint:hover {
+  background: var(--wp-bg-3);
+  color: var(--wp-text);
+  border-color: var(--wp-border-strong, var(--wp-border));
+}
+.wp-topbar__palette-hint:focus-visible {
+  outline: 2px solid var(--wp-accent-500);
+  outline-offset: 2px;
+}
+.wp-topbar__palette-label { color: inherit; }
+.wp-topbar__palette-hint .wp-kbd {
+  /* Inherit the chip's font-size so it doesn't tower over the label. */
+  padding: 1px 6px;
+  font-size: 10.5px;
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+}
+@media (max-width: 640px) {
+  .wp-topbar__palette-label { display: none; }
 }
 </style>
