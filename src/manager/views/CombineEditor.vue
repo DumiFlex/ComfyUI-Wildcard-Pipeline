@@ -10,7 +10,7 @@
  */
 import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
@@ -22,6 +22,7 @@ import { tokenizeRich } from "../../widgets/richTokenize";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
+import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
@@ -35,41 +36,12 @@ import type {
 } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
-const route = useRoute();
 const router = useRouter();
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
 const recent = useRecentStore();
-
-const KNOWN_LIST_PATHS = new Set([
-  "/wildcards",
-  "/fixed-values",
-  "/combines",
-  "/derivations",
-  "/constraints",
-  "/bundles",
-  "/all",
-  "/categories",
-  "/dashboard",
-  "/import-export",
-  "/test",
-]);
-
-/** Validated return path or fallback to bare list. */
-function resolveReturnTo(fallback: string): string {
-  const raw = route.query.returnTo;
-  if (typeof raw !== "string") return fallback;
-  try {
-    const decoded = decodeURIComponent(raw);
-    if (!decoded.startsWith("/") || decoded.startsWith("//")) return fallback;
-    const basePath = decoded.split("?")[0];
-    if (!KNOWN_LIST_PATHS.has(basePath)) return fallback;
-    return decoded;
-  } catch {
-    return fallback;
-  }
-}
+const { resolveReturnTo } = useReturnTo();
 
 const name = ref("");
 const description = ref("");
