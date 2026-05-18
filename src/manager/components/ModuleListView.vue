@@ -104,6 +104,8 @@ const emit = defineEmits<{
   (e: "bulk-tag-add", items: T[], tag: string): void;
   (e: "bulk-tag-remove", items: T[], tag: string): void;
   (e: "bulk-set-category", items: T[], categoryId: string | null): void;
+  (e: "row-open", row: T): void;
+  (e: "row-favorite-toggle", row: T): void;
 }>();
 
 const slots = useSlots();
@@ -302,6 +304,72 @@ function isExpanded(id: string): boolean {
   return expanded.value.has(id);
 }
 
+const focusedRowId = ref<string | null>(null);
+
+// Reset focus when paged content changes — focused row may have scrolled out
+// (filter change, page change, sort, etc.). Snap to first row on new page.
+watch(paged, (next) => {
+  if (focusedRowId.value && !next.some((r) => r.id === focusedRowId.value)) {
+    focusedRowId.value = next[0]?.id ?? null;
+  }
+});
+
+function focusedIndex(): number {
+  if (!focusedRowId.value) return -1;
+  return paged.value.findIndex((r) => r.id === focusedRowId.value);
+}
+
+function moveFocus(delta: number) {
+  const list = paged.value;
+  if (list.length === 0) return;
+  const i = focusedIndex();
+  let next: number;
+  if (i < 0) next = delta > 0 ? 0 : list.length - 1;
+  else next = Math.max(0, Math.min(list.length - 1, i + delta));
+  focusedRowId.value = list[next].id;
+}
+
+function onTableKeydown(e: KeyboardEvent) {
+  switch (e.key) {
+    case "ArrowDown":
+      e.preventDefault(); moveFocus(1); return;
+    case "ArrowUp":
+      e.preventDefault(); moveFocus(-1); return;
+    case "Home":
+      e.preventDefault();
+      focusedRowId.value = paged.value[0]?.id ?? null;
+      return;
+    case "End":
+      e.preventDefault();
+      focusedRowId.value = paged.value[paged.value.length - 1]?.id ?? null;
+      return;
+    case " ": {
+      if (!focusedRowId.value) return;
+      e.preventDefault();
+      const row = paged.value.find((r) => r.id === focusedRowId.value);
+      if (row) toggleSelect(row);
+      return;
+    }
+    case "Enter": {
+      if (!focusedRowId.value) return;
+      e.preventDefault();
+      const row = paged.value.find((r) => r.id === focusedRowId.value);
+      if (row) emit("row-open", row);
+      return;
+    }
+    case "f": case "F": {
+      if (!focusedRowId.value) return;
+      // Skip if user is typing in an input/textarea.
+      const target = e.target as HTMLElement | null;
+      if (target?.matches("input, textarea")) return;
+      e.preventDefault();
+      const row = paged.value.find((r) => r.id === focusedRowId.value);
+      if (row) emit("row-favorite-toggle", row);
+      return;
+    }
+  }
+}
+
 function clearFilters() {
   props.filter.q = "";
   props.filter.favorites = false;
@@ -454,6 +522,7 @@ defineExpose({
   paged,
   totalPages,
   activeFilterCount,
+  focusedRowId,
 });
 </script>
 
@@ -730,11 +799,18 @@ defineExpose({
             <th class="wp-table__actions-col" style="text-align:right">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody @keydown="onTableKeydown">
           <template v-for="row in paged" :key="row.id">
             <tr
+              :tabindex="focusedRowId === row.id ? 0 : -1"
+              :data-focused="focusedRowId === row.id ? 'true' : null"
               :data-expanded="isExpanded(row.id) ? 'true' : 'false'"
-              :class="{ 'wp-table__row--selected': isSelected(row), 'wp-row-favorite': row.is_favorite }"
+              :class="{
+                'wp-table__row--selected': isSelected(row),
+                'wp-table__row--focused': focusedRowId === row.id,
+                'wp-row-favorite': row.is_favorite,
+              }"
+              @focus="focusedRowId = row.id"
             >
               <td :data-test="`row-select-${row.id}`" @click.stop="toggleSelect(row)">
                 <!-- Checkbox is purely visual here — the wrapping <td>'s @click handler
@@ -1113,6 +1189,17 @@ defineExpose({
 
 .wp-row-favorite > td:first-child {
   border-left: 2px solid var(--wp-warn, #f7b955);
+}
+
+/* Focused-row marker (keyboard-nav) — subtle accent stripe on the left. Separate
+ * from selected (checkbox) and hover. Outline appears via :focus-visible. */
+.wp-table__row--focused > td:first-child {
+  box-shadow: inset 2px 0 0 var(--wp-accent-500);
+}
+.wp-table tr:focus { outline: none; }
+.wp-table tr:focus-visible {
+  outline: 2px solid var(--wp-accent-500);
+  outline-offset: -2px;
 }
 
 .wp-bulk-modal-body {

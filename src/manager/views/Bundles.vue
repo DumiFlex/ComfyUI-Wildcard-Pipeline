@@ -158,6 +158,8 @@ function frameColor(row: BundleRow): string {
     @bulk-tag-add="bulk.onBulkTagAdd"
     @bulk-tag-remove="bulk.onBulkTagRemove"
     @bulk-delete="bulk.onBulkDelete"
+    @row-open="edit"
+    @row-favorite-toggle="fav"
   >
     <template #empty>
       <EmptyState

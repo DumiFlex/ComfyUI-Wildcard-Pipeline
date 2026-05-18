@@ -379,6 +379,8 @@ function refresh() {
     @bulk-tag-remove="onBulkTagRemove"
     @bulk-set-category="onBulkSetCategory"
     @bulk-delete="onBulkDelete"
+    @row-open="editRow"
+    @row-favorite-toggle="fav"
   >
     <template #empty>
       <EmptyState

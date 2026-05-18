@@ -258,6 +258,8 @@ function isValid(row: ModuleRow): boolean {
     @bulk-tag-remove="bulk.onBulkTagRemove"
     @bulk-set-category="bulk.onBulkSetCategory"
     @bulk-delete="bulk.onBulkDelete"
+    @row-open="edit"
+    @row-favorite-toggle="fav"
   >
     <template #empty>
       <EmptyState
