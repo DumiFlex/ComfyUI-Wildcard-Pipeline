@@ -23,6 +23,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import { collectLibraryVarHints, type VarHint } from "../utils/library-suggestions";
@@ -38,6 +39,7 @@ const router = useRouter();
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+const recent = useRecentStore();
 
 const KNOWN_LIST_PATHS = new Set([
   "/wildcards",
@@ -160,6 +162,7 @@ onMounted(async () => {
         outputVar.value = toIdentifier(row.name);
       }
       historyEntries.value = readHistory(row.payload);
+      recent.push({ id: props.id, kind: "combine", name: name.value });
     } catch {
       toast.push({ severity: "error", summary: "Combine not found" });
       router.replace("/combines");
@@ -231,7 +234,10 @@ async function save() {
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
+      recent.push({ id: props.id, kind: "combine", name: name.value });
     } else {
+      // New mode: the new row id is not surfaced here; mount-time push fires
+      // next time the user opens this item.
       await moduleStore.create({
         type: "combine",
         name: name.value,

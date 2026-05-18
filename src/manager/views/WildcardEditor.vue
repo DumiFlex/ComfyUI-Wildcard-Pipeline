@@ -25,6 +25,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 import { collectLibraryWildcardRefs } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
@@ -41,6 +42,7 @@ const router = useRouter();
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+const recent = useRecentStore();
 
 const KNOWN_LIST_PATHS = new Set([
   "/wildcards",
@@ -185,6 +187,7 @@ onMounted(async () => {
       subCategories.value = [...(p.sub_categories ?? [])];
       varBinding.value = (p.var_binding && p.var_binding.trim()) || toIdentifier(row.name);
       historyEntries.value = readHistory(row.payload);
+      recent.push({ id: props.id, kind: "wildcard", name: name.value });
     } catch {
       toast.push({ severity: "error", summary: "Wildcard not found" });
       router.replace("/wildcards");
@@ -273,7 +276,11 @@ async function save() {
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
+      recent.push({ id: props.id, kind: "wildcard", name: name.value });
     } else {
+      // New mode: moduleStore.create() does not expose the new id on the
+      // returned row in a way that's stable across mock/real backends.
+      // The next time the user opens this item the mount-time push fires.
       await moduleStore.create({
         type: "wildcard",
         name: name.value, description: description.value,

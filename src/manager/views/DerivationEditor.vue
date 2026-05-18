@@ -17,6 +17,7 @@ import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
+import { useRecentStore } from "../stores/recentStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { appendSnapshot, readHistory } from "../utils/history";
 import { buildUuidToName } from "../utils/wildcardSyntax";
@@ -63,6 +64,7 @@ function resolveReturnTo(fallback: string): string {
 }
 const categoryStore = useCategoryStore();
 const toast = useToast();
+const recent = useRecentStore();
 
 const name = ref("");
 const description = ref("");
@@ -193,6 +195,7 @@ onMounted(async () => {
       const incoming = Array.isArray(p.rules) ? p.rules : [];
       rules.value = incoming.length ? incoming.map(migrateRule) : [];
       historyEntries.value = readHistory(row.payload);
+      recent.push({ id: props.id, kind: "derivation", name: name.value });
     } catch {
       toast.push({ severity: "error", summary: "Derivation not found" });
       router.replace("/derivations");
@@ -256,7 +259,10 @@ async function save() {
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
+      recent.push({ id: props.id, kind: "derivation", name: name.value });
     } else {
+      // New mode: the new row id is not surfaced here; mount-time push fires
+      // next time the user opens this item.
       await moduleStore.create({
         type: "derivation",
         name: name.value,

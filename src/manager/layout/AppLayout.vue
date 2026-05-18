@@ -8,9 +8,11 @@ import TweaksPanel from "../components/TweaksPanel.vue";
 import CommandPalette from "../components/CommandPalette.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommandIndex } from "../composables/useCommandIndex";
+import { useRecentStore } from "../stores/recentStore";
 
 const ui = useUiStore();
 const commandIndex = useCommandIndex();
+const recent = useRecentStore();
 
 const paletteOpen = ref(false);
 
@@ -44,6 +46,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     </div>
     <ToastHost />
     <TweaksPanel />
-    <CommandPalette v-model:open="paletteOpen" :items="commandIndex" />
+    <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
   </div>
 </template>

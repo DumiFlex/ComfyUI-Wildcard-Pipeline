@@ -26,6 +26,7 @@ import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useModuleStore } from "../stores/moduleStore";
+import { useRecentStore } from "../stores/recentStore";
 import type { BundleRow, ModuleRow } from "../api/types";
 import type { ModuleEntry } from "../../widgets/_shared";
 
@@ -64,6 +65,7 @@ const store = useBundleStore();
 const categoryStore = useCategoryStore();
 const moduleStore = useModuleStore();
 const toast = useToast();
+const recent = useRecentStore();
 
 const addModalOpen = ref(false);
 
@@ -219,6 +221,7 @@ onMounted(async () => {
       ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
       : [];
     baselineByChildId.value = snapshotBaseline(children.value);
+    recent.push({ id: props.id, kind: "bundle", name: name.value });
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   } finally {
@@ -266,6 +269,7 @@ async function save() {
       : [];
     baselineByChildId.value = snapshotBaseline(children.value);
     bundleBaseline.value = bundleSnapshot();
+    recent.push({ id: props.id, kind: "bundle", name: updated.name });
     toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });

@@ -22,6 +22,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useRecentStore } from "../stores/recentStore";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
   ConstraintCell,
@@ -66,6 +67,7 @@ function resolveReturnTo(fallback: string): string {
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+const recent = useRecentStore();
 
 interface WildcardOption { id: string; value: string; weight: number; sub_category?: string | null; }
 interface WildcardPayloadShape {
@@ -223,6 +225,7 @@ onMounted(async () => {
       matrix.value = normalizeMatrix(p.matrix);
       exceptions.value = normalizeExceptions(p.exceptions);
       historyEntries.value = readHistory(row.payload);
+      recent.push({ id: props.id, kind: "constraint", name: name.value });
     } catch {
       toast.push({ severity: "error", summary: "Constraint not found" });
       router.replace("/constraints");
@@ -307,7 +310,10 @@ async function save() {
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
+      recent.push({ id: props.id, kind: "constraint", name: name.value });
     } else {
+      // New mode: the new row id is not surfaced here; mount-time push fires
+      // next time the user opens this item.
       await moduleStore.create({
         type: "constraint",
         name: name.value,

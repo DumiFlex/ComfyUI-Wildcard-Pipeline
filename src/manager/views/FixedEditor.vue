@@ -20,6 +20,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useRecentStore } from "../stores/recentStore";
 import { VALID_IDENTIFIER_RE } from "../utils/slug";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type { ModuleHistoryEntry } from "../api/types";
@@ -32,6 +33,7 @@ const router = useRouter();
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+const recent = useRecentStore();
 
 const KNOWN_LIST_PATHS = new Set([
   "/wildcards",
@@ -105,6 +107,7 @@ onMounted(async () => {
         value: v.value ?? "",
       }));
       historyEntries.value = readHistory(row.payload);
+      recent.push({ id: props.id, kind: "fixed_values", name: name.value });
     } catch {
       toast.push({ severity: "error", summary: "Module not found" });
       router.replace("/fixed-values");
@@ -198,7 +201,10 @@ async function save() {
         payload: { ...payload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
+      recent.push({ id: props.id, kind: "fixed_values", name: name.value });
     } else {
+      // New mode: the new row id is not surfaced here; mount-time push fires
+      // next time the user opens this item.
       await moduleStore.create({
         type: "fixed_values",
         name: name.value, description: description.value,
