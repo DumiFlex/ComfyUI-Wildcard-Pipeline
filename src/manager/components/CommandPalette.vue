@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "./ui/Icon.vue";
+import type { CommandItem } from "./CommandPalette.types";
 import { rankCommands } from "../utils/commandRank";
 
-export interface CommandItem {
-  id: string;
-  label: string;
-  kind: "module" | "bundle" | "category" | "route" | "action";
-  icon: string;
-  subtitle?: string;
-  run: () => void;
-}
+// `CommandItem` lives in `./CommandPalette.types.ts` so plain-TS
+// consumers (e.g. utils/commandRank.ts) can import the type without
+// going through the Vue SFC module shim, and to break the circular
+// dependency that would otherwise exist between component + ranker.
+// Re-export for consumers that prefer to import from the component
+// path:
+export type { CommandItem };
 
 interface Props {
   open: boolean;

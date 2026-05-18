@@ -1,4 +1,4 @@
-import type { CommandItem } from "../components/CommandPalette.vue";
+import type { CommandItem } from "../components/CommandPalette.types";
 
 /**
  * Score and sort commands against a query. Full token-aware ranking
