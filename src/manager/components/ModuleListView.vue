@@ -340,8 +340,14 @@ const tagAddInputRef = ref<HTMLInputElement | null>(null);
 const tagRemoveOpen = ref(false);
 const tagRemoveValue = ref("");
 
+/** Sentinel marking "user hasn't picked a category yet" so we can keep the
+ *  Apply button disabled until a real choice is made — including `null`
+ *  (the "(none)" option). Without this, opening the modal and reflexively
+ *  clicking Apply would clear category on every selected item. */
+const CATEGORY_NOT_PICKED = "__wp_category_not_picked__";
+
 const categoryOpen = ref(false);
-const categoryValue = ref<string | number | null>(null);
+const categoryValue = ref<string | null>(CATEGORY_NOT_PICKED);
 
 const deleteOpen = ref(false);
 
@@ -354,7 +360,7 @@ watch(tagAddOpen, async (open) => {
 });
 
 watch(tagRemoveOpen, (open) => { if (open) tagRemoveValue.value = ""; });
-watch(categoryOpen, (open) => { if (open) categoryValue.value = null; });
+watch(categoryOpen, (open) => { if (open) categoryValue.value = CATEGORY_NOT_PICKED; });
 
 const selectedItems = computed(() => props.items.filter((i) => selected.value.has(i.id)));
 
@@ -396,11 +402,8 @@ function submitTagRemove() {
 }
 
 function submitSetCategory() {
-  emit(
-    "bulk-set-category",
-    selectedItems.value,
-    typeof categoryValue.value === "string" ? categoryValue.value : null,
-  );
+  if (categoryValue.value === CATEGORY_NOT_PICKED) return;
+  emit("bulk-set-category", selectedItems.value, categoryValue.value);
   categoryOpen.value = false;
 }
 
@@ -644,6 +647,7 @@ defineExpose({
         <Button variant="ghost" @click="categoryOpen = false">Cancel</Button>
         <Button
           variant="primary"
+          :disabled="categoryValue === CATEGORY_NOT_PICKED"
           data-test="bulk-set-category-submit"
           @click="submitSetCategory"
         >Apply</Button>
@@ -730,6 +734,10 @@ defineExpose({
               :class="{ 'wp-table__row--selected': isSelected(row), 'wp-row-favorite': row.is_favorite }"
             >
               <td :data-test="`row-select-${row.id}`" @click.stop="toggleSelect(row)">
+                <!-- Checkbox is purely visual here — the wrapping <td>'s @click handler
+                     owns toggle state via `toggleSelect(row)`. Update handler is a
+                     deliberate no-op to prevent double-toggle on mouse click while
+                     keeping keyboard Space functional (button click bubbles to td). -->
                 <Checkbox
                   :model-value="isSelected(row)"
                   aria-label="Select row"
