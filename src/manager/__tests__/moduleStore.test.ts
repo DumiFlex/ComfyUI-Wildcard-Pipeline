@@ -47,11 +47,14 @@ describe("moduleStore", () => {
     expect(apiMod.list).toHaveBeenCalledWith({ type: "wildcard", q: "color" });
   });
 
-  // Regression: editors call this when they need cross-references (e.g.
+  // Regression: editors and the sidebar need cross-kind cross-references (e.g.
   // ConstraintEditor needs all wildcards even when the user came from the
   // Constraints list page that pinned `filter.type = "constraint"`). The
-  // fix must drop the persistent filter so cross-refs aren't silently empty.
-  it("fetchCatalog ignores persisted filters", async () => {
+  // catalog must reflect ALL modules without the persistent filter; `items`
+  // is left to whatever the active list view loaded (the original implementation
+  // wrote items too, but that raced with per-view fetchAll and stomped the
+  // typed subset, causing combines to appear in the Wildcards list).
+  it("fetchCatalog ignores persisted filters and writes catalog only", async () => {
     apiMod.list.mockResolvedValue({
       items: [
         { id: "wc_a", type: "wildcard" },
@@ -63,9 +66,11 @@ describe("moduleStore", () => {
     s.filter.type = "constraint";
     s.filter.q = "anything";
     s.filter.favorites = true;
+    const beforeItems = s.items.length;
     await s.fetchCatalog();
     expect(apiMod.list).toHaveBeenCalledWith({});
-    expect(s.items).toHaveLength(2);
+    expect(s.catalog).toHaveLength(2);
+    expect(s.items.length).toBe(beforeItems);
   });
 
   it("create unshifts to items", async () => {

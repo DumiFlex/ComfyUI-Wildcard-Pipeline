@@ -26,7 +26,7 @@ const editing = ref<EditingState | null>(null);
 
 const countsByCategory = computed(() => {
   const map = new Map<string, number>();
-  for (const m of moduleStore.items) {
+  for (const m of moduleStore.catalog) {
     if (m.category_id) map.set(m.category_id, (map.get(m.category_id) ?? 0) + 1);
   }
   return map;

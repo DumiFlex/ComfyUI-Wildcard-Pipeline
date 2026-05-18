@@ -38,23 +38,20 @@ export const useModuleStore = defineStore("modules", () => {
   /**
    * Fetch the full module catalog, ignoring the persistent `filter.*` state.
    *
-   * `fetchAll()` honors `filter.type` so that list views (Wildcards, Combines,
-   * etc.) only load same-kind rows — but editors need ALL modules for cross-
-   * references (`$var` autocomplete sourced from upstream wildcards/combines,
-   * Constraint editor wildcard pickers, …). Calling `fetchAll()` from an editor
-   * after the user came from a typed list page would silently scope `items` to
-   * one type and break those cross-refs. Use this method from editors instead.
+   * Writes ONLY to `catalog` — the permanent unfiltered cache read by sidebar
+   * count badges, Cmd+K palette, and editors that need cross-kind references
+   * (`$var` autocomplete, Constraint wildcard pickers, …). Editors must read
+   * `store.catalog` for cross-refs, not `store.items` (which is scoped to the
+   * current list view's filter).
    *
-   * Writes to BOTH `items` (so editors see the full set) AND `catalog` (the
-   * permanent unfiltered cache read by sidebar count badges and Cmd+K palette).
-   * The next list-view mount re-applies its filter via `fetchAll()`, restoring
-   * `items` to the scoped subset without touching `catalog`.
+   * Previously also wrote `items` so editors could read from there — but that
+   * raced against per-view `fetchAll()` and could leave list views showing
+   * mixed-kind rows when the eager AppLayout fetchCatalog returned last.
    */
   async function fetchCatalog() {
     loading.value = true;
     try {
       const res = await api.modules.list({});
-      items.value = res.items;
       catalog.value = res.items;
     } finally {
       loading.value = false;

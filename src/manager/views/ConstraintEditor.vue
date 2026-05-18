@@ -96,14 +96,14 @@ const MODE_OPTIONS = [
 ];
 
 const wildcardOptions = computed(() =>
-  moduleStore.items
+  moduleStore.catalog
     .filter((m) => m.type === "wildcard")
     .map((m) => ({ label: m.name, value: m.id })),
 );
 
 function wildcardById(id: string | null): ModuleRow | undefined {
   if (!id) return undefined;
-  return moduleStore.items.find((m) => m.id === id);
+  return moduleStore.catalog.find((m) => m.id === id);
 }
 
 const sourceWildcard = computed(() => wildcardById(sourceWildcardId.value));

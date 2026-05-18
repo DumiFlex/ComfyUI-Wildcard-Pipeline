@@ -453,7 +453,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 
       <BundleAddChildModal
         :visible="addModalOpen"
-        :modules="moduleStore.items"
+        :modules="moduleStore.catalog"
         @close="addModalOpen = false"
         @pick="onAddPick"
       />

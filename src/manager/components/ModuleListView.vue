@@ -812,16 +812,30 @@ defineExpose({
               }"
               @focus="focusedRowId = row.id"
             >
-              <td :data-test="`row-select-${row.id}`" @click.stop="toggleSelect(row)">
-                <!-- Checkbox is purely visual here — the wrapping <td>'s @click handler
-                     owns toggle state via `toggleSelect(row)`. Update handler is a
-                     deliberate no-op to prevent double-toggle on mouse click while
-                     keeping keyboard Space functional (button click bubbles to td). -->
-                <Checkbox
-                  :model-value="isSelected(row)"
+              <!-- Row-select cell renders a button directly (not <Checkbox>) so
+                   the entire <td> is one consistent click target. The earlier
+                   nested <label><button> from <Checkbox> caused intermittent
+                   double-toggle: in some pointer paths the label re-dispatched
+                   click on the inner button after the td handler had already
+                   toggled, leaving the row in the original state. -->
+              <td
+                :data-test="`row-select-${row.id}`"
+                class="wp-table__select-cell"
+                @click.stop="toggleSelect(row)"
+              >
+                <button
+                  type="button"
+                  class="wp-check"
+                  role="checkbox"
+                  :aria-checked="isSelected(row)"
+                  :data-checked="isSelected(row) ? 'true' : 'false'"
                   aria-label="Select row"
-                  @update:model-value="() => { /* td click handles toggle */ }"
-                />
+                  tabindex="-1"
+                >
+                  <svg v-if="isSelected(row)" viewBox="0 0 12 12" fill="none" style="display:block">
+                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
               </td>
               <td>
                 <button
@@ -1249,12 +1263,11 @@ defineExpose({
   z-index: 2;
 }
 
-.wp-table--sticky-head thead th {
-  /* Override global thead top so it sits below toolbar + active-filters + bulk-bar.
-   * The bulk-bar only renders when selection is non-empty, but its sticky offset
-   * applies even when hidden — the table head stays at a stable offset regardless. */
-  top: calc(var(--wp-control-h-md) * 2 + var(--wp-space-5));
-}
+/* Thead sticks at top:0 of `.wp-table-wrap` (its own scroll container).
+ * Don't override here — the global rule in tokens.css owns this. The page-
+ * level sticky toolbar + bulk-bar live OUTSIDE the wrap so they stack
+ * independently when the outer page scrolls; inside the wrap, the head
+ * pins at the top of the table viewport. */
 
 /* Disable sticky on short viewports — under 600px tall the stack would consume
  * most of the visible area. Table head still sticks via the global rule. */

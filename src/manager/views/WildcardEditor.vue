@@ -100,7 +100,7 @@ const wcSuggestions = computed<string[]>(
 // and the resolver all agree on identity.
 const nameByUuid = computed<Map<string, string>>(() => {
   const m = new Map<string, string>();
-  for (const mod of moduleStore.items) {
+  for (const mod of moduleStore.catalog) {
     if (mod.type !== "wildcard") continue;
     const p = (mod.payload ?? {}) as { var_binding?: string };
     const display = (p.var_binding && p.var_binding.trim()) || toIdentifier(mod.name);
@@ -113,7 +113,7 @@ const nameByUuid = computed<Map<string, string>>(() => {
 const varSuggestions = computed<string[]>(() => {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const m of moduleStore.items) {
+  for (const m of moduleStore.catalog) {
     if (props.id && m.id === props.id) continue;
     if (m.type === "wildcard") {
       const p = (m.payload ?? {}) as Partial<WildcardPayload>;

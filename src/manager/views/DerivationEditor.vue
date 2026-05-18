@@ -81,7 +81,7 @@ const varSuggestions = computed<string[]>(
 // DerivationRuleCard so stray `@{uuid}` tokens (pasted, copied from a
 // wildcard editor, etc.) render as `@name` chips even though `@` refs
 // don't resolve on the derivation surface.
-const uuidToName = computed(() => buildUuidToName(moduleStore.items));
+const uuidToName = computed(() => buildUuidToName(moduleStore.catalog));
 
 let ruleSeq = 0;
 function newRuleId(): string {

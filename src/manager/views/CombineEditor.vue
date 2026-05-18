@@ -99,7 +99,7 @@ const varSuggestions = computed<string[]>(() => varHints.value.map((h) => h.labe
 // Surfaces `@{uuid}` chips with human var-names in template + preview.
 // Combine surface ignores `@` refs at resolve time, but stray UUIDs
 // pasted in still benefit from the labelled chip.
-const uuidToName = computed(() => buildUuidToName(moduleStore.items));
+const uuidToName = computed(() => buildUuidToName(moduleStore.catalog));
 const hintByLabel = computed<Map<string, VarHint>>(() => {
   const m = new Map<string, VarHint>();
   for (const h of varHints.value) m.set(h.label, h);

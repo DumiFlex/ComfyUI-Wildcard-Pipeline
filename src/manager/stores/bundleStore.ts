@@ -41,15 +41,14 @@ export const useBundleStore = defineStore("bundles", () => {
   /**
    * Fetch the full bundle catalog, ignoring the persistent `filter.*` state.
    *
-   * Mirrors `moduleStore.fetchCatalog()`. Writes to BOTH `items` and `catalog`
-   * so that sidebar count badges and Cmd+K palette (which read from `catalog`)
-   * remain accurate regardless of which list-view filter is currently active.
+   * Writes ONLY to `catalog` (sidebar count badges, Cmd+K palette). Bundles
+   * have no kind discriminator so the staleness race that bit moduleStore
+   * doesn't apply here, but the API is kept symmetric for clarity.
    */
   async function fetchCatalog() {
     loading.value = true;
     try {
       const res = await api.bundles.list({});
-      items.value = res.items;
       catalog.value = res.items;
     } finally {
       loading.value = false;
