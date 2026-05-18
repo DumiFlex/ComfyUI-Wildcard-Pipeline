@@ -16,6 +16,10 @@ function severityIcon(s: string): string {
       return "info-circle";
   }
 }
+
+async function runAction(id: string, handler: () => void | Promise<void>) {
+  try { await handler(); } finally { dismiss(id); }
+}
 </script>
 
 <template>
@@ -33,6 +37,15 @@ function severityIcon(s: string): string {
         <div v-if="t.detail" class="wp-toast__detail">{{ t.detail }}</div>
       </div>
       <button
+        v-if="t.action"
+        type="button"
+        class="wp-toast__action"
+        data-test="toast-action"
+        @click="runAction(t.id, t.action.run)"
+      >
+        {{ t.action.label }}
+      </button>
+      <button
         type="button"
         class="wp-toast__close"
         aria-label="Dismiss"
@@ -43,3 +56,20 @@ function severityIcon(s: string): string {
     </div>
   </div>
 </template>
+
+<style scoped>
+.wp-toast__action {
+  margin-left: auto;
+  padding: 4px var(--wp-space-3);
+  background: transparent;
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
+  border-radius: var(--wp-radius-sm);
+  color: var(--wp-text);
+  font-size: var(--wp-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.wp-toast__action:hover {
+  background: var(--wp-bg-3);
+}
+</style>

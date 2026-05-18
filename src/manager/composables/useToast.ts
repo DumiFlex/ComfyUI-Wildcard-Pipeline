@@ -2,18 +2,24 @@ import { ref } from "vue";
 
 export type ToastSeverity = "info" | "success" | "warn" | "error";
 
+export interface ToastAction {
+  label: string;
+  run: () => void | Promise<void>;
+}
+
 export interface ToastEntry {
   id: string;
   severity: ToastSeverity;
   summary: string;
   detail?: string;
   life?: number;
+  /** Optional action button rendered inline with the toast. Click runs the handler
+   *  and dismisses the toast. Reserved for Undo flows (Phase 3 bulk actions). */
+  action?: ToastAction;
 }
 
 const DEFAULT_LIFE = 2400;
 
-// Module-level singleton — every call to useToast() shares the same stack so
-// any view can push and the single <ToastHost /> mounted in App.vue renders.
 const toasts = ref<ToastEntry[]>([]);
 
 let nextId = 0;
