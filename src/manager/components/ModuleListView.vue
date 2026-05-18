@@ -1071,7 +1071,11 @@ defineExpose({
 .wp-table__fav-col { width: 28px; padding: 0; }
 .wp-table__updated-col { width: 100px; }
 .wp-table__actions-col { width: 130px; }
-.wp-table__row--selected > td { background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent) !important; }
+/* `:deep()` so the rule reaches slot-projected <td>s (Category, Items,
+ * Syntax, Valid, custom columns), which carry the PARENT view's data-v
+ * attribute. Without it, the highlight only paints scoped cells and the
+ * selected-row tint stops mid-table. */
+:deep(.wp-table__row--selected) > td { background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent) !important; }
 
 .wp-row-expand-btn {
   background: transparent;

@@ -220,9 +220,11 @@ describe("ImportExport.vue — Import tab", () => {
     await wrap.find('[data-test="io-export-select-none"]').trigger("click");
     await flushPromises();
 
-    // ui/Checkbox is a custom <button role="checkbox"> — click it to toggle on.
+    // ui/Checkbox renders a <span> wrapper around a <button role="checkbox">.
+    // The button owns the toggle handler (wrapper has no click forwarding to
+    // avoid double-toggle in real-pointer paths). Trigger the button.
     const groupCheckEl = wrap.get('[data-test="io-export-group-check-wildcard"]');
-    await groupCheckEl.trigger("click");
+    await groupCheckEl.get('button[role="checkbox"]').trigger("click");
     await flushPromises();
 
     // Both rows should now be selected → download should be enabled.

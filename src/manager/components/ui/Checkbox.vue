@@ -20,7 +20,13 @@ function toggle() {
 </script>
 
 <template>
-  <label class="wp-checkbox" :class="{ 'is-disabled': disabled }">
+  <!-- Wrapper is a <span> rather than a <label> on purpose. Native <label>
+       re-dispatches click on its associated form control in some pointer
+       paths (notably when the click target is the SVG inside the button),
+       firing the button's @click twice — which double-toggled and left
+       the underlying model unchanged when a parent also wired a click
+       handler. The span wrapper has no synthetic-dispatch behavior. -->
+  <span class="wp-checkbox" :class="{ 'is-disabled': disabled }">
     <button
       type="button"
       class="wp-check"
@@ -32,12 +38,17 @@ function toggle() {
       role="checkbox"
       @click="toggle"
     >
+      <!-- pointer-events: none on the visual SVG so the entire button area
+           (including the check mark) is a single click target — clicks land
+           on the button itself, not the SVG child. Without this, a click
+           on the SVG centerpoint could route through wrapper-bubble paths
+           in some browsers/automation drivers and double-fire toggle. -->
       <svg
         v-if="modelValue"
         viewBox="0 0 12 12"
         fill="none"
         aria-hidden="true"
-        style="display: block"
+        style="display: block; pointer-events: none"
       >
         <path
           d="M3 6.2l2.2 2.2L9 4.4"
@@ -48,6 +59,6 @@ function toggle() {
         />
       </svg>
     </button>
-    <span v-if="label" class="wp-checkbox__label">{{ label }}</span>
-  </label>
+    <span v-if="label" class="wp-checkbox__label" @click="toggle">{{ label }}</span>
+  </span>
 </template>
