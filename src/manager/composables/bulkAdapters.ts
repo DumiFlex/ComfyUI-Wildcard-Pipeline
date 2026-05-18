@@ -25,7 +25,10 @@ function emptyResult(): BulkResult {
 }
 
 function isModule(row: AnyRow): row is ModuleRow {
-  return "type" in row && typeof (row as ModuleRow).type === "string";
+  // Discriminate on `children` (bundle-only required field) rather than `type`
+  // (module-only) — `children` is structurally definitive and won't false-positive
+  // if some future ModuleRow variant gains an optional `type: string` field.
+  return !("children" in row);
 }
 
 async function runEach<R extends AnyRow>(
