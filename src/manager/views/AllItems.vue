@@ -22,7 +22,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useUrlState, type UrlSchema } from "../composables/useUrlState";
+import { useListUrlState } from "../composables/useListUrlState";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeMixedKindAdapter, type AnyRow } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
@@ -47,29 +47,9 @@ const bundleStore = useBundleStore();
 const bulkAdapter = makeMixedKindAdapter({ moduleStore, bundleStore });
 const bulkActions = useBulkActions(bulkAdapter);
 
-interface UrlStateShape {
-  q: string;
-  category: string | null;
-  favorites: boolean;
-  tags: string[];
-  sortBy: string;
-  page: number;
-  pageSize: number;
-  kinds: string[];
-}
-
-const URL_SCHEMA: UrlSchema<UrlStateShape> = {
-  q:        { type: "string",         default: "" },
-  category: { type: "string-or-null", default: null,           urlKey: "cat" },
-  favorites: { type: "bool",          default: false,           urlKey: "fav" },
-  tags:     { type: "csv",            default: [],              urlKey: "tag" },
-  sortBy:   { type: "string",         default: "updated-desc",  urlKey: "sort" },
-  page:     { type: "int",            default: 1 },
-  pageSize: { type: "int",            default: 15,              urlKey: "ps" },
-  kinds:    { type: "csv",            default: [] },
-};
-
-const urlState = useUrlState<UrlStateShape>(URL_SCHEMA);
+const urlState = useListUrlState<{ kinds: string[] }>({
+  kinds: { type: "csv", default: [] },
+});
 
 type LibraryKind = ModuleType | "bundle";
 

@@ -2,7 +2,7 @@
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
-import { useUrlState, type UrlSchema } from "../composables/useUrlState";
+import { useListUrlState } from "../composables/useListUrlState";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
@@ -29,27 +29,7 @@ const toast = useToast();
 const bulkAdapter = makeModuleStoreAdapter(store);
 const bulk = useBulkActions(bulkAdapter);
 
-interface UrlStateShape {
-  q: string;
-  category: string | null;
-  favorites: boolean;
-  tags: string[];
-  sortBy: string;
-  page: number;
-  pageSize: number;
-}
-
-const URL_SCHEMA: UrlSchema<UrlStateShape> = {
-  q:        { type: "string",         default: "" },
-  category: { type: "string-or-null", default: null,           urlKey: "cat" },
-  favorites: { type: "bool",          default: false,           urlKey: "fav" },
-  tags:     { type: "csv",            default: [],              urlKey: "tag" },
-  sortBy:   { type: "string",         default: "updated-desc",  urlKey: "sort" },
-  page:     { type: "int",            default: 1 },
-  pageSize: { type: "int",            default: 15,              urlKey: "ps" },
-};
-
-const urlState = useUrlState<UrlStateShape>(URL_SCHEMA);
+const urlState = useListUrlState();
 
 const filter = urlState as {
   q?: string;
