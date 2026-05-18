@@ -3,6 +3,8 @@ import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
 import { useUrlState, type UrlSchema } from "../composables/useUrlState";
+import { useBulkActions } from "../composables/useBulkActions";
+import { makeBundleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
@@ -17,6 +19,9 @@ const router = useRouter();
 const store = useBundleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+
+const bulkAdapter = makeBundleStoreAdapter(store);
+const bulk = useBulkActions(bulkAdapter);
 
 interface UrlStateShape {
   q: string;
@@ -112,10 +117,6 @@ async function del(row: BundleRow) {
   }
 }
 
-async function bulkDel(items: BundleRow[]) {
-  for (const item of items) await del(item);
-}
-
 function toggleTag(t: string, currentTags: string[] | undefined): string[] {
   const cur = currentTags ?? [];
   return cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t];
@@ -146,11 +147,17 @@ function frameColor(row: BundleRow): string {
     empty-message="No bundles yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"
+    :available-tags="allTags"
+    :hide-bulk-set-category="true"
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="fetch"
     @delete="del"
-    @bulk-delete="bulkDel"
+    @bulk-favorite="bulk.onBulkFavorite"
+    @bulk-duplicate="bulk.onBulkDuplicate"
+    @bulk-tag-add="bulk.onBulkTagAdd"
+    @bulk-tag-remove="bulk.onBulkTagRemove"
+    @bulk-delete="bulk.onBulkDelete"
   >
     <template #empty>
       <EmptyState

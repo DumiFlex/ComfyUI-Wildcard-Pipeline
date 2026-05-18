@@ -3,6 +3,8 @@ import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
 import { useUrlState, type UrlSchema } from "../composables/useUrlState";
+import { useBulkActions } from "../composables/useBulkActions";
+import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
@@ -23,6 +25,9 @@ const router = useRouter();
 const store = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+
+const bulkAdapter = makeModuleStoreAdapter(store);
+const bulk = useBulkActions(bulkAdapter);
 
 interface UrlStateShape {
   q: string;
@@ -76,6 +81,13 @@ const allTags = computed(() => {
 
 const categoryOptions = computed(() => [
   { value: null, label: "All categories" },
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
+]);
+
+/** Bulk-set-category modal options — uses "(none)" for the null choice
+ *  since the user is explicitly setting category (not filtering). */
+const bulkCategoryOptions = computed(() => [
+  { value: null, label: "(none)" },
   ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
 ]);
 
@@ -135,10 +147,6 @@ async function del(row: ModuleRow) {
   } catch (e) {
     toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
   }
-}
-
-async function bulkDel(items: ModuleRow[]) {
-  for (const item of items) await del(item);
 }
 
 function toggleTag(t: string, currentTags: string[] | undefined): string[] {
@@ -214,11 +222,18 @@ function formatFactor(f: number): string {
     empty-message="No constraints yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"
+    :available-tags="allTags"
+    :category-options="bulkCategoryOptions"
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="fetch"
     @delete="del"
-    @bulk-delete="bulkDel"
+    @bulk-favorite="bulk.onBulkFavorite"
+    @bulk-duplicate="bulk.onBulkDuplicate"
+    @bulk-tag-add="bulk.onBulkTagAdd"
+    @bulk-tag-remove="bulk.onBulkTagRemove"
+    @bulk-set-category="bulk.onBulkSetCategory"
+    @bulk-delete="bulk.onBulkDelete"
   >
     <template #empty>
       <EmptyState

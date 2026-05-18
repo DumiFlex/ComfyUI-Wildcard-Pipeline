@@ -23,6 +23,8 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useUrlState, type UrlSchema } from "../composables/useUrlState";
+import { useBulkActions } from "../composables/useBulkActions";
+import { makeMixedKindAdapter, type AnyRow } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
@@ -31,12 +33,19 @@ import { useToast } from "../composables/useToast";
 import { api } from "../api/client";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useModuleStore } from "../stores/moduleStore";
+import { useBundleStore } from "../stores/bundleStore";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const categoryStore = useCategoryStore();
+const moduleStore = useModuleStore();
+const bundleStore = useBundleStore();
+
+const bulkAdapter = makeMixedKindAdapter({ moduleStore, bundleStore });
+const bulkActions = useBulkActions(bulkAdapter);
 
 interface UrlStateShape {
   q: string;
@@ -136,6 +145,13 @@ const categoryById = computed(() => {
 
 const categoryOptions = computed(() => [
   { value: null, label: "All categories" },
+  ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
+]);
+
+/** Bulk-set-category modal options — uses "(none)" for the null choice
+ *  since the user is explicitly setting category (not filtering). */
+const bulkCategoryOptions = computed(() => [
+  { value: null, label: "(none)" },
   ...categoryStore.items.map((c) => ({ value: c.id, label: c.name, dot: c.color || undefined })),
 ]);
 
@@ -284,8 +300,40 @@ async function del(row: LibraryRow) {
   }
 }
 
-async function bulkDel(rows: LibraryRow[]) {
-  for (const r of rows) await del(r);
+/** Unwrap the synthesized LibraryRow into the underlying source row
+ *  expected by the mixed-kind adapter. The adapter discriminates on
+ *  `children` (bundles) vs absence (modules), so we just hand it the
+ *  original ModuleRow / BundleRow. */
+function unwrap(rows: LibraryRow[]): AnyRow[] {
+  return rows.map((r) => r.source);
+}
+
+/** Bulk handlers refetch after running so the synthesized view reflects
+ *  server-side state — moduleStore/bundleStore mutations don't flow
+ *  through this view's `localModules` / `localBundles` refs. */
+async function onBulkFavorite(rows: LibraryRow[], on: boolean) {
+  await bulkActions.onBulkFavorite(unwrap(rows), on);
+  await fetchAll();
+}
+async function onBulkDuplicate(rows: LibraryRow[]) {
+  await bulkActions.onBulkDuplicate(unwrap(rows));
+  await fetchAll();
+}
+async function onBulkTagAdd(rows: LibraryRow[], tag: string) {
+  await bulkActions.onBulkTagAdd(unwrap(rows), tag);
+  await fetchAll();
+}
+async function onBulkTagRemove(rows: LibraryRow[], tag: string) {
+  await bulkActions.onBulkTagRemove(unwrap(rows), tag);
+  await fetchAll();
+}
+async function onBulkSetCategory(rows: LibraryRow[], categoryId: string | null) {
+  await bulkActions.onBulkSetCategory(unwrap(rows), categoryId);
+  await fetchAll();
+}
+async function onBulkDelete(rows: LibraryRow[]) {
+  await bulkActions.onBulkDelete(unwrap(rows));
+  await fetchAll();
 }
 
 function toggleKind(k: LibraryKind) {
@@ -319,11 +367,18 @@ function refresh() {
     empty-message="Library is empty"
     :page="urlState.page"
     :page-size="urlState.pageSize"
+    :available-tags="allTags"
+    :category-options="bulkCategoryOptions"
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="refresh"
     @delete="del"
-    @bulk-delete="bulkDel"
+    @bulk-favorite="onBulkFavorite"
+    @bulk-duplicate="onBulkDuplicate"
+    @bulk-tag-add="onBulkTagAdd"
+    @bulk-tag-remove="onBulkTagRemove"
+    @bulk-set-category="onBulkSetCategory"
+    @bulk-delete="onBulkDelete"
   >
     <template #empty>
       <EmptyState
