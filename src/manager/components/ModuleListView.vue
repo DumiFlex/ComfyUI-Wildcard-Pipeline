@@ -911,7 +911,22 @@ defineExpose({
               </td>
             </tr>
           </template>
-          <tr v-if="!paged.length">
+          <!-- Skeleton rows during initial fetch (no items yet + still loading).
+               Keeps the layout stable so the page does not flash an empty
+               state on its way to a populated list. -->
+          <template v-if="loading && !items.length">
+            <tr
+              v-for="n in 6"
+              :key="`skel-${n}`"
+              class="wp-row-skel"
+              aria-hidden="true"
+            >
+              <td v-for="c in totalCols" :key="c">
+                <span class="wp-skel-bar" :style="`width:${30 + ((c * 17) % 55)}%`" />
+              </td>
+            </tr>
+          </template>
+          <tr v-else-if="!paged.length">
             <td :colspan="totalCols">
               <slot v-if="!hasActiveFilters" name="empty">
                 <EmptyState

@@ -827,6 +827,35 @@ input, textarea, select { font: inherit; }
 .wp-table tbody tr:last-child td { border-bottom: none; }
 .wp-table tbody tr:hover td { background: var(--wp-row-hover, rgba(255,255,255,0.02)); }
 .wp-table tbody tr[data-expanded="true"] > td { background: var(--wp-row-active, rgba(124,58,237,0.04)); }
+
+/* Skeleton rows shown during first paint of list views. The shimmer
+ * animation is short + low-contrast so it reads as "content settling"
+ * rather than competing for attention. `prefers-reduced-motion` users
+ * still get the bar — sans pulse — so absence of motion does not
+ * collapse the loading affordance to nothing. */
+.wp-row-skel:hover td { background: transparent; }
+.wp-row-skel td { vertical-align: middle; }
+.wp-skel-bar {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(
+    90deg,
+    var(--wp-bg-3) 0%,
+    var(--wp-bg-4) 50%,
+    var(--wp-bg-3) 100%
+  );
+  background-size: 200% 100%;
+  animation: wp-skel-pulse 1.4s ease-in-out infinite;
+  opacity: 0.55;
+}
+@keyframes wp-skel-pulse {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wp-skel-bar { animation: none; }
+}
 .wp-table .wp-row-expand {
   background: var(--wp-bg-2);
   padding: 12px 16px 14px 56px;
