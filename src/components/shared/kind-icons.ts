@@ -16,6 +16,7 @@ export const KIND_ICON_MAP = {
   combine:      "pi pi-link",
   derivation:   "pi pi-arrow-right-arrow-left",
   constraint:   "pi pi-filter",
+  bundle:       "pi pi-box",
 } as const;
 
 export type WpKind = keyof typeof KIND_ICON_MAP;

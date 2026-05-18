@@ -106,11 +106,11 @@
   --wp-kind-injector:    #60a5fa;
 
   /* Bundle frame default color — used when a bundle library entry
-   * has no user-picked color set. Muted steel-blue chosen to read
-   * as "structural wrapper" without competing with any kind hue or
-   * conflict-severity color. Per-bundle color overrides this via
-   * inline style on the BundleFrame component. */
-  --wp-bundle-default:   #46566B;
+   * has no user-picked color set. Indigo-500 chosen for visibility:
+   * distinct from accent purple and injector blue, high enough chroma
+   * to read on the in-graph canvas surface. Per-bundle color overrides
+   * this via inline style on the BundleFrame component. */
+  --wp-bundle-default:   #6366f1;
 
   --wp-radius-lg: 12px;
   /* Three shadow scales used across surfaces:
