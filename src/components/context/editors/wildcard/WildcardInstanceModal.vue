@@ -52,19 +52,19 @@ function onSpaClick(): void {
 </script>
 
 <template>
-  <div class="wcm">
-    <header class="wcm__head">
-      <i class="pi pi-sparkles wcm__head-icon" aria-hidden="true" />
-      <div class="wcm__title-block">
-        <div class="wcm__title-row">
-          <span class="wcm__name" data-test="wcm-name">{{ module.meta?.name ?? module.type }}</span>
-          <span class="wcm__chip" data-test="wcm-chip">wildcard</span>
+  <div class="wp-wcm">
+    <header class="wp-wcm__head">
+      <i class="pi pi-sparkles wp-wcm__head-icon" aria-hidden="true" />
+      <div class="wp-wcm__title-block">
+        <div class="wp-wcm__title-row">
+          <span class="wp-wcm__name" data-test="wcm-name">{{ module.meta?.name ?? module.type }}</span>
+          <span class="wp-wcm__chip" data-test="wcm-chip">wildcard</span>
         </div>
-        <div class="wcm__sub">Library entry · weighted options resolved per pick</div>
+        <div class="wp-wcm__sub">Library entry · weighted options resolved per pick</div>
       </div>
       <button
         type="button"
-        class="wcm__close"
+        class="wp-wcm__close"
         aria-label="Close"
         data-test="wcm-close"
         @click="emit('cancel')"
@@ -82,10 +82,10 @@ function onSpaClick(): void {
     <PoolSection :module="module" @update="onUpdate" />
     <RuntimeSection :module="module" @update="onUpdate" />
 
-    <footer class="wcm__foot">
+    <footer class="wp-wcm__foot">
       <a
         v-if="module.payload_hash"
-        class="wcm__spa-link"
+        class="wp-wcm__spa-link"
         :href="spaUrl()"
         target="_blank"
         rel="noopener"
@@ -97,7 +97,7 @@ function onSpaClick(): void {
       </a>
       <button
         type="button"
-        class="wcm__btn wcm__btn--quiet"
+        class="wp-wcm__btn wp-wcm__btn--quiet"
         data-test="wcm-clear-all"
         title="Clear all instance overrides on this wildcard"
         @click="emit('clear-all-overrides')"
@@ -105,24 +105,24 @@ function onSpaClick(): void {
         <i class="pi pi-replay" aria-hidden="true" />
         Reset overrides
       </button>
-      <span class="wcm__hint">
+      <span class="wp-wcm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"
         type="button"
-        class="wcm__btn"
+        class="wp-wcm__btn"
         data-test="wcm-save-lib"
         @click="emit('save-to-library')"
       >
         Save to library
       </button>
-      <button type="button" class="wcm__btn" data-test="wcm-cancel" @click="emit('cancel')">
+      <button type="button" class="wp-wcm__btn" data-test="wcm-cancel" @click="emit('cancel')">
         Cancel
       </button>
       <button
         type="button"
-        class="wcm__btn wcm__btn--primary"
+        class="wp-wcm__btn wp-wcm__btn--primary"
         data-test="wcm-save"
         @click="emit('save')"
       >
@@ -133,7 +133,7 @@ function onSpaClick(): void {
 </template>
 
 <style scoped>
-.wcm {
+.wp-wcm {
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
@@ -150,7 +150,7 @@ function onSpaClick(): void {
 /* Head styling lives in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). Adopted from InjectorBindingModal
  * so every per-instance edit modal reads as one design family. */
-.wcm__foot {
+.wp-wcm__foot {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -158,7 +158,7 @@ function onSpaClick(): void {
   background: var(--wp-bg3);
   border-top: 1px solid var(--wp-border);
 }
-.wcm__spa-link {
+.wp-wcm__spa-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -166,13 +166,13 @@ function onSpaClick(): void {
   color: var(--wp-text-muted, var(--wp-text2));
   text-decoration: none;
 }
-.wcm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
-.wcm__hint {
+.wp-wcm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
+.wp-wcm__hint {
   margin-left: auto;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wcm__hint kbd {
+.wp-wcm__hint kbd {
   font: 9px var(--wp-font-mono);
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
@@ -180,7 +180,7 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.wcm__btn {
+.wp-wcm__btn {
   padding: 5px 12px;
   border: 1px solid var(--wp-border);
   border-radius: 3px;
@@ -189,12 +189,12 @@ function onSpaClick(): void {
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.wcm__btn--primary {
+.wp-wcm__btn--primary {
   border-color: var(--wp-accent);
   background: var(--wp-accent);
   color: white;
 }
-.wcm__btn--quiet {
+.wp-wcm__btn--quiet {
   border-color: transparent;
   color: var(--wp-text-dim, var(--wp-text3));
   display: inline-flex;
@@ -202,9 +202,9 @@ function onSpaClick(): void {
   gap: 5px;
   font-size: 10px;
 }
-.wcm__btn--quiet:hover {
+.wp-wcm__btn--quiet:hover {
   border-color: var(--wp-border);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.wcm__btn--quiet .pi { font-size: 10px; }
+.wp-wcm__btn--quiet .pi { font-size: 10px; }
 </style>

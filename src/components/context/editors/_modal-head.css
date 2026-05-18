@@ -4,8 +4,8 @@
  * the gradient + chip + icon all read from that single var.
  *
  * Imported once from ContextWidget's unscoped `<style>` block — the
- * class names are namespaced (`cbm__`, `cnm__`, `dvm__`, `fvm__`,
- * `wcm__`) so global declaration is safe.
+ * class names are namespaced (`wp-cbm__`, `wp-cnm__`, `wp-dvm__`,
+ * `wp-fvm__`, `wp-wcm__`) so global declaration is safe.
  *
  * NOT wrapped in `@layer wp-extension` — same constraint as the
  * other shared CSS files in the codebase (Vue's scoped CSS scoper
@@ -13,13 +13,13 @@
  */
 
 /* Per-modal accent — kind color drives the head gradient + chip + icon. */
-.cbm__head { --modal-accent: var(--wp-kind-combine); }
-.cnm__head { --modal-accent: var(--wp-kind-constraint, var(--wp-accent)); }
-.dvm__head { --modal-accent: var(--wp-kind-derivation, var(--wp-accent)); }
-.fvm__head { --modal-accent: var(--wp-kind-fixed); }
-.wcm__head { --modal-accent: var(--wp-kind-wildcard); }
+.wp-cbm__head { --modal-accent: var(--wp-kind-combine); }
+.wp-cnm__head { --modal-accent: var(--wp-kind-constraint, var(--wp-accent)); }
+.wp-dvm__head { --modal-accent: var(--wp-kind-derivation, var(--wp-accent)); }
+.wp-fvm__head { --modal-accent: var(--wp-kind-fixed); }
+.wp-wcm__head { --modal-accent: var(--wp-kind-wildcard); }
 
-.cbm__head, .cnm__head, .dvm__head, .fvm__head, .wcm__head {
+.wp-cbm__head, .wp-cnm__head, .wp-dvm__head, .wp-fvm__head, .wp-wcm__head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -32,30 +32,30 @@
   border-bottom: 1px solid var(--wp-border);
 }
 
-.cbm__head-icon, .cnm__head-icon, .dvm__head-icon, .fvm__head-icon, .wcm__head-icon {
+.wp-cbm__head-icon, .wp-cnm__head-icon, .wp-dvm__head-icon, .wp-fvm__head-icon, .wp-wcm__head-icon {
   color: var(--modal-accent, var(--wp-accent));
   font-size: 18px;
   width: 24px;
   text-align: center;
 }
 
-.cbm__title-block, .cnm__title-block, .dvm__title-block, .fvm__title-block, .wcm__title-block {
+.wp-cbm__title-block, .wp-cnm__title-block, .wp-dvm__title-block, .wp-fvm__title-block, .wp-wcm__title-block {
   flex: 1;
   min-width: 0;
 }
 
-.cbm__title-row, .cnm__title-row, .dvm__title-row, .fvm__title-row, .wcm__title-row {
+.wp-cbm__title-row, .wp-cnm__title-row, .wp-dvm__title-row, .wp-fvm__title-row, .wp-wcm__title-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.cbm__name, .cnm__name, .dvm__name, .fvm__name, .wcm__name {
+.wp-cbm__name, .wp-cnm__name, .wp-dvm__name, .wp-fvm__name, .wp-wcm__name {
   font: 600 13px var(--wp-font-sans);
   color: var(--wp-text);
 }
 
-.cbm__chip, .cnm__chip, .dvm__chip, .fvm__chip, .wcm__chip {
+.wp-cbm__chip, .wp-cnm__chip, .wp-dvm__chip, .wp-fvm__chip, .wp-wcm__chip {
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -65,22 +65,22 @@
   color: var(--modal-accent, var(--wp-accent));
 }
 
-.cbm__sub, .cnm__sub, .dvm__sub, .fvm__sub, .wcm__sub {
+.wp-cbm__sub, .wp-cnm__sub, .wp-dvm__sub, .wp-fvm__sub, .wp-wcm__sub {
   font: 400 10px var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
   margin-top: 2px;
 }
 
-.cbm__close, .cnm__close, .dvm__close, .fvm__close, .wcm__close {
+.wp-cbm__close, .wp-cnm__close, .wp-dvm__close, .wp-fvm__close, .wp-wcm__close {
   background: transparent;
   border: 0;
   color: var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
   padding: 4px;
 }
-.cbm__close:hover, .cnm__close:hover, .dvm__close:hover, .fvm__close:hover, .wcm__close:hover {
+.wp-cbm__close:hover, .wp-cnm__close:hover, .wp-dvm__close:hover, .wp-fvm__close:hover, .wp-wcm__close:hover {
   color: var(--wp-text);
 }
-.cbm__close .pi, .cnm__close .pi, .dvm__close .pi, .fvm__close .pi, .wcm__close .pi {
+.wp-cbm__close .pi, .wp-cnm__close .pi, .wp-dvm__close .pi, .wp-fvm__close .pi, .wp-wcm__close .pi {
   font-size: 12px;
 }

@@ -1,6 +1,6 @@
 /* Shared template-section controls — insert-var/insert-slot dropdown
  * button + reset button + dropdown panel + dropdown item. Used by:
- *   - Combine's TemplateSection (`.tpl__*`)
+ *   - Combine's TemplateSection (`.wp-tpl__*`)
  *   - InjectorBindingModal     (`.ibm__*`)
  *
  * Both modals previously declared their own copies of these rules with
@@ -11,7 +11,7 @@
  * sizing).
  *
  * Imported globally from ContextWidget's unscoped `<style>` block.
- * Class names are namespaced (`.tpl__*`, `.ibm__*`) so no leakage
+ * Class names are namespaced (`.wp-tpl__*`, `.ibm__*`) so no leakage
  * concerns. */
 
 /* Wrap div is `inline-flex` (not the default block) so its inner
@@ -25,13 +25,13 @@
  * combine modal's `.tpl` section uses a different base line-height
  * inheritance chain. Switching the wrapper to inline-flex pins
  * cross-axis size to the button itself, killing the offset. */
-.tpl__menu-wrap, .ibm__menu-wrap {
+.wp-tpl__menu-wrap, .ibm__menu-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
 }
 
-.tpl__menu-btn, .ibm__menu-btn {
+.wp-tpl__menu-btn, .ibm__menu-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -46,14 +46,14 @@
   cursor: pointer;
   line-height: 1;
 }
-.tpl__menu-btn:hover, .ibm__menu-btn:hover {
+.wp-tpl__menu-btn:hover, .ibm__menu-btn:hover {
   border-color: var(--wp-accent);
   color: var(--wp-text);
 }
-.tpl__menu-btn .pi, .ibm__menu-btn .pi { font-size: 9px; }
+.wp-tpl__menu-btn .pi, .ibm__menu-btn .pi { font-size: 9px; }
 
 /* Reset button — used by section-level modal headers:
- *   - .tpl__reset      Combine TemplateSection reset
+ *   - .wp-tpl__reset      Combine TemplateSection reset
  *   - .ibm__reset      InjectorBindingModal template reset
  *   - .id__reset       IdentitySection reset (all kinds)
  *
@@ -68,7 +68,7 @@
  * at rest, colored bg on hover) for in-row inline actions rather
  * than the section-level affordance shape. Different visual role,
  * different rule set — kept local to those SFCs. */
-.tpl__reset, .ibm__reset, .id__reset {
+.wp-tpl__reset, .ibm__reset, .id__reset {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -83,15 +83,15 @@
   flex-shrink: 0;
   padding: 0;
 }
-.tpl__reset:hover, .ibm__reset:hover, .id__reset:hover {
+.wp-tpl__reset:hover, .ibm__reset:hover, .id__reset:hover {
   border-color: var(--wp-accent);
   color: var(--wp-text);
 }
-.tpl__reset .pi, .ibm__reset .pi, .id__reset .pi {
+.wp-tpl__reset .pi, .ibm__reset .pi, .id__reset .pi {
   font-size: 10px;
 }
 
-.tpl__menu, .ibm__menu {
+.wp-tpl__menu, .ibm__menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
@@ -109,7 +109,7 @@
   gap: 1px;
 }
 
-.tpl__menu-item, .ibm__menu-item {
+.wp-tpl__menu-item, .ibm__menu-item {
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -121,6 +121,6 @@
   cursor: pointer;
   color: var(--wp-text);
 }
-.tpl__menu-item:hover, .ibm__menu-item:hover {
+.wp-tpl__menu-item:hover, .ibm__menu-item:hover {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
 }

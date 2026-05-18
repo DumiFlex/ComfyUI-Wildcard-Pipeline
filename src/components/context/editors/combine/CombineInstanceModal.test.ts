@@ -30,7 +30,7 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("CombineInstanceModal", () => {
   it("renders pi-link icon in header", () => {
     const w = mount(CombineInstanceModal, { props: { module: makeModule() } });
-    expect(w.find(".cbm__head-icon.pi.pi-link").exists()).toBe(true);
+    expect(w.find(".wp-cbm__head-icon.pi.pi-link").exists()).toBe(true);
   });
 
   it("renders 'combine' chip + module name in header", () => {

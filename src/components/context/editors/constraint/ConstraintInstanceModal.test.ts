@@ -32,7 +32,7 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("ConstraintInstanceModal", () => {
   it("renders pi-link icon in header", () => {
     const w = mount(ConstraintInstanceModal, { props: { module: makeModule() } });
-    expect(w.find(".cnm__head-icon.pi.pi-link").exists()).toBe(true);
+    expect(w.find(".wp-cnm__head-icon.pi.pi-link").exists()).toBe(true);
   });
 
   it("renders 'constraint' chip + module name", () => {

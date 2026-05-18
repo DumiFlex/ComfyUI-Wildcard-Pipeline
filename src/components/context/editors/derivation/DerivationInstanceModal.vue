@@ -57,18 +57,18 @@ function onSpaClick(): void {
 
 <template>
   <div class="dvm">
-    <header class="dvm__head">
-      <i class="pi pi-arrow-right-arrow-left dvm__head-icon" aria-hidden="true" />
-      <div class="dvm__title-block">
-        <div class="dvm__title-row">
-          <span class="dvm__name" data-test="dvm-name">{{ module.meta?.name ?? module.type }}</span>
-          <span class="dvm__chip" data-test="dvm-chip">derivation</span>
+    <header class="wp-dvm__head">
+      <i class="pi pi-arrow-right-arrow-left wp-dvm__head-icon" aria-hidden="true" />
+      <div class="wp-dvm__title-block">
+        <div class="wp-dvm__title-row">
+          <span class="wp-dvm__name" data-test="dvm-name">{{ module.meta?.name ?? module.type }}</span>
+          <span class="wp-dvm__chip" data-test="dvm-chip">derivation</span>
         </div>
-        <div class="dvm__sub">Library entry · conditional rule-based variable rewrites</div>
+        <div class="wp-dvm__sub">Library entry · conditional rule-based variable rewrites</div>
       </div>
       <button
         type="button"
-        class="dvm__close"
+        class="wp-dvm__close"
         aria-label="Close"
         data-test="dvm-close"
         @click="emit('cancel')"
@@ -79,10 +79,10 @@ function onSpaClick(): void {
     <RulesSection :module="module" @update="onUpdate" />
     <RuntimeSection :module="module" @update="onUpdate" />
 
-    <footer class="dvm__foot">
+    <footer class="wp-dvm__foot">
       <a
         v-if="isLibraryTracked"
-        class="dvm__spa-link"
+        class="wp-dvm__spa-link"
         :href="spaUrl()"
         target="_blank"
         rel="noopener"
@@ -94,7 +94,7 @@ function onSpaClick(): void {
       </a>
       <button
         type="button"
-        class="dvm__btn dvm__btn--quiet"
+        class="wp-dvm__btn wp-dvm__btn--quiet"
         data-test="dvm-clear-all"
         title="Clear all instance overrides on this derivation"
         @click="emit('clear-all-overrides')"
@@ -102,18 +102,18 @@ function onSpaClick(): void {
         <i class="pi pi-replay" aria-hidden="true" />
         Reset overrides
       </button>
-      <span class="dvm__hint">
+      <span class="wp-dvm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"
         type="button"
-        class="dvm__btn"
+        class="wp-dvm__btn"
         data-test="dvm-save-lib"
         @click="emit('save-to-library')"
       >Save to library</button>
-      <button type="button" class="dvm__btn" data-test="dvm-cancel" @click="emit('cancel')">Cancel</button>
-      <button type="button" class="dvm__btn dvm__btn--primary" data-test="dvm-save" @click="emit('save')">Save</button>
+      <button type="button" class="wp-dvm__btn" data-test="dvm-cancel" @click="emit('cancel')">Cancel</button>
+      <button type="button" class="wp-dvm__btn wp-dvm__btn--primary" data-test="dvm-save" @click="emit('save')">Save</button>
     </footer>
   </div>
 </template>
@@ -135,7 +135,7 @@ function onSpaClick(): void {
 }
 /* Head styling lives in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). */
-.dvm__foot {
+.wp-dvm__foot {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -143,7 +143,7 @@ function onSpaClick(): void {
   background: var(--wp-bg3);
   border-top: 1px solid var(--wp-border);
 }
-.dvm__spa-link {
+.wp-dvm__spa-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -151,13 +151,13 @@ function onSpaClick(): void {
   color: var(--wp-text-muted, var(--wp-text2));
   text-decoration: none;
 }
-.dvm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
-.dvm__hint {
+.wp-dvm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
+.wp-dvm__hint {
   margin-left: auto;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.dvm__hint kbd {
+.wp-dvm__hint kbd {
   font: 9px var(--wp-font-mono);
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
@@ -165,7 +165,7 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.dvm__btn {
+.wp-dvm__btn {
   padding: 5px 12px;
   border: 1px solid var(--wp-border);
   border-radius: 3px;
@@ -174,12 +174,12 @@ function onSpaClick(): void {
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.dvm__btn--primary {
+.wp-dvm__btn--primary {
   border-color: var(--wp-accent);
   background: var(--wp-accent);
   color: white;
 }
-.dvm__btn--quiet {
+.wp-dvm__btn--quiet {
   border-color: transparent;
   color: var(--wp-text-dim, var(--wp-text3));
   display: inline-flex;
@@ -187,9 +187,9 @@ function onSpaClick(): void {
   gap: 5px;
   font-size: 10px;
 }
-.dvm__btn--quiet:hover {
+.wp-dvm__btn--quiet:hover {
   border-color: var(--wp-border);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.dvm__btn--quiet .pi { font-size: 10px; }
+.wp-dvm__btn--quiet .pi { font-size: 10px; }
 </style>

@@ -37,10 +37,7 @@ const ALLOWED_PREFIXES = [
  *  CI stays green. Add to this list ONLY for existing classes that
  *  need a tracked rename; new code must use `wp-*` from the start. */
 const LEGACY_ALLOWLIST = new Set([
-  // TODO: rename .wcm → .wp-wcm-modal (WildcardInstanceModal + display-prefs.css refs)
-  ".wcm",
-  // TODO: rename .fvm → .wp-fvm-modal (FixedValuesInstanceModal + display-prefs.css refs)
-  ".fvm",
+  // (empty — all previous entries have been properly prefixed)
 ]);
 
 const SCOPES = [

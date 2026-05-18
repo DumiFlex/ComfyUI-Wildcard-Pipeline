@@ -34,7 +34,7 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("DerivationInstanceModal", () => {
   it("renders pi-arrow-right-arrow-left icon in header", () => {
     const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
-    expect(w.find(".dvm__head-icon.pi.pi-arrow-right-arrow-left").exists()).toBe(true);
+    expect(w.find(".wp-dvm__head-icon.pi.pi-arrow-right-arrow-left").exists()).toBe(true);
   });
 
   it("renders 'derivation' chip + module name", () => {

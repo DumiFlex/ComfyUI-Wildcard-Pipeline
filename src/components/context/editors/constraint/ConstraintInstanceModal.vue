@@ -166,18 +166,18 @@ function onSpaClick(): void {
 
 <template>
   <div class="cnm">
-    <header class="cnm__head">
-      <i class="pi pi-link cnm__head-icon" aria-hidden="true" />
-      <div class="cnm__title-block">
-        <div class="cnm__title-row">
-          <span class="cnm__name" data-test="cnm-name">{{ module.meta?.name ?? module.type }}</span>
-          <span class="cnm__chip" data-test="cnm-chip">constraint</span>
+    <header class="wp-cnm__head">
+      <i class="pi pi-link wp-cnm__head-icon" aria-hidden="true" />
+      <div class="wp-cnm__title-block">
+        <div class="wp-cnm__title-row">
+          <span class="wp-cnm__name" data-test="cnm-name">{{ module.meta?.name ?? module.type }}</span>
+          <span class="wp-cnm__chip" data-test="cnm-chip">constraint</span>
         </div>
-        <div class="cnm__sub">Library entry · source pick → modifies target option weights</div>
+        <div class="wp-cnm__sub">Library entry · source pick → modifies target option weights</div>
       </div>
       <button
         type="button"
-        class="cnm__close"
+        class="wp-cnm__close"
         aria-label="Close"
         data-test="cnm-close"
         @click="emit('cancel')"
@@ -200,10 +200,10 @@ function onSpaClick(): void {
       @update="onUpdate"
     />
 
-    <footer class="cnm__foot">
+    <footer class="wp-cnm__foot">
       <a
         v-if="isLibraryTracked"
-        class="cnm__spa-link"
+        class="wp-cnm__spa-link"
         :href="spaUrl()"
         target="_blank"
         rel="noopener"
@@ -215,7 +215,7 @@ function onSpaClick(): void {
       </a>
       <button
         type="button"
-        class="cnm__btn cnm__btn--quiet"
+        class="wp-cnm__btn wp-cnm__btn--quiet"
         data-test="cnm-clear-all"
         title="Clear all instance overrides on this constraint"
         @click="emit('clear-all-overrides')"
@@ -223,18 +223,18 @@ function onSpaClick(): void {
         <i class="pi pi-replay" aria-hidden="true" />
         Reset overrides
       </button>
-      <span class="cnm__hint">
+      <span class="wp-cnm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"
         type="button"
-        class="cnm__btn"
+        class="wp-cnm__btn"
         data-test="cnm-save-lib"
         @click="emit('save-to-library')"
       >Save to library</button>
-      <button type="button" class="cnm__btn" data-test="cnm-cancel" @click="emit('cancel')">Cancel</button>
-      <button type="button" class="cnm__btn cnm__btn--primary" data-test="cnm-save" @click="emit('save')">Save</button>
+      <button type="button" class="wp-cnm__btn" data-test="cnm-cancel" @click="emit('cancel')">Cancel</button>
+      <button type="button" class="wp-cnm__btn wp-cnm__btn--primary" data-test="cnm-save" @click="emit('save')">Save</button>
     </footer>
   </div>
 </template>
@@ -256,7 +256,7 @@ function onSpaClick(): void {
 }
 /* Head styling lives in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). */
-.cnm__foot {
+.wp-cnm__foot {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -264,7 +264,7 @@ function onSpaClick(): void {
   background: var(--wp-bg3);
   border-top: 1px solid var(--wp-border);
 }
-.cnm__spa-link {
+.wp-cnm__spa-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -272,13 +272,13 @@ function onSpaClick(): void {
   color: var(--wp-text-muted, var(--wp-text2));
   text-decoration: none;
 }
-.cnm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
-.cnm__hint {
+.wp-cnm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
+.wp-cnm__hint {
   margin-left: auto;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.cnm__hint kbd {
+.wp-cnm__hint kbd {
   font: 9px var(--wp-font-mono);
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
@@ -286,7 +286,7 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.cnm__btn {
+.wp-cnm__btn {
   padding: 5px 12px;
   border: 1px solid var(--wp-border);
   border-radius: 3px;
@@ -295,12 +295,12 @@ function onSpaClick(): void {
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.cnm__btn--primary {
+.wp-cnm__btn--primary {
   border-color: var(--wp-accent);
   background: var(--wp-accent);
   color: white;
 }
-.cnm__btn--quiet {
+.wp-cnm__btn--quiet {
   border-color: transparent;
   color: var(--wp-text-dim, var(--wp-text3));
   display: inline-flex;
@@ -308,9 +308,9 @@ function onSpaClick(): void {
   gap: 5px;
   font-size: 10px;
 }
-.cnm__btn--quiet:hover {
+.wp-cnm__btn--quiet:hover {
   border-color: var(--wp-border);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.cnm__btn--quiet .pi { font-size: 10px; }
+.wp-cnm__btn--quiet .pi { font-size: 10px; }
 </style>

@@ -43,19 +43,19 @@ function onSpaClick(): void {
 </script>
 
 <template>
-  <div class="fvm">
-    <header class="fvm__head">
-      <i class="pi pi-tag fvm__head-icon" aria-hidden="true" />
-      <div class="fvm__title-block">
-        <div class="fvm__title-row">
-          <span class="fvm__name" data-test="fvm-name">{{ module.meta?.name ?? module.type }}</span>
-          <span class="fvm__chip" data-test="fvm-chip">fixed</span>
+  <div class="wp-fvm">
+    <header class="wp-fvm__head">
+      <i class="pi pi-tag wp-fvm__head-icon" aria-hidden="true" />
+      <div class="wp-fvm__title-block">
+        <div class="wp-fvm__title-row">
+          <span class="wp-fvm__name" data-test="fvm-name">{{ module.meta?.name ?? module.type }}</span>
+          <span class="wp-fvm__chip" data-test="fvm-chip">fixed</span>
         </div>
-        <div class="fvm__sub">Library entry · static $var → value pairs</div>
+        <div class="wp-fvm__sub">Library entry · static $var → value pairs</div>
       </div>
       <button
         type="button"
-        class="fvm__close"
+        class="wp-fvm__close"
         aria-label="Close"
         data-test="fvm-close"
         @click="emit('cancel')"
@@ -66,10 +66,10 @@ function onSpaClick(): void {
     <ValuesSection :module="module" @update="onUpdate" />
     <RuntimeSection :module="module" @update="onUpdate" />
 
-    <footer class="fvm__foot">
+    <footer class="wp-fvm__foot">
       <a
         v-if="isLibraryTracked"
-        class="fvm__spa-link"
+        class="wp-fvm__spa-link"
         :href="spaUrl()"
         target="_blank"
         rel="noopener"
@@ -82,7 +82,7 @@ function onSpaClick(): void {
       <button
         v-if="isLibraryTracked"
         type="button"
-        class="fvm__btn fvm__btn--quiet"
+        class="wp-fvm__btn wp-fvm__btn--quiet"
         data-test="fvm-clear-all"
         title="Clear all instance overrides"
         @click="emit('clear-all-overrides')"
@@ -90,24 +90,24 @@ function onSpaClick(): void {
         <i class="pi pi-replay" aria-hidden="true" />
         Reset overrides
       </button>
-      <span class="fvm__hint">
+      <span class="wp-fvm__hint">
         <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
       </span>
       <button
         v-if="canSaveToLibrary"
         type="button"
-        class="fvm__btn"
+        class="wp-fvm__btn"
         data-test="fvm-save-lib"
         @click="emit('save-to-library')"
       >Save to library</button>
-      <button type="button" class="fvm__btn" data-test="fvm-cancel" @click="emit('cancel')">Cancel</button>
-      <button type="button" class="fvm__btn fvm__btn--primary" data-test="fvm-save" @click="emit('save')">Save</button>
+      <button type="button" class="wp-fvm__btn" data-test="fvm-cancel" @click="emit('cancel')">Cancel</button>
+      <button type="button" class="wp-fvm__btn wp-fvm__btn--primary" data-test="fvm-save" @click="emit('save')">Save</button>
     </footer>
   </div>
 </template>
 
 <style scoped>
-.fvm {
+.wp-fvm {
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
@@ -123,7 +123,7 @@ function onSpaClick(): void {
 }
 /* Head styling lives in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). */
-.fvm__foot {
+.wp-fvm__foot {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -131,7 +131,7 @@ function onSpaClick(): void {
   background: var(--wp-bg3);
   border-top: 1px solid var(--wp-border);
 }
-.fvm__spa-link {
+.wp-fvm__spa-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -139,13 +139,13 @@ function onSpaClick(): void {
   color: var(--wp-text-muted, var(--wp-text2));
   text-decoration: none;
 }
-.fvm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
-.fvm__hint {
+.wp-fvm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
+.wp-fvm__hint {
   margin-left: auto;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.fvm__hint kbd {
+.wp-fvm__hint kbd {
   font: 9px var(--wp-font-mono);
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
@@ -153,7 +153,7 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.fvm__btn {
+.wp-fvm__btn {
   padding: 5px 12px;
   border: 1px solid var(--wp-border);
   border-radius: 3px;
@@ -162,12 +162,12 @@ function onSpaClick(): void {
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.fvm__btn--primary {
+.wp-fvm__btn--primary {
   border-color: var(--wp-accent);
   background: var(--wp-accent);
   color: white;
 }
-.fvm__btn--quiet {
+.wp-fvm__btn--quiet {
   border-color: transparent;
   color: var(--wp-text-dim, var(--wp-text3));
   display: inline-flex;
@@ -175,9 +175,9 @@ function onSpaClick(): void {
   gap: 5px;
   font-size: 10px;
 }
-.fvm__btn--quiet:hover {
+.wp-fvm__btn--quiet:hover {
   border-color: var(--wp-border);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.fvm__btn--quiet .pi { font-size: 10px; }
+.wp-fvm__btn--quiet .pi { font-size: 10px; }
 </style>

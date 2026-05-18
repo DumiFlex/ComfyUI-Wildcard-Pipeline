@@ -218,15 +218,15 @@ function toggleVarMenu(): void {
 
 <template>
   <section class="tpl">
-    <div class="tpl__head">
-      <span class="tpl__label">Template</span>
-      <span class="tpl__hint">$name refs · $$ for literal $ · {a|b|c} inline choice</span>
-      <div class="tpl__head-actions">
-        <div class="tpl__menu-wrap">
+    <div class="wp-tpl__head">
+      <span class="wp-tpl__label">Template</span>
+      <span class="wp-tpl__hint">$name refs · $$ for literal $ · {a|b|c} inline choice</span>
+      <div class="wp-tpl__head-actions">
+        <div class="wp-tpl__menu-wrap">
           <button
             v-if="availableVars.length > 0"
             type="button"
-            class="tpl__menu-btn"
+            class="wp-tpl__menu-btn"
             data-test="tpl-insert-var"
             :title="`Insert $var (${availableVars.length} available)`"
             aria-label="Insert variable"
@@ -235,7 +235,7 @@ function toggleVarMenu(): void {
           ><i class="pi pi-plus" aria-hidden="true" /> $var</button>
           <div
             v-if="showVarMenu"
-            class="tpl__menu"
+            class="wp-tpl__menu"
             data-test="tpl-var-menu"
             role="listbox"
           >
@@ -243,7 +243,7 @@ function toggleVarMenu(): void {
               v-for="name in availableVars"
               :key="name"
               type="button"
-              class="tpl__menu-item"
+              class="wp-tpl__menu-item"
               :class="varColorClass(name)"
               :data-test="`tpl-var-item-${name}`"
               role="option"
@@ -255,7 +255,7 @@ function toggleVarMenu(): void {
         <button
           v-if="templateOverridden"
           type="button"
-          class="tpl__reset"
+          class="wp-tpl__reset"
           data-test="tpl-reset"
           title="Restore template to library default"
           aria-label="Reset template to library default"
@@ -266,8 +266,8 @@ function toggleVarMenu(): void {
 
     <textarea
       ref="taRef"
-      class="tpl__input"
-      :class="{ 'tpl__input--mod': templateOverridden }"
+      class="wp-tpl__input"
+      :class="{ 'wp-tpl__input--mod': templateOverridden }"
       data-test="tpl-textarea"
       :value="templateValue"
       :placeholder="libraryTemplate || '$first_name, a $age-year-old with $hair_color hair'"
@@ -276,24 +276,24 @@ function toggleVarMenu(): void {
       @input="onTemplateInput"
     />
 
-    <div class="tpl__detected">
-      <span class="tpl__detected-label">Detected</span>
-      <span class="tpl__detected-summary" data-test="tpl-detected-summary">
+    <div class="wp-tpl__detected">
+      <span class="wp-tpl__detected-label">Detected</span>
+      <span class="wp-tpl__detected-summary" data-test="tpl-detected-summary">
         {{ detectedSummary }}
       </span>
-      <div v-if="detectedVars.length" class="tpl__detected-pills">
+      <div v-if="detectedVars.length" class="wp-tpl__detected-pills">
         <span
           v-for="v in detectedVars"
           :key="v"
-          class="tpl__pill"
+          class="wp-tpl__pill"
           :class="varColorClass(v)"
           data-test="tpl-detected-pill"
         >${{ v }}</span>
       </div>
     </div>
 
-    <div class="tpl__preview-label">PREVIEW</div>
-    <div class="tpl__preview" data-test="tpl-preview">
+    <div class="wp-tpl__preview-label">PREVIEW</div>
+    <div class="wp-tpl__preview" data-test="tpl-preview">
       <template v-for="(tok, i) in previewTokens" :key="i">
         <span v-if="tok.kind === 'text'" class="tpl-tok--text">{{ tok.raw }}</span>
         <span
@@ -322,8 +322,8 @@ function toggleVarMenu(): void {
     </div>
 
     <template v-if="hasResolvableVar">
-      <div class="tpl__preview-label tpl__preview-label--resolved">RESOLVED</div>
-      <div class="tpl__preview tpl__preview--resolved" data-test="tpl-preview-resolved">
+      <div class="wp-tpl__preview-label wp-tpl__preview-label--resolved">RESOLVED</div>
+      <div class="wp-tpl__preview wp-tpl__preview--resolved" data-test="tpl-preview-resolved">
         <template v-for="(tok, i) in resolvedTokens" :key="i">
           <span v-if="tok.kind === 'literal'" class="tpl-tok--text">{{ tok.text }}</span>
           <span
@@ -341,10 +341,10 @@ function toggleVarMenu(): void {
       </div>
     </template>
 
-    <div class="tpl__stored" data-test="tpl-stored-as">
-      <span class="tpl__stored-arrow">→ stored as</span>
+    <div class="wp-tpl__stored" data-test="tpl-stored-as">
+      <span class="wp-tpl__stored-arrow">→ stored as</span>
       <span
-        class="tpl__stored-var"
+        class="wp-tpl__stored-var"
         :class="varColorClass(outputVar)"
       >${{ outputVar || "output" }}</span>
     </div>
@@ -357,24 +357,24 @@ function toggleVarMenu(): void {
   background: var(--wp-bg);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
-.tpl__head {
+.wp-tpl__head {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
 }
-.tpl__label {
+.wp-tpl__label {
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.tpl__hint {
+.wp-tpl__hint {
   font: 400 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
   letter-spacing: 0;
 }
-.tpl__head-actions {
+.wp-tpl__head-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -385,7 +385,7 @@ function toggleVarMenu(): void {
  * src/components/context/editors/_modal-template-ctrls.css. Single
  * source of truth keeps both modals at the same 22px button height. */
 
-.tpl__input {
+.wp-tpl__input {
   width: 100%;
   box-sizing: border-box;
   background: var(--wp-bg-deep, var(--wp-bg));
@@ -397,14 +397,14 @@ function toggleVarMenu(): void {
   min-height: 56px;
   resize: vertical;
 }
-.tpl__input:focus { outline: none; border-color: var(--wp-accent); }
-.tpl__input--mod {
+.wp-tpl__input:focus { outline: none; border-color: var(--wp-accent); }
+.wp-tpl__input--mod {
   border-color: var(--wp-accent);
   color: var(--wp-accent-text, var(--wp-text));
 }
-.tpl__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tpl__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
 
-.tpl__detected {
+.wp-tpl__detected {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -413,22 +413,22 @@ function toggleVarMenu(): void {
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.tpl__detected-label {
+.wp-tpl__detected-label {
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.tpl__detected-summary {
+.wp-tpl__detected-summary {
   font: 11px var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.tpl__detected-pills {
+.wp-tpl__detected-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
-.tpl__pill {
+.wp-tpl__pill {
   padding: 2px 6px;
   font: 600 10px var(--wp-font-mono);
   background: color-mix(in srgb, currentColor 12%, var(--wp-bg-deep, var(--wp-bg)));
@@ -436,7 +436,7 @@ function toggleVarMenu(): void {
   border-radius: 999px;
 }
 
-.tpl__preview-label {
+.wp-tpl__preview-label {
   margin-top: 10px;
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
@@ -444,7 +444,7 @@ function toggleVarMenu(): void {
   color: var(--wp-text-dim, var(--wp-text3));
   margin-bottom: 4px;
 }
-.tpl__preview {
+.wp-tpl__preview {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px dashed var(--wp-border);
   border-radius: 3px;
@@ -499,17 +499,17 @@ function toggleVarMenu(): void {
   text-underline-offset: 2px;
   font-weight: 600;
 }
-.tpl__preview-label--resolved {
+.wp-tpl__preview-label--resolved {
   margin-top: 8px;
   color: var(--wp-accent);
 }
-.tpl__preview--resolved {
+.wp-tpl__preview--resolved {
   border-style: solid;
   border-color: color-mix(in srgb, var(--wp-accent) 35%, var(--wp-border));
   background: color-mix(in srgb, var(--wp-accent) 6%, var(--wp-bg-deep, var(--wp-bg)));
 }
 
-.tpl__stored {
+.wp-tpl__stored {
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
@@ -518,6 +518,6 @@ function toggleVarMenu(): void {
   align-items: center;
   gap: 4px;
 }
-.tpl__stored-arrow { color: var(--wp-text-dim, var(--wp-text3)); }
-.tpl__stored-var { font-weight: 600; }
+.wp-tpl__stored-arrow { color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tpl__stored-var { font-weight: 600; }
 </style>

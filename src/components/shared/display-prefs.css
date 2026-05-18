@@ -60,8 +60,8 @@
   .wp-recovery,
   .wp-picker,
   .wp-ctxmenu,
-  .wcm,
-  .fvm,
+  .wp-wcm,
+  .wp-fvm,
   .wp-pg
 ) {
   box-shadow: none !important;
@@ -71,27 +71,22 @@
 /* Decor-off — also nuke the brand-gradient wash overlay on modal heads
  * so the now-solid background shows through cleanly. Without this, the
  * `::after { background: rgba(35,35,35,0.85) }` layer makes solid+wash
- * look identical to gradient+wash and the user sees no visible change.
- *
- * The instance modal heads use BEM-style class names (.wcm__head,
- * .fvm__head) — NOT a `wp-` prefix — so they need to be listed
- * explicitly. Earlier fix attempted `.wp-wci__head` / `.wp-fvi__head`
- * which match nothing in the DOM. */
+ * look identical to gradient+wash and the user sees no visible change. */
 .wp-decor-off .wp-medit__head::after,
-.wp-decor-off .wcm__head::after,
-.wp-decor-off .fvm__head::after,
+.wp-decor-off .wp-wcm__head::after,
+.wp-decor-off .wp-fvm__head::after,
 .wp-decor-off .wp-pg__head::after {
   display: none !important;
 }
 
 /* Decor-off — ALSO override the modal-head background itself with a
  * solid bg so even when the wash hides, no gradient peeks through.
- * Token override on .wcm/.fvm root doesn't reach because the .wcm__head
- * scoped rule re-applies `var(--wp-brand-gradient)` directly. Hit the
- * head element with high specificity. */
+ * Token override on .wp-wcm/.wp-fvm root doesn't reach because the
+ * .wp-wcm__head scoped rule re-applies `var(--wp-brand-gradient)`
+ * directly. Hit the head element with high specificity. */
 .wp-decor-off .wp-medit__head,
-.wp-decor-off .wcm__head,
-.wp-decor-off .fvm__head,
+.wp-decor-off .wp-wcm__head,
+.wp-decor-off .wp-fvm__head,
 .wp-decor-off .wp-pg__head {
   background: var(--wp-bg2) !important;
 }
@@ -113,8 +108,8 @@
   .wp-toast,
   .wp-picker,
   .wp-ctxmenu,
-  .wcm,
-  .fvm,
+  .wp-wcm,
+  .wp-fvm,
   .wp-pg
 ) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
