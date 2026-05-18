@@ -81,6 +81,8 @@ const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
 
+const dirty = computed(() => snapshot() !== baseline.value);
+
 // Suggestions: every other wildcard's id (= 8-hex uuid post DB
 // migration 004) for the `@`-trigger nested-reference autocomplete.
 // The canonical stored form is `@{8hex}` per the syntax spec — the
@@ -291,6 +293,7 @@ defineExpose({ historyEntries, applyRestore });
     back-label="Wildcards"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :dirty="dirty"
     :history-entries="historyEntries"
     @save="save"
     @cancel="cancel"

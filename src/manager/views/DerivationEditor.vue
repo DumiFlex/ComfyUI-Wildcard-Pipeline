@@ -67,6 +67,8 @@ const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
 
+const dirty = computed(() => snapshot() !== baseline.value);
+
 // Library var hints for the `$`-trigger autocomplete dropdown — pulls
 // from every wildcard / fixed_values / combine in the catalog except
 // the rule's own derivation. Extracted to `utils/library-suggestions.ts`
@@ -275,6 +277,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
     back-label="Derivations"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :dirty="dirty"
     :history-entries="historyEntries"
     @save="save"
     @cancel="cancel"

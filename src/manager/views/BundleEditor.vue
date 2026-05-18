@@ -129,6 +129,8 @@ const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
 );
 
+const dirty = computed(() => bundleSnapshot() !== bundleBaseline.value);
+
 const selectedChild = computed<Record<string, unknown> | null>(() => {
   const id = selectedChildId.value;
   if (!id) return null;
@@ -377,6 +379,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     back-label="Bundles"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :dirty="dirty"
     :save-disabled="!isEdit"
     @save="save"
     @cancel="cancel"

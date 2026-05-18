@@ -66,6 +66,8 @@ const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
 
+const dirty = computed(() => snapshot() !== baseline.value);
+
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
@@ -212,6 +214,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     back-label="Fixed Values"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :dirty="dirty"
     :history-entries="historyEntries"
     @save="save"
     @cancel="cancel"

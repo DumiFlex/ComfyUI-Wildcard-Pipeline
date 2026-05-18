@@ -35,12 +35,15 @@ interface Props {
   /** Optional. When provided, renders a multi-segment Breadcrumb at
    *  the top instead of the single back link. */
   breadcrumb?: BreadcrumbItem[];
+  /** When true, render an "Unsaved" chip and accent the Save button. */
+  dirty?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
   saving: false,
   saveDisabled: false,
   historyEntries: () => [],
+  dirty: false,
 });
 
 const emit = defineEmits<{
@@ -73,7 +76,13 @@ function onRestore(entry: ModuleHistoryEntry) {
 
     <div class="wp-page__header">
       <div class="wp-page__title-wrap">
-        <h1 class="wp-page__title">{{ title }}</h1>
+        <h1 class="wp-page__title">
+          {{ title }}
+          <span v-if="dirty" class="wp-editor__dirty-chip" data-test="editor-dirty-chip">
+            <span class="wp-editor__dirty-dot" aria-hidden="true" />
+            Unsaved
+          </span>
+        </h1>
         <p v-if="subtitle" class="wp-page__subtitle">{{ subtitle }}</p>
       </div>
       <slot name="header-extra" />
@@ -102,6 +111,7 @@ function onRestore(entry: ModuleHistoryEntry) {
           icon="pi-check"
           :loading="saving"
           :disabled="saveDisabled"
+          :data-dirty="dirty || undefined"
           data-test="save-btn"
           @click="onSave"
         >Save</Button>
@@ -134,5 +144,26 @@ function onRestore(entry: ModuleHistoryEntry) {
   gap: var(--wp-space-6);
   /* Buffer so the last card clears the gradient + sticky footer top. */
   padding-bottom: var(--wp-space-7);
+}
+.wp-editor__dirty-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-left: var(--wp-space-4);
+  padding: 2px var(--wp-space-3);
+  background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 32%, transparent);
+  border-radius: 999px;
+  font-size: var(--wp-text-xs);
+  font-weight: 500;
+  color: var(--wp-warn, #facc15);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  vertical-align: middle;
+}
+.wp-editor__dirty-dot {
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: currentColor;
 }
 </style>

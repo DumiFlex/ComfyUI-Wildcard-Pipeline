@@ -73,6 +73,8 @@ const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
 
+const dirty = computed(() => snapshot() !== baseline.value);
+
 const PLACEHOLDER = "$first_name, a $age-year-old with $hair_color hair";
 
 watch(name, (next) => {
@@ -248,6 +250,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     back-label="Combines"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :dirty="dirty"
     :history-entries="historyEntries"
     @save="save"
     @cancel="cancel"

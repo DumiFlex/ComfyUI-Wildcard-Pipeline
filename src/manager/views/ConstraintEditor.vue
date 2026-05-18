@@ -82,6 +82,8 @@ const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
 
+const dirty = computed(() => snapshot() !== baseline.value);
+
 const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   allow: 1,
   exclude: 0,
@@ -326,6 +328,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     back-label="Constraints"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :dirty="dirty"
     :history-entries="historyEntries"
     @save="save"
     @cancel="cancel"
