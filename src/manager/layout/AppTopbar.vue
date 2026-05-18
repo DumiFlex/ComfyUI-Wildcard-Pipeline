@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useTweaksStore } from "../stores/tweaksStore";
 
 const ui = useUiStore();
-const router = useRouter();
 const tweaks = useTweaksStore();
 
 const version = "1.4.0-dev";
@@ -65,16 +63,15 @@ const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
       <Icon name="pi-sliders-h" />
     </button>
 
-    <button
-      type="button"
+    <RouterLink
+      to="/settings"
       class="wp-topbar__icon-btn"
       aria-label="Settings"
       title="Settings"
       data-test="topbar-settings"
-      @click="router.push('/settings')"
     >
       <Icon name="pi-cog" />
-    </button>
+    </RouterLink>
   </header>
 </template>
 
