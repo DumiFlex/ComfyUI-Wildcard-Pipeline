@@ -1,14 +1,19 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
-import { makeModuleStoreAdapter, makeMixedKindAdapter, makeBundleStoreAdapter } from "../../../src/manager/composables/bulkAdapters";
-import { useModuleStore } from "../../../src/manager/stores/moduleStore";
-import { useBundleStore } from "../../../src/manager/stores/bundleStore";
-import type { ModuleRow, BundleRow } from "../../../src/manager/api/types";
+import {
+  makeModuleStoreAdapter,
+  makeMixedKindAdapter,
+  makeBundleStoreAdapter,
+} from "../../composables/bulkAdapters";
+import { useModuleStore } from "../../stores/moduleStore";
+import { useBundleStore } from "../../stores/bundleStore";
+import type { ModuleRow, BundleRow } from "../../api/types";
 
 function makeModule(over: Partial<ModuleRow> = {}): ModuleRow {
   return {
     id: over.id ?? "m1",
     name: over.name ?? "M",
+    description: over.description ?? "",
     type: over.type ?? "wildcard",
     is_favorite: over.is_favorite ?? false,
     tags: over.tags ?? [],
@@ -23,24 +28,29 @@ function makeBundle(over: Partial<BundleRow> = {}): BundleRow {
   return {
     id: over.id ?? "b1",
     name: over.name ?? "B",
+    description: over.description ?? "",
+    color: over.color ?? null,
+    category_id: over.category_id ?? null,
     is_favorite: over.is_favorite ?? false,
     tags: over.tags ?? [],
-    payload: over.payload ?? { children: [] },
+    children: over.children ?? [],
+    payload_hash: over.payload_hash ?? "h",
+    version: over.version ?? 1,
     updated_at: over.updated_at ?? "2026-01-01T00:00:00Z",
     created_at: over.created_at ?? "2026-01-01T00:00:00Z",
-  } as BundleRow;
+  };
 }
 
 describe("makeModuleStoreAdapter", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("setFavorite skips items already in target state", async () => {
+  it("setFavorite counts skipped items as ok (idempotent — they're already in target state)", async () => {
     const store = useModuleStore();
     const toggle = vi.spyOn(store, "toggleFavorite").mockResolvedValue(makeModule());
     const adapter = makeModuleStoreAdapter(store);
     const items = [makeModule({ id: "a", is_favorite: true }), makeModule({ id: "b", is_favorite: false })];
     const res = await adapter.setFavorite(items, true);
-    expect(res.ok).toBe(1);
+    expect(res.ok).toBe(2);
     expect(toggle).toHaveBeenCalledTimes(1);
     expect(toggle).toHaveBeenCalledWith("b");
   });
@@ -96,7 +106,7 @@ describe("makeModuleStoreAdapter", () => {
     expect(remove).toHaveBeenCalledTimes(2);
   });
 
-  it("duplicate returns new IDs", async () => {
+  it("duplicate returns new IDs in input order", async () => {
     const store = useModuleStore();
     const spy = vi.spyOn(store, "duplicate");
     spy.mockResolvedValueOnce(makeModule({ id: "a-copy" }));

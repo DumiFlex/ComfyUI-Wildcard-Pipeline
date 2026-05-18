@@ -51,7 +51,10 @@ export function makeModuleStoreAdapter(store: ModuleStore): BulkAdapter {
   return {
     async setFavorite(items, on) {
       const target = items.filter((i) => Boolean(i.is_favorite) !== on) as ModuleRow[];
-      return runEach(target, async (i) => { await store.toggleFavorite(i.id); });
+      const skipped = items.length - target.length;
+      const res = await runEach(target, async (i) => { await store.toggleFavorite(i.id); });
+      res.ok += skipped;
+      return res;
     },
     async duplicate(items) {
       const created: string[] = [];
@@ -104,7 +107,10 @@ export function makeBundleStoreAdapter(store: BundleStore): BulkAdapter {
   return {
     async setFavorite(items, on) {
       const target = items.filter((i) => Boolean(i.is_favorite) !== on) as BundleRow[];
-      return runEach(target, async (i) => { await store.toggleFavorite(i.id); });
+      const skipped = items.length - target.length;
+      const res = await runEach(target, async (i) => { await store.toggleFavorite(i.id); });
+      res.ok += skipped;
+      return res;
     },
     async duplicate(items) {
       // Bundle store has no duplicate method; this is intentionally not
