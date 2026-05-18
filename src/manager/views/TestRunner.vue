@@ -6,7 +6,7 @@
  * `docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx`.
  * Uses ui/* primitives only — no PrimeVue.
  */
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
@@ -379,6 +379,22 @@ function runBundle(b: BundleRow, n: number): BundleResult {
   return { type: "bundle", samples: n, runs, finalCounts: sorted };
 }
 
+/** Ctrl/Cmd+Enter triggers a run from anywhere on the page. Skips when
+ *  the focused element is a multi-line textarea so users typing prompts
+ *  inside playgrounds don't accidentally trigger a re-run. */
+function onKeydown(e: KeyboardEvent): void {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key !== "Enter") return;
+  const t = e.target as HTMLElement | null;
+  if (t?.tagName === "TEXTAREA") return;
+  if (!moduleId.value || running.value) return;
+  e.preventDefault();
+  void run();
+}
+
+onMounted(() => window.addEventListener("keydown", onKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+
 async function run() {
   running.value = true;
   result.value = null;
@@ -523,6 +539,7 @@ function pickKind(k: SelectorKind) {
               icon="pi-bolt"
               :loading="running"
               :disabled="!moduleId || running"
+              :title="running ? undefined : 'Ctrl + Enter'"
               data-test="run-btn"
               @click="run"
             >{{ running ? "Running…" : "Run" }}</Button>
