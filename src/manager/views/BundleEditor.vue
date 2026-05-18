@@ -17,6 +17,8 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
+import Button from "../components/ui/Button.vue";
+import Icon from "../components/ui/Icon.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
@@ -25,6 +27,7 @@ import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
+import { useEditorDraft } from "../composables/useEditorDraft";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -129,6 +132,47 @@ function bundleSnapshot(): string {
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
 );
+
+const draft = useEditorDraft({
+  kind: "bundle",
+  id: props.id ?? "new",
+  dirty,
+  snapshot: bundleSnapshot,
+});
+
+function formatDraftAge(ms: number | null): string {
+  if (!ms || ms < 0) return "just now";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+
+function applyDraft(): void {
+  const snap = draft.restore();
+  if (!snap) return;
+  try {
+    const parsed = JSON.parse(snap) as {
+      name: string;
+      description: string;
+      color: string;
+      categoryId: string | null;
+      tags: string[];
+      children: Array<Record<string, unknown>>;
+    };
+    name.value = parsed.name;
+    description.value = parsed.description;
+    color.value = parsed.color;
+    categoryId.value = parsed.categoryId;
+    tags.value = parsed.tags;
+    children.value = Array.isArray(parsed.children) ? parsed.children : [];
+  } catch {
+    toast.push({ severity: "error", summary: "Draft restore failed", life: 3000 });
+  }
+}
 
 const selectedChild = computed<Record<string, unknown> | null>(() => {
   const id = selectedChildId.value;
@@ -245,6 +289,7 @@ async function save() {
       : [];
     baselineByChildId.value = snapshotBaseline(children.value);
     bundleBaseline.value = bundleSnapshot();
+    draft.discard();
     recent.push({ id: props.id, kind: "bundle", name: updated.name });
     toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
   } catch (e) {
@@ -389,6 +434,15 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     @save="save"
     @cancel="cancel"
   >
+    <template #draft-banner>
+      <div v-if="draft.hasDraft.value" class="wp-draft-banner" role="status" data-test="draft-banner">
+        <Icon name="pi-clock" />
+        <span>Unsaved draft from {{ formatDraftAge(draft.draftAge.value) }}.</span>
+        <span class="wp-spacer" />
+        <Button variant="primary" size="sm" @click="applyDraft">Restore</Button>
+        <Button variant="ghost" size="sm" @click="draft.discard">Discard</Button>
+      </div>
+    </template>
     <div v-if="loading" class="wp-dim wp-bundle-editor__loading">Loading bundle…</div>
 
     <template v-else>

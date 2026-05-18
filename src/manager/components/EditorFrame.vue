@@ -88,6 +88,8 @@ function onRestore(entry: ModuleHistoryEntry) {
       <slot name="header-extra" />
     </div>
 
+    <slot name="draft-banner" />
+
     <div class="wp-editor__body">
       <slot />
     </div>
@@ -166,4 +168,16 @@ function onRestore(entry: ModuleHistoryEntry) {
   border-radius: 999px;
   background: currentColor;
 }
+.wp-draft-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-3) var(--wp-space-5);
+  background: color-mix(in oklab, var(--wp-info, var(--wp-accent-500)) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-info, var(--wp-accent-500)) 30%, transparent);
+  border-radius: var(--wp-radius);
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text);
+}
+.wp-draft-banner .pi { color: var(--wp-info, var(--wp-accent-500)); }
 </style>

@@ -14,6 +14,8 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
+import Button from "../components/ui/Button.vue";
+import Icon from "../components/ui/Icon.vue";
 import Field from "../components/ui/Field.vue";
 import Chip from "../components/ui/Chip.vue";
 import RichTextInput from "../components/RichTextInput.vue";
@@ -23,6 +25,7 @@ import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
+import { useEditorDraft } from "../composables/useEditorDraft";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -73,6 +76,48 @@ function snapshot(): string {
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
+
+const draft = useEditorDraft({
+  kind: "combine",
+  id: props.id ?? "new",
+  dirty,
+  snapshot,
+});
+
+function formatDraftAge(ms: number | null): string {
+  if (!ms || ms < 0) return "just now";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+
+function applyDraft(): void {
+  const snap = draft.restore();
+  if (!snap) return;
+  try {
+    const parsed = JSON.parse(snap) as {
+      name: string;
+      description: string;
+      categoryId: string | null;
+      tags: string[];
+      template: string;
+      outputVar: string;
+    };
+    name.value = parsed.name;
+    description.value = parsed.description;
+    categoryId.value = parsed.categoryId;
+    tags.value = parsed.tags;
+    template.value = parsed.template;
+    outputVar.value = parsed.outputVar;
+    outputVarTouched.value = true;
+  } catch {
+    toast.push({ severity: "error", summary: "Draft restore failed", life: 3000 });
+  }
+}
 
 const PLACEHOLDER = "$first_name, a $age-year-old with $hair_color hair";
 
@@ -225,6 +270,7 @@ async function save() {
     }
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
     baseline.value = snapshot();
+    draft.discard();
     router.push(resolveReturnTo("/combines"));
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
@@ -261,6 +307,15 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     @cancel="cancel"
     @restore="applyRestore"
   >
+    <template #draft-banner>
+      <div v-if="draft.hasDraft.value" class="wp-draft-banner" role="status" data-test="draft-banner">
+        <Icon name="pi-clock" />
+        <span>Unsaved draft from {{ formatDraftAge(draft.draftAge.value) }}.</span>
+        <span class="wp-spacer" />
+        <Button variant="primary" size="sm" @click="applyDraft">Restore</Button>
+        <Button variant="ghost" size="sm" @click="draft.discard">Discard</Button>
+      </div>
+    </template>
     <IdentityCard
       :name="name"
       :description="description"
