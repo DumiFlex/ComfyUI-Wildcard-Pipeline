@@ -882,6 +882,11 @@ defineExpose({
   align-items: center;
   gap: var(--wp-space-4);
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--wp-bg);
+  padding: var(--wp-space-3) 0;
 }
 .wp-page-toolbar__search {
   flex: 1;
@@ -1124,6 +1129,40 @@ defineExpose({
 .wp-bulk-bar__hint {
   margin-left: var(--wp-space-3);
   font-size: var(--wp-text-xs);
+}
+
+/* Sticky stack — toolbar pins at top, active-filter chips below it, bulk-bar
+ * below those. Table head sits beneath the entire stack so scrolling a long
+ * list keeps search/filter context visible without losing column labels. */
+.wp-active-filters {
+  position: sticky;
+  top: var(--wp-control-h-md);
+  z-index: 2;
+  background: var(--wp-bg);
+  padding: var(--wp-space-2) 0;
+}
+
+.wp-bulk-bar {
+  position: sticky;
+  top: calc(var(--wp-control-h-md) * 2);
+  z-index: 2;
+}
+
+.wp-table--sticky-head thead th {
+  /* Override global thead top so it sits below toolbar + active-filters + bulk-bar.
+   * The bulk-bar only renders when selection is non-empty, but its sticky offset
+   * applies even when hidden — the table head stays at a stable offset regardless. */
+  top: calc(var(--wp-control-h-md) * 2 + var(--wp-space-5));
+}
+
+/* Disable sticky on short viewports — under 600px tall the stack would consume
+ * most of the visible area. Table head still sticks via the global rule. */
+@media (max-height: 600px) {
+  .wp-page-toolbar,
+  .wp-active-filters,
+  .wp-bulk-bar {
+    position: static;
+  }
 }
 
 </style>
