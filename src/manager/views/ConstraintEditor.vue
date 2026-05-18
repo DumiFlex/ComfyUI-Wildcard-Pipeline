@@ -10,7 +10,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import type { SaveState } from "../components/EditorFrame.types";
+import type { SaveState, EditorSection } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -381,6 +381,13 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { label: isEdit.value ? (name.value || "Editing") : "New constraint" },
 ]);
 
+const sections: EditorSection[] = [
+  { id: "editor-section-identity",   label: "Identity" },
+  { id: "editor-section-wildcards",  label: "Wildcards" },
+  { id: "editor-section-matrix",     label: "Matrix" },
+  { id: "editor-section-exceptions", label: "Exceptions" },
+];
+
 defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore });
 </script>
 
@@ -395,6 +402,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     :save-error="saveError"
     :dirty="dirty"
     :history-entries="historyEntries"
+    :sections="sections"
     @save="save"
     @cancel="cancel"
     @restore="applyRestore"
@@ -408,17 +416,20 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         <Button variant="ghost" size="sm" @click="draft.discard">Discard</Button>
       </div>
     </template>
-    <IdentityCard
-      :name="name"
-      :description="description"
-      :category-id="categoryId"
-      :tags="tags"
-      @update:name="(v) => (name = v)"
-      @update:description="(v) => (description = v)"
-      @update:category-id="(v) => (categoryId = v)"
-      @update:tags="(v) => (tags = v)"
-    />
+    <div id="editor-section-identity">
+      <IdentityCard
+        :name="name"
+        :description="description"
+        :category-id="categoryId"
+        :tags="tags"
+        @update:name="(v) => (name = v)"
+        @update:description="(v) => (description = v)"
+        @update:category-id="(v) => (categoryId = v)"
+        @update:tags="(v) => (tags = v)"
+      />
+    </div>
 
+    <div id="editor-section-wildcards">
     <Card title="Wildcards">
       <template #actions>
         <span class="wp-card__hint">Pick the two wildcards whose sub-categories form the matrix</span>
@@ -462,7 +473,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         <div class="cn-pair-hint" style="grid-area: tgt-hint">Columns of the matrix</div>
       </div>
     </Card>
+    </div>
 
+    <div id="editor-section-matrix">
     <Card title="Rule matrix">
       <template #actions>
         <span class="wp-card__hint">Click cycles · cog tunes factor</span>
@@ -493,7 +506,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         @update:model-value="onMatrixUpdate"
       />
     </Card>
+    </div>
 
+    <div id="editor-section-exceptions">
     <Card :title="`Exceptions (${exceptions.length})`" :padding="false">
       <template #actions>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="add-exception" @click="addException">
@@ -565,6 +580,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         </tbody>
       </table>
     </Card>
+    </div>
     <!-- ConfirmDialog inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
     <ConfirmDialog

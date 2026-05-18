@@ -12,7 +12,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import type { SaveState } from "../components/EditorFrame.types";
+import type { SaveState, EditorSection } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -349,6 +349,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { label: isEdit.value ? (name.value || "Editing") : "New wildcard" },
 ]);
 
+const sections: EditorSection[] = [
+  { id: "editor-section-identity",       label: "Identity" },
+  { id: "editor-section-sub-categories", label: "Sub-categories" },
+  { id: "editor-section-options",        label: "Options" },
+];
+
 defineExpose({ historyEntries, applyRestore });
 </script>
 
@@ -363,6 +369,7 @@ defineExpose({ historyEntries, applyRestore });
     :save-error="saveError"
     :dirty="dirty"
     :history-entries="historyEntries"
+    :sections="sections"
     @save="save"
     @cancel="cancel"
     @restore="applyRestore"
@@ -376,45 +383,50 @@ defineExpose({ historyEntries, applyRestore });
         <Button variant="ghost" size="sm" @click="draft.discard">Discard</Button>
       </div>
     </template>
-    <IdentityCard
-      :name="name"
-      :description="description"
-      :category-id="categoryId"
-      :tags="tags"
-      :var-binding="varBinding"
-      :var-binding-error="varBindingError"
-      @update:name="(v) => (name = v)"
-      @update:description="(v) => (description = v)"
-      @update:category-id="(v) => (categoryId = v)"
-      @update:tags="(v) => (tags = v)"
-      @update:var-binding="(v) => (varBinding = v)"
-    />
+    <div id="editor-section-identity">
+      <IdentityCard
+        :name="name"
+        :description="description"
+        :category-id="categoryId"
+        :tags="tags"
+        :var-binding="varBinding"
+        :var-binding-error="varBindingError"
+        @update:name="(v) => (name = v)"
+        @update:description="(v) => (description = v)"
+        @update:category-id="(v) => (categoryId = v)"
+        @update:tags="(v) => (tags = v)"
+        @update:var-binding="(v) => (varBinding = v)"
+      />
+    </div>
 
-    <Card title="Sub-Categories">
-      <template #actions>
-        <span class="wp-card__hint">Optional groupings inside this wildcard</span>
-      </template>
-      <div class="sub-add-row">
-        <Input
-          v-model="subDraft"
-          placeholder="e.g. warm tones"
-          data-test="wc-sub-input"
-          @keydown.enter.prevent="addSub"
-        />
-        <Button icon="pi-plus" data-test="wc-sub-add" @click="addSub">Add</Button>
-      </div>
-      <div v-if="subCategories.length" class="sub-list">
-        <Chip
-          v-for="s in subCategories"
-          :key="s"
-          tone="accent"
-          removable
-          @remove="removeSub(s)"
-        >{{ s }}</Chip>
-      </div>
-      <span v-else class="wp-card__hint">No sub-categories yet.</span>
-    </Card>
+    <div id="editor-section-sub-categories">
+      <Card title="Sub-Categories">
+        <template #actions>
+          <span class="wp-card__hint">Optional groupings inside this wildcard</span>
+        </template>
+        <div class="sub-add-row">
+          <Input
+            v-model="subDraft"
+            placeholder="e.g. warm tones"
+            data-test="wc-sub-input"
+            @keydown.enter.prevent="addSub"
+          />
+          <Button icon="pi-plus" data-test="wc-sub-add" @click="addSub">Add</Button>
+        </div>
+        <div v-if="subCategories.length" class="sub-list">
+          <Chip
+            v-for="s in subCategories"
+            :key="s"
+            tone="accent"
+            removable
+            @remove="removeSub(s)"
+          >{{ s }}</Chip>
+        </div>
+        <span v-else class="wp-card__hint">No sub-categories yet.</span>
+      </Card>
+    </div>
 
+    <div id="editor-section-options">
     <Card :title="`Options (${options.length})`" :padding="false">
       <template #actions>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" @click="addOption">
@@ -487,6 +499,7 @@ defineExpose({ historyEntries, applyRestore });
         </tbody>
       </table>
     </Card>
+    </div>
 
     <!-- ConfirmDialog lives INSIDE EditorFrame so the template has a single
          root vnode. Multi-root templates break the parent RouterView's
