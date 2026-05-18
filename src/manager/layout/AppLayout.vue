@@ -1,12 +1,30 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
+import CommandPalette from "../components/CommandPalette.vue";
 import { useUiStore } from "../stores/uiStore";
 
 const ui = useUiStore();
+
+const paletteOpen = ref(false);
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key !== "k" && e.key !== "K") return;
+  if (!(e.metaKey || e.ctrlKey)) return;
+  const target = e.target as HTMLElement | null;
+  const tag = target?.tagName?.toLowerCase();
+  if (tag === "input" || tag === "textarea") return;
+  if (target?.isContentEditable) return;
+  e.preventDefault();
+  paletteOpen.value = !paletteOpen.value;
+}
+
+onMounted(() => window.addEventListener("keydown", onKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
@@ -24,5 +42,6 @@ const ui = useUiStore();
     </div>
     <ToastHost />
     <TweaksPanel />
+    <CommandPalette v-model:open="paletteOpen" :items="[]" />
   </div>
 </template>
