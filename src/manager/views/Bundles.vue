@@ -106,6 +106,35 @@ function childCount(row: BundleRow): number {
   return (row.children ?? []).length;
 }
 
+interface BundleChildPreview { name: string; type: string; }
+
+/** Read a bundle child's name + kind for the expansion preview. Bundle
+ *  children are loose `Record<string, unknown>` server-side (deep-cloned
+ *  module snapshots) — the display name lives under `meta.name` (mirrors
+ *  the Context-widget instance shape), not on the root, so we narrow
+ *  defensively before reading. */
+function children(row: BundleRow): BundleChildPreview[] {
+  const out: BundleChildPreview[] = [];
+  for (const c of row.children ?? []) {
+    const meta = (c.meta && typeof c.meta === "object") ? c.meta as Record<string, unknown> : null;
+    const metaName = meta && typeof meta.name === "string" ? meta.name : null;
+    const rootName = typeof c.name === "string" ? c.name : null;
+    out.push({
+      name: metaName ?? rootName ?? "(unnamed)",
+      type: typeof c.type === "string" ? c.type : "module",
+    });
+  }
+  return out;
+}
+
+const KIND_ICON: Record<string, string> = {
+  wildcard:     "pi pi-sparkles",
+  fixed_values: "pi pi-tag",
+  combine:      "pi pi-link",
+  derivation:   "pi pi-arrow-right-arrow-left",
+  constraint:   "pi pi-filter",
+};
+
 /** Resolved frame color — same fallback rule the Context widget uses
  *  for unconfigured bundles. Keeps the swatch visible for default-color
  *  rows. */
@@ -147,7 +176,13 @@ function frameColor(row: BundleRow): string {
         headline="No bundles yet"
         body="Bundles group modules together for reuse. Create your first to package modules into a unit."
         variant="library"
-      />
+      >
+        <template #cta>
+          <Button variant="primary" icon="pi-plus" @click="$router.push('/bundles/new')">
+            New bundle
+          </Button>
+        </template>
+      </EmptyState>
     </template>
 
     <template #filter-panel="{ filter, emitFetch }">
@@ -256,12 +291,22 @@ function frameColor(row: BundleRow): string {
 
     <template #expansion="{ row }">
       <div class="wp-row-expand__title">
-        Children frozen at <span class="wp-mono">{{ (row.payload_hash ?? '').slice(0, 8) || '—' }}</span>
+        Children ({{ childCount(row) }})
+        <span v-if="(row.payload_hash ?? '').length" class="wp-dim wp-bundle-hash">
+          · frozen at <span class="wp-mono">{{ row.payload_hash.slice(0, 8) }}</span>
+        </span>
       </div>
       <div v-if="!childCount(row)" class="wp-dim">Empty bundle.</div>
-      <div v-else class="wp-dim wp-children-summary">
-        {{ childCount(row) }} module{{ childCount(row) === 1 ? '' : 's' }} packaged.
-      </div>
+      <ul v-else class="wp-bundle-children">
+        <li
+          v-for="(c, i) in children(row)" :key="i"
+          class="wp-bundle-child"
+        >
+          <i :class="KIND_ICON[c.type] ?? 'pi pi-box'" />
+          <span class="wp-bundle-child__name">{{ c.name }}</span>
+          <span class="wp-dim wp-bundle-child__kind">{{ c.type }}</span>
+        </li>
+      </ul>
     </template>
   </ModuleListView>
 </template>
@@ -283,4 +328,23 @@ function frameColor(row: BundleRow): string {
   vertical-align: middle;
 }
 .wp-children-summary { font-size: var(--wp-text-sm); }
+.wp-bundle-hash { margin-left: var(--wp-space-3); font-size: var(--wp-text-xs); }
+.wp-bundle-children {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+  max-width: 560px;
+}
+.wp-bundle-child {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  font-size: var(--wp-text-sm);
+}
+.wp-bundle-child .pi { font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
+.wp-bundle-child__name { font-weight: 500; }
+.wp-bundle-child__kind { font-size: var(--wp-text-xs); }
 </style>

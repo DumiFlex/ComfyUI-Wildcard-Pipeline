@@ -45,11 +45,13 @@ const categoryById = computed(() => {
   return map;
 });
 
-// Best-effort module-by-id lookup. Only resolves wildcards already loaded into
-// the moduleStore — see Constraints.vue port note in v1 for context.
+// Module-by-id lookup. Reads from `catalog` (all kinds) rather than `items`
+// (constraint-only after the type filter) so source/target wildcard IDs
+// resolve to their names — otherwise the column shows raw 8-hex UUIDs
+// because the active list page only loaded constraint rows into items.
 const moduleNameById = computed(() => {
   const map = new Map<string, ModuleRow>();
-  for (const m of store.items) map.set(m.id, m);
+  for (const m of store.catalog) map.set(m.id, m);
   return map;
 });
 

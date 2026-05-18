@@ -298,26 +298,26 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
       <div v-else class="wp-snippet wp-rules-snippet">
         <div v-for="(rule, ri) in rules(row)" :key="rule.id ?? ri" class="wp-rule-block">
           <div class="wp-token-com wp-rule-block__head"># rule {{ ri + 1 }}</div>
-          <div v-for="(b, bi) in rule.branches ?? []" :key="bi">
+          <div v-for="(b, bi) in rule.branches ?? []" :key="bi" class="wp-rule-branch">
             <span class="wp-token-key">{{ bi === 0 ? "IF" : "ELIF" }}</span>
             <template v-if="condView(b.condition)">
-              <span> @{{ condView(b.condition)!.var || "?" }}</span>
-              <span> {{ condView(b.condition)!.op }}</span>
-              <span class="wp-token-str"> "{{ condView(b.condition)!.value }}"</span>
+              <span>&nbsp;@{{ condView(b.condition)!.var || "?" }}</span>
+              <span>&nbsp;{{ condView(b.condition)!.op }}</span>
+              <span class="wp-token-str">&nbsp;"{{ condView(b.condition)!.value }}"</span>
             </template>
-            <span v-else><em class="wp-dim">always</em></span>
+            <span v-else>&nbsp;<em class="wp-dim">always</em></span>
             <span class="wp-token-com"> · </span>
             <span class="wp-token-key">THEN</span>
             <template v-if="actView(b.action)">
-              <span> {{ actView(b.action)!.verb }} {{ actView(b.action)!.target }}</span>
-              <span class="wp-token-str"> "{{ actView(b.action)!.value }}"</span>
+              <span>&nbsp;{{ actView(b.action)!.verb }} {{ actView(b.action)!.target }}</span>
+              <span v-if="actView(b.action)!.value" class="wp-token-str">&nbsp;"{{ actView(b.action)!.value }}"</span>
             </template>
           </div>
-          <div v-if="rule.else">
+          <div v-if="rule.else" class="wp-rule-branch">
             <span class="wp-token-key">ELSE</span>
             <template v-if="actView(rule.else.action)">
-              <span> {{ actView(rule.else.action)!.verb }} {{ actView(rule.else.action)!.target }}</span>
-              <span class="wp-token-str"> "{{ actView(rule.else.action)!.value }}"</span>
+              <span>&nbsp;{{ actView(rule.else.action)!.verb }} {{ actView(rule.else.action)!.target }}</span>
+              <span v-if="actView(rule.else.action)!.value" class="wp-token-str">&nbsp;"{{ actView(rule.else.action)!.value }}"</span>
             </template>
           </div>
         </div>
@@ -339,8 +339,9 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
   max-width: 720px;
   line-height: 1.5;
 }
-.wp-rule-block { margin-bottom: var(--wp-space-3); }
+.wp-rule-block { margin-bottom: var(--wp-space-4); }
 .wp-rule-block:last-child { margin-bottom: 0; }
+.wp-rule-branch { margin-bottom: var(--wp-space-1); }
 .wp-rule-block__head {
   font-size: var(--wp-text-xs);
   letter-spacing: 0.05em;

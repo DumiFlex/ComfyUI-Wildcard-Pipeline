@@ -352,6 +352,7 @@ function refresh() {
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="refresh"
+    @clear="urlState.kinds = []"
     @delete="del"
     @bulk-favorite="onBulkFavorite"
     @bulk-duplicate="onBulkDuplicate"
@@ -368,7 +369,13 @@ function refresh() {
         headline="Library is empty"
         body="Create a module from any kind to populate your library."
         variant="library"
-      />
+      >
+        <template #cta>
+          <Button variant="primary" icon="pi-plus" @click="$router.push('/wildcards/new')">
+            New wildcard
+          </Button>
+        </template>
+      </EmptyState>
     </template>
 
     <template #filter-panel="{ filter: f, emitFetch }">

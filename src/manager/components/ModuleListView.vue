@@ -94,6 +94,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: "fetch"): void;
+  (e: "clear"): void;
   (e: "delete", item: T): void;
   (e: "bulk-delete", items: T[]): void;
   (e: "update:page", value: number): void;
@@ -174,6 +175,22 @@ watch(
 const activeExtras = computed(() =>
   (props.extraFilters ?? []).filter((f) => extraActive.value[f.key]),
 );
+
+/** Resolve category id → human label from `categoryOptions`. Used by the
+ *  active-filter chip strip so users see the category NAME (e.g.
+ *  "Composition") instead of the raw 8-hex id stored in `filter.category`. */
+const categoryLabelById = computed<Map<string, string>>(() => {
+  const map = new Map<string, string>();
+  for (const o of props.categoryOptions) {
+    if (typeof o.value === "string") map.set(o.value, o.label);
+  }
+  return map;
+});
+
+function categoryLabel(id: string | null | undefined): string {
+  if (!id) return "";
+  return categoryLabelById.value.get(id) ?? id;
+}
 
 const activeFilterCount = computed(() => {
   let n = 0;
@@ -376,6 +393,9 @@ function clearFilters() {
   props.filter.category = null;
   props.filter.tags = [];
   clearExtraActive();
+  // Fire `clear` so parents can wipe view-specific URL state that the
+  // shared filter object doesn't know about (e.g. AllItems' kinds[]).
+  emit("clear");
   emit("fetch");
 }
 
@@ -763,7 +783,7 @@ defineExpose({
         removable
         @remove="() => { filter.category = null; emitFetch(); }"
       >
-        Category: {{ filter.category }}
+        Category: {{ categoryLabel(filter.category) }}
       </Chip>
       <Chip
         v-for="t in filter.tags ?? []" :key="t"

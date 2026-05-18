@@ -274,9 +274,9 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
       </div>
       <div v-if="!values(row).length" class="wp-dim">No values defined.</div>
       <div v-else class="wp-snippet">
-        <div v-for="(v, i) in topValues(row)" :key="i">
-          <span class="wp-token-var">${{ (v.name ?? '').replace(/^\$/, '') || "?" }}</span>
-          <span class="wp-token-com">  =  </span>
+        <div v-for="(v, i) in topValues(row)" :key="i" class="wp-fv-row">
+          <span class="wp-token-var">${{ (v.name ?? '').replace(/^\$/, '') || "unnamed" }}</span>
+          <span class="wp-token-com wp-fv-sep">=</span>
           <span class="wp-token-str">"{{ v.value }}"</span>
         </div>
       </div>
@@ -296,4 +296,6 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
   color: var(--wp-accent-text);
 }
 .wp-opts-more { margin-top: var(--wp-space-4); font-size: var(--wp-text-xs); }
+.wp-fv-row { display: flex; align-items: baseline; gap: var(--wp-space-3); }
+.wp-fv-sep { color: var(--wp-text-muted); }
 </style>
