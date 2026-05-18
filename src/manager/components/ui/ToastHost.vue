@@ -2,7 +2,7 @@
 import { useToast } from "../../composables/useToast";
 import Icon, { ICON_SM } from "./Icon.vue";
 
-const { toasts, dismiss } = useToast();
+const { toasts, push, dismiss } = useToast();
 
 function severityIcon(s: string): string {
   switch (s) {
@@ -18,7 +18,18 @@ function severityIcon(s: string): string {
 }
 
 async function runAction(id: string, handler: () => void | Promise<void>) {
-  try { await handler(); } finally { dismiss(id); }
+  try {
+    await handler();
+  } catch (e) {
+    push({
+      severity: "error",
+      summary: "Undo failed",
+      detail: e instanceof Error ? e.message : String(e),
+      life: 4000,
+    });
+  } finally {
+    dismiss(id);
+  }
 }
 </script>
 
