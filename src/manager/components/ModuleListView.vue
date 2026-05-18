@@ -810,26 +810,29 @@ defineExpose({
 
     <!-- Load-error banner. Renders when the parent reports a failed fetch
          (network down, server 500, etc). The Retry button re-emits the
-         `fetch` event the toolbar's Refresh control uses. -->
-    <div
-      v-if="loadError"
-      class="wp-load-error"
-      role="alert"
-      data-test="load-error-banner"
-    >
-      <i class="pi pi-exclamation-triangle wp-load-error__icon" aria-hidden="true" />
-      <div class="wp-load-error__body">
-        <strong class="wp-load-error__title">Couldn't load items</strong>
-        <span class="wp-load-error__detail">{{ loadError }}</span>
+         `fetch` event the toolbar's Refresh control uses. Wrapped in a
+         Transition so retry-success doesn't snap the banner away. -->
+    <Transition name="wp-banner">
+      <div
+        v-if="loadError"
+        class="wp-load-error"
+        role="alert"
+        data-test="load-error-banner"
+      >
+        <i class="pi pi-exclamation-triangle wp-load-error__icon" aria-hidden="true" />
+        <div class="wp-load-error__body">
+          <strong class="wp-load-error__title">Couldn't load items</strong>
+          <span class="wp-load-error__detail">{{ loadError }}</span>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          icon="pi-refresh"
+          data-test="load-error-retry"
+          @click="emitFetch"
+        >Retry</Button>
       </div>
-      <Button
-        variant="secondary"
-        size="sm"
-        icon="pi-refresh"
-        data-test="load-error-retry"
-        @click="emitFetch"
-      >Retry</Button>
-    </div>
+    </Transition>
 
     <!-- Table -->
     <div class="wp-table-wrap wp-table-wrap--scroll">

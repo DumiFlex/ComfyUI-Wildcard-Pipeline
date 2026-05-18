@@ -16,13 +16,13 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
-import Icon from "../components/ui/Icon.vue";
+import DraftBanner from "../components/DraftBanner.vue";
 import Textarea from "../components/ui/Textarea.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
-import { useEditorDraft, formatDraftAge } from "../composables/useEditorDraft";
+import { useEditorDraft } from "../composables/useEditorDraft";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -281,13 +281,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     @restore="applyRestore"
   >
     <template #draft-banner>
-      <div v-if="draft.hasDraft.value" class="wp-draft-banner" role="status" data-test="draft-banner">
-        <Icon name="pi-clock" />
-        <span>Unsaved draft from {{ formatDraftAge(draft.draftAge.value) }}.</span>
-        <span class="wp-spacer" />
-        <Button variant="primary" size="sm" @click="applyDraft">Restore</Button>
-        <Button variant="ghost" size="sm" @click="draft.discard">Discard</Button>
-      </div>
+      <DraftBanner
+        :has-draft="draft.hasDraft.value"
+        :age-ms="draft.draftAge.value"
+        @restore="applyDraft"
+        @discard="draft.discard"
+      />
     </template>
     <IdentityCard
       :name="name"

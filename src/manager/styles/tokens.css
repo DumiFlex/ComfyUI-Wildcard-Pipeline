@@ -884,6 +884,20 @@ input, textarea, select { font: inherit; }
   border: 0;
 }
 
+/* Subtle banner transition used by load-error, draft-restore, and
+ * editor field-error rollups. Slide-down + fade on enter, fade only on
+ * leave so the banner doesn't visually retreat to the wrong direction.
+ * Honored by Vue's <Transition name="wp-banner">. */
+.wp-banner-enter-active { transition: opacity 180ms ease, transform 180ms ease; }
+.wp-banner-leave-active { transition: opacity 140ms ease; }
+.wp-banner-enter-from { opacity: 0; transform: translateY(-6px); }
+.wp-banner-leave-to   { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .wp-banner-enter-active,
+  .wp-banner-leave-active { transition: none; }
+  .wp-banner-enter-from { transform: none; }
+}
+
 .wp-load-error {
   display: flex;
   align-items: center;

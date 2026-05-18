@@ -143,23 +143,25 @@ function scrollToField(id: string): void {
     <slot name="draft-banner" />
 
     <div class="wp-editor__body">
-      <div
-        v-if="errors.length"
-        class="wp-editor__errors"
-        role="alert"
-        data-test="editor-errors"
-      >
-        <div class="wp-editor__errors-title">
-          {{ errors.length }} field{{ errors.length === 1 ? '' : 's' }} need{{ errors.length === 1 ? 's' : '' }} attention:
+      <Transition name="wp-banner">
+        <div
+          v-if="errors.length"
+          class="wp-editor__errors"
+          role="alert"
+          data-test="editor-errors"
+        >
+          <div class="wp-editor__errors-title">
+            {{ errors.length }} field{{ errors.length === 1 ? '' : 's' }} need{{ errors.length === 1 ? 's' : '' }} attention:
+          </div>
+          <ul>
+            <li v-for="e in errors" :key="e.field + ':' + e.label">
+              <a :href="`#${e.field}`" @click.prevent="scrollToField(e.field)">{{ e.label }}</a>
+              <span class="wp-editor__errors-sep"> — </span>
+              <span>{{ e.message }}</span>
+            </li>
+          </ul>
         </div>
-        <ul>
-          <li v-for="e in errors" :key="e.field + ':' + e.label">
-            <a :href="`#${e.field}`" @click.prevent="scrollToField(e.field)">{{ e.label }}</a>
-            <span class="wp-editor__errors-sep"> — </span>
-            <span>{{ e.message }}</span>
-          </li>
-        </ul>
-      </div>
+      </Transition>
       <slot />
     </div>
 

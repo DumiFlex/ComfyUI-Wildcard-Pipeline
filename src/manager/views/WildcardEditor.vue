@@ -18,7 +18,6 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
-import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Chip from "../components/ui/Chip.vue";
@@ -27,7 +26,8 @@ import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
-import { useEditorDraft, formatDraftAge } from "../composables/useEditorDraft";
+import { useEditorDraft } from "../composables/useEditorDraft";
+import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -402,13 +402,12 @@ defineExpose({ historyEntries, applyRestore, options });
     @restore="applyRestore"
   >
     <template #draft-banner>
-      <div v-if="draft.hasDraft.value" class="wp-draft-banner" role="status" data-test="draft-banner">
-        <Icon name="pi-clock" />
-        <span>Unsaved draft from {{ formatDraftAge(draft.draftAge.value) }}.</span>
-        <span class="wp-spacer" />
-        <Button variant="primary" size="sm" @click="applyDraft">Restore</Button>
-        <Button variant="ghost" size="sm" @click="draft.discard">Discard</Button>
-      </div>
+      <DraftBanner
+        :has-draft="draft.hasDraft.value"
+        :age-ms="draft.draftAge.value"
+        @restore="applyDraft"
+        @discard="draft.discard"
+      />
     </template>
     <div id="editor-section-identity">
       <IdentityCard
