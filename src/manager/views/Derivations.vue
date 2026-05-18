@@ -301,7 +301,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
           <div v-for="(b, bi) in rule.branches ?? []" :key="bi" class="wp-rule-branch">
             <span class="wp-token-key">{{ bi === 0 ? "IF" : "ELIF" }}</span>
             <template v-if="condView(b.condition)">
-              <span>&nbsp;@{{ condView(b.condition)!.var || "?" }}</span>
+              <span class="wp-token-var">&nbsp;${{ (condView(b.condition)!.var ?? '').replace(/^\$/, '') || "?" }}</span>
               <span>&nbsp;{{ condView(b.condition)!.op }}</span>
               <span class="wp-token-str">&nbsp;"{{ condView(b.condition)!.value }}"</span>
             </template>
