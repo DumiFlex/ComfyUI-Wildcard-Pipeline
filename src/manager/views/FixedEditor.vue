@@ -9,6 +9,7 @@
  * Validation enforces unique, identifier-clean `$name` per row.
  */
 import { computed, onMounted, ref } from "vue";
+import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -222,6 +223,12 @@ async function save() {
 }
 
 function cancel() { router.push(resolveReturnTo("/fixed-values")); }
+
+const breadcrumb = computed<BreadcrumbItem[]>(() => [
+  { to: "/dashboard", label: "Library" },
+  { to: "/fixed-values", label: "Fixed Values" },
+  { label: isEdit.value ? (name.value || "Editing") : "New fixed values" },
+]);
 </script>
 
 <template>
@@ -229,6 +236,7 @@ function cancel() { router.push(resolveReturnTo("/fixed-values")); }
     :title="isEdit ? 'Edit fixed values' : 'New fixed values'"
     back-route="/fixed-values"
     back-label="Fixed Values"
+    :breadcrumb="breadcrumb"
     :saving="saving"
     :history-entries="historyEntries"
     @save="save"

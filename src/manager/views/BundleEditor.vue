@@ -12,6 +12,7 @@
  *   /bundles/:id/edit       → edit-mode
  */
 import { computed, onMounted, ref } from "vue";
+import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -387,6 +388,12 @@ function onDragEnd() {
   dragSourceIdx.value = null;
   dragOverIdx.value = null;
 }
+
+const breadcrumb = computed<BreadcrumbItem[]>(() => [
+  { to: "/dashboard", label: "Library" },
+  { to: "/bundles", label: "Bundles" },
+  { label: isEdit.value ? (name.value || original.value?.name || "Editing") : "New bundle" },
+]);
 </script>
 
 <template>
@@ -394,6 +401,7 @@ function onDragEnd() {
     :title="isEdit ? (original?.name || 'Loading…') : 'New bundle'"
     back-route="/bundles"
     back-label="Bundles"
+    :breadcrumb="breadcrumb"
     :saving="saving"
     :save-disabled="!isEdit"
     @save="save"

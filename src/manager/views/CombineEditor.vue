@@ -9,6 +9,7 @@
  *  4. Live preview
  */
 import { computed, onMounted, ref, watch } from "vue";
+import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -258,6 +259,12 @@ async function save() {
 }
 
 function cancel() { router.push(resolveReturnTo("/combines")); }
+
+const breadcrumb = computed<BreadcrumbItem[]>(() => [
+  { to: "/dashboard", label: "Library" },
+  { to: "/combines", label: "Combines" },
+  { label: isEdit.value ? (name.value || "Editing") : "New combine" },
+]);
 </script>
 
 <template>
@@ -265,6 +272,7 @@ function cancel() { router.push(resolveReturnTo("/combines")); }
     :title="isEdit ? 'Edit combine' : 'New combine'"
     back-route="/combines"
     back-label="Combines"
+    :breadcrumb="breadcrumb"
     :saving="saving"
     :history-entries="historyEntries"
     @save="save"

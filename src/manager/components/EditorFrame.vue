@@ -20,6 +20,8 @@ import { ref } from "vue";
 import { RouterLink } from "vue-router";
 import Button from "./ui/Button.vue";
 import HistoryPanel from "./HistoryPanel.vue";
+import Breadcrumb from "./Breadcrumb.vue";
+import type { BreadcrumbItem } from "./Breadcrumb.types";
 import type { ModuleHistoryEntry } from "../api/types";
 
 interface Props {
@@ -30,6 +32,9 @@ interface Props {
   saving?: boolean;
   saveDisabled?: boolean;
   historyEntries?: ModuleHistoryEntry[];
+  /** Optional. When provided, renders a multi-segment Breadcrumb at
+   *  the top instead of the single back link. */
+  breadcrumb?: BreadcrumbItem[];
 }
 
 withDefaults(defineProps<Props>(), {
@@ -56,7 +61,13 @@ function onRestore(entry: ModuleHistoryEntry) {
 
 <template>
   <div class="wp-page wp-page--fill wp-editor">
-    <RouterLink :to="backRoute" class="wp-breadcrumb" data-test="editor-back">
+    <Breadcrumb v-if="breadcrumb && breadcrumb.length" :items="breadcrumb" />
+    <RouterLink
+      v-else
+      :to="backRoute"
+      class="wp-breadcrumb"
+      data-test="editor-back"
+    >
       <i class="pi pi-angle-left" /> {{ backLabel }}
     </RouterLink>
 

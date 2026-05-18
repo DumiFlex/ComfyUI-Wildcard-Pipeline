@@ -11,6 +11,7 @@
  * the EditorFrame's history button works on the next mount.
  */
 import { computed, onMounted, ref } from "vue";
+import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -300,6 +301,12 @@ async function save() {
 
 function cancel() { router.push(resolveReturnTo("/wildcards")); }
 
+const breadcrumb = computed<BreadcrumbItem[]>(() => [
+  { to: "/dashboard", label: "Library" },
+  { to: "/wildcards", label: "Wildcards" },
+  { label: isEdit.value ? (name.value || "Editing") : "New wildcard" },
+]);
+
 defineExpose({ historyEntries, applyRestore });
 </script>
 
@@ -308,6 +315,7 @@ defineExpose({ historyEntries, applyRestore });
     :title="isEdit ? 'Edit wildcard' : 'New wildcard'"
     back-route="/wildcards"
     back-label="Wildcards"
+    :breadcrumb="breadcrumb"
     :saving="saving"
     :history-entries="historyEntries"
     @save="save"

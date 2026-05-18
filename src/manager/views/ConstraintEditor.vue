@@ -9,6 +9,7 @@
  *  4. Exceptions table
  */
 import { computed, onMounted, ref } from "vue";
+import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -335,6 +336,12 @@ async function save() {
 
 function cancel() { router.push(resolveReturnTo("/constraints")); }
 
+const breadcrumb = computed<BreadcrumbItem[]>(() => [
+  { to: "/dashboard", label: "Library" },
+  { to: "/constraints", label: "Constraints" },
+  { label: isEdit.value ? (name.value || "Editing") : "New constraint" },
+]);
+
 defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore });
 </script>
 
@@ -343,6 +350,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     :title="isEdit ? 'Edit constraint' : 'New constraint'"
     back-route="/constraints"
     back-label="Constraints"
+    :breadcrumb="breadcrumb"
     :saving="saving"
     :history-entries="historyEntries"
     @save="save"

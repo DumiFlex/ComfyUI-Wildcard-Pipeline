@@ -283,9 +283,11 @@ describe("BundleEditor.vue", () => {
   it("renders EditorFrame breadcrumb back to /bundles", async () => {
     const wrap = mountEditor();
     await flushPromises();
-    const back = wrap.find('[data-test="editor-back"]');
-    expect(back.exists()).toBe(true);
-    expect(back.text()).toContain("Bundles");
+    // EditorFrame now renders a Breadcrumb component when breadcrumb prop is
+    // passed; check that the breadcrumb nav contains "Bundles".
+    const nav = wrap.find("nav.wp-breadcrumb");
+    expect(nav.exists()).toBe(true);
+    expect(nav.text()).toContain("Bundles");
   });
 
   it("save persists children array after toggle", async () => {

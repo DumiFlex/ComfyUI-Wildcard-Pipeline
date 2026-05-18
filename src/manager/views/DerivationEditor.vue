@@ -7,6 +7,7 @@
  *  2. Rules list (DerivationRuleCard, with add/remove)
  */
 import { computed, onMounted, ref } from "vue";
+import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -284,6 +285,12 @@ async function save() {
 
 function cancel() { router.push(resolveReturnTo("/derivations")); }
 
+const breadcrumb = computed<BreadcrumbItem[]>(() => [
+  { to: "/dashboard", label: "Library" },
+  { to: "/derivations", label: "Derivations" },
+  { label: isEdit.value ? (name.value || "Editing") : "New derivation" },
+]);
+
 defineExpose({ rules, addRule, removeRule, applyRestore });
 </script>
 
@@ -292,6 +299,7 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
     :title="isEdit ? 'Edit derivation' : 'New derivation'"
     back-route="/derivations"
     back-label="Derivations"
+    :breadcrumb="breadcrumb"
     :saving="saving"
     :history-entries="historyEntries"
     @save="save"
