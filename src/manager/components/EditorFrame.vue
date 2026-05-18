@@ -180,4 +180,22 @@ function onRestore(entry: ModuleHistoryEntry) {
   color: var(--wp-text);
 }
 .wp-draft-banner .pi { color: var(--wp-info, var(--wp-accent-500)); }
+
+/* Footer-bar backdrop polish: solid colors don't read well when long-form
+ * content peeks behind on scroll. Blur + a top-fade gradient give the bar
+ * a soft floating feel without obscuring the cards above. */
+.wp-footer-bar {
+  position: relative;
+  background: color-mix(in oklab, var(--wp-bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid var(--wp-border);
+}
+.wp-footer-bar::before {
+  content: "";
+  position: absolute;
+  inset: -24px 0 100% 0;
+  background: linear-gradient(to top, var(--wp-bg) 0%, transparent 100%);
+  pointer-events: none;
+}
 </style>
