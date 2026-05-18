@@ -1538,14 +1538,19 @@ input, textarea, select { font: inherit; }
   pointer-events: none;
 }
 .wp-toast {
-  background: var(--wp-bg-3);
+  /* Slight transparency + backdrop-blur so the toast reads as a
+   * floating overlay against whatever's underneath. Replaces the old
+   * heavy 40px black shadow that looked off against dark surfaces. */
+  background: color-mix(in oklab, var(--wp-bg-3) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--wp-border-strong);
   border-left: 3px solid var(--wp-accent-500);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   font-size: 12.5px;
-  display: flex; align-items: center; gap: 8px;
-  box-shadow: var(--wp-shadow-lg);
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: auto;
   animation: wp-slide-in .18s ease-out;
   min-width: 220px;
