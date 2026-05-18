@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter, RouterLink } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
-import { useRecentStore } from "../stores/recentStore";
-import { kindIcon } from "../../components/shared/kind-icons";
 
 interface NavItem {
   id: string;
@@ -28,21 +26,13 @@ const router = useRouter();
 const route = useRoute();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
-const recent = useRecentStore();
 
 const SECTIONS: NavSection[] = [
   {
     label: "Home",
     items: [
-      {
-        id: "dashboard",
-        label: "Dashboard",
-        icon: "pi-home",
-        to: "/dashboard",
-        children: [
-          { id: "all", label: "All items", icon: "pi-objects-column", to: "/all" },
-        ],
-      },
+      { id: "dashboard", label: "Dashboard", icon: "pi-home",             to: "/dashboard" },
+      { id: "all",       label: "All items", icon: "pi-objects-column",   to: "/all" },
     ],
   },
   {
@@ -178,26 +168,7 @@ const countByKey = computed<Record<string, number>>(() => {
   };
 });
 
-// ── Task 11: Recents section ──────────────────────────────────────────────
-const KIND_TO_PATH: Record<string, string> = {
-  wildcard:     "wildcards",
-  fixed_values: "fixed-values",
-  combine:      "combines",
-  derivation:   "derivations",
-  constraint:   "constraints",
-  bundle:       "bundles",
-};
-
-function recentTo(item: { id: string; kind: string }): string {
-  const path = KIND_TO_PATH[item.kind];
-  return path ? `/${path}/${item.id}/edit` : "/";
-}
-
-/** Bare `pi-*` icon name, extracted from `kindIcon`'s full class string. */
-function recentIcon(kind: string): string {
-  const full = kindIcon(kind as never);
-  return full.split(" ").pop() ?? "pi-file";
-}
+// Recents section moved to Dashboard. See Dashboard.vue tabs.
 </script>
 
 <template>
@@ -310,19 +281,6 @@ function recentIcon(kind: string): string {
       </template>
     </template>
 
-    <!-- Task 11: Recents section — hidden in collapsed mode and when empty -->
-    <template v-if="!ui.sidebarCollapsed && recent.items.length > 0">
-      <div class="wp-sidebar__section">Recent</div>
-      <RouterLink
-        v-for="r in recent.items.slice(0, 5)"
-        :key="r.id"
-        :to="recentTo(r)"
-        class="wp-nav wp-nav--recent"
-      >
-        <span class="wp-nav__icon"><i :class="['pi', recentIcon(r.kind)]" /></span>
-        <span class="wp-nav__label">{{ r.name }}</span>
-      </RouterLink>
-    </template>
   </nav>
 </template>
 
@@ -411,12 +369,5 @@ function recentIcon(kind: string): string {
   text-align: center;
 }
 
-/* ── Task 11: Recents section ──────────────────────────────────────────── */
-.wp-nav--recent .wp-nav__label {
-  font-size: var(--wp-text-sm);
-  color: var(--wp-text-muted);
-}
-.wp-nav--recent:hover .wp-nav__label {
-  color: var(--wp-text);
-}
+/* Recents section CSS removed — Dashboard owns the recent surface now. */
 </style>

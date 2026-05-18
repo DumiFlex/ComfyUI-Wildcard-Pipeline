@@ -9,6 +9,7 @@ import { api } from "../api/client";
 import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useRecentStore } from "../stores/recentStore";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
  *  kinds; bundles get `key: "bundle"` with no `type` since they live in
@@ -38,6 +39,12 @@ const KIND_BY_KEY: Record<string, KindMeta> = KIND_META.reduce((acc, k) => {
 
 const router = useRouter();
 const categoryStore = useCategoryStore();
+const recentStore = useRecentStore();
+
+/** Max rows rendered per tab. The Dashboard list section has more vertical
+ *  room than the sidebar recents block it replaced, so 10 fits without
+ *  scroll on typical viewports while still capping client-side merge work. */
+const DASHBOARD_LIST_CAP = 10;
 
 const counts = ref<Record<string, number>>({
   wildcard: 0,
@@ -63,7 +70,7 @@ interface DashboardRow {
 
 const recentItems = ref<DashboardRow[]>([]);
 const favoriteItems = ref<DashboardRow[]>([]);
-const tab = ref<"recent" | "favorites">("recent");
+const tab = ref<"recent" | "opened" | "favorites">("recent");
 
 const logoUrl = `${import.meta.env.BASE_URL}images/favicon.svg`;
 const wikiUrl = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline/wiki";
@@ -113,9 +120,36 @@ function categoryFor(row: DashboardRow): { name: string; color: string | null } 
   return categoryById.value.get(row.category_id);
 }
 
-const visibleItems = computed<DashboardRow[]>(() =>
-  tab.value === "favorites" ? favoriteItems.value : recentItems.value,
-);
+/** "Recently opened" rows derived from `recentStore` (localStorage MRU of
+ *  what the user actually clicked into) — distinct from "Recent edits"
+ *  which is sorted by server-side `updated_at`. Pulls cached name/kind
+ *  straight from the store so no API fetch is needed; category + date
+ *  are intentionally omitted (recentStore doesn't snapshot them and the
+ *  data would drift anyway). */
+const openedItems = computed<DashboardRow[]>(() => {
+  const out: DashboardRow[] = [];
+  for (const r of recentStore.items) {
+    const meta = r.kind === "bundle" ? KIND_BY_KEY.bundle : KIND_BY_KEY[r.kind];
+    if (!meta) continue;
+    out.push({
+      id: r.id,
+      name: r.name,
+      category_id: null,
+      updated_at: "",
+      kind: r.kind === "bundle" ? "bundle" : "module",
+      moduleType: r.kind === "bundle" ? undefined : (r.kind as ModuleType),
+      color: meta.color,
+      icon: meta.icon,
+    });
+  }
+  return out;
+});
+
+const visibleItems = computed<DashboardRow[]>(() => {
+  if (tab.value === "favorites") return favoriteItems.value;
+  if (tab.value === "opened") return openedItems.value;
+  return recentItems.value;
+});
 
 function moduleToRow(m: ModuleRow): DashboardRow {
   const meta = KIND_BY_KEY[m.type];
@@ -186,7 +220,7 @@ async function loadRecent() {
       const tb = Date.parse(b.updated_at || "") || 0;
       return tb - ta;
     });
-    recentItems.value = rows.slice(0, 5);
+    recentItems.value = rows.slice(0, DASHBOARD_LIST_CAP);
   } catch {
     recentItems.value = [];
   }
@@ -195,8 +229,8 @@ async function loadRecent() {
 async function loadFavorites() {
   try {
     const [modRes, bundleRes] = await Promise.all([
-      api.modules.list({ favorites: true, limit: 5 }),
-      api.bundles.list({ favorites: true, limit: 5 }),
+      api.modules.list({ favorites: true, limit: DASHBOARD_LIST_CAP }),
+      api.bundles.list({ favorites: true, limit: DASHBOARD_LIST_CAP }),
     ]);
     const rows: DashboardRow[] = [
       ...modRes.items.map(moduleToRow),
@@ -207,7 +241,7 @@ async function loadFavorites() {
       const tb = Date.parse(b.updated_at || "") || 0;
       return tb - ta;
     });
-    favoriteItems.value = rows.slice(0, 5);
+    favoriteItems.value = rows.slice(0, DASHBOARD_LIST_CAP);
   } catch {
     favoriteItems.value = [];
   }
@@ -304,6 +338,15 @@ onMounted(refresh);
           <button
             type="button"
             class="wp-tabs__btn wp-tab"
+            :data-active="tab === 'opened' ? 'true' : 'false'"
+            data-test="dashboard-tab-opened"
+            @click="tab = 'opened'"
+          >
+            <Icon name="pi-history" /> Recently opened
+          </button>
+          <button
+            type="button"
+            class="wp-tabs__btn wp-tab"
             :data-active="tab === 'favorites' ? 'true' : 'false'"
             data-test="dashboard-tab-favorites"
             @click="tab = 'favorites'"
@@ -349,7 +392,11 @@ onMounted(refresh);
         </div>
       </div>
       <p v-else class="dashboard__empty">
-        {{ tab === 'favorites' ? 'No favorites yet.' : 'No edits yet.' }}
+        {{
+          tab === 'favorites' ? 'No favorites yet.'
+            : tab === 'opened' ? 'No recently opened items yet — pick a module from the sidebar.'
+            : 'No edits yet.'
+        }}
       </p>
     </Card>
   </div>
