@@ -301,10 +301,14 @@ function scrollToField(id: string): void {
   border-radius: 999px;
   background: currentColor;
 }
-.wp-draft-banner {
+/* Use :deep() so the rules reach the banner div which is rendered through
+ * the `draft-banner` slot — slot content carries the parent editor's
+ * data-v attribute, not EditorFrame's, so the default scoped selector
+ * would miss the gap + spacing properties. */
+:deep(.wp-draft-banner) {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-3);
+  gap: var(--wp-space-4);
   padding: var(--wp-space-3) var(--wp-space-5);
   background: color-mix(in oklab, var(--wp-info, var(--wp-accent-500)) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-info, var(--wp-accent-500)) 30%, transparent);
@@ -312,7 +316,8 @@ function scrollToField(id: string): void {
   font-size: var(--wp-text-sm);
   color: var(--wp-text);
 }
-.wp-draft-banner .pi { color: var(--wp-info, var(--wp-accent-500)); }
+:deep(.wp-draft-banner) .pi { color: var(--wp-info, var(--wp-accent-500)); }
+:deep(.wp-draft-banner) .wp-spacer { flex: 1; }
 
 /* Footer-bar backdrop polish: solid colors don't read well when long-form
  * content peeks behind on scroll. Blur + a top-fade gradient give the bar
@@ -364,28 +369,35 @@ function scrollToField(id: string): void {
 }
 .wp-editor__body-wrap--with-rail {
   display: grid;
-  grid-template-columns: 1fr 160px;
-  gap: var(--wp-space-6);
+  grid-template-columns: 1fr 96px;
+  gap: var(--wp-space-4);
 }
 .wp-editor__body-wrap--with-rail > .wp-editor__body { min-height: 0; }
 
+/* Tightened rail — narrow column (96px), thin left border, dim text.
+ * Active link picks up the accent. Sized to feel like a sidebar
+ * indicator, not a second nav column. */
 .wp-editor__rail {
   position: sticky;
   top: var(--wp-space-5);
   align-self: start;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--wp-space-3) var(--wp-space-4);
+  gap: 1px;
+  padding: var(--wp-space-2) 0 var(--wp-space-2) var(--wp-space-3);
   border-left: 1px solid var(--wp-border);
 }
 .wp-editor__rail-link {
   display: block;
-  padding: var(--wp-space-2) var(--wp-space-3);
+  padding: 4px var(--wp-space-2);
   color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
+  font-size: var(--wp-text-xs);
   text-decoration: none;
   border-radius: var(--wp-radius-sm);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wp-editor__rail-link:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-editor__rail-link[data-active] {
