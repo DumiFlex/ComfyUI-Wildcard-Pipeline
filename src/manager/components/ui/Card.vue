@@ -15,7 +15,7 @@ const slots = useSlots();
   <section class="wp-card">
     <header v-if="title || slots.actions" class="wp-card__header">
       <div class="wp-card__title-wrap">
-        <h3 v-if="title" class="wp-card__title">{{ title }}</h3>
+        <h2 v-if="title" class="wp-card__title">{{ title }}</h2>
         <p v-if="subtitle" class="wp-card__subtitle">{{ subtitle }}</p>
       </div>
       <span class="wp-spacer" />

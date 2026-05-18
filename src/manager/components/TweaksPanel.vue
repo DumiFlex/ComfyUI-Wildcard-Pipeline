@@ -36,7 +36,7 @@ function onDensity(d: Density) {
   <aside
     class="wp-tweaks"
     :class="{ 'wp-tweaks--open': tweaks.panelOpen }"
-    :aria-hidden="!tweaks.panelOpen"
+    :inert="!tweaks.panelOpen || undefined"
     role="dialog"
     aria-label="Tweaks"
     data-test="tweaks-panel"

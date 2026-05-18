@@ -19,6 +19,10 @@ coverage/
 .coverage
 .vitest-cache/
 
+# Scratch dir for screenshots, lighthouse reports, and other artifacts
+# generated during local QA. Never belongs in the tree.
+.tmp/
+
 # Archives never belong in the repo (caught a stray src.zip
 # hand-dropped into the tree on Apr 26)
 *.zip

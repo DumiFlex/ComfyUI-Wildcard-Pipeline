@@ -52,10 +52,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 <template>
   <div class="wp-app">
+    <a href="#wp-main" class="wp-skip-link">Skip to main content</a>
     <AppTopbar />
     <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
       <AppSidebar />
-      <main class="wp-content">
+      <main id="wp-main" class="wp-content" tabindex="-1">
         <RouterView v-slot="{ Component, route }">
           <Transition name="route-fade" mode="out-in">
             <component :is="Component" :key="route.path" />

@@ -46,6 +46,16 @@ const btnClasses = computed(() => [
   props.size === "sm" && "wp-select--sm",
 ]);
 
+/** Surface an aria-label only when there's no visible selected text —
+ *  otherwise the visible label IS the accessible name and an aria-label
+ *  override would just disagree with the visible text (axe rule
+ *  label-content-name-mismatch). When the trigger shows a placeholder
+ *  with no selection, fall through to the ariaLabel prop. */
+const composedAriaLabel = computed<string | undefined>(() => {
+  if (selected.value) return undefined;
+  return props.ariaLabel;
+});
+
 function onDocClick(e: MouseEvent) {
   const t = e.target as Node | null;
   if (!t) return;
@@ -191,7 +201,7 @@ function onKeydown(e: KeyboardEvent) {
       type="button"
       :class="btnClasses"
       :disabled="disabled"
-      :aria-label="ariaLabel"
+      :aria-label="composedAriaLabel"
       :aria-expanded="open"
       :aria-haspopup="'listbox'"
       :aria-invalid="error || undefined"

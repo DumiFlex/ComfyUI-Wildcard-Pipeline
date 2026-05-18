@@ -58,7 +58,11 @@
   /* Text */
   --wp-text:        #e7e7ee;
   --wp-text-muted:  #a1a1ad;
-  --wp-text-dim:    #6e6e7c;
+  /* Dim was previously #6e6e7c (~3.8:1 vs --wp-bg). Bumped to #8a8a9a
+   * so all dim text — row ids, version chip, toolbar counters,
+   * sidebar section headings — passes WCAG AA 4.5:1 contrast on the
+   * darkest surface. Still visually subordinate to text-muted. */
+  --wp-text-dim:    #8a8a9a;
 
   /* Status */
   --wp-success: #22c55e;
@@ -250,7 +254,9 @@
 
   --wp-text:        #1a1a25;
   --wp-text-muted:  #5a5a6a;
-  --wp-text-dim:    #8b8b98;
+  /* Light theme: dim was #8b8b98 (~3.2:1 vs #f7f7fb). Bumped to #6e6e7e
+   * for WCAG AA on the darkest light-mode surface. */
+  --wp-text-dim:    #6e6e7e;
 
   --wp-shadow-sm: 0 1px 2px rgba(15,15,30,0.06);
   --wp-shadow:    0 4px 16px rgba(15,15,30,0.08);
@@ -779,7 +785,11 @@ input, textarea, select { font: inherit; }
 .wp-chip--info    { color: var(--wp-info);    background: color-mix(in oklab, var(--wp-info)    14%, transparent); border-color: color-mix(in oklab, var(--wp-info)    36%, transparent); }
 .wp-chip__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .wp-chip__close {
-  background: none; border: none; padding: 0; margin-left: 2px;
+  /* Min 24×24 touch target (WCAG 2.5.8 enhanced target size). Glyph
+   * stays small via the inner Icon component; the larger hit area is
+   * invisible padding. */
+  background: none; border: none; padding: 4px; margin-left: 2px;
+  min-width: 24px; min-height: 24px;
   color: inherit; cursor: pointer; line-height: 0;
   display: inline-grid; place-items: center;
 }
@@ -837,6 +847,43 @@ input, textarea, select { font: inherit; }
  * danger-tinted block sits between the filter chips and the (probably
  * stale or empty) table, so the user sees the failure without losing
  * whatever was last rendered. */
+/* Skip-to-content link — hidden off-screen until keyboard focus, then
+ * pops into the top-left so users can jump past the topbar + sidebar.
+ * Standard a11y pattern; matches WCAG 2.4.1 bypass-blocks. */
+.wp-skip-link {
+  position: fixed;
+  top: -40px;
+  left: 8px;
+  z-index: 10000;
+  padding: 8px 14px;
+  background: var(--wp-accent-500);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: top 120ms ease;
+}
+.wp-skip-link:focus,
+.wp-skip-link:focus-visible {
+  top: 8px;
+  outline: 2px solid var(--wp-accent-300, var(--wp-accent-500));
+  outline-offset: 2px;
+}
+
+/* Visually-hidden text for screen readers — pattern lifted from
+ * Tailwind's `sr-only`. Used to give empty `<th>` cells (select,
+ * expand, favorite) an accessible name without showing one. */
+.wp-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .wp-load-error {
   display: flex;
   align-items: center;

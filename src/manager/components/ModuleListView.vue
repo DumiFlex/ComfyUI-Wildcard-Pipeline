@@ -836,14 +836,17 @@ defineExpose({
       <table class="wp-table wp-table--sticky-head">
         <thead>
           <tr>
-            <th class="wp-table__select"><Checkbox v-model="allSelected" aria-label="Select all" /></th>
-            <th class="wp-table__expand-col" />
-            <th v-if="showFavorite" class="wp-table__fav-col" />
-            <th class="wp-sortable">Name</th>
+            <th scope="col" class="wp-table__select">
+              <Checkbox v-model="allSelected" aria-label="Select all" />
+              <span class="wp-sr-only">Select</span>
+            </th>
+            <th scope="col" class="wp-table__expand-col"><span class="wp-sr-only">Expand row</span></th>
+            <th v-if="showFavorite" scope="col" class="wp-table__fav-col"><span class="wp-sr-only">Favorite</span></th>
+            <th scope="col" class="wp-sortable">Name</th>
             <slot name="columns-head" />
-            <th v-if="showTags">Tags</th>
-            <th v-if="showUpdated" class="wp-sortable wp-table__updated-col">Updated</th>
-            <th class="wp-table__actions-col" style="text-align:right">Actions</th>
+            <th v-if="showTags" scope="col">Tags</th>
+            <th v-if="showUpdated" scope="col" class="wp-sortable wp-table__updated-col">Updated</th>
+            <th scope="col" class="wp-table__actions-col" style="text-align:right">Actions</th>
           </tr>
         </thead>
         <tbody @keydown="onTableKeydown">

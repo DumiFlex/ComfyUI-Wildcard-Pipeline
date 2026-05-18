@@ -463,11 +463,11 @@ defineExpose({ historyEntries, applyRestore, options });
       <table class="wp-table wp-options-table">
         <thead>
           <tr>
-            <th class="opt-col-weight">Weight</th>
-            <th>Value</th>
-            <th class="opt-col-sub">Sub-category</th>
-            <th class="opt-col-prob">Probability</th>
-            <th class="opt-col-trash" />
+            <th scope="col" class="opt-col-weight">Weight</th>
+            <th scope="col">Value</th>
+            <th scope="col" class="opt-col-sub">Sub-category</th>
+            <th scope="col" class="opt-col-prob">Probability</th>
+            <th scope="col" class="opt-col-trash"><span class="wp-sr-only">Remove option</span></th>
           </tr>
         </thead>
         <tbody>
