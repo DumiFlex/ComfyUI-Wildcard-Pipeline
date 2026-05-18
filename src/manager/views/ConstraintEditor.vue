@@ -10,7 +10,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import type { SaveState, EditorSection } from "../components/EditorFrame.types";
+import type { SaveState, EditorSection, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -296,17 +296,11 @@ function applyRestore(entry: ModuleHistoryEntry): void {
 }
 
 async function save() {
-  if (!name.value.trim()) {
-    toast.push({ severity: "warn", summary: "Name required" });
+  if (validationErrors.value.length > 0) {
+    showErrors.value = true;
     return;
   }
-  if (!sourceWildcardId.value || !targetWildcardId.value) {
-    toast.push({
-      severity: "warn",
-      summary: "Source and target wildcards are required",
-    });
-    return;
-  }
+  showErrors.value = false;
   setSaveState("saving");
   saving.value = true;
   try {
@@ -388,6 +382,28 @@ const sections: EditorSection[] = [
   { id: "editor-section-exceptions", label: "Exceptions" },
 ];
 
+/** Flipped on the first invalid Save attempt; gates rollup visibility
+ *  so the banner appears as feedback, not pre-emptive nagging. */
+const showErrors = ref(false);
+
+const validationErrors = computed<EditorFieldError[]>(() => {
+  const out: EditorFieldError[] = [];
+  if (!name.value.trim()) {
+    out.push({ field: "editor-section-identity", label: "Name", message: "Required" });
+  }
+  if (!sourceWildcardId.value) {
+    out.push({ field: "editor-section-wildcards", label: "Source wildcard", message: "Required" });
+  }
+  if (!targetWildcardId.value) {
+    out.push({ field: "editor-section-wildcards", label: "Target wildcard", message: "Required" });
+  }
+  return out;
+});
+
+const visibleErrors = computed<EditorFieldError[]>(() =>
+  showErrors.value ? validationErrors.value : [],
+);
+
 defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore });
 </script>
 
@@ -403,6 +419,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     :dirty="dirty"
     :history-entries="historyEntries"
     :sections="sections"
+    :errors="visibleErrors"
     @save="save"
     @cancel="cancel"
     @restore="applyRestore"

@@ -13,7 +13,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import type { SaveState } from "../components/EditorFrame.types";
+import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -271,10 +271,11 @@ async function save() {
     });
     return;
   }
-  if (!name.value.trim()) {
-    toast.push({ severity: "warn", summary: "Name required", life: 2500 });
+  if (validationErrors.value.length > 0) {
+    showErrors.value = true;
     return;
   }
+  showErrors.value = false;
   setSaveState("saving");
   saving.value = true;
   try {
@@ -428,6 +429,23 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { to: "/bundles", label: "Bundles" },
   { label: isEdit.value ? (name.value || original.value?.name || "Editing") : "New bundle" },
 ]);
+
+/** Gates the field-error rollup. Flipped on the first invalid Save
+ *  attempt; reset when the form becomes valid (handled by the
+ *  computed's emptiness). */
+const showErrors = ref(false);
+
+const validationErrors = computed<EditorFieldError[]>(() => {
+  const out: EditorFieldError[] = [];
+  if (!name.value.trim()) {
+    out.push({ field: "editor-section-identity", label: "Name", message: "Required" });
+  }
+  return out;
+});
+
+const visibleErrors = computed<EditorFieldError[]>(() =>
+  showErrors.value ? validationErrors.value : [],
+);
 </script>
 
 <template>
@@ -441,6 +459,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     :save-error="saveError"
     :dirty="dirty"
     :save-disabled="!isEdit"
+    :errors="visibleErrors"
     @save="save"
     @cancel="cancel"
   >
@@ -456,24 +475,26 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     <div v-if="loading" class="wp-dim wp-bundle-editor__loading">Loading bundle…</div>
 
     <template v-else>
-      <IdentityCard
-        :name="name"
-        :description="description"
-        :category-id="categoryId"
-        :tags="tags"
-        @update:name="(v) => (name = v)"
-        @update:description="(v) => (description = v)"
-        @update:category-id="(v) => (categoryId = v)"
-        @update:tags="(v) => (tags = v)"
-      >
-        <template #nameLeading>
-          <ColorPicker
-            v-model="color"
-            :presets="COLOR_PRESETS"
-            aria-label="Bundle frame color"
-          />
-        </template>
-      </IdentityCard>
+      <div id="editor-section-identity">
+        <IdentityCard
+          :name="name"
+          :description="description"
+          :category-id="categoryId"
+          :tags="tags"
+          @update:name="(v) => (name = v)"
+          @update:description="(v) => (description = v)"
+          @update:category-id="(v) => (categoryId = v)"
+          @update:tags="(v) => (tags = v)"
+        >
+          <template #nameLeading>
+            <ColorPicker
+              v-model="color"
+              :presets="COLOR_PRESETS"
+              aria-label="Bundle frame color"
+            />
+          </template>
+        </IdentityCard>
+      </div>
 
       <Card
         :title="`Children (${children.length})`"

@@ -12,7 +12,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import type { SaveState, EditorSection } from "../components/EditorFrame.types";
+import type { SaveState, EditorSection, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -266,17 +266,19 @@ function applyRestore(entry: ModuleHistoryEntry): void {
 }
 
 async function save() {
-  if (!name.value.trim()) {
-    toast.push({ severity: "warn", summary: "Name required" });
-    return;
-  }
+  // Update varBindingError synchronously so the rollup picks it up
+  // in the same tick. The validation computed reads this ref.
   const finalBinding = varBinding.value.trim() || toIdentifier(name.value);
-  if (!VALID_IDENTIFIER_RE.test(finalBinding)) {
+  if (varBinding.value.trim() && !VALID_IDENTIFIER_RE.test(finalBinding)) {
     varBindingError.value = "Use letters, digits, underscores; must not start with a digit.";
-    toast.push({ severity: "warn", summary: "Invalid variable name" });
+  } else {
+    varBindingError.value = "";
+  }
+  if (validationErrors.value.length > 0) {
+    showErrors.value = true;
     return;
   }
-  varBindingError.value = "";
+  showErrors.value = false;
   setSaveState("saving");
   saving.value = true;
   try {
@@ -355,7 +357,39 @@ const sections: EditorSection[] = [
   { id: "editor-section-options",        label: "Options" },
 ];
 
-defineExpose({ historyEntries, applyRestore });
+/** Set true on the first Save click while invalid; cleared on a
+ *  valid save. Gates rollup visibility so the banner is feedback,
+ *  not a nagging pre-emptive scolding while the user is still
+ *  filling the form. */
+const showErrors = ref(false);
+
+const validationErrors = computed<EditorFieldError[]>(() => {
+  const out: EditorFieldError[] = [];
+  if (!name.value.trim()) {
+    out.push({ field: "editor-section-identity", label: "Name", message: "Required" });
+  }
+  if (varBindingError.value) {
+    out.push({ field: "editor-section-identity", label: "$variable binding", message: varBindingError.value });
+  }
+  if (options.value.length === 0) {
+    out.push({ field: "editor-section-options", label: "Options", message: "At least one option is required" });
+  } else {
+    for (let i = 0; i < options.value.length; i++) {
+      const o = options.value[i];
+      if (!o.value || !o.value.trim()) {
+        out.push({ field: "editor-section-options", label: `Option #${i + 1}`, message: "Value cannot be empty" });
+        break;
+      }
+    }
+  }
+  return out;
+});
+
+const visibleErrors = computed<EditorFieldError[]>(() =>
+  showErrors.value ? validationErrors.value : [],
+);
+
+defineExpose({ historyEntries, applyRestore, options });
 </script>
 
 <template>
@@ -370,6 +404,7 @@ defineExpose({ historyEntries, applyRestore });
     :dirty="dirty"
     :history-entries="historyEntries"
     :sections="sections"
+    :errors="visibleErrors"
     @save="save"
     @cancel="cancel"
     @restore="applyRestore"

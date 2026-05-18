@@ -20,3 +20,21 @@ export interface EditorSection {
   id: string;
   label: string;
 }
+
+/**
+ * EditorFieldError — one entry in the rollup banner.
+ *
+ * `field` is the DOM id of the offending element (or a parent
+ * wrapper) used as the scroll-to anchor when the user clicks the
+ * rollup link. `label` is the short human heading rendered as the
+ * link text. `message` is the one-line explanation appended after
+ * the em dash separator.
+ */
+export interface EditorFieldError {
+  /** DOM id of the field — used for anchor scroll-to. */
+  field: string;
+  /** Short human label shown in the rollup link. */
+  label: string;
+  /** One-line description of what's wrong. */
+  message: string;
+}

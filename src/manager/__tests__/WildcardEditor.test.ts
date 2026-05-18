@@ -80,6 +80,11 @@ describe("WildcardEditor.vue", () => {
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("alpha");
+    // Field-error rollup (Task 4.7) blocks save when any option is empty.
+    // Fill in non-empty values so the save() path proceeds to apiMod.create.
+    const vm = wrap.vm as unknown as { options: { value: string }[] };
+    vm.options[0].value = "red";
+    vm.options[1].value = "blue";
     await flushPromises();
     const saveBtn = wrap.find('[data-test="save-btn"]');
     await saveBtn.trigger("click");
@@ -126,6 +131,9 @@ describe("WildcardEditor.vue", () => {
     await flushPromises();
     const nameInput = wrap.find('[data-test="identity-name"]');
     await nameInput.setValue("Outfit Style");
+    const vm = wrap.vm as unknown as { options: { value: string }[] };
+    vm.options[0].value = "red";
+    vm.options[1].value = "blue";
     await flushPromises();
     const saveBtn = wrap.find('[data-test="save-btn"]');
     await saveBtn.trigger("click");
@@ -206,7 +214,11 @@ describe("WildcardEditor.vue", () => {
     apiMod.get.mockResolvedValue({
       id: "wc_a", name: "alpha", description: "", category_id: null,
       tags: [], type: "wildcard",
-      payload: { options: [], sub_categories: [], var_binding: "alpha" },
+      payload: {
+        options: [{ id: "o1", value: "red", weight: 1 }],
+        sub_categories: [],
+        var_binding: "alpha",
+      },
       version: 1, created_at: "", updated_at: "", is_favorite: false,
     });
     apiMod.update.mockImplementation((_id: string, body: { payload: Record<string, unknown> }) => Promise.resolve({

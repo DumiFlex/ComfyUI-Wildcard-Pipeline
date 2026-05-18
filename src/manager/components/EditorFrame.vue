@@ -23,7 +23,7 @@ import HistoryPanel from "./HistoryPanel.vue";
 import Breadcrumb from "./Breadcrumb.vue";
 import type { BreadcrumbItem } from "./Breadcrumb.types";
 import type { ModuleHistoryEntry } from "../api/types";
-import type { SaveState, EditorSection } from "./EditorFrame.types";
+import type { SaveState, EditorSection, EditorFieldError } from "./EditorFrame.types";
 
 interface Props {
   title: string;
@@ -49,6 +49,11 @@ interface Props {
    *  highlighting. Each `id` must match a DOM id on a card (or
    *  card-wrapper `<div>`) in the body slot. */
   sections?: EditorSection[];
+  /** Field validation errors. When non-empty, renders a top-of-body
+   *  rollup with anchor links that scroll to + focus the offending
+   *  field. Editors typically gate visibility behind a "tried to save
+   *  while invalid" flag so the banner is feedback, not nagging. */
+  errors?: EditorFieldError[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -59,6 +64,7 @@ const props = withDefaults(defineProps<Props>(), {
   saveState: "idle",
   saveError: "",
   sections: () => [],
+  errors: () => [],
 });
 
 const emit = defineEmits<{
@@ -134,6 +140,21 @@ function scrollToSection(id: string): void {
   const el = document.getElementById(id);
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+/** Field-error rollup anchor. Scrolls the target element into view
+ *  (center-aligned so the field sits in the comfortable read zone)
+ *  and focuses the first form control inside it. The control lookup
+ *  handles both "id on the input itself" and "id on a wrapper card"
+ *  so editors can anchor to either granularity. */
+function scrollToField(id: string): void {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  const input = el.matches?.("input, textarea, select")
+    ? (el as HTMLInputElement)
+    : el.querySelector<HTMLInputElement>("input, textarea, select");
+  input?.focus();
+}
 </script>
 
 <template>
@@ -169,6 +190,23 @@ function scrollToSection(id: string): void {
       :class="{ 'wp-editor__body-wrap--with-rail': sections.length >= 3 }"
     >
       <div class="wp-editor__body">
+        <div
+          v-if="errors.length"
+          class="wp-editor__errors"
+          role="alert"
+          data-test="editor-errors"
+        >
+          <div class="wp-editor__errors-title">
+            {{ errors.length }} field{{ errors.length === 1 ? '' : 's' }} need{{ errors.length === 1 ? 's' : '' }} attention:
+          </div>
+          <ul>
+            <li v-for="e in errors" :key="e.field + ':' + e.label">
+              <a :href="`#${e.field}`" @click.prevent="scrollToField(e.field)">{{ e.label }}</a>
+              <span class="wp-editor__errors-sep"> — </span>
+              <span>{{ e.message }}</span>
+            </li>
+          </ul>
+        </div>
         <slot />
       </div>
       <aside
@@ -359,4 +397,22 @@ function scrollToSection(id: string): void {
   .wp-editor__body-wrap--with-rail { display: block; }
   .wp-editor__rail { display: none; }
 }
+
+/* Field-error rollup. Shown above the editor body when the user
+ * attempts to save with invalid fields. The danger-tinted panel
+ * surfaces every problem in one place and lets the user jump to
+ * each field via underlined anchors. Auto-hides when the user fixes
+ * the issues (validation computed re-evaluates). */
+.wp-editor__errors {
+  padding: var(--wp-space-4) var(--wp-space-5);
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
+  border-radius: var(--wp-radius);
+  font-size: var(--wp-text-sm);
+}
+.wp-editor__errors-title { font-weight: 600; margin-bottom: var(--wp-space-3); }
+.wp-editor__errors ul { margin: 0; padding-left: var(--wp-space-5); }
+.wp-editor__errors li { margin-bottom: var(--wp-space-2); }
+.wp-editor__errors a { color: var(--wp-text); text-decoration: underline; }
+.wp-editor__errors-sep { color: var(--wp-text-muted); }
 </style>
