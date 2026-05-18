@@ -1135,6 +1135,20 @@ defineExpose({
   display: inline-flex;
   gap: 2px;
   justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+/* Reveal row actions on hover / focus-within / when the row is keyboard-focused.
+ * data-focused="true" comes from the keyboard-nav state in Task 3.7 — so a row
+ * with focus ring also shows its actions. */
+.wp-table tbody tr:hover .wp-row-actions,
+.wp-table tbody tr:focus-within .wp-row-actions,
+.wp-table tbody tr[data-focused="true"] .wp-row-actions {
+  opacity: 1;
+}
+/* Always visible on touch (no hover capability). */
+@media (hover: none) {
+  .wp-row-actions { opacity: 1; }
 }
 
 
