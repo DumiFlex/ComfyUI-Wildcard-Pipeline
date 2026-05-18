@@ -77,14 +77,21 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
     }
   }
 
-  const stored = ref<StoredDraft | null>(readStored());
+  /** Bootstrap-time draft snapshot — only the draft that existed when
+   *  the composable mounted drives `hasDraft`. Subsequent persist() calls
+   *  during this session DO NOT flip the banner back on. Without this
+   *  distinction the user sees "Unsaved draft from 0s ago" appear while
+   *  they're actively typing, which makes no sense. */
+  const bootstrap = ref<StoredDraft | null>(readStored());
 
   function persist(): void {
     if (disabled.value || !storage) return;
     try {
       const payload: StoredDraft = { snapshot: opts.snapshot(), savedAt: new Date().toISOString() };
       storage.setItem(key, JSON.stringify(payload));
-      stored.value = payload;
+      // Note: deliberately NOT updating `bootstrap` here — the banner
+      // is bound to bootstrap, so persisting during the active session
+      // stays invisible. Reload re-reads via readStored() on next mount.
     } catch {
       disabled.value = true;
     }
@@ -103,21 +110,21 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
 
   onBeforeUnmount(() => { if (timer) clearTimeout(timer); });
 
-  const hasDraft = computed<boolean>(() => stored.value !== null);
+  const hasDraft = computed<boolean>(() => bootstrap.value !== null);
   const draftAge = computed<number | null>(() =>
-    stored.value ? Date.now() - Date.parse(stored.value.savedAt) : null,
+    bootstrap.value ? Date.now() - Date.parse(bootstrap.value.savedAt) : null,
   );
-  const draftSnapshot = computed<string | null>(() => stored.value?.snapshot ?? null);
+  const draftSnapshot = computed<string | null>(() => bootstrap.value?.snapshot ?? null);
 
   function restore(): string | null {
-    const snap = stored.value?.snapshot ?? null;
+    const snap = bootstrap.value?.snapshot ?? null;
     discard();
     return snap;
   }
 
   function discard(): void {
     if (storage) try { storage.removeItem(key); } catch { /* ignore */ }
-    stored.value = null;
+    bootstrap.value = null;
   }
 
   return { hasDraft, draftAge, draftSnapshot, restore, discard };

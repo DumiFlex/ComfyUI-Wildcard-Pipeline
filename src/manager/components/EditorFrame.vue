@@ -16,14 +16,14 @@
  * `wp-page__*`, `wp-breadcrumb`, `wp-card`, `wp-footer-bar` tokens that
  * already live in `tokens.css`.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import Button from "./ui/Button.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import Breadcrumb from "./Breadcrumb.vue";
 import type { BreadcrumbItem } from "./Breadcrumb.types";
 import type { ModuleHistoryEntry } from "../api/types";
-import type { SaveState, EditorSection, EditorFieldError } from "./EditorFrame.types";
+import type { SaveState, EditorFieldError } from "./EditorFrame.types";
 
 interface Props {
   title: string;
@@ -44,11 +44,6 @@ interface Props {
   saveState?: SaveState;
   /** Tooltip surfaced on the Save button when `saveState === "error"`. */
   saveError?: string;
-  /** Opt-in section-anchor side rail. When provided AND length >= 3,
-   *  EditorFrame renders a sticky right-column nav with scroll-spy
-   *  highlighting. Each `id` must match a DOM id on a card (or
-   *  card-wrapper `<div>`) in the body slot. */
-  sections?: EditorSection[];
   /** Field validation errors. When non-empty, renders a top-of-body
    *  rollup with anchor links that scroll to + focus the offending
    *  field. Editors typically gate visibility behind a "tried to save
@@ -63,7 +58,6 @@ const props = withDefaults(defineProps<Props>(), {
   dirty: false,
   saveState: "idle",
   saveError: "",
-  sections: () => [],
   errors: () => [],
 });
 
@@ -102,43 +96,6 @@ function onSave() { emit("save"); }
 function onRestore(entry: ModuleHistoryEntry) {
   emit("restore", entry);
   historyOpen.value = false;
-}
-
-/* Side-rail scroll-spy. Sections are opt-in; rail hides when fewer than 3.
- * IntersectionObserver fires as cards enter/leave the viewport; we pick the
- * entry with the largest visible ratio and mark its id active. The
- * rootMargin biases toward the upper-middle of the scroll region so the
- * "active" section feels anchored where the user is reading, not at the
- * very top edge.
- *
- * jsdom doesn't ship IntersectionObserver — guard so unit tests mount
- * cleanly without polyfilling the global. */
-const activeSection = ref<string>("");
-let observer: IntersectionObserver | null = null;
-
-onMounted(() => {
-  if (!props.sections.length || props.sections.length < 3) return;
-  if (typeof IntersectionObserver === "undefined") return;
-  observer = new IntersectionObserver(
-    (entries) => {
-      const visible = entries
-        .filter((e) => e.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-      if (visible[0]) activeSection.value = visible[0].target.id;
-    },
-    { rootMargin: "-30% 0px -60% 0px", threshold: [0, 0.25, 0.5, 0.75, 1] },
-  );
-  for (const s of props.sections) {
-    const el = document.getElementById(s.id);
-    if (el) observer.observe(el);
-  }
-});
-
-onBeforeUnmount(() => { observer?.disconnect(); observer = null; });
-
-function scrollToSection(id: string): void {
-  const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** Field-error rollup anchor. Scrolls the target element into view
@@ -185,44 +142,25 @@ function scrollToField(id: string): void {
 
     <slot name="draft-banner" />
 
-    <div
-      class="wp-editor__body-wrap"
-      :class="{ 'wp-editor__body-wrap--with-rail': sections.length >= 3 }"
-    >
-      <div class="wp-editor__body">
-        <div
-          v-if="errors.length"
-          class="wp-editor__errors"
-          role="alert"
-          data-test="editor-errors"
-        >
-          <div class="wp-editor__errors-title">
-            {{ errors.length }} field{{ errors.length === 1 ? '' : 's' }} need{{ errors.length === 1 ? 's' : '' }} attention:
-          </div>
-          <ul>
-            <li v-for="e in errors" :key="e.field + ':' + e.label">
-              <a :href="`#${e.field}`" @click.prevent="scrollToField(e.field)">{{ e.label }}</a>
-              <span class="wp-editor__errors-sep"> — </span>
-              <span>{{ e.message }}</span>
-            </li>
-          </ul>
-        </div>
-        <slot />
-      </div>
-      <aside
-        v-if="sections.length >= 3"
-        class="wp-editor__rail"
-        aria-label="Editor sections"
+    <div class="wp-editor__body">
+      <div
+        v-if="errors.length"
+        class="wp-editor__errors"
+        role="alert"
+        data-test="editor-errors"
       >
-        <a
-          v-for="s in sections"
-          :key="s.id"
-          :href="`#${s.id}`"
-          class="wp-editor__rail-link"
-          :data-active="activeSection === s.id || undefined"
-          @click.prevent="scrollToSection(s.id)"
-        >{{ s.label }}</a>
-      </aside>
+        <div class="wp-editor__errors-title">
+          {{ errors.length }} field{{ errors.length === 1 ? '' : 's' }} need{{ errors.length === 1 ? 's' : '' }} attention:
+        </div>
+        <ul>
+          <li v-for="e in errors" :key="e.field + ':' + e.label">
+            <a :href="`#${e.field}`" @click.prevent="scrollToField(e.field)">{{ e.label }}</a>
+            <span class="wp-editor__errors-sep"> — </span>
+            <span>{{ e.message }}</span>
+          </li>
+        </ul>
+      </div>
+      <slot />
     </div>
 
     <div class="wp-footer-bar">
@@ -349,65 +287,6 @@ function scrollToField(id: string): void {
 }
 :deep(.wp-btn[data-dirty]:not([data-save-state="saved"]):not([data-save-state="error"])) {
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
-}
-
-/* Section anchor side rail — opt-in via `sections` prop on EditorFrame.
- * Hidden when fewer than 3 sections (not worth the column) or on narrow
- * viewports. Highlight uses an IntersectionObserver-driven scroll-spy
- * keyed off each card's id.
- *
- * Body-wrap MUST be a flex container itself so the inner `.wp-editor__body`
- * keeps its `flex: 1 1 auto; min-height: 0` scroll-region behavior (we
- * inserted a wrapper between the parent flex column and the body, breaking
- * the original direct-child relationship). The grid variant overrides
- * display to position the rail alongside the body. */
-.wp-editor__body-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.wp-editor__body-wrap--with-rail {
-  display: grid;
-  grid-template-columns: 1fr 96px;
-  gap: var(--wp-space-4);
-}
-.wp-editor__body-wrap--with-rail > .wp-editor__body { min-height: 0; }
-
-/* Tightened rail — narrow column (96px), thin left border, dim text.
- * Active link picks up the accent. Sized to feel like a sidebar
- * indicator, not a second nav column. */
-.wp-editor__rail {
-  position: sticky;
-  top: var(--wp-space-5);
-  align-self: start;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: var(--wp-space-2) 0 var(--wp-space-2) var(--wp-space-3);
-  border-left: 1px solid var(--wp-border);
-}
-.wp-editor__rail-link {
-  display: block;
-  padding: 4px var(--wp-space-2);
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-xs);
-  text-decoration: none;
-  border-radius: var(--wp-radius-sm);
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wp-editor__rail-link:hover { color: var(--wp-text); background: var(--wp-bg-3); }
-.wp-editor__rail-link[data-active] {
-  color: var(--wp-text);
-  background: color-mix(in oklab, var(--wp-accent-500) 15%, transparent);
-}
-
-@media (max-width: 1024px) {
-  .wp-editor__body-wrap--with-rail { display: block; }
-  .wp-editor__rail { display: none; }
 }
 
 /* Field-error rollup. Shown above the editor body when the user

@@ -10,7 +10,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import type { SaveState, EditorSection, EditorFieldError } from "../components/EditorFrame.types";
+import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -375,13 +375,6 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { label: isEdit.value ? (name.value || "Editing") : "New constraint" },
 ]);
 
-const sections: EditorSection[] = [
-  { id: "editor-section-identity",   label: "Identity" },
-  { id: "editor-section-wildcards",  label: "Wildcards" },
-  { id: "editor-section-matrix",     label: "Matrix" },
-  { id: "editor-section-exceptions", label: "Exceptions" },
-];
-
 /** Flipped on the first invalid Save attempt; gates rollup visibility
  *  so the banner appears as feedback, not pre-emptive nagging. */
 const showErrors = ref(false);
@@ -418,7 +411,6 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     :save-error="saveError"
     :dirty="dirty"
     :history-entries="historyEntries"
-    :sections="sections"
     :errors="visibleErrors"
     @save="save"
     @cancel="cancel"

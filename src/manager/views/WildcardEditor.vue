@@ -12,7 +12,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
-import type { SaveState, EditorSection, EditorFieldError } from "../components/EditorFrame.types";
+import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -351,12 +351,6 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { label: isEdit.value ? (name.value || "Editing") : "New wildcard" },
 ]);
 
-const sections: EditorSection[] = [
-  { id: "editor-section-identity",       label: "Identity" },
-  { id: "editor-section-sub-categories", label: "Sub-categories" },
-  { id: "editor-section-options",        label: "Options" },
-];
-
 /** Set true on the first Save click while invalid; cleared on a
  *  valid save. Gates rollup visibility so the banner is feedback,
  *  not a nagging pre-emptive scolding while the user is still
@@ -403,7 +397,6 @@ defineExpose({ historyEntries, applyRestore, options });
     :save-error="saveError"
     :dirty="dirty"
     :history-entries="historyEntries"
-    :sections="sections"
     :errors="visibleErrors"
     @save="save"
     @cancel="cancel"
