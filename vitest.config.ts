@@ -18,7 +18,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     setupFiles: ["./src/test-setup.ts"],
     coverage: {
       // V8 coverage works against the Vite test pipeline without a separate
