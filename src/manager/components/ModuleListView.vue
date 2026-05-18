@@ -75,6 +75,8 @@ interface Props {
   categoryOptions?: { value: string | null; label: string; dot?: string }[];
   /** Hide the bulk Set-category action — for kinds without a category field (bundles). */
   hideBulkSetCategory?: boolean;
+  /** Hide the bulk Duplicate action — for kinds without library duplicate support (bundles). */
+  hideBulkDuplicate?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -87,6 +89,7 @@ const props = withDefaults(defineProps<Props>(), {
   availableTags: () => [],
   categoryOptions: () => [],
   hideBulkSetCategory: false,
+  hideBulkDuplicate: false,
 });
 
 const emit = defineEmits<{
@@ -557,7 +560,7 @@ defineExpose({
         @click="emit('bulk-favorite', selectedItems, true)">Favorite</Button>
       <Button variant="ghost" size="sm" icon="pi-star-fill" data-test="bulk-favorite-off"
         @click="emit('bulk-favorite', selectedItems, false)">Unfavorite</Button>
-      <Button variant="ghost" size="sm" icon="pi-clone" data-test="bulk-duplicate"
+      <Button v-if="!hideBulkDuplicate" variant="ghost" size="sm" icon="pi-clone" data-test="bulk-duplicate"
         @click="emit('bulk-duplicate', selectedItems)">Duplicate</Button>
       <Button variant="ghost" size="sm" icon="pi-plus" data-test="bulk-tag-add-open"
         @click="tagAddOpen = true">Add tag</Button>
