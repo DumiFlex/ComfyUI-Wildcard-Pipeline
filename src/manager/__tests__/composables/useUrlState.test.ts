@@ -102,4 +102,35 @@ describe("useUrlState", () => {
     const { wrap } = await mountAt("/?filters=a,,b,");
     expect(wrap.find('[data-test="filters"]').text()).toBe("a,b");
   });
+
+  it("strips param when field is reset to default after being non-default", async () => {
+    const { wrap, router } = await mountAt("/?q=hello");
+    const vm = wrap.vm as unknown as { state: State };
+    expect(router.currentRoute.value.query.q).toBe("hello");
+    vm.state.q = "";  // back to default
+    await flushPromises();
+    await nextTick();
+    expect(router.currentRoute.value.query.q).toBeUndefined();
+  });
+
+  it("reads first value when param key appears twice in URL", async () => {
+    // Vue Router yields an array for duplicate keys; readQuery picks first non-null.
+    const { wrap } = await mountAt("/?q=first&q=second");
+    expect(wrap.find('[data-test="q"]').text()).toBe("first");
+  });
+
+  it("uses urlKey alias when reading + writing; ignores state-key name", async () => {
+    // SCHEMA maps state.category to URL key "cat". A URL with only the
+    // alias key present (?cat=Style) must populate state.category; the
+    // state-key name ("category") is never read from or written to the URL.
+    const { wrap, router } = await mountAt("/?cat=Style");
+    expect(wrap.find('[data-test="cat"]').text()).toBe("Style");
+    // Reset state and verify the alias key is stripped (not "category").
+    const vm = wrap.vm as unknown as { state: State };
+    vm.state.category = null; // back to default
+    await flushPromises();
+    await nextTick();
+    expect(router.currentRoute.value.query.cat).toBeUndefined();
+    expect(router.currentRoute.value.query.category).toBeUndefined();
+  });
 });

@@ -40,16 +40,26 @@ function parseField<V>(raw: string | null, spec: FieldSpec<V>): V {
 function serializeField<V>(value: V, spec: FieldSpec<V>): string | undefined {
   // Compare against default; if equal, omit from URL.
   if (Array.isArray(value) && Array.isArray(spec.default)) {
+    // NOTE: csv default-stripping checks only "both empty". A non-empty
+    // default array will always serialize even when value matches it
+    // structurally. All Phase 2 schemas use `default: []`; extend this
+    // check if you add a csv field with a non-empty default.
     if (value.length === 0 && spec.default.length === 0) return undefined;
     return (value as unknown as string[]).join(",");
   }
   if (value === spec.default) return undefined;
-  if (value === null) return undefined; // null is always omitted
+  // `null` is always omitted from the URL regardless of kind. The
+  // pre-switch return makes per-kind null branches unreachable; each
+  // case below assumes `value !== null`.
+  if (value === null) return undefined;
   switch (spec.type) {
     case "string":
+      // NOTE: empty-string value is omitted from the URL regardless of
+      // default. Only correct when the default is also "". For a non-empty
+      // string default, use explicit `value === spec.default` here.
       return (value as unknown as string) || undefined;
     case "string-or-null":
-      return value === null ? undefined : (value as unknown as string);
+      return value as unknown as string;
     case "int":
       return String(value);
     case "csv":
@@ -83,6 +93,42 @@ export function useUrlState<T extends object>(
 
   // Watch state → URL.
   let writing = false;
+  let pendingFlush = false;
+
+  function buildAndReplace(): void {
+    if (writing) {
+      // A router.replace is already in-flight; mark the flush so it
+      // re-runs after the current replace settles rather than dropping
+      // the mutation. This handles fast typing / rapid state changes.
+      pendingFlush = true;
+      return;
+    }
+    writing = true;
+    pendingFlush = false;
+    const nextQuery: Record<string, string | undefined> = {
+      ...route.query,
+    } as Record<string, string | undefined>;
+    for (const key of Object.keys(schema) as (keyof T)[]) {
+      const spec = schema[key];
+      const urlKey = spec.urlKey ?? (key as string);
+      const serialized = serializeField(
+        (state as Record<string, unknown>)[key as string],
+        spec,
+      );
+      if (serialized === undefined) delete nextQuery[urlKey];
+      else nextQuery[urlKey] = serialized;
+    }
+    void router
+      .replace({
+        path: route.path,
+        query: nextQuery as Record<string, string>,
+      })
+      .finally(() => {
+        writing = false;
+        if (pendingFlush) buildAndReplace();
+      });
+  }
+
   watch(
     () => {
       // Build a stable snapshot of state to trigger watcher.
@@ -92,31 +138,7 @@ export function useUrlState<T extends object>(
       }
       return JSON.stringify(snap);
     },
-    () => {
-      if (writing) return;
-      writing = true;
-      const nextQuery: Record<string, string | undefined> = {
-        ...route.query,
-      } as Record<string, string | undefined>;
-      for (const key of Object.keys(schema) as (keyof T)[]) {
-        const spec = schema[key];
-        const urlKey = spec.urlKey ?? (key as string);
-        const serialized = serializeField(
-          (state as Record<string, unknown>)[key as string],
-          spec,
-        );
-        if (serialized === undefined) delete nextQuery[urlKey];
-        else nextQuery[urlKey] = serialized;
-      }
-      void router
-        .replace({
-          path: route.path,
-          query: nextQuery as Record<string, string>,
-        })
-        .finally(() => {
-          writing = false;
-        });
-    },
+    () => { buildAndReplace(); },
   );
 
   return state;
