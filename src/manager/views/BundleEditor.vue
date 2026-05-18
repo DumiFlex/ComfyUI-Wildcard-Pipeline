@@ -13,6 +13,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
+import type { SaveState } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -61,6 +62,19 @@ const COLOR_PRESETS = [
 
 const loading = ref(false);
 const saving = ref(false);
+const saveState = ref<SaveState>("idle");
+const saveError = ref<string>("");
+let saveStateTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setSaveState(next: SaveState, ttl?: number): void {
+  if (saveStateTimer) { clearTimeout(saveStateTimer); saveStateTimer = null; }
+  saveState.value = next;
+  if (ttl && (next === "saved" || next === "error")) {
+    saveStateTimer = setTimeout(() => {
+      if (saveState.value === next) saveState.value = "idle";
+    }, ttl);
+  }
+}
 const original = ref<BundleRow | null>(null);
 
 const name = ref("");
@@ -261,6 +275,7 @@ async function save() {
     toast.push({ severity: "warn", summary: "Name required", life: 2500 });
     return;
   }
+  setSaveState("saving");
   saving.value = true;
   try {
     const colorOut = color.value === DEFAULT_COLOR ? null : color.value;
@@ -280,9 +295,13 @@ async function save() {
     bundleBaseline.value = bundleSnapshot();
     draft.discard();
     recent.push({ id: props.id, kind: "bundle", name: updated.name });
-    toast.push({ severity: "success", summary: "Saved", detail: updated.name, life: 2000 });
+    // BundleEditor never navigates away on save — the inline state-machine
+    // flash IS the only feedback (no toast — iterative editing flow).
+    setSaveState("saved", 1500);
   } catch (e) {
-    toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
+    saveError.value = e instanceof Error ? e.message : String(e);
+    setSaveState("error", 3000);
+    toast.push({ severity: "error", summary: "Save failed", detail: saveError.value, life: 4000 });
   } finally {
     saving.value = false;
   }
@@ -418,6 +437,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     back-label="Bundles"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :save-state="saveState"
+    :save-error="saveError"
     :dirty="dirty"
     :save-disabled="!isEdit"
     @save="save"

@@ -16,13 +16,14 @@
  * `wp-page__*`, `wp-breadcrumb`, `wp-card`, `wp-footer-bar` tokens that
  * already live in `tokens.css`.
  */
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import Button from "./ui/Button.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import Breadcrumb from "./Breadcrumb.vue";
 import type { BreadcrumbItem } from "./Breadcrumb.types";
 import type { ModuleHistoryEntry } from "../api/types";
+import type { SaveState } from "./EditorFrame.types";
 
 interface Props {
   title: string;
@@ -37,13 +38,21 @@ interface Props {
   breadcrumb?: BreadcrumbItem[];
   /** When true, render an "Unsaved" chip and accent the Save button. */
   dirty?: boolean;
+  /** Save button state-machine. When set to anything other than "idle"
+   *  it wins over the legacy `saving` boolean. Editors flash "saved" /
+   *  "error" for ~1.5–3s then return to "idle". */
+  saveState?: SaveState;
+  /** Tooltip surfaced on the Save button when `saveState === "error"`. */
+  saveError?: string;
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   saving: false,
   saveDisabled: false,
   historyEntries: () => [],
   dirty: false,
+  saveState: "idle",
+  saveError: "",
 });
 
 const emit = defineEmits<{
@@ -53,6 +62,28 @@ const emit = defineEmits<{
 }>();
 
 const historyOpen = ref(false);
+
+/** Effective state — explicit `saveState` prop wins over the legacy
+ *  `saving` boolean so editors mid-migration still flip the spinner. */
+const effectiveSaveState = computed<SaveState>(() => {
+  if (props.saveState && props.saveState !== "idle") return props.saveState;
+  if (props.saving) return "saving";
+  return "idle";
+});
+
+const saveIcon = computed(() => ({
+  idle:   "pi-check",
+  saving: "pi-spinner",
+  saved:  "pi-check-circle",
+  error:  "pi-times-circle",
+}[effectiveSaveState.value]));
+
+const saveLabel = computed(() => ({
+  idle:   "Save",
+  saving: "Saving",
+  saved:  "Saved",
+  error:  "Retry",
+}[effectiveSaveState.value]));
 
 function onCancel() { emit("cancel"); }
 function onSave() { emit("save"); }
@@ -110,13 +141,15 @@ function onRestore(entry: ModuleHistoryEntry) {
         <Button variant="secondary" data-test="cancel-btn" @click="onCancel">Cancel</Button>
         <Button
           variant="primary"
-          icon="pi-check"
-          :loading="saving"
-          :disabled="saveDisabled"
+          :icon="saveIcon"
+          :loading="effectiveSaveState === 'saving'"
+          :disabled="saveDisabled || effectiveSaveState === 'saving'"
           :data-dirty="dirty || undefined"
+          :data-save-state="effectiveSaveState"
+          :title="effectiveSaveState === 'error' ? saveError : undefined"
           data-test="save-btn"
           @click="onSave"
-        >Save</Button>
+        >{{ saveLabel }}</Button>
       </div>
     </div>
 
@@ -197,5 +230,19 @@ function onRestore(entry: ModuleHistoryEntry) {
   inset: -24px 0 100% 0;
   background: linear-gradient(to top, var(--wp-bg) 0%, transparent 100%);
   pointer-events: none;
+}
+
+/* Save button state-machine visuals. Base button styling lives in
+ * tokens.css; this layers the saved/error nuance on top. */
+:deep(.wp-btn[data-save-state="saved"]) {
+  background: var(--wp-success, #22c55e);
+  border-color: var(--wp-success, #22c55e);
+}
+:deep(.wp-btn[data-save-state="error"]) {
+  background: var(--wp-danger, #ef4444);
+  border-color: var(--wp-danger, #ef4444);
+}
+:deep(.wp-btn[data-dirty]:not([data-save-state="saved"]):not([data-save-state="error"])) {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
 }
 </style>

@@ -8,6 +8,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
+import type { SaveState } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -50,6 +51,19 @@ const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 const rules = ref<DerivationRule[]>([]);
 const saving = ref(false);
+const saveState = ref<SaveState>("idle");
+const saveError = ref<string>("");
+let saveStateTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setSaveState(next: SaveState, ttl?: number): void {
+  if (saveStateTimer) { clearTimeout(saveStateTimer); saveStateTimer = null; }
+  saveState.value = next;
+  if (ttl && (next === "saved" || next === "error")) {
+    saveStateTimer = setTimeout(() => {
+      if (saveState.value === next) saveState.value = "idle";
+    }, ttl);
+  }
+}
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
@@ -241,6 +255,7 @@ async function save() {
     toast.push({ severity: "warn", summary: "Name required" });
     return;
   }
+  setSaveState("saving");
   saving.value = true;
   try {
     const payload: DerivationPayload = { rules: rules.value };
@@ -278,12 +293,18 @@ async function save() {
         payload: newPayload,
       });
     }
-    toast.push({ severity: "success", summary: "Saved", detail: name.value });
-    baseline.value = snapshot();
     draft.discard();
+    setSaveState("saved", 1500);
+    baseline.value = snapshot();
+    // Creates: toast confirms the new item. Updates: inline flash only.
+    if (!isEdit.value) {
+      toast.push({ severity: "success", summary: "Created", detail: name.value });
+    }
     router.push(resolveReturnTo("/derivations"));
   } catch (e) {
-    toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
+    saveError.value = e instanceof Error ? e.message : String(e);
+    setSaveState("error", 3000);
+    toast.push({ severity: "error", summary: "Save failed", detail: saveError.value, life: 4000 });
   } finally {
     saving.value = false;
   }
@@ -313,6 +334,8 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
     back-label="Derivations"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :save-state="saveState"
+    :save-error="saveError"
     :dirty="dirty"
     :history-entries="historyEntries"
     @save="save"

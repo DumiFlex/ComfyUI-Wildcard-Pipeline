@@ -12,6 +12,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
+import type { SaveState } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
@@ -62,6 +63,22 @@ const options = ref<WildcardOption[]>([
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1 },
 ]);
 const saving = ref(false);
+const saveState = ref<SaveState>("idle");
+const saveError = ref<string>("");
+let saveStateTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Flip the Save button state-machine. `ttl` (ms) auto-resets the
+ *  saved/error flash back to "idle" if nothing else has touched the
+ *  state in the meantime. */
+function setSaveState(next: SaveState, ttl?: number): void {
+  if (saveStateTimer) { clearTimeout(saveStateTimer); saveStateTimer = null; }
+  saveState.value = next;
+  if (ttl && (next === "saved" || next === "error")) {
+    saveStateTimer = setTimeout(() => {
+      if (saveState.value === next) saveState.value = "idle";
+    }, ttl);
+  }
+}
 const isEdit = computed(() => !!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
@@ -260,6 +277,7 @@ async function save() {
     return;
   }
   varBindingError.value = "";
+  setSaveState("saving");
   saving.value = true;
   try {
     const payload: WildcardPayload = {
@@ -298,12 +316,20 @@ async function save() {
         payload: newPayload,
       });
     }
-    toast.push({ severity: "success", summary: "Saved", detail: name.value });
-    baseline.value = snapshot();
     draft.discard();
+    setSaveState("saved", 1500);
+    baseline.value = snapshot();
+    // For creates: keep the toast so the user gets explicit confirmation
+    // of the new item before we navigate away. For updates: the inline
+    // state-machine flash is the only feedback (less noise).
+    if (!isEdit.value) {
+      toast.push({ severity: "success", summary: "Created", detail: name.value });
+    }
     router.push(resolveReturnTo("/wildcards"));
   } catch (e) {
-    toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
+    saveError.value = e instanceof Error ? e.message : String(e);
+    setSaveState("error", 3000);
+    toast.push({ severity: "error", summary: "Save failed", detail: saveError.value, life: 4000 });
   } finally {
     saving.value = false;
   }
@@ -333,6 +359,8 @@ defineExpose({ historyEntries, applyRestore });
     back-label="Wildcards"
     :breadcrumb="breadcrumb"
     :saving="saving"
+    :save-state="saveState"
+    :save-error="saveError"
     :dirty="dirty"
     :history-entries="historyEntries"
     @save="save"
