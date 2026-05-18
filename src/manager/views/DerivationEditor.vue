@@ -63,11 +63,9 @@ function snapshot(): string {
   });
 }
 
-const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
-
-const dirty = computed(() => snapshot() !== baseline.value);
 
 // Library var hints for the `$`-trigger autocomplete dropdown — pulls
 // from every wildcard / fixed_values / combine in the catalog except

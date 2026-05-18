@@ -1,4 +1,4 @@
-import { onBeforeUnmount, ref, type Ref } from "vue";
+import { computed, onBeforeUnmount, ref, type ComputedRef, type Ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 
 /**
@@ -24,6 +24,11 @@ import { onBeforeRouteLeave } from "vue-router";
  */
 export interface UnsavedGuard {
   showConfirm: Ref<boolean>;
+  /** Reactive flag exposing the same predicate the guard uses. Editors
+   *  bind this to the EditorFrame `dirty` prop so the visible "Unsaved"
+   *  chip is driven by the same source of truth as the route-leave
+   *  prompt — no chance of the two disagreeing. */
+  dirty: ComputedRef<boolean>;
   onConfirmLeave(): void;
   onCancelLeave(): void;
 }
@@ -68,5 +73,7 @@ export function useUnsavedGuard(isDirty: () => boolean): UnsavedGuard {
     pendingResolve = null;
   }
 
-  return { showConfirm, onConfirmLeave, onCancelLeave };
+  const dirty = computed(() => isDirty());
+
+  return { showConfirm, dirty, onConfirmLeave, onCancelLeave };
 }

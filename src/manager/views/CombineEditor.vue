@@ -69,11 +69,9 @@ function snapshot(): string {
   });
 }
 
-const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
-
-const dirty = computed(() => snapshot() !== baseline.value);
 
 const PLACEHOLDER = "$first_name, a $age-year-old with $hair_color hair";
 

@@ -78,11 +78,9 @@ function snapshot(): string {
   });
 }
 
-const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
-
-const dirty = computed(() => snapshot() !== baseline.value);
 
 const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   allow: 1,

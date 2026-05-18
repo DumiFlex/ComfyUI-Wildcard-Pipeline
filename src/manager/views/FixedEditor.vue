@@ -62,11 +62,9 @@ function snapshot(): string {
   });
 }
 
-const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => snapshot() !== baseline.value,
 );
-
-const dirty = computed(() => snapshot() !== baseline.value);
 
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);

@@ -125,11 +125,9 @@ function bundleSnapshot(): string {
   });
 }
 
-const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
+const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
 );
-
-const dirty = computed(() => bundleSnapshot() !== bundleBaseline.value);
 
 const selectedChild = computed<Record<string, unknown> | null>(() => {
   const id = selectedChildId.value;
