@@ -24,6 +24,7 @@ import RichTextInput from "../components/RichTextInput.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
+import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -274,6 +275,12 @@ async function save() {
 }
 
 function cancel() { router.push(resolveReturnTo("/wildcards")); }
+
+useEditorShortcuts({
+  onSave: () => save(),
+  onCancel: () => cancel(),
+  enabled: () => !saving.value,
+});
 
 const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { to: "/dashboard", label: "Library" },

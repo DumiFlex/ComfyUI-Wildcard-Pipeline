@@ -17,6 +17,7 @@ import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
+import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useRecentStore } from "../stores/recentStore";
@@ -258,6 +259,12 @@ async function save() {
 }
 
 function cancel() { router.push(resolveReturnTo("/derivations")); }
+
+useEditorShortcuts({
+  onSave: () => save(),
+  onCancel: () => cancel(),
+  enabled: () => !saving.value,
+});
 
 const breadcrumb = computed<BreadcrumbItem[]>(() => [
   { to: "/dashboard", label: "Library" },

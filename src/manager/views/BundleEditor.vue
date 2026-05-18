@@ -24,6 +24,7 @@ import BundleAddChildModal from "../components/BundleAddChildModal.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
+import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -252,6 +253,12 @@ async function save() {
     saving.value = false;
   }
 }
+
+useEditorShortcuts({
+  onSave: () => save(),
+  onCancel: () => cancel(),
+  enabled: () => !saving.value,
+});
 
 /** Snapshot a library module into a bundle child entry.
  *
