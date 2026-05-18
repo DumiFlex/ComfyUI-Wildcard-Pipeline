@@ -13,7 +13,7 @@ describe("useRecentStore", () => {
     expect(r.items.length).toBe(0);
   });
 
-  it("push adds to front, dedups, caps at 6", () => {
+  it("push adds to front, dedups, caps at 10", () => {
     const r = useRecentStore();
     r.push({ id: "a", kind: "wildcard", name: "A" });
     r.push({ id: "b", kind: "wildcard", name: "B" });
@@ -21,15 +21,18 @@ describe("useRecentStore", () => {
     expect(r.items.map((i) => i.id)).toEqual(["a", "b"]);
 
     // Fill past cap
-    for (let i = 0; i < 10; i++) r.push({ id: `x${i}`, kind: "wildcard", name: `X${i}` });
-    expect(r.items.length).toBe(6);
+    for (let i = 0; i < 15; i++) r.push({ id: `x${i}`, kind: "wildcard", name: `X${i}` });
+    expect(r.items.length).toBe(10);
   });
 
-  it("persists to localStorage", () => {
+  it("persists to localStorage with openedAt stamp", () => {
     const r = useRecentStore();
     r.push({ id: "a", kind: "wildcard", name: "A" });
     const stored = JSON.parse(localStorage.getItem("wp-recent-items") || "[]");
-    expect(stored).toEqual([{ id: "a", kind: "wildcard", name: "A" }]);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ id: "a", kind: "wildcard", name: "A" });
+    expect(typeof stored[0].openedAt).toBe("string");
+    expect(Number.isFinite(Date.parse(stored[0].openedAt))).toBe(true);
   });
 
   it("reads localStorage on init", () => {

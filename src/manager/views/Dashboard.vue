@@ -10,6 +10,8 @@ import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
+import { useModuleStore } from "../stores/moduleStore";
+import { useBundleStore } from "../stores/bundleStore";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
  *  kinds; bundles get `key: "bundle"` with no `type` since they live in
@@ -40,6 +42,8 @@ const KIND_BY_KEY: Record<string, KindMeta> = KIND_META.reduce((acc, k) => {
 const router = useRouter();
 const categoryStore = useCategoryStore();
 const recentStore = useRecentStore();
+const moduleStore = useModuleStore();
+const bundleStore = useBundleStore();
 
 /** Max rows rendered per tab. The Dashboard list section has more vertical
  *  room than the sidebar recents block it replaced, so 10 fits without
@@ -70,7 +74,7 @@ interface DashboardRow {
 
 const recentItems = ref<DashboardRow[]>([]);
 const favoriteItems = ref<DashboardRow[]>([]);
-const tab = ref<"recent" | "opened" | "favorites">("recent");
+const tab = ref<"recent" | "opened" | "favorites">("opened");
 
 const logoUrl = `${import.meta.env.BASE_URL}images/favicon.svg`;
 const wikiUrl = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline/wiki";
@@ -122,25 +126,44 @@ function categoryFor(row: DashboardRow): { name: string; color: string | null } 
 
 /** "Recently opened" rows derived from `recentStore` (localStorage MRU of
  *  what the user actually clicked into) — distinct from "Recent edits"
- *  which is sorted by server-side `updated_at`. Pulls cached name/kind
- *  straight from the store so no API fetch is needed; category + date
- *  are intentionally omitted (recentStore doesn't snapshot them and the
- *  data would drift anyway). */
+ *  which is sorted by server-side `updated_at`. Joins against live
+ *  module/bundle catalog to pick up category_id; falls back to the
+ *  recentStore snapshot if the row is no longer in the catalog (e.g.
+ *  deleted, or catalog still loading). `updated_at` is wired to the
+ *  recentStore's `openedAt` so RelativeDate renders "X ago" since the
+ *  user last opened the row — not since it was last edited. */
 const openedItems = computed<DashboardRow[]>(() => {
+  const modIx = new Map(moduleStore.catalog.map((m) => [m.id, m]));
+  const bunIx = new Map(bundleStore.catalog.map((b) => [b.id, b]));
   const out: DashboardRow[] = [];
   for (const r of recentStore.items) {
-    const meta = r.kind === "bundle" ? KIND_BY_KEY.bundle : KIND_BY_KEY[r.kind];
-    if (!meta) continue;
-    out.push({
-      id: r.id,
-      name: r.name,
-      category_id: null,
-      updated_at: "",
-      kind: r.kind === "bundle" ? "bundle" : "module",
-      moduleType: r.kind === "bundle" ? undefined : (r.kind as ModuleType),
-      color: meta.color,
-      icon: meta.icon,
-    });
+    if (r.kind === "bundle") {
+      const live = bunIx.get(r.id);
+      const base = live ? bundleToRow(live) : null;
+      out.push({
+        id: r.id,
+        name: live?.name ?? r.name,
+        category_id: live?.category_id ?? null,
+        updated_at: r.openedAt,
+        kind: "bundle",
+        color: base?.color ?? (KIND_BY_KEY.bundle?.color ?? "var(--wp-bundle-default)"),
+        icon: KIND_BY_KEY.bundle?.icon ?? "pi-box",
+      });
+    } else {
+      const meta = KIND_BY_KEY[r.kind];
+      if (!meta) continue;
+      const live = modIx.get(r.id);
+      out.push({
+        id: r.id,
+        name: live?.name ?? r.name,
+        category_id: live?.category_id ?? null,
+        updated_at: r.openedAt,
+        kind: "module",
+        moduleType: r.kind as ModuleType,
+        color: meta.color,
+        icon: meta.icon,
+      });
+    }
   }
   return out;
 });
@@ -329,20 +352,20 @@ onMounted(refresh);
           <button
             type="button"
             class="wp-tabs__btn wp-tab"
-            :data-active="tab === 'recent' ? 'true' : 'false'"
-            data-test="dashboard-tab-recent"
-            @click="tab = 'recent'"
-          >
-            <Icon name="pi-clock" /> Recent edits
-          </button>
-          <button
-            type="button"
-            class="wp-tabs__btn wp-tab"
             :data-active="tab === 'opened' ? 'true' : 'false'"
             data-test="dashboard-tab-opened"
             @click="tab = 'opened'"
           >
             <Icon name="pi-history" /> Recently opened
+          </button>
+          <button
+            type="button"
+            class="wp-tabs__btn wp-tab"
+            :data-active="tab === 'recent' ? 'true' : 'false'"
+            data-test="dashboard-tab-recent"
+            @click="tab = 'recent'"
+          >
+            <Icon name="pi-clock" /> Recent edits
           </button>
           <button
             type="button"

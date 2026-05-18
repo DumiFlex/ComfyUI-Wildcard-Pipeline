@@ -92,7 +92,10 @@ describe("Dashboard.vue", () => {
     apiMod.list.mockResolvedValue({ items: [], total: 0 });
     const wrap = mountView();
     await flushPromises();
-    // Default tab is Recent — empty-state copy.
+    // Default tab is Recently opened — empty-state copy.
+    expect(wrap.text()).toContain("No recently opened items yet");
+    // Switch to Recent edits tab and confirm its empty-state copy.
+    await wrap.get('[data-test="dashboard-tab-recent"]').trigger("click");
     expect(wrap.text()).toContain("No edits yet.");
     // Switch to Favorites tab and confirm its empty-state copy.
     await wrap.get('[data-test="dashboard-tab-favorites"]').trigger("click");
