@@ -51,10 +51,23 @@ async function runEach<R extends AnyRow>(
 }
 
 export function makeModuleStoreAdapter(store: ModuleStore): BulkAdapter {
+  // Refresh items from the live store before idempotence filtering.
+  // The composable's undo handlers close over the items array from BEFORE
+  // the original mutation — by undo time, store has refetched and those
+  // refs are stale. Without this lookup, the idempotence filter reads
+  // pre-mutation `is_favorite`/`tags` and incorrectly skips items that
+  // need flipping back.
+  function fresh(items: AnyRow[]): ModuleRow[] {
+    return items.map((i) => {
+      const live = store.items.find((s) => s.id === i.id) ?? store.catalog.find((s) => s.id === i.id);
+      return (live ?? (i as ModuleRow));
+    });
+  }
   return {
     async setFavorite(items, on) {
-      const target = items.filter((i) => Boolean(i.is_favorite) !== on) as ModuleRow[];
-      const skipped = items.length - target.length;
+      const live = fresh(items);
+      const target = live.filter((i) => Boolean(i.is_favorite) !== on);
+      const skipped = live.length - target.length;
       const res = await runEach(target, async (i) => { await store.toggleFavorite(i.id); });
       res.ok += skipped;
       return res;
@@ -76,8 +89,9 @@ export function makeModuleStoreAdapter(store: ModuleStore): BulkAdapter {
       return { ...res, created };
     },
     async addTag(items, tag) {
-      const target = items.filter((i) => !(i.tags ?? []).includes(tag)) as ModuleRow[];
-      const skipped = items.length - target.length;
+      const live = fresh(items);
+      const target = live.filter((i) => !(i.tags ?? []).includes(tag));
+      const skipped = live.length - target.length;
       const res = await runEach(target, async (i) => {
         const nextTags = [...(i.tags ?? []), tag];
         await store.update(i.id, { tags: nextTags });
@@ -86,8 +100,9 @@ export function makeModuleStoreAdapter(store: ModuleStore): BulkAdapter {
       return res;
     },
     async removeTag(items, tag) {
-      const target = items.filter((i) => (i.tags ?? []).includes(tag)) as ModuleRow[];
-      const skipped = items.length - target.length;
+      const live = fresh(items);
+      const target = live.filter((i) => (i.tags ?? []).includes(tag));
+      const skipped = live.length - target.length;
       const res = await runEach(target, async (i) => {
         const nextTags = (i.tags ?? []).filter((t) => t !== tag);
         await store.update(i.id, { tags: nextTags });
@@ -107,10 +122,20 @@ export function makeModuleStoreAdapter(store: ModuleStore): BulkAdapter {
 }
 
 export function makeBundleStoreAdapter(store: BundleStore): BulkAdapter {
+  // Same staleness defeat as the module adapter — re-read live state via
+  // the store before deciding what to mutate. See `makeModuleStoreAdapter`
+  // for the full rationale.
+  function fresh(items: AnyRow[]): BundleRow[] {
+    return items.map((i) => {
+      const live = store.items.find((s) => s.id === i.id) ?? store.catalog.find((s) => s.id === i.id);
+      return (live ?? (i as BundleRow));
+    });
+  }
   return {
     async setFavorite(items, on) {
-      const target = items.filter((i) => Boolean(i.is_favorite) !== on) as BundleRow[];
-      const skipped = items.length - target.length;
+      const live = fresh(items);
+      const target = live.filter((i) => Boolean(i.is_favorite) !== on);
+      const skipped = live.length - target.length;
       const res = await runEach(target, async (i) => { await store.toggleFavorite(i.id); });
       res.ok += skipped;
       return res;
@@ -123,8 +148,9 @@ export function makeBundleStoreAdapter(store: BundleStore): BulkAdapter {
       return { ok: 0, failed: items.length, errors, created: [] };
     },
     async addTag(items, tag) {
-      const target = items.filter((i) => !(i.tags ?? []).includes(tag)) as BundleRow[];
-      const skipped = items.length - target.length;
+      const live = fresh(items);
+      const target = live.filter((i) => !(i.tags ?? []).includes(tag));
+      const skipped = live.length - target.length;
       const res = await runEach(target, async (i) => {
         const nextTags = [...(i.tags ?? []), tag];
         await store.update(i.id, { tags: nextTags });
@@ -133,8 +159,9 @@ export function makeBundleStoreAdapter(store: BundleStore): BulkAdapter {
       return res;
     },
     async removeTag(items, tag) {
-      const target = items.filter((i) => (i.tags ?? []).includes(tag)) as BundleRow[];
-      const skipped = items.length - target.length;
+      const live = fresh(items);
+      const target = live.filter((i) => (i.tags ?? []).includes(tag));
+      const skipped = live.length - target.length;
       const res = await runEach(target, async (i) => {
         const nextTags = (i.tags ?? []).filter((t) => t !== tag);
         await store.update(i.id, { tags: nextTags });

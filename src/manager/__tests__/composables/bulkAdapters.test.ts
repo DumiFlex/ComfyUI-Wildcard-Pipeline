@@ -97,6 +97,34 @@ describe("makeModuleStoreAdapter", () => {
     expect(update).toHaveBeenCalledTimes(2);
   });
 
+  it("setFavorite reads fresh state from store, not stale input refs (defeats undo staleness)", async () => {
+    const store = useModuleStore();
+    // Store holds the LIVE row showing is_favorite=true (post-original-op state).
+    store.items = [makeModule({ id: "a", is_favorite: true })];
+    const toggle = vi.spyOn(store, "toggleFavorite").mockResolvedValue(makeModule());
+    const adapter = makeModuleStoreAdapter(store);
+    // Caller passes the STALE pre-mutation ref where is_favorite=false.
+    const stale = [makeModule({ id: "a", is_favorite: false })];
+    // Undo wants to set back to false. Without fresh-lookup the adapter would
+    // see stale.is_favorite=false, filter target=empty, silently no-op.
+    const res = await adapter.setFavorite(stale, false);
+    expect(toggle).toHaveBeenCalledWith("a");
+    expect(res.ok).toBe(1);
+  });
+
+  it("addTag reads fresh tags from store, not stale input refs", async () => {
+    const store = useModuleStore();
+    // Live state: tag already added by prior op.
+    store.items = [makeModule({ id: "a", tags: ["red"] })];
+    vi.spyOn(store, "update").mockResolvedValue(makeModule());
+    const adapter = makeModuleStoreAdapter(store);
+    // Caller's stale ref still says no tags — addTag should skip (live has it).
+    const stale = [makeModule({ id: "a", tags: [] })];
+    const res = await adapter.addTag(stale, "red");
+    expect(store.update).not.toHaveBeenCalled();
+    expect(res.ok).toBe(1);
+  });
+
   it("delete calls store.remove for each item", async () => {
     const store = useModuleStore();
     const remove = vi.spyOn(store, "remove").mockResolvedValue(undefined);
