@@ -81,7 +81,7 @@ export function useCommandIndex(): ComputedRef<CommandItem[]> {
     }
 
     // Modules — kindIcon returns "pi pi-sparkles"; extract "pi-sparkles" for Icon.vue
-    for (const m of moduleStore.items) {
+    for (const m of moduleStore.catalog) {
       const editPath = KIND_TO_EDIT_PATH[m.type];
       if (!editPath) continue;
       const rawIcon = kindIcon(m.type);
@@ -97,7 +97,7 @@ export function useCommandIndex(): ComputedRef<CommandItem[]> {
     }
 
     // Bundles
-    for (const b of bundleStore.items) {
+    for (const b of bundleStore.catalog) {
       items.push({
         id: `bundle:${b.id}`,
         label: b.name || "(unnamed)",

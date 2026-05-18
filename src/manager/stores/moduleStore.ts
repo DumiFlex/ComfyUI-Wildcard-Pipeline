@@ -16,6 +16,7 @@ interface Filter {
 
 export const useModuleStore = defineStore("modules", () => {
   const items = ref<ModuleRow[]>([]);
+  const catalog = ref<ModuleRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
 
@@ -44,14 +45,17 @@ export const useModuleStore = defineStore("modules", () => {
    * after the user came from a typed list page would silently scope `items` to
    * one type and break those cross-refs. Use this method from editors instead.
    *
-   * Mutates the same `items` ref. The next list-view mount re-applies its
-   * filter via `fetchAll()`, so this does not pollute long-term state.
+   * Writes to BOTH `items` (so editors see the full set) AND `catalog` (the
+   * permanent unfiltered cache read by sidebar count badges and Cmd+K palette).
+   * The next list-view mount re-applies its filter via `fetchAll()`, restoring
+   * `items` to the scoped subset without touching `catalog`.
    */
   async function fetchCatalog() {
     loading.value = true;
     try {
       const res = await api.modules.list({});
       items.value = res.items;
+      catalog.value = res.items;
     } finally {
       loading.value = false;
     }
@@ -64,31 +68,38 @@ export const useModuleStore = defineStore("modules", () => {
   async function create(body: ModuleCreateInput) {
     const row = await api.modules.create(body);
     items.value.unshift(row);
+    catalog.value = [row, ...catalog.value.filter((i) => i.id !== row.id)];
     return row;
   }
 
   async function update(id: string, body: ModuleUpdateInput) {
     const updated = await api.modules.update(id, body);
-    const idx = items.value.findIndex((i) => i.id === id);
-    if (idx >= 0) items.value[idx] = updated;
+    const i1 = items.value.findIndex((i) => i.id === id);
+    if (i1 >= 0) items.value[i1] = updated;
+    const i2 = catalog.value.findIndex((i) => i.id === id);
+    if (i2 >= 0) catalog.value[i2] = updated;
     return updated;
   }
 
   async function remove(id: string) {
     await api.modules.delete(id);
     items.value = items.value.filter((i) => i.id !== id);
+    catalog.value = catalog.value.filter((i) => i.id !== id);
   }
 
   async function duplicate(id: string) {
     const copy = await api.modules.duplicate(id);
     items.value.unshift(copy);
+    catalog.value = [copy, ...catalog.value.filter((i) => i.id !== copy.id)];
     return copy;
   }
 
   async function toggleFavorite(id: string) {
     const updated = await api.modules.favorite(id);
-    const idx = items.value.findIndex((i) => i.id === id);
-    if (idx >= 0) items.value[idx] = updated;
+    const i1 = items.value.findIndex((i) => i.id === id);
+    if (i1 >= 0) items.value[i1] = updated;
+    const i2 = catalog.value.findIndex((i) => i.id === id);
+    if (i2 >= 0) catalog.value[i2] = updated;
     return updated;
   }
 
@@ -96,7 +107,7 @@ export const useModuleStore = defineStore("modules", () => {
   const fixedValues = computed(() => items.value.filter((i) => i.type === "fixed_values"));
 
   return {
-    items, loading, filter,
+    items, catalog, loading, filter,
     fetchAll, fetchCatalog, get, create, update, remove, duplicate, toggleFavorite,
     wildcards, fixedValues,
   };

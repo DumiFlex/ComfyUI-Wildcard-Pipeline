@@ -44,7 +44,7 @@ onMounted(() => {
   // Fire-and-forget: errors silently swallowed — the lazy list-view
   // fetches still run on actual usage if a fetch fails here.
   void moduleStore.fetchCatalog().catch(() => undefined);
-  void bundleStore.fetchAll().catch(() => undefined);
+  void bundleStore.fetchCatalog().catch(() => undefined);
   void categoryStore.fetchAll().catch(() => undefined);
 });
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));

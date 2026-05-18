@@ -167,14 +167,14 @@ function onSearchKey(e: KeyboardEvent): void {
 
 // ── Task 10: Per-kind count badges ────────────────────────────────────────
 const countByKey = computed<Record<string, number>>(() => {
-  const all = moduleStore.items;
+  const all = moduleStore.catalog;
   return {
     wildcards:   all.filter((m) => m.type === "wildcard").length,
     fixed:       all.filter((m) => m.type === "fixed_values").length,
     combines:    all.filter((m) => m.type === "combine").length,
     derivations: all.filter((m) => m.type === "derivation").length,
     constraints: all.filter((m) => m.type === "constraint").length,
-    bundles:     bundleStore.items.length,
+    bundles:     bundleStore.catalog.length,
   };
 });
 

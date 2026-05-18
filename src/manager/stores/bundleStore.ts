@@ -20,6 +20,7 @@ interface Filter {
  *  table/grid components by swapping store. */
 export const useBundleStore = defineStore("bundles", () => {
   const items = ref<BundleRow[]>([]);
+  const catalog = ref<BundleRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
 
@@ -37,6 +38,24 @@ export const useBundleStore = defineStore("bundles", () => {
     }
   }
 
+  /**
+   * Fetch the full bundle catalog, ignoring the persistent `filter.*` state.
+   *
+   * Mirrors `moduleStore.fetchCatalog()`. Writes to BOTH `items` and `catalog`
+   * so that sidebar count badges and Cmd+K palette (which read from `catalog`)
+   * remain accurate regardless of which list-view filter is currently active.
+   */
+  async function fetchCatalog() {
+    loading.value = true;
+    try {
+      const res = await api.bundles.list({});
+      items.value = res.items;
+      catalog.value = res.items;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function get(id: string) {
     return await api.bundles.get(id);
   }
@@ -44,30 +63,36 @@ export const useBundleStore = defineStore("bundles", () => {
   async function create(body: BundleCreateInput) {
     const row = await api.bundles.create(body);
     items.value.unshift(row);
+    catalog.value = [row, ...catalog.value.filter((i) => i.id !== row.id)];
     return row;
   }
 
   async function update(id: string, body: BundleUpdateInput) {
     const updated = await api.bundles.update(id, body);
-    const idx = items.value.findIndex((i) => i.id === id);
-    if (idx >= 0) items.value[idx] = updated;
+    const i1 = items.value.findIndex((i) => i.id === id);
+    if (i1 >= 0) items.value[i1] = updated;
+    const i2 = catalog.value.findIndex((i) => i.id === id);
+    if (i2 >= 0) catalog.value[i2] = updated;
     return updated;
   }
 
   async function remove(id: string) {
     await api.bundles.delete(id);
     items.value = items.value.filter((i) => i.id !== id);
+    catalog.value = catalog.value.filter((i) => i.id !== id);
   }
 
   async function toggleFavorite(id: string) {
     const updated = await api.bundles.favorite(id);
-    const idx = items.value.findIndex((i) => i.id === id);
-    if (idx >= 0) items.value[idx] = updated;
+    const i1 = items.value.findIndex((i) => i.id === id);
+    if (i1 >= 0) items.value[i1] = updated;
+    const i2 = catalog.value.findIndex((i) => i.id === id);
+    if (i2 >= 0) catalog.value[i2] = updated;
     return updated;
   }
 
   return {
-    items, loading, filter,
-    fetchAll, get, create, update, remove, toggleFavorite,
+    items, catalog, loading, filter,
+    fetchAll, fetchCatalog, get, create, update, remove, toggleFavorite,
   };
 });
