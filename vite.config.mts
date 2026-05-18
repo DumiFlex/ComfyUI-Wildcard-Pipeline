@@ -83,6 +83,26 @@ export default defineConfig(({ mode }) => {
   // Vite ≥5.4 emits the HTML directly to web/manager.html (basename only);
   // older versions used web/src/manager.html (full relative path). Handle both.
   // If Vite already emitted to web/index.html (future-proof), skip the copy.
+  // PrimeIcons ships @font-face declarations for eot/ttf/woff/svg/woff2.
+  // Every modern browser ComfyUI supports loads only the woff2; the rest
+  // are dead weight (~600 KB combined, including a 342 KB SVG sprite).
+  // Strip them at transform time so Vite never emits the asset files.
+  const stripLegacyIconFonts = {
+    name: "strip-primeicons-legacy-fonts",
+    enforce: "pre" as const,
+    transform(code: string, id: string): string | undefined {
+      // Strip the legacy @font-face src list down to just woff2. Vite's CSS
+      // asset resolver runs after the `transform` hook, so the eot/ttf/woff/
+      // svg url() references never make it into the dependency graph and
+      // Vite never emits those font assets. ~600 KB saved per build.
+      if (!id.includes("primeicons") || !id.endsWith(".css")) return undefined;
+      return code.replace(
+        /src:\s*url\([^)]*\.eot[^)]*\);\s*src:[\s\S]*?;/,
+        "src: url('./fonts/primeicons.woff2') format('woff2');",
+      );
+    },
+  };
+
   const renameManagerHtml = {
     name: "rename-manager-html",
     closeBundle() {
@@ -108,7 +128,7 @@ export default defineConfig(({ mode }) => {
   return {
     ...common,
     base: "/wp/",
-    plugins: [...(common.plugins as []), renameManagerHtml],
+    plugins: [...(common.plugins as []), stripLegacyIconFonts, renameManagerHtml],
     build: {
       outDir: "web",
       emptyOutDir: true,
