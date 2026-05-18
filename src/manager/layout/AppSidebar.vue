@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter, RouterLink } from "vue-router";
 import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
+import { useModuleStore } from "../stores/moduleStore";
+import { useBundleStore } from "../stores/bundleStore";
+import { useRecentStore } from "../stores/recentStore";
+import { kindIcon } from "../../components/shared/kind-icons";
 
 interface NavItem {
   id: string;
@@ -22,6 +26,9 @@ interface NavSection {
 const ui = useUiStore();
 const router = useRouter();
 const route = useRoute();
+const moduleStore = useModuleStore();
+const bundleStore = useBundleStore();
+const recent = useRecentStore();
 
 const SECTIONS: NavSection[] = [
   {
@@ -141,11 +148,74 @@ function onItemClick(item: NavItem) {
   }
   if (item.to) router.push(item.to);
 }
+
+// ── Task 9: Search-within ─────────────────────────────────────────────────
+const searchQuery = ref("");
+
+const filteredSections = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return SECTIONS;
+  return SECTIONS.map((s) => ({
+    ...s,
+    items: s.items.filter((i) => i.label.toLowerCase().includes(q)),
+  })).filter((s) => s.items.length > 0);
+});
+
+function onSearchKey(e: KeyboardEvent): void {
+  if (e.key === "Escape") searchQuery.value = "";
+}
+
+// ── Task 10: Per-kind count badges ────────────────────────────────────────
+const countByKey = computed<Record<string, number>>(() => {
+  const all = moduleStore.items;
+  return {
+    wildcards:   all.filter((m) => m.type === "wildcard").length,
+    fixed:       all.filter((m) => m.type === "fixed_values").length,
+    combines:    all.filter((m) => m.type === "combine").length,
+    derivations: all.filter((m) => m.type === "derivation").length,
+    constraints: all.filter((m) => m.type === "constraint").length,
+    bundles:     bundleStore.items.length,
+  };
+});
+
+// ── Task 11: Recents section ──────────────────────────────────────────────
+const KIND_TO_PATH: Record<string, string> = {
+  wildcard:     "wildcards",
+  fixed_values: "fixed-values",
+  combine:      "combines",
+  derivation:   "derivations",
+  constraint:   "constraints",
+  bundle:       "bundles",
+};
+
+function recentTo(item: { id: string; kind: string }): string {
+  const path = KIND_TO_PATH[item.kind];
+  return path ? `/${path}/${item.id}/edit` : "/";
+}
+
+/** Bare `pi-*` icon name, extracted from `kindIcon`'s full class string. */
+function recentIcon(kind: string): string {
+  const full = kindIcon(kind as never);
+  return full.split(" ").pop() ?? "pi-file";
+}
 </script>
 
 <template>
   <nav class="wp-sidebar" :data-collapsed="ui.sidebarCollapsed || undefined">
-    <template v-for="section in SECTIONS" :key="section.label">
+    <!-- Task 9: Search input — hidden in collapsed mode -->
+    <div v-if="!ui.sidebarCollapsed" class="wp-sidebar__search">
+      <Icon name="pi-search" :size="12" />
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Filter nav…"
+        class="wp-sidebar__search-input"
+        aria-label="Filter sidebar nav"
+        @keydown="onSearchKey"
+      />
+    </div>
+
+    <template v-for="section in filteredSections" :key="section.label">
       <div v-if="!ui.sidebarCollapsed" class="wp-sidebar__section">
         {{ section.label }}
       </div>
@@ -231,8 +301,27 @@ function onItemClick(item: NavItem) {
         >
           <span class="wp-nav__icon"><Icon :name="item.icon" /></span>
           <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
+          <!-- Task 10: Count badge — only for items tracked in countByKey -->
+          <span
+            v-if="!ui.sidebarCollapsed && countByKey[item.id] !== undefined"
+            class="wp-nav__count"
+          >{{ countByKey[item.id] }}</span>
         </button>
       </template>
+    </template>
+
+    <!-- Task 11: Recents section — hidden in collapsed mode and when empty -->
+    <template v-if="!ui.sidebarCollapsed && recent.items.length > 0">
+      <div class="wp-sidebar__section">Recent</div>
+      <RouterLink
+        v-for="r in recent.items.slice(0, 5)"
+        :key="r.id"
+        :to="recentTo(r)"
+        class="wp-nav wp-nav--recent"
+      >
+        <span class="wp-nav__icon"><i :class="['pi', recentIcon(r.kind)]" /></span>
+        <span class="wp-nav__label">{{ r.name }}</span>
+      </RouterLink>
     </template>
   </nav>
 </template>
@@ -287,5 +376,47 @@ function onItemClick(item: NavItem) {
   width: 3px;
   background: var(--wp-brand-gradient);
   border-radius: var(--wp-radius-sm, 2px);
+}
+
+/* ── Task 9: Search input ──────────────────────────────────────────────── */
+.wp-sidebar__search {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-3) var(--wp-space-4);
+  margin-bottom: var(--wp-space-3);
+  background: var(--wp-bg-2);
+  border-radius: var(--wp-radius-sm);
+  border: 1px solid var(--wp-border);
+}
+.wp-sidebar__search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--wp-text);
+  font-size: var(--wp-text-sm);
+  width: 100%;
+  font-family: var(--wp-font);
+}
+
+/* ── Task 10: Count badge ──────────────────────────────────────────────── */
+.wp-nav__count {
+  margin-left: auto;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+  background: var(--wp-bg-3);
+  padding: 0 var(--wp-space-2);
+  border-radius: var(--wp-radius-sm);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ── Task 11: Recents section ──────────────────────────────────────────── */
+.wp-nav--recent .wp-nav__label {
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+}
+.wp-nav--recent:hover .wp-nav__label {
+  color: var(--wp-text);
 }
 </style>
