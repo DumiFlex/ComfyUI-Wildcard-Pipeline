@@ -305,8 +305,13 @@
    Dark-theme kind values are high-chroma pastels that fail WCAG AA on white/near-white.
    These darker shades pass AA for both page-surface usage (icons, borders, dots ≥3.0)
    and chip-text usage (color on 22% tint background ≥4.5). Verified 2026-05-18.
-   See docs/superpowers/specs/2026-05-18-kind-color-audit.md. */
-.wp-theme-light {
+   See docs/superpowers/specs/2026-05-18-kind-color-audit.md.
+
+   Selector is `html.wp-theme-light` (specificity 0,1,1) — beats the
+   later `:root` kind-color block (specificity 0,1,0) further down the
+   file. Without the `html` qualifier the second `:root` definition
+   would clobber these overrides through plain source-order cascade. */
+html.wp-theme-light {
   --wp-kind-wildcard:        #6d28d9;                       /* violet-700  — chip 4.91:1 on white */
   --wp-kind-wildcard-bg:     rgba(109, 40, 217, 0.12);
   --wp-kind-fixed:           #155e75;                       /* cyan-800    — chip 5.15:1 on white */
