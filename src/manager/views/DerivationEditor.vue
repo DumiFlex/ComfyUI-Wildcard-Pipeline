@@ -304,17 +304,19 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
         />
       </div>
     </Card>
+    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+         see WildcardEditor for the multi-root Transition explanation. -->
+    <ConfirmDialog
+      :visible="showConfirm"
+      title="Discard unsaved changes?"
+      body="You have unsaved edits. Leaving this page will discard them."
+      confirm-label="Discard & leave"
+      cancel-label="Stay"
+      variant="danger"
+      @confirm="onConfirmLeave"
+      @cancel="onCancelLeave"
+    />
   </EditorFrame>
-  <ConfirmDialog
-    :visible="showConfirm"
-    title="Discard unsaved changes?"
-    body="You have unsaved edits. Leaving this page will discard them."
-    confirm-label="Discard & leave"
-    cancel-label="Stay"
-    variant="danger"
-    @confirm="onConfirmLeave"
-    @cancel="onCancelLeave"
-  />
 </template>
 
 <style scoped>

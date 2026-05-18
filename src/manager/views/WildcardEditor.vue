@@ -390,17 +390,24 @@ defineExpose({ historyEntries, applyRestore });
         </tbody>
       </table>
     </Card>
+
+    <!-- ConfirmDialog lives INSIDE EditorFrame so the template has a single
+         root vnode. Multi-root templates break the parent RouterView's
+         <Transition mode="out-in"> after this component unmounts — the
+         transition tracker desyncs and the destination view never paints.
+         Dialog still Teleports to body via its internal <Teleport>; the
+         source placement here only affects vnode tracking. -->
+    <ConfirmDialog
+      :visible="showConfirm"
+      title="Discard unsaved changes?"
+      body="You have unsaved edits. Leaving this page will discard them."
+      confirm-label="Discard & leave"
+      cancel-label="Stay"
+      variant="danger"
+      @confirm="onConfirmLeave"
+      @cancel="onCancelLeave"
+    />
   </EditorFrame>
-  <ConfirmDialog
-    :visible="showConfirm"
-    title="Discard unsaved changes?"
-    body="You have unsaved edits. Leaving this page will discard them."
-    confirm-label="Discard & leave"
-    cancel-label="Stay"
-    variant="danger"
-    @confirm="onConfirmLeave"
-    @cancel="onCancelLeave"
-  />
 </template>
 
 <style scoped>
