@@ -9,10 +9,16 @@ import CommandPalette from "../components/CommandPalette.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
+import { useModuleStore } from "../stores/moduleStore";
+import { useBundleStore } from "../stores/bundleStore";
+import { useCategoryStore } from "../stores/categoryStore";
 
 const ui = useUiStore();
 const commandIndex = useCommandIndex();
 const recent = useRecentStore();
+const moduleStore = useModuleStore();
+const bundleStore = useBundleStore();
+const categoryStore = useCategoryStore();
 
 const paletteOpen = ref(false);
 
@@ -27,7 +33,20 @@ function onKeydown(e: KeyboardEvent) {
   paletteOpen.value = !paletteOpen.value;
 }
 
-onMounted(() => window.addEventListener("keydown", onKeydown));
+onMounted(() => {
+  window.addEventListener("keydown", onKeydown);
+  // Eager-fetch the three library stores so sidebar count badges,
+  // Cmd+K palette index, and Recents section have real data on cold
+  // load. Dashboard fetches via api.* directly and does not touch
+  // these stores; list views fetch lazily on mount but only after the
+  // user navigates to them. AppLayout mounts once for the entire SPA
+  // lifetime, so this is a one-time cost per app load.
+  // Fire-and-forget: errors silently swallowed — the lazy list-view
+  // fetches still run on actual usage if a fetch fails here.
+  void moduleStore.fetchCatalog().catch(() => undefined);
+  void bundleStore.fetchAll().catch(() => undefined);
+  void categoryStore.fetchAll().catch(() => undefined);
+});
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>
 
