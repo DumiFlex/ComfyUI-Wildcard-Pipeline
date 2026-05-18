@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
+import { useUrlState, type UrlSchema } from "../composables/useUrlState";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
@@ -11,10 +12,41 @@ import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { CategoryRow, CombinePayload, ModuleRow } from "../api/types";
 
+const route = useRoute();
 const router = useRouter();
 const store = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+
+interface UrlStateShape {
+  q: string;
+  category: string | null;
+  favorites: boolean;
+  tags: string[];
+  sortBy: string;
+  page: number;
+  pageSize: number;
+}
+
+const URL_SCHEMA: UrlSchema<UrlStateShape> = {
+  q:        { type: "string",         default: "" },
+  category: { type: "string-or-null", default: null,           urlKey: "cat" },
+  favorites: { type: "bool",          default: false,           urlKey: "fav" },
+  tags:     { type: "csv",            default: [],              urlKey: "tag" },
+  sortBy:   { type: "string",         default: "updated-desc",  urlKey: "sort" },
+  page:     { type: "int",            default: 1 },
+  pageSize: { type: "int",            default: 15,              urlKey: "ps" },
+};
+
+const urlState = useUrlState<UrlStateShape>(URL_SCHEMA);
+
+const filter = urlState as {
+  q?: string;
+  favorites?: boolean;
+  category?: string | null;
+  tags?: string[];
+  sortBy?: string;
+};
 
 const categoryById = computed(() => {
   const map = new Map<string, CategoryRow>();
@@ -40,6 +72,10 @@ onMounted(async () => {
 
 async function fetch() {
   store.filter.type = "combine";
+  store.filter.q = urlState.q;
+  store.filter.category = urlState.category;
+  store.filter.favorites = urlState.favorites;
+  store.filter.sortBy = urlState.sortBy;
   try {
     await store.fetchAll();
   } catch (e) {
@@ -48,7 +84,11 @@ async function fetch() {
 }
 
 function edit(row: ModuleRow) {
-  router.push({ name: "combines-edit", params: { id: row.id } });
+  router.push({
+    name: "combines-edit",
+    params: { id: row.id },
+    query: { returnTo: encodeURIComponent(route.fullPath) },
+  });
 }
 
 async function copyId(id: string) {
@@ -133,9 +173,13 @@ function templateParts(row: ModuleRow): TemplatePart[] {
     new-route="/combines/new"
     :items="store.items"
     :loading="store.loading"
-    :filter="store.filter"
+    :filter="filter"
     :mid-cols="3"
     empty-message="No combines yet"
+    :page="urlState.page"
+    :page-size="urlState.pageSize"
+    @update:page="(v) => urlState.page = v"
+    @update:page-size="(v) => urlState.pageSize = v"
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"

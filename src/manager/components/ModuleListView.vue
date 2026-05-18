@@ -63,6 +63,11 @@ interface Props {
   showTags?: boolean;
   /** Whether the column block emits the updated-at column (default true). */
   showUpdated?: boolean;
+  /** Optional v-model props so parents can lift page/pageSize/extraActive to URL state.
+   *  Falls back to local refs when not provided — backward-compatible. */
+  page?: number;
+  pageSize?: number;
+  extraActive?: Record<string, boolean>;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -78,6 +83,9 @@ const emit = defineEmits<{
   (e: "fetch"): void;
   (e: "delete", item: T): void;
   (e: "bulk-delete", items: T[]): void;
+  (e: "update:page", value: number): void;
+  (e: "update:pageSize", value: number): void;
+  (e: "update:extraActive", value: Record<string, boolean>): void;
 }>();
 
 const slots = useSlots();
@@ -99,9 +107,37 @@ const PAGE_SIZE_OPTIONS = [
 const filtersOpen = ref(false);
 const selected = ref<Set<string>>(new Set());
 const expanded = ref<Set<string>>(new Set());
-const extraActive = ref<Record<string, boolean>>({});
-const page = ref(1);
-const pageSize = ref(15);
+
+// Local fallback refs — used when parent does not supply v-model props.
+const localPage = ref(1);
+const localPageSize = ref(15);
+const localExtraActive = ref<Record<string, boolean>>({});
+
+const page = computed<number>({
+  get: () => props.page ?? localPage.value,
+  set: (v) => { if (props.page !== undefined) emit("update:page", v); else localPage.value = v; },
+});
+const pageSize = computed<number>({
+  get: () => props.pageSize ?? localPageSize.value,
+  set: (v) => { if (props.pageSize !== undefined) emit("update:pageSize", v); else localPageSize.value = v; },
+});
+const extraActive = computed<Record<string, boolean>>({
+  get: () => props.extraActive ?? localExtraActive.value,
+  set: (v) => { if (props.extraActive !== undefined) emit("update:extraActive", v); else localExtraActive.value = v; },
+});
+
+/** Assign a single extraActive key, building a new object so the computed
+ *  setter fires and the parent's URL state update is emitted correctly. */
+function setExtraActiveKey(key: string, val: boolean): void {
+  extraActive.value = { ...extraActive.value, [key]: val };
+}
+
+/** Clear all extraActive flags, emitting the full replacement. */
+function clearExtraActive(): void {
+  const next: Record<string, boolean> = {};
+  for (const k of Object.keys(extraActive.value)) next[k] = false;
+  extraActive.value = next;
+}
 
 // Sync `extraActive` keys with current `extraFilters` so we never read from
 // removed keys after the parent swaps the array.
@@ -253,7 +289,7 @@ function clearFilters() {
   props.filter.favorites = false;
   props.filter.category = null;
   props.filter.tags = [];
-  for (const k of Object.keys(extraActive.value)) extraActive.value[k] = false;
+  clearExtraActive();
   emit("fetch");
 }
 
@@ -400,7 +436,7 @@ defineExpose({
                 class="wp-chip wp-chip--toggle"
                 :class="ef.chipClass"
                 :data-active="extraActive[ef.key] ? '' : null"
-                @click="extraActive[ef.key] = !extraActive[ef.key]"
+                @click="setExtraActiveKey(ef.key, !extraActive[ef.key])"
               >
                 {{ ef.label }}
                 <span class="wp-dim wp-chip__count">{{ matchCount(ef) }}</span>
@@ -463,7 +499,7 @@ defineExpose({
         v-for="ef in activeExtras" :key="ef.key"
         tone="accent"
         removable
-        @remove="extraActive[ef.key] = false"
+        @remove="setExtraActiveKey(ef.key, false)"
       >
         {{ ef.label }}
       </Chip>

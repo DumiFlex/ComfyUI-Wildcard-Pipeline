@@ -9,7 +9,7 @@
  *  4. Exceptions table
  */
 import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
@@ -34,7 +34,23 @@ import type {
 } from "../api/types";
 
 const props = defineProps<{ id?: string }>();
+const route = useRoute();
 const router = useRouter();
+
+/** Validated return path or fallback to bare list. */
+function resolveReturnTo(fallback: string): string {
+  const raw = route.query.returnTo;
+  if (typeof raw !== "string") return fallback;
+  try {
+    const decoded = decodeURIComponent(raw);
+    if (!decoded.startsWith("/") || decoded.startsWith("//")) return fallback;
+    const resolved = router.resolve(decoded);
+    if (resolved.matched.length === 0) return fallback;
+    return decoded;
+  } catch {
+    return fallback;
+  }
+}
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
@@ -291,7 +307,7 @@ async function save() {
     }
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
     baseline.value = snapshot();
-    router.push("/constraints");
+    router.push(resolveReturnTo("/constraints"));
   } catch (e) {
     toast.push({ severity: "error", summary: "Save failed", detail: String(e), life: 4000 });
   } finally {
@@ -299,7 +315,7 @@ async function save() {
   }
 }
 
-function cancel() { router.push("/constraints"); }
+function cancel() { router.push(resolveReturnTo("/constraints")); }
 
 defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore });
 </script>

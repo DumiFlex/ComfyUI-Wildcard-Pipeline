@@ -2,7 +2,7 @@ import { reactive, watch, type UnwrapNestedRefs } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 /** Field kinds the schema understands. Add new kinds here when needed. */
-type SchemaKind = "string" | "string-or-null" | "int" | "csv";
+type SchemaKind = "string" | "string-or-null" | "int" | "csv" | "bool";
 
 interface FieldSpec<V> {
   type: SchemaKind;
@@ -34,6 +34,8 @@ function parseField<V>(raw: string | null, spec: FieldSpec<V>): V {
     }
     case "csv":
       return raw.split(",").map((s) => s.trim()).filter(Boolean) as unknown as V;
+    case "bool":
+      return (raw === "1" || raw === "true") as unknown as V;
   }
 }
 
@@ -64,6 +66,8 @@ function serializeField<V>(value: V, spec: FieldSpec<V>): string | undefined {
       return String(value);
     case "csv":
       return (value as unknown as string[]).join(",") || undefined;
+    case "bool":
+      return (value as unknown as boolean) ? "1" : undefined;
   }
 }
 

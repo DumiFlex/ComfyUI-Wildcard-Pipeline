@@ -20,8 +20,9 @@
  * items array before handing it to ModuleListView gives us the OR
  * we actually want.
  */
-import { computed, onMounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useUrlState, type UrlSchema } from "../composables/useUrlState";
 import ModuleListView from "../components/ModuleListView.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
@@ -32,9 +33,34 @@ import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 
+const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const categoryStore = useCategoryStore();
+
+interface UrlStateShape {
+  q: string;
+  category: string | null;
+  favorites: boolean;
+  tags: string[];
+  sortBy: string;
+  page: number;
+  pageSize: number;
+  kinds: string[];
+}
+
+const URL_SCHEMA: UrlSchema<UrlStateShape> = {
+  q:        { type: "string",         default: "" },
+  category: { type: "string-or-null", default: null,           urlKey: "cat" },
+  favorites: { type: "bool",          default: false,           urlKey: "fav" },
+  tags:     { type: "csv",            default: [],              urlKey: "tag" },
+  sortBy:   { type: "string",         default: "updated-desc",  urlKey: "sort" },
+  page:     { type: "int",            default: 1 },
+  pageSize: { type: "int",            default: 15,              urlKey: "ps" },
+  kinds:    { type: "csv",            default: [] },
+};
+
+const urlState = useUrlState<UrlStateShape>(URL_SCHEMA);
 
 type LibraryKind = ModuleType | "bundle";
 
@@ -86,27 +112,21 @@ const localBundles = ref<BundleRow[]>([]);
 const loading = ref(true);
 const hasLoaded = ref(false);
 
-// ModuleListView reads from the same Filter shape every kind list
-// uses. `q` + `category` + `favorites` + `tags` + `sortBy` flow
-// through unchanged; the kind selector lives outside this object.
-const filter = reactive<{
+/** Filter proxy pointing at urlState — ModuleListView (and its slots)
+ *  mutate through this; changes propagate to URL automatically. */
+const filter = urlState as {
   q?: string;
   favorites?: boolean;
   category?: string | null;
   tags?: string[];
   sortBy?: string;
-}>({
-  q: "",
-  favorites: false,
-  category: null,
-  tags: [],
-  sortBy: "updated-desc",
-});
+};
 
-// Kind multi-select. Empty set = show every kind (we don't toggle to
-// "nothing visible" — that's surprising UX; if the user wants
-// exclusion they can flip the other 5).
-const selectedKinds = ref<Set<LibraryKind>>(new Set());
+// Kind multi-select backed by urlState.kinds (csv array).
+const selectedKinds = computed<Set<LibraryKind>>({
+  get: () => new Set(urlState.kinds as LibraryKind[]),
+  set: (next: Set<LibraryKind>) => { urlState.kinds = [...next]; },
+});
 
 const categoryById = computed(() => {
   const m = new Map<string, CategoryRow>();
@@ -217,13 +237,14 @@ onMounted(async () => {
 });
 
 function editRow(row: LibraryRow) {
+  const returnTo = encodeURIComponent(route.fullPath);
   if (row.kind === "bundle") {
-    router.push({ name: "bundles-edit", params: { id: row.id } });
+    router.push({ name: "bundles-edit", params: { id: row.id }, query: { returnTo } });
     return;
   }
   const meta = KIND_BY_KEY[row.kind];
   if (!meta) return;
-  router.push(`/${meta.slug}/${row.id}/edit`);
+  router.push({ path: `/${meta.slug}/${row.id}/edit`, query: { returnTo } });
 }
 
 async function copyId(id: string) {
@@ -296,6 +317,10 @@ function refresh() {
     :filter="filter"
     :mid-cols="2"
     empty-message="Library is empty"
+    :page="urlState.page"
+    :page-size="urlState.pageSize"
+    @update:page="(v) => urlState.page = v"
+    @update:page-size="(v) => urlState.pageSize = v"
     @fetch="refresh"
     @delete="del"
     @bulk-delete="bulkDel"

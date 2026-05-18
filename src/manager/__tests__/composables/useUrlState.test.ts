@@ -119,6 +119,22 @@ describe("useUrlState", () => {
     expect(wrap.find('[data-test="q"]').text()).toBe("first");
   });
 
+  it("bool parses 1/true as true, absent as default false", async () => {
+    interface BoolState { fav: boolean; }
+    const SCHEMA: UrlSchema<BoolState> = { fav: { type: "bool", default: false } };
+    const HostBool = defineComponent({
+      setup() { const state = useUrlState<BoolState>(SCHEMA); return { state }; },
+      template: `<span data-test="fav">{{ state.fav }}</span>`,
+    });
+    const r = createRouter({ history: createMemoryHistory(), routes: [{ path: "/", component: HostBool }] });
+    await r.push("/?fav=1");
+    await r.isReady();
+    const w = mount(HostBool, { global: { plugins: [r] } });
+    wrappers.push(w);
+    await flushPromises();
+    expect(w.find('[data-test="fav"]').text()).toBe("true");
+  });
+
   it("uses urlKey alias when reading + writing; ignores state-key name", async () => {
     // SCHEMA maps state.category to URL key "cat". A URL with only the
     // alias key present (?cat=Style) must populate state.category; the

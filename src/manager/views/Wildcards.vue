@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
+import { useUrlState, type UrlSchema } from "../composables/useUrlState";
 import ModuleListView from "../components/ModuleListView.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import Button from "../components/ui/Button.vue";
@@ -16,10 +17,58 @@ import {
   getWildcardSyntax,
 } from "../utils/wildcardSyntax";
 
+const route = useRoute();
 const router = useRouter();
 const store = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+
+interface UrlStateShape {
+  q: string;
+  category: string | null;
+  favorites: boolean;
+  tags: string[];
+  sortBy: string;
+  page: number;
+  pageSize: number;
+  filters: string[];
+}
+
+const URL_SCHEMA: UrlSchema<UrlStateShape> = {
+  q:        { type: "string",         default: "" },
+  category: { type: "string-or-null", default: null,           urlKey: "cat" },
+  favorites: { type: "bool",          default: false,           urlKey: "fav" },
+  tags:     { type: "csv",            default: [],              urlKey: "tag" },
+  sortBy:   { type: "string",         default: "updated-desc",  urlKey: "sort" },
+  page:     { type: "int",            default: 1 },
+  pageSize: { type: "int",            default: 15,              urlKey: "ps" },
+  filters:  { type: "csv",            default: [] },
+};
+
+const urlState = useUrlState<UrlStateShape>(URL_SCHEMA);
+
+/** Writable proxy so ModuleListView (and its filter-panel slot) can mutate
+ *  filter fields in place — mutations flow to urlState automatically. */
+const filter = urlState as {
+  q?: string;
+  favorites?: boolean;
+  category?: string | null;
+  tags?: string[];
+  sortBy?: string;
+};
+
+const extraActiveFromUrl = computed<Record<string, boolean>>({
+  get: () => {
+    const out: Record<string, boolean> = {};
+    for (const k of urlState.filters) out[k] = true;
+    return out;
+  },
+  set: (val: Record<string, boolean>) => {
+    urlState.filters = Object.entries(val)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+  },
+});
 
 const categoryById = computed(() => {
   const map = new Map<string, CategoryRow>();
@@ -94,6 +143,10 @@ onMounted(async () => {
 
 async function fetch() {
   store.filter.type = "wildcard";
+  store.filter.q = urlState.q;
+  store.filter.category = urlState.category;
+  store.filter.favorites = urlState.favorites;
+  store.filter.sortBy = urlState.sortBy;
   try {
     await store.fetchAll();
   } catch (e) {
@@ -102,7 +155,11 @@ async function fetch() {
 }
 
 function edit(row: ModuleRow) {
-  router.push({ name: "wildcards-edit", params: { id: row.id } });
+  router.push({
+    name: "wildcards-edit",
+    params: { id: row.id },
+    query: { returnTo: encodeURIComponent(route.fullPath) },
+  });
 }
 
 async function copyId(id: string) {
@@ -173,10 +230,16 @@ function isValid(row: ModuleRow): boolean {
     new-route="/wildcards/new"
     :items="store.items"
     :loading="store.loading"
-    :filter="store.filter"
+    :filter="filter"
     :extra-filters="extraFilters"
     :mid-cols="4"
     empty-message="No wildcards yet"
+    :page="urlState.page"
+    :page-size="urlState.pageSize"
+    :extra-active="extraActiveFromUrl"
+    @update:page="(v) => urlState.page = v"
+    @update:page-size="(v) => urlState.pageSize = v"
+    @update:extra-active="(v) => extraActiveFromUrl = v"
     @fetch="fetch"
     @delete="del"
     @bulk-delete="bulkDel"

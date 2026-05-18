@@ -12,7 +12,7 @@
  *   /bundles/:id/edit       → edit-mode
  */
 import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
@@ -31,7 +31,23 @@ import type { ModuleEntry } from "../../widgets/_shared";
 
 const props = defineProps<{ id?: string }>();
 
+const route = useRoute();
 const router = useRouter();
+
+/** Validated return path or fallback to bare list. */
+function resolveReturnTo(fallback: string): string {
+  const raw = route.query.returnTo;
+  if (typeof raw !== "string") return fallback;
+  try {
+    const decoded = decodeURIComponent(raw);
+    if (!decoded.startsWith("/") || decoded.startsWith("//")) return fallback;
+    const resolved = router.resolve(decoded);
+    if (resolved.matched.length === 0) return fallback;
+    return decoded;
+  } catch {
+    return fallback;
+  }
+}
 const store = useBundleStore();
 const categoryStore = useCategoryStore();
 const moduleStore = useModuleStore();
@@ -200,7 +216,7 @@ onMounted(async () => {
 });
 
 function cancel() {
-  router.push("/bundles");
+  router.push(resolveReturnTo("/bundles"));
 }
 
 async function save() {
