@@ -39,6 +39,18 @@ const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
 
+const KNOWN_LIST_PATHS = new Set([
+  "/wildcards",
+  "/fixed-values",
+  "/combines",
+  "/derivations",
+  "/constraints",
+  "/bundles",
+  "/all",
+  "/categories",
+  "/dashboard",
+]);
+
 /** Validated return path or fallback to bare list. */
 function resolveReturnTo(fallback: string): string {
   const raw = route.query.returnTo;
@@ -46,8 +58,8 @@ function resolveReturnTo(fallback: string): string {
   try {
     const decoded = decodeURIComponent(raw);
     if (!decoded.startsWith("/") || decoded.startsWith("//")) return fallback;
-    const resolved = router.resolve(decoded);
-    if (resolved.matched.length === 0) return fallback;
+    const basePath = decoded.split("?")[0];
+    if (!KNOWN_LIST_PATHS.has(basePath)) return fallback;
     return decoded;
   } catch {
     return fallback;

@@ -34,6 +34,18 @@ const props = defineProps<{ id?: string }>();
 const route = useRoute();
 const router = useRouter();
 
+const KNOWN_LIST_PATHS = new Set([
+  "/wildcards",
+  "/fixed-values",
+  "/combines",
+  "/derivations",
+  "/constraints",
+  "/bundles",
+  "/all",
+  "/categories",
+  "/dashboard",
+]);
+
 /** Validated return path or fallback to bare list. */
 function resolveReturnTo(fallback: string): string {
   const raw = route.query.returnTo;
@@ -41,8 +53,8 @@ function resolveReturnTo(fallback: string): string {
   try {
     const decoded = decodeURIComponent(raw);
     if (!decoded.startsWith("/") || decoded.startsWith("//")) return fallback;
-    const resolved = router.resolve(decoded);
-    if (resolved.matched.length === 0) return fallback;
+    const basePath = decoded.split("?")[0];
+    if (!KNOWN_LIST_PATHS.has(basePath)) return fallback;
     return decoded;
   } catch {
     return fallback;
@@ -219,6 +231,10 @@ function cancel() {
   router.push(resolveReturnTo("/bundles"));
 }
 
+// BundleEditor deliberately does not redirect on save. Bundles are edited
+// iteratively (add children, reorder, recolor); jumping back to the list
+// after every save would force the user to re-enter the editor for each
+// tweak. cancel() uses resolveReturnTo for the explicit-exit path.
 async function save() {
   if (!isEdit.value || !props.id) {
     toast.push({
