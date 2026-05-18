@@ -3,6 +3,7 @@ import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
+import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
@@ -28,6 +29,7 @@ const toast = useToast();
 
 const bulkAdapter = makeModuleStoreAdapter(store);
 const bulk = useBulkActions(bulkAdapter);
+const loadErr = useLoadError();
 
 const urlState = useListUrlState();
 
@@ -85,7 +87,7 @@ async function fetch() {
   store.filter.favorites = urlState.favorites;
   store.filter.sortBy = urlState.sortBy;
   try {
-    await store.fetchAll();
+    await loadErr.run(() => store.fetchAll());
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   }
@@ -199,6 +201,7 @@ function formatFactor(f: number): string {
     new-route="/constraints/new"
     :items="store.items"
     :loading="store.loading"
+    :load-error="loadErr.error.value"
     :filter="filter"
     :mid-cols="4"
     empty-message="No constraints yet"

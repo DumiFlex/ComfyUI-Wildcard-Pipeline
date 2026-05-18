@@ -77,6 +77,10 @@ interface Props {
   hideBulkSetCategory?: boolean;
   /** Hide the bulk Duplicate action — for kinds without library duplicate support (bundles). */
   hideBulkDuplicate?: boolean;
+  /** When set, surfaces a dismissible error banner above the table with a Retry
+   *  button. The banner replaces the empty/skeleton row, since "no items + load
+   *  error" is fundamentally an error state, not an empty library. */
+  loadError?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -802,6 +806,29 @@ defineExpose({
         {{ ef.label }}
       </Chip>
       <Button variant="link" size="sm" @click="clearFilters">Clear all</Button>
+    </div>
+
+    <!-- Load-error banner. Renders when the parent reports a failed fetch
+         (network down, server 500, etc). The Retry button re-emits the
+         `fetch` event the toolbar's Refresh control uses. -->
+    <div
+      v-if="loadError"
+      class="wp-load-error"
+      role="alert"
+      data-test="load-error-banner"
+    >
+      <i class="pi pi-exclamation-triangle wp-load-error__icon" aria-hidden="true" />
+      <div class="wp-load-error__body">
+        <strong class="wp-load-error__title">Couldn't load items</strong>
+        <span class="wp-load-error__detail">{{ loadError }}</span>
+      </div>
+      <Button
+        variant="secondary"
+        size="sm"
+        icon="pi-refresh"
+        data-test="load-error-retry"
+        @click="emitFetch"
+      >Retry</Button>
     </div>
 
     <!-- Table -->

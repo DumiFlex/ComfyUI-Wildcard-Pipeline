@@ -5,8 +5,9 @@ interface Props {
   icon: string;
   headline: string;
   body?: string;
-  /** "library" = encouraging first-run; "no-results" = corrective for filter misses. */
-  variant?: "library" | "no-results";
+  /** "library" = encouraging first-run; "no-results" = corrective for
+   *  filter misses; "error" = network/permission failure with retry. */
+  variant?: "library" | "no-results" | "error";
 }
 withDefaults(defineProps<Props>(), {
   variant: "library",
@@ -48,6 +49,11 @@ withDefaults(defineProps<Props>(), {
 .wp-empty--no-results .wp-empty__icon {
   background: transparent;
   border: 1px dashed var(--wp-border);
+}
+.wp-empty--error .wp-empty__icon {
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+  color: var(--wp-danger);
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 30%, transparent);
 }
 .wp-empty__headline {
   margin: 0;

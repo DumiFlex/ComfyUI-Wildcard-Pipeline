@@ -23,6 +23,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useListUrlState } from "../composables/useListUrlState";
+import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeMixedKindAdapter, type AnyRow } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
@@ -43,6 +44,7 @@ const toast = useToast();
 const categoryStore = useCategoryStore();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
+const loadErr = useLoadError();
 
 const bulkAdapter = makeMixedKindAdapter({ moduleStore, bundleStore });
 const bulkActions = useBulkActions(bulkAdapter);
@@ -214,12 +216,14 @@ const visibleItems = computed<LibraryRow[]>(() => {
 async function fetchAll() {
   loading.value = true;
   try {
-    const [modRes, bunRes] = await Promise.all([
-      api.modules.list({ limit: 1000 }),
-      api.bundles.list({ limit: 1000 }),
-    ]);
-    localModules.value = modRes.items;
-    localBundles.value = bunRes.items;
+    await loadErr.run(async () => {
+      const [modRes, bunRes] = await Promise.all([
+        api.modules.list({ limit: 1000 }),
+        api.bundles.list({ limit: 1000 }),
+      ]);
+      localModules.value = modRes.items;
+      localBundles.value = bunRes.items;
+    });
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   } finally {
@@ -342,6 +346,7 @@ function refresh() {
     new-route="/wildcards/new"
     :items="visibleItems"
     :loading="loading"
+    :load-error="loadErr.error.value"
     :filter="filter"
     :mid-cols="2"
     empty-message="Library is empty"
