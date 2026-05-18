@@ -296,9 +296,8 @@ async function save() {
     bundleBaseline.value = bundleSnapshot();
     draft.discard();
     recent.push({ id: props.id, kind: "bundle", name: updated.name });
-    // BundleEditor never navigates away on save — the inline state-machine
-    // flash IS the only feedback (no toast — iterative editing flow).
     setSaveState("saved", 1500);
+    toast.push({ severity: "success", summary: "Saved", detail: updated.name });
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : String(e);
     setSaveState("error", 3000);

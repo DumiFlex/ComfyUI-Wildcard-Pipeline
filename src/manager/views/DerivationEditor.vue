@@ -296,10 +296,11 @@ async function save() {
     draft.discard();
     setSaveState("saved", 1500);
     baseline.value = snapshot();
-    // Creates: toast confirms the new item. Updates: inline flash only.
-    if (!isEdit.value) {
-      toast.push({ severity: "success", summary: "Created", detail: name.value });
-    }
+    toast.push({
+      severity: "success",
+      summary: isEdit.value ? "Saved" : "Created",
+      detail: name.value,
+    });
     router.push(resolveReturnTo("/derivations"));
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : String(e);

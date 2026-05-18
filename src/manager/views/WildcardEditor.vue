@@ -321,12 +321,11 @@ async function save() {
     draft.discard();
     setSaveState("saved", 1500);
     baseline.value = snapshot();
-    // For creates: keep the toast so the user gets explicit confirmation
-    // of the new item before we navigate away. For updates: the inline
-    // state-machine flash is the only feedback (less noise).
-    if (!isEdit.value) {
-      toast.push({ severity: "success", summary: "Created", detail: name.value });
-    }
+    toast.push({
+      severity: "success",
+      summary: isEdit.value ? "Saved" : "Created",
+      detail: name.value,
+    });
     router.push(resolveReturnTo("/wildcards"));
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : String(e);
