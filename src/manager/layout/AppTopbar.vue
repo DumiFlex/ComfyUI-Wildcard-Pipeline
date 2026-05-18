@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useTweaksStore } from "../stores/tweaksStore";
@@ -19,6 +20,20 @@ const themeIcon = computed(() => {
   }
 });
 const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
+
+const router = useRouter();
+const canGoBack = ref(false);
+
+onMounted(() => {
+  // History length > 1 means there's a navigation we can return to.
+  // This is a heuristic — window.history.length is 1 on a fresh tab
+  // load and grows with each in-app navigation.
+  canGoBack.value = typeof window !== "undefined" && window.history.length > 1;
+});
+
+function onBack(): void {
+  router.back();
+}
 </script>
 
 <template>
@@ -40,6 +55,18 @@ const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
     </RouterLink>
 
     <div class="wp-topbar__spacer" />
+
+    <button
+      type="button"
+      class="wp-topbar__icon-btn"
+      :disabled="!canGoBack"
+      aria-label="Back"
+      title="Back"
+      data-test="topbar-back"
+      @click="onBack"
+    >
+      <Icon name="pi-arrow-left" />
+    </button>
 
     <button
       type="button"
