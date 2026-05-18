@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useTweaksStore } from "../stores/tweaksStore";
+import { useBrowserHistory } from "../composables/useBrowserHistory";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
@@ -22,14 +23,7 @@ const themeIcon = computed(() => {
 const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
 
 const router = useRouter();
-const canGoBack = ref(false);
-
-onMounted(() => {
-  // History length > 1 means there's a navigation we can return to.
-  // This is a heuristic — window.history.length is 1 on a fresh tab
-  // load and grows with each in-app navigation.
-  canGoBack.value = typeof window !== "undefined" && window.history.length > 1;
-});
+const { canGoBack } = useBrowserHistory();
 
 function onBack(): void {
   router.back();
