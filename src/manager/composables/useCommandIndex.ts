@@ -4,6 +4,7 @@ import type { CommandItem } from "../components/CommandPalette.types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useUiStore } from "../stores/uiStore";
 import { kindIcon } from "../../components/shared/kind-icons";
 import { getActions } from "../utils/actionRegistry";
 
@@ -61,6 +62,7 @@ const KIND_TO_EDIT_PATH: Record<string, string> = {
  */
 export function useCommandIndex(): ComputedRef<CommandItem[]> {
   const router = useRouter();
+  const ui = useUiStore();
   const moduleStore = useModuleStore();
   const bundleStore = useBundleStore();
   const categoryStore = useCategoryStore();
@@ -74,7 +76,7 @@ export function useCommandIndex(): ComputedRef<CommandItem[]> {
     }
 
     // Actions
-    for (const a of getActions(router)) {
+    for (const a of getActions(ui, router)) {
       items.push(a);
     }
 

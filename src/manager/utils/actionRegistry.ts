@@ -1,19 +1,16 @@
 import type { Router } from "vue-router";
-import { useUiStore } from "../stores/uiStore";
+import type { useUiStore } from "../stores/uiStore";
 import type { CommandItem } from "../components/CommandPalette.types";
 
+type UiStore = ReturnType<typeof useUiStore>;
+
 /**
- * Returns the static list of action commands. Called at palette-build
- * time so labels reflect current state (e.g. "Toggle theme: dark → light").
- *
- * Router is passed in by the caller (useCommandIndex) because useRouter()
- * must be called during component setup; this function is invoked inside
- * a computed and cannot call setup-context APIs.
- *
- * Phase 2 Task 5 will refine ranker behavior; this registry shape is final.
+ * Returns the static list of action commands. Caller passes the
+ * ui store (called in setup context via useUiStore()) and the router
+ * (called in setup context via useRouter()) — this function only
+ * consumes those references and does NOT call any setup-context APIs.
  */
-export function getActions(router: Router): CommandItem[] {
-  const ui = useUiStore();
+export function getActions(ui: UiStore, router: Router): CommandItem[] {
   const nextTheme = ui.themeMode === "dark" ? "light" : ui.themeMode === "light" ? "auto" : "dark";
   const nextDensity = ui.density === "comfortable" ? "compact" : "comfortable";
 
@@ -67,5 +64,10 @@ export function getActions(router: Router): CommandItem[] {
       icon: "pi-plus",
       run: () => { void router.push("/constraints/new"); },
     },
+    // action:new-bundle intentionally omitted — new bundles are created
+    // via the Context widget (the in-graph node), not the SPA. The
+    // /bundles/new route exists but disables Save with a toast pointing
+    // the user to the Context widget. Surfacing it from the palette
+    // would lead to a dead-end form.
   ];
 }

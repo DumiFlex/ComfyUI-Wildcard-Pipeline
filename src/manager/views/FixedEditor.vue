@@ -46,6 +46,8 @@ const KNOWN_LIST_PATHS = new Set([
   "/all",
   "/categories",
   "/dashboard",
+  "/import-export",
+  "/test",
 ]);
 
 /** Validated return path or fallback to bare list. */
