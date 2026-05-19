@@ -88,4 +88,40 @@ describe("atomicEditorModel operations", () => {
     const next = replaceAtom(atoms, 1, replaced);
     expect(serialise(next)).toBe("a @{aabbccdd:warm}");
   });
+
+  it("insertText with cursor at a non-text atom splices a fresh text atom in", () => {
+    const atoms: Atom[] = [{ kind: "ref", uuid: "aabbccdd", subCategories: [] }];
+    const cur: Cursor = { atomIndex: 0, offset: 0 };
+    const { atoms: next, cursor } = insertText(atoms, cur, "hello ");
+    expect(serialise(next)).toBe("hello @{aabbccdd}");
+    expect(cursor).toEqual({ atomIndex: 1, offset: 0 });
+  });
+
+  it("insertAtom at offset 0 of a text atom places the new atom BEFORE the text", () => {
+    const atoms: Atom[] = [{ kind: "text", text: "hello" }];
+    const cur: Cursor = { atomIndex: 0, offset: 0 };
+    const newRef: Atom = { kind: "ref", uuid: "aabbccdd", subCategories: [] };
+    const { atoms: next, cursor } = insertAtom(atoms, cur, newRef);
+    expect(serialise(next)).toBe("@{aabbccdd}hello");
+    // Cursor lands AFTER the inserted ref atom — at the boundary between
+    // it and the trailing "hello" text. The boundary cursor is
+    // {atomIndex: 1, offset: 0} (start of the trailing text atom).
+    expect(cursor).toEqual({ atomIndex: 1, offset: 0 });
+  });
+
+  it("deleteBackward at the start of the document is a no-op", () => {
+    const atoms: Atom[] = [{ kind: "text", text: "hello" }];
+    const cur: Cursor = { atomIndex: 0, offset: 0 };
+    const { atoms: next, cursor } = deleteBackward(atoms, cur);
+    expect(next).toBe(atoms);  // no-op returns the input array reference
+    expect(cursor).toEqual({ atomIndex: 0, offset: 0 });
+  });
+
+  it("replaceAtom out-of-range is a no-op", () => {
+    const atoms: Atom[] = [{ kind: "text", text: "hi" }];
+    const replaced: Atom = { kind: "ref", uuid: "aabbccdd", subCategories: [] };
+    const next = replaceAtom(atoms, 5, replaced);
+    expect(next).toBe(atoms);  // no-op returns the input
+    expect(serialise(next)).toBe("hi");
+  });
 });

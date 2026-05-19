@@ -115,19 +115,16 @@ export function insertAtom(atoms: Atom[], cur: Cursor, atom: Atom): EditResult {
       atom,
       { kind: "text", text: after },
     );
-    const normalised = normalise(next);
-    // Find the inserted atom's new index — first non-text whose properties match.
-    // Easier: count atoms produced before it. Before-text contributes 1 if non-empty.
-    const insertedIdx = before.length > 0 ? cur.atomIndex + 1 : cur.atomIndex;
-    return {
-      atoms: normalised,
-      cursor: { atomIndex: insertedIdx + 1, offset: 0 },
-    };
+  } else {
+    next.splice(cur.atomIndex, 0, atom);
   }
-  next.splice(cur.atomIndex, 0, atom);
+  const normalised = normalise(next);
+  // Locate the inserted atom by object identity — normalise only mutates
+  // text atoms, so the original `atom` reference survives unchanged.
+  const insertedIdx = normalised.indexOf(atom);
   return {
-    atoms: normalise(next),
-    cursor: { atomIndex: cur.atomIndex + 1, offset: 0 },
+    atoms: normalised,
+    cursor: { atomIndex: insertedIdx + 1, offset: 0 },
   };
 }
 
@@ -176,6 +173,7 @@ export function deleteBackward(atoms: Atom[], cur: Cursor): EditResult {
 }
 
 export function replaceAtom(atoms: Atom[], atomIndex: number, atom: Atom): Atom[] {
+  if (atomIndex < 0 || atomIndex >= atoms.length) return atoms;
   const next = atoms.map((a) => ({ ...a }));
   next[atomIndex] = atom;
   return normalise(next);
