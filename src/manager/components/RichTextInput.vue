@@ -22,7 +22,7 @@
  * API.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { insertAtom, parse, serialise, type Atom, type Cursor } from "./atomicEditorModel";
+import { insertAtom, parse, replaceAtom, serialise, type Atom, type Cursor } from "./atomicEditorModel";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
@@ -122,8 +122,18 @@ function atomIsResolved(atom: Atom): boolean {
   return true;
 }
 
-function onChipClick(_idx: number): void {
-  // Wired up in Task 8 — click-to-edit picker integration.
+function onChipClick(idx: number): void {
+  const atom = atoms.value[idx];
+  if (!atom || atom.kind !== "ref") return;
+  // Unresolved refs have no edit affordance — RefChip already gates the click
+  // emit but be defensive in case a future caller routes here directly.
+  if (!props.uuidToName.has(atom.uuid)) return;
+  pickerSubCats.value = props.uuidToSubCategories.get(atom.uuid) ?? [];
+  pickerInitial.value = atom.subCategories;
+  pickerMode.value = "edit";
+  pickerTargetAtomIndex.value = idx;
+  pendingInsert.value = null;
+  pickerOpen.value = true;
 }
 
 // --- Suggestion list filtering. ---
@@ -277,7 +287,14 @@ function onPickerApply(subCats: string[]): void {
     insertRefAtCursor(pendingInsert.value.uuid, subCats);
     pendingInsert.value = null;
   } else if (pickerMode.value === "edit" && pickerTargetAtomIndex.value !== null) {
-    // Implemented in Task 8 (click-to-edit). Stub for now.
+    const target = atoms.value[pickerTargetAtomIndex.value];
+    if (target && target.kind === "ref") {
+      const next = replaceAtom(atoms.value, pickerTargetAtomIndex.value, {
+        ...target,
+        subCategories: subCats,
+      });
+      emit("update:modelValue", serialise(next));
+    }
   }
   pickerOpen.value = false;
 }
@@ -291,7 +308,11 @@ function onPickerSkip(): void {
 }
 
 function onPickerDelete(): void {
-  // Implemented in Task 8 — delete the target atom.
+  if (pickerTargetAtomIndex.value !== null) {
+    const idx = pickerTargetAtomIndex.value;
+    const next = atoms.value.filter((_, i) => i !== idx);
+    emit("update:modelValue", serialise(next));
+  }
   pickerOpen.value = false;
 }
 

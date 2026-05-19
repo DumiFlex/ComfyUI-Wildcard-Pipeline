@@ -306,6 +306,71 @@ describe("RichTextInput.vue", () => {
     expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
     wrap.unmount();
   });
+
+  // --- Task 8: click-to-edit ref chip opens picker in edit mode ---
+
+  it("opens picker in edit mode when clicking a ref chip", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "hi @{aabbccdd:warm} foo",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool", "earth"]]]),
+      },
+      attachTo: document.body,
+    });
+    const chip = wrap.find(".wp-refchip--ref");
+    await chip.trigger("click");
+    const picker = document.querySelector('[data-test="subcat-picker"]');
+    expect(picker).not.toBeNull();
+    // Edit-mode → delete button present.
+    expect(document.querySelector('[data-test="picker-delete"]')).not.toBeNull();
+    // The "warm" subcat chip should be preselected.
+    const warmChip = document.querySelector('[data-test="subcat-chip"][data-value="warm"]');
+    expect(warmChip?.classList.contains("wp-subcat-chip--selected")).toBe(true);
+    wrap.unmount();
+  });
+
+  it("apply in edit mode replaces the chip's subCategories in place", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "hi @{aabbccdd:warm} foo",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool", "earth"]]]),
+      },
+      attachTo: document.body,
+    });
+    await wrap.find(".wp-refchip--ref").trigger("click");
+    // Click "cool" to add it to selection.
+    const coolChip = document.querySelector('[data-test="subcat-chip"][data-value="cool"]') as HTMLElement;
+    coolChip.click();
+    await flushPromises();
+    // Apply.
+    (document.querySelector('[data-test="picker-apply"]') as HTMLElement).click();
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("hi @{aabbccdd:warm,cool} foo");
+    wrap.unmount();
+  });
+
+  it("delete in edit mode removes the chip atom", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "hi @{aabbccdd:warm} foo",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+      },
+      attachTo: document.body,
+    });
+    await wrap.find(".wp-refchip--ref").trigger("click");
+    (document.querySelector('[data-test="picker-delete"]') as HTMLElement).click();
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("hi  foo");
+    wrap.unmount();
+  });
 });
 
 describe("RichTextPreview.vue", () => {
