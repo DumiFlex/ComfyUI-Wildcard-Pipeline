@@ -295,6 +295,27 @@ function onPickerDelete(): void {
   pickerOpen.value = false;
 }
 
+function cancelPicker(): void {
+  // Backdrop dismiss is a clean cancel — drop pending state, do NOT
+  // insert anything. Use Skip inside the picker to insert without
+  // filter.
+  pendingInsert.value = null;
+  pickerTargetAtomIndex.value = null;
+  pickerOpen.value = false;
+}
+
+function onPickerEscape(ev: KeyboardEvent): void {
+  if (ev.key === "Escape") cancelPicker();
+}
+
+watch(pickerOpen, (open) => {
+  if (open) {
+    window.addEventListener("keydown", onPickerEscape);
+  } else {
+    window.removeEventListener("keydown", onPickerEscape);
+  }
+});
+
 // --- Test seams ---
 // Only used by Vitest, not user-facing. Exposed via defineExpose so test
 // scripts can drive the autocomplete state machine without faking keyboard
@@ -350,6 +371,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("mousedown", onDocumentMouseDown, true);
   window.removeEventListener("scroll", onWindowScroll, true);
   window.removeEventListener("resize", onWindowResize);
+  window.removeEventListener("keydown", onPickerEscape);
 });
 
 // `refreshAutocompleteFromCaret` is currently orphaned because the `@input`
@@ -517,15 +539,11 @@ function onHostInput(): void {
       </div>
     </Teleport>
 
-    <!-- Step-2 SubcategoryFilterPicker overlay. Teleported to <body> so it
-         escapes ancestor overflow / transform. Backdrop click closes the
-         picker without inserting (treated as Skip). -->
-    <Teleport to="body">
-      <div
-        v-if="pickerOpen"
-        class="wp-subcat-picker__overlay"
-        @click="pickerOpen = false"
-      >
+    <!-- Backdrop click cancels the picker without inserting anything. To
+         insert an unfiltered @{uuid}, use the Skip button inside the
+         picker. -->
+    <Teleport to="body" v-if="pickerOpen">
+      <div class="wp-subcat-picker__overlay" @click="cancelPicker">
         <div @click.stop>
           <SubcategoryFilterPicker
             :sub-categories="pickerSubCats"
@@ -709,7 +727,8 @@ function onHostInput(): void {
 
 /* Step-2 SubcategoryFilterPicker overlay — fixed, full-viewport backdrop
    teleported to <body> so it escapes ancestor overflow/transform contexts.
-   Centred picker; backdrop click closes the picker without inserting. */
+   Centred picker; backdrop click cancels the picker (no insert). Escape
+   key dismisses with the same cancel semantics. */
 .wp-subcat-picker__overlay {
   position: fixed;
   inset: 0;

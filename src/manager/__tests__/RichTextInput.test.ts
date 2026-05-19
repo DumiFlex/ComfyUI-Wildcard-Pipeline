@@ -232,6 +232,62 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("backdrop click cancels picker without inserting", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm"]]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    // Picker is open.
+    expect(document.querySelector('[data-test="subcat-picker"]')).not.toBeNull();
+    // Click backdrop (the overlay div, not the picker contents).
+    const overlay = document.querySelector(".wp-subcat-picker__overlay") as HTMLElement;
+    overlay.click();
+    await flushPromises();
+    // Picker closed, no chip inserted.
+    expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
+    // No update:modelValue with a ref chip was emitted.
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const hasInsert = events.some((e) => String(e[0]).includes("@{aabbccdd"));
+    expect(hasInsert).toBe(false);
+    wrap.unmount();
+  });
+
+  it("Escape key cancels picker without inserting", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm"]]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    expect(document.querySelector('[data-test="subcat-picker"]')).not.toBeNull();
+    // Dispatch Escape on window.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushPromises();
+    expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const hasInsert = events.some((e) => String(e[0]).includes("@{aabbccdd"));
+    expect(hasInsert).toBe(false);
+    wrap.unmount();
+  });
+
   it("$var autocomplete pick inserts $var atom directly (no picker)", async () => {
     const wrap = mount(RichTextInput, {
       props: {
