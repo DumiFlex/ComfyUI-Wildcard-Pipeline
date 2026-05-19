@@ -156,15 +156,28 @@ function onBackdropClick() {
 }
 .wp-cp__input {
   width: 100%;
-  height: var(--wp-control-h-lg);
-  padding: 0 var(--wp-space-5);
+  /* Taller search bar — the palette is the app's "I forgot where X is"
+   * tool, so giving the input some breathing room makes it feel more
+   * like a hero affordance and less like a side input. */
+  height: calc(var(--wp-control-h-lg) + 12px);
+  padding: 0 var(--wp-space-6);
   border: none;
-  border-bottom: 1px solid var(--wp-border);
-  background: transparent;
+  /* Accent-tinted underline so the input visually anchors the palette
+   * (matches the focus ring color, hints the palette is interactive). */
+  border-bottom: 2px solid color-mix(in oklab, var(--wp-accent-500) 60%, var(--wp-border));
+  background: color-mix(in oklab, var(--wp-accent-500) 5%, transparent);
   color: var(--wp-text);
-  font-size: var(--wp-text-md);
+  font-size: var(--wp-text-lg);
   font-family: var(--wp-font);
   outline: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.wp-cp__input::placeholder {
+  color: color-mix(in oklab, var(--wp-text-muted) 75%, var(--wp-accent-500));
+}
+.wp-cp__input:focus {
+  background: color-mix(in oklab, var(--wp-accent-500) 9%, transparent);
+  border-bottom-color: var(--wp-accent-500);
 }
 .wp-cp__results {
   list-style: none; margin: 0; padding: var(--wp-space-2) 0;

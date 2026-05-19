@@ -198,8 +198,12 @@ function isActivePreset(preset: string): boolean {
 }
 
 .wp-color-picker__chip {
-  width: 32px;
-  height: 32px;
+  /* Span the grid cell instead of locking at 32px so the swatches reach
+   * both edges of the popover. aspect-ratio keeps them square as the
+   * cell width changes with popover size. */
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
   border-radius: var(--wp-radius-sm);
   border: 1px solid var(--wp-border);
   cursor: pointer;
