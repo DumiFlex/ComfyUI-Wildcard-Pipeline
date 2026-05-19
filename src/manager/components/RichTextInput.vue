@@ -279,15 +279,15 @@ void refreshAutocompleteFromCaret;
 
 // --- Host DOM → raw text serialisation ---
 // Walks the contenteditable host's children and rebuilds the raw expression
-// string. Text nodes contribute their text directly. `.wp-refchip` children
-// are atomic — we read the underlying atom (via `data-atom-index`) and
+// string. Text nodes contribute their text directly (Vue's `<template
+// v-for>` inserts empty text-node fragment markers around each entry —
+// those are harmless empty strings here). `.wp-refchip` children are
+// atomic — we read the underlying atom (via `data-atom-index`) and
 // reconstruct the canonical syntax (`@{uuid}` / `@{uuid:sub}` / `$name`),
 // NOT the chip's rendered display text (e.g. `@color` for a resolved UUID).
-// `.wp-rt__text` spans are Vue's rendered presentation of text atoms — we
-// read from the atom (via `data-atom-index`) rather than the span text to
-// avoid double-counting when the browser also inserts a sibling text node
-// during user input (e.g. typing at a chip boundary appends a raw text node
-// while the previously-rendered span still holds the old text).
+// `.wp-rt__text` spans hold the live text — user typing modifies the span's
+// textContent in place (browsers extend the existing span's content rather
+// than inserting sibling text nodes), so we read whatever's there now.
 function readHostAsText(): string {
   const host = hostEl.value;
   if (!host) return "";
@@ -295,27 +295,35 @@ function readHostAsText(): string {
   for (const node of host.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
       out += node.textContent ?? "";
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const el = node as HTMLElement;
-      if (el.classList.contains("wp-refchip")) {
-        const idx = Number(el.getAttribute("data-atom-index"));
-        const atom = atoms.value[idx];
-        if (!atom) continue;
-        if (atom.kind === "ref") {
-          out += "@{" + atom.uuid;
-          if (atom.subCategories.length > 0) out += ":" + atom.subCategories.join(",");
-          out += "}";
-        } else if (atom.kind === "var") {
-          out += "$" + atom.name;
-        }
-      } else if (el.classList.contains("wp-rt__text")) {
-        // Skip the rendered text span; its content is the previously-rendered
-        // atom text. User input arrives as adjacent text nodes (handled above).
-        continue;
-      } else {
-        out += el.textContent ?? "";
-      }
+      continue;
     }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = node as HTMLElement;
+    if (el.classList.contains("wp-refchip")) {
+      // Chips are atomic — read the underlying atom (via data-atom-index)
+      // and reconstruct canonical syntax (`@{uuid}` / `@{uuid:sub}` /
+      // `$name`), NOT the chip's rendered display text.
+      const idx = Number(el.getAttribute("data-atom-index"));
+      const atom = atoms.value[idx];
+      if (!atom) continue;
+      if (atom.kind === "ref") {
+        out += "@{" + atom.uuid;
+        if (atom.subCategories.length > 0) out += ":" + atom.subCategories.join(",");
+        out += "}";
+      } else if (atom.kind === "var") {
+        out += "$" + atom.name;
+      }
+      continue;
+    }
+    if (el.classList.contains("wp-rt__text")) {
+      // wp-rt__text spans hold the live text — user typing modifies the
+      // span's textContent in place, so we read whatever's there now.
+      out += el.textContent ?? "";
+      continue;
+    }
+    // Defensive fallback for any other element (shouldn't happen in
+    // practice — host children are chips + text spans + fragment markers).
+    out += el.textContent ?? "";
   }
   return out;
 }

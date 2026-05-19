@@ -28,18 +28,35 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     const host = wrap.find(".wp-rt__host");
-    // Simulate the user typing "x" — append to the existing text node.
-    const hostEl = host.element as HTMLElement;
-    const textNode = hostEl.firstChild;
-    if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-      textNode.textContent = "hellox";
-    } else {
-      // Fallback: append a fresh text node so the input listener has something to read.
-      hostEl.appendChild(document.createTextNode("x"));
-    }
+    // Simulate the user typing — browsers extend the existing text span's
+    // textContent rather than inserting sibling text nodes.
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text");
+    if (span) span.textContent = "hellox";
     await host.trigger("input");
     const events = wrap.emitted("update:modelValue") ?? [];
     expect(events[events.length - 1]?.[0]).toBe("hellox");
+    wrap.unmount();
+  });
+
+  it("readHostAsText reconstructs ref/var chips from atom truth, not display text", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "a @{aabbccdd:warm} b",
+        varSuggestions: [],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    // Simulate user editing the trailing " b" text — typing "z" at end.
+    const spans = (host.element as HTMLElement).querySelectorAll(".wp-rt__text");
+    // Trailing text is the last wp-rt__text span.
+    const trailing = spans[spans.length - 1];
+    trailing.textContent = " bz";
+    await host.trigger("input");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    // Expect the raw form preserved + the trailing edit captured.
+    expect(events[events.length - 1]?.[0]).toBe("a @{aabbccdd:warm} bz");
     wrap.unmount();
   });
 
