@@ -10,12 +10,46 @@ from __future__ import annotations
 from aiohttp import web
 
 from engine.db.repositories import BundleNotFound, BundleRepository
+from engine.modules.dispatcher import get_handler
 from wp_api._helpers import db_session, json_error, json_ok
 
 _UPDATABLE_FIELDS = (
     "name", "description", "color", "category_id", "tags",
     "children", "is_favorite",
 )
+
+
+def _validate_children_payloads(children: object) -> str | None:
+    """Run ``handler.validate_payload`` against every child's payload.
+
+    Bundles ship a frozen ``children`` array; without this guard the
+    bundle endpoint is a side door that bypasses the per-module
+    validation enforced on POST/PUT ``/wp/api/modules``. Returns an
+    error string when any child is malformed, ``None`` when every
+    payload passes. Children without a registered handler are skipped
+    silently (mirrors the module-side behavior for unknown types).
+    """
+    if children is None:
+        return None
+    if not isinstance(children, list):
+        return "children must be a list"
+    for i, child in enumerate(children):
+        if not isinstance(child, dict):
+            return f"children[{i}] must be an object"
+        type_id = child.get("type")
+        payload = child.get("payload")
+        if type_id is None or payload is None:
+            # Children may legitimately omit `payload` for inline
+            # entries; only validate when both fields are present.
+            continue
+        handler = get_handler(type_id)
+        if handler is None:
+            continue
+        try:
+            handler.validate_payload(payload)
+        except ValueError as exc:
+            return f"children[{i}].payload: {exc}"
+    return None
 
 
 async def list_bundles(request: web.Request) -> web.Response:
@@ -70,6 +104,10 @@ async def create_bundle(request: web.Request) -> web.Response:
     if "name" not in body:
         return json_error("missing field: name", status=400)
 
+    err = _validate_children_payloads(body.get("children"))
+    if err is not None:
+        return json_error(err, status=400)
+
     try:
         with db_session(request) as conn:
             row = BundleRepository(conn).create(
@@ -116,6 +154,10 @@ async def update_bundle(request: web.Request) -> web.Response:
     if not isinstance(body, dict):
         return json_error("body must be a JSON object", status=400)
     patch = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}
+    if "children" in patch:
+        err = _validate_children_payloads(patch["children"])
+        if err is not None:
+            return json_error(err, status=400)
     with db_session(request) as conn:
         try:
             row = BundleRepository(conn).update(bundle_id, **patch)

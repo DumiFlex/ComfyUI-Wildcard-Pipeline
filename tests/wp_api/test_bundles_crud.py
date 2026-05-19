@@ -47,7 +47,11 @@ async def test_create_minimal_returns_201_with_8hex_id(wp_client):
 async def test_create_with_color_and_children(wp_client):
     children = [
         {"id": "aabbcc11", "type": "wildcard", "payload": {"options": []}},
-        {"id": "ddeeff22", "type": "combine", "payload": {"template": ""}},
+        {
+            "id": "ddeeff22",
+            "type": "combine",
+            "payload": {"template": "$x", "output_var": "phrase"},
+        },
     ]
     resp = await wp_client.post("/wp/api/bundles", json={
         "name": "subject_phrase",

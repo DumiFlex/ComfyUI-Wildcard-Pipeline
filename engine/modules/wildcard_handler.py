@@ -17,12 +17,15 @@ emitted.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng as _derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+
+_IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 # `_derive_module_rng` lifted to engine/modules/_seed.py so combine +
 # fixed_values handlers share the same helper (Phase: combine v2 +
@@ -189,6 +192,52 @@ def _push_constraint_warning(ctx: Any, type_: str, detail: dict[str, Any]) -> No
 
 class WildcardHandler(ModuleHandler):
     type_id = "wildcard"
+
+    @classmethod
+    def validate_payload(cls, payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            raise ValueError("wildcard payload must be an object")
+        options = payload.get("options")
+        if not isinstance(options, list):
+            raise ValueError("wildcard payload.options must be a list")
+        for i, opt in enumerate(options):
+            if not isinstance(opt, dict):
+                raise ValueError(f"wildcard payload.options[{i}] must be an object")
+            value = opt.get("value", "")
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"wildcard payload.options[{i}].value must be a string"
+                )
+            weight = opt.get("weight", 1)
+            if not isinstance(weight, (int, float)) or isinstance(weight, bool):
+                raise ValueError(
+                    f"wildcard payload.options[{i}].weight must be a number"
+                )
+            if float(weight) < 0:
+                raise ValueError(
+                    f"wildcard payload.options[{i}].weight must not be negative"
+                )
+            sub_cat = opt.get("sub_category")
+            if sub_cat is not None and not isinstance(sub_cat, str):
+                raise ValueError(
+                    f"wildcard payload.options[{i}].sub_category must be a string"
+                )
+        binding = payload.get("var_binding")
+        if binding is not None:
+            if not isinstance(binding, str):
+                raise ValueError("wildcard payload.var_binding must be a string")
+            if binding and not _IDENT_RE.match(binding):
+                raise ValueError(
+                    f"wildcard payload.var_binding {binding!r} is not a valid identifier"
+                )
+        sub_categories = payload.get("sub_categories", [])
+        if not isinstance(sub_categories, list):
+            raise ValueError("wildcard payload.sub_categories must be a list")
+        for i, sc in enumerate(sub_categories):
+            if not isinstance(sc, str):
+                raise ValueError(
+                    f"wildcard payload.sub_categories[{i}] must be a string"
+                )
 
     @classmethod
     def resolve(

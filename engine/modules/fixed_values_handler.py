@@ -19,6 +19,7 @@ the module id when present (ctx["__wp_module_id__"]).
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from engine.modules import build_resolve_ctx
@@ -26,9 +27,41 @@ from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
+_IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
 
 class FixedValuesHandler(ModuleHandler):
     type_id = "fixed_values"
+
+    @classmethod
+    def validate_payload(cls, payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            raise ValueError("fixed_values payload must be an object")
+        values = payload.get("values")
+        if not isinstance(values, list):
+            raise ValueError("fixed_values payload.values must be a list")
+        for i, v in enumerate(values):
+            if not isinstance(v, dict):
+                raise ValueError(
+                    f"fixed_values payload.values[{i}] must be an object"
+                )
+            name = v.get("name")
+            if name is not None and not isinstance(name, str):
+                raise ValueError(
+                    f"fixed_values payload.values[{i}].name must be a string"
+                )
+            # Empty name is allowed (resolver skips those entries) but a
+            # non-empty name must be a valid identifier — it gets emitted
+            # as a $var into the runtime ctx.
+            if isinstance(name, str) and name and not _IDENT_RE.match(name):
+                raise ValueError(
+                    f"fixed_values payload.values[{i}].name {name!r} is not a valid identifier"
+                )
+            value = v.get("value", "")
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"fixed_values payload.values[{i}].value must be a string"
+                )
 
     @classmethod
     def resolve(

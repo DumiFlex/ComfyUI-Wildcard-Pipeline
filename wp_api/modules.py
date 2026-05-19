@@ -4,8 +4,26 @@ from __future__ import annotations
 from aiohttp import web
 
 from engine.db.repositories import ModuleNotFound, ModuleRepository
+from engine.modules.dispatcher import get_handler
 from engine.modules.snapshot import freeze_snapshot, payload_hash
 from wp_api._helpers import db_session, json_error, json_ok
+
+
+def _validate_payload_for_type(type_id: str, payload: dict) -> str | None:
+    """Run the registered ``validate_payload`` for this module type.
+
+    Returns the error string when the payload is malformed, or ``None``
+    when it passes. Unknown types skip validation (the create/PUT path
+    rejects unknown types separately via the repository layer).
+    """
+    handler = get_handler(type_id)
+    if handler is None:
+        return None
+    try:
+        handler.validate_payload(payload)
+    except ValueError as exc:
+        return str(exc)
+    return None
 
 _UPDATABLE_FIELDS = (
     "name", "description", "tags", "payload", "is_favorite", "category_id",
@@ -54,6 +72,10 @@ async def create_module(request: web.Request) -> web.Response:
     if missing:
         return json_error(f"missing fields: {sorted(missing)}", status=400)
 
+    err = _validate_payload_for_type(body["type"], body["payload"])
+    if err is not None:
+        return json_error(err, status=400)
+
     try:
         with db_session(request) as conn:
             row = ModuleRepository(conn).create(
@@ -91,6 +113,10 @@ async def import_from_workflow(request: web.Request) -> web.Response:
     missing = required - body.keys()
     if missing:
         return json_error(f"missing fields: {sorted(missing)}", status=400)
+
+    err = _validate_payload_for_type(body["type"], body["payload"])
+    if err is not None:
+        return json_error(err, status=400)
 
     try:
         with db_session(request) as conn:
@@ -133,6 +159,17 @@ async def update_module(request: web.Request) -> web.Response:
     if not isinstance(body, dict):
         return json_error("body must be a JSON object", status=400)
     kwargs: dict = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}
+    # If the caller is rewriting the payload, validate it against the
+    # row's existing module type — same guard as POST/import-from-workflow.
+    if "payload" in kwargs:
+        with db_session(request) as conn:
+            try:
+                existing = ModuleRepository(conn).get(mid)
+            except ModuleNotFound:
+                return json_error(f"module not found: {mid}", status=404)
+        err = _validate_payload_for_type(existing["type"], kwargs["payload"])
+        if err is not None:
+            return json_error(err, status=400)
     with db_session(request) as conn:
         try:
             row = ModuleRepository(conn).update(mid, **kwargs)
