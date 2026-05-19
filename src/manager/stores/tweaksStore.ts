@@ -12,8 +12,8 @@ import { ref, watch } from "vue";
  * postMessage iframe dance, since we own the document directly.
  */
 
-export type AccentName  = "violet" | "indigo" | "teal" | "rose" | "amber";
-export type Density     = "compact" | "comfortable";
+export type AccentName  = "violet" | "indigo" | "teal" | "rose" | "amber" | "custom";
+export type Density     = "compact" | "comfortable" | "cozy";
 export type SidebarMode = "expanded" | "collapsed";
 
 const STORAGE_KEY = "wp-tweaks-v1";
@@ -21,8 +21,11 @@ const STORAGE_KEY = "wp-tweaks-v1";
 /** Accent palette presets — full 50→900 scale from prototype `tweaks-panel.jsx`.
  *  The prototype only persists the 300–700 stops (since the mid-range is what
  *  surfaces in tinted backgrounds, gradients, and focus rings) but we override
- *  the whole scale so cross-theme consistency holds. */
-export const ACCENT_PALETTES: Record<AccentName, Record<string, string>> = {
+ *  the whole scale so cross-theme consistency holds.
+ *
+ *  The "custom" key intentionally points at a placeholder palette; the actual
+ *  palette is generated from the user's hex via `paletteFromHex()` below. */
+export const ACCENT_PALETTES: Record<Exclude<AccentName, "custom">, Record<string, string>> = {
   violet: {
     "--wp-accent-50":  "#f5f3ff",
     "--wp-accent-100": "#ede9fe",
@@ -86,7 +89,7 @@ export const ACCENT_PALETTES: Record<AccentName, Record<string, string>> = {
 };
 
 /** 500-stop hex used as the visible swatch color on the accent picker buttons. */
-export const SWATCH_PREVIEW: Record<AccentName, string> = {
+export const SWATCH_PREVIEW: Record<Exclude<AccentName, "custom">, string> = {
   violet: ACCENT_PALETTES.violet["--wp-accent-500"],
   indigo: ACCENT_PALETTES.indigo["--wp-accent-500"],
   teal:   ACCENT_PALETTES.teal["--wp-accent-500"],
@@ -94,16 +97,87 @@ export const SWATCH_PREVIEW: Record<AccentName, string> = {
   amber:  ACCENT_PALETTES.amber["--wp-accent-500"],
 };
 
-export const ACCENT_OPTIONS: AccentName[] = ["violet", "indigo", "teal", "rose", "amber"];
-export const DENSITY_OPTIONS: Density[]   = ["compact", "comfortable"];
+export const DEFAULT_CUSTOM_HEX = ACCENT_PALETTES.violet["--wp-accent-500"];
+
+export const ACCENT_OPTIONS: Array<Exclude<AccentName, "custom">> = ["violet", "indigo", "teal", "rose", "amber"];
+export const DENSITY_OPTIONS: Density[]   = ["compact", "comfortable", "cozy"];
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const r = parseInt(m[1].slice(0, 2), 16) / 255;
+  const g = parseInt(m[1].slice(2, 4), 16) / 255;
+  const b = parseInt(m[1].slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d) + (g < b ? 6 : 0); break;
+      case g: h = ((b - r) / d) + 2; break;
+      case b: h = ((r - g) / d) + 4; break;
+    }
+    h *= 60;
+  }
+  return { h, s: s * 100, l: l * 100 };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sN = Math.max(0, Math.min(100, s)) / 100;
+  const lN = Math.max(0, Math.min(100, l)) / 100;
+  const c = (1 - Math.abs(2 * lN - 1)) * sN;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const mb = lN - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60)        { r = c; g = x; b = 0; }
+  else if (h < 120)  { r = x; g = c; b = 0; }
+  else if (h < 180)  { r = 0; g = c; b = x; }
+  else if (h < 240)  { r = 0; g = x; b = c; }
+  else if (h < 300)  { r = x; g = 0; b = c; }
+  else               { r = c; g = 0; b = x; }
+  const to = (n: number) => Math.round((n + mb) * 255).toString(16).padStart(2, "0");
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+/** Derive a 50→900 palette from a single "500" hex via HSL lightness
+ *  walks. Saturation stays anchored so the ramp reads as one family
+ *  rather than five unrelated colors. Falls back to the violet default
+ *  if the hex doesn't parse. */
+export function paletteFromHex(hex: string): Record<string, string> {
+  const hsl = hexToHsl(hex) ?? hexToHsl(DEFAULT_CUSTOM_HEX);
+  if (!hsl) return {};
+  const stops: Array<[string, number]> = [
+    ["--wp-accent-50",  95],
+    ["--wp-accent-100", 90],
+    ["--wp-accent-200", 80],
+    ["--wp-accent-300", 70],
+    ["--wp-accent-400", 62],
+    ["--wp-accent-500", hsl.l],
+    ["--wp-accent-600", Math.max(8, hsl.l - 8)],
+    ["--wp-accent-700", Math.max(6, hsl.l - 16)],
+    ["--wp-accent-800", Math.max(4, hsl.l - 24)],
+    ["--wp-accent-900", Math.max(3, hsl.l - 32)],
+  ];
+  const out: Record<string, string> = {};
+  for (const [key, l] of stops) {
+    out[key] = hslToHex(hsl.h, hsl.s, l);
+  }
+  return out;
+}
 
 const DENSITY_HEIGHT: Record<Density, string> = {
-  compact:     "34px",
+  compact:     "32px",
   comfortable: "38px",
+  cozy:        "44px",
 };
 
 interface PersistedShape {
   accent?: AccentName;
+  customHex?: string;
   density?: Density;
   sidebarMode?: SidebarMode;
 }
@@ -135,13 +209,19 @@ export const useTweaksStore = defineStore("tweaks", () => {
   const stored = readStored();
 
   const accent      = ref<AccentName>(stored.accent ?? "violet");
+  const customHex   = ref<string>(stored.customHex ?? DEFAULT_CUSTOM_HEX);
   const density     = ref<Density>(stored.density ?? "comfortable");
   const sidebarMode = ref<SidebarMode>(stored.sidebarMode ?? "expanded");
   const panelOpen   = ref<boolean>(false);
 
   function applyAccent(name: AccentName) {
     if (!hasDocument()) return;
-    const palette = ACCENT_PALETTES[name];
+    let palette: Record<string, string>;
+    if (name === "custom") {
+      palette = paletteFromHex(customHex.value);
+    } else {
+      palette = ACCENT_PALETTES[name];
+    }
     const root = document.documentElement;
     for (const [key, value] of Object.entries(palette)) {
       root.style.setProperty(key, value);
@@ -180,6 +260,11 @@ export const useTweaksStore = defineStore("tweaks", () => {
     applyAccent(name);
   }
 
+  function setCustomHex(hex: string) {
+    customHex.value = hex;
+    if (accent.value === "custom") applyAccent("custom");
+  }
+
   function setDensity(d: Density) {
     density.value = d;
     applyDensity(d);
@@ -199,6 +284,7 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   function reset() {
     accent.value = "violet";
+    customHex.value = DEFAULT_CUSTOM_HEX;
     density.value = "comfortable";
     sidebarMode.value = "expanded";
     clearAccent();
@@ -218,14 +304,16 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   // Persist on every change to a tracked field.
   watch(
-    [accent, density, sidebarMode],
-    ([a, d, s]) => {
-      writeStored({ accent: a, density: d, sidebarMode: s });
+    [accent, customHex, density, sidebarMode],
+    ([a, c, d, s]) => {
+      writeStored({ accent: a, customHex: c, density: d, sidebarMode: s });
     },
   );
 
   return {
     accent,
+    customHex,
+    setCustomHex,
     density,
     sidebarMode,
     panelOpen,

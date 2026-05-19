@@ -46,12 +46,12 @@ describe("tweaksStore — accent palette", () => {
 });
 
 describe("tweaksStore — density", () => {
-  it("setDensity('compact') sets --wp-input-h to 34px", () => {
+  it("setDensity('compact') sets --wp-input-h to 32px", () => {
     const tweaks = useTweaksStore();
     tweaks.setDensity("compact");
     expect(tweaks.density).toBe("compact");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("34px");
-    expect(document.documentElement.style.getPropertyValue("--wp-btn-h")).toBe("34px");
+    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("32px");
+    expect(document.documentElement.style.getPropertyValue("--wp-btn-h")).toBe("32px");
   });
 
   it("setDensity('comfortable') sets --wp-input-h to 38px", () => {
@@ -143,6 +143,6 @@ describe("tweaksStore — persistence", () => {
     expect(root.style.getPropertyValue("--wp-accent-500")).toBe(
       ACCENT_PALETTES.amber["--wp-accent-500"],
     );
-    expect(root.style.getPropertyValue("--wp-input-h")).toBe("34px");
+    expect(root.style.getPropertyValue("--wp-input-h")).toBe("32px");
   });
 });

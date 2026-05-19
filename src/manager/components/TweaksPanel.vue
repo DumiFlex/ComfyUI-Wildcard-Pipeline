@@ -3,6 +3,7 @@ import { computed } from "vue";
 import Button from "./ui/Button.vue";
 import Toggle from "./ui/Toggle.vue";
 import Icon from "./ui/Icon.vue";
+import HsvPicker from "./HsvPicker.vue";
 import {
   ACCENT_OPTIONS,
   DENSITY_OPTIONS,
@@ -29,6 +30,12 @@ function onAccent(name: AccentName) {
 }
 function onDensity(d: Density) {
   tweaks.setDensity(d);
+}
+function onCustomHex(hex: string) {
+  tweaks.setCustomHex(hex);
+}
+function pickCustomAccent() {
+  tweaks.setAccent("custom");
 }
 </script>
 
@@ -71,6 +78,27 @@ function onDensity(d: Density) {
             :title="name"
             :data-test="`tweaks-accent-${name}`"
             @click="onAccent(name)"
+          />
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="tweaks.accent === 'custom'"
+            class="wp-tweaks__swatch wp-tweaks__swatch--custom"
+            :class="{ 'is-active': tweaks.accent === 'custom' }"
+            :style="{ background: tweaks.customHex }"
+            aria-label="Accent: custom"
+            title="Custom"
+            data-test="tweaks-accent-custom"
+            @click="pickCustomAccent"
+          >
+            <Icon name="pi-palette" />
+          </button>
+        </div>
+        <div v-if="tweaks.accent === 'custom'" class="wp-tweaks__custom-picker">
+          <HsvPicker
+            :model-value="tweaks.customHex"
+            aria-label="Custom accent color"
+            @update:model-value="onCustomHex"
           />
         </div>
       </section>
@@ -221,6 +249,15 @@ function onDensity(d: Density) {
 .wp-tweaks__swatch.is-active {
   border-color: var(--wp-text);
   box-shadow: 0 0 0 2px var(--wp-bg-1), 0 0 0 4px var(--wp-accent-500);
+}
+.wp-tweaks__swatch--custom {
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+.wp-tweaks__custom-picker {
+  margin-top: var(--wp-space-4);
 }
 
 .wp-tweaks__radio { display: flex; gap: var(--wp-space-3); padding: 2px; background: var(--wp-bg-3); border-radius: var(--wp-radius); }

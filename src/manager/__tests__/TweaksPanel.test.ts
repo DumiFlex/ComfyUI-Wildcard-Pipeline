@@ -14,10 +14,12 @@ beforeEach(() => {
 });
 
 describe("TweaksPanel.vue", () => {
-  it("renders 5 accent swatches", () => {
+  it("renders 5 preset swatches plus the custom swatch", () => {
     const wrap = mount(TweaksPanel);
     const swatches = wrap.findAll('[data-test^="tweaks-accent-"]');
-    expect(swatches).toHaveLength(5);
+    expect(swatches).toHaveLength(6);
+    // Custom swatch sits at the end of the row.
+    expect(wrap.find('[data-test="tweaks-accent-custom"]').exists()).toBe(true);
   });
 
   it("clicking the violet swatch calls setAccent('violet') and writes the palette", async () => {
@@ -47,7 +49,7 @@ describe("TweaksPanel.vue", () => {
     expect(tweaks.density).toBe("comfortable");
     await wrap.find('[data-test="tweaks-density-compact"]').trigger("change");
     expect(tweaks.density).toBe("compact");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("34px");
+    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("32px");
 
     await wrap.find('[data-test="tweaks-density-comfortable"]').trigger("change");
     expect(tweaks.density).toBe("comfortable");

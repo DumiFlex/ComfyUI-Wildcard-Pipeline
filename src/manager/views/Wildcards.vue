@@ -30,9 +30,10 @@ const bulkAdapter = makeModuleStoreAdapter(store);
 const bulk = useBulkActions(bulkAdapter);
 const loadErr = useLoadError();
 
-const urlState = useListUrlState<{ filters: string[] }>({
-  filters: { type: "csv", default: [] },
-});
+const urlState = useListUrlState<{ filters: string[] }>(
+  { filters: { type: "csv", default: [] } },
+  "wildcards",
+);
 
 /** Writable proxy so ModuleListView (and its filter-panel slot) can mutate
  *  filter fields in place — mutations flow to urlState automatically. */

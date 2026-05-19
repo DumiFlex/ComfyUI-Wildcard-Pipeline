@@ -25,7 +25,7 @@ const bulkAdapter = makeModuleStoreAdapter(store);
 const bulk = useBulkActions(bulkAdapter);
 const loadErr = useLoadError();
 
-const urlState = useListUrlState();
+const urlState = useListUrlState(undefined, "combines");
 
 const filter = urlState as {
   q?: string;

@@ -49,9 +49,10 @@ const loadErr = useLoadError();
 const bulkAdapter = makeMixedKindAdapter({ moduleStore, bundleStore });
 const bulkActions = useBulkActions(bulkAdapter);
 
-const urlState = useListUrlState<{ kinds: string[] }>({
-  kinds: { type: "csv", default: [] },
-});
+const urlState = useListUrlState<{ kinds: string[] }>(
+  { kinds: { type: "csv", default: [] } },
+  "all",
+);
 
 type LibraryKind = ModuleType | "bundle";
 

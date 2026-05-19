@@ -25,7 +25,7 @@ const bulkAdapter = makeBundleStoreAdapter(store);
 const bulk = useBulkActions(bulkAdapter);
 const loadErr = useLoadError();
 
-const urlState = useListUrlState();
+const urlState = useListUrlState(undefined, "bundles");
 
 const filter = urlState as {
   q?: string;

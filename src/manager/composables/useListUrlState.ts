@@ -1,4 +1,13 @@
+import { watch } from "vue";
 import { useUrlState, type UrlSchema } from "./useUrlState";
+import {
+  useListPrefsStore,
+  type ListKind,
+  type PageSize,
+  type SortKey,
+  PAGE_SIZE_OPTIONS,
+  SORT_OPTIONS,
+} from "../stores/listPrefsStore";
 
 interface BaseShape {
   q: string;
@@ -25,15 +34,58 @@ export const BASE_LIST_SCHEMA: UrlSchema<BaseShape> = {
 };
 
 /**
- * Share the canonical list-view URL schema across all 7 list views. Each
- * view passes only its kind-specific fields as `extraSchema`.
+ * Share the canonical list-view URL schema across all 7 list views.
+ *
+ * Pass `kind` (e.g. "wildcards", "constraints") to inherit the user's
+ * persisted page-size + sort defaults from listPrefsStore. Without
+ * `kind`, falls back to the hard-coded BASE_LIST_SCHEMA defaults.
+ *
+ * URL params still override store defaults at all times — the store
+ * only provides the *starting* values when no URL state exists.
  */
+const KNOWN_PAGE_SIZES = new Set<number>(PAGE_SIZE_OPTIONS);
+const KNOWN_SORT_KEYS = new Set<string>(SORT_OPTIONS.map((o) => o.value));
+
 export function useListUrlState<E extends object = Record<string, never>>(
   extraSchema?: UrlSchema<E>,
+  kind?: ListKind,
 ) {
+  let baseSchema: UrlSchema<BaseShape> = BASE_LIST_SCHEMA;
+  let prefs: ReturnType<typeof useListPrefsStore> | null = null;
+  if (kind) {
+    prefs = useListPrefsStore();
+    baseSchema = {
+      ...BASE_LIST_SCHEMA,
+      sortBy:   { ...BASE_LIST_SCHEMA.sortBy,   default: prefs.sortBy[kind] },
+      pageSize: { ...BASE_LIST_SCHEMA.pageSize, default: prefs.pageSize[kind] },
+    };
+  }
   const schema = {
-    ...BASE_LIST_SCHEMA,
+    ...baseSchema,
     ...(extraSchema ?? ({} as UrlSchema<E>)),
   } as UrlSchema<BaseShape & E>;
-  return useUrlState<BaseShape & E>(schema);
+  const state = useUrlState<BaseShape & E>(schema);
+
+  // Mirror the user's in-session pageSize/sortBy choices back to the
+  // prefs store so the next visit picks up the new defaults. Only
+  // accepted values (PAGE_SIZE_OPTIONS / SORT_OPTIONS) are persisted —
+  // arbitrary URL values stay session-scoped.
+  if (kind && prefs) {
+    const persistedKind = kind;
+    const persistedStore = prefs;
+    watch(
+      () => state.pageSize,
+      (v) => {
+        if (KNOWN_PAGE_SIZES.has(v)) persistedStore.setPageSize(persistedKind, v as PageSize);
+      },
+    );
+    watch(
+      () => state.sortBy,
+      (v) => {
+        if (KNOWN_SORT_KEYS.has(v)) persistedStore.setSortBy(persistedKind, v as SortKey);
+      },
+    );
+  }
+
+  return state;
 }
