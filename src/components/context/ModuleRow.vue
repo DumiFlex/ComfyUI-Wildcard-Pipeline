@@ -119,8 +119,8 @@ const {
           @click.stop="removeModule(idx)"><i class="pi pi-trash" /></button>
       </div>
     </div>
-    <Transition name="wp-collapse">
-      <div v-if="!isCollapsed(module)" class="wp-summary" :title="summaryFor(module)">
+    <div class="wp-collapse-row" :data-collapsed="isCollapsed(module) ? 'true' : 'false'">
+      <div class="wp-summary" :title="summaryFor(module)">
         <span class="wp-summary__main">
           <template v-for="(tok, i) in summaryTokens(module)" :key="i"><span
             v-if="tok.kind === 'var'"
@@ -131,6 +131,6 @@ const {
           data-test="sibling-chip"
           :title="`used ${siblingInfo(module)!.total} times in this Context`">#{{ siblingInfo(module)!.index }} of {{ siblingInfo(module)!.total }}</span>
       </div>
-    </Transition>
+    </div>
   </div>
 </template>

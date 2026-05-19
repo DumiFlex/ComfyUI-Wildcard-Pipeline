@@ -228,9 +228,16 @@ describe("InjectorRow — collapse / summary (Phase 5)", () => {
     expect(w.find('[data-test="inj-row-summary"]').exists()).toBe(true);
   });
 
-  it("summary hidden when row._collapsed is true", () => {
+  it("summary stays mounted but is marked collapsed when row._collapsed is true", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ _collapsed: true }) } });
-    expect(w.find('[data-test="inj-row-summary"]').exists()).toBe(false);
+    // .wp-collapse-row keeps content mounted and animates a grid-track
+    // 1fr -> 0fr collapse. Tests check the collapsed-state marker on
+    // the wrapper rather than DOM presence so Vue Test Utils still
+    // sees the summary node.
+    expect(w.find('[data-test="inj-row-summary"]').exists()).toBe(true);
+    const wrap = w.find('[data-test="inj-row-summary"]').element.parentElement;
+    expect(wrap?.classList.contains("wp-collapse-row")).toBe(true);
+    expect(wrap?.getAttribute("data-collapsed")).toBe("true");
   });
 
   it("caret toggles _collapsed via update emit", async () => {

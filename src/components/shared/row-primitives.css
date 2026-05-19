@@ -140,21 +140,44 @@
   min-width: 0;
 }
 
-/* ── Vue transition: `wp-collapse` ───────────────────────────────── */
+/* ── `wp-collapse-row` — class-driven smooth collapse ────────────── */
 
-/* Pairs with `<Transition name="wp-collapse">` to animate the summary
- * line in/out via max-height + opacity. Cap matches typical summary
- * height (32px); consumers with taller summaries can override the
- * `enter-to` / `leave-from` max-height in their scoped block. */
-.wp-collapse-enter-active,
-.wp-collapse-leave-active {
-  transition: max-height var(--wp-motion-swap) ease, opacity var(--wp-motion-hover), padding var(--wp-motion-hover);
-  overflow: hidden;
+/* Wrapper class that interpolates a grid track from 1fr → 0fr while the
+ * single child it contains fades opacity + collapses padding in
+ * lockstep. Pattern matches `.wp-bundle` (ContextWidget) and
+ * `.wp-inj-rows-wrap` (InjectorWidget); using grid-track-interpolation
+ * instead of `max-height` means collapsed content can be any height —
+ * no 32px ceiling, no JS measurement, no abrupt clip when the content
+ * doesn't match an arbitrary cap.
+ *
+ * Usage:
+ *   <div class="wp-collapse-row" :data-collapsed="collapsed ? 'true' : 'false'">
+ *     <div class="wp-summary">...</div>   <!-- always mounted -->
+ *   </div>
+ *
+ * The child stays in the DOM regardless of state. Reduce-motion
+ * collapses the duration to 0.01ms via the existing .wp-a11y-no-motion
+ * sweep on .wp-context descendants. */
+.wp-collapse-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
 }
-.wp-collapse-enter-from,
-.wp-collapse-leave-to { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
-.wp-collapse-enter-to,
-.wp-collapse-leave-from { max-height: 32px; opacity: 1; }
+.wp-collapse-row[data-collapsed="true"] {
+  grid-template-rows: 0fr;
+}
+.wp-collapse-row > * {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
+              padding var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
+}
+.wp-collapse-row[data-collapsed="true"] > * {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
 
 /* ── Row type icon ───────────────────────────────────────────────── */
 

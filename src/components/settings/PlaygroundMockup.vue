@@ -637,26 +637,9 @@ function viewForBundle(key: string) {
   color: var(--wp-text-dim, var(--wp-text3));
 }
 
-/* Collapse Vue transition — mirrors ContextWidget's `wp-collapse`
- * scoped styles so the slide reads identically here. The reduce-motion
- * sweep in a11y.css already targets `.wp-pg` so flipping reduce-motion
- * collapses transition-duration to 0.01ms — instant snap, no fade. */
-.wp-pg-mockup .wp-collapse-enter-active,
-.wp-pg-mockup .wp-collapse-leave-active {
-  transition: max-height var(--wp-motion-swap) ease, opacity var(--wp-motion-hover), padding var(--wp-motion-hover);
-  overflow: hidden;
-}
-.wp-pg-mockup .wp-collapse-enter-from,
-.wp-pg-mockup .wp-collapse-leave-to {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-.wp-pg-mockup .wp-collapse-enter-to,
-.wp-pg-mockup .wp-collapse-leave-from {
-  max-height: 32px;
-  opacity: 1;
-}
+/* `.wp-collapse-row` base styles come from row-primitives.css (loaded
+ * globally via ContextWidget). The grid-track interpolation works
+ * identically inside the mockup without per-surface overrides — no
+ * 32px ceiling, content of any size collapses cleanly. */
 }  /* end @layer wp-extension */
 </style>

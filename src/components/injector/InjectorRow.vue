@@ -265,8 +265,8 @@ function onDragEnd(): void {
         ><i class="pi pi-trash" aria-hidden="true" /></button>
       </div>
     </div>
-    <Transition name="wp-collapse">
-      <div v-if="!row._collapsed" class="wp-summary wp-inj-summary" :title="summaryTitle" data-test="inj-row-summary">
+    <div class="wp-collapse-row" :data-collapsed="row._collapsed ? 'true' : 'false'">
+      <div class="wp-summary wp-inj-summary" :title="summaryTitle" data-test="inj-row-summary">
         <span class="wp-summary__main">
           <template v-if="isEmpty"><span class="wp-inj-summary__empty">no binding — type a variable name</span></template>
           <template v-else-if="hasTemplate"><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__template" data-test="inj-row-summary-template">{{ row.template }}</span></template>
@@ -279,7 +279,7 @@ function onDragEnd(): void {
           title="Template active — engine substitutes $slot_name refs before writing to ctx"
         >tpl</span>
       </div>
-    </Transition>
+    </div>
   </div>
 </template>
 

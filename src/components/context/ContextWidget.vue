@@ -4626,9 +4626,11 @@ provide(ModuleRowCtxKey, moduleRowCtx);
               transform var(--wp-motion-flip) var(--wp-motion-curve-flip);
 }
 
-/* `wp-collapse` Vue transition → row-primitives.css. Animates the
- * max-height + opacity of the summary line for both ModuleRow and
- * InjectorRow. */
+/* `.wp-collapse-row` utility → row-primitives.css. Wraps the summary
+ * line for both ModuleRow and InjectorRow, interpolating a grid track
+ * from 1fr → 0fr (same trick as `.wp-bundle` and
+ * `.wp-inj-rows-wrap`). Replaces the older `wp-collapse` Vue
+ * transition that capped at a 32px max-height. */
 
 /* Pulse on first appear — applies uniformly to every state-marker dot
  * (mod / drift / missing AND every conflict severity) so the user gets

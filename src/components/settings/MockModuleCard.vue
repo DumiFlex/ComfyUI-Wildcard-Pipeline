@@ -156,8 +156,8 @@ const states = computed(() => props.module.states ?? {});
         ><i class="pi pi-trash" aria-hidden="true"></i></button>
       </div>
     </div>
-    <Transition name="wp-collapse">
-      <div v-if="!state.collapsed" class="wp-summary">
+    <div class="wp-collapse-row" :data-collapsed="state.collapsed ? 'true' : 'false'">
+      <div class="wp-summary">
         <span class="wp-summary__main">
           <template v-for="(tok, i) in module.summary" :key="i">
             <span v-if="tok.isVar" class="wp-pg-mockup__var">{{ tok.text }}</span>
@@ -165,6 +165,6 @@ const states = computed(() => props.module.states ?? {});
           </template>
         </span>
       </div>
-    </Transition>
+    </div>
   </div>
 </template>

@@ -957,12 +957,27 @@ describe("ContextWidget sibling badge — summary line", () => {
     expect(chips[0].attributes("title")).toBe("used 2 times in this Context");
   });
 
-  it("hides sibling chip when collapsed (no summary line rendered)", () => {
+  it("keeps sibling chip mounted under a collapsed wp-collapse-row wrapper", () => {
+    // Migration note: the summary line used to mount/unmount via a
+    // Vue <Transition v-if>, so the chip was absent from the DOM when
+    // collapsed. The new .wp-collapse-row utility keeps the chip in
+    // the tree and animates a grid-track 1fr -> 0fr collapse instead —
+    // smoother UX, but Test Utils now sees the chip in either state.
     const wrapper = mountWithModules([
       { id: "abc12345", type: "wildcard", enabled: true, collapsed: true },
       { id: "abc12345", type: "wildcard", enabled: true, collapsed: true },
     ]);
-    expect(wrapper.findAll('[data-test="sibling-chip"]').length).toBe(0);
+    const chips = wrapper.findAll('[data-test="sibling-chip"]');
+    expect(chips.length).toBe(2);
+    for (const chip of chips) {
+      // Walk up to the wp-collapse-row wrapper and confirm it carries
+      // the collapsed marker that drives the CSS animation.
+      let el: HTMLElement | null = chip.element as HTMLElement;
+      while (el && !el.classList.contains("wp-collapse-row")) {
+        el = el.parentElement;
+      }
+      expect(el?.getAttribute("data-collapsed")).toBe("true");
+    }
   });
 
   it("does NOT render sibling chip when uuid appears once", () => {
