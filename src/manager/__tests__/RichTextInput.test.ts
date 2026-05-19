@@ -371,6 +371,42 @@ describe("RichTextInput.vue", () => {
     expect(events[events.length - 1]?.[0]).toBe("hi  foo");
     wrap.unmount();
   });
+
+  it("inserts an autocomplete pick at the current selection, not the end", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "alpha  beta",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", []]]),
+      },
+      attachTo: document.body,
+    });
+    // Place the caret between the two spaces (offset 6 in "alpha  beta").
+    // NOTE: focus first, then set selection — jsdom's `focus()` on a
+    // contenteditable resets the selection to (host, 0), so installing
+    // the range after focus is the only way to preserve our intended
+    // caret position under jsdom. In a real browser the order doesn't
+    // matter because focus doesn't clobber an in-element selection.
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    const textNode = host.querySelector(".wp-rt__text")?.firstChild ?? host.firstChild;
+    const range = document.createRange();
+    if (textNode) range.setStart(textNode, 6);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Pick via the test seam.
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("alpha @{aabbccdd} beta");
+    wrap.unmount();
+  });
 });
 
 describe("RichTextPreview.vue", () => {

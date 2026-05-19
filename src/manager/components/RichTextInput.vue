@@ -275,9 +275,46 @@ function insertVarAtCursor(name: string): void {
 }
 
 function currentCursor(): Cursor {
-  // Map DOM selection (host range) → model cursor. For tests we accept
-  // a fallback: end of value. Production input flows via DOM selection
-  // — implemented in Task 9.
+  const host = hostEl.value;
+  if (!host) return { atomIndex: atoms.value.length, offset: 0 };
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return { atomIndex: atoms.value.length, offset: 0 };
+  const range = sel.getRangeAt(0);
+  if (!host.contains(range.startContainer)) {
+    return { atomIndex: atoms.value.length, offset: 0 };
+  }
+  // Walk the host's child list to find which atom the range start lives in.
+  // The host children are 1:1 with `atoms` in render order — BUT Vue's
+  // `<template v-for>` injects fragment-marker text nodes (empty
+  // textContent) around each rendered child. We need to map DOM child
+  // index → atom index by counting only the meaningful children
+  // (RefChip elements + .wp-rt__text spans), skipping fragment markers.
+  const meaningful: Node[] = [];
+  for (const child of host.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      // Vue fragment markers are empty text nodes — skip those, but
+      // keep user-inserted text nodes (which have non-empty content).
+      if ((child.textContent ?? "").length > 0) meaningful.push(child);
+    } else {
+      meaningful.push(child);
+    }
+  }
+
+  for (let i = 0; i < meaningful.length; i++) {
+    const node = meaningful[i];
+    if (node === range.startContainer) {
+      // The range start IS this child — cursor sits AT this atom boundary.
+      return { atomIndex: i + range.startOffset, offset: 0 };
+    }
+    if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).contains(range.startContainer)) {
+      const el = node as HTMLElement;
+      if (el.classList.contains("wp-rt__text")) {
+        return { atomIndex: i, offset: range.startOffset };
+      }
+      // Range inside a chip — treat as cursor at the END of that chip.
+      return { atomIndex: i + 1, offset: 0 };
+    }
+  }
   return { atomIndex: atoms.value.length, offset: 0 };
 }
 
