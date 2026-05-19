@@ -26,6 +26,7 @@ from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_MAX_IDENT_LEN = 64
 
 # `_derive_module_rng` lifted to engine/modules/_seed.py so combine +
 # fixed_values handlers share the same helper (Phase: combine v2 +
@@ -200,9 +201,22 @@ class WildcardHandler(ModuleHandler):
         options = payload.get("options")
         if not isinstance(options, list):
             raise ValueError("wildcard payload.options must be a list")
+        seen_ids: set[str] = set()
         for i, opt in enumerate(options):
             if not isinstance(opt, dict):
                 raise ValueError(f"wildcard payload.options[{i}] must be an object")
+            # Option ids must be unique across the pool — `pinned_option_id`
+            # lookup, `enabled_options` toggles, and `option_weights`
+            # overrides all key by id, so dupes make those features
+            # nondeterministic.
+            opt_id = opt.get("id")
+            if isinstance(opt_id, str):
+                if opt_id in seen_ids:
+                    raise ValueError(
+                        f"wildcard payload.options[{i}].id {opt_id!r} duplicates "
+                        f"an earlier option id"
+                    )
+                seen_ids.add(opt_id)
             value = opt.get("value", "")
             if not isinstance(value, str):
                 raise ValueError(
@@ -226,7 +240,24 @@ class WildcardHandler(ModuleHandler):
         if binding is not None:
             if not isinstance(binding, str):
                 raise ValueError("wildcard payload.var_binding must be a string")
-            if binding and not _IDENT_RE.match(binding):
+            # Empty string used to slip through (the old guard was
+            # `if binding and not match`, which short-circuited on
+            # falsy). Reject explicitly + bound length + reject the
+            # `__dunder` prefix (collides with engine-internal key
+            # convention — see engine/modules/types.py:strip_internals).
+            if not binding:
+                raise ValueError("wildcard payload.var_binding must not be empty")
+            if len(binding) > _MAX_IDENT_LEN:
+                raise ValueError(
+                    f"wildcard payload.var_binding must be at most "
+                    f"{_MAX_IDENT_LEN} chars (got {len(binding)})"
+                )
+            if binding.startswith("__"):
+                raise ValueError(
+                    "wildcard payload.var_binding must not start with '__' "
+                    "(reserved for engine-internal keys)"
+                )
+            if not _IDENT_RE.match(binding):
                 raise ValueError(
                     f"wildcard payload.var_binding {binding!r} is not a valid identifier"
                 )

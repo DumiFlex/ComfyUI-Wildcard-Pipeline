@@ -7,16 +7,63 @@ themselves the frozen snapshot package, so re-snapshotting at insert
 time is a no-op."""
 from __future__ import annotations
 
+import sqlite3
+
 from aiohttp import web
 
 from engine.db.repositories import BundleNotFound, BundleRepository
 from engine.modules.dispatcher import get_handler
 from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._validators import validate_body_size, validate_meta
 
 _UPDATABLE_FIELDS = (
     "name", "description", "color", "category_id", "tags",
     "children", "is_favorite",
 )
+
+
+def _dedupe_children(children: list[dict]) -> list[dict]:
+    """Drop second+ occurrences of any child sharing an ``id`` with an
+    earlier child in the same list.
+
+    Without this guard the same module could appear twice (or three,
+    four) times in ``children[]`` and every propagation pass would
+    rewrite every copy identically — harmless but bloats the bundle
+    payload and confuses the SPA bundle preview (two "framing" cards,
+    same id). Order is preserved; the first occurrence wins.
+    """
+    seen: set[str] = set()
+    out: list[dict] = []
+    for child in children:
+        if not isinstance(child, dict):
+            out.append(child)
+            continue
+        cid = child.get("id")
+        if isinstance(cid, str) and cid in seen:
+            continue
+        if isinstance(cid, str):
+            seen.add(cid)
+        out.append(child)
+    return out
+
+
+def _auto_suffix_bundle_name(repo: BundleRepository, name: str) -> str:
+    """If ``name`` is already taken by another bundle in the library,
+    append ``" (copy)"`` / ``" (copy 2)"`` / etc. until a free name is
+    found. Mirrors ``forkModule``'s collision rule on the modules side
+    so the two surfaces feel the same.
+
+    Walks every bundle once (library volumes are dozens, not thousands).
+    """
+    existing = {b["name"] for b in repo.list()}
+    if name not in existing:
+        return name
+    candidate = f"{name} (copy)"
+    i = 2
+    while candidate in existing:
+        candidate = f"{name} (copy {i})"
+        i += 1
+    return candidate
 
 
 def _validate_children_payloads(children: object) -> str | None:
@@ -109,10 +156,18 @@ async def create_bundle(request: web.Request) -> web.Response:
     (user-picked hex), `category_id`, `tags`, `children` (deep-cloned
     module snapshots), `is_favorite`.
 
-    Children are stored verbatim — caller (typically the SPA bundle
-    editor) is responsible for ensuring each child is a self-contained
-    snapshot the frontend `remapBundleUuids` helper can consume at
-    insert time."""
+    Children are stored verbatim except for id-dedup — caller
+    (typically the SPA bundle editor) is responsible for ensuring each
+    child is a self-contained snapshot the frontend `remapBundleUuids`
+    helper can consume at insert time. Duplicate ids are silently
+    dropped (first occurrence wins).
+
+    Name collisions are auto-suffixed with `(copy)` / `(copy N)` so
+    library picker dropdowns stay unambiguous.
+    """
+    err = validate_body_size(request.content_length)
+    if err is not None:
+        return json_error(err, status=400)
     try:
         body = await request.json()
     except Exception:
@@ -121,24 +176,33 @@ async def create_bundle(request: web.Request) -> web.Response:
         return json_error("body must be a JSON object", status=400)
     if "name" not in body:
         return json_error("missing field: name", status=400)
-
-    err = _validate_children_payloads(body.get("children"))
+    err = validate_meta(body)
     if err is not None:
         return json_error(err, status=400)
 
+    children_raw = body.get("children")
+    err = _validate_children_payloads(children_raw)
+    if err is not None:
+        return json_error(err, status=400)
+    children = _dedupe_children(children_raw) if isinstance(children_raw, list) else []
+
     try:
         with db_session(request) as conn:
-            row = BundleRepository(conn).create(
-                name=body["name"],
+            repo = BundleRepository(conn)
+            unique_name = _auto_suffix_bundle_name(repo, body["name"])
+            row = repo.create(
+                name=unique_name,
                 description=body.get("description", ""),
                 color=body.get("color"),
                 category_id=body.get("category_id"),
                 tags=body.get("tags", []),
-                children=body.get("children", []),
+                children=children,
                 is_favorite=bool(body.get("is_favorite", False)),
             )
     except ValueError as e:
         return json_error(str(e), status=400)
+    except sqlite3.IntegrityError as e:
+        return json_error(f"foreign-key constraint failed: {e}", status=400)
     return json_ok(row, status=201)
 
 
@@ -161,26 +225,67 @@ async def update_bundle(request: web.Request) -> web.Response:
     category_id, tags, children, is_favorite}. Unknown fields are
     ignored.
 
+    Optional ``If-Match: <version>`` request header enables optimistic
+    concurrency. See `wp_api.modules.update_module` for the contract.
+
     Children changes recompute `payload_hash`; pure-cosmetic field
     changes (rename, recolor) leave the hash unchanged so inserted
     instances don't flag a spurious "library updated" hint."""
     bundle_id = request.match_info["id"]
+    err = validate_body_size(request.content_length)
+    if err is not None:
+        return json_error(err, status=400)
     try:
         body = await request.json()
     except Exception:
         return json_error("invalid JSON body", status=400)
     if not isinstance(body, dict):
         return json_error("body must be a JSON object", status=400)
+    err = validate_meta(body)
+    if err is not None:
+        return json_error(err, status=400)
     patch = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}
     if "children" in patch:
         err = _validate_children_payloads(patch["children"])
         if err is not None:
             return json_error(err, status=400)
-    with db_session(request) as conn:
+        if isinstance(patch["children"], list):
+            patch["children"] = _dedupe_children(patch["children"])
+
+    expected_version_raw = request.headers.get("If-Match")
+    expected_version: int | None = None
+    if expected_version_raw is not None:
         try:
-            row = BundleRepository(conn).update(bundle_id, **patch)
+            expected_version = int(expected_version_raw.strip().strip('"'))
+        except ValueError:
+            return json_error("If-Match must be an integer version", status=400)
+
+    with db_session(request) as conn:
+        repo = BundleRepository(conn)
+        if expected_version is not None:
+            try:
+                current = repo.get(bundle_id)
+            except BundleNotFound:
+                return json_error(f"bundle {bundle_id!r} not found", status=404)
+            if current["version"] != expected_version:
+                return json_error(
+                    f"version mismatch: If-Match={expected_version} but "
+                    f"current version is {current['version']}",
+                    status=409,
+                )
+        # Auto-suffix rename collisions only when the new name actually
+        # changed AND collides with a DIFFERENT row. PUTting a row with
+        # its own current name must be a no-op for the suffix logic.
+        if "name" in patch and isinstance(patch["name"], str):
+            others = {b["name"] for b in repo.list() if b["id"] != bundle_id}
+            if patch["name"] in others:
+                patch["name"] = _auto_suffix_bundle_name(repo, patch["name"])
+        try:
+            row = repo.update(bundle_id, **patch)
         except BundleNotFound:
             return json_error(f"bundle {bundle_id!r} not found", status=404)
+        except sqlite3.IntegrityError as e:
+            return json_error(f"foreign-key constraint failed: {e}", status=400)
     return json_ok(row)
 
 

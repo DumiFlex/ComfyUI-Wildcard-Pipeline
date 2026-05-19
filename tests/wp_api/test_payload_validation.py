@@ -80,14 +80,49 @@ async def test_post_accepts_valid_payload_for_each_kind(wp_client, type_id):
     ("wildcard", {"options": [{"id": "o1", "value": "x", "weight": -3}]}),  # negative weight
     ("wildcard", {"options": [{"id": "o1", "value": "x", "weight": "heavy"}]}),  # weight not number
     ("wildcard", {"options": [], "var_binding": "0_bad_ident"}),  # bad identifier
+    # New post-2026-05 hardening — see QA report
+    # empty binding
+    ("wildcard", {
+        "options": [{"id": "o1", "value": "x", "weight": 1}],
+        "var_binding": "",
+    }),
+    # dunder reserved
+    ("wildcard", {
+        "options": [{"id": "o1", "value": "x", "weight": 1}],
+        "var_binding": "__dunder",
+    }),
+    # too long
+    ("wildcard", {
+        "options": [{"id": "o1", "value": "x", "weight": 1}],
+        "var_binding": "a" * 500,
+    }),
+    # duplicate option ids
+    ("wildcard", {
+        "options": [
+            {"id": "o1", "value": "x", "weight": 1},
+            {"id": "o1", "value": "y", "weight": 1},
+        ],
+        "var_binding": "dupopt",
+    }),
     # fixed_values
     ("fixed_values", {"values": "not-an-array"}),
     ("fixed_values", {"values": [{"id": "v1", "name": "1_bad_ident", "value": "x"}]}),
     ("fixed_values", {"values": [{"id": "v1", "name": "mood", "value": 99}]}),  # value not str
+    # dunder reserved
+    ("fixed_values", {"values": [{"id": "v1", "name": "__internal", "value": "x"}]}),
+    # name too long
+    ("fixed_values", {"values": [{"id": "v1", "name": "a" * 200, "value": "x"}]}),
+    ("fixed_values", {"values": [  # duplicate row names
+        {"id": "v1", "name": "mood", "value": "calm"},
+        {"id": "v2", "name": "mood", "value": "wild"},
+    ]}),
     # combine
     ("combine", {"template": "hello"}),  # missing output_var
     ("combine", {"template": "hi", "output_var": "0bad"}),  # bad identifier
     ("combine", {"template": 42, "output_var": "phrase"}),  # template not str
+    ("combine", {"template": "", "output_var": "phrase"}),  # empty template
+    ("combine", {"template": "hi", "output_var": "__internal"}),  # dunder reserved
+    ("combine", {"template": "hi", "output_var": "a" * 200}),  # output_var too long
     # constraint
     (
         "constraint",
@@ -112,6 +147,16 @@ async def test_post_accepts_valid_payload_for_each_kind(wp_client, type_id):
             "action": {"target_var": "y", "mode": "replace", "value": ""},
         }],
     }]}),  # invalid op
+    ("derivation", {"rules": [  # duplicate rule ids
+        {"id": "r1", "branches": [{
+            "condition": {"var": "x", "op": "equals", "value": "a"},
+            "action": {"target_var": "y", "mode": "replace", "value": "1"},
+        }]},
+        {"id": "r1", "branches": [{
+            "condition": {"var": "x", "op": "equals", "value": "b"},
+            "action": {"target_var": "y", "mode": "replace", "value": "2"},
+        }]},
+    ]}),
 ])
 async def test_post_rejects_malformed_payload(wp_client, type_id, broken_payload):
     resp = await _create(wp_client, type_id, broken_payload, name=f"qa_bad_{type_id}")

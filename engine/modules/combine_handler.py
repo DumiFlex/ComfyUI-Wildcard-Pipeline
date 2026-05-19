@@ -22,6 +22,8 @@ from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_MAX_IDENT_LEN = 64
+_MAX_TEMPLATE_LEN = 8000
 
 
 class CombineHandler(ModuleHandler):
@@ -36,9 +38,30 @@ class CombineHandler(ModuleHandler):
         template = payload.get("template")
         if not isinstance(template, str):
             raise ValueError("combine payload.template must be a string")
+        # Empty template means the module emits an empty string for its
+        # output_var — almost always a config mistake (the user removed
+        # the template content but forgot the module is still in the
+        # chain). Reject so the broken state surfaces at save time.
+        if not template:
+            raise ValueError("combine payload.template must not be empty")
+        if len(template) > _MAX_TEMPLATE_LEN:
+            raise ValueError(
+                f"combine payload.template must be at most {_MAX_TEMPLATE_LEN} "
+                f"chars (got {len(template)})"
+            )
         output_var = payload.get("output_var")
         if not isinstance(output_var, str) or not output_var:
             raise ValueError("combine payload.output_var must be a non-empty string")
+        if len(output_var) > _MAX_IDENT_LEN:
+            raise ValueError(
+                f"combine payload.output_var must be at most {_MAX_IDENT_LEN} "
+                f"chars (got {len(output_var)})"
+            )
+        if output_var.startswith("__"):
+            raise ValueError(
+                "combine payload.output_var must not start with '__' "
+                "(reserved for engine-internal keys)"
+            )
         if not _IDENT_RE.match(output_var):
             raise ValueError(
                 f"combine payload.output_var {output_var!r} is not a valid identifier"

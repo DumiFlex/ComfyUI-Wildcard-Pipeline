@@ -28,6 +28,7 @@ from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_MAX_IDENT_LEN = 64
 
 
 class FixedValuesHandler(ModuleHandler):
@@ -40,6 +41,7 @@ class FixedValuesHandler(ModuleHandler):
         values = payload.get("values")
         if not isinstance(values, list):
             raise ValueError("fixed_values payload.values must be a list")
+        seen_names: set[str] = set()
         for i, v in enumerate(values):
             if not isinstance(v, dict):
                 raise ValueError(
@@ -53,10 +55,30 @@ class FixedValuesHandler(ModuleHandler):
             # Empty name is allowed (resolver skips those entries) but a
             # non-empty name must be a valid identifier — it gets emitted
             # as a $var into the runtime ctx.
-            if isinstance(name, str) and name and not _IDENT_RE.match(name):
-                raise ValueError(
-                    f"fixed_values payload.values[{i}].name {name!r} is not a valid identifier"
-                )
+            if isinstance(name, str) and name:
+                if len(name) > _MAX_IDENT_LEN:
+                    raise ValueError(
+                        f"fixed_values payload.values[{i}].name must be at most "
+                        f"{_MAX_IDENT_LEN} chars (got {len(name)})"
+                    )
+                if name.startswith("__"):
+                    raise ValueError(
+                        f"fixed_values payload.values[{i}].name must not start "
+                        f"with '__' (reserved for engine-internal keys)"
+                    )
+                if not _IDENT_RE.match(name):
+                    raise ValueError(
+                        f"fixed_values payload.values[{i}].name {name!r} is not a valid identifier"
+                    )
+                # Names must be unique across rows — two rows with the
+                # same name silently last-write-wins at runtime, hiding
+                # the earlier row's value.
+                if name in seen_names:
+                    raise ValueError(
+                        f"fixed_values payload.values[{i}].name {name!r} "
+                        f"duplicates an earlier row"
+                    )
+                seen_names.add(name)
             value = v.get("value", "")
             if not isinstance(value, str):
                 raise ValueError(

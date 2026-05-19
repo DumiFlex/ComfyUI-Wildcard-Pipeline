@@ -199,6 +199,7 @@ class DerivationHandler(ModuleHandler):
         rules = payload.get("rules")
         if not isinstance(rules, list):
             raise ValueError("derivation payload.rules must be a list")
+        seen_rule_ids: set[str] = set()
         for ri, rule in enumerate(rules):
             if not isinstance(rule, dict):
                 raise ValueError(f"derivation payload.rules[{ri}] must be an object")
@@ -207,6 +208,14 @@ class DerivationHandler(ModuleHandler):
                 raise ValueError(
                     f"derivation payload.rules[{ri}].id must be a non-empty string"
                 )
+            # Rule ids index `instance.disabled_rule_ids` and
+            # `rule_order_override` — dupes make both ambiguous.
+            if rule_id in seen_rule_ids:
+                raise ValueError(
+                    f"derivation payload.rules[{ri}].id {rule_id!r} duplicates "
+                    f"an earlier rule id"
+                )
+            seen_rule_ids.add(rule_id)
             branches = rule.get("branches")
             if not isinstance(branches, list) or not branches:
                 raise ValueError(

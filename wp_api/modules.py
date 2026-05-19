@@ -1,12 +1,15 @@
 """/wp/api/modules CRUD + snapshot + match + duplicate + favorite endpoints."""
 from __future__ import annotations
 
+import sqlite3
+
 from aiohttp import web
 
 from engine.db.repositories import BundleRepository, ModuleNotFound, ModuleRepository
 from engine.modules.dispatcher import get_handler
 from engine.modules.snapshot import freeze_snapshot, payload_hash
 from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._validators import validate_body_size, validate_meta
 
 
 def _validate_payload_for_type(type_id: str, payload: dict) -> str | None:
@@ -110,6 +113,9 @@ async def list_modules(request: web.Request) -> web.Response:
 
 
 async def create_module(request: web.Request) -> web.Response:
+    err = validate_body_size(request.content_length)
+    if err is not None:
+        return json_error(err, status=400)
     try:
         body = await request.json()
     except Exception:
@@ -120,6 +126,9 @@ async def create_module(request: web.Request) -> web.Response:
     missing = required - body.keys()
     if missing:
         return json_error(f"missing fields: {sorted(missing)}", status=400)
+    err = validate_meta(body)
+    if err is not None:
+        return json_error(err, status=400)
 
     err = _validate_payload_for_type(body["type"], body["payload"])
     if err is not None:
@@ -137,6 +146,12 @@ async def create_module(request: web.Request) -> web.Response:
             )
     except ValueError as e:
         return json_error(str(e), status=400)
+    except sqlite3.IntegrityError as e:
+        # Most common: caller passed a `category_id` that doesn't exist
+        # in the categories table. Pre-fix this surfaced as a 500 with
+        # a stack trace; surface it as a clean 400 instead so the
+        # client can act on the error.
+        return json_error(f"foreign-key constraint failed: {e}", status=400)
     return json_ok(row, status=201)
 
 
@@ -152,6 +167,9 @@ async def import_from_workflow(request: web.Request) -> web.Response:
     (the indicator dot would already be cleared, so this should
     only fire on race).
     """
+    err = validate_body_size(request.content_length)
+    if err is not None:
+        return json_error(err, status=400)
     try:
         body = await request.json()
     except Exception:
@@ -162,6 +180,9 @@ async def import_from_workflow(request: web.Request) -> web.Response:
     missing = required - body.keys()
     if missing:
         return json_error(f"missing fields: {sorted(missing)}", status=400)
+    err = validate_meta(body)
+    if err is not None:
+        return json_error(err, status=400)
 
     err = _validate_payload_for_type(body["type"], body["payload"])
     if err is not None:
@@ -186,6 +207,8 @@ async def import_from_workflow(request: web.Request) -> web.Response:
             )
     except ValueError as e:
         return json_error(str(e), status=400)
+    except sqlite3.IntegrityError as e:
+        return json_error(f"foreign-key constraint failed: {e}", status=400)
     return json_ok(row, status=201)
 
 
@@ -211,18 +234,41 @@ async def update_module(request: web.Request) -> web.Response:
     registered module handler before write — same guard as POST and
     import-from-workflow.
 
+    Optional ``If-Match: <version>`` request header enables optimistic
+    concurrency: if the row's current ``version`` no longer matches
+    the value the client last saw, the PUT is rejected with ``409``
+    instead of silently overwriting another writer's work. Header is
+    opt-in — omitting it preserves the legacy last-write-wins behavior.
+
     Response shape on success:
       {<module fields>, "bundles_updated": ["bundle_id_1", ...]}
     """
     mid = request.match_info["id"]
+    err = validate_body_size(request.content_length)
+    if err is not None:
+        return json_error(err, status=400)
     try:
         body = await request.json()
     except Exception:
         return json_error("invalid JSON body", status=400)
     if not isinstance(body, dict):
         return json_error("body must be a JSON object", status=400)
+    err = validate_meta(body)
+    if err is not None:
+        return json_error(err, status=400)
     kwargs: dict = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}
     propagate = bool(body.get("propagate_to_bundles", True))
+
+    # Optional optimistic-concurrency guard. Two-window edits previously
+    # raced silently — both PUTs returned 200, last writer won. With
+    # If-Match the second writer gets a 409 and can re-fetch.
+    expected_version_raw = request.headers.get("If-Match")
+    expected_version: int | None = None
+    if expected_version_raw is not None:
+        try:
+            expected_version = int(expected_version_raw.strip().strip('"'))
+        except ValueError:
+            return json_error("If-Match must be an integer version", status=400)
 
     # If the caller is rewriting the payload, validate it against the
     # row's existing module type — same guard as POST/import-from-workflow.
@@ -238,10 +284,24 @@ async def update_module(request: web.Request) -> web.Response:
 
     bundles_updated: list[str] = []
     with db_session(request) as conn:
+        repo = ModuleRepository(conn)
+        if expected_version is not None:
+            try:
+                current = repo.get(mid)
+            except ModuleNotFound:
+                return json_error(f"module not found: {mid}", status=404)
+            if current["version"] != expected_version:
+                return json_error(
+                    f"version mismatch: If-Match={expected_version} but "
+                    f"current version is {current['version']}",
+                    status=409,
+                )
         try:
-            row = ModuleRepository(conn).update(mid, **kwargs)
+            row = repo.update(mid, **kwargs)
         except ModuleNotFound:
             return json_error(f"module not found: {mid}", status=404)
+        except sqlite3.IntegrityError as e:
+            return json_error(f"foreign-key constraint failed: {e}", status=400)
         # Bundle propagation runs in the same transaction so an update is
         # atomic across modules + bundles tables. Only fires when payload
         # or library-facing meta (name/description/tags) changed and the
@@ -255,6 +315,50 @@ async def update_module(request: web.Request) -> web.Response:
     return json_ok(out)
 
 
+def _flag_orphaned_in_bundles(conn, module_id: str) -> list[str]:
+    """Mark every bundle child snapshot whose ``id`` matches ``module_id``
+    as orphaned so the SPA can surface a "library entry gone" badge.
+
+    Bundles are deliberately self-contained — children stay as frozen
+    payload snapshots even after the source module is deleted, so a
+    user can still pull a working bundle into a workflow. The downside
+    is that the bundle now references a phantom module with no live
+    library ancestor. Stamping ``meta.orphaned = true`` (plus a
+    timestamp) is the smallest structural change that keeps the
+    snapshot intact while giving the UI something to filter on.
+
+    Returns the list of bundle ids that had at least one child stamped.
+    """
+    from datetime import datetime, timezone
+
+    bundle_repo = BundleRepository(conn)
+    stamped_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    affected: list[str] = []
+    for bundle in bundle_repo.list():
+        children = bundle.get("children") or []
+        if not isinstance(children, list):
+            continue
+        rewritten = False
+        new_children: list[dict] = []
+        for child in children:
+            if isinstance(child, dict) and child.get("id") == module_id:
+                next_child = dict(child)
+                meta = next_child.get("meta")
+                if not isinstance(meta, dict):
+                    meta = {}
+                if not meta.get("orphaned"):
+                    meta = {**meta, "orphaned": True, "orphaned_at": stamped_at}
+                    next_child["meta"] = meta
+                    rewritten = True
+                new_children.append(next_child)
+            else:
+                new_children.append(child)
+        if rewritten:
+            bundle_repo.update(bundle["id"], children=new_children)
+            affected.append(bundle["id"])
+    return affected
+
+
 async def delete_module(request: web.Request) -> web.Response:
     mid = request.match_info["id"]
     with db_session(request) as conn:
@@ -262,6 +366,11 @@ async def delete_module(request: web.Request) -> web.Response:
             ModuleRepository(conn).delete(mid)
         except ModuleNotFound:
             return json_error(f"module not found: {mid}", status=404)
+        # After the row's gone, flag any bundle children whose snapshot
+        # pointed at this id so the SPA can render a "stale snapshot"
+        # badge. Same transaction means the bundles never see a window
+        # where the module is missing but children aren't flagged.
+        _flag_orphaned_in_bundles(conn, mid)
     return web.Response(status=204)
 
 

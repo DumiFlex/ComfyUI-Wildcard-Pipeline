@@ -66,3 +66,17 @@ async def test_api_routes_not_shadowed(wp_client):
     assert resp.status == 200
     body = await resp.json()
     assert "items" in body
+
+
+async def test_unknown_api_path_returns_json_404(wp_client):
+    """Unknown `/wp/api/...` paths must NOT fall through to the SPA shell.
+
+    Pre-fix `GET /wp/api/this/does/not/exist` returned 200 text/html
+    (the SPA index), making client-side debugging hostile — the
+    JSON.parse failure masked the real "no such route" error.
+    """
+    resp = await wp_client.get("/wp/api/this/path/does/not/exist")
+    assert resp.status == 404
+    assert resp.headers.get("Content-Type", "").startswith("application/json")
+    body = await resp.json()
+    assert "error" in body
