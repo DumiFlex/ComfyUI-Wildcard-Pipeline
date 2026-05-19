@@ -88,10 +88,23 @@ describe("Dashboard.vue", () => {
     expect(text).toContain("Bundles");
   });
 
-  it("renders without crashing when API returns empty arrays", async () => {
+  it("renders the getting-started checklist when the library is empty", async () => {
     apiMod.list.mockResolvedValue({ items: [], total: 0 });
     const wrap = mountView();
     await flushPromises();
+    expect(wrap.find('[data-test="dashboard-getting-started"]').exists()).toBe(true);
+    expect(wrap.text()).toContain("Get started in three steps");
+    // Recents tabs are hidden in the empty state.
+    expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(false);
+  });
+
+  it("renders the Recents tabs when the library has items", async () => {
+    apiMod.list.mockResolvedValue({ items: [], total: 5 });
+    apiBundles.list.mockResolvedValue({ items: [], total: 0 });
+    const wrap = mountView();
+    await flushPromises();
+    expect(wrap.find('[data-test="dashboard-getting-started"]').exists()).toBe(false);
+    expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(true);
     // Default tab is Recently opened — empty-state copy.
     expect(wrap.text()).toContain("No recently opened items yet");
     // Switch to Recent edits tab and confirm its empty-state copy.
@@ -100,6 +113,13 @@ describe("Dashboard.vue", () => {
     // Switch to Favorites tab and confirm its empty-state copy.
     await wrap.get('[data-test="dashboard-tab-favorites"]').trigger("click");
     expect(wrap.text()).toContain("No favorites yet.");
+  });
+
+  it("renders 6 quick-create buttons (one per kind)", async () => {
+    apiMod.list.mockResolvedValue({ items: [], total: 0 });
+    const wrap = mountView();
+    await flushPromises();
+    expect(wrap.findAll('[data-test^="quick-new-"]')).toHaveLength(6);
   });
 
   it("clicking a stat card navigates to that kind list", async () => {

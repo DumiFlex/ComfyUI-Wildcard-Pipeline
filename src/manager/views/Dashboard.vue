@@ -59,6 +59,12 @@ const counts = ref<Record<string, number>>({
   bundle: 0,
 });
 
+/** Last edited timestamp per kind — surfaced under the stat tile's count
+ *  so the dashboard answers "what changed recently" without scrolling
+ *  to the Recent edits tab. Empty string means "never", which renders
+ *  as a hyphen via the RelativeDate empty path. */
+const lastEditByKind = ref<Record<string, string>>({});
+
 /** Normalised recent/favorite entry. Bundles + modules feed into the
  *  same list so users see edits across both surfaces ordered by recency. */
 interface DashboardRow {
@@ -99,9 +105,103 @@ function newWildcard() {
   router.push("/wildcards/new");
 }
 
-function newBundle() {
-  router.push("/bundles/new");
+function newOfKind(slug: string) {
+  router.push(`/${slug}/new`);
 }
+
+/** Total library size — drives both the stats summary and the
+ *  getting-started conditional. Empty libraries (< 3 items total) get
+ *  the intro checklist instead of the recents tabs. */
+const totalItems = computed<number>(() =>
+  Object.values(counts.value).reduce((sum, n) => sum + n, 0),
+);
+const showGettingStarted = computed<boolean>(() => totalItems.value < 3);
+
+/** Health issues derived from the live catalog. Lightweight checks
+ *  surfaced as a single advisory card — runtime conflicts (missing
+ *  $vars, etc.) are the extension's domain; this card focuses on
+ *  *editor-time* mistakes the user can fix from the library. */
+interface HealthIssue {
+  id: string;
+  label: string;
+  detail: string;
+  count: number;
+  route: string;
+}
+const healthIssues = computed<HealthIssue[]>(() => {
+  const issues: HealthIssue[] = [];
+  const blankWildcards = moduleStore.catalog.filter((m) => {
+    if (m.type !== "wildcard") return false;
+    const opts = (m.payload as { options?: { value?: string }[] } | null)?.options ?? [];
+    return opts.length === 0 || opts.every((o) => !(o.value || "").trim());
+  });
+  if (blankWildcards.length) {
+    issues.push({
+      id: "blank-wildcards",
+      label: `${blankWildcards.length} wildcard${blankWildcards.length === 1 ? '' : 's'} with no usable options`,
+      detail: "Wildcards need at least one non-empty option to resolve.",
+      count: blankWildcards.length,
+      route: "/wildcards",
+    });
+  }
+  const emptyBundles = bundleStore.catalog.filter((b) => {
+    const kids = Array.isArray(b.children) ? b.children : [];
+    return kids.length === 0;
+  });
+  if (emptyBundles.length) {
+    issues.push({
+      id: "empty-bundles",
+      label: `${emptyBundles.length} empty bundle${emptyBundles.length === 1 ? '' : 's'}`,
+      detail: "Bundles without children won't surface anything at run time.",
+      count: emptyBundles.length,
+      route: "/bundles",
+    });
+  }
+  const unnamed = [
+    ...moduleStore.catalog.filter((m) => !m.name?.trim()),
+    ...bundleStore.catalog.filter((b) => !b.name?.trim()),
+  ];
+  if (unnamed.length) {
+    issues.push({
+      id: "unnamed",
+      label: `${unnamed.length} unnamed item${unnamed.length === 1 ? '' : 's'}`,
+      detail: "Items without names are hard to find in pickers and references.",
+      count: unnamed.length,
+      route: "/all",
+    });
+  }
+  return issues;
+});
+
+/** Getting-started steps. The check column reflects actual library
+ *  state so users can see their progress against the checklist as
+ *  they create things. */
+const startSteps = computed(() => [
+  {
+    id: "wildcard",
+    title: "Create your first wildcard",
+    body: "Wildcards pick one weighted option from a pool. They form the base of every prompt template.",
+    cta: "New wildcard",
+    slug: "wildcards",
+    done: counts.value.wildcard > 0,
+  },
+  {
+    id: "combine",
+    title: "Compose a Combine module",
+    body: "Combine joins fixed text with wildcard variables into a reusable template.",
+    cta: "New combine",
+    slug: "combines",
+    done: counts.value.combine > 0,
+  },
+  {
+    id: "test",
+    title: "Try the Test Runner",
+    body: "Run any module against the engine to preview output before wiring it into a graph.",
+    cta: "Open Test Runner",
+    slug: "test",
+    done: false,
+  },
+]);
 
 function editRow(row: DashboardRow) {
   if (row.kind === "bundle") {
@@ -206,19 +306,24 @@ function bundleToRow(b: BundleRow): DashboardRow {
 
 async function loadCounts() {
   // Fetch one record per kind in parallel; both api.modules.list and
-  // api.bundles.list expose `total` on the response.
+  // api.bundles.list expose `total` on the response. Requesting limit:1
+  // sorted by updated_at desc gives us count + most-recent edit in a
+  // single round-trip per kind.
   await Promise.all(
     KIND_META.map(async (k) => {
       try {
         if (k.key === "bundle") {
           const res = await api.bundles.list({ limit: 1 });
           counts.value.bundle = res.total ?? res.items.length;
+          lastEditByKind.value.bundle = res.items[0]?.updated_at ?? "";
         } else if (k.type) {
           const res = await api.modules.list({ type: k.type, limit: 1 });
           counts.value[k.key] = res.total ?? res.items.length;
+          lastEditByKind.value[k.key] = res.items[0]?.updated_at ?? "";
         }
       } catch {
         counts.value[k.key] = 0;
+        lastEditByKind.value[k.key] = "";
       }
     }),
   );
@@ -332,21 +437,108 @@ onMounted(refresh);
         </div>
         <div class="wp-stat__label">{{ kind.label }}</div>
         <div class="wp-stat__value">{{ counts[kind.key] }}</div>
-        <div class="wp-stat__delta">
-          <Icon name="pi-arrow-up-right" :size="ICON_SM" /> View all
+        <div class="wp-stat__delta dashboard__stat-foot">
+          <span class="dashboard__stat-edit">
+            <Icon name="pi-clock" :size="ICON_SM" />
+            <RelativeDate v-if="lastEditByKind[kind.key]" :value="lastEditByKind[kind.key]" />
+            <span v-else>—</span>
+          </span>
+          <span class="dashboard__stat-cta">
+            <Icon name="pi-arrow-up-right" :size="ICON_SM" /> View
+          </span>
         </div>
       </button>
     </div>
 
-    <!-- Quick actions row -->
-    <div class="dashboard__quick">
-      <Button variant="ghost" icon="pi-bolt" @click="openTestRunner">Open test runner</Button>
-      <Button variant="ghost" icon="pi-arrow-right-arrow-left" @click="openImportExport">Import / Export</Button>
-      <Button variant="ghost" icon="pi-plus" @click="newBundle">New bundle</Button>
+    <!-- Quick-create row — one '+ New <kind>' button per module type so
+         creation is one click from the dashboard for every shape. -->
+    <div class="dashboard__quick" data-test="dashboard-quick-create">
+      <span class="dashboard__quick-label">Quick create</span>
+      <Button
+        v-for="kind in KIND_META"
+        :key="kind.key"
+        variant="ghost"
+        size="sm"
+        icon="pi-plus"
+        :data-test="`quick-new-${kind.key}`"
+        @click="newOfKind(kind.slug)"
+      >{{ kind.label.replace(/s$/, '') }}</Button>
+      <span class="wp-spacer" />
+      <Button variant="ghost" size="sm" icon="pi-bolt" @click="openTestRunner">Test Runner</Button>
+      <Button variant="ghost" size="sm" icon="pi-arrow-right-arrow-left" @click="openImportExport">Import / Export</Button>
     </div>
 
+    <!-- Health issues — advisory card, surfaced only when the catalog
+         has real editor-time problems. Each row links to the list view
+         where the user can find + fix the offending items. -->
+    <Card v-if="healthIssues.length" data-test="dashboard-health">
+      <template #default>
+        <div class="dashboard__health-head">
+          <Icon name="pi-exclamation-triangle" />
+          <span class="dashboard__health-title">{{ healthIssues.length }} thing{{ healthIssues.length === 1 ? '' : 's' }} to look at</span>
+        </div>
+        <ul class="dashboard__health-list">
+          <li
+            v-for="issue in healthIssues"
+            :key="issue.id"
+            class="dashboard__health-row"
+            @click="router.push(issue.route)"
+            @keydown.enter.prevent="router.push(issue.route)"
+            @keydown.space.prevent="router.push(issue.route)"
+            tabindex="0"
+            role="button"
+            :aria-label="`${issue.label}. Open ${issue.route}`"
+          >
+            <strong>{{ issue.label }}</strong>
+            <span class="dashboard__health-detail">{{ issue.detail }}</span>
+            <Icon name="pi-arrow-right" :size="ICON_SM" />
+          </li>
+        </ul>
+      </template>
+    </Card>
+
+    <!-- Getting-started checklist — shown only when the library is
+         essentially empty (< 3 items across all kinds). Auto-collapses
+         into the regular Recents tabs as soon as the user creates a
+         few things, so it never gets in the way of returning users. -->
+    <Card v-if="showGettingStarted" data-test="dashboard-getting-started">
+      <template #default>
+        <div class="dashboard__start-head">
+          <Icon name="pi-compass" />
+          <div>
+            <h3 class="dashboard__start-title">Get started in three steps</h3>
+            <p class="dashboard__start-sub">Each step turns into a checkmark once you've done it.</p>
+          </div>
+        </div>
+        <ol class="dashboard__start-list">
+          <li
+            v-for="(step, i) in startSteps"
+            :key="step.id"
+            class="dashboard__start-row"
+            :data-done="step.done || undefined"
+          >
+            <span class="dashboard__start-step">
+              <Icon v-if="step.done" name="pi-check-circle" />
+              <span v-else class="dashboard__start-num">{{ i + 1 }}</span>
+            </span>
+            <div class="dashboard__start-body">
+              <strong>{{ step.title }}</strong>
+              <p>{{ step.body }}</p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              :icon="step.id === 'test' ? 'pi-bolt' : 'pi-plus'"
+              :disabled="step.done && step.id !== 'test'"
+              @click="router.push(`/${step.slug}${step.id === 'test' ? '' : '/new'}`)"
+            >{{ step.done && step.id !== 'test' ? 'Done' : step.cta }}</Button>
+          </li>
+        </ol>
+      </template>
+    </Card>
+
     <!-- Recent / Favorites -->
-    <Card padding>
+    <Card v-if="!showGettingStarted" padding>
       <template #actions>
         <div class="wp-tabs wp-recent__tabs">
           <button
@@ -429,11 +621,139 @@ onMounted(refresh);
 .dashboard__hero-text { flex: 1; min-width: 0; }
 .dashboard__hero-actions { gap: var(--wp-space-4); }
 
+.dashboard__stat-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wp-space-3);
+  width: 100%;
+}
+.dashboard__stat-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-xs);
+}
+.dashboard__stat-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .dashboard__quick {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-3) var(--wp-space-4);
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-lg);
+}
+.dashboard__quick-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wp-text-dim);
+  padding-right: var(--wp-space-3);
+  border-right: 1px solid var(--wp-border);
+}
+
+/* Health card — danger-tinted advisory list. Each row is keyboard
+ * focusable + clickable to jump to the relevant kind page. */
+.dashboard__health-head {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  margin-bottom: var(--wp-space-4);
+  color: var(--wp-warn, #facc15);
+}
+.dashboard__health-title { font-weight: 600; font-size: var(--wp-text-base); }
+.dashboard__health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
+}
+.dashboard__health-row {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-4);
+  padding: var(--wp-space-3) var(--wp-space-4);
+  background: color-mix(in oklab, var(--wp-warn, #facc15) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 22%, transparent);
+  border-radius: var(--wp-radius);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.dashboard__health-row:hover,
+.dashboard__health-row:focus-visible {
+  background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
+  outline: none;
+}
+.dashboard__health-row strong { font-weight: 600; }
+.dashboard__health-detail {
+  flex: 1;
+  color: var(--wp-text-muted);
+  font-size: var(--wp-text-sm);
+}
+
+/* Getting-started 3-step checklist. Steps render as a numbered list
+ * with the number swapped for a check icon when the corresponding
+ * library item exists (e.g. the wildcard step ticks once counts.wildcard > 0). */
+.dashboard__start-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--wp-space-4);
+  margin-bottom: var(--wp-space-5);
+}
+.dashboard__start-head .pi { color: var(--wp-accent-500); font-size: 22px; margin-top: 2px; }
+.dashboard__start-title { margin: 0; font-size: var(--wp-text-lg); font-weight: 600; }
+.dashboard__start-sub { margin: 2px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
+.dashboard__start-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
   gap: var(--wp-space-4);
 }
+.dashboard__start-row {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-4);
+  padding: var(--wp-space-4);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+}
+.dashboard__start-row[data-done] {
+  background: color-mix(in oklab, var(--wp-success, #22c55e) 6%, transparent);
+  border-color: color-mix(in oklab, var(--wp-success, #22c55e) 26%, transparent);
+}
+.dashboard__start-step {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--wp-bg-3);
+  color: var(--wp-text-muted);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.dashboard__start-row[data-done] .dashboard__start-step {
+  background: color-mix(in oklab, var(--wp-success, #22c55e) 20%, transparent);
+  color: var(--wp-success, #22c55e);
+}
+.dashboard__start-num { font-size: 12.5px; }
+.dashboard__start-body { flex: 1; min-width: 0; }
+.dashboard__start-body strong { font-weight: 600; }
+.dashboard__start-body p { margin: 2px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 
 .wp-recent__tabs {
   display: flex;
