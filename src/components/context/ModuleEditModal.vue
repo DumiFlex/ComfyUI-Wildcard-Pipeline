@@ -7,11 +7,9 @@ import {
   type InstanceFieldKey,
 } from "./editors/_shell";
 import { setLibraryHash } from "./drift-store";
-import { workflowSiblingCount } from "./duplicates/sibling-count";
-import { forkModule } from "./duplicates/fork";
-import { app } from "#comfyui/app";
 import { pushToast } from "../shared/toast-store";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import PushToLibraryModal from "./PushToLibraryModal.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
 import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
@@ -207,242 +205,64 @@ function doClearAllOverrides(): void {
   };
 }
 
-/**
- * Phase B (2026-05-10): Save-to-library auto-fork shared helpers.
- * When the draft's uuid has > 1 instances anywhere in the workflow,
- * save creates a NEW library entry instead of overwriting the shared
- * one. The forked row gets a fresh uuid + " (copy)" name; other
- * instances stay on the original entry.
- */
-async function fetchExistingLibraryNames(): Promise<Set<string>> {
-  try {
-    const res = await fetch("/wp/api/modules");
-    if (!res.ok) return new Set();
-    const body = await res.json() as Array<{ name?: string }>;
-    return new Set(body.map((m) => m.name ?? "").filter(Boolean));
-  } catch {
-    return new Set();
-  }
+/** Unified save-to-library entry point.
+ *
+ * Replaces the five `onXxxSaveToLibraryClick` flows that lived here
+ * before — each had its own confirm dialog + per-kind PUT handler and
+ * each silently dropped meta because the server route ignored it. The
+ * canonical surface is now `PushToLibraryModal.vue`, which owns name/
+ * description/tags edits, bundle-propagation toggle, and the explicit
+ * fork-vs-update choice.
+ *
+ * The five kind-specific modals continue to emit `save-to-library`; we
+ * just hand the draft to one shared modal instead of branching on type
+ * here. */
+const pushToLibraryOpen = ref<boolean>(false);
+
+function onSaveToLibraryClick(): void {
+  if (!draft.value) return;
+  pushToLibraryOpen.value = true;
 }
 
-async function doFork(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const existingNames = await fetchExistingLibraryNames();
-    const { newId, newHash, suffixedName } = await forkModule(draft.value, existingNames);
-    // Stamp `_originalId` so saveEditedModule can swap the row by old
-    // id (otherwise the .map() reconciliation can't find it).
+interface PushSaveResult {
+  mode: "update" | "fork";
+  id: string;
+  payload_hash: string;
+  bundles_updated: string[];
+  name: string;
+}
+
+function onPushToLibrarySaved(result: PushSaveResult): void {
+  if (!draft.value) {
+    pushToLibraryOpen.value = false;
+    return;
+  }
+  setLibraryHash(result.id, result.payload_hash);
+  if (result.mode === "fork") {
+    // The new entry replaces the draft's identity; `_originalId` lets
+    // saveEditedModule swap the row by old id during the next save().
     (draft.value as ModuleEntry & { _originalId?: string })._originalId = draft.value.id;
-    draft.value.id = newId;
-    draft.value.payload_hash = newHash;
-    draft.value.meta = { ...draft.value.meta, name: suffixedName };
-    setLibraryHash(newId, newHash);
-    pushToast(`Saved as new library entry "${suffixedName}"`, { severity: "success" });
+    draft.value.id = result.id;
+    draft.value.payload_hash = result.payload_hash;
+    draft.value.meta = { ...(draft.value.meta ?? {}), name: result.name };
+    pushToast(`Saved as new library entry "${result.name}"`, { severity: "success" });
     save();
-  } catch (err) {
-    pushToast(`Fork failed: ${(err as Error).message}`, { severity: "error" });
+  } else {
+    // Update path — same uuid, refreshed hash. Stamp meta so the local
+    // row matches what the library now stores.
+    draft.value.payload_hash = result.payload_hash;
+    draft.value.meta = { ...(draft.value.meta ?? {}), name: result.name };
+    const bundlesNote =
+      result.bundles_updated.length > 0
+        ? ` · ${result.bundles_updated.length} bundle${result.bundles_updated.length === 1 ? "" : "s"} synced`
+        : "";
+    pushToast(`Saved to library${bundlesNote}`, { severity: "success" });
   }
+  pushToLibraryOpen.value = false;
 }
 
-function siblingCount(): number {
-  if (!draft.value) return 0;
-  return workflowSiblingCount(draft.value.id, app.graph as never);
-}
-
-function buildForkBody(moduleName: string, count: number): string {
-  return `${moduleName} is used ${count} times in this workflow. ` +
-    `Saving creates a new library entry "${moduleName} (copy)". ` +
-    `The other ${count - 1} instance${count - 1 === 1 ? "" : "s"} stay on the original entry.`;
-}
-
-function onWildcardSaveToLibraryClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  const count = siblingCount();
-  if (count > 1) {
-    askConfirm({
-      title: "Save creates a new library entry",
-      body: buildForkBody(moduleName, count),
-      confirmLabel: "Continue — save as fork",
-      onConfirm: () => { void doFork(); },
-    });
-    return;
-  }
-  askConfirm({
-    title: "Save to library?",
-    body: `Push current changes to library entry "${moduleName}". Other workflows referencing this module will see the new version on their next open.`,
-    confirmLabel: "Save to library",
-    onConfirm: () => { void doWildcardSaveToLibrary(); },
-  });
-}
-
-async function doWildcardSaveToLibrary(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json() as { new_hash: string };
-    setLibraryHash(draft.value.id, body.new_hash);
-    pushToast("Saved to library", { severity: "success" });
-  } catch (err) {
-    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
-function onFixedValuesSaveToLibraryClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  const count = siblingCount();
-  if (count > 1) {
-    askConfirm({
-      title: "Save creates a new library entry",
-      body: buildForkBody(moduleName, count),
-      confirmLabel: "Continue — save as fork",
-      onConfirm: () => { void doFork(); },
-    });
-    return;
-  }
-  askConfirm({
-    title: "Save to library?",
-    body: `Push current values to library entry "${moduleName}". Other workflows referencing this module will see the new version on their next open.`,
-    confirmLabel: "Save to library",
-    onConfirm: () => { void doFixedValuesSaveToLibrary(); },
-  });
-}
-
-async function doFixedValuesSaveToLibrary(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json() as { new_hash: string };
-    setLibraryHash(draft.value.id, body.new_hash);
-    pushToast("Saved to library", { severity: "success" });
-  } catch (err) {
-    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
-function onCombineSaveToLibraryClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  const count = siblingCount();
-  if (count > 1) {
-    askConfirm({
-      title: "Save creates a new library entry",
-      body: buildForkBody(moduleName, count),
-      confirmLabel: "Continue — save as fork",
-      onConfirm: () => { void doFork(); },
-    });
-    return;
-  }
-  askConfirm({
-    title: "Save to library?",
-    body: `Push current template + binding to library entry "${moduleName}".`,
-    confirmLabel: "Save to library",
-    onConfirm: () => { void doCombineSaveToLibrary(); },
-  });
-}
-
-async function doCombineSaveToLibrary(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json() as { new_hash: string };
-    setLibraryHash(draft.value.id, body.new_hash);
-    pushToast("Saved to library", { severity: "success" });
-  } catch (err) {
-    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
-function onDerivationSaveToLibraryClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  const count = siblingCount();
-  if (count > 1) {
-    askConfirm({
-      title: "Save creates a new library entry",
-      body: buildForkBody(moduleName, count),
-      confirmLabel: "Continue — save as fork",
-      onConfirm: () => { void doFork(); },
-    });
-    return;
-  }
-  askConfirm({
-    title: "Save to library?",
-    body: `Push current rules + meta to library entry "${moduleName}".`,
-    confirmLabel: "Save to library",
-    onConfirm: () => { void doDerivationSaveToLibrary(); },
-  });
-}
-
-async function doDerivationSaveToLibrary(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json() as { new_hash: string };
-    setLibraryHash(draft.value.id, body.new_hash);
-    pushToast("Saved to library", { severity: "success" });
-  } catch (err) {
-    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
-}
-
-function onConstraintSaveToLibraryClick(): void {
-  if (!draft.value) return;
-  const moduleName = draft.value.meta?.name || "this module";
-  const count = siblingCount();
-  if (count > 1) {
-    askConfirm({
-      title: "Save creates a new library entry",
-      body: buildForkBody(moduleName, count),
-      confirmLabel: "Continue — save as fork",
-      onConfirm: () => { void doFork(); },
-    });
-    return;
-  }
-  askConfirm({
-    title: "Save to library?",
-    body: `Push current changes to library entry "${moduleName}". Other workflows referencing this constraint will see the new version on their next open.`,
-    confirmLabel: "Save to library",
-    onConfirm: () => { void doConstraintSaveToLibrary(); },
-  });
-}
-
-async function doConstraintSaveToLibrary(): Promise<void> {
-  if (!draft.value) return;
-  try {
-    const res = await fetch(`/wp/api/modules/${draft.value.id}/payload`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: draft.value.payload, meta: draft.value.meta }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json() as { new_hash: string };
-    setLibraryHash(draft.value.id, body.new_hash);
-    pushToast("Saved to library", { severity: "success" });
-  } catch (err) {
-    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
+function onPushToLibraryClose(): void {
+  pushToLibraryOpen.value = false;
 }
 
 function save() {
@@ -543,7 +363,7 @@ function cancel() {
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @save-to-library="onWildcardSaveToLibraryClick"
+      @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
 
@@ -555,7 +375,7 @@ function cancel() {
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @save-to-library="onFixedValuesSaveToLibraryClick"
+      @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
 
@@ -572,7 +392,7 @@ function cancel() {
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @save-to-library="onCombineSaveToLibraryClick"
+      @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
 
@@ -587,7 +407,7 @@ function cancel() {
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @save-to-library="onDerivationSaveToLibraryClick"
+      @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
 
@@ -604,7 +424,7 @@ function cancel() {
       @update="onUpdate"
       @save="save"
       @cancel="cancel"
-      @save-to-library="onConstraintSaveToLibraryClick"
+      @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
     />
 
@@ -622,6 +442,16 @@ function cancel() {
     :variant="confirmDialog?.variant ?? 'default'"
     @confirm="onConfirmDialogConfirm"
     @cancel="onConfirmDialogCancel"
+  />
+
+  <!-- Unified save-to-library surface. Replaces the five per-kind
+       confirm flows that lived in onXxxSaveToLibraryClick — see the
+       handlers above for the migration commentary. -->
+  <PushToLibraryModal
+    :open="pushToLibraryOpen"
+    :draft="draft"
+    @close="onPushToLibraryClose"
+    @saved="onPushToLibrarySaved"
   />
 </template>
 

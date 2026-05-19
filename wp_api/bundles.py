@@ -56,11 +56,17 @@ async def list_bundles(request: web.Request) -> web.Response:
     """GET /wp/api/bundles — paginated listing with optional filters.
 
     Filters mirror modules: `category`, `q` (name search), `favorites=1`.
+    Additionally accepts `contains_module=<id>` which restricts the result
+    to bundles whose ``children[]`` snapshot references that module id —
+    used by the save-to-library modal to show which bundles a save would
+    affect.
+
     Returns `{items, total}` so the Dashboard count cards work the same
     way they do for modules."""
     category_id = request.query.get("category")
     query = request.query.get("q")
     favorites = request.query.get("favorites") == "1"
+    contains_module = request.query.get("contains_module")
     try:
         limit = int(request.query["limit"]) if "limit" in request.query else None
         offset = int(request.query.get("offset", 0))
@@ -81,6 +87,18 @@ async def list_bundles(request: web.Request) -> web.Response:
             category_id=category_id, query=query,
             favorites_only=favorites,
         )
+    if contains_module:
+        # Children are stored as JSON; SQLite has no efficient nested-array
+        # contains. Library volumes are dozens of bundles — Python filter
+        # is fast enough and keeps the SQL portable.
+        items = [
+            b for b in items
+            if any(
+                isinstance(c, dict) and c.get("id") == contains_module
+                for c in (b.get("children") or [])
+            )
+        ]
+        total = len(items)
     return json_ok({"items": items, "total": total})
 
 

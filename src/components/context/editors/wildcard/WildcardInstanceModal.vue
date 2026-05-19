@@ -30,9 +30,11 @@ const emit = defineEmits<{
   "clear-all-overrides": [];
 }>();
 
-const canSaveToLibrary = computed(
-  () => Boolean(props.module.payload_hash) && props.isModified,
-);
+// Save-to-library is always available when the row has a payload —
+// the unified PushToLibraryModal owns the explicit "Update existing"
+// (disabled when no payload_hash) vs "Save as new entry" choice, so
+// the older gate of `isLibraryTracked && isModified` is gone.
+const canSaveToLibrary = computed(() => Boolean(props.module.payload));
 
 function spaUrl(): string {
   // SPA base is `/wp/` (see `src/manager/router/index.ts:44`),

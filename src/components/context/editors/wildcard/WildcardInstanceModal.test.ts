@@ -78,25 +78,31 @@ describe("WildcardInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("Save to library hidden when not modified (no point pushing unchanged payload)", () => {
+  // Save-to-library is now always available when the row has a
+  // payload. The unified PushToLibraryModal owns the explicit fork-vs-
+  // update choice — see the design doc + WildcardInstanceModal's
+  // canSaveToLibrary comment for the wider migration. Inline-created
+  // rows (no payload_hash) qualify too because the modal lets them
+  // fork into a fresh library entry.
+  it("Save to library visible when payload exists, regardless of isModified", () => {
     const w = mount(WildcardInstanceModal, {
       props: { module: makeModule(), isDrifted: false, isModified: false },
     });
-    expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(false);
+    expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(true);
   });
 
-  it("Save to library visible when library-tracked + modified", () => {
+  it("Save to library still visible when library-tracked + modified", () => {
     const w = mount(WildcardInstanceModal, {
       props: { module: makeModule(), isDrifted: false, isModified: true },
     });
     expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(true);
   });
 
-  it("Save to library hidden for inline-created (no payload_hash) even if modified", () => {
+  it("Save to library visible for inline-created (no payload_hash)", () => {
     const w = mount(WildcardInstanceModal, {
       props: { module: makeModule({ payload_hash: undefined }), isModified: true },
     });
-    expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(false);
+    expect(w.find('[data-test="wcm-save-lib"]').exists()).toBe(true);
   });
 
   it("Reset overrides button emits clear-all-overrides event", async () => {

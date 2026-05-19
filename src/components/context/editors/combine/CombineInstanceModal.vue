@@ -54,7 +54,9 @@ const emit = defineEmits<{
 }>();
 
 const isLibraryTracked = computed(() => Boolean(props.module.payload_hash));
-const canSaveToLibrary = computed(() => isLibraryTracked.value && props.isModified);
+// See WildcardInstanceModal — PushToLibraryModal owns the update vs fork
+// choice, so save-to-library is always available when payload exists.
+const canSaveToLibrary = computed(() => Boolean(props.module.payload));
 
 function spaUrl(): string {
   // SPA base is `/wp/`. Combine library editor lives at

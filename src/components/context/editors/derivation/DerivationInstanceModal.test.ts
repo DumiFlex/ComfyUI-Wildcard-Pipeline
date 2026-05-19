@@ -83,25 +83,27 @@ describe("DerivationInstanceModal", () => {
     expect(w.emitted("cancel")).toBeTruthy();
   });
 
-  it("Save to library hidden when not modified (no point pushing unchanged payload)", () => {
+  // PushToLibraryModal owns the explicit fork-vs-update choice now;
+  // see WildcardInstanceModal.test.ts for the migration commentary.
+  it("Save to library visible when payload exists, regardless of isModified", () => {
     const w = mount(DerivationInstanceModal, {
       props: { module: makeModule(), isDrifted: false, isModified: false },
     });
-    expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(false);
+    expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(true);
   });
 
-  it("Save to library visible when library-tracked + modified", () => {
+  it("Save to library still visible when library-tracked + modified", () => {
     const w = mount(DerivationInstanceModal, {
       props: { module: makeModule(), isDrifted: false, isModified: true },
     });
     expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(true);
   });
 
-  it("Save to library hidden for inline-created (no payload_hash) even if modified", () => {
+  it("Save to library visible for inline-created (no payload_hash)", () => {
     const w = mount(DerivationInstanceModal, {
       props: { module: makeModule({ payload_hash: undefined }), isModified: true },
     });
-    expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(false);
+    expect(w.find('[data-test="dvm-save-lib"]').exists()).toBe(true);
   });
 
   it("Reset overrides emits clear-all-overrides", async () => {

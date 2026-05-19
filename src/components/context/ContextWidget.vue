@@ -37,6 +37,7 @@ import {
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
+import PushToLibraryModal from "./PushToLibraryModal.vue";
 import ContextMenu, {
   type ContextMenuEntry,
   type ContextMenuHeader,
@@ -55,6 +56,7 @@ import {
   bundleHashes,
   refreshMany,
   refreshModule,
+  setLibraryHash,
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
@@ -247,6 +249,52 @@ const ctxMenu = ref<{
 // (and save into) the FIRST sibling regardless of which one the user
 // double-clicked. Indexing into `value.modules` directly disambiguates.
 const editingIdx = ref<number | null>(null);
+
+/** Right-click "Push to library…" can fire on any row without first
+ *  opening the edit modal. The modal holds a snapshot copy so the user
+ *  can rename/retag without dirtying the workflow row. */
+const pushDraft = ref<ModuleEntry | null>(null);
+const pushOpen = ref<boolean>(false);
+
+function openPushToLibrary(idx: number): void {
+  const m = value.value.modules[idx];
+  if (!m) return;
+  // Deep-clone so meta edits inside the modal stay local until commit.
+  pushDraft.value = JSON.parse(JSON.stringify(m));
+  pushOpen.value = true;
+}
+
+interface PushSaveResult {
+  mode: "update" | "fork";
+  id: string;
+  payload_hash: string;
+  bundles_updated: string[];
+  name: string;
+}
+function onPushSaved(result: PushSaveResult): void {
+  // Refresh library hashes regardless of mode — the drift store sees
+  // the new entry for forks + the new hash for updates so the
+  // missing/drift dots clear immediately instead of waiting for the
+  // next poll tick.
+  setLibraryHash(result.id, result.payload_hash);
+  void forceRefreshHashes();
+  const bundlesNote =
+    result.bundles_updated.length > 0
+      ? ` · ${result.bundles_updated.length} bundle${result.bundles_updated.length === 1 ? "" : "s"} synced`
+      : "";
+  pushToast(
+    result.mode === "fork"
+      ? `Saved as new library entry "${result.name}"`
+      : `Saved "${result.name}" to library${bundlesNote}`,
+    { severity: "success" },
+  );
+  pushOpen.value = false;
+  pushDraft.value = null;
+}
+function onPushClosed(): void {
+  pushOpen.value = false;
+  pushDraft.value = null;
+}
 const editingModule = computed<ModuleEntry | null>(() =>
   editingIdx.value != null ? (value.value.modules[editingIdx.value] ?? null) : null,
 );
@@ -1348,47 +1396,6 @@ function isDrifted(m: ModuleEntry): boolean {
   const live = libraryHashes.value[m.id];
   if (live === undefined) return false;       // covered by isMissingFromLibrary
   return live !== m.payload_hash;
-}
-
-/**
- * Save a workflow-resident module snapshot back into the live
- * library at the SAME uuid so the next workflow load won't flag it
- * missing. POSTs to a small new endpoint that bypasses the regular
- * uuid-generator and inserts at the supplied id. On success, refresh
- * the library set so the indicator dot disappears immediately
- * instead of waiting for the next poll.
- */
-async function saveToLibrary(m: ModuleEntry) {
-  if (!m.payload) {
-    pushToast("This module has no payload to save.", { severity: "warning" });
-    return;
-  }
-  try {
-    const res = await fetch("/wp/api/modules/import-from-workflow", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: m.id,
-        type: m.type,
-        name: m.meta.name || `(unnamed ${m.type})`,
-        description: m.meta.description ?? "",
-        tags: m.meta.tags ?? [],
-        payload: m.payload,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const detail = (body as { error?: string }).error ?? `${res.status}`;
-      pushToast(`Save failed: ${detail}`, { severity: "error" });
-      return;
-    }
-    pushToast(`Saved "${m.meta.name || m.type}" to library.`, {
-      severity: "success",
-    });
-    await forceRefreshHashes();
-  } catch (err) {
-    pushToast(`Save failed: ${(err as Error).message}`, { severity: "error" });
-  }
 }
 
 /** Per-card refresh — replace one drifted entry with the live snapshot.
@@ -2776,11 +2783,17 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
       divider: true,
     });
   }
-  if (isMissingFromLibrary(m) && !!m.payload) {
+  // "Push to library" is now always present for any row that has a
+  // payload. The unified PushToLibraryModal owns the explicit fork-vs-
+  // update choice + the meta editing surface, replacing the older
+  // implicit logic that only surfaced when the row was missing from
+  // the live library. Inline-created rows still qualify — the modal
+  // greys out the "Update existing" button when payload_hash is empty.
+  if (!!m.payload) {
     items.push({
-      label: "Save to library",
+      label: "Push to library…",
       icon: "pi-cloud-upload",
-      onSelect: () => saveToLibrary(m),
+      onSelect: () => openPushToLibrary(idx),
       divider: true,
     });
   }
@@ -3715,6 +3728,17 @@ provide(ModuleRowCtxKey, moduleRowCtx);
       :last-used-seed-reader="lastUsedSeedReader"
       @save="saveEditedModule"
       @close="editingIdx = null"
+    />
+
+    <!-- Standalone push-to-library entry point — fires from the
+         right-click menu without going through the edit modal first.
+         Same component as the one mounted inside ModuleEditModal so
+         either path produces identical behavior. -->
+    <PushToLibraryModal
+      :open="pushOpen"
+      :draft="pushDraft"
+      @close="onPushClosed"
+      @saved="onPushSaved"
     />
 
     <ContextMenu

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from aiohttp import web
 
-from engine.db.repositories import ModuleNotFound, ModuleRepository
+from engine.db.repositories import BundleRepository, ModuleNotFound, ModuleRepository
 from engine.modules.dispatcher import get_handler
 from engine.modules.snapshot import freeze_snapshot, payload_hash
 from wp_api._helpers import db_session, json_error, json_ok
@@ -28,6 +28,55 @@ def _validate_payload_for_type(type_id: str, payload: dict) -> str | None:
 _UPDATABLE_FIELDS = (
     "name", "description", "tags", "payload", "is_favorite", "category_id",
 )
+
+
+def _propagate_module_to_bundles(conn, module_row: dict) -> list[str]:
+    """Rewrite every bundle's child snapshot whose id matches the updated
+    module so the bundle's frozen ``children[]`` reflects the new payload
+    + meta. Returns the list of bundle ids whose children were rewritten.
+
+    Bundles store children as a JSON blob; SQLite has no efficient
+    contains-key query for nested arrays. Library volumes are dozens of
+    bundles, not thousands — Python-side filter is fine.
+    """
+    mid = module_row["id"]
+    bundle_repo = BundleRepository(conn)
+    affected: list[str] = []
+    for bundle in bundle_repo.list():
+        children = bundle.get("children") or []
+        if not isinstance(children, list):
+            continue
+        rewritten = False
+        new_children: list[dict] = []
+        for child in children:
+            if isinstance(child, dict) and child.get("id") == mid:
+                # Overwrite payload + meta but preserve any per-bundle
+                # fields the snapshot carries (enabled/collapsed flags,
+                # bundle-scope instance overrides, etc).
+                next_child = dict(child)
+                next_child["payload"] = module_row["payload"]
+                next_child["payload_hash"] = module_row["payload_hash"]
+                meta = next_child.get("meta")
+                if not isinstance(meta, dict):
+                    meta = {}
+                # Library name/description/tags become the authoritative
+                # source for the child snapshot too — keeps drift detection
+                # honest when the user later opens this bundle elsewhere.
+                meta["name"] = module_row["name"]
+                meta["library_name"] = module_row["name"]
+                if module_row.get("description") is not None:
+                    meta["description"] = module_row["description"]
+                if module_row.get("tags") is not None:
+                    meta["tags"] = list(module_row["tags"])
+                next_child["meta"] = meta
+                new_children.append(next_child)
+                rewritten = True
+            else:
+                new_children.append(child)
+        if rewritten:
+            bundle_repo.update(bundle["id"], children=new_children)
+            affected.append(bundle["id"])
+    return affected
 
 
 async def list_modules(request: web.Request) -> web.Response:
@@ -151,6 +200,20 @@ async def get_module(request: web.Request) -> web.Response:
 
 
 async def update_module(request: web.Request) -> web.Response:
+    """PUT /wp/api/modules/{id} — partial update.
+
+    Accepts any subset of {name, description, tags, payload, is_favorite,
+    category_id} plus an optional ``propagate_to_bundles`` boolean (default
+    true) that controls whether saved bundles containing this module get
+    their child snapshots refreshed in lockstep.
+
+    When ``payload`` is present the new value is validated via the
+    registered module handler before write — same guard as POST and
+    import-from-workflow.
+
+    Response shape on success:
+      {<module fields>, "bundles_updated": ["bundle_id_1", ...]}
+    """
     mid = request.match_info["id"]
     try:
         body = await request.json()
@@ -159,6 +222,8 @@ async def update_module(request: web.Request) -> web.Response:
     if not isinstance(body, dict):
         return json_error("body must be a JSON object", status=400)
     kwargs: dict = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}
+    propagate = bool(body.get("propagate_to_bundles", True))
+
     # If the caller is rewriting the payload, validate it against the
     # row's existing module type — same guard as POST/import-from-workflow.
     if "payload" in kwargs:
@@ -170,12 +235,24 @@ async def update_module(request: web.Request) -> web.Response:
         err = _validate_payload_for_type(existing["type"], kwargs["payload"])
         if err is not None:
             return json_error(err, status=400)
+
+    bundles_updated: list[str] = []
     with db_session(request) as conn:
         try:
             row = ModuleRepository(conn).update(mid, **kwargs)
         except ModuleNotFound:
             return json_error(f"module not found: {mid}", status=404)
-    return json_ok(row)
+        # Bundle propagation runs in the same transaction so an update is
+        # atomic across modules + bundles tables. Only fires when payload
+        # or library-facing meta (name/description/tags) changed and the
+        # caller hasn't opted out.
+        propagatable_keys = {"payload", "name", "description", "tags"}
+        if propagate and propagatable_keys & kwargs.keys():
+            bundles_updated = _propagate_module_to_bundles(conn, row)
+
+    out = dict(row)
+    out["bundles_updated"] = bundles_updated
+    return json_ok(out)
 
 
 async def delete_module(request: web.Request) -> web.Response:

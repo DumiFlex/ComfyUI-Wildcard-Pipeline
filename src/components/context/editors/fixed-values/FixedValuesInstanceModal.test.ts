@@ -63,23 +63,28 @@ describe("FixedValuesInstanceModal", () => {
     expect(w.find('[data-test="fvm-spa-link"]').attributes("href")).toBe("/wp/fixed-values/fv012345/edit");
   });
 
-  it("inline-created module (no payload_hash) hides SPA link + Reset overrides + Save to library", () => {
+  // PushToLibraryModal owns the explicit fork-vs-update choice — see
+  // WildcardInstanceModal.test.ts for the migration commentary. The
+  // SPA link + Reset overrides still hide for inline-created modules
+  // (no payload_hash) since those are library-only operations.
+  it("inline-created module (no payload_hash) hides SPA link + Reset overrides but keeps Save to library", () => {
     const w = mount(FixedValuesInstanceModal, {
       props: { module: makeModule({ payload_hash: undefined }), isDrifted: false, isModified: true },
     });
     expect(w.find('[data-test="fvm-spa-link"]').exists()).toBe(false);
     expect(w.find('[data-test="fvm-clear-all"]').exists()).toBe(false);
-    expect(w.find('[data-test="fvm-save-lib"]').exists()).toBe(false);
+    // Save-to-library is the path inline-created rows reach the library.
+    expect(w.find('[data-test="fvm-save-lib"]').exists()).toBe(true);
   });
 
-  it("Save to library hidden when not modified (no point pushing unchanged payload)", () => {
+  it("Save to library visible when payload exists, regardless of isModified", () => {
     const w = mount(FixedValuesInstanceModal, {
       props: { module: makeModule(), isDrifted: false, isModified: false },
     });
-    expect(w.find('[data-test="fvm-save-lib"]').exists()).toBe(false);
+    expect(w.find('[data-test="fvm-save-lib"]').exists()).toBe(true);
   });
 
-  it("Save to library visible when library-tracked + modified", () => {
+  it("Save to library still visible when library-tracked + modified", () => {
     const w = mount(FixedValuesInstanceModal, {
       props: { module: makeModule(), isDrifted: false, isModified: true },
     });
