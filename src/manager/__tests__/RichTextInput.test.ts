@@ -372,6 +372,63 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("backspace immediately after a chip deletes the chip", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "a @{aabbccdd} b",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    // Place caret at start of " b" (the text node after the chip).
+    const trailingTextSpans = host.querySelectorAll(".wp-rt__text");
+    const trailingSpan = trailingTextSpans[trailingTextSpans.length - 1];
+    const textNode = trailingSpan.firstChild;
+    const range = document.createRange();
+    if (textNode) range.setStart(textNode, 0);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    if (textNode) sel?.addRange(range);
+    // Dispatch a Backspace keydown via the host wrapper.
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("a  b");
+    wrap.unmount();
+  });
+
+  it("arrow-left at start of text right of a chip preventDefaults the keydown", async () => {
+    // Behavioral assertion via defaultPrevented — the model-driven handler
+    // intercepts arrow keys at chip boundaries so the native browser caret
+    // doesn't land mid-chip (chip is contenteditable=false; native caret
+    // sometimes lands at chip offset 0 on Firefox).
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "a @{aabbccdd} b",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    const trailingTextSpans = host.querySelectorAll(".wp-rt__text");
+    const trailingSpan = trailingTextSpans[trailingTextSpans.length - 1];
+    const textNode = trailingSpan.firstChild;
+    const range = document.createRange();
+    if (textNode) range.setStart(textNode, 0);
+    range.collapse(true);
+    window.getSelection()?.removeAllRanges();
+    if (textNode) window.getSelection()?.addRange(range);
+    const ev = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true });
+    host.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    wrap.unmount();
+  });
+
   it("inserts an autocomplete pick at the current selection, not the end", async () => {
     const wrap = mount(RichTextInput, {
       props: {

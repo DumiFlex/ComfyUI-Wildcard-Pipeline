@@ -22,7 +22,7 @@
  * API.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { insertAtom, parse, replaceAtom, serialise, type Atom, type Cursor } from "./atomicEditorModel";
+import { deleteBackward, insertAtom, parse, replaceAtom, serialise, type Atom, type Cursor } from "./atomicEditorModel";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
@@ -495,6 +495,71 @@ function onHostInput(): void {
   const next = readHostAsText();
   if (next !== props.modelValue) emit("update:modelValue", next);
 }
+
+// --- Atomic-chip keyboard handling ---
+// Override keydown for Backspace and Arrow keys at chip boundaries so the
+// browser doesn't (a) eat half a chip by collapsing into its display text
+// (chips are `contenteditable=false` containers but the native caret can
+// land at chip-offset 0 on Firefox), or (b) leave the caret stranded
+// mid-chip after an arrow keystroke. All other keystrokes fall through to
+// the native handler.
+function onHostKeydown(ev: KeyboardEvent): void {
+  if (props.disabled) return;
+  if (ev.key === "Backspace") {
+    const cur = currentCursor();
+    // Only intercept when the cursor sits at an atom boundary where the
+    // PREVIOUS atom is a chip (ref/var). Otherwise let the browser
+    // handle the keystroke natively (cheaper + matches platform feel).
+    if (cur.offset === 0 && cur.atomIndex > 0) {
+      const prev = atoms.value[cur.atomIndex - 1];
+      if (prev && (prev.kind === "ref" || prev.kind === "var")) {
+        ev.preventDefault();
+        const result = deleteBackward(atoms.value, cur);
+        emit("update:modelValue", serialise(result.atoms));
+      }
+    }
+    return;
+  }
+  if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
+    const cur = currentCursor();
+    if (ev.key === "ArrowLeft" && cur.offset === 0 && cur.atomIndex > 0) {
+      const prev = atoms.value[cur.atomIndex - 1];
+      if (prev && prev.kind !== "text") {
+        ev.preventDefault();
+        moveCursorToAtomEnd(cur.atomIndex - 2);  // skip over the chip
+      }
+    } else if (ev.key === "ArrowRight") {
+      const target = atoms.value[cur.atomIndex];
+      if (
+        target?.kind === "text" &&
+        cur.offset === target.text.length &&
+        cur.atomIndex + 1 < atoms.value.length &&
+        atoms.value[cur.atomIndex + 1].kind !== "text"
+      ) {
+        ev.preventDefault();
+        moveCursorToAtomEnd(cur.atomIndex + 1);
+      }
+    }
+  }
+}
+
+function moveCursorToAtomEnd(atomIndex: number): void {
+  // Set DOM selection to land just AFTER the atom at `atomIndex`.
+  const host = hostEl.value;
+  if (!host) return;
+  const child = host.childNodes[atomIndex];
+  if (!child) return;
+  const range = document.createRange();
+  if (child.nodeType === Node.TEXT_NODE) {
+    range.setStart(child, (child.textContent ?? "").length);
+  } else {
+    range.setStartAfter(child);
+  }
+  range.collapse(true);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
 </script>
 
 <template>
@@ -526,6 +591,7 @@ function onHostInput(): void {
       @focus="focused = true"
       @blur="focused = false"
       @input="onHostInput"
+      @keydown="onHostKeydown"
     >
       <template v-for="(atom, idx) in atoms" :key="idx">
         <RefChip
