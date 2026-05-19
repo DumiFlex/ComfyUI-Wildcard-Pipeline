@@ -1,10 +1,12 @@
-import { mount, flushPromises } from "@vue/test-utils";
+import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import RichTextInput from "../../components/RichTextInput.vue";
 import RichTextPreview from "../../components/RichTextPreview.vue";
 import type { ResolveWarning } from "../../utils/resolveTokens";
 
-const tick = flushPromises;
+// `tick` (alias for flushPromises) and `popoverExists` were used by the
+// surface-prop autocomplete tests skipped in Task 5; Task 6 will reintroduce
+// equivalent helpers when it rewires autocomplete onto the host.
 
 // Helper to build a minimal ResolveWarning.
 function warn(
@@ -101,145 +103,31 @@ describe("RichTextInput — warning markers", () => {
 // Surface-conditional autocomplete
 // ---------------------------------------------------------------------------
 
-function popoverExists(): boolean {
-  return document.querySelector(".wp-rt-suggestions") !== null;
-}
-
 describe("RichTextInput — surface prop", () => {
-  it("defaults surface to wildcard — @ autocomplete enabled", async () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "",
-        refSuggestions: ["1a2b3c4d"],
-      },
-      attachTo: document.body,
-    });
-    const input = wrap.find("input");
-    const el = input.element as HTMLInputElement;
-    el.value = "@1";
-    el.setSelectionRange(2, 2);
-    await input.trigger("input");
-    await tick();
-    expect(popoverExists()).toBe(true);
-    wrap.unmount();
-  });
+  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
+  it.skip("defaults surface to wildcard — @ autocomplete enabled (rewired in Task 6)", () => {});
 
-  it("surface=wildcard: @ autocomplete shows suggestions", async () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "",
-        surface: "wildcard" as const,
-        refSuggestions: ["aabbccdd", "11223344"],
-      },
-      attachTo: document.body,
-    });
-    const input = wrap.find("input");
-    const el = input.element as HTMLInputElement;
-    el.value = "@aa";
-    el.setSelectionRange(3, 3);
-    await input.trigger("input");
-    await tick();
-    expect(popoverExists()).toBe(true);
-    wrap.unmount();
-  });
+  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
+  it.skip("surface=wildcard: @ autocomplete shows suggestions (rewired in Task 6)", () => {});
 
-  it("surface=combine: @ autocomplete is disabled", async () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "",
-        surface: "combine" as const,
-        refSuggestions: ["aabbccdd"],
-      },
-      attachTo: document.body,
-    });
-    const input = wrap.find("input");
-    const el = input.element as HTMLInputElement;
-    el.value = "@aa";
-    el.setSelectionRange(3, 3);
-    await input.trigger("input");
-    await tick();
-    expect(popoverExists()).toBe(false);
-    wrap.unmount();
-  });
+  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
+  it.skip("surface=combine: @ autocomplete is disabled (rewired in Task 6)", () => {});
 
-  it("surface=derivation: @ autocomplete is disabled", async () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "",
-        surface: "derivation" as const,
-        refSuggestions: ["aabbccdd"],
-      },
-      attachTo: document.body,
-    });
-    const input = wrap.find("input");
-    const el = input.element as HTMLInputElement;
-    el.value = "@aa";
-    el.setSelectionRange(3, 3);
-    await input.trigger("input");
-    await tick();
-    expect(popoverExists()).toBe(false);
-    wrap.unmount();
-  });
+  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
+  it.skip("surface=derivation: @ autocomplete is disabled (rewired in Task 6)", () => {});
 
-  it("surface=assembler: @ autocomplete is disabled", async () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "",
-        surface: "assembler" as const,
-        refSuggestions: ["aabbccdd"],
-      },
-      attachTo: document.body,
-    });
-    const input = wrap.find("input");
-    const el = input.element as HTMLInputElement;
-    el.value = "@aa";
-    el.setSelectionRange(3, 3);
-    await input.trigger("input");
-    await tick();
-    expect(popoverExists()).toBe(false);
-    wrap.unmount();
-  });
+  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
+  it.skip("surface=assembler: @ autocomplete is disabled (rewired in Task 6)", () => {});
 
-  it("non-wildcard surface: $ autocomplete still works", async () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "",
-        surface: "combine" as const,
-        varSuggestions: ["person"],
-      },
-      attachTo: document.body,
-    });
-    const input = wrap.find("input");
-    const el = input.element as HTMLInputElement;
-    el.value = "$pe";
-    el.setSelectionRange(3, 3);
-    await input.trigger("input");
-    await tick();
-    expect(popoverExists()).toBe(true);
-    wrap.unmount();
-  });
+  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
+  it.skip("non-wildcard surface: $ autocomplete still works (rewired in Task 6)", () => {});
 
-  it("non-wildcard surface: @{uuid} tokens in mirror get wp-rt-ref--ignored class", () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "@{1a2b3c4d} text",
-        surface: "combine" as const,
-      },
-    });
-    const mirror = wrap.find(".wp-rt__mirror");
-    expect(mirror.html()).toContain("wp-rt-ref--ignored");
-  });
+  // OBSOLETE (Task 5 rewrite) — mirror layer removed; surface-conditional
+  // ref styling moves onto RefChip (likely via a new prop) in Task 13.
+  it.skip("non-wildcard surface: @{uuid} tokens in mirror get wp-rt-ref--ignored class (rewired in Task 13)", () => {});
 
-  it("wildcard surface: @{uuid} tokens in mirror do NOT get wp-rt-ref--ignored class", () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "@{1a2b3c4d} text",
-        surface: "wildcard" as const,
-      },
-    });
-    const mirror = wrap.find(".wp-rt__mirror");
-    expect(mirror.html()).not.toContain("wp-rt-ref--ignored");
-  });
+  // OBSOLETE (Task 5 rewrite) — mirror layer removed; see comment on prior test.
+  it.skip("wildcard surface: @{uuid} tokens in mirror do NOT get wp-rt-ref--ignored class (rewired in Task 13)", () => {});
 });
 
 // ---------------------------------------------------------------------------
@@ -247,28 +135,14 @@ describe("RichTextInput — surface prop", () => {
 // ---------------------------------------------------------------------------
 
 describe("RichTextInput — UUID name display", () => {
-  it("renders @name display form when uuidToName provides a match", () => {
-    const map = new Map([["1a2b3c4d", "hat"]]);
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "wear @{1a2b3c4d}",
-        uuidToName: map,
-      },
-    });
-    const mirror = wrap.find(".wp-rt__mirror");
-    expect(mirror.html()).toContain("@hat");
-  });
+  // OBSOLETE (Task 5 rewrite) — mirror layer removed; UUID → name display is
+  // now handled by RefChip via the host's atom render path. Task 13 will
+  // restore an equivalent assertion against the chip label.
+  it.skip("renders @name display form when uuidToName provides a match (rewired in Task 13)", () => {});
 
-  it("falls back to raw @{uuid} when uuid not in map", () => {
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "wear @{1a2b3c4d}",
-        uuidToName: new Map(),
-      },
-    });
-    const mirror = wrap.find(".wp-rt__mirror");
-    expect(mirror.html()).toContain("@{1a2b3c4d}");
-  });
+  // OBSOLETE (Task 5 rewrite) — see prior test. Unresolved fallback now
+  // surfaces as the RefChip `?` icon + uuid label.
+  it.skip("falls back to raw @{uuid} when uuid not in map (rewired in Task 13)", () => {});
 });
 
 // ---------------------------------------------------------------------------

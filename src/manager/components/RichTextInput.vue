@@ -2,20 +2,28 @@
 /**
  * RichTextInput
  *
- * A textarea/input replacement that renders a syntax-highlight overlay for
- * Wildcard Pipeline expression syntax (`$var`, `@ref`, `{a|b|c}`, `N#$var`,
- * `# comment`, `$$`/`@@` escapes). The user-visible glyphs come from a
- * mirrored `<div>` painted behind a transparent textarea — see the
- * focused/rest dual mode comments below for why this gymnastic is needed.
+ * Atomic-chip editor host for Wildcard Pipeline expression syntax
+ * (`$var`, `@ref`, `{a|b|c}`). The bound `modelValue` is parsed via
+ * `atomicEditorModel.parse(...)` into an `Atom[]` list and each atom is
+ * rendered either as a `RefChip` (for ref/var atoms) or a plain text
+ * span. The host element is `contenteditable` so the native caret lives
+ * inside the chip stream, but THIS TASK ships READ rendering only —
+ * input handling (typing, deletion, autocomplete insertion, click-to-
+ * edit) is wired up in Tasks 6/7/8.
  *
- * The `$` / `@` autocomplete popover is teleported to <body> and positioned
- * with `position: fixed` so it escapes any ancestor `overflow: hidden`
- * (e.g. the `.wp-rt` wrapper itself, scroll containers in editor tables).
- *
- * Reference: docs/design-handoff/wildcardpipeline/project/rich-input.jsx.
+ * The `$` / `@` autocomplete popover is teleported to <body> and
+ * positioned with `position: fixed` so it escapes any ancestor
+ * `overflow: hidden` (e.g. the `.wp-rt` wrapper itself, scroll
+ * containers in editor tables). The popover state is preserved here
+ * verbatim from the previous implementation; the input plumbing that
+ * drives it (`probeAutocomplete`, `onInput`, etc.) is currently
+ * dormant because the textarea it used to read from is gone. Task 6
+ * rewires those handlers against the contenteditable host + selection
+ * API.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { tokenizeRich } from "../../widgets/richTokenize";
+import { parse, type Atom } from "./atomicEditorModel";
+import RefChip from "./RefChip.vue";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 
 interface Props {
@@ -51,8 +59,13 @@ const emit = defineEmits<{
 }>();
 
 // --- Refs ---
+// `inputEl` is a transitional dead ref. The original textarea/input it
+// pointed at was removed in this task; the autocomplete machinery
+// below still references it because Task 6 rewires that machinery
+// against `hostEl` + the Selection API. Until then, the popover-state
+// code path runs but produces no UI because nothing dispatches `@input`.
 const inputEl = ref<HTMLTextAreaElement | HTMLInputElement | null>(null);
-const mirrorEl = ref<HTMLDivElement | null>(null);
+const hostEl = ref<HTMLDivElement | null>(null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const focused = ref(false);
 
@@ -71,60 +84,26 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
   flipped: false,
 });
 
-// --- Tokenize + mirror HTML (pre-escaped — see richTokenize.ts). ---
-const tokens = computed(() => tokenizeRich(props.modelValue || ""));
-// SAFE: every `raw` payload is HTML-escaped before concatenation. The only
-// tags in the output are ones we emit ourselves, so `v-html` cannot inject
-// user-controlled markup.
-//
-// CARET ALIGNMENT — read this before changing the rendering logic.
-// The mirror is painted behind a transparent textarea. The native caret
-// only stays glued to the visible glyphs if the mirror's text width
-// matches the textarea's text width *exactly*. That means we MUST emit
-// the same characters the textarea sees — `@{abcd1234}` (12 chars), not
-// `@shirt` (6 chars). Substituting the UUID for a friendlier name while
-// the user is editing leaves the caret floating to the right of the chip
-// by the width-difference.
-//
-// So: while focused, render the raw `@{uuid}` form. When blurred
-// (`wp-rt--rest`), swap in the human name for readability — there's no
-// caret to misalign at rest, and the rest-mode pill padding already
-// shifts widths anyway.
-//
-// `surface !== "wildcard"` stamps refs with an "ignored" class so they
-// render muted on surfaces where `@`-refs aren't resolved.
-const ESC: Record<string, string> = {
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-};
-function escHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ESC[c] ?? c);
-}
-const mirrorHtml = computed(() => {
-  const toks = tokens.value;
-  const isWildcard = props.surface === "wildcard";
-  const map = props.uuidToName;
-  const editing = focused.value;
-  let html = "";
-  for (let i = 0; i < toks.length; i++) {
-    const t = toks[i];
-    let cls = `wp-rt-${t.kind}`;
-    let display = escHtml(t.raw);
-    if (t.kind === "ref") {
-      if (!isWildcard) cls += " wp-rt-ref--ignored";
-      const uuid = t.meta?.uuid;
-      if (!editing && uuid && map.has(uuid)) {
-        // Rest-mode: show `@name` for readability. Caret alignment doesn't
-        // matter when the textarea isn't focused.
-        display = "@" + escHtml(map.get(uuid)!);
-      }
-      // Editing-mode falls through with the raw `@{uuid}` form so caret
-      // pixel-tracks the underlying textarea characters.
-    }
-    html += `<span class="${cls}" data-idx="${i}">${display}</span>`;
+// --- Atom rendering ---
+// `parse(modelValue)` collapses text/escape/dp-* tokens into plain text
+// atoms and lifts only var/ref tokens out as chip atoms. Brace
+// alternation `{a|b|c}` stays as text in this model — chips are reserved
+// for tokens with structured identity (UUIDs, variable names).
+const atoms = computed<Atom[]>(() => parse(props.modelValue || ""));
+
+function atomIsResolved(atom: Atom): boolean {
+  if (atom.kind === "var") {
+    return props.varSuggestions.includes(atom.name);
   }
-  html += '<span class="wp-rt-tail">&#x200B;</span>';
-  return html;
-});
+  if (atom.kind === "ref") {
+    return props.uuidToName.has(atom.uuid);
+  }
+  return true;
+}
+
+function onChipClick(_idx: number): void {
+  // Wired up in Task 8 — click-to-edit picker integration.
+}
 
 // --- Suggestion list filtering. ---
 // `@` autocomplete is only available in the "wildcard" surface.
@@ -158,16 +137,6 @@ watch(acItems, (items) => {
   if (acActive.value >= items.length) acActive.value = 0;
 });
 
-// --- Mirror/textarea scroll sync (multi-line scrolling alignment). ---
-function syncScroll(): void {
-  const ta = inputEl.value;
-  const mirror = mirrorEl.value;
-  if (!ta || !mirror) return;
-  mirror.scrollTop = ta.scrollTop;
-  mirror.scrollLeft = ta.scrollLeft;
-}
-watch(() => props.modelValue, () => { void nextTick(syncScroll); });
-
 // --- Autocomplete probe: scan back from caret through `[a-zA-Z0-9_]` until
 //     we hit a `$` or `@` trigger (and bail if it's a `$$` / `@@` escape). ---
 function probeAutocomplete(str: string, caret: number): {
@@ -186,14 +155,15 @@ function probeAutocomplete(str: string, caret: number): {
 }
 
 // --- Popup placement ---
-// Anchor to the wrapper's bounding box. We use the input's parent (`.wp-rt`)
+// Anchor to the wrapper's bounding box. We use the host's parent (`.wp-rt`)
 // rect rather than caret pixel coordinates for robustness — caret-pixel
-// math against a textarea is error-prone and the prototype ships the same
-// "below-the-input" behaviour. Flips above when there's no room below.
+// math against a contenteditable is error-prone and the prototype ships
+// the same "below-the-input" behaviour. Flips above when there's no room
+// below.
 function positionPopup(): void {
-  const ta = inputEl.value;
-  if (!ta) return;
-  const wrap = ta.parentElement;
+  const host = hostEl.value;
+  if (!host) return;
+  const wrap = host.parentElement;
   if (!wrap) return;
   const rect = wrap.getBoundingClientRect();
   const POPUP_H = 240; // matches max-height in CSS (keep in sync)
@@ -208,29 +178,11 @@ function positionPopup(): void {
 }
 
 // --- Handlers ---
-function onInput(e: Event): void {
-  const target = e.target as HTMLTextAreaElement | HTMLInputElement;
-  const next = target.value;
-  emit("update:modelValue", next);
-  const caret = target.selectionStart ?? next.length;
-  const hit = probeAutocomplete(next, caret);
-  if (hit) {
-    // Gate `@` autocomplete — only available in the "wildcard" surface.
-    if (hit.trigger === "@" && props.surface !== "wildcard") {
-      acOpen.value = false;
-      return;
-    }
-    acOpen.value = true;
-    acStart.value = hit.start;
-    acQuery.value = hit.query;
-    acTrigger.value = hit.trigger;
-    acActive.value = 0;
-    positionPopup();
-  } else {
-    acOpen.value = false;
-  }
-}
-
+// NOTE: `onInput` / `refreshAutocompleteFromCaret` / `onKeyDown` /
+// `onSelect` / `applyAutocomplete` are preserved verbatim because Task 6
+// rewires them to the contenteditable host. They currently target the
+// transitional `inputEl` ref (always null after this rewrite) and so
+// are effectively no-ops until then.
 function refreshAutocompleteFromCaret(): void {
   const el = inputEl.value;
   if (!el) return;
@@ -250,37 +202,6 @@ function refreshAutocompleteFromCaret(): void {
   } else {
     acOpen.value = false;
   }
-}
-
-function onKeyDown(e: KeyboardEvent): void {
-  if (acOpen.value && acItems.value.length > 0) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      acActive.value = (acActive.value + 1) % acItems.value.length;
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      acActive.value = (acActive.value - 1 + acItems.value.length) % acItems.value.length;
-      return;
-    }
-    if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault();
-      applyAutocomplete(acItems.value[acActive.value]);
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      acOpen.value = false;
-      return;
-    }
-  }
-}
-
-function onSelect(): void {
-  // `select` fires on caret moves too in modern browsers; refresh AC state
-  // so e.g. arrow-key navigation into a `$tok` opens the menu correctly.
-  if (focused.value) refreshAutocompleteFromCaret();
 }
 
 function applyAutocomplete(label: string | undefined): void {
@@ -306,21 +227,6 @@ function applyAutocomplete(label: string | undefined): void {
   });
 }
 
-function onFocus(): void {
-  focused.value = true;
-}
-function onBlur(e: FocusEvent): void {
-  // Keep autocomplete open if focus moved into the popover (mousedown on
-  // an item is dispatched before the textarea blur event in some browsers).
-  const next = e.relatedTarget as Node | null;
-  if (next && popoverEl.value?.contains(next)) return;
-  focused.value = false;
-  // Slight delay so a mousedown on a suggestion still fires before close.
-  window.setTimeout(() => {
-    acOpen.value = false;
-  }, 120);
-}
-
 function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   // `mousedown` (not click) so we beat the textarea blur.
   e.preventDefault();
@@ -332,7 +238,7 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
 function onDocumentMouseDown(e: MouseEvent): void {
   const t = e.target as Node | null;
   if (!t) return;
-  if (inputEl.value?.contains(t)) return;
+  if (hostEl.value?.contains(t)) return;
   if (popoverEl.value?.contains(t)) return;
   acOpen.value = false;
 }
@@ -362,6 +268,14 @@ onBeforeUnmount(() => {
   window.removeEventListener("scroll", onWindowScroll, true);
   window.removeEventListener("resize", onWindowResize);
 });
+
+// `refreshAutocompleteFromCaret` is currently orphaned because the `@input`
+// / `@select` / `@keyup` / `@click` handlers that used to call it lived on
+// the now-removed <textarea>/<input>. Preserve the function shape for Task 6
+// to wire up against the contenteditable host's selection events without
+// having to reimplement the probe-from-caret logic. Reference it here so
+// strict noUnusedLocals doesn't strip it.
+void refreshAutocompleteFromCaret;
 </script>
 
 <template>
@@ -370,18 +284,43 @@ onBeforeUnmount(() => {
     :class="[
       multiline ? 'wp-rt--multi' : 'wp-rt--single',
       focused ? 'wp-rt--focused' : 'wp-rt--rest',
+      disabled ? 'wp-rt--disabled' : null,
     ]"
     :data-focused="focused ? '' : null"
   >
-    <!-- The mirror is read-only chrome; pointer-events:none in CSS.
-         `v-html` is safe because the computed mirrorHtml escapes all token text. -->
+    <!-- Contenteditable host. Children are RefChip atoms (for ref/var
+         atoms) and plain text spans (for everything else). The native
+         caret lives inside this element; chips are `contenteditable=
+         false` so the caret skips over them as atomic units.
+         Input handling lands in Task 6. -->
     <div
-      ref="mirrorEl"
-      class="wp-rt__mirror"
-      :class="multiline ? 'wp-rt__mirror--multi' : 'wp-rt__mirror--single'"
-      aria-hidden="true"
-      v-html="mirrorHtml"
-    />
+      ref="hostEl"
+      class="wp-rt__host"
+      :class="multiline ? 'wp-rt__host--multi' : 'wp-rt__host--single'"
+      :contenteditable="!disabled"
+      :aria-label="ariaLabel"
+      :data-placeholder="placeholder"
+      :data-multiline="multiline"
+      role="textbox"
+      :aria-multiline="multiline"
+      spellcheck="false"
+      @focus="focused = true"
+      @blur="focused = false"
+    >
+      <template v-for="(atom, idx) in atoms" :key="idx">
+        <RefChip
+          v-if="atom.kind === 'ref' || atom.kind === 'var'"
+          :kind="atom.kind"
+          :name="atom.kind === 'var' ? atom.name : (uuidToName.get(atom.uuid) ?? '')"
+          :uuid="atom.kind === 'ref' ? atom.uuid : ''"
+          :sub-categories="atom.kind === 'ref' ? atom.subCategories : []"
+          :resolved="atomIsResolved(atom)"
+          :data-atom-index="idx"
+          @click="onChipClick(idx)"
+        />
+        <span v-else :data-atom-index="idx" class="wp-rt__text">{{ atom.text }}</span>
+      </template>
+    </div>
 
     <!-- Warning markers overlay. Each marker is a zero-width inline element
          anchored at the UTF-16 offset corresponding to the warning position.
@@ -400,45 +339,6 @@ onBeforeUnmount(() => {
         :title="w.message"
       />
     </div>
-
-    <textarea
-      v-if="multiline"
-      ref="inputEl"
-      class="wp-rt__input wp-rt__input--multi"
-      :value="modelValue"
-      :placeholder="placeholder"
-      :rows="rows"
-      :aria-label="ariaLabel"
-      :disabled="disabled"
-      spellcheck="false"
-      @input="onInput"
-      @keydown="onKeyDown"
-      @select="onSelect"
-      @keyup="onSelect"
-      @click="onSelect"
-      @scroll="syncScroll"
-      @focus="onFocus"
-      @blur="onBlur"
-    />
-    <input
-      v-else
-      ref="inputEl"
-      class="wp-rt__input wp-rt__input--single"
-      type="text"
-      :value="modelValue"
-      :placeholder="placeholder"
-      :aria-label="ariaLabel"
-      :disabled="disabled"
-      spellcheck="false"
-      @input="onInput"
-      @keydown="onKeyDown"
-      @select="onSelect"
-      @keyup="onSelect"
-      @click="onSelect"
-      @scroll="syncScroll"
-      @focus="onFocus"
-      @blur="onBlur"
-    >
 
     <!-- Teleport so the popover escapes ancestor overflow:hidden /
          transformed scroll containers / table cells. -->
@@ -498,84 +398,59 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 25%, transparent);
   background: var(--wp-bg-1, #11111b);
 }
-
-/* Mirror layer — paints styled tokens behind the textarea.
-   Two visual modes are toggled by the parent class:
-     wp-rt--focused : while editing, chips are zero-width visual decorations
-                      (background + box-shadow only, no padding/margin/border)
-                      so the mirror text width matches the textarea text width
-                      exactly and the native caret tracks correctly.
-     wp-rt--rest    : when blurred, chips get a hair of horizontal padding
-                      so they read as proper pills at a glance. */
-.wp-rt__mirror {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  font-family: inherit;
-  font-size: inherit;
-  color: var(--wp-text, #e7e7ee);
+.wp-rt--disabled {
+  opacity: 0.6;
   pointer-events: none;
-  user-select: none;
-  letter-spacing: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-.wp-rt__mirror--single {
-  padding: 0 var(--wp-space-5);
-  line-height: var(--wp-input-h, 34px);
-  white-space: pre;
-}
-.wp-rt__mirror--multi {
-  padding: var(--wp-space-4) var(--wp-space-5);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
-/* Input layer — transparent text so the mirror shows through; visible caret. */
-.wp-rt__input {
-  position: relative;
+/* Contenteditable host. Chips are atomic (contenteditable=false on the
+   chip root) so the caret skips them. Text atoms are regular spans —
+   the caret enters them like ordinary characters. */
+.wp-rt__host {
   display: block;
   width: 100%;
   margin: 0;
   border: none;
   outline: none;
   background: transparent;
-  color: transparent;
-  caret-color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text, #e7e7ee);
   font-family: inherit;
   font-size: inherit;
   letter-spacing: 0;
   box-sizing: border-box;
-  resize: none;
 }
-.wp-rt__input--single {
+.wp-rt__host--single {
   height: var(--wp-input-h, 34px);
   padding: 0 var(--wp-space-5);
   line-height: var(--wp-input-h, 34px);
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
-.wp-rt__input--multi {
+.wp-rt__host--multi {
   padding: var(--wp-space-4) var(--wp-space-5);
   line-height: 1.5;
-  resize: vertical;
   min-height: 72px;
   white-space: pre-wrap;
   word-break: break-word;
 }
-.wp-rt__input::selection {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 38%, transparent);
-  color: transparent;
-}
-.wp-rt__input::placeholder {
+
+/* Placeholder ghost — fires only when the host is empty AND not focused.
+   Modern selector parity with `<input placeholder>`. */
+.wp-rt__host:empty::before {
+  content: attr(data-placeholder);
   color: var(--wp-text-dim, #6e6e7c);
+  pointer-events: none;
 }
 
-/* Token span chrome (.wp-rt-var / .wp-rt-ref / .wp-rt-dp-* / quantifier
-   colour + chip backgrounds + focus/rest padding) lives in the global
-   styles/rich-text.css so RichTextInput and RichTextPreview stay in sync. */
+/* Plain text atom — inherits host typography. Inline so it flows with
+   sibling chips on the same line. */
+.wp-rt__text {
+  white-space: pre-wrap;
+}
 
-/* Warning markers overlay — sits atop the mirror, pointer-events: none so
-   it does not block textarea interaction. */
+/* Warning markers overlay — sits atop the host, pointer-events: none so
+   it does not block typing. */
 .wp-rt__warnings {
   position: absolute;
   inset: 0;
