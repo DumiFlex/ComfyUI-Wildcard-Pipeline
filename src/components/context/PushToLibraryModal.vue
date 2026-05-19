@@ -108,6 +108,32 @@ function resetForm(): void {
   errorMsg.value = "";
 }
 
+/** When the row is library-tracked, fetch the live library entry and
+ *  fold its description/tags into the form. Workflow rows only ever
+ *  carry `meta.name` + `meta.library_name` at insert time — they don't
+ *  copy the library's description or tags forward — so without this
+ *  fetch the modal opens with blank fields even when the library row
+ *  has values. Only fills when the draft itself is empty for that
+ *  field so an in-modal edit isn't clobbered by the async response. */
+async function seedFromLibrary(): Promise<void> {
+  if (!props.draft || !props.draft.payload_hash) return;
+  try {
+    const res = await fetch(`/wp/api/modules/${props.draft.id}`);
+    if (!res.ok) return;
+    const lib = await res.json() as { description?: unknown; tags?: unknown };
+    if (!description.value && typeof lib.description === "string") {
+      description.value = lib.description;
+    }
+    if (!tagsText.value && Array.isArray(lib.tags)) {
+      tagsText.value = lib.tags
+        .filter((t): t is string => typeof t === "string")
+        .join(", ");
+    }
+  } catch {
+    /* network — leave form as-is */
+  }
+}
+
 async function fetchBundlesContaining(): Promise<void> {
   if (!props.draft?.id) return;
   bundlesLoading.value = true;
@@ -130,6 +156,7 @@ watch(
     if (!isOpen) return;
     resetForm();
     void fetchBundlesContaining();
+    void seedFromLibrary();
   },
 );
 
@@ -151,30 +178,38 @@ async function doUpdate(): Promise<void> {
   busy.value = true;
   errorMsg.value = "";
   try {
-    const res = await fetch(`/wp/api/modules/${props.draft.id}/payload`, {
+    const meta = metaBody();
+    // Phase D contract: PUT /wp/api/modules/{id} is the canonical
+    // update route. It accepts payload + flattened meta fields +
+    // propagate flag. The older /payload alias still exists for
+    // backwards compat but new client code calls the canonical
+    // endpoint directly.
+    const body: Record<string, unknown> = {
+      payload: props.draft.payload,
+      propagate_to_bundles: propagate.value,
+    };
+    if (meta.name !== undefined) body.name = meta.name;
+    if (meta.description !== undefined) body.description = meta.description;
+    if (meta.tags !== undefined) body.tags = meta.tags;
+
+    const res = await fetch(`/wp/api/modules/${props.draft.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        payload: props.draft.payload,
-        meta: metaBody(),
-        propagate_to_bundles: propagate.value,
-      }),
+      body: JSON.stringify(body),
     });
-    const body = await res.json() as {
-      ok?: boolean;
-      new_hash?: string;
-      bundles_updated?: string[];
-      error?: string;
-    };
-    if (!res.ok || !body.ok) {
-      errorMsg.value = body.error ?? `HTTP ${res.status}`;
+    const respBody = await res.json() as Record<string, unknown>;
+    if (!res.ok) {
+      errorMsg.value = (respBody.error as string | undefined) ?? `HTTP ${res.status}`;
       return;
     }
+    // Server returns the full module row + bundles_updated. payload_hash
+    // is at the top level (not nested under new_hash like the legacy
+    // alias) — match the canonical shape.
     emit("saved", {
       mode: "update",
       id: props.draft.id,
-      payload_hash: body.new_hash ?? "",
-      bundles_updated: body.bundles_updated ?? [],
+      payload_hash: (respBody.payload_hash as string | undefined) ?? "",
+      bundles_updated: (respBody.bundles_updated as string[] | undefined) ?? [],
       name: name.value.trim() || props.draft.meta?.name || props.draft.type,
     });
   } catch (err) {

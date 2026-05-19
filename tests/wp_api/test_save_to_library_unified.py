@@ -73,51 +73,10 @@ async def test_put_modules_id_persists_meta(wp_client):
     assert after["tags"] == ["t1", "t2"]
 
 
-# ─── PUT /payload alias also persists meta ───────────────────────────
-
-
-async def test_put_payload_alias_persists_meta(wp_client):
-    mod = await _make_wildcard(wp_client, name="qa_alias")
-    mid = mod["id"]
-    resp = await wp_client.put(f"/wp/api/modules/{mid}/payload", json={
-        "payload": VALID_WILDCARD,
-        "meta": {
-            "name": "renamed_via_alias",
-            "description": "alias description",
-            "tags": ["alias"],
-        },
-        "propagate_to_bundles": False,
-    })
-    assert resp.status == 200
-    body = await resp.json()
-    assert body["ok"] is True
-    assert "new_hash" in body
-    assert "bundles_updated" in body
-
-    after_resp = await wp_client.get(f"/wp/api/modules/{mid}")
-    after = await after_resp.json()
-    assert after["name"] == "renamed_via_alias"
-    assert after["description"] == "alias description"
-    assert after["tags"] == ["alias"]
-
-
-# ─── PUT /payload alias rejects malformed meta ───────────────────────
-
-
-async def test_put_payload_alias_rejects_bad_meta_shape(wp_client):
-    mod = await _make_wildcard(wp_client, name="qa_alias_bad_meta")
-    mid = mod["id"]
-    resp = await wp_client.put(f"/wp/api/modules/{mid}/payload", json={
-        "payload": VALID_WILDCARD,
-        "meta": {"tags": "not-a-list"},
-    })
-    assert resp.status == 400
-
-
 # ─── Bundle propagation — default on ─────────────────────────────────
 
 
-async def test_save_payload_propagates_to_bundles(wp_client):
+async def test_canonical_put_propagates_to_bundles(wp_client):
     mod = await _make_wildcard(wp_client, name="qa_prop_source")
     mid = mod["id"]
     bundle = await _make_bundle_containing(wp_client, mod, bundle_name="qa_prop_bundle")
@@ -127,9 +86,9 @@ async def test_save_payload_propagates_to_bundles(wp_client):
     new_payload = {**VALID_WILDCARD, "options": [
         {"id": "o1", "value": "marker_qa_prop", "weight": 1},
     ]}
-    resp = await wp_client.put(f"/wp/api/modules/{mid}/payload", json={
+    resp = await wp_client.put(f"/wp/api/modules/{mid}", json={
         "payload": new_payload,
-        "meta": {"name": "qa_prop_renamed"},
+        "name": "qa_prop_renamed",
     })
     assert resp.status == 200
     body = await resp.json()
@@ -149,7 +108,7 @@ async def test_save_payload_propagates_to_bundles(wp_client):
 # ─── Bundle propagation — opt out ────────────────────────────────────
 
 
-async def test_save_payload_propagate_to_bundles_false_skips_rewrite(wp_client):
+async def test_canonical_put_propagate_to_bundles_false_skips_rewrite(wp_client):
     mod = await _make_wildcard(wp_client, name="qa_optout_source")
     mid = mod["id"]
     bundle = await _make_bundle_containing(wp_client, mod, bundle_name="qa_optout_bundle")
@@ -158,7 +117,7 @@ async def test_save_payload_propagate_to_bundles_false_skips_rewrite(wp_client):
     new_payload = {**VALID_WILDCARD, "options": [
         {"id": "o1", "value": "should_NOT_appear_in_bundle", "weight": 1},
     ]}
-    resp = await wp_client.put(f"/wp/api/modules/{mid}/payload", json={
+    resp = await wp_client.put(f"/wp/api/modules/{mid}", json={
         "payload": new_payload,
         "propagate_to_bundles": False,
     })

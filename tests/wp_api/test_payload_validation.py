@@ -2,8 +2,8 @@
 
 Pins the contract that the API enforces ``handler.validate_payload`` at
 every write boundary — POST /wp/api/modules, PUT /wp/api/modules/<id>,
-PUT /wp/api/modules/<id>/payload, POST /wp/api/modules/import-from-workflow,
-and the bundle endpoints when a ``children[]`` array is part of the body.
+POST /wp/api/modules/import-from-workflow, and the bundle endpoints when
+a ``children[]`` array is part of the body.
 
 The shape used per kind is intentionally minimal-but-valid for the
 "happy path" and intentionally malformed in one specific way for each
@@ -118,16 +118,16 @@ async def test_post_rejects_malformed_payload(wp_client, type_id, broken_payload
     assert resp.status == 400, await resp.text()
 
 
-# ─── PUT /payload uses the same validator ─────────────────────────────
+# ─── Canonical PUT uses the same validator ────────────────────────────
 
 
-async def test_put_payload_rejects_cross_type_pollution(wp_client):
+async def test_put_modules_id_rejects_cross_type_pollution(wp_client):
     # Create a wildcard, then try to PUT a combine-shaped payload to it.
     create = await _create(wp_client, "wildcard", VALID_PAYLOADS["wildcard"])
     assert create.status == 201
     mid = (await create.json())["id"]
 
-    bad = await wp_client.put(f"/wp/api/modules/{mid}/payload", json={
+    bad = await wp_client.put(f"/wp/api/modules/{mid}", json={
         "payload": {"template": "hi $world", "output_var": "phrase"},
     })
     assert bad.status == 400, await bad.text()

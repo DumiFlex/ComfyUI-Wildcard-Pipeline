@@ -278,6 +278,22 @@ function onPushSaved(result: PushSaveResult): void {
   // next poll tick.
   setLibraryHash(result.id, result.payload_hash);
   void forceRefreshHashes();
+  // Update mode: sync every workflow row with this uuid so each row's
+  // payload_hash + meta.library_name match the freshly-saved library
+  // entry. Without this, the per-field reset target on Display name
+  // still points at the OLD library name → reset icon shows even
+  // though the row IS at the library default now.
+  if (result.mode === "update") {
+    const next = value.value.modules.map((m) => {
+      if (m.id !== result.id) return m;
+      return {
+        ...m,
+        payload_hash: result.payload_hash,
+        meta: { ...(m.meta ?? {}), library_name: result.name },
+      };
+    });
+    commitModules(next);
+  }
   const bundlesNote =
     result.bundles_updated.length > 0
       ? ` · ${result.bundles_updated.length} bundle${result.bundles_updated.length === 1 ? "" : "s"} synced`
@@ -1759,6 +1775,11 @@ function isModified(m: ModuleEntry): boolean {
       if (inst.mode && inst.mode !== "random") return true;
       if (inst.pinned_option_id) return true;
       if (nonEmptyArr(inst.category_filter)) return true;
+      // Binding override — matches the combine branch below so changing
+      // `$var` on a wildcard surfaces the same mod-state cue as on a
+      // combine. INSTANCE_FIELDS_PER_KIND already lists it on both kinds;
+      // this row brings the outer dot logic in line.
+      if (typeof inst.variable_binding === "string" && inst.variable_binding.length > 0) return true;
       return false;
     case "fixed_values":
       // Library-tracked: `values_overrides` non-empty = user edited entries,

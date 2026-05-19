@@ -241,17 +241,28 @@ function onPushToLibrarySaved(result: PushSaveResult): void {
   if (result.mode === "fork") {
     // The new entry replaces the draft's identity; `_originalId` lets
     // saveEditedModule swap the row by old id during the next save().
+    // library_name follows the new entry's name so per-field reset
+    // semantics start from the fresh row.
     (draft.value as ModuleEntry & { _originalId?: string })._originalId = draft.value.id;
     draft.value.id = result.id;
     draft.value.payload_hash = result.payload_hash;
-    draft.value.meta = { ...(draft.value.meta ?? {}), name: result.name };
+    draft.value.meta = {
+      ...(draft.value.meta ?? {}),
+      name: result.name,
+      library_name: result.name,
+    };
     pushToast(`Saved as new library entry "${result.name}"`, { severity: "success" });
     save();
   } else {
-    // Update path — same uuid, refreshed hash. Stamp meta so the local
-    // row matches what the library now stores.
+    // Update path — same uuid, refreshed hash. Stamp library_name too
+    // so per-field "reset to library default" stops offering to revert
+    // to the pre-save name once it's no longer the library default.
     draft.value.payload_hash = result.payload_hash;
-    draft.value.meta = { ...(draft.value.meta ?? {}), name: result.name };
+    draft.value.meta = {
+      ...(draft.value.meta ?? {}),
+      name: result.name,
+      library_name: result.name,
+    };
     const bundlesNote =
       result.bundles_updated.length > 0
         ? ` · ${result.bundles_updated.length} bundle${result.bundles_updated.length === 1 ? "" : "s"} synced`

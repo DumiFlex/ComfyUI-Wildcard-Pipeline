@@ -129,9 +129,10 @@ describe("PushToLibraryModal", () => {
     wrap.unmount();
   });
 
-  it("Update existing PUTs payload + meta + propagate flag", async () => {
-    pushResponse({ items: [] });  // contains_module
-    pushResponse({ ok: true, new_hash: "new123", bundles_updated: [] });  // PUT
+  it("Update existing PUTs payload + flattened meta + propagate flag", async () => {
+    pushResponse({ items: [] });                                              // contains_module
+    pushResponse({ description: "", tags: [], name: "test_w" });              // seedFromLibrary
+    pushResponse({ payload_hash: "new123", bundles_updated: [], name: "x" }); // canonical PUT
     const wrap = await openModal(makeDraft());
 
     const nameInput = document.querySelector<HTMLInputElement>('[data-test="ptl-name"]')!;
@@ -145,19 +146,22 @@ describe("PushToLibraryModal", () => {
 
     const putCall = calls.find((c) => c.init?.method === "PUT");
     expect(putCall).toBeDefined();
-    expect(putCall!.url).toBe("/wp/api/modules/src00001/payload");
+    expect(putCall!.url).toBe("/wp/api/modules/src00001");
     const body = JSON.parse(putCall!.init!.body as string);
     expect(body.payload).toEqual(VALID_PAYLOAD);
-    // metaBody() only emits keys with non-empty values — the modal
-    // doesn't waste bytes sending blank description/tags overrides.
-    expect(body.meta).toEqual({ name: "renamed_in_modal" });
+    // Canonical contract — meta fields are flattened on the body, not
+    // nested under a `meta` key.
+    expect(body.name).toBe("renamed_in_modal");
+    expect(body.description).toBeUndefined();
+    expect(body.tags).toBeUndefined();
     expect(body.propagate_to_bundles).toBe(true);
     wrap.unmount();
   });
 
   it("emits saved with bundles_updated forwarded from the server", async () => {
     pushResponse({ items: [] });
-    pushResponse({ ok: true, new_hash: "h2", bundles_updated: ["b1", "b2"] });
+    pushResponse({ description: "", tags: [] });  // seedFromLibrary
+    pushResponse({ payload_hash: "h2", bundles_updated: ["b1", "b2"], name: "test_w" });
     const wrap = await openModal(makeDraft());
 
     document.querySelector<HTMLButtonElement>('[data-test="ptl-update"]')!.click();
@@ -171,8 +175,9 @@ describe("PushToLibraryModal", () => {
   });
 
   it("Save as new entry POSTs to /wp/api/modules with the renamed payload", async () => {
-    pushResponse({ items: [] });  // contains_module
-    pushResponse([]);              // forkModule's fetch of /modules (existing names)
+    pushResponse({ items: [] });                  // contains_module
+    pushResponse({ description: "", tags: [] });  // seedFromLibrary
+    pushResponse([]);                              // forkModule's fetch of /modules (existing names)
     pushResponse({ id: "newid01", payload_hash: "fh1" }, 201);  // POST /modules
 
     const wrap = await openModal(makeDraft());
@@ -208,9 +213,44 @@ describe("PushToLibraryModal", () => {
     wrap.unmount();
   });
 
+  it("seeds description + tags from the library entry when the draft is silent", async () => {
+    // Workflow rows only carry meta.name + library_name at insert
+    // time; the modal fetches the live library row to fill the rest.
+    pushResponse({ items: [] });
+    pushResponse({ description: "library description", tags: ["fromlib", "two"] });
+    const wrap = await openModal(makeDraft({
+      meta: { name: "test_w" } as { name: string },  // intentionally no description/tags
+    }));
+    // seedFromLibrary fires async after openModal resolves — give it a
+    // beat to land.
+    await flushPromises();
+    const descInput = document.querySelector<HTMLTextAreaElement>('[data-test="ptl-description"]')!;
+    const tagsInput = document.querySelector<HTMLInputElement>('[data-test="ptl-tags"]')!;
+    expect(descInput.value).toBe("library description");
+    expect(tagsInput.value).toBe("fromlib, two");
+    wrap.unmount();
+  });
+
+  it("does not clobber in-modal edits when seedFromLibrary lands late", async () => {
+    pushResponse({ items: [] });
+    // First arg ignored — we'll set the form before this resolves by
+    // delaying via Promise indirection. Simulate by stubbing fetch
+    // returning library data with a different description; the modal
+    // should respect the typed value because the field is non-empty.
+    pushResponse({ description: "FROM_LIB_SHOULD_LOSE", tags: ["lib"] });
+    const wrap = await openModal(makeDraft({
+      meta: { name: "test_w", description: "USER_TYPED" } as { name: string; description: string },
+    }));
+    await flushPromises();
+    const descInput = document.querySelector<HTMLTextAreaElement>('[data-test="ptl-description"]')!;
+    expect(descInput.value).toBe("USER_TYPED");
+    wrap.unmount();
+  });
+
   it("opt-out checkbox round-trips into the PUT body", async () => {
     pushResponse({ items: [{ id: "b1", name: "framing" }] });
-    pushResponse({ ok: true, new_hash: "h", bundles_updated: [] });
+    pushResponse({ description: "", tags: [] });  // seedFromLibrary
+    pushResponse({ payload_hash: "h", bundles_updated: [], name: "test_w" });
     const wrap = await openModal(makeDraft());
 
     const cb = document.querySelector<HTMLInputElement>('[data-test="ptl-propagate"]')!;
