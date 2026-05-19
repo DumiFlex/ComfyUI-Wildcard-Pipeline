@@ -478,4 +478,19 @@ describe("RichTextPreview.vue", () => {
     const wrap = mount(RichTextPreview, { props: { value: "" } });
     expect(wrap.exists()).toBe(true);
   });
+
+  it("renders RefChip atoms for refs and vars in the same shape as the editor", () => {
+    const wrap = mount(RichTextPreview, {
+      props: {
+        modelValue: "x $person sees @{aabbccdd:warm}",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        varSuggestions: ["person"],
+      },
+    });
+    const chips = wrap.findAll(".wp-refchip");
+    expect(chips.length).toBe(2);
+    expect(chips[0].text()).toContain("$person");
+    expect(chips[1].text()).toContain("@color");
+    expect(chips[1].text()).toContain("warm");
+  });
 });
