@@ -38,7 +38,10 @@ const VAR_VALID_SURFACES = new Set<Surface>(["combine", "derivation", "assembler
 const REF_VALID_SURFACES = new Set<Surface>(["wildcard"]);
 
 const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/y;
-const REF_RE = /@\{([0-9a-f]{8})\}/y;
+// Optional `:subcat[,subcat]` per-call sub-category filter — empty
+// filter is equivalent to no filter, sub-categories are stripped of
+// whitespace + comma-separated.
+const REF_RE = /@\{([0-9a-f]{8})(?::([^}]*))?\}/y;
 const DP_MULTI_RE = /\{(\d+)\$\$([^$]*)\$\$([^}]*)\}/y;
 const DP_BRACE_RE = /\{([^{}]*\|[^{}]*)\}/y;
 

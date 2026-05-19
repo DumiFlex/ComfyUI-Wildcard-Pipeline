@@ -503,6 +503,153 @@ describe("scanConflicts — constraint ordering", () => {
   });
 });
 
+// Helper: wildcard whose option value contains an @{} ref to another
+// wildcard. Used to seed the nested-reach walker.
+const wildcardWithRef = (
+  id: string,
+  varBinding: string,
+  refUuid: string,
+): ContextWidgetValue["modules"][number] => ({
+  id, type: "wildcard", enabled: true, meta: { name: "" },
+  entries: [],
+  payload: {
+    var_binding: varBinding,
+    options: [{ id: "o1", value: `@{${refUuid}}`, weight: 1 }],
+  },
+});
+
+describe("scanConflicts — constraint nested-reach classification", () => {
+  it("target reachable via nested @{} from a later wildcard does NOT flag missing", () => {
+    // `outer` at position 1 has option value `@{nested-uuid}`. Target
+    // `nested-uuid` doesn't appear directly in chain but IS reachable
+    // through nesting → constraint applies at ref-resolve time, no flag.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "aabbccdd"),
+        wildcardWithRef("outer", "phrase", "aabbccdd"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(
+      out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_")),
+    ).toBeUndefined();
+  });
+
+  it("target reachable via deep nested @{} chain (transitive) does NOT flag missing", () => {
+    // outer → @{mid}; mid (in chain) → @{deep}. Constraint targets deep.
+    // Walker expands through local catalog so deep counts as reachable.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "defacedb"),
+        wildcardWithRef("outer", "phrase", "facedab0"),
+        wildcardWithRef("facedab0", "mid", "defacedb"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(
+      out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_")),
+    ).toBeUndefined();
+  });
+
+  it("target in upstream + ALSO downstream → no warning (downstream picks get constrained)", () => {
+    // User has same wildcard in two Contexts: upstream copy already
+    // picked, downstream copy will pick AFTER this constraint. The
+    // downstream instance benefits → don't false-flag in_upstream.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111", "bbbb2222"], ["bbbb2222"]);
+    expect(
+      out.find((c) => c.moduleId === "c1" && c.type === "constraint_target_in_upstream"),
+    ).toBeUndefined();
+  });
+
+  it("target in upstream + ALSO in same node AFTER constraint → no warning", () => {
+    // Two instances of bbbb2222: upstream (already picked) + local
+    // after constraint (still to pick). The local-after instance gets
+    // constrained, so don't flag.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111", "bbbb2222"]);
+    expect(
+      out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_")),
+    ).toBeUndefined();
+  });
+
+  it("target ONLY upstream still flags target_in_upstream (no other bindable instance)", () => {
+    // Sanity check that the rule didn't go too lax: when target is
+    // genuinely only upstream + nothing downstream / local / nested,
+    // the warning still fires.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111", "bbbb2222"], []);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "bbbb2222",
+      type: "constraint_target_in_upstream",
+      severity: "warning",
+    });
+  });
+
+  it("nested @{} from a wildcard BEFORE the constraint does NOT count as bindable", () => {
+    // Wildcard at index 0 has @{nested}, constraint at index 1 targets
+    // nested. The outer wildcard already rolled (picking from `nested`
+    // before constraint registered) → constraint can't bind to that
+    // nested call. Without other bindable instance → flag missing.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wildcardWithRef("outer", "phrase", "aabbccdd"),
+        constraint("c1", "aaaa1111", "aabbccdd"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "aabbccdd",
+      type: "constraint_target_missing",
+      severity: "warning",
+    });
+  });
+
+  it("nested @{} with sub-category filter still counts as a reachable target", () => {
+    // `@{nested:warm}` is a valid ref form for the resolver and the
+    // scanner — filter is metadata, doesn't change reachability.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "aabbccdd"),
+        {
+          id: "outer", type: "wildcard", enabled: true, meta: { name: "" },
+          entries: [],
+          payload: {
+            var_binding: "phrase",
+            options: [{ id: "o1", value: "@{aabbccdd:warm,cool}", weight: 1 }],
+          },
+        },
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(
+      out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_")),
+    ).toBeUndefined();
+  });
+});
+
 describe("conflict scanner — instance.variable_binding override", () => {
   it("reads instance.variable_binding before payload.var_binding", () => {
     // Two wildcards: m1 has payload.var_binding="outfit" but the user

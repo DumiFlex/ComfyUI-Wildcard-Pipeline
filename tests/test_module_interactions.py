@@ -615,6 +615,245 @@ class TestChainReproducibility:
 # ─── Realistic kitchen-sink scenario ─────────────────────────────────
 
 
+class TestNestedConstraints:
+    """2026-05-19 cycle — constraints now apply to wildcards reached via
+    nested `@{uuid}` refs, not just chain-level wildcards. Pre-fix the
+    matrix silently bypassed when target was buried inside another
+    wildcard's option value."""
+
+    def test_constraint_applies_to_nested_target(self):
+        """Outer wildcard's option is `@{nested}`. Constraint excludes
+        nested='forbidden' when src='trigger'. Expect: nested rolls
+        'allowed', never 'forbidden', across many seeds.
+
+        Pre-fix: constraint silently bypassed → 'forbidden' appeared.
+        Post-fix: constraint applied during ref resolution.
+        """
+        catalog = {
+            "bbbbbbbb": {
+                "type": "wildcard",
+                "var_binding": "inner",
+                "options": [
+                    {"id": "b1", "value": "forbidden", "weight": 1},
+                    {"id": "b2", "value": "allowed", "weight": 1},
+                ],
+            },
+        }
+        modules = [
+            _wildcard("srcwild", "src", [
+                {"id": "s1", "value": "trigger", "weight": 1},
+            ]),
+            _constraint("c1", source="srcwild", target="bbbbbbbb", exceptions=[
+                {"source": "trigger", "target": "forbidden", "mode": "exclude", "factor": 0},
+            ]),
+            _wildcard("outer", "final", [
+                {"id": "o1", "value": "@{bbbbbbbb}", "weight": 1},
+            ]),
+        ]
+        # Run many seeds; with constraint working, "forbidden" never appears.
+        picks: set[str] = set()
+        for seed in range(40):
+            ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=seed)
+            picks.add(ctx["final"])
+        assert "forbidden" not in picks
+        assert "allowed" in picks  # confirm pool wasn't accidentally empty
+
+    def test_nested_constraint_excludes_all_emits_warning(self):
+        """Exceptions exclude every option of the nested target →
+        ref resolver falls back to options[0] + emits the
+        constraint_excludes_all_options warning (same path as chain-
+        level wildcards)."""
+        catalog = {
+            "cccccccc": {
+                "type": "wildcard",
+                "var_binding": "inner",
+                "options": [
+                    {"id": "c1", "value": "punk", "weight": 1},
+                    {"id": "c2", "value": "classic", "weight": 1},
+                ],
+            },
+        }
+        modules = [
+            _wildcard("srcwild", "src", [
+                {"id": "s1", "value": "trigger", "weight": 1},
+            ]),
+            _constraint("c1", source="srcwild", target="cccccccc", exceptions=[
+                {"source": "trigger", "target": "punk", "mode": "exclude", "factor": 0},
+                {"source": "trigger", "target": "classic", "mode": "exclude", "factor": 0},
+            ]),
+            _wildcard("outer", "final", [
+                {"id": "o1", "value": "@{cccccccc}", "weight": 1},
+            ]),
+        ]
+        ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=1)
+        warning_types = [w["type"] for w in ctx["__wp_warnings__"]]
+        assert "constraint_excludes_all_options" in warning_types
+
+    def test_nested_constraint_warns_when_source_not_picked(self):
+        """Source wildcard sits after the outer wildcard that nests the
+        constraint's target → at nested-roll time the source's pick
+        isn't in __wp_picks__ yet → emits unknown_constraint_source.
+
+        Sanity check that the warning surface is consistent between
+        chain-level and nested constraint application paths."""
+        catalog = {
+            "dddddddd": {
+                "type": "wildcard",
+                "var_binding": "inner",
+                "options": [{"id": "d1", "value": "x", "weight": 1}],
+            },
+        }
+        modules = [
+            _constraint("c1", source="srcwild", target="dddddddd", exceptions=[
+                {"source": "trigger", "target": "x", "mode": "exclude", "factor": 0},
+            ]),
+            _wildcard("outer", "final", [
+                {"id": "o1", "value": "@{dddddddd}", "weight": 1},
+            ]),
+            _wildcard("srcwild", "src", [
+                {"id": "s1", "value": "trigger", "weight": 1},
+            ]),
+        ]
+        ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=1)
+        warning_types = [w["type"] for w in ctx["__wp_warnings__"]]
+        assert "unknown_constraint_source" in warning_types
+
+
+class TestNestedSubcategoryFilter:
+    """`@{uuid:subcat,subcat2}` per-call sub-category filter — restricts
+    the nested wildcard's pick to options whose `sub_category` matches.
+    Same semantics as chain-level `instance.category_filter` but scoped
+    per call site so one library wildcard can be narrowed differently
+    from each reference."""
+
+    def test_subcat_filter_narrows_pool(self):
+        """`@{color:warm}` should only pick from options whose
+        sub_category == 'warm', skipping cool options entirely."""
+        catalog = {
+            "eeeeeeee": {
+                "type": "wildcard",
+                "var_binding": "color",
+                "options": [
+                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                    {"id": "c2", "value": "yellow", "weight": 1, "sub_category": "warm"},
+                    {"id": "c3", "value": "blue", "weight": 1, "sub_category": "cool"},
+                    {"id": "c4", "value": "green", "weight": 1, "sub_category": "cool"},
+                ],
+            },
+        }
+        modules = [
+            _wildcard("outer", "phrase", [
+                {"id": "o1", "value": "@{eeeeeeee:warm}", "weight": 1},
+            ]),
+        ]
+        picks: set[str] = set()
+        for seed in range(30):
+            ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=seed)
+            picks.add(ctx["phrase"])
+        assert picks.issubset({"red", "yellow"})
+        assert "blue" not in picks
+        assert "green" not in picks
+
+    def test_subcat_filter_multi_categories(self):
+        """Comma-separated subcats accept union of matching options."""
+        catalog = {
+            "ffffffff": {
+                "type": "wildcard",
+                "var_binding": "color",
+                "options": [
+                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                    {"id": "c2", "value": "blue", "weight": 1, "sub_category": "cool"},
+                    {"id": "c3", "value": "green", "weight": 1, "sub_category": "earth"},
+                ],
+            },
+        }
+        modules = [
+            _wildcard("outer", "phrase", [
+                {"id": "o1", "value": "@{ffffffff:warm,cool}", "weight": 1},
+            ]),
+        ]
+        picks: set[str] = set()
+        for seed in range(30):
+            ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=seed)
+            picks.add(ctx["phrase"])
+        assert picks.issubset({"red", "blue"})
+        assert "green" not in picks
+
+    def test_subcat_filter_empty_pool_warns(self):
+        """Filter matching no options → empty string output + warning."""
+        catalog = {
+            "aaaa1111": {
+                "type": "wildcard",
+                "var_binding": "color",
+                "options": [
+                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                ],
+            },
+        }
+        modules = [
+            _wildcard("outer", "phrase", [
+                {"id": "o1", "value": "[@{aaaa1111:nonexistent}]", "weight": 1},
+            ]),
+        ]
+        ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=1)
+        # Outer renders the literal brackets with empty ref result inside
+        assert ctx["phrase"] == "[]"
+        warning_types = [w["type"] for w in ctx["__wp_warnings__"]]
+        assert "ref_subcategory_empty_pool" in warning_types
+
+    def test_empty_filter_equivalent_to_no_filter(self):
+        """`@{uuid:}` with empty subcat list = full pool (defensive
+        against trailing-colon typos breaking everything)."""
+        catalog = {
+            "aaaa2222": {
+                "type": "wildcard",
+                "var_binding": "color",
+                "options": [
+                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                ],
+            },
+        }
+        modules = [
+            _wildcard("outer", "phrase", [
+                {"id": "o1", "value": "@{aaaa2222:}", "weight": 1},
+            ]),
+        ]
+        ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=1)
+        assert ctx["phrase"] == "red"
+
+    def test_subcat_filter_composes_with_constraint(self):
+        """`@{color:warm}` + constraint excluding 'red' → only 'yellow'
+        survives. Confirms filter applies BEFORE constraint, both
+        compose correctly."""
+        catalog = {
+            "aaaa3333": {
+                "type": "wildcard",
+                "var_binding": "color",
+                "options": [
+                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                    {"id": "c2", "value": "yellow", "weight": 1, "sub_category": "warm"},
+                    {"id": "c3", "value": "blue", "weight": 1, "sub_category": "cool"},
+                ],
+            },
+        }
+        modules = [
+            _wildcard("srcwild", "src", [
+                {"id": "s1", "value": "trigger", "weight": 1},
+            ]),
+            _constraint("c1", source="srcwild", target="aaaa3333", exceptions=[
+                {"source": "trigger", "target": "red", "mode": "exclude", "factor": 0},
+            ]),
+            _wildcard("outer", "phrase", [
+                {"id": "o1", "value": "@{aaaa3333:warm}", "weight": 1},
+            ]),
+        ]
+        picks: set[str] = set()
+        for seed in range(30):
+            ctx = _run(modules, ctx={"__wp_catalog__": catalog}, seed=seed)
+            picks.add(ctx["phrase"])
+        assert picks == {"yellow"}
+
+
 class TestKitchenSink:
     """End-to-end scenario combining most module kinds — the kind of
     pipeline a real user authors. If this test breaks, something

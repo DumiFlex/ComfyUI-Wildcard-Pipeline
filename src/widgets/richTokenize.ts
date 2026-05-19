@@ -211,19 +211,31 @@ export function tokenizeRich(text: string): RichToken[] {
       // Lone $ or $ not followed by ident -- fall through to text accumulation
     }
 
-    // -- Ref: @{8hex} UUID form only ----------------------------------------
+    // -- Ref: @{8hex} or @{8hex:subcat[,subcat]} ----------------------------
+    // Optional `:subcat,subcat` filter restricts the nested wildcard's
+    // pick to options whose `sub_category` is in the list. Keeps one
+    // library wildcard reusable while letting each call site narrow
+    // surgically (e.g. `@{color:warm}` vs `@{color:cool}` referencing
+    // the same `color` wildcard). Empty filter → no filter.
     if (ch === "@") {
-      const m = /^@\{([0-9a-f]{8})\}/.exec(text.slice(i));
-      if (m) {
+      const refMatch = text.slice(i).match(/^@\{([0-9a-f]{8})(?::([^}]*))?\}/);
+      if (refMatch) {
         flushText(i);
+        const filterRaw = refMatch[2];
+        const subCategories =
+          typeof filterRaw === "string"
+            ? filterRaw.split(",").map((s) => s.trim()).filter(Boolean)
+            : [];
+        const meta: { uuid: string; sub_categories?: string[] } = { uuid: refMatch[1] };
+        if (subCategories.length > 0) meta.sub_categories = subCategories;
         out.push({
           kind: "ref",
-          raw: m[0],
+          raw: refMatch[0],
           start: i,
-          end: i + m[0].length,
-          meta: { uuid: m[1] },
+          end: i + refMatch[0].length,
+          meta,
         });
-        i += m[0].length;
+        i += refMatch[0].length;
         continue;
       }
       // Not a ref -- fall through to text accumulation

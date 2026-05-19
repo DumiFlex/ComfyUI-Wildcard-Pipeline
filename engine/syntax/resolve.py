@@ -342,9 +342,63 @@ def _resolve_ref(
     # legacy flat shape used by existing unit tests (options at top level).
     payload_dict = module.get("payload")
     if isinstance(payload_dict, dict):
-        options = payload_dict.get("options", [])
+        options = list(payload_dict.get("options", []))
     else:
-        options = module.get("options", [])
+        options = list(module.get("options", []))
+
+    # Optional per-call sub-category filter: `@{uuid:warm,cool}` keeps
+    # only options whose `sub_category` is in the requested list. Same
+    # semantics as chain-level `instance.category_filter` but scoped to
+    # this specific ref, so a shared library wildcard (e.g. `@{color}`)
+    # can be narrowed differently at every call site without authoring
+    # separate library entries. Empty post-filter pool → empty string
+    # + warning so the user sees the unsatisfiable filter rather than
+    # silently falling through to the unfiltered list.
+    sub_filter = tok.meta.get("sub_categories")
+    if isinstance(sub_filter, list) and sub_filter:
+        allowed_subs = set(sub_filter)
+        options = [
+            o for o in options
+            if isinstance(o, dict) and o.get("sub_category") in allowed_subs
+        ]
+        if not options:
+            _push_warning(
+                ctx,
+                type="ref_subcategory_empty_pool",
+                severity="warn",
+                module_id="",
+                source_field="",
+                position=tok.start,
+                token_index=None,
+                detail={"uuid": uuid, "sub_categories": list(sub_filter)},
+                message=(
+                    f"@{{{uuid}:{','.join(sub_filter)}}} matched no options"
+                ),
+            )
+            return ""
+
+    # Apply chain-level constraints whose `target_wildcard_id` matches
+    # this nested ref's uuid. Pre-2026-05 only top-level wildcards saw
+    # constraints — nested `@{B}` from inside another wildcard's
+    # option value silently bypassed every rule, defeating composed
+    # pipelines. ResolveContext exposes `get_constraints` / `get_picks`
+    # for this path; both default to empty for hand-built resolve
+    # contexts in tests so the legacy fast path keeps working.
+    get_constraints = getattr(ctx, "get_constraints", None)
+    get_picks = getattr(ctx, "get_picks", None)
+    if callable(get_constraints) and callable(get_picks):
+        constraints = get_constraints()
+        if constraints:
+            from engine.modules._constraints import (
+                apply_constraints_for_target,
+                warn_excludes_all,
+            )
+            options, any_applied = apply_constraints_for_target(
+                options, uuid, constraints, get_picks(), ctx.warnings,
+            )
+            if any_applied:
+                warn_excludes_all(options, uuid, ctx.warnings)
+
     chosen = _pick_weighted(options, ctx.rng)
     if chosen is None:
         return ""

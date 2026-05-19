@@ -15,8 +15,13 @@ from engine.syntax.types import Token, TokenKind
 
 # `$name` — identifier starts with letter or underscore, then word chars
 _VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
-# `@{8hex}` — exactly 8 lowercase hex chars in braces
-_REF_RE = re.compile(r"@\{([0-9a-f]{8})\}")
+# `@{8hex}` or `@{8hex:subcat[,subcat...]}` — exactly 8 lowercase hex
+# chars, optionally followed by a colon + comma-separated sub-category
+# filter. Filter restricts the nested wildcard's pick to options whose
+# `sub_category` is in the supplied list — same semantics as
+# instance.category_filter at the chain level, but scoped per-call so
+# one library wildcard can be narrowed differently from each call site.
+_REF_RE = re.compile(r"@\{([0-9a-f]{8})(?::([^}]*))?\}")
 # Multi-pick prefix: {N$$sep$$ where N is one or more digits and sep can be empty.
 _MULTI_PREFIX_RE = re.compile(r"^\{(\d+)\$\$(.*?)\$\$", flags=re.DOTALL)
 
@@ -171,12 +176,26 @@ def tokenize_text(text: str) -> list[Token]:
             m = _REF_RE.match(text, i)
             if m:
                 _flush_text(i)
+                # Optional sub-category filter: split on comma, strip
+                # whitespace, drop empties. Empty / whitespace-only
+                # filter is equivalent to "no filter" — keeps
+                # `@{xyz:}` from accidentally banning every option.
+                filter_raw = m.group(2)
+                sub_categories: list[str] = []
+                if filter_raw is not None:
+                    sub_categories = [
+                        sc for sc in (s.strip() for s in filter_raw.split(","))
+                        if sc
+                    ]
+                meta: dict = {"uuid": m.group(1)}
+                if sub_categories:
+                    meta["sub_categories"] = sub_categories
                 out.append(Token(
                     kind=TokenKind.REF,
                     raw=m.group(0),
                     start=i,
                     end=m.end(),
-                    meta={"uuid": m.group(1)},
+                    meta=meta,
                 ))
                 i = m.end()
                 continue

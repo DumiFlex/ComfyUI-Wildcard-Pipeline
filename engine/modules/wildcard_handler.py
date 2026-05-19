@@ -163,34 +163,6 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
         }
 
 
-def _push_constraint_warning(ctx: Any, type_: str, detail: dict[str, Any]) -> None:
-    """Emit an `unknown_constraint_source` / similar warning into ctx.warnings.
-
-    Shape mirrors `engine/syntax/resolve.py:_push_warning` so the debug
-    viewer can format it uniformly. Surface the constraint id + the
-    missing source uuid in `detail` for actionable errors.
-    """
-    if ctx is None:
-        return
-    warnings = ctx.get("__wp_warnings__")
-    if not isinstance(warnings, list):
-        return
-    warnings.append({
-        "type": type_,
-        "severity": "warn",
-        "module_id": ctx.get("__wp_current_module_id__", ""),
-        "source_field": "",
-        "position": 0,
-        "token_index": None,
-        "detail": detail,
-        "message": (
-            f"constraint source not yet picked: {detail.get('source_wildcard_id')!r}"
-            if type_ == "unknown_constraint_source"
-            else f"constraint warning: {detail!r}"
-        ),
-    })
-
-
 class WildcardHandler(ModuleHandler):
     type_id = "wildcard"
 
@@ -348,76 +320,23 @@ class WildcardHandler(ModuleHandler):
 
         # Constraint application — each constraint targeting THIS module
         # adjusts the option pool's weights based on what its source
-        # wildcard already picked. Constraints registered earlier in
-        # the chain pile up in `ctx["__wp_constraints__"]`; we filter
-        # to those naming the current module as target. Source pick
-        # must be available in `ctx["__wp_picks__"][source_wildcard_id]`
-        # — pipeline order matters, the source must run first.
-        # Constraints applied in registration order so multiple
-        # constraints on the same target compose multiplicatively.
+        # wildcard already picked. Apply logic extracted to
+        # `engine.modules._constraints` so the nested-`@{}` path in
+        # `engine.syntax.resolve` shares the same implementation.
+        from engine.modules._constraints import (
+            apply_constraints_for_target,
+            warn_excludes_all,
+        )
         my_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
-        constraints = ctx.get("__wp_constraints__") if ctx is not None else None
         any_constraint_applied = False
-        if my_id and isinstance(constraints, list):
+        if my_id:
+            constraints = ctx.get("__wp_constraints__") if ctx is not None else None
             picks = ctx.get("__wp_picks__") if ctx is not None else None
-            if not isinstance(picks, dict):
-                picks = {}
-            for c in constraints:
-                if not isinstance(c, dict):
-                    continue
-                if c.get("target_wildcard_id") != my_id:
-                    continue
-                src_id = c.get("source_wildcard_id")
-                src_pick = picks.get(src_id) if isinstance(src_id, str) else None
-                if not isinstance(src_pick, dict):
-                    _push_constraint_warning(
-                        ctx,
-                        "unknown_constraint_source",
-                        {
-                            "source_wildcard_id": src_id,
-                            "target_wildcard_id": my_id,
-                            "hint": "source must be picked before target — check chain order",
-                        },
-                    )
-                    continue
-                # Accumulate per-rule mode/factor anomalies into a
-                # local list, then surface each as a warning so the
-                # user gets a clear signal about typo'd modes (silent
-                # no-op pre-fix) and ignored factors on `allow` cells.
-                adjustment_warnings: list[dict[str, Any]] = []
-                options = _apply_constraint_to_options(
-                    options, c, src_pick, adjustment_warnings,
-                )
-                any_constraint_applied = True
-                for w in adjustment_warnings:
-                    _push_constraint_warning(
-                        ctx,
-                        w.get("type", "unknown_constraint_mode"),
-                        {
-                            **{k: v for k, v in w.items() if k != "type"},
-                            "source_wildcard_id": src_id,
-                            "target_wildcard_id": my_id,
-                        },
-                    )
-
-        # Excludes-all detection: when constraints have been applied
-        # AND the post-application total weight is zero, every option
-        # was excluded. `_pick_weighted` falls back to options[0]
-        # silently — the user gets the same "first option" forever
-        # with no signal that the constraint over-narrowed. Surface a
-        # warning so the user knows to broaden their matrix /
-        # exceptions.
-        if any_constraint_applied and options:
-            total = sum(max(0.0, float(o.get("weight", 1))) for o in options)
-            if total <= 0:
-                _push_constraint_warning(
-                    ctx,
-                    "constraint_excludes_all_options",
-                    {
-                        "target_wildcard_id": my_id,
-                        "hint": "every option was excluded; falling back to options[0]",
-                    },
-                )
+            options, any_constraint_applied = apply_constraints_for_target(
+                options, my_id, constraints, picks, ctx["__wp_warnings__"],
+            )
+        if any_constraint_applied:
+            warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
 
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance

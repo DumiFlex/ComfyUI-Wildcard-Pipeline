@@ -329,6 +329,59 @@ function varReadsOf(m: ModuleEntry): string[] {
   return out;
 }
 
+/** Regex for `@{uuid[:subcat,subcat]}` ref tokens inside string values.
+ *  Captures the uuid (group 1); the optional sub-category filter is
+ *  matched but not captured because the scanner only cares about
+ *  reachability, not the filter contents. Kept in sync with
+ *  `engine/syntax/tokenize.py:_REF_RE` so the scanner's reach-set
+ *  walker recognises every form the engine resolver accepts. */
+const REF_TOKEN_RE = /@\{([0-9a-f]{8})(?::[^}]*)?\}/g;
+
+/** Extract every nested `@{uuid}` ref a wildcard module would walk at
+ *  runtime — currently only the option `value` strings. Used by the
+ *  reach-set walker so the scanner knows constraint targets reached
+ *  via nested refs from later-in-chain wildcards are NOT missing. */
+function nestedRefsOf(m: ModuleEntry): string[] {
+  if (m.type !== "wildcard") return [];
+  const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
+  const out: string[] = [];
+  for (const opt of payload.options ?? []) {
+    const v = opt.value;
+    if (typeof v !== "string") continue;
+    for (const match of v.matchAll(REF_TOKEN_RE)) out.push(match[1]);
+  }
+  return out;
+}
+
+/** Walk the local catalog from a starting set of uuids, expanding via
+ *  every `@{uuid}` ref found inside each visited wildcard's option
+ *  values. Bounded by `MAX_REACH_DEPTH` (matches the engine resolver's
+ *  `max_ref_depth` default). Returns the full set of uuids reachable,
+ *  including the starting seeds. */
+const MAX_REACH_DEPTH = 8;
+function walkLocalReach(
+  seeds: Iterable<string>,
+  catalog: Map<string, ModuleEntry>,
+): Set<string> {
+  const reach = new Set<string>();
+  let frontier: string[] = [];
+  for (const u of seeds) {
+    if (!reach.has(u)) { reach.add(u); frontier.push(u); }
+  }
+  for (let depth = 0; depth < MAX_REACH_DEPTH && frontier.length > 0; depth++) {
+    const next: string[] = [];
+    for (const u of frontier) {
+      const m = catalog.get(u);
+      if (!m) continue;
+      for (const r of nestedRefsOf(m)) {
+        if (!reach.has(r)) { reach.add(r); next.push(r); }
+      }
+    }
+    frontier = next;
+  }
+  return reach;
+}
+
 export function scanConflicts(
   value: ContextWidgetValue,
   upstreamVars: string[],
@@ -348,9 +401,32 @@ export function scanConflicts(
   // resulting warning would push the user to fix a typo that isn't
   // there. Disabled vs enabled is a separate concern.
   const localWildcardIndex = new Map<string, number>();
+  // Per-position cumulative nested-reach: `localNestedReachAfter[i]`
+  // is the set of uuids reachable via `@{}` from any wildcard at
+  // index > i, transitively via this node's local catalog. Used by
+  // the constraint target check so a constraint at position i whose
+  // target reaches via nested ref from a later wildcard doesn't flag
+  // as "missing".
+  const localCatalog = new Map<string, ModuleEntry>();
   value.modules.forEach((m, i) => {
-    if (m.type === "wildcard") localWildcardIndex.set(m.id, i);
+    if (m.type === "wildcard") {
+      localWildcardIndex.set(m.id, i);
+      localCatalog.set(m.id, m);
+    }
   });
+  // Walk backwards: each position's "reach at-or-after" is everything
+  // referenced by modules at positions ≥ k, expanded transitively
+  // through the catalog. Cheap for library volumes (dozens of modules,
+  // single-digit refs each). For a constraint at position i, the
+  // check uses `localNestedReachAfter[i + 1]` which corresponds to
+  // "uuids reachable from modules at positions > i".
+  const localNestedReachAfter: Set<string>[] = new Array(value.modules.length + 1);
+  localNestedReachAfter[value.modules.length] = new Set();
+  const seedsAccumulator: string[] = [];
+  for (let i = value.modules.length - 1; i >= 0; i--) {
+    for (const r of nestedRefsOf(value.modules[i])) seedsAccumulator.push(r);
+    localNestedReachAfter[i] = walkLocalReach(seedsAccumulator, localCatalog);
+  }
   const written = new Set<string>();
   // Track the kind of the FIRST module to write each name in this
   // node. Used to distinguish intentional cross-kind overrides
@@ -488,33 +564,60 @@ export function scanConflicts(
       }
       if (typeof tgtId === "string" && tgtId) {
         // Target needs to pick AFTER this constraint runs. Good
-        // locations: same node at index > i, OR downstream Context.
-        // Bad locations: same node at index <= i (before_self),
-        // upstream Context (in_upstream — already picked), or
-        // unfindable (missing).
+        // locations: same node at index > i, downstream Context, OR
+        // reachable via nested `@{}` from a wildcard at index > i
+        // (engine.syntax.resolve applies constraints to refs too —
+        // see engine/modules/_constraints.py).
+        // Bad locations:
+        //   - same node at index <= i (`target_before_self`)
+        //   - ONLY in upstream Context with no later instance
+        //     anywhere (`target_in_upstream` — the upstream pick is
+        //     already locked, and there's no downstream / later /
+        //     nested instance for the constraint to bind to)
+        //   - not findable anywhere (`target_missing`)
         const localIdx = localWildcardIndex.get(tgtId);
-        const inLocal = localIdx !== undefined;
+        const inLocalDirect = localIdx !== undefined;
+        const inLocalAfterSelf = inLocalDirect && (localIdx as number) > i;
+        const inLocalBeforeOrAtSelf = inLocalDirect && (localIdx as number) <= i;
         const inUpstream = upstreamUuids.has(tgtId);
         const inDownstream = downstreamUuids.has(tgtId);
-        if (inLocal && (localIdx as number) <= i) {
+        // Nested-reach is computed PER constraint position: only nested
+        // refs from wildcards at index > i count, because nested refs
+        // from earlier wildcards already resolved before the constraint
+        // registered. `localNestedReachAfter[i + 1]` captures uuids
+        // reachable from positions strictly greater than i.
+        const inLocalNestedAfter = localNestedReachAfter[i + 1].has(tgtId);
+        // "Constraint can bind to SOMETHING that runs after registration"
+        const hasBindableInstance =
+          inLocalAfterSelf || inDownstream || inLocalNestedAfter;
+
+        if (inLocalBeforeOrAtSelf && !hasBindableInstance) {
+          // Only-flagged-instance is upstream of this constraint in the
+          // local chain. If we ALSO have a later instance somewhere,
+          // the constraint is useful — stay silent.
           out.push({
             moduleId: m._uid ?? m.id,
             variable: tgtId,
             type: "constraint_target_before_self",
             severity: "warning",
           });
-        } else if (inUpstream) {
+        } else if (inUpstream && !hasBindableInstance && !inLocalBeforeOrAtSelf) {
+          // Pre-fix this fired whenever target had an upstream
+          // instance. With multi-instance reasoning a target that's
+          // ALSO downstream / nested-after / local-after-self is
+          // bindable — only flag when upstream is the sole instance.
           out.push({
             moduleId: m._uid ?? m.id,
             variable: tgtId,
             type: "constraint_target_in_upstream",
             severity: "warning",
           });
-        } else if (!inLocal && !inDownstream) {
-          // Not findable anywhere reachable. Pre-fix the scanner
-          // flagged this even when target was downstream; the
-          // downstream walker now lets us distinguish — only flag
-          // when truly unfindable.
+        } else if (
+          !inLocalDirect && !inUpstream && !inDownstream && !inLocalNestedAfter
+        ) {
+          // Not findable anywhere reachable. Nested-reach via @{} from
+          // any later chain wildcard counts as reachable — the engine
+          // resolver applies constraints to nested target refs too.
           out.push({
             moduleId: m._uid ?? m.id,
             variable: tgtId,
@@ -522,7 +625,8 @@ export function scanConflicts(
             severity: "warning",
           });
         }
-        // Target in downstream → no warning (good case).
+        // All other cases → constraint has at least one bindable
+        // instance; silent (good).
       }
     }
   }

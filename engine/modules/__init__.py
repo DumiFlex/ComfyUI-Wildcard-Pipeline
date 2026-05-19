@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from engine.syntax.types import ResolveContext, SurfaceKind
@@ -23,6 +23,14 @@ class _RuntimeResolveContext:
     warnings: list[dict[str, Any]]
     _vars: dict[str, Any]
     _catalog: dict[str, dict[str, Any]]
+    # Back-channels for the syntax resolver's nested-`@{}` path so it
+    # can apply constraints to wildcards reached transitively (same
+    # rule book as the chain-level wildcard handler). Both default to
+    # empty so legacy callers that build a ResolveContext by hand keep
+    # working — the resolver falls back to "no constraints" when the
+    # bucket is empty/None.
+    _constraints: list[dict[str, Any]] = field(default_factory=list)
+    _picks: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def get_var(self, name: str) -> str | None:
         if name in self._vars:
@@ -42,6 +50,22 @@ class _RuntimeResolveContext:
         """
         return self._catalog.get(uuid)
 
+    def get_constraints(self) -> list[dict[str, Any]]:
+        """Registered constraints from the current pipeline run.
+
+        Each entry is the meta dict that ``constraint_handler`` writes
+        into ``ctx['__wp_constraints__']``. Used by ``_resolve_ref`` to
+        apply constraints against the nested-target wildcard before
+        rolling its options.
+        """
+        return self._constraints
+
+    def get_picks(self) -> dict[str, dict[str, Any]]:
+        """``ctx['__wp_picks__']`` — every wildcard's last pick keyed
+        by module id. Constraint application needs this to look up the
+        source wildcard's pick when reweighting the target."""
+        return self._picks
+
 
 def build_resolve_ctx(
     ctx: dict[str, Any],
@@ -54,6 +78,8 @@ def build_resolve_ctx(
     Handlers call this with their type-appropriate surface ("wildcard" /
     "combine" / "derivation" / "assembler") then pass the result to resolve_text.
     """
+    constraints = ctx.get("__wp_constraints__")
+    picks = ctx.get("__wp_picks__")
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -63,6 +89,13 @@ def build_resolve_ctx(
         warnings=ctx["__wp_warnings__"],
         _vars={k: v for k, v in ctx.items() if not k.startswith("__")},
         _catalog=ctx.get("__wp_catalog__", {}),
+        # Constraint bucket + picks table threaded through so the
+        # syntax resolver's `_resolve_ref` can apply chain-level
+        # constraints against nested-via-`@{}` target wildcards. Both
+        # may be missing (legacy ctx, tests that pre-date constraint
+        # support) — defaults handle that path.
+        _constraints=constraints if isinstance(constraints, list) else [],
+        _picks=picks if isinstance(picks, dict) else {},
     )
 
 
