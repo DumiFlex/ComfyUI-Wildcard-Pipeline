@@ -73,9 +73,7 @@ onMounted(loadLibrary);
 
 const exportSelected = ref<Set<string>>(new Set());
 const exportSearch = ref("");
-const exportOpenGroups = ref<Set<GroupKey>>(
-  new Set(["wildcard", "fixed_values"]),
-);
+const exportOpenGroups = ref<Set<GroupKey>>(new Set());
 
 // Initial seed: "Full library" once data lands.
 let didSeedExport = false;
