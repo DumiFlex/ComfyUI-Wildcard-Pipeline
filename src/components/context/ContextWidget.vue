@@ -1770,16 +1770,15 @@ function isModified(m: ModuleEntry): boolean {
   switch (m.type) {
     case "wildcard":
       // Pool overrides — anything that changes WHICH option a roll picks.
+      // Identity (display name + variable_binding) is intentionally
+      // excluded: those have their own per-field reset icon inside the
+      // modal, and counting them in the outer mod dot would conflate
+      // identity-level renames with behavioural overrides.
       if (nonEmptyArr(inst.enabled_options)) return true;
       if (nonEmptyObj(inst.option_weights)) return true;
       if (inst.mode && inst.mode !== "random") return true;
       if (inst.pinned_option_id) return true;
       if (nonEmptyArr(inst.category_filter)) return true;
-      // Binding override — matches the combine branch below so changing
-      // `$var` on a wildcard surfaces the same mod-state cue as on a
-      // combine. INSTANCE_FIELDS_PER_KIND already lists it on both kinds;
-      // this row brings the outer dot logic in line.
-      if (typeof inst.variable_binding === "string" && inst.variable_binding.length > 0) return true;
       return false;
     case "fixed_values":
       // Library-tracked: `values_overrides` non-empty = user edited entries,
@@ -1789,10 +1788,9 @@ function isModified(m: ModuleEntry): boolean {
       if (Array.isArray(inst.enabled_options)) return true;
       return false;
     case "combine":
-      // Template override + variable_binding override (binding lives on
-      // identity but is per-instance so counts as a diff vs library).
+      // Template override only. Identity (binding) excluded — see
+      // wildcard branch comment.
       if (typeof inst.template_override === "string" && inst.template_override.length > 0) return true;
-      if (typeof inst.variable_binding === "string" && inst.variable_binding.length > 0) return true;
       return false;
     case "derivation":
       if (nonEmptyArr(inst.disabled_rule_ids)) return true;
