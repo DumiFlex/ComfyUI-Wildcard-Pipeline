@@ -247,6 +247,8 @@ function downloadBundle() {
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const dropActive = ref(false);
+const dropInvalid = ref(false);
+const parsing = ref(false);
 const parseError = ref<string | null>(null);
 const parsedBundle = ref<ImportBundle | null>(null);
 const parsedFileName = ref<string>("");
@@ -406,6 +408,20 @@ function badgeLabel(kind: ConflictKind): string {
   return "exists";
 }
 
+/** Best-effort early-check that the dragged file is JSON-ish. The
+ *  dataTransfer.items API exposes MIME type during dragover (but not
+ *  the file name). Falls back to "valid" when the source doesn't
+ *  announce a type so non-Chromium browsers don't reject everything. */
+function dragHasJsonFile(dt: DataTransfer | null): boolean {
+  if (!dt) return true;
+  for (const item of dt.items) {
+    if (item.kind !== "file") continue;
+    if (!item.type) return true; // unknown — let it through, validated post-drop
+    return /(^|\/)json$/i.test(item.type);
+  }
+  return true;
+}
+
 function onPickFile(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (f) handleFile(f);
@@ -413,15 +429,23 @@ function onPickFile(e: Event) {
 function onDrop(e: DragEvent) {
   e.preventDefault();
   dropActive.value = false;
+  dropInvalid.value = false;
   const f = e.dataTransfer?.files?.[0];
-  if (f) handleFile(f);
+  if (!f) return;
+  if (!/\.json$/i.test(f.name) && !/(^|\/)json$/i.test(f.type)) {
+    parseError.value = "Only .json bundles are supported.";
+    return;
+  }
+  handleFile(f);
 }
 function onDragOver(e: DragEvent) {
   e.preventDefault();
   dropActive.value = true;
+  dropInvalid.value = !dragHasJsonFile(e.dataTransfer);
 }
 function onDragLeave() {
   dropActive.value = false;
+  dropInvalid.value = false;
 }
 
 async function handleFile(file: File) {
@@ -430,6 +454,11 @@ async function handleFile(file: File) {
   importSelected.value = new Set();
   parsedFileName.value = file.name;
   parsedFileSizeKb.value = (file.size / 1024).toFixed(1);
+  parsing.value = true;
+  // Yield so the parsing UI paints before file.text() blocks the main
+  // thread on a multi-MB bundle. Both reads + JSON.parse can take a
+  // measurable fraction of a second on large libraries.
+  await new Promise((r) => setTimeout(r, 0));
   try {
     const text = await file.text();
     const data = JSON.parse(text);
@@ -449,6 +478,7 @@ async function handleFile(file: File) {
     parseError.value = err instanceof Error ? err.message : String(err);
     parsedBundle.value = null;
   } finally {
+    parsing.value = false;
     if (fileInputRef.value) fileInputRef.value.value = "";
   }
 }
@@ -757,18 +787,38 @@ watch(
           <div
             class="wp-io-drop"
             :data-active="dropActive ? 'true' : 'false'"
+            :data-invalid="dropInvalid ? 'true' : 'false'"
+            :data-parsing="parsing ? 'true' : 'false'"
+            :aria-busy="parsing || undefined"
             data-test="io-dropzone"
-            @click="fileInputRef?.click()"
+            @click="!parsing && fileInputRef?.click()"
             @dragover="onDragOver"
             @dragleave="onDragLeave"
             @drop="onDrop"
           >
-            <Icon name="pi-cloud-upload" :size="22" /><!-- outlier: 22px drop-zone hero icon -->
+            <Icon
+              v-if="parsing"
+              name="spin pi-spinner"
+              :size="22"
+            />
+            <Icon
+              v-else-if="dropInvalid"
+              name="pi-times-circle"
+              :size="22"
+            />
+            <Icon
+              v-else
+              name="pi-cloud-upload"
+              :size="22"
+            />
             <div class="wp-io-drop__title">
-              {{ parsedFileName || "Drop a .json file or click to browse" }}
+              <template v-if="parsing">Parsing {{ parsedFileName }}…</template>
+              <template v-else-if="dropInvalid">Only .json files accepted</template>
+              <template v-else>{{ parsedFileName || "Drop a .json file or click to browse" }}</template>
             </div>
             <div class="wp-io-drop__hint wp-dim">
-              <template v-if="parsedFileName">{{ parsedFileSizeKb }} KB · click to replace</template>
+              <template v-if="parsing">Reading {{ parsedFileSizeKb }} KB</template>
+              <template v-else-if="parsedFileName">{{ parsedFileSizeKb }} KB · click to replace</template>
               <template v-else>Up to 10 MB</template>
             </div>
           </div>
@@ -1036,6 +1086,18 @@ watch(
 .wp-io-drop[data-active="true"] {
   background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent);
   border-color: var(--wp-accent-500);
+}
+.wp-io-drop[data-invalid="true"] {
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+  border-color: var(--wp-danger);
+  color: var(--wp-danger);
+  cursor: not-allowed;
+}
+.wp-io-drop[data-parsing="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 6%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 40%, transparent);
+  border-style: solid;
+  cursor: progress;
 }
 .wp-io-drop__title {
   font-size: var(--wp-text-base);
