@@ -5,6 +5,7 @@ import Icon from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useTweaksStore } from "../stores/tweaksStore";
 import { useBrowserHistory } from "../composables/useBrowserHistory";
+import { isMac } from "../utils/platform";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
@@ -33,16 +34,16 @@ function onBack(): void {
  *  Ctrl+K keydown reuses the same handler AppLayout installs for the
  *  keyboard shortcut — keeps palette ownership in one place. The
  *  visible label adapts to mac (⌘K) / windows (Ctrl K). */
-const isMac = typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/i.test(navigator.platform);
+const mac = isMac();
 const paletteShortcut = computed(() => ({
-  kbd: isMac ? "⌘ K" : "Ctrl K",
-  tooltip: isMac ? "Search modules and commands (⌘ K)" : "Search modules and commands (Ctrl+K)",
+  kbd: mac ? "⌘ K" : "Ctrl K",
+  tooltip: mac ? "Search modules and commands (⌘ K)" : "Search modules and commands (Ctrl+K)",
 }));
 function openPalette(): void {
   window.dispatchEvent(new KeyboardEvent("keydown", {
     key: "k",
-    ctrlKey: !isMac,
-    metaKey: isMac,
+    ctrlKey: !mac,
+    metaKey: mac,
     bubbles: true,
   }));
 }

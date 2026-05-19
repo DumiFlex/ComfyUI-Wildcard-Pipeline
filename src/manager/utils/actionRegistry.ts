@@ -1,6 +1,7 @@
 import type { Router } from "vue-router";
 import type { useUiStore } from "../stores/uiStore";
 import type { CommandItem } from "../components/CommandPalette.types";
+import { isMac } from "./platform";
 
 type UiStore = ReturnType<typeof useUiStore>;
 
@@ -63,6 +64,30 @@ export function getActions(ui: UiStore, router: Router): CommandItem[] {
       kind: "action",
       icon: "pi-plus",
       run: () => { void router.push("/constraints/new"); },
+    },
+    {
+      id: "action:toggle-sidebar",
+      label: "Toggle sidebar",
+      kind: "action",
+      icon: "pi-bars",
+      run: () => ui.toggleSidebar(),
+    },
+    {
+      id: "action:show-shortcuts",
+      label: "Show keyboard shortcuts",
+      kind: "action",
+      icon: "pi-question-circle",
+      run: () => {
+        // Dispatch the same Cmd+/ keystroke AppLayout listens for.
+        // Keeps the modal owned by a single source of truth.
+        const mac = isMac();
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "/",
+          ctrlKey: !mac,
+          metaKey: mac,
+          bubbles: true,
+        }));
+      },
     },
     // action:new-bundle intentionally omitted — new bundles are created
     // via the Context widget (the in-graph node), not the SPA. The

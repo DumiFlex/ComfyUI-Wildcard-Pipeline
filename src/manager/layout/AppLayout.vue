@@ -6,6 +6,7 @@ import AppSidebar from "./AppSidebar.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
 import CommandPalette from "../components/CommandPalette.vue";
+import ShortcutsHelp from "../components/ShortcutsHelp.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
@@ -21,16 +22,49 @@ const bundleStore = useBundleStore();
 const categoryStore = useCategoryStore();
 
 const paletteOpen = ref(false);
+const shortcutsOpen = ref(false);
+
+/** Predicate: target is a typing surface where global single-modifier
+ *  shortcuts should defer to the input. Cmd+K and Cmd+/ still fire —
+ *  those are deliberately global — but Cmd+B (sidebar toggle) and
+ *  similar should pass through if the user is typing. */
+function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName?.toLowerCase();
+  if (tag === "input" || tag === "textarea") return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key !== "k" && e.key !== "K") return;
   if (!(e.metaKey || e.ctrlKey)) return;
-  const target = e.target as HTMLElement | null;
-  const tag = target?.tagName?.toLowerCase();
-  if (tag === "input" || tag === "textarea") return;
-  if (target?.isContentEditable) return;
-  e.preventDefault();
-  paletteOpen.value = !paletteOpen.value;
+  const key = e.key.toLowerCase();
+
+  // Palette — Cmd/Ctrl + K. Suppress while typing so editor finds /
+  // replaces aren't hijacked.
+  if (key === "k") {
+    if (isTypingTarget(e.target)) return;
+    e.preventDefault();
+    paletteOpen.value = !paletteOpen.value;
+    return;
+  }
+
+  // Shortcut help — Cmd/Ctrl + /. Fires from anywhere; '/' isn't a
+  // common in-editor binding so global wins.
+  if (key === "/") {
+    e.preventDefault();
+    shortcutsOpen.value = !shortcutsOpen.value;
+    return;
+  }
+
+  // Sidebar toggle — Cmd/Ctrl + B. Skip while typing (Bold etc.).
+  if (key === "b") {
+    if (isTypingTarget(e.target)) return;
+    e.preventDefault();
+    ui.toggleSidebar();
+    return;
+  }
 }
 
 onMounted(() => {
@@ -67,5 +101,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     <ToastHost />
     <TweaksPanel />
     <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
+    <ShortcutsHelp v-model:open="shortcutsOpen" />
   </div>
 </template>
