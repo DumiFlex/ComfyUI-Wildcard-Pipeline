@@ -161,6 +161,24 @@ const nameByUuid = computed<Map<string, string>>(() => {
   return m;
 });
 
+// UUID → sub_categories[] map used by RichTextInput's step-2 picker
+// to surface the chosen wildcard's declared sub-category filters.
+// Wildcards without declared sub_categories map to an empty array so
+// the picker can still distinguish "known empty" from "missing entry".
+const uuidToSubCategories = computed<Map<string, string[]>>(() => {
+  const out = new Map<string, string[]>();
+  for (const mod of moduleStore.catalog) {
+    if (mod.type !== "wildcard") continue;
+    const subs = (mod.payload as { sub_categories?: unknown } | undefined)?.sub_categories;
+    if (Array.isArray(subs)) {
+      out.set(mod.id, subs.filter((s): s is string => typeof s === "string"));
+    } else {
+      out.set(mod.id, []);
+    }
+  }
+  return out;
+});
+
 // Suggestions: union of upstream `$var` names for inline `$`-trigger autocomplete.
 const varSuggestions = computed<string[]>(() => {
   const seen = new Set<string>();
@@ -486,6 +504,7 @@ defineExpose({ historyEntries, applyRestore, options });
                 :ref-suggestions="wcSuggestions"
                 :var-suggestions="varSuggestions"
                 :uuid-to-name="nameByUuid"
+                :uuid-to-sub-categories="uuidToSubCategories"
                 placeholder="value (type @ for nested wildcards · {a|b|c} for inline choices)"
                 aria-label="Option value"
               />
