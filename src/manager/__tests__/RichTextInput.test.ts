@@ -3,11 +3,6 @@ import { describe, expect, it } from "vitest";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 
-// NOTE: `flushPromises` / `popoverItems` / `popoverExists` helpers were
-// removed in Task 5 along with the autocomplete tests that used them.
-// Task 6 will reintroduce equivalents when it rewires autocomplete onto
-// the contenteditable host.
-
 describe("RichTextInput.vue", () => {
   it("renders bound value as text+chip atoms inside the host", () => {
     const wrap = mount(RichTextInput, {
@@ -18,9 +13,6 @@ describe("RichTextInput.vue", () => {
     expect(host.text()).toContain("$person");
     expect(host.text()).toContain("walks");
   });
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 against contenteditable host.
-  it.skip("emits update:modelValue on input (rewired in Task 6)", () => {});
 
   it("emits update:modelValue with serialised raw text after host input", async () => {
     const wrap = mount(RichTextInput, {
@@ -60,8 +52,19 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 13 (multiline contenteditable host).
-  it.skip("renders multiline as <textarea> when multiline=true (rewired in Task 13)", () => {});
+  it("multiline=true sets data-multiline + wp-rt--multi on the host (no textarea)", () => {
+    // Multiline mode used to swap the input for a <textarea>; now it's a
+    // single contenteditable host with a data attribute + size variant.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "line1\nline2", multiline: true, rows: 6 },
+    });
+    expect(wrap.find("textarea").exists()).toBe(false);
+    const host = wrap.find(".wp-rt__host");
+    expect(host.attributes("data-multiline")).toBe("true");
+    expect(host.attributes("aria-multiline")).toBe("true");
+    expect(host.classes()).toContain("wp-rt__host--multi");
+    expect(wrap.find(".wp-rt").classes()).toContain("wp-rt--multi");
+  });
 
   it("renders RefChip atoms for $var/@{uuid}/@{uuid:subcat} tokens", () => {
     // `varSuggestions` opts the `$person` var into resolved state so its
@@ -83,12 +86,24 @@ describe("RichTextInput.vue", () => {
     expect(chips[2].text()).toContain("deadbeef");
   });
 
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 13 (escape rendering on host).
-  it.skip("renders $$ escapes as escape spans (not vars) (rewired in Task 13)", () => {});
+  it("renders $$ escapes as literal text without classifying as a var chip", () => {
+    // `$$` is an escape token in the tokenizer — atomicEditorModel collapses
+    // it back into the text buffer rather than lifting it into a var atom.
+    // The host should therefore render NO var chip for `$$literal`.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$$literal", varSuggestions: ["literal"] },
+    });
+    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(0);
+    expect(wrap.findAll(".wp-refchip")).toHaveLength(0);
+    // The raw `$$` survives in the rendered text — atoms preserve the
+    // original characters even though they're escape tokens.
+    expect(wrap.find(".wp-rt__host").text()).toContain("$$literal");
+  });
 
-  // OBSOLETE (task-19 confirmed): Comment token kind was removed in the locked grammar.
-  // `# lines` are now plain text. This test can never pass with the current tokenizer.
-  // Keeping skipped rather than deleted so the intent is visible in git history.
+  // OBSOLETE (task-19 confirmed): Comment token kind was removed in the locked
+  // grammar. `# lines` are now plain text. Keeping the skip so the intent is
+  // visible in git history — the assertion can never pass with the current
+  // tokenizer.
   it.skip("renders # comment lines greyed out [OBSOLETE — comment syntax removed]", () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "# noted", multiline: true },
@@ -96,42 +111,39 @@ describe("RichTextInput.vue", () => {
     expect(wrap.find(".wp-rt__mirror").html()).toContain("wp-rt-comment");
   });
 
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 13 against contenteditable host focus/blur.
-  it.skip("toggles wp-rt--focused / wp-rt--rest classes on focus / blur (rewired in Task 13)", () => {});
+  it("toggles wp-rt--focused class on host focus/blur", async () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "" },
+      attachTo: document.body,
+    });
+    const root = wrap.find(".wp-rt");
+    // Rest state — `wp-rt--rest` is on, `wp-rt--focused` is off.
+    expect(root.classes()).toContain("wp-rt--rest");
+    expect(root.classes()).not.toContain("wp-rt--focused");
+    await wrap.find(".wp-rt__host").trigger("focus");
+    expect(root.classes()).toContain("wp-rt--focused");
+    expect(root.classes()).not.toContain("wp-rt--rest");
+    await wrap.find(".wp-rt__host").trigger("blur");
+    expect(root.classes()).not.toContain("wp-rt--focused");
+    expect(root.classes()).toContain("wp-rt--rest");
+    wrap.unmount();
+  });
 
-  // Autocomplete-popover tests below all depend on the legacy <input>/<textarea>
-  // dispatching `@input` to drive `probeAutocomplete`. Task 6 rewires the probe
-  // to read from the contenteditable host + Selection API. Until then these
-  // are mechanically broken (no <input> element to setValue against). Keep
-  // the intent visible in git rather than deleting.
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("opens autocomplete and filters by prefix when typing $ (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("opens autocomplete with refSuggestions when typing @ (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("inserts a suggestion on Enter (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("`@` autocomplete filters by display name and inserts the UUID (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("closes autocomplete on Escape (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("ArrowDown advances suggestion selection (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("typing $ followed by space without picking closes the popup (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — mirror layer removed; caret alignment is no
-  // longer a textarea-overlay concern. Task 13 will re-pin host rendering.
-  it.skip("keeps mirror text identical to value while focused (no chip padding drift) (rewired in Task 13)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — underlying <input> removed; aria/disabled
-  // forwarding moves to the contenteditable host in Task 10/13.
-  it.skip("forwards aria-label and disabled to the underlying input (rewired in Task 13)", () => {});
+  it("forwards aria-label + disabled onto the contenteditable host", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "hi",
+        ariaLabel: "Template body",
+        disabled: true,
+      },
+    });
+    const host = wrap.find(".wp-rt__host");
+    expect(host.attributes("aria-label")).toBe("Template body");
+    // Disabled toggles `contenteditable="false"` so the caret can't enter
+    // the host. The wrapper also picks up `wp-rt--disabled` for styling.
+    expect(host.attributes("contenteditable")).toBe("false");
+    expect(wrap.find(".wp-rt").classes()).toContain("wp-rt--disabled");
+  });
 
   // --- Task 7: autocomplete pick routes through SubcategoryFilterPicker ---
   // These tests drive the autocomplete state machine via test seams

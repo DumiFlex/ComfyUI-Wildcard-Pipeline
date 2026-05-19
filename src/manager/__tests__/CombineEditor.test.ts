@@ -16,9 +16,7 @@ vi.mock("../api/client", () => ({
 
 import { api } from "../api/client";
 import CombineEditor from "../views/CombineEditor.vue";
-// `CombinePayload` was only used by the save-shape assertion that Task 5
-// skipped (RichTextInput rewrite removed the underlying <textarea>). Re-add
-// when Task 6 reintroduces a host-driven equivalent.
+import RichTextInput from "../components/RichTextInput.vue";
 
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const apiCat = api.categories as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -85,12 +83,68 @@ describe("CombineEditor.vue", () => {
     expect(apiMod.create).not.toHaveBeenCalled();
   });
 
-  // OBSOLETE (Task 5 rewrite): drives the template via `<textarea>` inside
-  // RichTextInput, which no longer exists — the input layer is now a
-  // contenteditable host. Task 6 introduces a host-aware update path; this
-  // assertion will get re-anchored there.
-  it.skip("save creates combine with type/payload shape (rewired in Task 6)", () => {});
+  it("save creates combine with type/payload shape", async () => {
+    apiMod.create.mockResolvedValue({
+      id: "cb_new", name: "Subject", description: "", category_id: null,
+      tags: [], type: "combine",
+      payload: { template: "$first_name walks", output_var: "subject_phrase", input_vars: ["first_name"] },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    const wrap = mount(CombineEditor, {
+      global: { plugins: [makeRouter()] },
+    });
+    await flushPromises();
 
-  // OBSOLETE (Task 5 rewrite): same `<textarea>` reliance — see prior test.
-  it.skip("detected inputs panel shows the $vars from the template (rewired in Task 6)", () => {});
+    // Fill the name field (uses Input component → setValue).
+    await wrap.find('[data-test="identity-name"]').setValue("Subject");
+
+    // Drive the template via the RichTextInput's v-model emit — the host
+    // is contenteditable so we don't simulate keystrokes; we emit the
+    // serialised raw text the way `onHostInput` would after the user
+    // typed it. This matches the production code path which reads
+    // textContent off the host and emits update:modelValue.
+    const rt = wrap.findComponent(RichTextInput);
+    rt.vm.$emit("update:modelValue", "$first_name walks");
+    await flushPromises();
+
+    // Click Save.
+    await wrap.find('[data-test="save-btn"]').trigger("click");
+    await flushPromises();
+
+    expect(apiMod.create).toHaveBeenCalledTimes(1);
+    const arg = apiMod.create.mock.calls[0][0] as {
+      type: string;
+      name: string;
+      payload: { template: string; output_var: string; input_vars: string[] };
+    };
+    expect(arg.type).toBe("combine");
+    expect(arg.name).toBe("Subject");
+    expect(arg.payload.template).toBe("$first_name walks");
+    // output_var defaults to `toIdentifier(name)` when the user hasn't edited it.
+    expect(arg.payload.output_var).toBe("subject");
+    // detected input_vars are derived from the template's $vars.
+    expect(arg.payload.input_vars).toEqual(["first_name"]);
+  });
+
+  it("detected inputs panel shows the $vars from the template", async () => {
+    const wrap = mount(CombineEditor, {
+      global: { plugins: [makeRouter()] },
+    });
+    await flushPromises();
+
+    // Empty template → empty panel hint.
+    expect(wrap.text()).toContain("None — type a template above.");
+
+    // Drive the template via the RichTextInput's v-model emit.
+    const rt = wrap.findComponent(RichTextInput);
+    rt.vm.$emit("update:modelValue", "$first_name and $last_name greet $first_name");
+    await flushPromises();
+
+    // Detected chips render in declared order with dedupe.
+    const chipText = wrap.find('[data-test="cb-detected"]').text();
+    expect(chipText).toContain("$first_name");
+    expect(chipText).toContain("$last_name");
+    // Header count reflects the dedup'd $var count.
+    expect(wrap.text()).toContain("Detected inputs (2)");
+  });
 });

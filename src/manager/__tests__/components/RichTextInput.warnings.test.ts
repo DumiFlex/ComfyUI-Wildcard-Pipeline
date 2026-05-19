@@ -4,10 +4,6 @@ import RichTextInput from "../../components/RichTextInput.vue";
 import RichTextPreview from "../../components/RichTextPreview.vue";
 import type { ResolveWarning } from "../../utils/resolveTokens";
 
-// `tick` (alias for flushPromises) and `popoverExists` were used by the
-// surface-prop autocomplete tests skipped in Task 5; Task 6 will reintroduce
-// equivalent helpers when it rewires autocomplete onto the host.
-
 // Helper to build a minimal ResolveWarning.
 function warn(
   position: number,
@@ -101,48 +97,54 @@ describe("RichTextInput — warning markers", () => {
 
 // ---------------------------------------------------------------------------
 // Surface-conditional autocomplete
+//
+// The legacy autocomplete tests drove input via `setValue` on a <textarea>
+// that no longer exists. The host-driven autocomplete path uses test seams
+// (`__triggerAutocompleteForTest`, `__applyAutocompleteForTest`) — the
+// equivalent surface-gating + insert-shape coverage lives in the main
+// RichTextInput test file (e.g. "opens SubcategoryFilterPicker after picking
+// an @ ref" / "$var autocomplete pick inserts $var atom directly"). The
+// surface-conditional ref styling (`wp-rt-ref--ignored`) is verified against
+// RichTextPreview in the bottom describe block below — RichTextInput itself
+// no longer renders the mirror layer, so this concept moved.
 // ---------------------------------------------------------------------------
 
-describe("RichTextInput — surface prop", () => {
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("defaults surface to wildcard — @ autocomplete enabled (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("surface=wildcard: @ autocomplete shows suggestions (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("surface=combine: @ autocomplete is disabled (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("surface=derivation: @ autocomplete is disabled (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("surface=assembler: @ autocomplete is disabled (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — rewired in Task 6 (autocomplete on host).
-  it.skip("non-wildcard surface: $ autocomplete still works (rewired in Task 6)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — mirror layer removed; surface-conditional
-  // ref styling moves onto RefChip (likely via a new prop) in Task 13.
-  it.skip("non-wildcard surface: @{uuid} tokens in mirror get wp-rt-ref--ignored class (rewired in Task 13)", () => {});
-
-  // OBSOLETE (Task 5 rewrite) — mirror layer removed; see comment on prior test.
-  it.skip("wildcard surface: @{uuid} tokens in mirror do NOT get wp-rt-ref--ignored class (rewired in Task 13)", () => {});
-});
-
 // ---------------------------------------------------------------------------
-// UUID → name display in mirror
+// UUID → name display via RefChip
 // ---------------------------------------------------------------------------
 
-describe("RichTextInput — UUID name display", () => {
-  // OBSOLETE (Task 5 rewrite) — mirror layer removed; UUID → name display is
-  // now handled by RefChip via the host's atom render path. Task 13 will
-  // restore an equivalent assertion against the chip label.
-  it.skip("renders @name display form when uuidToName provides a match (rewired in Task 13)", () => {});
+describe("RichTextInput — UUID name display via RefChip", () => {
+  it("renders @name display form when uuidToName provides a match", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "@{aabbccdd}",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+    });
+    const chip = wrap.find(".wp-refchip--ref");
+    expect(chip.exists()).toBe(true);
+    expect(chip.classes()).not.toContain("wp-refchip--unresolved");
+    // Resolved chip renders the human display name with the `@` prefix.
+    expect(chip.text()).toContain("@color");
+    // The raw uuid is NOT shown when the chip is resolved.
+    expect(chip.text()).not.toContain("aabbccdd");
+  });
 
-  // OBSOLETE (Task 5 rewrite) — see prior test. Unresolved fallback now
-  // surfaces as the RefChip `?` icon + uuid label.
-  it.skip("falls back to raw @{uuid} when uuid not in map (rewired in Task 13)", () => {});
+  it("falls back to a `?<uuid>` unresolved chip when uuid is not in the name map", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "@{deadbeef}",
+        // uuidToName intentionally empty — `deadbeef` should be unresolved.
+      },
+    });
+    const chip = wrap.find(".wp-refchip--ref");
+    expect(chip.exists()).toBe(true);
+    expect(chip.classes()).toContain("wp-refchip--unresolved");
+    // Unresolved chip uses the `?` icon + the raw uuid as the label so the
+    // user can still debug what's broken.
+    expect(chip.text()).toContain("?");
+    expect(chip.text()).toContain("deadbeef");
+  });
 });
 
 // ---------------------------------------------------------------------------
