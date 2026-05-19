@@ -22,8 +22,9 @@
  * API.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { parse, type Atom } from "./atomicEditorModel";
+import { insertAtom, parse, serialise, type Atom, type Cursor } from "./atomicEditorModel";
 import RefChip from "./RefChip.vue";
+import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 
 interface Props {
@@ -37,6 +38,10 @@ interface Props {
   refSuggestions?: string[];
   /** Map from UUID to display name; used to render `@{uuid}` refs as human labels. */
   uuidToName?: Map<string, string>;
+  /** Map from wildcard UUID → its declared sub_categories. Used by the
+   *  step-2 picker so the user sees the correct sub-cat chips for the
+   *  wildcard they picked. */
+  uuidToSubCategories?: Map<string, string[]>;
   ariaLabel?: string;
   disabled?: boolean;
 }
@@ -50,6 +55,7 @@ const props = withDefaults(defineProps<Props>(), {
   varSuggestions: () => [],
   refSuggestions: () => [],
   uuidToName: () => new Map(),
+  uuidToSubCategories: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
 });
@@ -83,6 +89,21 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
   width: 240,
   flipped: false,
 });
+
+// --- Step-2 SubcategoryFilterPicker state ---
+// Opened after picking an `@` ref that has declared sub_categories. Both the
+// insert flow (Task 7) and the click-to-edit flow (Task 8) drive the same
+// picker — `pickerMode` distinguishes them.
+const pickerOpen = ref(false);
+const pickerSubCats = ref<string[]>([]);
+const pickerInitial = ref<string[]>([]);
+const pickerMode = ref<"insert" | "edit">("insert");
+// The atom-index this picker is editing — null when inserting fresh.
+const pickerTargetAtomIndex = ref<number | null>(null);
+// During insert flow we stash the uuid + the insertion cursor so the
+// apply/skip handlers can build the right atom + put it in the right
+// place after the picker closes.
+const pendingInsert = ref<{ uuid: string; cursor: Cursor } | null>(null);
 
 // --- Atom rendering ---
 // `parse(modelValue)` collapses text/escape/dp-* tokens into plain text
@@ -178,11 +199,13 @@ function positionPopup(): void {
 }
 
 // --- Handlers ---
-// NOTE: `onInput` / `refreshAutocompleteFromCaret` / `onKeyDown` /
-// `onSelect` / `applyAutocomplete` are preserved verbatim because Task 6
-// rewires them to the contenteditable host. They currently target the
-// transitional `inputEl` ref (always null after this rewrite) and so
-// are effectively no-ops until then.
+// NOTE: `refreshAutocompleteFromCaret` is preserved verbatim because Task 9
+// rewires it to the contenteditable host's Selection API. It currently
+// targets the transitional `inputEl` ref (always null after the Task 5
+// rewrite) and so is effectively a no-op until then. The autocomplete-
+// apply path (`applyAutocomplete`) below is the live path driven by
+// Task 7's test seams (`__triggerAutocompleteForTest`, etc.) and by the
+// suggestion popover's mousedown.
 function refreshAutocompleteFromCaret(): void {
   const el = inputEl.value;
   if (!el) return;
@@ -206,26 +229,86 @@ function refreshAutocompleteFromCaret(): void {
 
 function applyAutocomplete(label: string | undefined): void {
   if (!label) return;
-  const el = inputEl.value;
-  if (!el) return;
-  const value = props.modelValue || "";
-  const caret = el.selectionStart ?? value.length;
-  const before = value.slice(0, acStart.value);
-  const after = value.slice(caret);
-  // For `@` trigger in wildcard surface, `label` is a UUID; wrap it in `@{uuid}`.
-  // For `$` trigger, insert `$name` as before.
-  const inserted = acTrigger.value === "@"
-    ? `@{${label}}`
-    : acTrigger.value + label;
-  const next = before + inserted + after;
-  emit("update:modelValue", next);
+  if (acTrigger.value === "@") {
+    const subCats = props.uuidToSubCategories.get(label) ?? [];
+    if (subCats.length === 0) {
+      // No sub-categories declared — insert plain ref immediately.
+      insertRefAtCursor(label, []);
+    } else {
+      // Open step-2 picker so the user can multi-select sub-categories.
+      pendingInsert.value = { uuid: label, cursor: currentCursor() };
+      pickerSubCats.value = subCats;
+      pickerInitial.value = [];
+      pickerMode.value = "insert";
+      pickerTargetAtomIndex.value = null;
+      pickerOpen.value = true;
+    }
+  } else {
+    // `$var` trigger — insert var atom directly (no step-2 picker for vars).
+    insertVarAtCursor(label);
+  }
   acOpen.value = false;
-  void nextTick(() => {
-    const pos = (before + inserted).length;
-    el.focus();
-    el.setSelectionRange(pos, pos);
-  });
 }
+
+function insertRefAtCursor(uuid: string, subCategories: string[]): void {
+  const atom: Atom = { kind: "ref", uuid, subCategories };
+  const cur = currentCursor();
+  const result = insertAtom(atoms.value, cur, atom);
+  emit("update:modelValue", serialise(result.atoms));
+}
+
+function insertVarAtCursor(name: string): void {
+  const atom: Atom = { kind: "var", name };
+  const cur = currentCursor();
+  const result = insertAtom(atoms.value, cur, atom);
+  emit("update:modelValue", serialise(result.atoms));
+}
+
+function currentCursor(): Cursor {
+  // Map DOM selection (host range) → model cursor. For tests we accept
+  // a fallback: end of value. Production input flows via DOM selection
+  // — implemented in Task 9.
+  return { atomIndex: atoms.value.length, offset: 0 };
+}
+
+// --- SubcategoryFilterPicker handlers ---
+function onPickerApply(subCats: string[]): void {
+  if (pickerMode.value === "insert" && pendingInsert.value) {
+    insertRefAtCursor(pendingInsert.value.uuid, subCats);
+    pendingInsert.value = null;
+  } else if (pickerMode.value === "edit" && pickerTargetAtomIndex.value !== null) {
+    // Implemented in Task 8 (click-to-edit). Stub for now.
+  }
+  pickerOpen.value = false;
+}
+
+function onPickerSkip(): void {
+  if (pickerMode.value === "insert" && pendingInsert.value) {
+    insertRefAtCursor(pendingInsert.value.uuid, []);
+    pendingInsert.value = null;
+  }
+  pickerOpen.value = false;
+}
+
+function onPickerDelete(): void {
+  // Implemented in Task 8 — delete the target atom.
+  pickerOpen.value = false;
+}
+
+// --- Test seams ---
+// Only used by Vitest, not user-facing. Exposed via defineExpose so test
+// scripts can drive the autocomplete state machine without faking keyboard
+// events (which are flaky under jsdom).
+function __triggerAutocompleteForTest(trigger: "@" | "$"): void {
+  acOpen.value = true;
+  acTrigger.value = trigger;
+}
+
+function __applyAutocompleteForTest(label: string): void {
+  applyAutocomplete(label);
+}
+
+defineExpose({ __triggerAutocompleteForTest, __applyAutocompleteForTest });
 
 function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   // `mousedown` (not click) so we beat the textarea blur.
@@ -433,6 +516,28 @@ function onHostInput(): void {
         </button>
       </div>
     </Teleport>
+
+    <!-- Step-2 SubcategoryFilterPicker overlay. Teleported to <body> so it
+         escapes ancestor overflow / transform. Backdrop click closes the
+         picker without inserting (treated as Skip). -->
+    <Teleport to="body">
+      <div
+        v-if="pickerOpen"
+        class="wp-subcat-picker__overlay"
+        @click="pickerOpen = false"
+      >
+        <div @click.stop>
+          <SubcategoryFilterPicker
+            :sub-categories="pickerSubCats"
+            :initial-selection="pickerInitial"
+            :mode="pickerMode"
+            @apply="onPickerApply"
+            @skip="onPickerSkip"
+            @delete="onPickerDelete"
+          />
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -600,5 +705,18 @@ function onHostInput(): void {
 }
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);
+}
+
+/* Step-2 SubcategoryFilterPicker overlay — fixed, full-viewport backdrop
+   teleported to <body> so it escapes ancestor overflow/transform contexts.
+   Centred picker; backdrop click closes the picker without inserting. */
+.wp-subcat-picker__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

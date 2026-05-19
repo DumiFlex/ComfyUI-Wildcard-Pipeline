@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { mount, flushPromises } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
@@ -132,6 +132,124 @@ describe("RichTextInput.vue", () => {
   // OBSOLETE (Task 5 rewrite) — underlying <input> removed; aria/disabled
   // forwarding moves to the contenteditable host in Task 10/13.
   it.skip("forwards aria-label and disabled to the underlying input (rewired in Task 13)", () => {});
+
+  // --- Task 7: autocomplete pick routes through SubcategoryFilterPicker ---
+  // These tests drive the autocomplete state machine via test seams
+  // (`__triggerAutocompleteForTest`, `__applyAutocompleteForTest`) exposed
+  // via `defineExpose` rather than faking keyboard events (which are flaky
+  // under jsdom).
+
+  it("opens SubcategoryFilterPicker after picking an @ ref with sub-categories", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+      },
+      attachTo: document.body,
+    });
+    // Force open the autocomplete state at `@` (test seam — directly toggle
+    // the internal trigger; the real-world path is via keyboard).
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    // Pick the first suggestion.
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    // Picker should now be open.
+    expect(document.querySelector('[data-test="subcat-picker"]')).not.toBeNull();
+    wrap.unmount();
+  });
+
+  it("inserts unfiltered ref atom when wildcard has no sub-categories", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "outfit"]]),
+        // No entry in uuidToSubCategories → empty array → skip picker.
+        uuidToSubCategories: new Map([["aabbccdd", []]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd}");
+    expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
+    wrap.unmount();
+  });
+
+  it("subcat picker Apply with selection inserts @{uuid:warm} chip", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    // Click "warm" then Apply.
+    (document.querySelector('[data-test="subcat-chip"][data-value="warm"]') as HTMLElement).click();
+    await flushPromises();
+    (document.querySelector('[data-test="picker-apply"]') as HTMLElement).click();
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd:warm}");
+    expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
+    wrap.unmount();
+  });
+
+  it("subcat picker Skip inserts plain @{uuid} chip", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "wildcard",
+        refSuggestions: ["aabbccdd"],
+        uuidToName: new Map([["aabbccdd", "color"]]),
+        uuidToSubCategories: new Map([["aabbccdd", ["warm", "cool"]]]),
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("@");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("aabbccdd");
+    (document.querySelector('[data-test="picker-skip"]') as HTMLElement).click();
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd}");
+    wrap.unmount();
+  });
+
+  it("$var autocomplete pick inserts $var atom directly (no picker)", async () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "",
+        surface: "combine",  // $var allowed surface
+        varSuggestions: ["person"],
+      },
+      attachTo: document.body,
+    });
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("person");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("$person");
+    expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
+    wrap.unmount();
+  });
 });
 
 describe("RichTextPreview.vue", () => {
