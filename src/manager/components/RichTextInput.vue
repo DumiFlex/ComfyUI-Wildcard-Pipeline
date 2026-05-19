@@ -276,6 +276,54 @@ onBeforeUnmount(() => {
 // having to reimplement the probe-from-caret logic. Reference it here so
 // strict noUnusedLocals doesn't strip it.
 void refreshAutocompleteFromCaret;
+
+// --- Host DOM → raw text serialisation ---
+// Walks the contenteditable host's children and rebuilds the raw expression
+// string. Text nodes contribute their text directly. `.wp-refchip` children
+// are atomic — we read the underlying atom (via `data-atom-index`) and
+// reconstruct the canonical syntax (`@{uuid}` / `@{uuid:sub}` / `$name`),
+// NOT the chip's rendered display text (e.g. `@color` for a resolved UUID).
+// `.wp-rt__text` spans are Vue's rendered presentation of text atoms — we
+// read from the atom (via `data-atom-index`) rather than the span text to
+// avoid double-counting when the browser also inserts a sibling text node
+// during user input (e.g. typing at a chip boundary appends a raw text node
+// while the previously-rendered span still holds the old text).
+function readHostAsText(): string {
+  const host = hostEl.value;
+  if (!host) return "";
+  let out = "";
+  for (const node of host.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out += node.textContent ?? "";
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      if (el.classList.contains("wp-refchip")) {
+        const idx = Number(el.getAttribute("data-atom-index"));
+        const atom = atoms.value[idx];
+        if (!atom) continue;
+        if (atom.kind === "ref") {
+          out += "@{" + atom.uuid;
+          if (atom.subCategories.length > 0) out += ":" + atom.subCategories.join(",");
+          out += "}";
+        } else if (atom.kind === "var") {
+          out += "$" + atom.name;
+        }
+      } else if (el.classList.contains("wp-rt__text")) {
+        // Skip the rendered text span; its content is the previously-rendered
+        // atom text. User input arrives as adjacent text nodes (handled above).
+        continue;
+      } else {
+        out += el.textContent ?? "";
+      }
+    }
+  }
+  return out;
+}
+
+function onHostInput(): void {
+  const next = readHostAsText();
+  if (next !== props.modelValue) emit("update:modelValue", next);
+}
 </script>
 
 <template>
@@ -306,6 +354,7 @@ void refreshAutocompleteFromCaret;
       spellcheck="false"
       @focus="focused = true"
       @blur="focused = false"
+      @input="onHostInput"
     >
       <template v-for="(atom, idx) in atoms" :key="idx">
         <RefChip

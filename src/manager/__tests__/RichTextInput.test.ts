@@ -22,6 +22,27 @@ describe("RichTextInput.vue", () => {
   // OBSOLETE (Task 5 rewrite) — rewired in Task 6 against contenteditable host.
   it.skip("emits update:modelValue on input (rewired in Task 6)", () => {});
 
+  it("emits update:modelValue with serialised raw text after host input", async () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "hello", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    // Simulate the user typing "x" — append to the existing text node.
+    const hostEl = host.element as HTMLElement;
+    const textNode = hostEl.firstChild;
+    if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+      textNode.textContent = "hellox";
+    } else {
+      // Fallback: append a fresh text node so the input listener has something to read.
+      hostEl.appendChild(document.createTextNode("x"));
+    }
+    await host.trigger("input");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("hellox");
+    wrap.unmount();
+  });
+
   // OBSOLETE (Task 5 rewrite) — rewired in Task 13 (multiline contenteditable host).
   it.skip("renders multiline as <textarea> when multiline=true (rewired in Task 13)", () => {});
 
