@@ -10,21 +10,31 @@
 import { computed, ref, watch } from "vue";
 import Input from "./ui/Input.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
-import type { ModuleRow, ModuleType } from "../api/types";
+import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
+
+type PickerTab = ModuleType | "bundle" | "all";
 
 interface Props {
   visible: boolean;
   modules: ModuleRow[];
+  /** Tier-1 bundles eligible to be referenced as children. Caller is
+   *  responsible for filtering out the bundle being edited and any
+   *  bundle that already contains a bundle child (the API would 400
+   *  the write anyway, but hiding them keeps the picker honest). */
+  bundles?: BundleRow[];
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  bundles: () => [],
+});
 
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "pick", row: ModuleRow): void;
+  (e: "pick-bundle", row: BundleRow): void;
 }>();
 
 interface KindTab {
-  type: ModuleType | "all";
+  type: PickerTab;
   label: string;
   icon: string;
 }
@@ -36,6 +46,7 @@ const KIND_TABS: KindTab[] = [
   { type: "combine",      label: "Combines",      icon: "pi pi-link" },
   { type: "derivation",   label: "Derivations",   icon: "pi pi-arrow-right-arrow-left" },
   { type: "constraint",   label: "Constraints",   icon: "pi pi-filter" },
+  { type: "bundle",       label: "Bundles",       icon: "pi pi-box" },
 ];
 
 const KIND_LABEL: Record<ModuleType, string> = {
@@ -46,7 +57,7 @@ const KIND_LABEL: Record<ModuleType, string> = {
   constraint:   "Constraint",
 };
 
-const activeTab = ref<ModuleType | "all">("all");
+const activeTab = ref<PickerTab>("all");
 const search = ref("");
 
 watch(() => props.visible, (v) => {
@@ -56,16 +67,27 @@ watch(() => props.visible, (v) => {
   }
 });
 
-const filtered = computed<ModuleRow[]>(() => {
+function matchesQuery(name: string, id: string, tags: readonly string[] | undefined, q: string): boolean {
+  if (!q) return true;
+  if (name.toLowerCase().includes(q)) return true;
+  if (id.toLowerCase().includes(q)) return true;
+  if ((tags ?? []).some((t) => t.toLowerCase().includes(q))) return true;
+  return false;
+}
+
+const filteredModules = computed<ModuleRow[]>(() => {
+  if (activeTab.value === "bundle") return [];
   const q = search.value.trim().toLowerCase();
   return props.modules.filter((m) => {
     if (activeTab.value !== "all" && m.type !== activeTab.value) return false;
-    if (!q) return true;
-    if (m.name.toLowerCase().includes(q)) return true;
-    if (m.id.toLowerCase().includes(q)) return true;
-    if ((m.tags ?? []).some((t) => t.toLowerCase().includes(q))) return true;
-    return false;
+    return matchesQuery(m.name, m.id, m.tags, q);
   });
+});
+
+const filteredBundles = computed<BundleRow[]>(() => {
+  if (activeTab.value !== "all" && activeTab.value !== "bundle") return [];
+  const q = search.value.trim().toLowerCase();
+  return props.bundles.filter((b) => matchesQuery(b.name, b.id, b.tags, q));
 });
 
 const counts = computed<Record<string, number>>(() => {
@@ -75,12 +97,18 @@ const counts = computed<Record<string, number>>(() => {
     c.all += 1;
     c[m.type] = (c[m.type] ?? 0) + 1;
   }
+  c.all += props.bundles.length;
+  c.bundle = props.bundles.length;
   return c;
 });
 
 function close() { emit("close"); }
-function pick(row: ModuleRow) {
+function pickModule(row: ModuleRow) {
   emit("pick", row);
+  emit("close");
+}
+function pickBundle(row: BundleRow) {
+  emit("pick-bundle", row);
   emit("close");
 }
 </script>
@@ -138,17 +166,20 @@ function pick(row: ModuleRow) {
           </div>
 
           <div class="wp-bundle-add__list" data-test="bundle-add-list">
-            <div v-if="!filtered.length" class="wp-bundle-add__empty">
-              No modules match.
+            <div
+              v-if="!filteredModules.length && !filteredBundles.length"
+              class="wp-bundle-add__empty"
+            >
+              No entries match.
             </div>
             <button
-              v-for="m in filtered"
-              :key="m.id"
+              v-for="m in filteredModules"
+              :key="`mod-${m.id}`"
               type="button"
               class="wp-bundle-add__row"
               :data-kind="m.type"
               :data-test="`bundle-add-row-${m.id}`"
-              @click="pick(m)"
+              @click="pickModule(m)"
             >
               <span class="wp-bundle-add__rowicon" aria-hidden="true">
                 <i :class="kindIcon(m.type)" />
@@ -156,6 +187,26 @@ function pick(row: ModuleRow) {
               <div class="wp-bundle-add__rowmain">
                 <div class="wp-bundle-add__rowname">{{ m.name }}</div>
                 <div class="wp-bundle-add__rowsub">{{ KIND_LABEL[m.type] ?? m.type }} · {{ m.id }}</div>
+              </div>
+              <span class="wp-bundle-add__rowadd" aria-hidden="true">
+                <i class="pi pi-plus" />
+              </span>
+            </button>
+            <button
+              v-for="b in filteredBundles"
+              :key="`bun-${b.id}`"
+              type="button"
+              class="wp-bundle-add__row"
+              data-kind="bundle"
+              :data-test="`bundle-add-bundle-${b.id}`"
+              @click="pickBundle(b)"
+            >
+              <span class="wp-bundle-add__rowicon" aria-hidden="true">
+                <i class="pi pi-box" />
+              </span>
+              <div class="wp-bundle-add__rowmain">
+                <div class="wp-bundle-add__rowname">{{ b.name }}</div>
+                <div class="wp-bundle-add__rowsub">Bundle · {{ b.id }}</div>
               </div>
               <span class="wp-bundle-add__rowadd" aria-hidden="true">
                 <i class="pi pi-plus" />
@@ -313,6 +364,7 @@ function pick(row: ModuleRow) {
 .wp-bundle-add__row[data-kind="combine"]      .wp-bundle-add__rowicon { color: var(--wp-kind-combine); }
 .wp-bundle-add__row[data-kind="derivation"]   .wp-bundle-add__rowicon { color: var(--wp-kind-derivation); }
 .wp-bundle-add__row[data-kind="constraint"]   .wp-bundle-add__rowicon { color: var(--wp-kind-constraint); }
+.wp-bundle-add__row[data-kind="bundle"]       .wp-bundle-add__rowicon { color: var(--wp-accent-500); }
 .wp-bundle-add__rowmain { min-width: 0; }
 .wp-bundle-add__rowname {
   font: 500 12.5px/1.2 var(--wp-font-sans); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */

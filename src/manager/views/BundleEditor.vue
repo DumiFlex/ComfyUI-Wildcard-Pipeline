@@ -219,12 +219,14 @@ const childrenSubtitle = computed<string>(() => {
 
 onMounted(async () => {
   await categoryStore.fetchAll();
-  // Catalog load powers the add-child library picker AND
+  // Catalog loads power the add-child library picker AND
   // ConstraintMatrixSection's sub-category lookups inside the pane.
+  // Bundle catalog drives the new tier-2 reference picker — fetched in
+  // parallel since the two stores are independent.
   try {
-    await moduleStore.fetchCatalog();
+    await Promise.all([moduleStore.fetchCatalog(), store.fetchCatalog()]);
   } catch (e) {
-    toast.push({ severity: "error", summary: "Failed to load module library", detail: String(e), life: 3000 });
+    toast.push({ severity: "error", summary: "Failed to load library", detail: String(e), life: 3000 });
   }
   if (!props.id) {
     bundleBaseline.value = bundleSnapshot();
@@ -338,6 +340,37 @@ function onAddPick(row: ModuleRow) {
   };
   children.value = [...children.value, snapshot];
 }
+
+/** Pick a bundle as a child — stored as a reference, NOT a snapshot.
+ *  See `_validate_bundle_refs` in wp_api/bundles.py: bundle children
+ *  persist as id-only pointers, and GET /bundles/{id} expands them
+ *  inline on read. Display fields cached so the parent renders a
+ *  placeholder if the referenced bundle is later deleted. */
+function onAddBundlePick(row: BundleRow) {
+  const ref: Record<string, unknown> = {
+    id: row.id,
+    type: "bundle",
+    name: row.name,
+    color: row.color,
+  };
+  children.value = [...children.value, ref];
+}
+
+/** Tier-1 bundles eligible to be referenced as a child of THIS bundle.
+ *  Filter out:
+ *  - The bundle currently being edited (self-reference rejected by API).
+ *  - Any bundle that already contains a bundle child (would make this
+ *    bundle's reference a tier-3 structure — API rejects it, so hide
+ *    rather than offer a click that fails). */
+const eligibleBundles = computed<BundleRow[]>(() => {
+  return store.catalog.filter((b) => {
+    if (props.id && b.id === props.id) return false;
+    const hasBundleChild = (b.children ?? []).some(
+      (c) => typeof c === "object" && c !== null && (c as { type?: string }).type === "bundle",
+    );
+    return !hasBundleChild;
+  });
+});
 
 function onToggleChild(idx: number) {
   const next = [...children.value];
@@ -544,8 +577,10 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       <BundleAddChildModal
         :visible="addModalOpen"
         :modules="moduleStore.catalog"
+        :bundles="eligibleBundles"
         @close="addModalOpen = false"
         @pick="onAddPick"
+        @pick-bundle="onAddBundlePick"
       />
     </template>
 
