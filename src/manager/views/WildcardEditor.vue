@@ -33,10 +33,12 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
-import { collectLibraryWildcardRefs } from "../utils/library-suggestions";
+import {
+  collectLibraryVarHints,
+  collectLibraryWildcardRefs,
+} from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
 import type {
-  CombinePayload,
   ModuleHistoryEntry,
   WildcardOption,
   WildcardPayload,
@@ -143,16 +145,7 @@ function applyDraft(): void {
 // Walker extracted to `utils/library-suggestions.ts` (2026-05-09 cycle)
 // so derivation editor + future SPA views inherit the same picker.
 const wcSuggestions = computed<string[]>(
-  // `collectLibraryWildcardRefs` walks `store.items`, but the editor
-  // only populates `moduleStore.catalog` (the unfiltered cache) on
-  // mount via `fetchCatalog()`. `items` is the filtered-list cache
-  // owned by the library list view and stays empty on the editor.
-  // Pass an adapter that exposes the catalog under the `items` key.
-  () => collectLibraryWildcardRefs(
-    { items: moduleStore.catalog },
-    props.id,
-    nameByUuid.value,
-  ),
+  () => collectLibraryWildcardRefs(moduleStore, props.id, nameByUuid.value),
 );
 
 // UUID → display-name map used by RichTextInput to render `@{uuid}`
@@ -188,30 +181,12 @@ const uuidToSubCategories = computed<Map<string, string[]>>(() => {
   return out;
 });
 
-// Suggestions: union of upstream `$var` names for inline `$`-trigger autocomplete.
-const varSuggestions = computed<string[]>(() => {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const m of moduleStore.catalog) {
-    if (props.id && m.id === props.id) continue;
-    if (m.type === "wildcard") {
-      const p = (m.payload ?? {}) as Partial<WildcardPayload>;
-      const b = (p.var_binding && p.var_binding.trim()) || toIdentifier(m.name);
-      if (b && !seen.has(b)) { seen.add(b); out.push(b); }
-    } else if (m.type === "fixed_values") {
-      const values = ((m.payload ?? {}) as { values?: { name?: string }[] }).values ?? [];
-      for (const row of values) {
-        const n = (row.name ?? "").replace(/^\$+/, "").trim();
-        if (n && !seen.has(n)) { seen.add(n); out.push(n); }
-      }
-    } else if (m.type === "combine") {
-      const p = (m.payload ?? {}) as Partial<CombinePayload>;
-      const o = (p.output_var ?? "").replace(/^\$+/, "").trim();
-      if (o && !seen.has(o)) { seen.add(o); out.push(o); }
-    }
-  }
-  return out.sort();
-});
+// Suggestions: union of upstream `$var` names for inline `$`-trigger
+// autocomplete. Delegates to the shared walker so wildcard, combine,
+// and derivation editors share one source of truth (and one bug surface).
+const varSuggestions = computed<string[]>(
+  () => collectLibraryVarHints(moduleStore, props.id).map((h) => h.label),
+);
 
 const subCategoryOptions = computed(() => [
   { value: "", label: "(none)" },

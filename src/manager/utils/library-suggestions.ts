@@ -21,20 +21,24 @@
  *   - `buildUuidToName` — re-export from wildcardSyntax.ts so callers
  *     have one import path for autocomplete-related helpers.
  */
-import type { ModuleRow, WildcardPayload } from "../api/types";
+import type { DerivationPayload, ModuleRow, WildcardPayload } from "../api/types";
 import { toIdentifier } from "./slug";
 import { buildUuidToName } from "./wildcardSyntax";
 
-/** Minimal shape of the Pinia module store the walkers need. Loose
- *  interface so tests can pass plain mock objects without spinning up
- *  a real Pinia instance. */
+/** Minimal shape of the Pinia module store the walkers need. The
+ *  walkers consume `catalog` (the unfiltered library cache) — not
+ *  `items` (the list-view filtered cache). When the user is editing
+ *  inside e.g. CombineEditor, `items` only contains rows visible in
+ *  the last list view, so a walker reading from `items` would miss
+ *  every var binding outside the current filter. Loose interface so
+ *  tests can pass plain mock objects without spinning up Pinia. */
 export interface ModuleStoreLike {
-  items: ModuleRow[];
+  catalog: ModuleRow[];
 }
 
 export interface VarHint {
   label: string;
-  kind: "wildcard" | "fixed_values" | "combine";
+  kind: "wildcard" | "fixed_values" | "combine" | "derivation";
 }
 
 /** Walk the library catalog and surface every var name a producer
@@ -43,6 +47,8 @@ export interface VarHint {
  *      legacy module has no binding set yet)
  *    - fixed_values: each row's `name` (leading `$` stripped)
  *    - combine: `payload.output_var`
+ *    - derivation: each rule's branch `action.target_var` + else
+ *      `action.target_var`
  *
  *  Dedups labels across kinds (first occurrence wins) + sorts
  *  alphabetically for stable dropdown ordering. Skips the module
@@ -55,33 +61,36 @@ export function collectLibraryVarHints(
 ): VarHint[] {
   const seen = new Set<string>();
   const out: VarHint[] = [];
+  const push = (label: string, kind: VarHint["kind"]) => {
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      out.push({ label, kind });
+    }
+  };
 
-  for (const m of store.items) {
+  for (const m of store.catalog) {
     if (excludeId && m.id === excludeId) continue;
 
     if (m.type === "wildcard") {
       const p = (m.payload ?? {}) as Partial<WildcardPayload>;
       const trimmed = (p.var_binding ?? "").trim();
-      const label = trimmed || toIdentifier(m.name);
-      if (label && !seen.has(label)) {
-        seen.add(label);
-        out.push({ label, kind: "wildcard" });
-      }
+      push(trimmed || toIdentifier(m.name), "wildcard");
     } else if (m.type === "fixed_values") {
       const values = ((m.payload ?? {}) as { values?: { name?: string }[] }).values ?? [];
       for (const row of values) {
-        const label = (row.name ?? "").replace(/^\$+/, "").trim();
-        if (label && !seen.has(label)) {
-          seen.add(label);
-          out.push({ label, kind: "fixed_values" });
-        }
+        push((row.name ?? "").replace(/^\$+/, "").trim(), "fixed_values");
       }
     } else if (m.type === "combine") {
       const p = (m.payload ?? {}) as { output_var?: string };
-      const label = (p.output_var ?? "").replace(/^\$+/, "").trim();
-      if (label && !seen.has(label)) {
-        seen.add(label);
-        out.push({ label, kind: "combine" });
+      push((p.output_var ?? "").replace(/^\$+/, "").trim(), "combine");
+    } else if (m.type === "derivation") {
+      const p = (m.payload ?? {}) as Partial<DerivationPayload>;
+      for (const rule of p.rules ?? []) {
+        for (const br of rule.branches ?? []) {
+          push((br.action?.target_var ?? "").replace(/^\$+/, "").trim(), "derivation");
+        }
+        const elseTarget = rule.else?.action?.target_var;
+        if (elseTarget) push(elseTarget.replace(/^\$+/, "").trim(), "derivation");
       }
     }
   }
@@ -101,7 +110,7 @@ export function collectLibraryWildcardRefs(
   uuidToName?: Map<string, string>,
 ): string[] {
   const out: string[] = [];
-  for (const m of store.items) {
+  for (const m of store.catalog) {
     if (m.type !== "wildcard") continue;
     if (excludeId && m.id === excludeId) continue;
     out.push(m.id);

@@ -28,8 +28,8 @@ function row(over: Partial<ModuleRow>): ModuleRow {
   } as ModuleRow;
 }
 
-function store(items: ModuleRow[]): ModuleStoreLike {
-  return { items };
+function store(catalog: ModuleRow[]): ModuleStoreLike {
+  return { catalog };
 }
 
 describe("collectLibraryVarHints", () => {
@@ -84,6 +84,32 @@ describe("collectLibraryVarHints", () => {
       { label: "angle", kind: "fixed_values" },
       { label: "lens", kind: "fixed_values" },
     ]);
+  });
+
+  it("extracts derivation target_vars from each rule branch + else", () => {
+    const hints = collectLibraryVarHints(
+      store([
+        row({
+          id: "dv111111",
+          type: "derivation",
+          name: "Rules",
+          payload: {
+            rules: [
+              {
+                id: "r1",
+                branches: [
+                  { condition: { var: "x", op: "equals", value: "y" },
+                    action: { target_var: "mood", mode: "replace", value: "calm" } },
+                ],
+                else: { action: { target_var: "fallback", mode: "replace", value: "neutral" } },
+              },
+            ],
+          },
+        }),
+      ]),
+    );
+    expect(hints.map((h) => h.label).sort()).toEqual(["fallback", "mood"]);
+    expect(hints.every((h) => h.kind === "derivation")).toBe(true);
   });
 
   it("extracts combine output_var", () => {
