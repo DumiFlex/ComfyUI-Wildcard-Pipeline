@@ -66,6 +66,127 @@ def _auto_suffix_bundle_name(repo: BundleRepository, name: str) -> str:
     return candidate
 
 
+# Fields kept on a bundle-typed child entry. Bundle children are stored
+# as REFERENCES, not snapshots — only the pointer fields survive. The
+# actual inner-bundle contents are resolved at read time via
+# `_expand_bundle_children` so the SPA always sees current state.
+_BUNDLE_REF_FIELDS = ("id", "type", "name", "color")
+
+
+def _strip_bundle_ref(child: dict) -> dict:
+    """Reduce a bundle-typed child entry to its reference fields.
+
+    SPA editors may forward the server-expanded `children` array back on
+    save (round-trip the GET shape verbatim); stripping it here keeps the
+    database row free of stale snapshots that would diverge from the
+    referenced bundle's actual state. Display fields (`name`, `color`)
+    are preserved as a cache so the parent renders something sensible if
+    the referenced bundle is later deleted.
+    """
+    return {k: child[k] for k in _BUNDLE_REF_FIELDS if k in child}
+
+
+def _normalise_bundle_children(children: list) -> list:
+    """Walk children and rewrite any bundle-typed entry to its reference
+    form. Leaf children pass through unchanged."""
+    out: list = []
+    for child in children:
+        if isinstance(child, dict) and child.get("type") == "bundle":
+            out.append(_strip_bundle_ref(child))
+        else:
+            out.append(child)
+    return out
+
+
+def _validate_bundle_refs(
+    children: object,
+    repo: BundleRepository,
+    self_id: str | None,
+) -> str | None:
+    """Enforce the Tier-2 bundle reference rule.
+
+    A bundle ``A`` may reference another bundle ``B`` as a child *only
+    if* ``B`` itself has no bundle children of its own. References are
+    resolved against the live ``BundleRepository`` (not the request
+    body), so a stale snapshot embedded in the request can't slip a
+    tier-3 structure past the validator.
+
+    Rejected cases:
+
+    - Self-include (``A → A``): a child references the parent's own id.
+      PUT only — POST creates a new id so this can't happen.
+    - Missing target: the referenced bundle id doesn't exist in the
+      library. Refuse rather than store a dangling pointer.
+    - Tier 3+: the referenced bundle's children already contain a
+      bundle entry. ``A → B → C`` is out of scope.
+
+    Returns an error string on rejection, ``None`` otherwise.
+    """
+    if not isinstance(children, list):
+        return None
+    for i, child in enumerate(children):
+        if not isinstance(child, dict) or child.get("type") != "bundle":
+            continue
+        ref_id = child.get("id")
+        if not isinstance(ref_id, str):
+            return f"children[{i}]: bundle reference must have an `id` string"
+        if self_id and ref_id == self_id:
+            return f"children[{i}]: bundle cannot include itself"
+        try:
+            target = repo.get(ref_id)
+        except BundleNotFound:
+            return f"children[{i}]: referenced bundle {ref_id!r} not found"
+        target_children = target.get("children") or []
+        if not isinstance(target_children, list):
+            continue
+        for j, gc in enumerate(target_children):
+            if isinstance(gc, dict) and gc.get("type") == "bundle":
+                return (
+                    f"children[{i}]: referenced bundle {ref_id!r} already "
+                    f"contains a bundle child at children[{j}] — bundle "
+                    f"nesting is limited to tier 2"
+                )
+    return None
+
+
+def _expand_bundle_children(
+    children: list,
+    repo: BundleRepository,
+) -> list:
+    """Server-side resolve every bundle-typed reference inline.
+
+    The DB stores bundle children as references (id-only pointers); on
+    read we attach the referenced bundle's *current* ``children`` array
+    under the same key so the SPA pre-flatten path (which inlines a
+    bundle child's grandchildren at insert time) keeps working without
+    knowing the difference. Missing references survive as the bare
+    reference shape so the SPA can flag a stale parent.
+    """
+    out: list = []
+    for child in children:
+        if not isinstance(child, dict) or child.get("type") != "bundle":
+            out.append(child)
+            continue
+        ref_id = child.get("id")
+        expanded = dict(child)
+        if isinstance(ref_id, str):
+            try:
+                target = repo.get(ref_id)
+                expanded["children"] = target.get("children") or []
+                # Refresh display fields off the live target so renames
+                # propagate. The cached values on the parent only matter
+                # when the target is missing.
+                if "name" in target:
+                    expanded["name"] = target["name"]
+                if "color" in target:
+                    expanded["color"] = target["color"]
+                expanded["_resolved_from"] = ref_id
+            except BundleNotFound:
+                expanded["_missing_ref"] = True
+        out.append(expanded)
+    return out
+
+
 def _validate_children_payloads(children: object) -> str | None:
     """Run ``handler.validate_payload`` against every child's payload.
 
@@ -184,11 +305,20 @@ async def create_bundle(request: web.Request) -> web.Response:
     err = _validate_children_payloads(children_raw)
     if err is not None:
         return json_error(err, status=400)
-    children = _dedupe_children(children_raw) if isinstance(children_raw, list) else []
 
     try:
         with db_session(request) as conn:
             repo = BundleRepository(conn)
+            # Bundle references resolved against live repo state — must
+            # happen inside the session so the check sees committed rows.
+            err = _validate_bundle_refs(children_raw, repo, self_id=None)
+            if err is not None:
+                return json_error(err, status=400)
+            if isinstance(children_raw, list):
+                normalised = _normalise_bundle_children(children_raw)
+                children = _dedupe_children(normalised)
+            else:
+                children = []
             unique_name = _auto_suffix_bundle_name(repo, body["name"])
             row = repo.create(
                 name=unique_name,
@@ -199,6 +329,7 @@ async def create_bundle(request: web.Request) -> web.Response:
                 children=children,
                 is_favorite=bool(body.get("is_favorite", False)),
             )
+            row["children"] = _expand_bundle_children(row.get("children") or [], repo)
     except ValueError as e:
         return json_error(str(e), status=400)
     except sqlite3.IntegrityError as e:
@@ -209,13 +340,21 @@ async def create_bundle(request: web.Request) -> web.Response:
 async def get_bundle(request: web.Request) -> web.Response:
     """GET /wp/api/bundles/{id} — full bundle row including the
     `children` JSON array. SPA bundle picker uses this to populate
-    the right-pane preview when a row is focused."""
+    the right-pane preview when a row is focused.
+
+    Bundle-typed children are stored as references; this endpoint
+    resolves each one against the current library state and attaches
+    the inner bundle's children inline, so consumers always see fresh
+    nested contents. Missing references survive as the bare reference
+    shape so callers can flag a stale parent."""
     bundle_id = request.match_info["id"]
     with db_session(request) as conn:
+        repo = BundleRepository(conn)
         try:
-            row = BundleRepository(conn).get(bundle_id)
+            row = repo.get(bundle_id)
         except BundleNotFound:
             return json_error(f"bundle {bundle_id!r} not found", status=404)
+        row["children"] = _expand_bundle_children(row.get("children") or [], repo)
     return json_ok(row)
 
 
@@ -249,8 +388,6 @@ async def update_bundle(request: web.Request) -> web.Response:
         err = _validate_children_payloads(patch["children"])
         if err is not None:
             return json_error(err, status=400)
-        if isinstance(patch["children"], list):
-            patch["children"] = _dedupe_children(patch["children"])
 
     expected_version_raw = request.headers.get("If-Match")
     expected_version: int | None = None
@@ -273,6 +410,19 @@ async def update_bundle(request: web.Request) -> web.Response:
                     f"current version is {current['version']}",
                     status=409,
                 )
+        if "children" in patch:
+            # Bundle references resolved against live repo state — must
+            # run inside the session so self_id (the bundle being PUT)
+            # is checked against the same view of the world that the
+            # write will commit against.
+            err = _validate_bundle_refs(
+                patch["children"], repo, self_id=bundle_id,
+            )
+            if err is not None:
+                return json_error(err, status=400)
+            if isinstance(patch["children"], list):
+                normalised = _normalise_bundle_children(patch["children"])
+                patch["children"] = _dedupe_children(normalised)
         # Auto-suffix rename collisions only when the new name actually
         # changed AND collides with a DIFFERENT row. PUTting a row with
         # its own current name must be a no-op for the suffix logic.
@@ -286,6 +436,7 @@ async def update_bundle(request: web.Request) -> web.Response:
             return json_error(f"bundle {bundle_id!r} not found", status=404)
         except sqlite3.IntegrityError as e:
             return json_error(f"foreign-key constraint failed: {e}", status=400)
+        row["children"] = _expand_bundle_children(row.get("children") or [], repo)
     return json_ok(row)
 
 
