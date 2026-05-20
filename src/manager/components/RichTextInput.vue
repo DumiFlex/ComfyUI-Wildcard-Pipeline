@@ -74,6 +74,16 @@ const hostEl = ref<HTMLDivElement | null>(null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const focused = ref(false);
 
+// Zero-width space rendered inside empty pad spans. Browsers can't reliably
+// land the caret inside a span that has no child text node (the kind Vue
+// emits for `{{ '' }}`) — clicking "after the last chip" then drops the
+// caret BEFORE the chip and subsequent typing inserts on the wrong side.
+// A single ZWSP gives the span a text node the caret can sit in, while
+// staying visually invisible. The read-side paths strip it back out so it
+// never reaches modelValue.
+const ZWSP = "​";
+const ZWSP_RE = /​/g;
+
 // Autocomplete state.
 const acOpen = ref(false);
 const acQuery = ref("");
@@ -384,16 +394,20 @@ function applyAutocomplete(label: string | undefined): void {
 function restoreCursorAtChar(targetChar: number): void {
   const host = hostEl.value;
   if (!host) return;
-  // Walk meaningful children + match char offset
+  // Walk meaningful children + match char offset. Length accounting must
+  // exclude ZWSPs so it matches the raw-text view (readHostAsText strips
+  // them too).
+  const visibleLen = (s: string): number => s.replace(ZWSP_RE, "").length;
   const meaningful: { el: Node; len: number; kind: "text" | "chip" }[] = [];
   for (const child of host.childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
       const t = child.textContent ?? "";
-      if (t.length > 0) meaningful.push({ el: child, len: t.length, kind: "text" });
+      const len = visibleLen(t);
+      if (len > 0) meaningful.push({ el: child, len, kind: "text" });
     } else if (child.nodeType === Node.ELEMENT_NODE) {
       const el = child as HTMLElement;
       if (el.classList.contains("wp-rt__text")) {
-        meaningful.push({ el, len: (el.textContent ?? "").length, kind: "text" });
+        meaningful.push({ el, len: visibleLen(el.textContent ?? ""), kind: "text" });
       } else if (el.classList.contains("wp-refchip")) {
         // Chip = atomic cursor stop, counts as 1 char visually but in
         // the raw text view the chip serialises to `@{uuid:sub}` (much
@@ -417,7 +431,21 @@ function restoreCursorAtChar(targetChar: number): void {
           ? (el as Text)
           : ((el as HTMLElement).firstChild as Text | null);
         if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-          range.setStart(textNode, Math.min(targetChar - acc, (textNode.textContent ?? "").length));
+          // Place caret at the visible offset, then bump past any leading
+          // ZWSP in this span so the caret sits in real content, not before
+          // a render-only space.
+          const raw = textNode.textContent ?? "";
+          const want = targetChar - acc;
+          let pos = 0;
+          let visible = 0;
+          while (pos < raw.length && visible < want) {
+            if (raw[pos] !== "​") visible++;
+            pos++;
+          }
+          // Skip past trailing ZWSPs that immediately follow the target
+          // position so the caret lands in actual text on the right side.
+          while (pos < raw.length && raw[pos] === "​") pos++;
+          range.setStart(textNode, pos);
         } else {
           range.setStart(m.el, 0);
         }
@@ -466,14 +494,19 @@ function currentCursorCharOffset(): number {
   if (!sel || sel.rangeCount === 0) return readHostAsText().length;
   const range = sel.getRangeAt(0);
   if (!host.contains(range.startContainer)) return readHostAsText().length;
+  // Count chars up to the caret in raw-text space. ZWSPs in empty pad
+  // spans don't count — readHostAsText strips them too, so the offset
+  // must agree.
+  const charsBefore = (s: string, n: number): number =>
+    s.slice(0, n).replace(ZWSP_RE, "").length;
   let acc = 0;
   for (const child of host.childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
       const t = child.textContent ?? "";
       if (child === range.startContainer) {
-        return acc + range.startOffset;
+        return acc + charsBefore(t, range.startOffset);
       }
-      acc += t.length;
+      acc += t.replace(ZWSP_RE, "").length;
       continue;
     }
     if (child.nodeType !== Node.ELEMENT_NODE) continue;
@@ -490,13 +523,14 @@ function currentCursorCharOffset(): number {
     if (el.classList.contains("wp-rt__text")) {
       const tn = el.firstChild;
       if (tn === range.startContainer) {
-        return acc + range.startOffset;
+        return acc + charsBefore(tn.textContent ?? "", range.startOffset);
       }
       if (el === range.startContainer) {
         // Range anchored on the span itself — offset is child-index
-        return acc + (range.startOffset === 0 ? 0 : (el.textContent ?? "").length);
+        const full = (el.textContent ?? "").replace(ZWSP_RE, "");
+        return acc + (range.startOffset === 0 ? 0 : full.length);
       }
-      acc += (el.textContent ?? "").length;
+      acc += (el.textContent ?? "").replace(ZWSP_RE, "").length;
       continue;
     }
   }
@@ -688,12 +722,14 @@ function readHostAsText(): string {
     if (el.classList.contains("wp-rt__text")) {
       // wp-rt__text spans hold the live text — user typing modifies the
       // span's textContent in place, so we read whatever's there now.
-      out += el.textContent ?? "";
+      // ZWSPs are render-only caret-landing helpers in empty pad spans;
+      // strip them so they never reach modelValue.
+      out += (el.textContent ?? "").replace(ZWSP_RE, "");
       continue;
     }
     // Defensive fallback for any other element (shouldn't happen in
     // practice — host children are chips + text spans + fragment markers).
-    out += el.textContent ?? "";
+    out += (el.textContent ?? "").replace(ZWSP_RE, "");
   }
   return out;
 }
@@ -850,24 +886,89 @@ function onHostBeforeInput(ev: InputEvent): void {
     const el = target as HTMLElement;
     if (el.classList.contains("wp-rt__text")) return;
   }
-  // Otherwise, find a wp-rt__text span to redirect into. Prefer the
-  // last span before the current selection; fall back to the first
-  // span overall.
-  const spans = host.querySelectorAll(".wp-rt__text");
-  if (spans.length === 0) return;
-  // Use the last span (typical "type at end" scenario).
-  const span = spans[spans.length - 1] as HTMLElement;
+  // Otherwise, find a wp-rt__text span to redirect into. Pick the span
+  // ADJACENT to the user's caret position — not the document-wide last
+  // span. When the caret landed on a chip element (chip body), the
+  // immediately-following pad span is what the user expects to type
+  // into; falling back to the final span shoves text to the wrong end
+  // of the input.
   const newRange = document.createRange();
-  const tn = span.firstChild;
-  if (tn && tn.nodeType === Node.TEXT_NODE) {
-    newRange.setStart(tn, (tn.textContent ?? "").length);
-  } else {
-    newRange.setStart(span, 0);
+  const positioned = positionAfterTarget(target, range.startOffset, newRange);
+  if (!positioned) {
+    // Fall back to the last span if no adjacent pad was found (e.g.
+    // selection is on the host root with no nearby chip).
+    const spans = host.querySelectorAll(".wp-rt__text");
+    if (spans.length === 0) return;
+    const span = spans[spans.length - 1] as HTMLElement;
+    const tn = span.firstChild;
+    if (tn && tn.nodeType === Node.TEXT_NODE) {
+      newRange.setStart(tn, (tn.textContent ?? "").length);
+    } else {
+      newRange.setStart(span, 0);
+    }
   }
   newRange.collapse(true);
   sel.removeAllRanges();
   sel.addRange(newRange);
   // Don't preventDefault — browser will now insert at the new selection.
+}
+
+/** Position `range` so the caret lands inside the wp-rt__text span
+ *  closest to the user's intent. When the original selection sat on a
+ *  chip or on the host root between chips, the user wanted to type
+ *  ADJACENT to that anchor — not somewhere else in the input. Returns
+ *  true if a position was set. */
+function positionAfterTarget(
+  target: Node,
+  offset: number,
+  range: Range,
+): boolean {
+  const host = hostEl.value;
+  if (!host) return false;
+  let chip: HTMLElement | null = null;
+  let preferFollowing = true;
+  if (target.nodeType === Node.ELEMENT_NODE) {
+    const el = target as HTMLElement;
+    if (el === host) {
+      // Caret on host root — offset is child-index. Inspect the child
+      // just before the offset (if any) to find the nearest chip.
+      const childBefore = host.childNodes[offset - 1] ?? null;
+      const childAt = host.childNodes[offset] ?? null;
+      if (childBefore && childBefore.nodeType === Node.ELEMENT_NODE
+          && (childBefore as HTMLElement).classList.contains("wp-refchip")) {
+        chip = childBefore as HTMLElement;
+        preferFollowing = true;
+      } else if (childAt && childAt.nodeType === Node.ELEMENT_NODE
+          && (childAt as HTMLElement).classList.contains("wp-refchip")) {
+        chip = childAt as HTMLElement;
+        preferFollowing = false;
+      }
+    } else if (el.classList.contains("wp-refchip")) {
+      chip = el;
+      preferFollowing = true;
+    }
+  }
+  if (!chip) return false;
+  // Walk siblings to find the nearest pad span.
+  let sib: Node | null = preferFollowing ? chip.nextSibling : chip.previousSibling;
+  while (sib) {
+    if (sib.nodeType === Node.ELEMENT_NODE
+        && (sib as HTMLElement).classList.contains("wp-rt__text")) {
+      const span = sib as HTMLElement;
+      const tn = span.firstChild;
+      if (tn && tn.nodeType === Node.TEXT_NODE) {
+        // Place caret at the END of the span if we want to type AFTER
+        // the chip, START of the span if BEFORE.
+        const len = (tn.textContent ?? "").length;
+        range.setStart(tn, preferFollowing ? len : 0);
+      } else {
+        range.setStart(span, 0);
+      }
+      return true;
+    }
+    sib = preferFollowing ? sib.nextSibling : sib.previousSibling;
+  }
+  return false;
 }
 
 /** Paste handler — converts the pasted text into atoms and merges
@@ -1071,7 +1172,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
         />
-        <span v-else :data-atom-index="idx" class="wp-rt__text">{{ atom.text }}</span>
+        <span v-else :data-atom-index="idx" class="wp-rt__text">{{ atom.text || ZWSP }}</span>
       </template>
     </div>
 
