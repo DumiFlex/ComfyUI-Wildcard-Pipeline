@@ -200,6 +200,79 @@ describe("BundleEditor.vue", () => {
     );
   });
 
+  it("save strips bundle-typed children down to ref shape before PUT", async () => {
+    // Tier-2 nesting: bundle children are stored as id-only references.
+    // The GET response server-expands them inline (attaches the inner
+    // bundle's children under the bundle-typed entry's `children` key
+    // + _resolved_from marker). On save the SPA must collapse them back
+    // to the canonical ref shape — otherwise we'd round-trip a stale
+    // snapshot through every PUT, and the API would defensively strip
+    // it anyway. Better to do it here, explicit at the call site.
+    apiBundles.get.mockResolvedValue({
+      id: "bn_strip",
+      name: "Outer",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [
+        {
+          id: "bb000001",
+          type: "bundle",
+          name: "inner",
+          color: "#abcdef",
+          _resolved_from: "bb000001",
+          children: [
+            { id: "ii000001", type: "wildcard", payload: {}, instance: {} },
+            { id: "ii000002", type: "wildcard", payload: {}, instance: {} },
+          ],
+        },
+      ],
+      payload_hash: "h",
+      version: 1,
+      created_at: "",
+      updated_at: "",
+    });
+    apiBundles.update.mockResolvedValue({
+      id: "bn_strip",
+      name: "Outer",
+      description: "",
+      color: null,
+      category_id: null,
+      tags: [],
+      is_favorite: false,
+      children: [{ id: "bb000001", type: "bundle", name: "inner", color: "#abcdef" }],
+      payload_hash: "h2",
+      version: 2,
+      created_at: "",
+      updated_at: "",
+    });
+    const wrap = mountEditor({ id: "bn_strip" });
+    await flushPromises();
+
+    // Edit name so save isn't a no-op
+    await wrap.find('[data-test="identity-name"]').setValue("Outer Edited");
+
+    const saveBtn = wrap.findAll("button").find((b) => b.text().includes("Save"));
+    await saveBtn!.trigger("click");
+    await flushPromises();
+
+    expect(apiBundles.update).toHaveBeenCalledTimes(1);
+    const [, body] = apiBundles.update.mock.calls[0];
+    const sent = body.children[0];
+    // Only the reference fields should survive the SPA-side strip.
+    expect(sent).toEqual({
+      id: "bb000001",
+      type: "bundle",
+      name: "inner",
+      color: "#abcdef",
+    });
+    // No inner-children blob, no server-expansion markers.
+    expect(sent).not.toHaveProperty("children");
+    expect(sent).not.toHaveProperty("_resolved_from");
+  });
+
   it("save in create-mode shows info toast instead of POST", async () => {
     const wrap = mountEditor();
     await flushPromises();

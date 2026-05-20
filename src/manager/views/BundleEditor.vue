@@ -99,6 +99,18 @@ const baselineByChildId = ref<Map<string, string>>(new Map());
  *  the user manually returns every field to its starting value. Strip
  *  null/undefined entries from `instance` before serializing. */
 function normalizeChild(c: Record<string, unknown>): Record<string, unknown> {
+  // Bundle-typed children are references — the only persistent state
+  // is {id, type, name?, color?}. The GET-expanded `children` array and
+  // the `_resolved_from` / `_missing_ref` markers are server-side view
+  // augmentations that must NOT enter the dirty-check shape: when the
+  // referenced bundle changes server-side, those fields drift and would
+  // falsely flag the OUTER bundle as having unsaved local edits.
+  if (c.type === "bundle") {
+    const ref: Record<string, unknown> = { id: c.id, type: "bundle" };
+    if (typeof c.name === "string") ref.name = c.name;
+    if (typeof c.color === "string" || c.color === null) ref.color = c.color;
+    return ref;
+  }
   const inst = c.instance as Record<string, unknown> | undefined;
   if (!inst) return c;
   const cleaned: Record<string, unknown> = {};
@@ -287,7 +299,7 @@ async function save() {
       color: colorOut,
       category_id: categoryId.value,
       tags: [...tags.value],
-      children: children.value.map((c) => ({ ...c })),
+      children: stripBundleChildrenForSave(children.value),
     });
     original.value = updated;
     children.value = Array.isArray(updated.children)
@@ -354,6 +366,27 @@ function onAddBundlePick(row: BundleRow) {
     color: row.color,
   };
   children.value = [...children.value, ref];
+}
+
+/** Strip bundle-typed children down to their reference shape before
+ *  sending a PUT to the API. The GET response server-expands references
+ *  by attaching the inner bundle's current children inline; saving that
+ *  expanded form back would persist a stale snapshot the server would
+ *  have to defensively strip anyway. Doing it here keeps the wire
+ *  payload small and the intent explicit.
+ *
+ *  Leaf children (wildcard / fixed_values / combine / derivation /
+ *  constraint) pass through unchanged. */
+function stripBundleChildrenForSave(
+  rows: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return rows.map((c) => {
+    if (c.type !== "bundle") return { ...c };
+    const ref: Record<string, unknown> = { id: c.id, type: "bundle" };
+    if (typeof c.name === "string") ref.name = c.name;
+    if (typeof c.color === "string" || c.color === null) ref.color = c.color;
+    return ref;
+  });
 }
 
 /** Tier-1 bundles eligible to be referenced as a child of THIS bundle.
