@@ -1,4 +1,9 @@
-import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
+import {
+  buildBundleEnabledMap,
+  isModuleEffectivelyEnabled,
+  parseWidgetJson,
+  type ContextWidgetValue,
+} from "../widgets/_shared";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -363,9 +368,10 @@ export function collectLocalResolvedForModule(
     catalog.set(m.id, m.payload as MinimalWildcard);
   }
 
+  const bundleEnabled = buildBundleEnabledMap(v.bundles);
   for (const m of v.modules) {
     if (excludeModuleId && m.id === excludeModuleId) continue;
-    if (!m.enabled) continue;
+    if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
     writeBindings(ctx, m, catalog);
   }
 
@@ -455,8 +461,9 @@ export function collectUpstreamWildcardUuids(
       widgetValue(n, "modules"),
       { version: 1, modules: [] },
     );
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
-      if (!m.enabled) continue;
+      if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
       if (m.type === "wildcard") uuids.add(m.id);
     }
   }
@@ -567,8 +574,9 @@ export function collectUpstreamKinds(
       widgetValue(n, "modules"),
       { version: 1, modules: [] },
     );
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
-      if (!m.enabled) continue;
+      if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
       // Per-kind binding emission — mirrors writeBindings, recording
       // kind instead of value. fixed_values fans out per row; the
       // others emit a single $output_var / $var_binding.
@@ -756,8 +764,9 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
       widgetValue(n, "modules"),
       { version: 1, modules: [] },
     );
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
-      if (!m.enabled) continue;
+      if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
       const beforeKeys = new Set(Object.keys(ctx));
       writeBindings(ctx, m, catalog);
       if (m.instance?.internal) {
@@ -978,8 +987,9 @@ export function collectDownstreamWildcardUuids(
             widgetValue(stepped.node, "modules"),
             { version: 1, modules: [] },
           );
+          const bundleEnabled = buildBundleEnabledMap(v.bundles);
           for (const m of v.modules) {
-            if (!m.enabled) continue;
+            if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
             if (m.type === "wildcard") out.add(m.id);
           }
         }

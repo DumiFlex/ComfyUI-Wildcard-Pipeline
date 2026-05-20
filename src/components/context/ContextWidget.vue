@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, provide } from "vue";
 import {
+  buildBundleEnabledMap,
+  isModuleEffectivelyEnabled,
   parseWidgetJsonWithRecovery, serializeWidgetJson,
   emptyContextValue, newModuleId, newRowUid,
   type ContextWidgetValue, type ModuleEntry,
@@ -350,10 +352,11 @@ const siblingNodeVars = computed<string[]>(() => {
     if (trimmed) names.add(trimmed);
   }
   const editingM = editingModule.value;
+  const bundleEnabled = buildBundleEnabledMap(value.value.bundles);
   for (let mi = 0; mi < value.value.modules.length; mi++) {
     const m = value.value.modules[mi];
     if (mi === editingIdx.value) continue;
-    if (!m.enabled) continue;
+    if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
     // Defensive: also skip if same object (shouldn't happen but Vue
     // proxies can confuse identity equals).
     void editingM;
@@ -1274,14 +1277,13 @@ watch(() => props.initialJson, (raw) => {
 });
 
 const conflicts = computed<Conflict[]>(() => {
-  // Disabled modules don't ship to runtime; skip them in the scan so they
-  // don't generate phantom shadows_upstream / duplicate_variable warnings.
-  const enabledOnly: ContextWidgetValue = {
-    ...value.value,
-    modules: value.value.modules.filter((m) => m.enabled),
-  };
+  // scanConflicts internally skips per-module via isModuleEffectivelyEnabled
+  // (handles both child.enabled=false AND bundle.enabled=false). Passing the
+  // full modules array preserves position semantics for constraint-target /
+  // nested-ref lookups that need to know where every module sits regardless
+  // of run state.
   const all = scanConflicts(
-    enabledOnly,
+    value.value,
     props.upstreamVars,
     props.upstreamWildcardUuids,
     props.downstreamWildcardUuids,
@@ -2633,9 +2635,13 @@ function setAllCollapsed(collapsed: boolean) {
   commitModules(value.value.modules.map((m) => ({ ...m, collapsed })));
 }
 
-/** Toolbar counts — total modules + how many are enabled. */
+/** Toolbar counts — total modules + how many are effectively enabled
+ *  (each child's own `enabled` AND the bundle gate, when bundled). */
 const totalCount = computed(() => value.value.modules.length);
-const enabledCount = computed(() => value.value.modules.filter((m) => m.enabled).length);
+const enabledCount = computed(() => {
+  const bundleEnabled = buildBundleEnabledMap(value.value.bundles);
+  return value.value.modules.filter((m) => isModuleEffectivelyEnabled(m, bundleEnabled)).length;
+});
 
 /** Toolbar bulk actions — wrappers so the toolbar template stays compact. */
 function collapseAll(): void { setAllCollapsed(true); }

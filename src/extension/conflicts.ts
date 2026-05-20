@@ -1,4 +1,10 @@
-import type { ContextWidgetValue, InjectorRowsValue, ModuleEntry } from "../widgets/_shared";
+import {
+  buildBundleEnabledMap,
+  isModuleEffectivelyEnabled,
+  type ContextWidgetValue,
+  type InjectorRowsValue,
+  type ModuleEntry,
+} from "../widgets/_shared";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -447,9 +453,10 @@ export function scanConflicts(
   // warning when the duplicate writer is a sibling.
   const firstWriterId = new Map<string, string>();
   const out: Conflict[] = [];
+  const bundleEnabled = buildBundleEnabledMap(value.bundles);
   for (let i = 0; i < value.modules.length; i++) {
     const m = value.modules[i];
-    if (!m.enabled) continue;
+    if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
 
     // 1. Var references — bare reads (`derivation.condition.var`) and
     //    `$var` tokens inside templates (`combine.template`,

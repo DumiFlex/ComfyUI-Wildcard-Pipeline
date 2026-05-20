@@ -381,8 +381,14 @@ export interface BundleInstance {
    *  entirely when the last child leaves the range. */
   start_idx: number;
   end_idx: number;
-  /** When false, every module inside `[start_idx..end_idx]` gets
-   *  `enabled: false` cascaded at engine-write time. */
+  /** Bundle-level enable gate. NOT cascaded onto children — child
+   *  `instance.enabled` state is preserved independently so toggling
+   *  the bundle off and back on restores each child to its previous
+   *  individual on/off. Effective enabled = bundle.enabled AND
+   *  child.enabled. Applied at the engine boundary
+   *  (`wp_nodes/types.py:deserialize_node_input`) for execution, and
+   *  via `isModuleEffectivelyEnabled` for every frontend reader
+   *  (conflict scanner, graph walkers, assembler preview). */
   enabled: boolean;
   /** When true, ContextWidget renders only the bundle header row
    *  and hides children. */
@@ -815,4 +821,67 @@ export function newRowUid(): string {
   const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Build a per-Context map from `BundleInstance._uid` → enabled. Used
+ *  by `isModuleEffectivelyEnabled` callers that walk the same modules
+ *  list multiple times — building the map once per walk avoids the
+ *  inner O(N) scan over bundles[] each lookup. */
+export function buildBundleEnabledMap(
+  bundles: readonly BundleInstance[] | undefined,
+): Map<string, boolean> {
+  const map = new Map<string, boolean>();
+  if (!bundles) return map;
+  for (const b of bundles) {
+    if (b && typeof b._uid === "string") map.set(b._uid, b.enabled !== false);
+  }
+  return map;
+}
+
+/** Resolves the effective enabled state of a module, taking the bundle
+ *  gate into account. `bundle.enabled` is a non-destructive gate that
+ *  ANDs over the child's own `enabled` — toggling a bundle off NEVER
+ *  mutates child state; the gate is just applied at every read site
+ *  (engine, conflict scanner, graph walkers, assembler preview).
+ *
+ *  When `module.enabled` is falsy → not enabled regardless of bundles.
+ *  When `module.bundle_origin` resolves to a bundle in `bundlesOrMap`
+ *  whose `enabled` is false → not enabled.
+ *  Otherwise → enabled.
+ *
+ *  Pass either the raw `bundles[]` array (one-shot calls) or a
+ *  pre-built map from `buildBundleEnabledMap` (hot-path walks).
+ *
+ *  Nested case (tier-2): the child's `bundle_origin` points at its
+ *  IMMEDIATE bundle. That bundle's `parent_uid` lets the walker step
+ *  up the chain. Currently flat (one level); the nesting work will
+ *  extend the AND through `parent_uid` once the field lands.
+ */
+export function isModuleEffectivelyEnabled(
+  module: { enabled?: boolean; bundle_origin?: string | null } | undefined | null,
+  bundlesOrMap: readonly BundleInstance[] | Map<string, boolean> | undefined,
+): boolean {
+  if (!module) return false;
+  if (module.enabled === false) return false;
+  const origin = module.bundle_origin;
+  if (typeof origin !== "string" || !origin) return true;
+  const lookup = bundlesOrMap instanceof Map
+    ? bundlesOrMap.get(origin)
+    : findBundleEnabled(bundlesOrMap, origin);
+  // Unknown / orphan bundle_origin → don't gate. The module's own
+  // enabled flag wins. Matches the engine-boundary behaviour in
+  // `wp_nodes/types.py:deserialize_node_input`.
+  if (lookup === undefined) return true;
+  return lookup;
+}
+
+function findBundleEnabled(
+  bundles: readonly BundleInstance[] | undefined,
+  uid: string,
+): boolean | undefined {
+  if (!bundles) return undefined;
+  for (const b of bundles) {
+    if (b && b._uid === uid) return b.enabled !== false;
+  }
+  return undefined;
 }
