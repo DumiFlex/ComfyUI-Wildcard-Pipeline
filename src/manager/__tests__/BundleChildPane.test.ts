@@ -156,4 +156,55 @@ describe("BundleChildPane.vue", () => {
     });
     expect(wrap.find('[data-test="bundle-pane-unsupported"]').exists()).toBe(true);
   });
+
+  // ── Tier-2 nesting: bundle reference branch ─────────────────────────
+
+  it("renders the reference summary block for bundle-type children", () => {
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: {
+          id: "b_ref",
+          type: "bundle",
+          name: "nested-bundle",
+          color: "#abcdef",
+          children: [
+            { id: "c1", type: "wildcard" },
+            { id: "c2", type: "fixed_values" },
+            { id: "c3", type: "combine" },
+          ],
+          _resolved_from: "b_ref",
+        },
+      },
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    expect(wrap.find('[data-test="bundle-pane-sections-bundle"]').exists()).toBe(true);
+    // The reference banner replaces the frozen-snapshot wording.
+    expect(wrap.text()).toContain("live reference");
+    expect(wrap.text()).not.toContain("snapshot");
+    // Inner count reflects the GET-expanded payload.
+    expect(wrap.text()).toContain("3");
+    // Open-in-editor CTA is wired.
+    expect(wrap.find('[data-test="bundle-pane-ref-open"]').exists()).toBe(true);
+  });
+
+  it("bundle reference reads display name off the row (not meta.name)", () => {
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: { id: "b_ref", type: "bundle", name: "subject_phrase" },
+      },
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    expect(wrap.text()).toContain("subject_phrase");
+  });
+
+  it("bundle ref with no children resolves to count 0", () => {
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: { id: "b_missing", type: "bundle", name: "missing", _missing_ref: true },
+      },
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    expect(wrap.find('[data-test="bundle-pane-sections-bundle"]').exists()).toBe(true);
+    expect(wrap.text()).toContain("0");
+  });
 });

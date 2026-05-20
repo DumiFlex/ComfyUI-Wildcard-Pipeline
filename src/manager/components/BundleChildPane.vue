@@ -15,6 +15,7 @@
  * constraint land in Task 4a–d.
  */
 import { computed } from "vue";
+import { RouterLink } from "vue-router";
 import WildcardIdentitySection from "../../components/context/editors/wildcard/sections/IdentitySection.vue";
 import WildcardPoolSection from "../../components/context/editors/wildcard/sections/PoolSection.vue";
 import WildcardRuntimeSection from "../../components/context/editors/wildcard/sections/RuntimeSection.vue";
@@ -67,8 +68,21 @@ const moduleEntry = computed<ModuleEntry | null>(() => {
   return props.child as unknown as ModuleEntry;
 });
 const displayName = computed<string>(() => {
+  // Bundle refs carry the cached name on the row itself (no `meta`
+  // wrapper); module snapshots use the canonical meta.name.
+  if (kind.value === "bundle") {
+    return String(props.child?.name ?? "(unnamed bundle)");
+  }
   const m = props.child?.meta as { name?: string } | undefined;
   return m?.name ?? String(props.child?.name ?? "(unnamed)");
+});
+/** Number of inner children resolved on the GET-expanded bundle ref.
+ *  Falls back to 0 when the reference is missing or arrived stripped.
+ *  Display-only — used in the pane's reference summary block. */
+const refInnerCount = computed<number>(() => {
+  if (kind.value !== "bundle") return 0;
+  const inner = (props.child as { children?: unknown }).children;
+  return Array.isArray(inner) ? inner.length : 0;
 });
 const headerIcon = computed<string>(() => (kind.value === "bundle" ? "pi pi-box" : kindIcon(kind.value)));
 const headerColor = computed<string>(() => KIND_COLOR[kind.value] ?? "var(--wp-accent-500)");
@@ -151,7 +165,20 @@ const constraintTargetValues = computed<string[]>(() => {
         </button>
       </header>
 
-      <div class="wp-bpane__banner" data-test="bundle-pane-banner">
+      <div
+        v-if="kind === 'bundle'"
+        class="wp-bpane__banner wp-bpane__banner--ref"
+        data-test="bundle-pane-banner"
+      >
+        <i class="pi pi-box" aria-hidden="true" />
+        <b>{{ displayName }}</b> is a live reference. Its contents update
+        wherever it's used — edit the bundle itself to change them.
+      </div>
+      <div
+        v-else
+        class="wp-bpane__banner"
+        data-test="bundle-pane-banner"
+      >
         <i class="pi pi-info-circle" aria-hidden="true" />
         Editing this bundle's snapshot of <b>{{ displayName }}</b>.
         Source library entry is unchanged.
@@ -220,6 +247,33 @@ const constraintTargetValues = computed<string[]>(() => {
           :target-values="constraintTargetValues"
           @update="onUpdate"
         />
+      </div>
+
+      <div
+        v-else-if="kind === 'bundle'"
+        class="wp-bpane__ref-summary"
+        data-test="bundle-pane-sections-bundle"
+      >
+        <p class="wp-bpane__ref-label">Referenced bundle</p>
+        <div class="wp-bpane__ref-fields">
+          <div class="wp-bpane__ref-field">
+            <span class="wp-bpane__ref-key">id</span>
+            <code class="wp-bpane__ref-val">{{ child?.id ?? "" }}</code>
+          </div>
+          <div class="wp-bpane__ref-field">
+            <span class="wp-bpane__ref-key">inner children</span>
+            <span class="wp-bpane__ref-val">{{ refInnerCount }} <span class="wp-bpane__ref-hint">(resolved live)</span></span>
+          </div>
+        </div>
+        <RouterLink
+          v-if="child?.id"
+          :to="`/bundles/${child.id}/edit`"
+          class="wp-bpane__ref-cta"
+          data-test="bundle-pane-ref-open"
+        >
+          <i class="pi pi-external-link" aria-hidden="true" />
+          Open in bundle editor
+        </RouterLink>
       </div>
 
       <div
@@ -304,6 +358,73 @@ const constraintTargetValues = computed<string[]>(() => {
   line-height: 1.45;
 }
 .wp-bpane__banner .pi { color: var(--wp-amber, #fbbf24); margin-top: 2px; flex-shrink: 0; }
+/* Bundle-reference banner uses accent (purple) instead of amber to read
+ * as "live link, all good" rather than "warning — frozen snapshot". */
+.wp-bpane__banner--ref {
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 12%, transparent);
+  border-left-color: var(--wp-accent-500, #8b5cf6);
+}
+.wp-bpane__banner--ref .pi { color: var(--wp-accent-500, #8b5cf6); }
+
+.wp-bpane__ref-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-4);
+}
+.wp-bpane__ref-label {
+  font-size: 9px; /* audit-exempt: micro uppercase section label — below scale floor */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-dim);
+  margin: 0;
+}
+.wp-bpane__ref-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-4) var(--wp-space-5);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+}
+.wp-bpane__ref-field {
+  display: flex;
+  align-items: baseline;
+  gap: var(--wp-space-4);
+  font-size: var(--wp-text-xs);
+}
+.wp-bpane__ref-key {
+  font: 600 9px var(--wp-font-sans); /* audit-exempt: micro key label */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--wp-text-dim);
+  min-width: 90px;
+}
+.wp-bpane__ref-val {
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  color: var(--wp-text);
+}
+.wp-bpane__ref-hint {
+  margin-left: var(--wp-space-3);
+  font-family: var(--wp-font-sans);
+  color: var(--wp-text-dim);
+  font-size: 10px; /* audit-exempt: micro inline hint */
+}
+.wp-bpane__ref-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  align-self: flex-start;
+  padding: var(--wp-space-3) var(--wp-space-5);
+  background: var(--wp-accent-500, #8b5cf6);
+  color: white;
+  border-radius: var(--wp-radius-sm);
+  font-size: var(--wp-text-xs);
+  text-decoration: none;
+  transition: filter 120ms ease;
+}
+.wp-bpane__ref-cta:hover { filter: brightness(1.1); }
 
 .wp-bpane__sections {
   display: flex;

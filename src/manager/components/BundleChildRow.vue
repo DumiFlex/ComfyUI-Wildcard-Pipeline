@@ -52,19 +52,39 @@ const KIND_META: Record<string, KindMeta> = {
 };
 
 const kind = computed(() => String(props.child.type ?? "module"));
+const isBundleRef = computed(() => kind.value === "bundle");
 const meta = computed<KindMeta>(
   () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), color: "#8b949e" },
 );
-const iconClass = computed(() => (kind.value === "bundle" ? "pi pi-box" : kindIcon(kind.value)));
+// Tier-2 nesting: bundle children are stored as REFERENCES (the API
+// expands them inline on read), not as frozen snapshots like other
+// child kinds. Override the kind tint with the parent's chosen color
+// when one is cached so the row mirrors the bundle's library frame.
+const rowTint = computed(() => {
+  if (isBundleRef.value) {
+    const cached = props.child.color as string | undefined;
+    if (cached) return cached;
+  }
+  return meta.value.color;
+});
+const iconClass = computed(() => (isBundleRef.value ? "pi pi-box" : kindIcon(kind.value)));
 const enabled = computed(() => props.child.enabled !== false);
 const displayName = computed(() => {
+  if (isBundleRef.value) {
+    return (props.child.name as string | undefined) ?? "(unnamed bundle)";
+  }
   const m = props.child.meta as { name?: string } | undefined;
   return m?.name ?? (props.child.name as string | undefined) ?? "(unnamed)";
 });
 
-// Parent owns the dirty diff (baseline lives there). This row just
-// surfaces the flag through the SNAPSHOT · EDITED pill rendering.
-const isEdited = computed(() => props.edited);
+// Bundle refs are live (no snapshot, no per-child override state), so
+// the SNAPSHOT · EDITED pill collapses to a single REFERENCE label.
+// For module snapshots the parent diff still drives the edited flag.
+const badgeLabel = computed(() => {
+  if (isBundleRef.value) return "REFERENCE";
+  return props.edited ? "SNAPSHOT · EDITED" : "SNAPSHOT";
+});
+const badgeAccent = computed(() => isBundleRef.value || props.edited);
 </script>
 
 <template>
@@ -74,7 +94,7 @@ const isEdited = computed(() => props.edited);
     :data-disabled="enabled ? null : 'true'"
     :data-selected="selected ? 'true' : null"
     :data-test="`bundle-child-${idx}`"
-    :style="{ '--row-kind': meta.color }"
+    :style="{ '--row-kind': rowTint }"
     draggable="true"
     @dragstart="(e) => emit('drag-start', e)"
     @dragover="(e) => emit('drag-over', e)"
@@ -123,8 +143,8 @@ const isEdited = computed(() => props.edited);
       </div>
       <div class="wp-bchild__name">
         {{ displayName }}
-        <span class="wp-bchild__frozen" :data-edited="isEdited ? 'true' : null">
-          {{ isEdited ? "SNAPSHOT · EDITED" : "SNAPSHOT" }}
+        <span class="wp-bchild__frozen" :data-edited="badgeAccent ? 'true' : null">
+          {{ badgeLabel }}
         </span>
       </div>
     </div>

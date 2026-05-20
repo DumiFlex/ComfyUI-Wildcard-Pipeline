@@ -28,6 +28,34 @@ describe("BundleChildRow.vue", () => {
     expect(wrap.text()).toContain("(unnamed)");
   });
 
+  it("bundle-typed child renders BUNDLE label + REFERENCE badge (not SNAPSHOT)", () => {
+    const wrap = mount(BundleChildRow, {
+      props: {
+        child: { id: "b_ref", type: "bundle", name: "nested-bundle", color: "#abcdef" },
+        idx: 0,
+        selected: false,
+      },
+    });
+    expect(wrap.text()).toContain("BUNDLE");
+    expect(wrap.text()).toContain("nested-bundle");
+    expect(wrap.text()).toContain("REFERENCE");
+    // The frozen-snapshot wording must NOT appear on bundle refs.
+    expect(wrap.text()).not.toContain("SNAPSHOT");
+  });
+
+  it("bundle ref reads name from the child entry (no meta wrapper)", () => {
+    // Bundle refs persist as {id, type, name?, color?} — no meta.name.
+    // BundleChildRow must read child.name directly for the bundle branch.
+    const wrap = mount(BundleChildRow, {
+      props: {
+        child: { id: "b_x", type: "bundle", name: "subject_phrase" },
+        idx: 0,
+        selected: false,
+      },
+    });
+    expect(wrap.text()).toContain("subject_phrase");
+  });
+
   it("emits toggle when eye button clicked", async () => {
     const wrap = mount(BundleChildRow, {
       props: { child: makeChild(), idx: 0, selected: false },
