@@ -171,49 +171,56 @@ const summary = computed(() => {
          remove) so users learn one button-row grammar regardless of
          scope. Internal sits between lock and remove on a module row;
          keeping the same placement at bundle scale means a glance
-         hits the same control. -->
-    <button
-      v-if="lockState !== null"
-      type="button"
-      class="wp-btn--icon-sm wp-btn--warn wp-bundle-action"
-      :class="{
-        'is-locked': lockState === 'all',
-        'is-partial': lockState === 'partial',
-      }"
-      draggable="false"
-      :title="lockState === 'all'
-        ? 'Unlock seeds on all lockable children'
-        : lockState === 'partial'
-          ? 'Lock seeds on all lockable children (some are already locked)'
-          : 'Lock seeds on all lockable children — freezes each at its current roll'"
-      :aria-label="`toggle seed lock on all lockable children of ${name}`"
-      @click.stop="emit('toggle-lock')"
-    ><i class="pi pi-lock" aria-hidden="true" /></button>
-    <button
-      v-if="internalState !== null"
-      type="button"
-      class="wp-btn--icon-sm wp-btn--accent wp-bundle-action"
-      :class="{
-        'is-active': internalState === 'all',
-        'is-partial': internalState === 'partial',
-      }"
-      draggable="false"
-      :title="internalState === 'all'
-        ? 'Clear internal on all children'
-        : internalState === 'partial'
-          ? 'Mark all children internal (some are already)'
-          : 'Mark all children internal — hides them from PromptAssembler'"
-      :aria-label="`toggle internal on all children of ${name}`"
-      @click.stop="emit('toggle-internal')"
-    ><i class="pi pi-globe" aria-hidden="true" /></button>
-    <button
-      type="button"
-      class="wp-btn--icon-sm wp-btn--danger wp-bundle-action"
-      draggable="false"
-      title="Remove bundle (right-click for more)"
-      :aria-label="`remove bundle ${name}`"
-      @click.stop="emit('remove')"
-    ><i class="pi pi-trash" aria-hidden="true" /></button>
+         hits the same control. Wrapped in `.wp-mod-actions` (same
+         class ModuleRow uses) so the inter-button gap matches a row's
+         action cluster — without this, the header's flex gap (6px)
+         would space the bundle buttons wider than a module row's
+         (1px), breaking the "bundle = row at larger scope" mental
+         model. -->
+    <div class="wp-mod-actions" draggable="false">
+      <button
+        v-if="lockState !== null"
+        type="button"
+        class="wp-btn--icon-sm wp-btn--warn wp-bundle-action"
+        :class="{
+          'is-locked': lockState === 'all',
+          'is-partial': lockState === 'partial',
+        }"
+        draggable="false"
+        :title="lockState === 'all'
+          ? 'Unlock seeds on all lockable children'
+          : lockState === 'partial'
+            ? 'Lock seeds on all lockable children (some are already locked)'
+            : 'Lock seeds on all lockable children — freezes each at its current roll'"
+        :aria-label="`toggle seed lock on all lockable children of ${name}`"
+        @click.stop="emit('toggle-lock')"
+      ><i class="pi pi-lock" aria-hidden="true" /></button>
+      <button
+        v-if="internalState !== null"
+        type="button"
+        class="wp-btn--icon-sm wp-btn--accent wp-bundle-action"
+        :class="{
+          'is-active': internalState === 'all',
+          'is-partial': internalState === 'partial',
+        }"
+        draggable="false"
+        :title="internalState === 'all'
+          ? 'Clear internal on all children'
+          : internalState === 'partial'
+            ? 'Mark all children internal (some are already)'
+            : 'Mark all children internal — hides them from PromptAssembler'"
+        :aria-label="`toggle internal on all children of ${name}`"
+        @click.stop="emit('toggle-internal')"
+      ><i class="pi pi-globe" aria-hidden="true" /></button>
+      <button
+        type="button"
+        class="wp-btn--icon-sm wp-btn--danger wp-bundle-action"
+        draggable="false"
+        title="Remove bundle (right-click for more)"
+        :aria-label="`remove bundle ${name}`"
+        @click.stop="emit('remove')"
+      ><i class="pi pi-trash" aria-hidden="true" /></button>
+    </div>
   </div>
 </template>
 

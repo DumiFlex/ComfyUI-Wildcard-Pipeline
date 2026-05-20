@@ -116,6 +116,18 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
 .wp-bundle.wp-bundle--nested > .wp-bundle-children {
   padding: 4px 5px 5px 5px;
 }
+/* When the bundle is collapsed, the children container must collapse to
+ * a true 0 height so the frame's bottom border sits flush against the
+ * header. Without this, the body's padding (4-5px on each side) keeps
+ * a residual height even with `grid-template-rows: auto 0fr`, leaving
+ * a tinted strip between the header and the frame's actual bottom
+ * border — reads as "frame not fully closed at the bottom". `overflow:
+ * hidden` clips any FLIP/leave transitions that might briefly overflow
+ * during the collapse animation. */
+.wp-bundle.wp-bundle--collapsed > .wp-bundle-children {
+  padding: 0;
+  overflow: hidden;
+}
 /* Drop-bar anchor — the floating indicator inside .wp-bundle-children
  * is absolutely positioned; the container needs to be the offset
  * parent. Both nested + outer frames share this rule. */

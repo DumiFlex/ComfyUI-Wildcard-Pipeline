@@ -203,62 +203,55 @@ function bundleHeaderGap(uid: string): "before" | "after" | null {
  *  BundleDropBar component renders an absolutely-positioned line at the
  *  returned offset.
  *
- *  Zone → anchor mapping:
- *    - row.before  → top edge of row[insertIdx]
- *    - row.after   → bottom edge of row[insertIdx]
- *    - empty       → vertical center of the container
- *    - header.before → top edge of the bundle's frame (paints at
- *                      container scope — its parent's body)
- *    - header.after  → bottom edge of the bundle's frame
- *    - end         → bottom edge of the last child of the top-level
- *                    container; null for non-top-level containers
+ *  The bar paints in the MIDDLE of the gap opened by the `wp-gap-*`
+ *  margin (14px) — half that offset (7px) lifts the bar off the row's
+ *  edge so it sits in the gap visibly rather than overlapping the
+ *  row's own top/bottom border. That gives ONE clear line per drop
+ *  position instead of "is that the bar or the row's border?".
  */
+const GAP_BAR_OFFSET = 7;
 function dropBarFor(containerUid: string | null): { top: number } | null {
   const z = dragOver.value;
   const containerEl = findContainerEl(containerUid);
   if (!z || !containerEl) return null;
   const cr = containerEl.getBoundingClientRect();
-
-  // Helper: convert a viewport y into container-relative offsetTop.
   const rel = (y: number): number => y - cr.top;
 
   switch (z.kind) {
     case "row": {
-      // The row belongs to this container only when its container scope
-      // matches. Top-level vs bundle-scope: containerUid must equal
-      // z.containerUid.
       if ((z.containerUid ?? null) !== (containerUid ?? null)) return null;
       const rowEl = findRowEl(z.insertIdx, containerEl);
       if (!rowEl) return null;
       const rr = rowEl.getBoundingClientRect();
-      return { top: z.pos === "before" ? rel(rr.top) : rel(rr.bottom) };
+      return {
+        top: z.pos === "before"
+          ? rel(rr.top) - GAP_BAR_OFFSET
+          : rel(rr.bottom) + GAP_BAR_OFFSET,
+      };
     }
     case "empty": {
-      // empty fires when the bundle's body is empty; the container's
-      // body anchors the bar at its vertical center.
       if (containerUid !== z.uid) return null;
       return { top: cr.height / 2 };
     }
     case "header": {
-      // The target bundle's frame is a child of THIS container. Find
-      // the bundle's wrapper and anchor on its top/bottom edge.
       const bundleEl = findBundleFrameEl(z.uid, containerEl);
       if (!bundleEl) return null;
       const br = bundleEl.getBoundingClientRect();
-      return { top: z.pos === "before" ? rel(br.top) : rel(br.bottom) };
+      return {
+        top: z.pos === "before"
+          ? rel(br.top) - GAP_BAR_OFFSET
+          : rel(br.bottom) + GAP_BAR_OFFSET,
+      };
     }
     case "end": {
-      // end fires only at top-level scope.
       if (containerUid !== null) return null;
-      // Anchor on the bottom edge of the LAST child in the top-level
-      // container so the bar sits visually past the bottom of the list.
       const children = Array.from(
         containerEl.querySelectorAll<HTMLElement>(":scope > .wp-module, :scope > .wp-bundle"),
       );
       if (children.length === 0) return { top: cr.height / 2 };
       const last = children[children.length - 1];
       const lr = last.getBoundingClientRect();
-      return { top: rel(lr.bottom) };
+      return { top: rel(lr.bottom) + GAP_BAR_OFFSET };
     }
   }
 }

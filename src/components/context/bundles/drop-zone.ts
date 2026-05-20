@@ -14,7 +14,7 @@
  * Pointer-to-zone resolution lives in `resolveDropZone()`.
  */
 
-import type { ContextWidgetValue } from "../../../widgets/_shared";
+import type { ContextWidgetValue, ModuleEntry } from "../../../widgets/_shared";
 import type { DragPayload } from "../drag-store";
 
 /**
@@ -184,11 +184,24 @@ function classifyWithinBundle(
   // background, we walk these to find the nearest slot). Only direct
   // children matter (the resolver already drilled into a nested bundle
   // by closest('.wp-bundle') returning the innermost ancestor).
+  //
+  // Skip the dragged bundle's frame from candidates — when the user
+  // drags an inner bundle around inside its parent's body, the inner
+  // shouldn't appear as a drop target (self-drop is a no-op + paints a
+  // misleading indicator on the source row).
+  const draggedBundleUid = drag?.kind === "bundle" ? drag.bundleUid : null;
   const directRows = Array.from(
     childrenEl.querySelectorAll<HTMLElement>(":scope > .wp-module[data-module-idx], :scope > .wp-bundle"),
-  );
+  ).filter((el) => {
+    if (!draggedBundleUid) return true;
+    if (!el.classList.contains("wp-bundle")) return true;
+    return el.dataset.bundleUid !== draggedBundleUid;
+  });
   if (directRows.length === 0) {
-    // Empty body — drop becomes the first child.
+    // Empty body OR only the dragged bundle lived here — treat as
+    // empty target. Self-drop guard in applyDrop prevents the actual
+    // no-op when the user lands; the indicator paints sensibly during
+    // hover.
     if (dragHasNested) return { kind: "header", uid, pos: "after" };
     return { kind: "empty", uid };
   }
@@ -299,9 +312,30 @@ function classifyAgainst(
   value: ContextWidgetValue,
   drag: DragPayload | null,
 ): DropZone {
+  // Skip the dragged bundle's frame entirely (and any rows owned by
+  // it — they move with it). isSelfHover catches the "drag bundle
+  // onto its own frame" case; the broader skip prevents the resolver
+  // from landing on the bundle's children when the bundle itself is
+  // being dragged (those rows are about to disappear from this scope).
+  const draggedBundleUid = drag?.kind === "bundle" ? drag.bundleUid : null;
   const filtered = candidates.filter((el) => {
-    if (!el.classList.contains("wp-bundle")) return true;
-    return !isSelfHover(el.dataset.bundleUid ?? "", drag);
+    if (el.classList.contains("wp-bundle")) {
+      const uid = el.dataset.bundleUid ?? "";
+      if (isSelfHover(uid, drag)) return false;
+      if (draggedBundleUid && uid === draggedBundleUid) return false;
+      return true;
+    }
+    // Skip module rows whose bundle_origin matches the dragged bundle —
+    // those rows belong to the bundle being dragged and disappear with
+    // it after drop. Top-level rows (no bundle_origin) always pass.
+    if (draggedBundleUid) {
+      const idxRaw = el.dataset.moduleIdx;
+      if (idxRaw !== undefined) {
+        const m = value.modules[Number(idxRaw)] as ModuleEntry & { bundle_origin?: string } | undefined;
+        if (m?.bundle_origin === draggedBundleUid) return false;
+      }
+    }
+    return true;
   });
   if (filtered.length === 0) return { kind: "end" };
 
