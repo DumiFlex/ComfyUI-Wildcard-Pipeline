@@ -510,7 +510,27 @@ export function collectUpstreamChain(
       widgetValue(n, "modules"),
       { version: 1, modules: [] },
     );
-    out.push(v.modules);
+    // Apply the bundle gate before posting to `/wp/api/preview/resolve`.
+    // The server runs each step as a flat module list — it doesn't see
+    // bundles[] — so we mask `enabled=false` on any child whose
+    // bundle is disabled before handing the chain over. Without this
+    // gate, the assembler's API preview returns bindings from
+    // bundle-disabled modules while the static fallback (which IS
+    // gated) doesn't, and chip strip / preview disagree.
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
+    if (bundleEnabled.size === 0) {
+      out.push(v.modules);
+      continue;
+    }
+    const gated = v.modules.map((m) => {
+      if (m.enabled === false) return m;
+      const origin = (m as { bundle_origin?: string }).bundle_origin;
+      if (typeof origin === "string" && bundleEnabled.get(origin) === false) {
+        return { ...m, enabled: false };
+      }
+      return m;
+    });
+    out.push(gated);
   }
   return out;
 }
