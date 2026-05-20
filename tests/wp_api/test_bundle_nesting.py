@@ -227,6 +227,91 @@ async def test_post_allows_mixed_leaf_and_reference(wp_client):
     assert [c["id"] for c in body["children"][1]["children"]] == ["inner-leaf"]
 
 
+# ── Bilateral tier-2 integrity ────────────────────────────────────────────
+# The write-time check on A enforces tier-2 from A's perspective, but B
+# can be updated unilaterally. Without a complementary check on B's
+# update, B could gain bundle children of its own and silently demote
+# every parent A's reference into a tier-3 structure on read. The
+# server refuses the B-side write to keep the ceiling honest.
+
+
+async def test_put_rejects_adding_bundle_child_when_referenced_by_parent(wp_client):
+    """B is referenced by A. B tries to add another bundle as a child —
+    would make A's view tier-3. Reject with 409 Conflict."""
+    grandchild = await _create_bundle(wp_client, name="grandchild")
+    # B starts as tier-1 (no bundle children).
+    b = await _create_bundle(
+        wp_client, name="b", children=[_leaf_wildcard("b-leaf")],
+    )
+    # A references B — legal (B is tier-1).
+    await _create_bundle(wp_client, name="a", children=[_bundle_ref(b["id"])])
+    # Now try to upgrade B by adding a bundle child of its own.
+    resp = await wp_client.put(f"/wp/api/bundles/{b['id']}", json={
+        "children": [_leaf_wildcard("b-leaf"), _bundle_ref(grandchild["id"])],
+    })
+    assert resp.status == 409
+    body = await resp.json()
+    assert "tier" in body["error"].lower() or "referenced" in body["error"].lower()
+
+
+async def test_put_allows_adding_bundle_child_when_no_parents(wp_client):
+    """Same B, no parents referencing it — adding a bundle child is fine."""
+    grandchild = await _create_bundle(wp_client, name="grandchild")
+    b = await _create_bundle(
+        wp_client, name="b", children=[_leaf_wildcard("b-leaf")],
+    )
+    resp = await wp_client.put(f"/wp/api/bundles/{b['id']}", json={
+        "children": [_leaf_wildcard("b-leaf"), _bundle_ref(grandchild["id"])],
+    })
+    assert resp.status == 200
+
+
+async def test_put_allows_leaf_only_edits_when_referenced(wp_client):
+    """B is referenced by A. B can still edit its leaf children — the
+    integrity check only fires when a bundle child appears in the update."""
+    b = await _create_bundle(
+        wp_client, name="b", children=[_leaf_wildcard("v1")],
+    )
+    await _create_bundle(wp_client, name="a", children=[_bundle_ref(b["id"])])
+    resp = await wp_client.put(f"/wp/api/bundles/{b['id']}", json={
+        "children": [_leaf_wildcard("v2"), _leaf_wildcard("v3")],
+    })
+    assert resp.status == 200
+
+
+async def test_put_allows_rename_or_recolor_when_referenced(wp_client):
+    """Metadata-only updates on B skip the children integrity check
+    entirely — no `children` key in the patch, no work to do."""
+    b = await _create_bundle(wp_client, name="b")
+    await _create_bundle(wp_client, name="a", children=[_bundle_ref(b["id"])])
+    resp = await wp_client.put(f"/wp/api/bundles/{b['id']}", json={
+        "name": "b-renamed",
+        "color": "#ff0000",
+    })
+    assert resp.status == 200
+
+
+async def test_put_error_lists_offending_parents(wp_client):
+    """The 409 body cites which parent bundles would break, so the SPA
+    can route the user to detach the reference first."""
+    grandchild = await _create_bundle(wp_client, name="grandchild")
+    b = await _create_bundle(wp_client, name="b")
+    parent_a = await _create_bundle(
+        wp_client, name="parent-a", children=[_bundle_ref(b["id"])],
+    )
+    parent_x = await _create_bundle(
+        wp_client, name="parent-x", children=[_bundle_ref(b["id"])],
+    )
+    resp = await wp_client.put(f"/wp/api/bundles/{b['id']}", json={
+        "children": [_bundle_ref(grandchild["id"])],
+    })
+    assert resp.status == 409
+    body = await resp.json()
+    # Both parents named — order not guaranteed by repo.list, accept either.
+    assert "parent-a" in body["error"] or parent_a["id"] in body["error"]
+    assert "parent-x" in body["error"] or parent_x["id"] in body["error"]
+
+
 # ── Edge cases ────────────────────────────────────────────────────────────
 
 

@@ -149,6 +149,76 @@ def _validate_bundle_refs(
     return None
 
 
+def _find_parents_referencing(
+    repo: BundleRepository,
+    bundle_id: str,
+) -> list[dict]:
+    """Return every bundle row whose children include a bundle reference
+    pointing at ``bundle_id``. Library volumes are small, so a full scan
+    is acceptable.
+
+    Used by the bilateral tier-2 integrity check: a bundle that other
+    bundles reference may not gain bundle children of its own, because
+    doing so would silently turn every parent's reference into a tier-3
+    structure on read.
+    """
+    out: list[dict] = []
+    for candidate in repo.list():
+        children = candidate.get("children") or []
+        if not isinstance(children, list):
+            continue
+        for child in children:
+            if (
+                isinstance(child, dict)
+                and child.get("type") == "bundle"
+                and child.get("id") == bundle_id
+            ):
+                out.append(candidate)
+                break
+    return out
+
+
+def _validate_parents_compatible(
+    new_children: object,
+    repo: BundleRepository,
+    bundle_id: str,
+) -> str | None:
+    """Bilateral tier-2 integrity check.
+
+    The ``_validate_bundle_refs`` rule rejects building ``A → B → C`` at
+    A's write time, but B can later add a bundle child *unilaterally*
+    and silently demote every parent A's view to tier 3. To keep the
+    tier-2 ceiling honest from both sides, reject B's update when B is
+    referenced by another bundle AND the new children introduce a
+    bundle entry.
+
+    Renames / recolors / leaf-only edits pass through untouched: only
+    the act of adding (or keeping) a bundle child while parents exist
+    is the violation.
+    """
+    if not isinstance(new_children, list):
+        return None
+    has_bundle_child = any(
+        isinstance(c, dict) and c.get("type") == "bundle"
+        for c in new_children
+    )
+    if not has_bundle_child:
+        return None
+    parents = _find_parents_referencing(repo, bundle_id)
+    if not parents:
+        return None
+    # Be concrete about which parents would break — the SPA can route
+    # the user to break the reference first.
+    parent_summary = ", ".join(f"{p['name']!r} ({p['id']})" for p in parents[:3])
+    if len(parents) > 3:
+        parent_summary += f", … {len(parents) - 3} more"
+    return (
+        f"cannot add a bundle child: this bundle is already referenced "
+        f"by {len(parents)} parent bundle(s) — {parent_summary} — and "
+        f"the tier-2 nesting cap forbids the resulting tier-3 structure"
+    )
+
+
 def _expand_bundle_children(
     children: list,
     repo: BundleRepository,
@@ -420,6 +490,16 @@ async def update_bundle(request: web.Request) -> web.Response:
             )
             if err is not None:
                 return json_error(err, status=400)
+            # Bilateral tier-2 check: if this bundle is referenced by
+            # any other bundle, it cannot gain bundle children of its
+            # own (would turn every parent's reference into a tier-3
+            # structure). Refuse the write rather than letting a stale
+            # ceiling slip through.
+            err = _validate_parents_compatible(
+                patch["children"], repo, bundle_id=bundle_id,
+            )
+            if err is not None:
+                return json_error(err, status=409)
             if isinstance(patch["children"], list):
                 normalised = _normalise_bundle_children(patch["children"])
                 patch["children"] = _dedupe_children(normalised)
