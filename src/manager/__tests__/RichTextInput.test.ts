@@ -412,33 +412,14 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("arrow-left at start of text right of a chip preventDefaults the keydown", async () => {
-    // Behavioral assertion via defaultPrevented — the model-driven handler
-    // intercepts arrow keys at chip boundaries so the native browser caret
-    // doesn't land mid-chip (chip is contenteditable=false; native caret
-    // sometimes lands at chip offset 0 on Firefox).
-    const wrap = mount(RichTextInput, {
-      props: {
-        modelValue: "a @{aabbccdd} b",
-        surface: "wildcard",
-        uuidToName: new Map([["aabbccdd", "color"]]),
-      },
-      attachTo: document.body,
-    });
-    const host = wrap.find(".wp-rt__host").element as HTMLElement;
-    host.focus();
-    const trailingTextSpans = host.querySelectorAll(".wp-rt__text");
-    const trailingSpan = trailingTextSpans[trailingTextSpans.length - 1];
-    const textNode = trailingSpan.firstChild;
-    const range = document.createRange();
-    if (textNode) range.setStart(textNode, 0);
-    range.collapse(true);
-    window.getSelection()?.removeAllRanges();
-    if (textNode) window.getSelection()?.addRange(range);
-    const ev = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true });
-    host.dispatchEvent(ev);
-    expect(ev.defaultPrevented).toBe(true);
-    wrap.unmount();
+  it.skip("OBSOLETE — arrow keys defer to native browser chip-skip handling", () => {
+    // The previous implementation preventDefaulted arrow keys at chip
+    // boundaries and tried to position the caret manually. Live QA
+    // showed that fighting the browser's selection semantics produced
+    // worse UX than the native fallback — modern Chrome + Firefox
+    // already skip `contenteditable=false` nodes naturally on
+    // ArrowLeft / ArrowRight. The handler was removed; this test no
+    // longer applies.
   });
 
   it("inserts an autocomplete pick at the current selection, not the end", async () => {

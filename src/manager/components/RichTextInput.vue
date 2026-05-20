@@ -913,6 +913,32 @@ function onHostBeforeInput(ev: InputEvent): void {
   // Don't preventDefault — browser will now insert at the new selection.
 }
 
+/** Paste handler — converts the pasted text into atoms and merges
+ *  them at the caret. Without intercepting, browsers paste raw text
+ *  directly into the host (potentially as a sibling text node rather
+ *  than inside a wp-rt__text span), and a pasted `@{uuid}` literal
+ *  stays as plain text instead of chip-ifying. Intercept, parse the
+ *  pasted text, splice into atoms, restore caret after the paste. */
+function onHostPaste(ev: ClipboardEvent): void {
+  if (props.disabled) return;
+  const data = ev.clipboardData?.getData("text/plain");
+  if (data == null) return;
+  ev.preventDefault();
+  const currentText = readHostAsText();
+  const caret = currentCursorCharOffset();
+  // Strip CRLF / LF normalisation — single-line inputs ignore newlines,
+  // multi-line inputs keep them. Atoms model treats text atoms as
+  // opaque strings either way.
+  const pasted = props.multiline ? data : data.replace(/[\r\n]+/g, " ");
+  const before = currentText.slice(0, caret);
+  const after = currentText.slice(caret);
+  const newText = before + pasted + after;
+  atoms.value = padAtoms(parse(newText));
+  emitValue(newText);
+  const newCaret = (before + pasted).length;
+  void nextTick(() => restoreCursorAtChar(newCaret));
+}
+
 function onHostFocus(): void {
   focused.value = true;
   // If the host gets focused but the caret didn't naturally land
@@ -1002,45 +1028,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
     }
     return;
   }
-  if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
-    const cur = currentCursor();
-    if (ev.key === "ArrowLeft" && cur.offset === 0 && cur.atomIndex > 0) {
-      const prev = atoms.value[cur.atomIndex - 1];
-      if (prev && prev.kind !== "text") {
-        ev.preventDefault();
-        moveCursorToAtomEnd(cur.atomIndex - 2);  // skip over the chip
-      }
-    } else if (ev.key === "ArrowRight") {
-      const target = atoms.value[cur.atomIndex];
-      if (
-        target?.kind === "text" &&
-        cur.offset === target.text.length &&
-        cur.atomIndex + 1 < atoms.value.length &&
-        atoms.value[cur.atomIndex + 1].kind !== "text"
-      ) {
-        ev.preventDefault();
-        moveCursorToAtomEnd(cur.atomIndex + 1);
-      }
-    }
-  }
-}
-
-function moveCursorToAtomEnd(atomIndex: number): void {
-  // Set DOM selection to land just AFTER the atom at `atomIndex`.
-  const host = hostEl.value;
-  if (!host) return;
-  const child = host.childNodes[atomIndex];
-  if (!child) return;
-  const range = document.createRange();
-  if (child.nodeType === Node.TEXT_NODE) {
-    range.setStart(child, (child.textContent ?? "").length);
-  } else {
-    range.setStartAfter(child);
-  }
-  range.collapse(true);
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-  sel?.addRange(range);
+  // Arrow keys: defer to native browser handling. Modern browsers skip
+  // `contenteditable=false` chip nodes naturally — the caret hops to
+  // the adjacent text span on both Chrome and Firefox. Earlier
+  // attempts at custom hopping fought the browser's selection
+  // semantics around empty text atoms (padded landing spans) and
+  // produced worse UX than the native fallback.
 }
 </script>
 
@@ -1075,6 +1068,7 @@ function moveCursorToAtomEnd(atomIndex: number): void {
       @input="onHostInput"
       @keydown="onHostKeydown"
       @beforeinput="onHostBeforeInput"
+      @paste="onHostPaste"
     >
       <template v-for="(atom, idx) in atoms" :key="idx">
         <RefChip
