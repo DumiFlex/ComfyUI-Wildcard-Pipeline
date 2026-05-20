@@ -67,8 +67,18 @@ export function buildBundleInsertion(
   insertIdx: number,
 ): BundleInsertion {
   const bundleInstance = emptyBundleInstance(entry.id);
+  // Pre-flatten any bundle-typed children. Tier-2 nesting (one level of
+  // bundle inside a bundle) is a library-only construct — the canvas
+  // surface is flat: a Context's modules[] is a list of leaf modules
+  // spanned by BundleInstance ranges. The GET /bundles/{id} response
+  // server-resolves bundle references inline (attaching the referenced
+  // bundle's current children under the bundle-typed entry's `children`
+  // key), so all this helper has to do is splice those inner children
+  // into the outer module list. The API validator caps nesting at
+  // tier 2, so flattenBundleChildren never has to recurse.
+  const flatChildren = flattenBundleChildren(entry.children);
   bundleInstance.start_idx = insertIdx;
-  bundleInstance.end_idx = insertIdx + entry.children.length - 1;
+  bundleInstance.end_idx = insertIdx + flatChildren.length - 1;
   bundleInstance.inserted_at_hash = entry.payload_hash;
   // Denormalize library metadata onto the instance so the bundle
   // header can render immediately + saved workflows retain the
@@ -90,7 +100,7 @@ export function buildBundleInsertion(
   // that target other bundle children will cross-talk between
   // instances. Documented as v2 polish — adds bundle-scope-aware
   // ref resolution.
-  const modulesToSplice = entry.children.map((c) => ({
+  const modulesToSplice = flatChildren.map((c) => ({
     ...c,
     _uid: newRowUid(),
     bundle_origin: bundleInstance._uid,
@@ -102,4 +112,31 @@ export function buildBundleInsertion(
   }));
 
   return { modulesToSplice, bundleInstance };
+}
+
+/** Replace any bundle-typed entries in `children` with their resolved
+ *  inner children, inline. The API expander attaches the referenced
+ *  bundle's current children under the same `children` key (along with
+ *  a `_resolved_from` marker), so a single pass is enough — the tier-2
+ *  cap guarantees those grandchildren are themselves leaves. A bundle
+ *  entry that arrives without an inner `children` array (e.g. a missing
+ *  reference flagged with `_missing_ref`) is dropped from the splice so
+ *  the canvas surface stays free of dangling placeholders. The bundle
+ *  frame's drift logic can still flag the parent as having lost an
+ *  inner reference via the BundleInstance's `inserted_at_hash`. */
+function flattenBundleChildren(children: ChildSnapshot[]): ChildSnapshot[] {
+  const out: ChildSnapshot[] = [];
+  for (const c of children) {
+    if (c.type === "bundle") {
+      const inner = (c as ChildSnapshot & { children?: ChildSnapshot[] }).children;
+      if (Array.isArray(inner)) {
+        for (const grandchild of inner) {
+          out.push(grandchild);
+        }
+      }
+      continue;
+    }
+    out.push(c);
+  }
+  return out;
 }
