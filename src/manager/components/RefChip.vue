@@ -21,9 +21,11 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  /** Fired when a ref-kind chip body is clicked. Used by parent to open
-   *  the subcategory picker in edit mode. Var-kind chips don't emit. */
-  "click": [];
+  /** Fired when a ref-kind chip body is clicked. The MouseEvent
+   *  payload lets the parent read the chip's bounding rect (via
+   *  `ev.currentTarget`) so it can anchor a popover near the chip
+   *  instead of centred on screen. Var-kind chips don't emit. */
+  "click": [event: MouseEvent];
 }>();
 
 const isRef = computed(() => props.kind === "ref");
@@ -42,10 +44,10 @@ const icon = computed(() => {
   return isRef.value ? "✦" : "⌘";
 });
 
-function onClick(): void {
+function onClick(ev: MouseEvent): void {
   // Only ref-kind chips have a click-to-edit affordance. Var-kind chips
   // are pure visual marks — no picker to open.
-  if (isRef.value && props.resolved) emit("click");
+  if (isRef.value && props.resolved) emit("click", ev);
 }
 </script>
 

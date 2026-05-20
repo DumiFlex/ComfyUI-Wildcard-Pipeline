@@ -262,7 +262,7 @@ describe("RichTextInput.vue", () => {
     // Picker is open.
     expect(document.querySelector('[data-test="subcat-picker"]')).not.toBeNull();
     // Click backdrop (the overlay div, not the picker contents).
-    const overlay = document.querySelector(".wp-subcat-picker__overlay") as HTMLElement;
+    const overlay = document.querySelector(".wp-subcat-picker__backdrop") as HTMLElement;
     overlay.click();
     await flushPromises();
     // Picker closed, no chip inserted.

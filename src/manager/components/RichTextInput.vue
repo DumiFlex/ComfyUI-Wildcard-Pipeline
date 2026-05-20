@@ -105,6 +105,12 @@ const pickerTargetAtomIndex = ref<number | null>(null);
 // apply/skip handlers can build the right atom + put it in the right
 // place after the picker closes.
 const pendingInsert = ref<{ uuid: string; cursor: Cursor } | null>(null);
+// Anchor coordinates for the picker popover — relative to the chip
+// being edited (click-to-edit flow) or the host element (insert
+// flow). Flips above the anchor if there's no room below.
+const pickerAnchor = ref<{ top: number; left: number; flipped: boolean }>({
+  top: 0, left: 0, flipped: false,
+});
 
 // --- Atom rendering — semi-controlled pattern ---
 //
@@ -185,7 +191,7 @@ function atomIsResolved(atom: Atom): boolean {
   return true;
 }
 
-function onChipClick(idx: number): void {
+function onChipClick(idx: number, ev?: MouseEvent): void {
   const atom = atoms.value[idx];
   if (!atom || atom.kind !== "ref") return;
   // Unresolved refs have no edit affordance — RefChip already gates the click
@@ -196,7 +202,29 @@ function onChipClick(idx: number): void {
   pickerMode.value = "edit";
   pickerTargetAtomIndex.value = idx;
   pendingInsert.value = null;
+  // Anchor picker beneath (or above) the clicked chip. Falls back to
+  // the host's rect if the event target isn't a chip element.
+  setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
   pickerOpen.value = true;
+}
+
+const PICKER_APPROX_H = 140;
+const PICKER_W = 240;
+
+function setPickerAnchorFromElement(el: HTMLElement | null): void {
+  const fallback = hostEl.value;
+  const rect = (el ?? fallback)?.getBoundingClientRect();
+  if (!rect) return;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const flipped = spaceBelow < PICKER_APPROX_H && rect.top > PICKER_APPROX_H;
+  // Clamp horizontally so the picker doesn't run off the right edge.
+  const maxLeft = window.innerWidth - PICKER_W - 8;
+  const left = Math.max(8, Math.min(rect.left, maxLeft));
+  pickerAnchor.value = {
+    top: flipped ? Math.max(8, rect.top - PICKER_APPROX_H - 6) : rect.bottom + 6,
+    left,
+    flipped,
+  };
 }
 
 // --- Suggestion list filtering. ---
@@ -347,6 +375,10 @@ function applyAutocomplete(label: string | undefined): void {
       pickerInitial.value = [];
       pickerMode.value = "insert";
       pickerTargetAtomIndex.value = null;
+      // Insert flow has no chip to anchor to yet — use the host's
+      // rect so the picker appears under the input the user just
+      // typed `@` into.
+      setPickerAnchorFromElement(hostEl.value);
       pickerOpen.value = true;
     }
   } else {
@@ -1079,7 +1111,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :sub-categories="atom.kind === 'ref' ? atom.subCategories : []"
           :resolved="atomIsResolved(atom)"
           :data-atom-index="idx"
-          @click="onChipClick(idx)"
+          @click="(ev: MouseEvent) => onChipClick(idx, ev)"
         />
         <span v-else :data-atom-index="idx" class="wp-rt__text">{{ atom.text }}</span>
       </template>
@@ -1142,19 +1174,29 @@ function onHostKeydown(ev: KeyboardEvent): void {
 
     <!-- Backdrop click cancels the picker without inserting anything. To
          insert an unfiltered @{uuid}, use the Skip button inside the
-         picker. -->
+         picker. The picker itself is anchored beneath (or above) the
+         clicked chip / host element via `pickerAnchor` — a popover,
+         not a modal — so it feels like a contextual control on the
+         element the user just touched. -->
     <Teleport to="body" v-if="pickerOpen">
-      <div class="wp-subcat-picker__overlay" @click="cancelPicker">
-        <div @click.stop>
-          <SubcategoryFilterPicker
-            :sub-categories="pickerSubCats"
-            :initial-selection="pickerInitial"
-            :mode="pickerMode"
-            @apply="onPickerApply"
-            @skip="onPickerSkip"
-            @delete="onPickerDelete"
-          />
-        </div>
+      <div class="wp-subcat-picker__backdrop" @click="cancelPicker"></div>
+      <div
+        class="wp-subcat-picker__anchor"
+        :class="{ 'wp-subcat-picker__anchor--flipped': pickerAnchor.flipped }"
+        :style="{
+          top: pickerAnchor.top + 'px',
+          left: pickerAnchor.left + 'px',
+        }"
+        @click.stop
+      >
+        <SubcategoryFilterPicker
+          :sub-categories="pickerSubCats"
+          :initial-selection="pickerInitial"
+          :mode="pickerMode"
+          @apply="onPickerApply"
+          @skip="onPickerSkip"
+          @delete="onPickerDelete"
+        />
       </div>
     </Teleport>
   </div>
@@ -1326,17 +1368,23 @@ function onHostKeydown(ev: KeyboardEvent): void {
   color: var(--wp-accent-text, #c4b5fd);
 }
 
-/* Step-2 SubcategoryFilterPicker overlay — fixed, full-viewport backdrop
-   teleported to <body> so it escapes ancestor overflow/transform contexts.
-   Centred picker; backdrop click cancels the picker (no insert). Escape
-   key dismisses with the same cancel semantics. */
-.wp-subcat-picker__overlay {
+/* Step-2 SubcategoryFilterPicker — anchored popover next to the
+   clicked chip (or below the host on insert flow). Teleported to
+   <body> so it escapes ancestor overflow/transform contexts. Backdrop
+   is a transparent click-target full-viewport layer that cancels the
+   picker (Skip semantics — no insert). Escape key dismisses the
+   same way. */
+.wp-subcat-picker__backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: transparent;
   z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+}
+.wp-subcat-picker__anchor {
+  position: fixed;
+  z-index: 1001;
+  /* Subtle drop-shadow so the popover reads as elevated even without
+     the dimmed backdrop of the previous modal version. */
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
 }
 </style>
