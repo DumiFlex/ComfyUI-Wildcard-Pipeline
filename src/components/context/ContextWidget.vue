@@ -26,6 +26,7 @@ import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-c
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
+import { buildLibraryChildren, toChildSnapshot } from "./bundles/save";
 import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
 import {
   captureRects,
@@ -1125,26 +1126,19 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   }
 }
 
-/** Canonical ChildSnapshot dict — strips per-instance fields
- *  (`_uid`, `bundle_origin`). Shared by saveBundleToLibrary +
- *  wrapIntoNewBundle so the library shape stays consistent. */
-function toChildSnapshot(m: ModuleEntry): Record<string, unknown> {
-  return {
-    id: m.id, type: m.type, enabled: m.enabled, collapsed: m.collapsed,
-    meta: m.meta, entries: m.entries, payload: m.payload,
-    instance: m.instance, payload_hash: m.payload_hash,
-  };
-}
-
 /** Push current bundle children back to library — mirrors
  *  resetBundleToLibrary in the opposite direction. */
 async function saveBundleToLibrary(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
+  const hasInnerBundles = bundles.some((b) => b.parent_uid === target._uid);
+  const bodyExtra = hasInnerBundles
+    ? " Nested bundles are saved as references — they always resolve to the referenced bundle's current state."
+    : "";
   if (!(await maybeConfirm({
     title: `Save "${target.name || "bundle"}" to library?`,
-    body: "Overwrites the bundle library entry with this instance's current children. Other inserts of this bundle elsewhere will read as drifted until reset. This op has no Undo (it writes to the library DB).",
+    body: `Overwrites the bundle library entry with this instance's current children. Other inserts of this bundle elsewhere will read as drifted until reset. This op has no Undo (it writes to the library DB).${bodyExtra}`,
     variant: "default",
     confirmLabel: "Save to library",
   }))) return;
@@ -1152,9 +1146,7 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
   // surfaced here. The confirm dialog above gates accidental
   // overwrites when the local instance has speculative edits the
   // user didn't intend to publish.
-  const childrenOut = value.value.modules
-    .slice(target.start_idx, target.end_idx + 1)
-    .map(toChildSnapshot);
+  const childrenOut = buildLibraryChildren(target, value.value.modules, bundles);
   try {
     const updated = await api.bundles.update(target.library_id, {
       children: childrenOut,
