@@ -3675,6 +3675,10 @@ const bundleFrameCtx: BundleFrameCtx = {
   openBundleContextMenu,
   onBundleDragStart,
   onDragEnd,
+  // Stub: real implementation lands in the ContextWidget rewire task.
+  // Until then the bar stays hidden — drag indicator falls back to the
+  // pre-existing wp-gap-before / wp-gap-after row classes.
+  dropBarFor: () => null,
 };
 provide(BundleFrameCtxKey, bundleFrameCtx);
 </script>

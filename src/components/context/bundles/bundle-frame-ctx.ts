@@ -29,6 +29,12 @@ export interface BundleFrameCtx {
   openBundleContextMenu: (ev: MouseEvent, uid: string) => void;
   onBundleDragStart: (ev: DragEvent, uid: string) => void;
   onDragEnd: () => void;
+  /** Returns the drop-indicator position for a given container scope.
+   *  `containerUid = null` means the top-level list. Returns null when
+   *  the resolved zone doesn't target this container — caller hides the
+   *  bar. ContextWidget owns the dragOver ref + DOM rect math; this
+   *  ctx surfaces the per-container slice. */
+  dropBarFor: (containerUid: string | null) => { top: number } | null;
 }
 
 export const BundleFrameCtxKey: InjectionKey<BundleFrameCtx> = Symbol("bundleFrameCtx");

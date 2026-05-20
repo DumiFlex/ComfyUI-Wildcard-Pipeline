@@ -20,6 +20,7 @@ import { inject } from "vue";
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 import { BundleFrameCtxKey } from "./bundle-frame-ctx";
 import BundleHeader from "./BundleHeader.vue";
+import BundleDropBar from "./BundleDropBar.vue";
 import ModuleRow from "../ModuleRow.vue";
 
 type BundleChild =
@@ -77,6 +78,7 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
       @dragend="ctx.onDragEnd()"
     />
     <div class="wp-bundle-children">
+      <BundleDropBar :container-uid="bundle._uid" />
       <template v-for="child in children" :key="child.key">
         <BundleFrame
           v-if="child.kind === 'bundle'"
@@ -112,5 +114,11 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
 }
 .wp-bundle.wp-bundle--nested > .wp-bundle-children {
   padding: 4px 5px 5px 5px;
+}
+/* Drop-bar anchor — the floating indicator inside .wp-bundle-children
+ * is absolutely positioned; the container needs to be the offset
+ * parent. Both nested + outer frames share this rule. */
+.wp-bundle > .wp-bundle-children {
+  position: relative;
 }
 </style>
