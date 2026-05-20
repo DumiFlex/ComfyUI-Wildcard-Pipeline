@@ -234,6 +234,16 @@ function dropBarFor(containerUid: string | null): { top: number } | null {
       return { top: cr.height / 2 };
     }
     case "header": {
+      // Only paint in the container that is the targeted bundle's
+      // ACTUAL parent scope. Without this guard, both the top-level
+      // container AND the bundle's parent container would find the
+      // nested bundle via deep-descendant fallback and paint two bars
+      // for the same drop position — user-visible as "sometimes 2
+      // lines".
+      const targetBundle = (value.value.bundles ?? []).find((b) => b._uid === z.uid);
+      if (!targetBundle) return null;
+      const parentScope = targetBundle.parent_uid ?? null;
+      if (parentScope !== containerUid) return null;
       const bundleEl = findBundleFrameEl(z.uid, containerEl);
       if (!bundleEl) return null;
       const br = bundleEl.getBoundingClientRect();
