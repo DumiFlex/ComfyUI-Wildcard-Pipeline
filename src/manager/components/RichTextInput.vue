@@ -23,12 +23,10 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import {
-  deleteBackward,
   parse,
   replaceAtom,
   serialise,
   type Atom,
-  type Cursor,
 } from "./atomicEditorModel";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
@@ -104,7 +102,7 @@ const pickerTargetAtomIndex = ref<number | null>(null);
 // During insert flow we stash the uuid + the insertion cursor so the
 // apply/skip handlers can build the right atom + put it in the right
 // place after the picker closes.
-const pendingInsert = ref<{ uuid: string; cursor: Cursor } | null>(null);
+const pendingInsert = ref<{ uuid: string } | null>(null);
 // Anchor coordinates for the picker popover — relative to the chip
 // being edited (click-to-edit flow) or the host element (insert
 // flow). Flips above the anchor if there's no room below.
@@ -361,7 +359,7 @@ function applyAutocomplete(label: string | undefined): void {
       insertRefAtCursor(label, []);
     } else {
       // Open step-2 picker so the user can multi-select sub-categories.
-      pendingInsert.value = { uuid: label, cursor: currentCursor() };
+      pendingInsert.value = { uuid: label };
       pickerSubCats.value = subCats;
       pickerInitial.value = [];
       pickerMode.value = "insert";
@@ -531,102 +529,6 @@ function insertRefAtCursor(uuid: string, subCategories: string[]): void {
 
 function insertVarAtCursor(name: string): void {
   insertChipAtCaret("$" + name);
-}
-
-/** Re-place the DOM Selection after a programmatic atom-list update.
- *  Walks the same `meaningful` filter as `currentCursor` (skipping Vue
- *  fragment markers) and lands the caret either inside a wp-rt__text
- *  span (cursor offset inside text) or at a chip boundary (cursor at
- *  atom edge). Called from a `nextTick` after `atoms.value` reassign
- *  so Vue has finished its DOM patches before we touch the selection. */
-function restoreCursor(cur: Cursor): void {
-  const host = hostEl.value;
-  if (!host) return;
-  const meaningful: Node[] = [];
-  for (const child of host.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      if ((child.textContent ?? "").length > 0) meaningful.push(child);
-    } else {
-      meaningful.push(child);
-    }
-  }
-  const range = document.createRange();
-  const target = meaningful[cur.atomIndex];
-  if (!target) {
-    // Past the end — land at end of host.
-    const last = meaningful[meaningful.length - 1];
-    if (last && last.nodeType === Node.TEXT_NODE) {
-      range.setStart(last, (last.textContent ?? "").length);
-    } else if (last) {
-      range.setStartAfter(last);
-    } else {
-      range.setStart(host, 0);
-    }
-  } else if (target.nodeType === Node.TEXT_NODE) {
-    range.setStart(target, Math.min(cur.offset, (target.textContent ?? "").length));
-  } else {
-    const el = target as HTMLElement;
-    if (el.classList.contains("wp-rt__text")) {
-      const tn = el.firstChild;
-      if (tn && tn.nodeType === Node.TEXT_NODE) {
-        range.setStart(tn, Math.min(cur.offset, (tn.textContent ?? "").length));
-      } else {
-        range.setStart(el, 0);
-      }
-    } else {
-      // Chip — place caret BEFORE the chip element.
-      range.setStartBefore(target);
-    }
-  }
-  range.collapse(true);
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-  sel?.addRange(range);
-  host.focus();
-}
-
-function currentCursor(): Cursor {
-  const host = hostEl.value;
-  if (!host) return { atomIndex: atoms.value.length, offset: 0 };
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return { atomIndex: atoms.value.length, offset: 0 };
-  const range = sel.getRangeAt(0);
-  if (!host.contains(range.startContainer)) {
-    return { atomIndex: atoms.value.length, offset: 0 };
-  }
-  // Walk the host's child list to find which atom the range start lives in.
-  // The host children are 1:1 with `atoms` in render order — BUT Vue's
-  // `<template v-for>` injects fragment-marker text nodes (empty
-  // textContent) around each rendered child. We need to map DOM child
-  // index → atom index by counting only the meaningful children
-  // (RefChip elements + .wp-rt__text spans), skipping fragment markers.
-  const meaningful: Node[] = [];
-  for (const child of host.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      // Vue fragment markers are empty text nodes — skip those, but
-      // keep user-inserted text nodes (which have non-empty content).
-      if ((child.textContent ?? "").length > 0) meaningful.push(child);
-    } else {
-      meaningful.push(child);
-    }
-  }
-
-  for (let i = 0; i < meaningful.length; i++) {
-    const node = meaningful[i];
-    if (node === range.startContainer) {
-      // The range start IS this child — cursor sits AT this atom boundary.
-      return { atomIndex: i + range.startOffset, offset: 0 };
-    }
-    if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).contains(range.startContainer)) {
-      const el = node as HTMLElement;
-      if (el.classList.contains("wp-rt__text")) {
-        return { atomIndex: i, offset: range.startOffset };
-      }
-      // Range inside a chip — treat as cursor at the END of that chip.
-      return { atomIndex: i + 1, offset: 0 };
-    }
-  }
-  return { atomIndex: atoms.value.length, offset: 0 };
 }
 
 // --- SubcategoryFilterPicker handlers ---
@@ -1051,12 +953,26 @@ function onHostFocus(): void {
 // the native handler.
 function onHostKeydown(ev: KeyboardEvent): void {
   if (props.disabled) return;
-  // Enter inside a single-line input commits / closes autocomplete
-  // rather than inserting a newline. Multi-line surfaces fall through.
-  if (ev.key === "Enter" && acOpen.value && acItems.value.length > 0) {
-    ev.preventDefault();
-    applyAutocomplete(acItems.value[acActive.value]);
-    return;
+  // Enter while the `$` / `@` autocomplete is open:
+  //   - Suggestion matched → insert that.
+  //   - No suggestion match BUT user typed a `$<name>` query → chipify
+  //     the literal name. Runtime / forward-declared vars never appear
+  //     in the static suggestion list, so this is the only way to get
+  //     a chip without manually typing a delimiter afterwards.
+  //   - No match + empty query (just `$` / `@`) → close popover, let
+  //     the browser handle Enter normally (insert newline in multiline).
+  if (ev.key === "Enter" && acOpen.value) {
+    if (acItems.value.length > 0) {
+      ev.preventDefault();
+      applyAutocomplete(acItems.value[acActive.value]);
+      return;
+    }
+    if (acTrigger.value === "$" && acQuery.value.length > 0) {
+      ev.preventDefault();
+      insertVarAtCursor(acQuery.value);
+      acOpen.value = false;
+      return;
+    }
   }
   if (ev.key === "ArrowDown" && acOpen.value) {
     ev.preventDefault();
@@ -1074,25 +990,32 @@ function onHostKeydown(ev: KeyboardEvent): void {
     return;
   }
   if (ev.key === "Backspace") {
-    // Sync atoms from live DOM before surgery — user may have typed
-    // into text spans since the last reactive sync. Without this we'd
-    // operate on stale atoms.value and lose trailing edits.
-    const liveText = readHostAsText();
-    const live = padAtoms(parse(liveText));
-    const cur = currentCursor();
-    // Only intercept when the cursor sits at an atom boundary where the
-    // PREVIOUS atom is a chip (ref/var). Otherwise let the browser
-    // handle the keystroke natively (cheaper + matches platform feel).
-    if (cur.offset === 0 && cur.atomIndex > 0) {
-      const prev = live[cur.atomIndex - 1];
-      if (prev && (prev.kind === "ref" || prev.kind === "var")) {
-        ev.preventDefault();
-        const result = deleteBackward(live, cur);
-        atoms.value = padAtoms(result.atoms);
-        emitValue(serialise(atoms.value));
-        void nextTick(() => restoreCursor(result.cursor));
-      }
+    // Backspace right after a chip should remove the chip atomically.
+    // Work entirely in raw-text space: read the host's raw text + caret,
+    // peek at the chars immediately before the caret, and if they form
+    // a complete chip serialisation (`$name` / `@{uuid}` / `@{uuid:sub}`)
+    // delete that whole syntax in one keystroke.
+    //
+    // Earlier the handler diffed `currentCursor` (DOM atom indices) against
+    // `padAtoms(parse(liveText))` (re-parsed atom indices). Those two index
+    // spaces diverge whenever the user typed a fresh chip-able token (e.g.
+    // `$test`) into a text span since the last settle — parse adds new chip
+    // atoms that the DOM-derived cursor doesn't know about, so the wrong
+    // atom gets deleted. Raw-text space sidesteps the alignment problem.
+    const rawText = readHostAsText();
+    const rawCaret = currentCursorCharOffset();
+    if (rawCaret === 0) return;
+    const before = rawText.slice(0, rawCaret);
+    const chipMatch = before.match(/(\$[A-Za-z_][A-Za-z0-9_]*|@\{[0-9a-f]{8}(?::[^}]*)?\})$/);
+    if (chipMatch) {
+      ev.preventDefault();
+      const newText = before.slice(0, -chipMatch[0].length) + rawText.slice(rawCaret);
+      atoms.value = padAtoms(parse(newText));
+      emitValue(newText);
+      const newCaret = before.length - chipMatch[0].length;
+      void nextTick(() => restoreCursorAtChar(newCaret));
     }
+    // Otherwise let the browser handle char-level deletion natively.
     return;
   }
   // Arrow keys: defer to native browser handling. Modern browsers skip

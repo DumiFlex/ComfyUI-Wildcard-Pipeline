@@ -80,6 +80,38 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("Enter on a $-trigger with no suggestion match chipifies the typed query", async () => {
+    // Runtime / forward-declared vars never appear in varSuggestions, so
+    // pressing Enter on `$runtimeVar` used to be a dead keystroke: the
+    // suggestion list was empty, the handler bailed, and the typed text
+    // stayed raw. Now we treat the typed query as the chip name directly.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$runtimeVar";
+    // Place the caret at the end of the typed text so refreshAutocomplete
+    // sees the `$` trigger.
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const tn = span.firstChild as Text;
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Drive an input event so refreshAutocompleteFromHost runs.
+    await host.trigger("input", { inputType: "insertText", data: "r" });
+    // Now press Enter.
+    await host.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    const chips = wrap.findAll(".wp-refchip--var");
+    expect(chips.length).toBe(1);
+    expect(chips[0].text()).toContain("$runtimeVar");
+    wrap.unmount();
+  });
+
   it("multiline=true sets data-multiline + wp-rt--multi on the host (no textarea)", () => {
     // Multiline mode used to swap the input for a <textarea>; now it's a
     // single contenteditable host with a data attribute + size variant.
