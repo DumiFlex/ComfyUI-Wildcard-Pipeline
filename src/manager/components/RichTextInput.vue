@@ -326,30 +326,16 @@ function refreshAutocompleteFromHost(): void {
     acOpen.value = false;
     return;
   }
-  // The caret only meaningfully sits inside a text node (chip bodies
-  // are contenteditable=false so the browser bounces off them). Find
-  // the text node + offset.
-  let textNode: Node | null = null;
-  let offset = 0;
-  if (range.startContainer.nodeType === Node.TEXT_NODE) {
-    textNode = range.startContainer;
-    offset = range.startOffset;
-  } else {
-    // Range may be anchored on the host or a wp-rt__text span. Walk
-    // forward into text nodes when needed.
-    const child = range.startContainer.childNodes[range.startOffset];
-    if (child && child.nodeType === Node.TEXT_NODE) {
-      textNode = child;
-      offset = 0;
-    }
-  }
-  if (!textNode) {
-    acOpen.value = false;
-    return;
-  }
-  const fullText = textNode.textContent ?? "";
-  const upToCaret = fullText.slice(0, offset);
-  const hit = probeAutocomplete(upToCaret, upToCaret.length);
+  // Probe in raw-text space so `acStart` is comparable with the raw
+  // offsets the insert path uses. The previous implementation read the
+  // caret-local text node and reported an offset inside that node, but
+  // `insertChipAtCaret` slices `readHostAsText()` (raw, includes
+  // serialised chips). When chips exist before the trigger, local and
+  // raw diverge and the slice nukes content between offset 0 and the
+  // caret. Working in raw space throughout keeps both ends honest.
+  const rawText = readHostAsText();
+  const rawCaret = currentCursorCharOffset();
+  const hit = probeAutocomplete(rawText, rawCaret);
   if (!hit) {
     acOpen.value = false;
     return;

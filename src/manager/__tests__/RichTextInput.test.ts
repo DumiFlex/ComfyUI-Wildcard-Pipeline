@@ -328,6 +328,50 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("autocomplete-pick preserves earlier chips when trigger sits after a chip", async () => {
+    // Reproduces the "template breaks after each edit" bug. The user has
+    // a chip + trailing text containing a `$te` trigger. Previous code
+    // stored acStart as the offset INSIDE the local text node, but the
+    // insert path slices the RAW host text (which includes the
+    // serialised chip). When chips precede the trigger, local and raw
+    // diverge and the slice nukes content between offset 0 and caret.
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$outfit, $te",
+        surface: "combine",
+        varSuggestions: ["outfit", "test"],
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    // Place the selection at the end of the trailing text span (after
+    // `$te`). The wp-rt__text spans hold the trailing run.
+    const spans = host.querySelectorAll(".wp-rt__text");
+    const trailing = spans[spans.length - 1] as HTMLElement;
+    const tn = trailing.firstChild as Text | null;
+    const sel = window.getSelection();
+    const range = document.createRange();
+    if (tn) {
+      range.setStart(tn, (tn.textContent ?? "").length);
+    } else {
+      range.setStart(trailing, 0);
+    }
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Drive an input event so refreshAutocompleteFromHost runs in raw-text space.
+    await wrap.find(".wp-rt__host").trigger("input");
+    // Now apply the picked suggestion.
+    (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => void })
+      .__applyAutocompleteForTest("test");
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    // The earlier chip + comma must survive — only the typed `$te` trigger
+    // fragment gets replaced with the picked `$test` chip.
+    expect(events[events.length - 1]?.[0]).toBe("$outfit, $test");
+    wrap.unmount();
+  });
+
   it("$var autocomplete pick inserts $var atom directly (no picker)", async () => {
     const wrap = mount(RichTextInput, {
       props: {
