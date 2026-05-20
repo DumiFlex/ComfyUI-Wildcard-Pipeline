@@ -186,9 +186,12 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
     if (node.type === "WP_Context") {
       const v = parseWidgetJson<ContextWidgetValue>(widgetValue(node, "modules"), { version: 1, modules: [] });
       const upstream = collectUpstreamVariables(rootGraph, node);
-      // Only enabled modules count — disabled ones don't ship to runtime.
-      const enabledOnly: ContextWidgetValue = { ...v, modules: v.modules.filter((m) => m.enabled) };
-      out.push(...scanConflicts(enabledOnly, upstream));
+      // scanConflicts internally gates via isModuleEffectivelyEnabled
+      // (covers both child.enabled=false AND bundle.enabled=false). Pre-
+      // filtering would drop rows from the array entirely and break the
+      // scanner's position-indexed lookups for constraint-target / nested-
+      // ref checks. Hand it the full list, let the scanner skip per-row.
+      out.push(...scanConflicts(v, upstream));
     } else if (node.type === "WP_PromptAssembler") {
       const tmpl = widgetValue(node, "template");
       if (!tmpl) continue;
