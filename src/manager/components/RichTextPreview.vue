@@ -61,7 +61,10 @@ const atoms = computed<Atom[]>(() => parse(sourceText.value));
 const isWildcard = computed(() => props.surface === "wildcard");
 
 function atomIsResolved(atom: Atom): boolean {
-  if (atom.kind === "var") return props.varSuggestions.includes(atom.name);
+  // Vars bind at runtime — a $name not in the static catalog may still
+  // resolve via upstream context / derivation / runtime overrides. The
+  // conflict scanner surfaces genuine missing-var advisories elsewhere.
+  if (atom.kind === "var") return atom.name.length > 0;
   if (atom.kind === "ref") return props.uuidToName.has(atom.uuid);
   return true;
 }

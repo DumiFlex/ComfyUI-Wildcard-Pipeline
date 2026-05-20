@@ -52,6 +52,34 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("chipifies a runtime-only $var when the user types a word-boundary char", async () => {
+    // The static suggestion list is empty (the runtime var doesn't exist yet
+    // in any module's catalog) but typing `$runtimeVar` + space should still
+    // produce a var chip. Without this settle path the token would stay raw
+    // text forever — vars created downstream / via overrides could never get
+    // a chip.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    // Simulate the user typing `$runtimeVar ` — browsers extend the trailing
+    // wp-rt__text span's textContent in place. We mirror that here.
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$runtimeVar";
+    await host.trigger("input", { inputType: "insertText", data: "r" });
+    // Mid-token: still raw text, no chip yet.
+    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(0);
+    // Now the boundary char.
+    span.textContent = "$runtimeVar ";
+    await host.trigger("input", { inputType: "insertText", data: " " });
+    await flushPromises();
+    const chips = wrap.findAll(".wp-refchip--var");
+    expect(chips.length).toBe(1);
+    expect(chips[0].text()).toContain("$runtimeVar");
+    wrap.unmount();
+  });
+
   it("multiline=true sets data-multiline + wp-rt--multi on the host (no textarea)", () => {
     // Multiline mode used to swap the input for a <textarea>; now it's a
     // single contenteditable host with a data attribute + size variant.
@@ -67,8 +95,8 @@ describe("RichTextInput.vue", () => {
   });
 
   it("renders RefChip atoms for $var/@{uuid}/@{uuid:subcat} tokens", () => {
-    // `varSuggestions` opts the `$person` var into resolved state so its
-    // chip renders `$person` instead of the unresolved `?person` fallback.
+    // Vars always render as resolved chips regardless of whether they
+    // appear in `varSuggestions` (runtime/forward-declared vars are valid).
     // `uuidToName` resolves `aabbccdd` → `color`; `deadbeef` stays unresolved.
     const wrap = mount(RichTextInput, {
       props: {

@@ -183,7 +183,12 @@ function emitValue(v: string): void {
 
 function atomIsResolved(atom: Atom): boolean {
   if (atom.kind === "var") {
-    return props.varSuggestions.includes(atom.name);
+    // Vars bind at runtime — a $name not in the static catalog may still
+    // resolve via upstream context / derivation / runtime overrides. The
+    // chip itself shouldn't gatekeep; conflict scanner emits a missing-var
+    // advisory when a binding truly has no producer. Only the empty form
+    // is unambiguously broken.
+    return atom.name.length > 0;
   }
   if (atom.kind === "ref") {
     return props.uuidToName.has(atom.uuid);
@@ -805,7 +810,7 @@ function readHostAsText(): string {
   return out;
 }
 
-function onHostInput(): void {
+function onHostInput(ev?: Event): void {
   // Browsers sometimes insert orphan text nodes directly as host
   // children (between Vue's wp-rt__text spans) when typing at the host
   // root, e.g. when the user clicks into an empty input. Vacuum those
@@ -818,6 +823,38 @@ function onHostInput(): void {
   // — covers the user typing `@` mid-text, deleting back across a
   // trigger, etc. Cheap (single text-slice + regex).
   refreshAutocompleteFromHost();
+  // Chipify any complete `$name` / `@{uuid}` tokens that the user just
+  // closed by typing a word-boundary char (space, tab, comma, etc.).
+  // Catches `$runtimeVar ` that never matched the static suggestion list
+  // and would otherwise stay raw text forever.
+  const inputEv = ev as InputEvent | undefined;
+  if (
+    inputEv?.inputType === "insertText" &&
+    typeof inputEv.data === "string" &&
+    SETTLE_DELIMITERS.test(inputEv.data)
+  ) {
+    settleAtomsFromHost();
+  }
+}
+
+const SETTLE_DELIMITERS = /[\s,;:./()[\]{}!?]/;
+
+/** Re-parse the host's raw text into atoms, preserving the caret in
+ *  raw-text space. Chipifies any complete `$name` / `@{uuid}` tokens
+ *  that accumulated as plain text during typing (the suggestion-driven
+ *  autocomplete path can only chipify names already in the catalog —
+ *  runtime/forward-declared vars need this fallback). */
+function settleAtomsFromHost(): void {
+  const text = readHostAsText();
+  const caret = currentCursorCharOffset();
+  const parsed = parse(text);
+  // Skip if parse didn't produce more chips than we already have — avoids
+  // a re-render churn on every space when there's no `$`/`@` token to settle.
+  const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
+  const chipsNext = parsed.filter((a) => a.kind !== "text").length;
+  if (chipsNext <= chipsNow) return;
+  atoms.value = padAtoms(parsed);
+  void nextTick(() => restoreCursorAtChar(caret));
 }
 
 /** Move any direct text-node children of the host into the nearest
@@ -971,6 +1008,18 @@ function onHostPaste(ev: ClipboardEvent): void {
   void nextTick(() => restoreCursorAtChar(newCaret));
 }
 
+function onHostBlur(): void {
+  focused.value = false;
+  // Safety net: any leftover `$name` / `@{uuid}` text that didn't trigger
+  // a settle-by-delimiter during typing chips up here. Caret already gone,
+  // so no need to restore it — atoms re-render is enough.
+  const text = readHostAsText();
+  const parsed = parse(text);
+  const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
+  const chipsNext = parsed.filter((a) => a.kind !== "text").length;
+  if (chipsNext > chipsNow) atoms.value = padAtoms(parsed);
+}
+
 function onHostFocus(): void {
   focused.value = true;
   // If the host gets focused but the caret didn't naturally land
@@ -1096,7 +1145,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       :aria-multiline="multiline"
       spellcheck="false"
       @focus="onHostFocus"
-      @blur="focused = false"
+      @blur="onHostBlur"
       @input="onHostInput"
       @keydown="onHostKeydown"
       @beforeinput="onHostBeforeInput"
