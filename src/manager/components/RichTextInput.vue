@@ -22,7 +22,14 @@
  * API.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { deleteBackward, insertAtom, parse, replaceAtom, serialise, type Atom, type Cursor } from "./atomicEditorModel";
+import {
+  deleteBackward,
+  parse,
+  replaceAtom,
+  serialise,
+  type Atom,
+  type Cursor,
+} from "./atomicEditorModel";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
@@ -65,12 +72,6 @@ const emit = defineEmits<{
 }>();
 
 // --- Refs ---
-// `inputEl` is a transitional dead ref. The original textarea/input it
-// pointed at was removed in this task; the autocomplete machinery
-// below still references it because Task 6 rewires that machinery
-// against `hostEl` + the Selection API. Until then, the popover-state
-// code path runs but produces no UI because nothing dispatches `@input`.
-const inputEl = ref<HTMLTextAreaElement | HTMLInputElement | null>(null);
 const hostEl = ref<HTMLDivElement | null>(null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const focused = ref(false);
@@ -105,12 +106,74 @@ const pickerTargetAtomIndex = ref<number | null>(null);
 // place after the picker closes.
 const pendingInsert = ref<{ uuid: string; cursor: Cursor } | null>(null);
 
-// --- Atom rendering ---
-// `parse(modelValue)` collapses text/escape/dp-* tokens into plain text
-// atoms and lifts only var/ref tokens out as chip atoms. Brace
-// alternation `{a|b|c}` stays as text in this model — chips are reserved
-// for tokens with structured identity (UUIDs, variable names).
-const atoms = computed<Atom[]>(() => parse(props.modelValue || ""));
+// --- Atom rendering — semi-controlled pattern ---
+//
+// `atoms` is a `ref<Atom[]>`, NOT a computed off `props.modelValue`. The
+// reason is brutal: Vue re-renders every host child whenever `atoms`
+// changes. The browser's caret position lives inside those children, and
+// a re-render mid-keystroke wipes the selection — every typed character
+// would teleport the caret back to the start of the host (we hit this in
+// live QA: typing "asd" produced "asdasdasa" because each emit echoed
+// back through the parent → modelValue → re-derive → re-render →
+// caret-lost loop).
+//
+// The fix is the standard contenteditable + reactive-framework pattern:
+// the host is "uncontrolled" while the user types. Vue owns rendering on
+// (1) initial mount, (2) external prop changes from outside the
+// component, (3) explicit programmatic ops (autocomplete insert,
+// picker apply/delete). User typing into a `wp-rt__text` span mutates
+// the span's `textContent` in place — we read that back via
+// `readHostAsText` and emit, but we DO NOT re-derive `atoms` from the
+// echoed `modelValue`. `lastEmittedValue` tracks what we last emitted so
+// the `watch(props.modelValue, ...)` below can distinguish the echo
+// from a genuine outside change.
+/** Padded-atoms invariant.
+ *
+ *  The contenteditable host needs a `wp-rt__text` span at every position
+ *  where the user might land their caret — otherwise browsers insert
+ *  user-typed characters as raw text nodes directly under the host,
+ *  bypassing Vue's render tracking. Without padding, Vue's v-for diff
+ *  can't reconcile against the orphan text node and subsequent
+ *  programmatic inserts fail to display.
+ *
+ *  Invariant after this normaliser:
+ *    - list is never empty (minimum `[{text:""}]`)
+ *    - first atom is a text atom
+ *    - last atom is a text atom
+ *    - no two adjacent chip atoms (text gaps in between)
+ *
+ *  `serialise` correctly drops empty text contributions, so the raw
+ *  string round-trip is preserved.
+ */
+function padAtoms(list: Atom[]): Atom[] {
+  if (list.length === 0) return [{ kind: "text", text: "" }];
+  const out: Atom[] = [];
+  if (list[0].kind !== "text") out.push({ kind: "text", text: "" });
+  for (let i = 0; i < list.length; i++) {
+    out.push(list[i]);
+    const next = list[i + 1];
+    const cur = list[i];
+    if (cur.kind !== "text" && (!next || next.kind !== "text")) {
+      out.push({ kind: "text", text: "" });
+    }
+  }
+  return out;
+}
+
+const atoms = ref<Atom[]>(padAtoms(parse(props.modelValue || "")));
+let lastEmittedValue = props.modelValue || "";
+
+watch(() => props.modelValue, (next) => {
+  if (next === lastEmittedValue) return;  // echo of our own emit — ignore
+  atoms.value = padAtoms(parse(next || ""));
+});
+
+/** Emit `update:modelValue` and remember the value so the watcher
+ *  above doesn't trip the echo. */
+function emitValue(v: string): void {
+  lastEmittedValue = v;
+  emit("update:modelValue", v);
+}
 
 function atomIsResolved(atom: Atom): boolean {
   if (atom.kind === "var") {
@@ -208,33 +271,66 @@ function positionPopup(): void {
   };
 }
 
-// --- Handlers ---
-// NOTE: `refreshAutocompleteFromCaret` is preserved verbatim because Task 9
-// rewires it to the contenteditable host's Selection API. It currently
-// targets the transitional `inputEl` ref (always null after the Task 5
-// rewrite) and so is effectively a no-op until then. The autocomplete-
-// apply path (`applyAutocomplete`) below is the live path driven by
-// Task 7's test seams (`__triggerAutocompleteForTest`, etc.) and by the
-// suggestion popover's mousedown.
-function refreshAutocompleteFromCaret(): void {
-  const el = inputEl.value;
-  if (!el) return;
-  const caret = el.selectionStart ?? 0;
-  const hit = probeAutocomplete(props.modelValue || "", caret);
-  if (hit) {
-    // Gate `@` autocomplete — only available in the "wildcard" surface.
-    if (hit.trigger === "@" && props.surface !== "wildcard") {
-      acOpen.value = false;
-      return;
-    }
-    acOpen.value = true;
-    acStart.value = hit.start;
-    acQuery.value = hit.query;
-    acTrigger.value = hit.trigger;
-    positionPopup();
-  } else {
+// --- Autocomplete probe driven by the contenteditable host's Selection ---
+//
+// Reads the live caret position out of the DOM, finds the `wp-rt__text`
+// span the caret is in (autocomplete only fires inside text — typing
+// inside a chip is impossible, the chip is `contenteditable=false`),
+// slices that span's text up to the caret, and probes for a `$` / `@`
+// trigger backwards through identifier characters. The slice-up-to-
+// caret is necessary because typing `@x foo @b<caret> ar` should
+// suggest matches for `b`, not for the earlier `@x`.
+function refreshAutocompleteFromHost(): void {
+  const host = hostEl.value;
+  if (!host) return;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) {
     acOpen.value = false;
+    return;
   }
+  const range = sel.getRangeAt(0);
+  if (!host.contains(range.startContainer)) {
+    acOpen.value = false;
+    return;
+  }
+  // The caret only meaningfully sits inside a text node (chip bodies
+  // are contenteditable=false so the browser bounces off them). Find
+  // the text node + offset.
+  let textNode: Node | null = null;
+  let offset = 0;
+  if (range.startContainer.nodeType === Node.TEXT_NODE) {
+    textNode = range.startContainer;
+    offset = range.startOffset;
+  } else {
+    // Range may be anchored on the host or a wp-rt__text span. Walk
+    // forward into text nodes when needed.
+    const child = range.startContainer.childNodes[range.startOffset];
+    if (child && child.nodeType === Node.TEXT_NODE) {
+      textNode = child;
+      offset = 0;
+    }
+  }
+  if (!textNode) {
+    acOpen.value = false;
+    return;
+  }
+  const fullText = textNode.textContent ?? "";
+  const upToCaret = fullText.slice(0, offset);
+  const hit = probeAutocomplete(upToCaret, upToCaret.length);
+  if (!hit) {
+    acOpen.value = false;
+    return;
+  }
+  // Gate `@` autocomplete — only available in the "wildcard" surface.
+  if (hit.trigger === "@" && props.surface !== "wildcard") {
+    acOpen.value = false;
+    return;
+  }
+  acOpen.value = true;
+  acStart.value = hit.start;
+  acQuery.value = hit.query;
+  acTrigger.value = hit.trigger;
+  positionPopup();
 }
 
 function applyAutocomplete(label: string | undefined): void {
@@ -260,18 +356,210 @@ function applyAutocomplete(label: string | undefined): void {
   acOpen.value = false;
 }
 
+/** Place caret at a character offset within the host's rendered text.
+ *  Walks atoms accumulating text-atom lengths; for chips, the offset
+ *  ticks past the chip body as one unit (matches user expectation:
+ *  the chip is one cursor stop, not its serialised length). */
+function restoreCursorAtChar(targetChar: number): void {
+  const host = hostEl.value;
+  if (!host) return;
+  // Walk meaningful children + match char offset
+  const meaningful: { el: Node; len: number; kind: "text" | "chip" }[] = [];
+  for (const child of host.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      const t = child.textContent ?? "";
+      if (t.length > 0) meaningful.push({ el: child, len: t.length, kind: "text" });
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      const el = child as HTMLElement;
+      if (el.classList.contains("wp-rt__text")) {
+        meaningful.push({ el, len: (el.textContent ?? "").length, kind: "text" });
+      } else if (el.classList.contains("wp-refchip")) {
+        // Chip = atomic cursor stop, counts as 1 char visually but in
+        // the raw text view the chip serialises to `@{uuid:sub}` (much
+        // longer). We track length as the SERIALISED length so caller
+        // can pass `targetChar` from raw-string space.
+        const idx = Number(el.getAttribute("data-atom-index"));
+        const atom = atoms.value[idx];
+        if (atom && atom.kind !== "text") {
+          meaningful.push({ el, len: serialise([atom]).length, kind: "chip" });
+        }
+      }
+    }
+  }
+  let acc = 0;
+  const range = document.createRange();
+  for (const m of meaningful) {
+    if (acc + m.len >= targetChar) {
+      if (m.kind === "text") {
+        const el = m.el as HTMLElement | Text;
+        const textNode = el.nodeType === Node.TEXT_NODE
+          ? (el as Text)
+          : ((el as HTMLElement).firstChild as Text | null);
+        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+          range.setStart(textNode, Math.min(targetChar - acc, (textNode.textContent ?? "").length));
+        } else {
+          range.setStart(m.el, 0);
+        }
+      } else {
+        range.setStartAfter(m.el);
+      }
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      host.focus();
+      return;
+    }
+    acc += m.len;
+  }
+  // Past end — land at end of host.
+  const last = meaningful[meaningful.length - 1];
+  if (last) {
+    if (last.kind === "text") {
+      const el = last.el as HTMLElement | Text;
+      const textNode = el.nodeType === Node.TEXT_NODE
+        ? (el as Text)
+        : ((el as HTMLElement).firstChild as Text | null);
+      if (textNode) range.setStart(textNode, (textNode.textContent ?? "").length);
+      else range.setStartAfter(last.el);
+    } else {
+      range.setStartAfter(last.el);
+    }
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+  host.focus();
+}
+
+/** Caret offset (in serialised raw text) where the cursor currently
+ *  sits. Walks meaningful host children accumulating their serialised
+ *  lengths; for a wp-rt__text span containing the cursor, adds the
+ *  intra-span offset; for cursor sitting adjacent to a chip, includes
+ *  the chip's full serialised length on the appropriate side. */
+function currentCursorCharOffset(): number {
+  const host = hostEl.value;
+  if (!host) return 0;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return readHostAsText().length;
+  const range = sel.getRangeAt(0);
+  if (!host.contains(range.startContainer)) return readHostAsText().length;
+  let acc = 0;
+  for (const child of host.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      const t = child.textContent ?? "";
+      if (child === range.startContainer) {
+        return acc + range.startOffset;
+      }
+      acc += t.length;
+      continue;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = child as HTMLElement;
+    if (el.classList.contains("wp-refchip")) {
+      // Range may be anchored ON the host with offset === child index;
+      // that case is handled below. Range can't realistically land
+      // inside a chip (contenteditable=false).
+      const idx = Number(el.getAttribute("data-atom-index"));
+      const atom = atoms.value[idx];
+      if (atom && atom.kind !== "text") acc += serialise([atom]).length;
+      continue;
+    }
+    if (el.classList.contains("wp-rt__text")) {
+      const tn = el.firstChild;
+      if (tn === range.startContainer) {
+        return acc + range.startOffset;
+      }
+      if (el === range.startContainer) {
+        // Range anchored on the span itself — offset is child-index
+        return acc + (range.startOffset === 0 ? 0 : (el.textContent ?? "").length);
+      }
+      acc += (el.textContent ?? "").length;
+      continue;
+    }
+  }
+  return acc;
+}
+
+function insertChipAtCaret(chipText: string): void {
+  // Operate in raw-text space — much simpler than atom-cursor surgery.
+  const text = readHostAsText();
+  const caret = currentCursorCharOffset();
+  // Strip the typed trigger fragment (`@col`, `$per`) before inserting
+  // the chip. `acStart` holds the raw-text offset of the trigger `@` /
+  // `$`; the slice [acStart, caret] is the trigger + typed query text.
+  const cutFrom = acStart.value >= 0 ? Math.min(acStart.value, caret) : caret;
+  const before = text.slice(0, cutFrom);
+  const after = text.slice(caret);
+  const newText = before + chipText + after;
+  atoms.value = padAtoms(parse(newText));
+  emitValue(newText);
+  const newCaret = (before + chipText).length;
+  void nextTick(() => restoreCursorAtChar(newCaret));
+}
+
 function insertRefAtCursor(uuid: string, subCategories: string[]): void {
-  const atom: Atom = { kind: "ref", uuid, subCategories };
-  const cur = currentCursor();
-  const result = insertAtom(atoms.value, cur, atom);
-  emit("update:modelValue", serialise(result.atoms));
+  const chipText = subCategories.length > 0
+    ? "@{" + uuid + ":" + subCategories.join(",") + "}"
+    : "@{" + uuid + "}";
+  insertChipAtCaret(chipText);
 }
 
 function insertVarAtCursor(name: string): void {
-  const atom: Atom = { kind: "var", name };
-  const cur = currentCursor();
-  const result = insertAtom(atoms.value, cur, atom);
-  emit("update:modelValue", serialise(result.atoms));
+  insertChipAtCaret("$" + name);
+}
+
+/** Re-place the DOM Selection after a programmatic atom-list update.
+ *  Walks the same `meaningful` filter as `currentCursor` (skipping Vue
+ *  fragment markers) and lands the caret either inside a wp-rt__text
+ *  span (cursor offset inside text) or at a chip boundary (cursor at
+ *  atom edge). Called from a `nextTick` after `atoms.value` reassign
+ *  so Vue has finished its DOM patches before we touch the selection. */
+function restoreCursor(cur: Cursor): void {
+  const host = hostEl.value;
+  if (!host) return;
+  const meaningful: Node[] = [];
+  for (const child of host.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      if ((child.textContent ?? "").length > 0) meaningful.push(child);
+    } else {
+      meaningful.push(child);
+    }
+  }
+  const range = document.createRange();
+  const target = meaningful[cur.atomIndex];
+  if (!target) {
+    // Past the end — land at end of host.
+    const last = meaningful[meaningful.length - 1];
+    if (last && last.nodeType === Node.TEXT_NODE) {
+      range.setStart(last, (last.textContent ?? "").length);
+    } else if (last) {
+      range.setStartAfter(last);
+    } else {
+      range.setStart(host, 0);
+    }
+  } else if (target.nodeType === Node.TEXT_NODE) {
+    range.setStart(target, Math.min(cur.offset, (target.textContent ?? "").length));
+  } else {
+    const el = target as HTMLElement;
+    if (el.classList.contains("wp-rt__text")) {
+      const tn = el.firstChild;
+      if (tn && tn.nodeType === Node.TEXT_NODE) {
+        range.setStart(tn, Math.min(cur.offset, (tn.textContent ?? "").length));
+      } else {
+        range.setStart(el, 0);
+      }
+    } else {
+      // Chip — place caret BEFORE the chip element.
+      range.setStartBefore(target);
+    }
+  }
+  range.collapse(true);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+  host.focus();
 }
 
 function currentCursor(): Cursor {
@@ -330,7 +618,8 @@ function onPickerApply(subCats: string[]): void {
         ...target,
         subCategories: subCats,
       });
-      emit("update:modelValue", serialise(next));
+      atoms.value = padAtoms(next);
+      emitValue(serialise(atoms.value));
     }
   }
   pickerOpen.value = false;
@@ -348,7 +637,8 @@ function onPickerDelete(): void {
   if (pickerTargetAtomIndex.value !== null) {
     const idx = pickerTargetAtomIndex.value;
     const next = atoms.value.filter((_, i) => i !== idx);
-    emit("update:modelValue", serialise(next));
+    atoms.value = padAtoms(next);
+    emitValue(serialise(atoms.value));
   }
   pickerOpen.value = false;
 }
@@ -432,14 +722,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onPickerEscape);
 });
 
-// `refreshAutocompleteFromCaret` is currently orphaned because the `@input`
-// / `@select` / `@keyup` / `@click` handlers that used to call it lived on
-// the now-removed <textarea>/<input>. Preserve the function shape for Task 6
-// to wire up against the contenteditable host's selection events without
-// having to reimplement the probe-from-caret logic. Reference it here so
-// strict noUnusedLocals doesn't strip it.
-void refreshAutocompleteFromCaret;
-
 // --- Host DOM → raw text serialisation ---
 // Walks the contenteditable host's children and rebuilds the raw expression
 // string. Text nodes contribute their text directly (Vue's `<template
@@ -492,8 +774,179 @@ function readHostAsText(): string {
 }
 
 function onHostInput(): void {
+  // Browsers sometimes insert orphan text nodes directly as host
+  // children (between Vue's wp-rt__text spans) when typing at the host
+  // root, e.g. when the user clicks into an empty input. Vacuum those
+  // back into the nearest wp-rt__text span so Vue's render tree stays
+  // consistent with what's actually visible.
+  reconcileOrphanTextNodes();
   const next = readHostAsText();
-  if (next !== props.modelValue) emit("update:modelValue", next);
+  if (next !== props.modelValue) emitValue(next);
+  // After every input we re-probe the caret for autocomplete trigger
+  // — covers the user typing `@` mid-text, deleting back across a
+  // trigger, etc. Cheap (single text-slice + regex).
+  refreshAutocompleteFromHost();
+}
+
+/** Move any direct text-node children of the host into the nearest
+ *  preceding (or following) wp-rt__text span. The browser can drop
+ *  user-typed text directly into the host's child list when the caret
+ *  lands at a position outside any wp-rt__text span (e.g. focus on
+ *  empty input, click between two chips). Without this fix, the
+ *  orphan text bypasses Vue's v-for tracking and subsequent atom
+ *  reassigns can't reconcile against it. */
+function reconcileOrphanTextNodes(): void {
+  const host = hostEl.value;
+  if (!host) return;
+  const orphans: Text[] = [];
+  for (const child of host.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").length > 0) {
+      orphans.push(child as Text);
+    }
+  }
+  if (orphans.length === 0) return;
+  // Track caret position so we can restore it after the DOM mutation.
+  const sel = window.getSelection();
+  let caretRel: { node: Node; offset: number } | null = null;
+  if (sel && sel.rangeCount > 0) {
+    const r = sel.getRangeAt(0);
+    caretRel = { node: r.startContainer, offset: r.startOffset };
+  }
+  for (const orphan of orphans) {
+    const text = orphan.textContent ?? "";
+    if (!text) continue;
+    let target: HTMLElement | null = null;
+    let appendMode = true;
+    let prev = orphan.previousSibling;
+    while (prev) {
+      if (
+        prev.nodeType === Node.ELEMENT_NODE &&
+        (prev as HTMLElement).classList.contains("wp-rt__text")
+      ) {
+        target = prev as HTMLElement;
+        break;
+      }
+      prev = prev.previousSibling;
+    }
+    if (!target) {
+      let next = orphan.nextSibling;
+      while (next) {
+        if (
+          next.nodeType === Node.ELEMENT_NODE &&
+          (next as HTMLElement).classList.contains("wp-rt__text")
+        ) {
+          target = next as HTMLElement;
+          appendMode = false;
+          break;
+        }
+        next = next.nextSibling;
+      }
+    }
+    if (!target) continue;
+    const before = target.textContent ?? "";
+    target.textContent = appendMode ? before + text : text + before;
+    // If the caret was in this orphan, redirect into the target span.
+    if (caretRel && caretRel.node === orphan) {
+      const tn = target.firstChild;
+      if (tn && tn.nodeType === Node.TEXT_NODE) {
+        const newOff = appendMode ? before.length + caretRel.offset : caretRel.offset;
+        caretRel = { node: tn, offset: newOff };
+      }
+    }
+    host.removeChild(orphan);
+  }
+  if (caretRel) {
+    const range = document.createRange();
+    try {
+      range.setStart(caretRel.node, Math.min(caretRel.offset, (caretRel.node.textContent ?? "").length));
+      range.collapse(true);
+      const s = window.getSelection();
+      s?.removeAllRanges();
+      s?.addRange(range);
+    } catch {
+      // Caret restoration is best-effort; if the saved node is gone
+      // (e.g. the orphan we just removed and the restoration logic
+      // didn't catch it), let the browser figure it out.
+    }
+  }
+}
+
+/** Intercept `beforeinput` events so we can capture user typing that
+ *  the browser is ABOUT to land outside a wp-rt__text span. If the
+ *  current selection isn't inside a span, redirect into one before the
+ *  text gets inserted. */
+function onHostBeforeInput(ev: InputEvent): void {
+  if (props.disabled) return;
+  if (ev.inputType !== "insertText" && ev.inputType !== "insertCompositionText") return;
+  const host = hostEl.value;
+  if (!host) return;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const target = range.startContainer;
+  // If selection is already inside a wp-rt__text span (or its text
+  // node), nothing to do — browser will insert correctly.
+  if (target.nodeType === Node.TEXT_NODE) {
+    const parent = (target as Text).parentElement;
+    if (parent && parent.classList.contains("wp-rt__text")) return;
+  } else if (target.nodeType === Node.ELEMENT_NODE) {
+    const el = target as HTMLElement;
+    if (el.classList.contains("wp-rt__text")) return;
+  }
+  // Otherwise, find a wp-rt__text span to redirect into. Prefer the
+  // last span before the current selection; fall back to the first
+  // span overall.
+  const spans = host.querySelectorAll(".wp-rt__text");
+  if (spans.length === 0) return;
+  // Use the last span (typical "type at end" scenario).
+  const span = spans[spans.length - 1] as HTMLElement;
+  const newRange = document.createRange();
+  const tn = span.firstChild;
+  if (tn && tn.nodeType === Node.TEXT_NODE) {
+    newRange.setStart(tn, (tn.textContent ?? "").length);
+  } else {
+    newRange.setStart(span, 0);
+  }
+  newRange.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+  // Don't preventDefault — browser will now insert at the new selection.
+}
+
+function onHostFocus(): void {
+  focused.value = true;
+  // If the host gets focused but the caret didn't naturally land
+  // inside a wp-rt__text span (e.g. first focus on an empty input),
+  // place it inside the rightmost span so typing lands somewhere
+  // Vue can render against.
+  void nextTick(() => {
+    const host = hostEl.value;
+    if (!host) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const sc = range.startContainer;
+    if (sc.nodeType === Node.TEXT_NODE) {
+      const parent = (sc as Text).parentElement;
+      if (parent && parent.classList.contains("wp-rt__text")) return;
+    } else if (sc.nodeType === Node.ELEMENT_NODE) {
+      const el = sc as HTMLElement;
+      if (el.classList.contains("wp-rt__text")) return;
+    }
+    const spans = host.querySelectorAll(".wp-rt__text");
+    if (spans.length === 0) return;
+    const span = spans[spans.length - 1] as HTMLElement;
+    const r = document.createRange();
+    const tn = span.firstChild;
+    if (tn && tn.nodeType === Node.TEXT_NODE) {
+      r.setStart(tn, (tn.textContent ?? "").length);
+    } else {
+      r.setStart(span, 0);
+    }
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
 }
 
 // --- Atomic-chip keyboard handling ---
@@ -505,17 +958,46 @@ function onHostInput(): void {
 // the native handler.
 function onHostKeydown(ev: KeyboardEvent): void {
   if (props.disabled) return;
+  // Enter inside a single-line input commits / closes autocomplete
+  // rather than inserting a newline. Multi-line surfaces fall through.
+  if (ev.key === "Enter" && acOpen.value && acItems.value.length > 0) {
+    ev.preventDefault();
+    applyAutocomplete(acItems.value[acActive.value]);
+    return;
+  }
+  if (ev.key === "ArrowDown" && acOpen.value) {
+    ev.preventDefault();
+    acActive.value = Math.min(acItems.value.length - 1, acActive.value + 1);
+    return;
+  }
+  if (ev.key === "ArrowUp" && acOpen.value) {
+    ev.preventDefault();
+    acActive.value = Math.max(0, acActive.value - 1);
+    return;
+  }
+  if (ev.key === "Escape" && acOpen.value) {
+    ev.preventDefault();
+    acOpen.value = false;
+    return;
+  }
   if (ev.key === "Backspace") {
+    // Sync atoms from live DOM before surgery — user may have typed
+    // into text spans since the last reactive sync. Without this we'd
+    // operate on stale atoms.value and lose trailing edits.
+    const liveText = readHostAsText();
+    const live = padAtoms(parse(liveText));
     const cur = currentCursor();
     // Only intercept when the cursor sits at an atom boundary where the
     // PREVIOUS atom is a chip (ref/var). Otherwise let the browser
     // handle the keystroke natively (cheaper + matches platform feel).
     if (cur.offset === 0 && cur.atomIndex > 0) {
-      const prev = atoms.value[cur.atomIndex - 1];
+      const prev = live[cur.atomIndex - 1];
       if (prev && (prev.kind === "ref" || prev.kind === "var")) {
         ev.preventDefault();
-        const result = deleteBackward(atoms.value, cur);
-        emit("update:modelValue", serialise(result.atoms));
+        const result = deleteBackward(live, cur);
+        atoms.value = padAtoms(result.atoms);
+        emitValue(serialise(atoms.value));
+        void nextTick(() => restoreCursor(result.cursor));
       }
     }
     return;
@@ -588,10 +1070,11 @@ function moveCursorToAtomEnd(atomIndex: number): void {
       role="textbox"
       :aria-multiline="multiline"
       spellcheck="false"
-      @focus="focused = true"
+      @focus="onHostFocus"
       @blur="focused = false"
       @input="onHostInput"
       @keydown="onHostKeydown"
+      @beforeinput="onHostBeforeInput"
     >
       <template v-for="(atom, idx) in atoms" :key="idx">
         <RefChip

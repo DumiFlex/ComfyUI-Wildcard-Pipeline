@@ -143,7 +143,16 @@ function applyDraft(): void {
 // Walker extracted to `utils/library-suggestions.ts` (2026-05-09 cycle)
 // so derivation editor + future SPA views inherit the same picker.
 const wcSuggestions = computed<string[]>(
-  () => collectLibraryWildcardRefs(moduleStore, props.id, nameByUuid.value),
+  // `collectLibraryWildcardRefs` walks `store.items`, but the editor
+  // only populates `moduleStore.catalog` (the unfiltered cache) on
+  // mount via `fetchCatalog()`. `items` is the filtered-list cache
+  // owned by the library list view and stays empty on the editor.
+  // Pass an adapter that exposes the catalog under the `items` key.
+  () => collectLibraryWildcardRefs(
+    { items: moduleStore.catalog },
+    props.id,
+    nameByUuid.value,
+  ),
 );
 
 // UUID → display-name map used by RichTextInput to render `@{uuid}`
