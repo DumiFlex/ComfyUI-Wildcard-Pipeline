@@ -1,12 +1,25 @@
-// Combine TemplateSection — textarea bound to instance.template_override
-// (falling back to payload.template), detected $vars pills, multi-token
-// preview using shared preview-tokens, "stored as $name" line, and
-// per-section reset button when override active.
+// Combine TemplateSection — RichTextInput bound to
+// instance.template_override (falling back to payload.template), detected
+// $vars pills, multi-token preview using shared preview-tokens, "stored
+// as $name" line, and per-section reset button when override active.
 
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, flushPromises } from "@vue/test-utils";
 import TemplateSection from "./TemplateSection.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
+
+// RichTextInput is async-loaded by TemplateSection (defineAsyncComponent
+// chunk-split for bundle-size). Tests stub it with a tiny shim so we can
+// assert prop wiring + simulate emits without waiting for the dynamic
+// import resolver in jsdom.
+const RichTextInputStub = {
+  name: "RichTextInput",
+  props: ["modelValue", "varSuggestions", "multiline", "rows", "surface", "placeholder", "ariaLabel"],
+  emits: ["update:modelValue"],
+  template: `<div class="wp-rt-stub" :data-model-value="modelValue"></div>`,
+};
+
+const globalStubs = { RichTextInput: RichTextInputStub };
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -22,29 +35,34 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 }
 
 describe("combine TemplateSection", () => {
-  it("textarea reads payload.template when no override is set", () => {
-    const w = mount(TemplateSection, { props: { module: makeModule() } });
-    const ta = w.find<HTMLTextAreaElement>('[data-test="tpl-textarea"]').element;
-    expect(ta.value).toBe("$style portrait");
+  it("RichTextInput modelValue reads payload.template when no override is set", () => {
+    const w = mount(TemplateSection, {
+      props: { module: makeModule() },
+      global: { stubs: globalStubs },
+    });
+    expect(w.findComponent(RichTextInputStub).props("modelValue")).toBe("$style portrait");
   });
 
-  it("textarea reads instance.template_override when set", () => {
+  it("RichTextInput modelValue reads instance.template_override when set", () => {
     const w = mount(TemplateSection, {
       props: {
         module: makeModule({
           instance: { template_override: "{moody|cinematic} $style portrait of $subject" },
         }),
       },
+      global: { stubs: globalStubs },
     });
-    const ta = w.find<HTMLTextAreaElement>('[data-test="tpl-textarea"]').element;
-    expect(ta.value).toBe("{moody|cinematic} $style portrait of $subject");
+    expect(w.findComponent(RichTextInputStub).props("modelValue"))
+      .toBe("{moody|cinematic} $style portrait of $subject");
   });
 
   it("typing emits instance.template_override patch", async () => {
-    const w = mount(TemplateSection, { props: { module: makeModule() } });
-    const ta = w.find<HTMLTextAreaElement>('[data-test="tpl-textarea"]');
-    ta.element.value = "$style epic shot of $subject";
-    await ta.trigger("input");
+    const w = mount(TemplateSection, {
+      props: { module: makeModule() },
+      global: { stubs: globalStubs },
+    });
+    w.findComponent(RichTextInputStub).vm.$emit("update:modelValue", "$style epic shot of $subject");
+    await flushPromises();
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.template_override).toBe("$style epic shot of $subject");
@@ -55,10 +73,10 @@ describe("combine TemplateSection", () => {
       props: {
         module: makeModule({ instance: { template_override: "$style epic shot" } }),
       },
+      global: { stubs: globalStubs },
     });
-    const ta = w.find<HTMLTextAreaElement>('[data-test="tpl-textarea"]');
-    ta.element.value = "$style portrait"; // matches library default
-    await ta.trigger("input");
+    w.findComponent(RichTextInputStub).vm.$emit("update:modelValue", "$style portrait");
+    await flushPromises();
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.template_override).toBeNull();
@@ -143,54 +161,31 @@ describe("combine TemplateSection", () => {
     expect(patch.instance?.template_override).toBeNull();
   });
 
-  // ── Insert-var dropdown ─────────────────────────────────────────
+  // ── varSuggestions wiring ───────────────────────────────────────
+  // The insert-var dropdown was removed when the textarea was replaced
+  // with RichTextInput: the chip editor's `$`-trigger autocomplete now
+  // surfaces the same list. We verify the suggestion list is wired
+  // through to the editor with the same dedupe + sort behaviour.
 
-  it("insert-var button hidden when no upstream/sibling vars", () => {
-    const w = mount(TemplateSection, { props: { module: makeModule() } });
-    expect(w.find('[data-test="tpl-insert-var"]').exists()).toBe(false);
-  });
-
-  it("insert-var button visible when upstream vars present, opens menu on click", async () => {
+  it("wires empty varSuggestions when no upstream/sibling vars", () => {
     const w = mount(TemplateSection, {
-      props: { module: makeModule(), upstreamVars: ["color", "shape"] },
+      props: { module: makeModule() },
+      global: { stubs: globalStubs },
     });
-    expect(w.find('[data-test="tpl-insert-var"]').exists()).toBe(true);
-    expect(w.find('[data-test="tpl-var-menu"]').exists()).toBe(false);
-    await w.find('[data-test="tpl-insert-var"]').trigger("click");
-    expect(w.find('[data-test="tpl-var-menu"]').exists()).toBe(true);
-    expect(w.findAll('[data-test^="tpl-var-item-"]')).toHaveLength(2);
+    expect(w.findComponent(RichTextInputStub).props("varSuggestions")).toEqual([]);
   });
 
-  it("clicking a var menu item appends $name to template + emits override", async () => {
-    const w = mount(TemplateSection, {
-      props: {
-        module: makeModule({
-          payload: { output_var: "out", template: "" },
-        }),
-        upstreamVars: ["mood"],
-      },
-    });
-    await w.find('[data-test="tpl-insert-var"]').trigger("click");
-    await w.find('[data-test="tpl-var-item-mood"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.template_override).toBe("$mood");
-  });
-
-  it("dedupes upstream + sibling vars and sorts alphabetically", () => {
+  it("dedupes upstream + sibling vars and sorts alphabetically before passing to RichTextInput", () => {
     const w = mount(TemplateSection, {
       props: {
         module: makeModule(),
         upstreamVars: ["zebra", "alpha"],
         siblingVars: ["alpha", "mango"],
       },
+      global: { stubs: globalStubs },
     });
-    void w.find('[data-test="tpl-insert-var"]').trigger("click");
-    return w.vm.$nextTick().then(() => {
-      const items = w.findAll('[data-test^="tpl-var-item-"]');
-      const names = items.map((i) => i.text());
-      expect(names).toEqual(["$alpha", "$mango", "$zebra"]);
-    });
+    expect(w.findComponent(RichTextInputStub).props("varSuggestions"))
+      .toEqual(["alpha", "mango", "zebra"]);
   });
 
   // ── Live-preview pane (upstream-resolved) ───────────────────────

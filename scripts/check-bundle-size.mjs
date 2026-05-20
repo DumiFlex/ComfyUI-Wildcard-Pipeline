@@ -20,8 +20,13 @@ const jsonPath = jsonIdx >= 0 ? args[jsonIdx + 1] : null;
 // 2026-05-12: total bumped 256 → 300 KB to fit Batch 2 bundle drag/drop
 // overhaul + headroom for follow-up batches without per-task contortion.
 // Cycle was explicitly scoped + approved.
+// 2026-05-20: total bumped 300 → 312 KB to fit RichTextInput atomic-chip
+// editor reused inside the canvas combine TemplateSection (lazy chunk
+// ~9 KB gzipped). The textarea-with-pills pattern was replaced with the
+// SPA's chip editor so canvas + SPA share one $var/@ref editing surface.
+// Explicitly approved feature request.
 const ENTRY_LIMIT = 30 * 1024;      // 30 KB
-const TOTAL_LIMIT = 300 * 1024;     // 300 KB
+const TOTAL_LIMIT = 312 * 1024;     // 312 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

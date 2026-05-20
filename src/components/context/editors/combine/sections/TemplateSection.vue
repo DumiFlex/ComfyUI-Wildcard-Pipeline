@@ -10,11 +10,18 @@
  * because combine doesn't recurse into nested wildcards (refs only
  * resolve from wildcard surface — RefOutOfSurfaceError at engine).
  */
-import { computed, ref } from "vue";
+import { computed, defineAsyncComponent } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
+
+// Async-import the rich-text editor so the chunk is split into its own
+// asset and only pulled in when the combine instance modal opens. Bundle
+// budget is tight — eager import pushes total over.
+const RichTextInput = defineAsyncComponent(
+  () => import("../../../../../manager/components/RichTextInput.vue"),
+);
 
 const props = withDefaults(
   defineProps<{
@@ -35,12 +42,9 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
-const taRef = ref<HTMLTextAreaElement | null>(null);
-const showVarMenu = ref(false);
-
 /** Combined upstream + sibling vars, deduped, alpha-sorted. Drives
- *  both the validity-coloring on detected pills and the insert-var
- *  dropdown. */
+ *  both the validity-coloring on detected pills and the
+ *  RichTextInput's `$`-trigger autocomplete suggestion list. */
 const availableVars = computed<string[]>(() => {
   const set = new Set<string>();
   for (const n of props.upstreamVars) if (n) set.add(n);
@@ -170,8 +174,7 @@ const detectedSummary = computed(() => {
   return parts.join(" · ");
 });
 
-function onTemplateInput(ev: Event): void {
-  const next = (ev.target as HTMLTextAreaElement).value;
+function onTemplateInput(next: string): void {
   // Collapse: if user types back to library default, drop the override
   // (null) so engine reads payload.template directly. Same precedence
   // pattern wildcard's variable_binding empty-collapse uses.
@@ -182,38 +185,6 @@ function onTemplateInput(ev: Event): void {
 function onResetTemplate(): void {
   emit("update", patchInstance(props.module, "template_override", null));
 }
-
-/** Insert `$varname` at the textarea's current caret position. Falls
- *  back to appending when no element ref / focus state. Closes the
- *  dropdown after each pick so it acts like a real autocomplete. */
-function insertVar(name: string): void {
-  const ta = taRef.value;
-  const insertion = `$${name}`;
-  const current = templateValue.value;
-  let next: string;
-  if (ta && typeof ta.selectionStart === "number") {
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd ?? start;
-    next = current.slice(0, start) + insertion + current.slice(end);
-    // Persist override + restore caret after the inserted token so
-    // typing continues smoothly. Vue re-renders synchronously after
-    // the emit; the setSelectionRange call below runs after that.
-    const caret = start + insertion.length;
-    queueMicrotask(() => {
-      ta.focus();
-      ta.setSelectionRange(caret, caret);
-    });
-  } else {
-    next = current + insertion;
-  }
-  showVarMenu.value = false;
-  const collapsed = next === libraryTemplate.value ? null : next;
-  emit("update", patchInstance(props.module, "template_override", collapsed));
-}
-
-function toggleVarMenu(): void {
-  showVarMenu.value = !showVarMenu.value;
-}
 </script>
 
 <template>
@@ -222,36 +193,6 @@ function toggleVarMenu(): void {
       <span class="wp-tpl__label">Template</span>
       <span class="wp-tpl__hint">$name refs · $$ for literal $ · {a|b|c} inline choice</span>
       <div class="wp-tpl__head-actions">
-        <div class="wp-tpl__menu-wrap">
-          <button
-            v-if="availableVars.length > 0"
-            type="button"
-            class="wp-tpl__menu-btn"
-            data-test="tpl-insert-var"
-            :title="`Insert $var (${availableVars.length} available)`"
-            aria-label="Insert variable"
-            :aria-expanded="showVarMenu"
-            @click="toggleVarMenu"
-          ><i class="pi pi-plus" aria-hidden="true" /> $var</button>
-          <div
-            v-if="showVarMenu"
-            class="wp-tpl__menu"
-            data-test="tpl-var-menu"
-            role="listbox"
-          >
-            <button
-              v-for="name in availableVars"
-              :key="name"
-              type="button"
-              class="wp-tpl__menu-item"
-              :class="varColorClass(name)"
-              :data-test="`tpl-var-item-${name}`"
-              role="option"
-              :aria-selected="false"
-              @click="insertVar(name)"
-            >${{ name }}</button>
-          </div>
-        </div>
         <button
           v-if="templateOverridden"
           type="button"
@@ -264,16 +205,17 @@ function toggleVarMenu(): void {
       </div>
     </div>
 
-    <textarea
-      ref="taRef"
-      class="wp-tpl__input"
-      :class="{ 'wp-tpl__input--mod': templateOverridden }"
-      data-test="tpl-textarea"
-      :value="templateValue"
+    <RichTextInput
+      :model-value="templateValue"
+      :var-suggestions="availableVars"
+      :multiline="true"
+      :rows="3"
+      surface="combine"
       :placeholder="libraryTemplate || '$first_name, a $age-year-old with $hair_color hair'"
       aria-label="Template"
-      rows="3"
-      @input="onTemplateInput"
+      data-test="tpl-textarea"
+      :class="{ 'wp-tpl__input--mod': templateOverridden }"
+      @update:model-value="onTemplateInput"
     />
 
     <div class="wp-tpl__detected">
