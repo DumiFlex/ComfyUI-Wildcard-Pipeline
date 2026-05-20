@@ -103,8 +103,12 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
  * to --wp-bundle-default when no explicit inner color was set. */
 .wp-bundle.wp-bundle--nested {
   /* Subtle inset so the nested frame's left rail doesn't visually
-   * merge with the outer's left rail when they share a color. */
-  margin-left: 2px;
+   * merge with the outer's left rail when they share a color, plus
+   * a few px of vertical breathing room so the inner frame's borders
+   * never look flush against the outer's frame chrome — without this
+   * the bottom of the inner frame sits flush against the outer's
+   * bottom border and the outer reads as "open at the bottom". */
+  margin: 2px 2px 4px 2px;
 }
 .wp-bundle.wp-bundle--nested > .wp-bundle-children {
   padding: 4px 5px 5px 5px;
