@@ -18,7 +18,7 @@ export interface BundleFrameCtx {
   bundleInternalState: (b: BundleInstance) => "all" | "none" | "partial" | null;
   bundleLockState: (b: BundleInstance) => "all" | "none" | "partial" | null;
   isBundleInsideTarget: (uid: string) => boolean;
-  bundleHeaderGap: (uid: string) => "before" | null;
+  bundleHeaderGap: (uid: string) => "before" | "after" | null;
   recentDropUids: Ref<Set<string>>;
   pulseDelayFor: (uid: string | null | undefined) => string;
   toggleBundleCollapsed: (uid: string) => void;

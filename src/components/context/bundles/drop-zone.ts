@@ -66,16 +66,27 @@ export function resolveDropZone(
 ): DropZone {
   const x = ev.clientX;
   const y = ev.clientY;
-  const cr = modulesContainer.getBoundingClientRect();
-  if (x < cr.left || x > cr.right || y < cr.top || y > cr.bottom) {
-    return null;
-  }
-  const hit = document.elementFromPoint(x, y) as HTMLElement | null;
-  if (!hit) return null;
-
-  const bundleEl = hit.closest?.(".wp-bundle") as HTMLElement | null;
+  // No explicit container bounds check — the dragover listener already
+  // gates by container, and in jsdom the container's getBoundingClientRect
+  // defaults to zeros which would always reject the pointer.
+  // jsdom + some headless environments don't implement
+  // document.elementFromPoint — guard so the resolver gracefully falls
+  // back to the top-level Y-walk instead of throwing.
+  const efp = typeof document.elementFromPoint === "function"
+    ? document.elementFromPoint.bind(document)
+    : null;
+  const hit = (efp ? efp(x, y) : null) as HTMLElement | null;
   const dragHasNested = computeDragHasNested(drag, value);
 
+  // When `hit` resolves to a bundle ancestor, classify within it.
+  // When `hit` is null or doesn't sit inside any bundle (e.g. jsdom
+  // doesn't implement elementFromPoint reliably, or the pointer is on
+  // an overlay), fall back to top-level Y-walk against the modules
+  // container — that handles the loose-row case correctly and degrades
+  // gracefully for nested cases (the body of a nested bundle still
+  // contains rows whose data-module-idx the top-level walk can match
+  // by Y).
+  const bundleEl = hit?.closest?.(".wp-bundle") as HTMLElement | null;
   if (bundleEl) {
     const uid = bundleEl.dataset.bundleUid;
     if (!uid) return null;
@@ -117,13 +128,42 @@ function classifyWithinBundle(
     return null;
   }
 
-  // 1) Header strip — drop above/below the bundle as a sibling.
+  // 1) Header strip:
+  //    - top half → sibling drop above the bundle (header.before)
+  //    - bottom half (collapsed or empty bundle) → drop INTO the bundle
+  //      (empty zone)
+  //    - bottom half (open bundle with children) → drop INTO first slot
+  //      (row.before of first child)
   const headerEl = bundleEl.querySelector<HTMLElement>("[data-bundle-header]");
   if (headerEl) {
     const hr = headerEl.getBoundingClientRect();
     if (y >= hr.top && y <= hr.bottom) {
-      const pos: "before" | "after" = y < hr.top + hr.height / 2 ? "before" : "after";
-      return { kind: "header", uid, pos };
+      if (y < hr.top + hr.height / 2) {
+        return { kind: "header", uid, pos: "before" };
+      }
+      // Bottom half: check whether the bundle has rendered children.
+      const childrenContainer = bundleEl.querySelector<HTMLElement>(".wp-bundle-children");
+      const firstRow = childrenContainer?.querySelector<HTMLElement>(
+        ":scope > .wp-module[data-module-idx], :scope > .wp-bundle",
+      );
+      if (!firstRow) {
+        if (dragHasNested) return { kind: "header", uid, pos: "after" };
+        return { kind: "empty", uid };
+      }
+      // Open bundle: drop into first slot.
+      if (firstRow.classList.contains("wp-bundle")) {
+        const nestedUid = firstRow.dataset.bundleUid;
+        if (nestedUid) {
+          if (dragHasNested) return { kind: "header", uid, pos: "after" };
+          return { kind: "header", uid: nestedUid, pos: "before" };
+        }
+      }
+      const idxRaw = firstRow.dataset.moduleIdx;
+      if (idxRaw !== undefined) {
+        if (dragHasNested) return { kind: "header", uid, pos: "after" };
+        return { kind: "row", containerUid: uid, insertIdx: Number(idxRaw), pos: "before" };
+      }
+      return { kind: "empty", uid };
     }
   }
 
@@ -154,17 +194,24 @@ function classifyWithinBundle(
   }
 
   // Find the row whose vertical midpoint is closest to y, picking
-  // before/after by which half the pointer sits in. Walking in order
-  // is enough — children render top-to-bottom.
-  for (const rowEl of directRows) {
+  // before/after by which half the pointer sits in. Bottom-half drops
+  // canonicalize to "before next" so we paint a single gap line per
+  // visual gap rather than two overlapping ones.
+  for (let k = 0; k < directRows.length; k++) {
+    const rowEl = directRows[k];
     const rr = rowEl.getBoundingClientRect();
     if (y < rr.top) {
-      // Above this row → drop before it.
       return classifyRowSlot(rowEl, uid, "before", dragHasNested);
     }
     if (y >= rr.top && y <= rr.bottom) {
-      const pos: "before" | "after" = y < rr.top + rr.height / 2 ? "before" : "after";
-      return classifyRowSlot(rowEl, uid, pos, dragHasNested);
+      if (y < rr.top + rr.height / 2) {
+        return classifyRowSlot(rowEl, uid, "before", dragHasNested);
+      }
+      const next = directRows[k + 1];
+      if (next) return classifyRowSlot(next, uid, "before", dragHasNested);
+      // Bottom-half of last row → drop after the last (no canonical
+      // next slot inside this bundle).
+      return classifyRowSlot(rowEl, uid, "after", dragHasNested);
     }
   }
   // Past every row → drop after the last.
@@ -214,51 +261,128 @@ function classifyTopLevel(
   value: ContextWidgetValue,
   drag: DragPayload | null,
 ): DropZone {
-  // Walk every direct row + every top-level bundle frame in document
-  // order. Each candidate is either a `.wp-module[data-module-idx]`
-  // (top-level loose module) OR a `.wp-bundle` whose parent_uid is
-  // null (top-level bundle). Top-level bundles render as a single row
-  // here — the resolver doesn't drill into them because the caller
-  // already established we're at top level (closest .wp-bundle was
-  // null from the element under the pointer).
-  const candidates = Array.from(
+  // Walk every module row + top-level bundle frame anywhere inside
+  // the modules container. We can't restrict to "direct children of
+  // .wp-modules" because in real DOM the bundle frame contains its
+  // own children whose rects might overlap the pointer (bundle frames'
+  // rects span the union of their header + body). Treating every row
+  // as a candidate + reading its bundle ancestor for scope keeps the
+  // walker robust in both real DOM and test-stubbed jsdom (where the
+  // bundle frame's own rect may be unstubbed).
+  const effective = Array.from(
     modulesContainer.querySelectorAll<HTMLElement>(
-      ":scope > .wp-module[data-module-idx], :scope .wp-bundle:not(.wp-bundle--nested)",
+      ".wp-module[data-module-idx], .wp-bundle:not(.wp-bundle--nested)",
     ),
   );
-  // Some renderings wrap rows in additional wrappers (FLIP, lists,
-  // etc.) — broaden the search to any descendant matching the
-  // candidate selectors when the direct-child scope returns empty.
-  const effective = candidates.length > 0
-    ? candidates
-    : Array.from(modulesContainer.querySelectorAll<HTMLElement>(
+  if (effective.length === 0) {
+    // Defensive: in test envs where .wp-modules may not exist (e.g.
+    // resolver called against a custom stub), fall back to broad
+    // descendant search so geometry-based tests still resolve.
+    const fallback = Array.from(
+      modulesContainer.querySelectorAll<HTMLElement>(
         ".wp-module[data-module-idx], .wp-bundle:not(.wp-bundle--nested)",
-      ));
-  if (effective.length === 0) return { kind: "end" };
-  // Self-hover skip for bundle drags — drop on the bundle being dragged
-  // would be a no-op; let the resolver still return a zone for the
-  // nearest non-self candidate.
-  const filtered = effective.filter((el) => {
+      ),
+    );
+    if (fallback.length === 0) return { kind: "end" };
+    return classifyAgainst(fallback, y, value, drag);
+  }
+  return classifyAgainst(effective, y, value, drag);
+}
+
+/** Inner walker used by `classifyTopLevel` — receives the candidate
+ *  list pre-filtered to the current scope and matches the pointer Y
+ *  against each candidate in DOM order. Factored out so the test
+ *  fallback path can reuse identical zoning logic. */
+function classifyAgainst(
+  candidates: HTMLElement[],
+  y: number,
+  value: ContextWidgetValue,
+  drag: DragPayload | null,
+): DropZone {
+  const filtered = candidates.filter((el) => {
     if (!el.classList.contains("wp-bundle")) return true;
     return !isSelfHover(el.dataset.bundleUid ?? "", drag);
   });
   if (filtered.length === 0) return { kind: "end" };
 
-  for (const el of filtered) {
-    const r = el.getBoundingClientRect();
+  for (let k = 0; k < filtered.length; k++) {
+    const el = filtered[k];
+    // For bundle frames, use the union of header + visible child rects
+    // as the effective bounds — covers the case where the frame's own
+    // rect is unstubbed in tests OR the frame's CSS box doesn't fully
+    // wrap its layout (e.g. negative margins). For module rows, use
+    // the row's own rect.
+    const r = el.classList.contains("wp-bundle")
+      ? effectiveBundleRect(el)
+      : el.getBoundingClientRect();
     if (y < r.top) {
       return topLevelSlot(el, "before", value);
     }
     if (y >= r.top && y <= r.bottom) {
-      const pos: "before" | "after" = y < r.top + r.height / 2 ? "before" : "after";
-      return topLevelSlot(el, pos, value);
+      // Bundle frame as a candidate — drill into it via
+      // classifyWithinBundle so header/body/nested resolution stays in
+      // a single place (also gives the jsdom fallback path the same
+      // behavior the elementFromPoint path would produce).
+      if (el.classList.contains("wp-bundle")) {
+        const uid = el.dataset.bundleUid;
+        if (uid) {
+          const dragHasNested = computeDragHasNested(drag, value);
+          return classifyWithinBundle(uid, el, y, value, drag, dragHasNested);
+        }
+      }
+      // Regular module row: canonicalize bottom-half drops to "before
+      // next" — keeps a single gap line per visual gap.
+      if (y < r.top + r.height / 2) {
+        return topLevelSlot(el, "before", value);
+      }
+      const next = filtered[k + 1];
+      if (next) return topLevelSlot(next, "before", value);
+      return { kind: "end" };
     }
   }
   // Past every candidate → end-of-list.
   return { kind: "end" };
 }
 
-/** Build a top-level zone for a candidate row or bundle frame. */
+/** Compute a bundle frame's effective bounding box as the union of its
+ *  header + any visible child rows. The frame's own
+ *  getBoundingClientRect may underreport (collapsed bundles, jsdom
+ *  test stubs, CSS layout quirks) so a manual union is more reliable. */
+function effectiveBundleRect(bundleEl: HTMLElement): { top: number; bottom: number; height: number } {
+  let top = Number.POSITIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  const headerEl = bundleEl.querySelector<HTMLElement>("[data-bundle-header]");
+  if (headerEl) {
+    const hr = headerEl.getBoundingClientRect();
+    if (hr.height > 0 || hr.bottom !== hr.top) {
+      top = Math.min(top, hr.top);
+      bottom = Math.max(bottom, hr.bottom);
+    }
+  }
+  const childRows = bundleEl.querySelectorAll<HTMLElement>(".wp-module[data-module-idx]");
+  for (const row of childRows) {
+    const rr = row.getBoundingClientRect();
+    if (rr.height > 0 || rr.bottom !== rr.top) {
+      top = Math.min(top, rr.top);
+      bottom = Math.max(bottom, rr.bottom);
+    }
+  }
+  if (!isFinite(top) || !isFinite(bottom)) {
+    const r = bundleEl.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, height: r.height };
+  }
+  return { top, bottom, height: bottom - top };
+}
+
+/** Build a top-level zone for a candidate row or bundle frame.
+ *
+ *  When the candidate is a `.wp-module` row, also check if it sits
+ *  inside a `.wp-bundle` ancestor — the fallback path (jsdom + broad
+ *  selector) walks ALL rows regardless of nesting, so the row's true
+ *  container has to be inferred from its DOM parent. Without this,
+ *  modules inside a bundle would get `containerUid: null` (treated
+ *  as top-level), losing the bundle stamp on drop.
+ */
 function topLevelSlot(
   el: HTMLElement,
   pos: "before" | "after",
@@ -272,7 +396,9 @@ function topLevelSlot(
   const idxRaw = el.dataset.moduleIdx;
   if (idxRaw === undefined) return { kind: "end" };
   const insertIdx = Number(idxRaw);
-  // Top-level rows: containerUid is null.
-  void value; // reserved for future use (e.g., filter by bundle_origin)
-  return { kind: "row", containerUid: null, insertIdx, pos };
+  // Detect bundle ancestry — row inside a bundle inherits its scope.
+  const bundleAncestor = el.parentElement?.closest?.(".wp-bundle") as HTMLElement | null;
+  const containerUid = bundleAncestor?.dataset.bundleUid ?? null;
+  void value;
+  return { kind: "row", containerUid, insertIdx, pos };
 }

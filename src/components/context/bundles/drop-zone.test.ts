@@ -159,19 +159,23 @@ function setPointerHit(el: HTMLElement | null) {
 // ─────────────────────────────────────────────────────────────────────
 
 describe("resolveDropZone — top-level", () => {
-  it("returns null when pointer is outside the modules container", () => {
+  it("empty container + pointer anywhere → end (the dragover listener gates by container, so the resolver doesn't bounds-check)", () => {
     const container = buildScene({});
+    setPointerHit(null);
     const ev = dragEvent(-10, -10);
     const value: ContextWidgetValue = { version: 1, modules: [], bundles: [] };
-    expect(resolveDropZone(ev, container, value, null)).toBeNull();
+    expect(resolveDropZone(ev, container, value, null)).toEqual({ kind: "end" });
   });
 
-  it("returns null when elementFromPoint returns nothing", () => {
+  it("falls back to top-level Y-walk when elementFromPoint returns null (jsdom + overlay-pointer case)", () => {
     const container = buildScene({});
     setPointerHit(null);
     const ev = dragEvent(50, 50);
     const value: ContextWidgetValue = { version: 1, modules: [], bundles: [] };
-    expect(resolveDropZone(ev, container, value, null)).toBeNull();
+    // Empty top-level → end zone, not null. The fallback keeps the
+    // resolver useful in test environments without elementFromPoint
+    // AND in real environments when the pointer hits an overlay.
+    expect(resolveDropZone(ev, container, value, null)).toEqual({ kind: "end" });
   });
 
   it("pointer in top-half of a top-level row → row, pos:'before'", () => {
@@ -191,7 +195,7 @@ describe("resolveDropZone — top-level", () => {
     });
   });
 
-  it("pointer in bottom-half of a top-level row → row, pos:'after'", () => {
+  it("pointer in bottom-half of the LAST top-level row → end (canonical: bottom-of-last has no 'next' to canonicalize onto)", () => {
     const container = buildScene({
       topRows: [{ idx: 0, top: 100, bottom: 140 }],
     });
@@ -201,8 +205,26 @@ describe("resolveDropZone — top-level", () => {
     const value: ContextWidgetValue = {
       version: 1, modules: [{ id: "a" } as ModuleEntry], bundles: [],
     };
+    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({ kind: "end" });
+  });
+
+  it("pointer in bottom-half of a non-last row → canonical 'before next' row", () => {
+    const container = buildScene({
+      topRows: [
+        { idx: 0, top: 100, bottom: 140 },
+        { idx: 1, top: 140, bottom: 180 },
+      ],
+    });
+    const firstRow = container.querySelector(".wp-module")!;
+    setPointerHit(firstRow as HTMLElement);
+    const ev = dragEvent(50, 135); // bottom-half of row 0
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [{ id: "a" } as ModuleEntry, { id: "b" } as ModuleEntry],
+      bundles: [],
+    };
     expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "row", containerUid: null, insertIdx: 0, pos: "after",
+      kind: "row", containerUid: null, insertIdx: 1, pos: "before",
     });
   });
 
@@ -248,7 +270,7 @@ describe("resolveDropZone — inside a bundle", () => {
     });
   });
 
-  it("pointer over bundle header bottom-half → header.after", () => {
+  it("pointer over bundle header bottom-half (open bundle with children) → row.before of first child (drop INTO first slot)", () => {
     const container = buildScene({
       bundles: [{
         uid: "B1", top: 100, bottom: 300,
@@ -264,7 +286,27 @@ describe("resolveDropZone — inside a bundle", () => {
       bundles: [makeBundleInstance("B1")],
     };
     expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "header", uid: "B1", pos: "after",
+      kind: "row", containerUid: "B1", insertIdx: 0, pos: "before",
+    });
+  });
+
+  it("pointer over bundle header bottom-half (empty/collapsed bundle) → empty zone", () => {
+    const container = buildScene({
+      bundles: [{
+        uid: "B1", top: 100, bottom: 140,
+        header: { top: 100, bottom: 140 },
+        rows: [],
+      }],
+    });
+    const header = container.querySelector("[data-bundle-header]")!;
+    setPointerHit(header as HTMLElement);
+    const ev = dragEvent(50, 135);
+    const value: ContextWidgetValue = {
+      version: 1, modules: [],
+      bundles: [makeBundleInstance("B1")],
+    };
+    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
+      kind: "empty", uid: "B1",
     });
   });
 

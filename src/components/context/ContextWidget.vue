@@ -27,7 +27,10 @@ import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { buildLibraryChildren, toChildSnapshot } from "./bundles/save";
-import { reconcileBundleRanges, type DropZone } from "./bundles/drag";
+import { reconcileBundleRanges } from "./bundles/drag";
+import { resolveDropZone, type DropZone } from "./bundles/drop-zone";
+import { applyDrop, type DropPayload } from "./bundles/drop";
+import BundleDropBar from "./bundles/BundleDropBar.vue";
 import {
   captureRects,
   applyFlip,
@@ -146,94 +149,155 @@ const suppressMove = ref(false);
 let suppressMoveTimer: number | null = null;
 
 // Gap-metaphor indicator: rows that own a "before"/"after" slot get a
-// margin so the gap opens; the bar element paints inside that gap.
-// Bundle "before"/"after" zones DO NOT project onto bundle-member rows
-// — the .wp-bundle div itself handles its outer margin via
-// bundleHeaderGap(), so projecting onto the first child would open a
-// second gap INSIDE the bundle while the bar paints OUTSIDE.
+// margin so the bar paints in the visual breathing room. With the new
+// container-scoped zone shape, every `row` zone references modules by
+// their global `insertIdx`, regardless of scope — top-level rows and
+// nested bundle children alike. The CSS class on each row opens the
+// matching gap.
 function rowGap(idx: number): "before" | "after" | null {
   const z = dragOver.value;
-  if (!z) return null;
-  if (z.kind === "row") return z.idx === idx ? z.pos : null;
-  if (z.kind === "bundle-slot" && z.targetIdx === idx) return z.before ? "before" : "after";
-  return null;
+  if (!z || z.kind !== "row") return null;
+  return z.insertIdx === idx ? z.pos : null;
 }
 
-// True when the drag is targeting this bundle's frame — header bottom
-// half from outside, or any bundle-slot with crossing=true. Drives the
-// `.wp-bundle-overlay--drop-inside` highlight.
+// True when the drag is targeting this bundle as a "drop inside" body.
+// Fires for:
+//   - empty zone on this uid (collapsed bundle / empty body)
+//   - row zone with containerUid = this uid AND the drag source isn't
+//     already a child of this bundle (i.e. crossing into it from outside)
+// Drives the `.wp-bundle--drop-inside` highlight border so the user
+// gets a "this whole bundle is the target" affordance when carrying a
+// row from outside.
 function isBundleInsideTarget(uid: string): boolean {
   const z = dragOver.value;
   if (!z) return false;
-  if (z.kind === "bundle" && z.uid === uid && z.zone === "inside") return true;
-  if (z.kind === "bundle-slot" && z.uid === uid && z.crossing) return true;
+  if (z.kind === "empty" && z.uid === uid) return true;
+  if (z.kind === "row" && z.containerUid === uid) {
+    const ds = dragState.value;
+    if (ds?.kind === "module" && (ds.sourceBundleUid ?? null) !== uid) return true;
+    if (ds?.kind === "bundle" && ds.bundleUid !== uid) return true;
+  }
   return false;
 }
 
-// Bundle header gets `wp-gap-before` when the bundle "before" zone is
-// active — opens a gap above the header so the bar paints in it.
-function bundleHeaderGap(uid: string): "before" | null {
+// Bundle header gets `wp-gap-before` when a `header` zone targets it
+// with pos:"before" — opens a gap above the bundle so the bar paints
+// in it. Sibling-after drops open the gap below; that's handled by
+// rowGap on the next top-level row OR by the bundle's own
+// `wp-gap-after` class (added below).
+function bundleHeaderGap(uid: string): "before" | "after" | null {
   const z = dragOver.value;
-  return z?.kind === "bundle" && z.uid === uid && z.zone === "before" ? "before" : null;
+  if (!z || z.kind !== "header" || z.uid !== uid) return null;
+  return z.pos;
 }
 
-// Computed gap-bar position relative to the modules container. Null when
-// no zone needs a bar (inside-bundle / end / null). Uses offsetTop/Left
-// walkers so the values reflect post-margin layout (not the mid-flight
-// rect from getBoundingClientRect).
-const gapBarStyle = computed<Record<string, string> | null>(() => {
+/** Looks up the indicator-bar position for a drop container.
+ *
+ *  `containerUid = null` → top-level list (the `.wp-modules` container
+ *  inside the `.wp-modules-frame` ref).
+ *  `containerUid = bundleUid` → that bundle's `.wp-bundle-children`
+ *  scrolling body.
+ *
+ *  Returns `{top}` in pixels relative to that container's content box
+ *  when the resolved zone targets the container; null otherwise. The
+ *  BundleDropBar component renders an absolutely-positioned line at the
+ *  returned offset.
+ *
+ *  Zone → anchor mapping:
+ *    - row.before  → top edge of row[insertIdx]
+ *    - row.after   → bottom edge of row[insertIdx]
+ *    - empty       → vertical center of the container
+ *    - header.before → top edge of the bundle's frame (paints at
+ *                      container scope — its parent's body)
+ *    - header.after  → bottom edge of the bundle's frame
+ *    - end         → bottom edge of the last child of the top-level
+ *                    container; null for non-top-level containers
+ */
+function dropBarFor(containerUid: string | null): { top: number } | null {
   const z = dragOver.value;
-  const container = modulesContainer.value;
-  if (!z || !container) return null;
+  const containerEl = findContainerEl(containerUid);
+  if (!z || !containerEl) return null;
+  const cr = containerEl.getBoundingClientRect();
 
-  let anchor: HTMLElement | null = null;
-  let beforeSide = true;
-  if (z.kind === "row") {
-    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${z.idx}"]`);
-    beforeSide = z.pos === "before";
-  } else if (z.kind === "bundle-slot") {
-    anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${z.targetIdx}"]`);
-    beforeSide = z.before;
-  } else if (z.kind === "bundle" && z.zone === "before") {
-    anchor = container.querySelector<HTMLElement>(`[data-bundle-uid="${z.uid}"][data-bundle-header]`);
-    beforeSide = true;
-  } else if (z.kind === "bundle" && z.zone === "after") {
-    const b = (value.value.bundles ?? []).find((bb) => bb._uid === z.uid);
-    if (b) anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${b.end_idx}"]`);
-    beforeSide = false;
-  } else if (z.kind === "end") {
-    const n = value.value.modules.length;
-    if (n === 0) return null;
-    const lastIdx = n - 1;
-    // If the last module lives inside a bundle, anchor on the bundle
-    // DIV itself so the bar lands below the bundle's frame border
-    // (anchoring on the last child puts the bar inside the bundle's
-    // padding-bottom area).
-    const lastBundle = (value.value.bundles ?? []).find((b) => b.end_idx === lastIdx);
-    if (lastBundle) {
-      anchor = container.querySelector<HTMLElement>(`.wp-bundle[data-bundle-uid="${lastBundle._uid}"]`);
-    } else {
-      anchor = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${lastIdx}"]`);
+  // Helper: convert a viewport y into container-relative offsetTop.
+  const rel = (y: number): number => y - cr.top;
+
+  switch (z.kind) {
+    case "row": {
+      // The row belongs to this container only when its container scope
+      // matches. Top-level vs bundle-scope: containerUid must equal
+      // z.containerUid.
+      if ((z.containerUid ?? null) !== (containerUid ?? null)) return null;
+      const rowEl = findRowEl(z.insertIdx, containerEl);
+      if (!rowEl) return null;
+      const rr = rowEl.getBoundingClientRect();
+      return { top: z.pos === "before" ? rel(rr.top) : rel(rr.bottom) };
     }
-    beforeSide = false;
-  } else {
-    return null;
+    case "empty": {
+      // empty fires when the bundle's body is empty; the container's
+      // body anchors the bar at its vertical center.
+      if (containerUid !== z.uid) return null;
+      return { top: cr.height / 2 };
+    }
+    case "header": {
+      // The target bundle's frame is a child of THIS container. Find
+      // the bundle's wrapper and anchor on its top/bottom edge.
+      const bundleEl = findBundleFrameEl(z.uid, containerEl);
+      if (!bundleEl) return null;
+      const br = bundleEl.getBoundingClientRect();
+      return { top: z.pos === "before" ? rel(br.top) : rel(br.bottom) };
+    }
+    case "end": {
+      // end fires only at top-level scope.
+      if (containerUid !== null) return null;
+      // Anchor on the bottom edge of the LAST child in the top-level
+      // container so the bar sits visually past the bottom of the list.
+      const children = Array.from(
+        containerEl.querySelectorAll<HTMLElement>(":scope > .wp-module, :scope > .wp-bundle"),
+      );
+      if (children.length === 0) return { top: cr.height / 2 };
+      const last = children[children.length - 1];
+      const lr = last.getBoundingClientRect();
+      return { top: rel(lr.bottom) };
+    }
   }
-  if (!anchor) return null;
+}
 
-  // Walk offsetTop/Left from anchor up to the modules container so the
-  // values reflect the post-margin layout immediately.
-  let oTop = 0;
-  let oLeft = 0;
-  for (let cur: HTMLElement | null = anchor; cur && cur !== container; cur = cur.offsetParent as HTMLElement | null) {
-    oTop += cur.offsetTop;
-    oLeft += cur.offsetLeft;
+/** Locate the offset container for a given scope. Top-level → the
+ *  `.wp-modules` div inside modulesContainer.value. Nested → that
+ *  bundle's `.wp-bundle-children`. Returns null when the container
+ *  isn't mounted yet (e.g. early reactive read). */
+function findContainerEl(containerUid: string | null): HTMLElement | null {
+  const frame = modulesContainer.value;
+  if (!frame) return null;
+  if (containerUid === null) {
+    return frame.querySelector<HTMLElement>(":scope > .wp-modules");
   }
-  const h = anchor.offsetHeight;
-  const w = anchor.offsetWidth;
-  const y = beforeSide ? oTop - 7 : oTop + h + 7;
-  return { top: `${y}px`, left: `${oLeft}px`, width: `${w}px` };
-});
+  return frame.querySelector<HTMLElement>(
+    `.wp-bundle[data-bundle-uid="${containerUid}"] > .wp-bundle-children`,
+  );
+}
+
+/** Find a module row by its absolute module idx, restricted to a given
+ *  container scope (so nested rows don't get matched at top level). */
+function findRowEl(moduleIdx: number, containerEl: HTMLElement): HTMLElement | null {
+  return containerEl.querySelector<HTMLElement>(
+    `:scope > .wp-module[data-module-idx="${moduleIdx}"]`,
+  ) ?? containerEl.querySelector<HTMLElement>(
+    `.wp-module[data-module-idx="${moduleIdx}"]`,
+  );
+}
+
+/** Find a bundle's outer wrapper element. Used for header.before/after
+ *  anchoring; `:scope >` keeps us in the container's immediate scope
+ *  so nested bundles don't bleed into a parent container's lookup. */
+function findBundleFrameEl(uid: string, containerEl: HTMLElement): HTMLElement | null {
+  return containerEl.querySelector<HTMLElement>(
+    `:scope > .wp-bundle[data-bundle-uid="${uid}"]`,
+  ) ?? containerEl.querySelector<HTMLElement>(
+    `.wp-bundle[data-bundle-uid="${uid}"]`,
+  );
+}
 
 const ctxMenu = ref<{
   visible: boolean;
@@ -3061,19 +3125,12 @@ let sameNodeDropHandled = false;
 // comes from the row immediately after the bundle range (treated as a
 // row "before" drop on the post-bundle row).
 // List-level dragover resolver — walks every top-level item (rows +
-// bundle frames) once per pointer event. The flat DOM (rows are siblings
-// of bundle headers, bundles render via overlay) means per-row dragover
-// handlers miss the 14px margin gap that opens during drag, so we
-// resolve from the pointer Y against ALL items in one pass.
-//
-// Slots fall into the following categories:
-//   - row "before"/"after" — between top-level standalone rows.
-//   - bundle "before" — above a bundle frame.
-//   - bundle "inside" — drop INTO a bundle as new child at end (crossing).
-//   - bundle-slot before/after — between two specific bundle children
-//     (or AFTER the last child while still inside the bundle, extending
-//     its range).
-//   - end — below all items.
+/** Dragover handler — delegates pointer-to-zone classification to the
+ *  pure resolver. The resolver walks DOM from the pointer (innermost
+ *  `.wp-bundle` ancestor wins as the target container) and applies the
+ *  tier-2 cap. ContextWidget just sets `dragOver.value`; the indicator
+ *  paint happens via the per-container `<BundleDropBar>` reading
+ *  `dropBarFor()`. */
 function onListDragOver(ev: DragEvent) {
   const ds = dragState.value;
   if (!ds) return;
@@ -3081,172 +3138,7 @@ function onListDragOver(ev: DragEvent) {
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
   const container = modulesContainer.value;
   if (!container) return;
-  const cy = ev.clientY;
-  const modules = value.value.modules;
-  const bundles = value.value.bundles ?? [];
-
-  // Build top-level item list in render order. Each item carries the
-  // DOM rect we need to test pointer Y against.
-  interface TopItem {
-    type: "row" | "bundle";
-    moduleIdx: number;
-    uid?: string;
-    bundleStartIdx?: number;
-    bundleEndIdx?: number;
-    top: number;
-    bottom: number;
-  }
-  const items: TopItem[] = [];
-  let i = 0;
-  while (i < modules.length) {
-    const b = bundles.find((bb) => bb.start_idx === i);
-    if (b) {
-      const hEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${b._uid}"][data-bundle-header]`);
-      // Collapsed bundle hides its children via v-show; their
-      // getBoundingClientRect collapses to zero. Use the header rect
-      // as both top and bottom in that case.
-      const lastEl = b.collapsed
-        ? hEl
-        : container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${b.end_idx}"]`);
-      if (hEl && lastEl) {
-        const hr = hEl.getBoundingClientRect();
-        const lr = lastEl.getBoundingClientRect();
-        items.push({
-          type: "bundle", moduleIdx: i, uid: b._uid,
-          bundleStartIdx: b.start_idx, bundleEndIdx: b.end_idx,
-          top: hr.top, bottom: lr.bottom,
-        });
-      }
-      i = b.end_idx + 1;
-    } else {
-      const el = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${i}"]`);
-      if (el) {
-        const r = el.getBoundingClientRect();
-        items.push({ type: "row", moduleIdx: i, top: r.top, bottom: r.bottom });
-      }
-      i++;
-    }
-  }
-  if (items.length === 0) { dragOver.value = { kind: "end" }; return; }
-
-  // Walk items: cy in a gap before an item → slot before that item. cy
-  // inside an item → handle row or bundle internals.
-  for (let k = 0; k < items.length; k++) {
-    const it = items[k];
-    if (cy < it.top) {
-      if (it.type === "bundle") dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
-      else dragOver.value = { kind: "row", idx: it.moduleIdx, pos: "before" };
-      return;
-    }
-    if (cy > it.bottom) continue;
-
-    if (it.type === "row") {
-      const mid = it.top + (it.bottom - it.top) / 2;
-      if (cy < mid) {
-        dragOver.value = { kind: "row", idx: it.moduleIdx, pos: "before" };
-      } else {
-        // Bottom half — canonicalise to "before next top-level item" so
-        // bottom-of-N and top-of-N+1 resolve to one slot + one bar.
-        const next = items[k + 1];
-        if (!next) dragOver.value = { kind: "end" };
-        else if (next.type === "bundle") dragOver.value = { kind: "bundle", uid: next.uid!, zone: "before" };
-        else dragOver.value = { kind: "row", idx: next.moduleIdx, pos: "before" };
-      }
-      return;
-    }
-
-    // Inside a bundle's rect.
-    const hEl = container.querySelector<HTMLElement>(`[data-bundle-uid="${it.uid}"][data-bundle-header]`);
-    if (!hEl) { dragOver.value = { kind: "bundle", uid: it.uid!, zone: "inside" }; return; }
-    const hr = hEl.getBoundingClientRect();
-    const crossing = !(ds.kind === "module" && ds.sourceBundleUid === it.uid);
-
-    // Bundle-as-unit drag never nests — treat the bundle as a single
-    // top-level item: top half = before, bottom half = before next (or end).
-    if (ds.kind === "bundle") {
-      const mid = it.top + (it.bottom - it.top) / 2;
-      if (cy < mid) {
-        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
-      } else {
-        const next = items[k + 1];
-        if (!next) dragOver.value = { kind: "end" };
-        else if (next.type === "bundle") dragOver.value = { kind: "bundle", uid: next.uid!, zone: "before" };
-        else dragOver.value = { kind: "row", idx: next.moduleIdx, pos: "before" };
-      }
-      return;
-    }
-
-    if (cy <= hr.bottom) {
-      // Pointer is on the bundle header itself.
-      if (cy < hr.top + hr.height / 2) {
-        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "before" };
-      } else if (crossing || it.bundleEndIdx! < it.bundleStartIdx!) {
-        dragOver.value = { kind: "bundle", uid: it.uid!, zone: "inside" };
-      } else {
-        dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: it.bundleStartIdx!, before: true, crossing: false };
-      }
-      return;
-    }
-
-    // Pointer is in the bundle children area. Before walking the leaf
-    // rows, check if the pointer sits inside a nested bundle wrapper —
-    // when it does, reassign the target to that inner bundle so drops
-    // land in the right scope (its bundle_origin stamp, its range).
-    const nestedBundles = (bundles ?? []).filter((b) => b.parent_uid === it.uid);
-    for (const nb of nestedBundles) {
-      const nbEl = container.querySelector<HTMLElement>(`.wp-bundle[data-bundle-uid="${nb._uid}"]`);
-      if (!nbEl) continue;
-      const nbr = nbEl.getBoundingClientRect();
-      if (cy < nbr.top || cy > nbr.bottom) continue;
-      // Pointer inside a nested wrapper. Test the nested header for
-      // before/inside/after the same way as a top-level bundle.
-      const nbHEl = nbEl.querySelector<HTMLElement>("[data-bundle-header]");
-      const nbHr = nbHEl?.getBoundingClientRect();
-      const nbCrossing = !(ds.kind === "module" && ds.sourceBundleUid === nb._uid);
-      if (nbHr && cy <= nbHr.bottom) {
-        if (cy < nbHr.top + nbHr.height / 2) {
-          dragOver.value = { kind: "bundle", uid: nb._uid, zone: "before" };
-        } else if (nbCrossing || nb.end_idx < nb.start_idx) {
-          dragOver.value = { kind: "bundle", uid: nb._uid, zone: "inside" };
-        } else {
-          dragOver.value = { kind: "bundle-slot", uid: nb._uid, targetIdx: nb.start_idx, before: true, crossing: false };
-        }
-        return;
-      }
-      // Body of nested — find the closest gap inside it.
-      for (let m = nb.start_idx; m <= nb.end_idx; m++) {
-        const cEl = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${m}"]`);
-        if (!cEl) continue;
-        const cr = cEl.getBoundingClientRect();
-        if (cy < cr.top + cr.height / 2) {
-          dragOver.value = { kind: "bundle-slot", uid: nb._uid, targetIdx: m, before: true, crossing: nbCrossing };
-          return;
-        }
-      }
-      dragOver.value = { kind: "bundle-slot", uid: nb._uid, targetIdx: nb.end_idx, before: false, crossing: nbCrossing };
-      return;
-    }
-    // Fall through: pointer is in the outer's body but outside any
-    // nested frame. Find the closest gap among the outer's direct
-    // leaves (skip rows whose bundle_origin doesn't match the outer —
-    // those belong to a nested bundle and shouldn't pull the drop
-    // target back to the outer).
-    for (let m = it.bundleStartIdx!; m <= it.bundleEndIdx!; m++) {
-      const mod = modules[m] as ModuleEntry & { bundle_origin?: string };
-      if (mod && mod.bundle_origin !== it.uid) continue;
-      const cEl = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${m}"]`);
-      if (!cEl) continue;
-      const cr = cEl.getBoundingClientRect();
-      if (cy < cr.top + cr.height / 2) {
-        dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: m, before: true, crossing };
-        return;
-      }
-    }
-    dragOver.value = { kind: "bundle-slot", uid: it.uid!, targetIdx: it.bundleEndIdx!, before: false, crossing };
-    return;
-  }
-  // Below all items.
-  dragOver.value = { kind: "end" };
+  dragOver.value = resolveDropZone(ev, container, value.value, ds);
 }
 
 // Empty-state hero is the drop target when the node has no modules.
@@ -3278,150 +3170,79 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   ev.stopPropagation();
   const ds = dragState.value;
   if (!ds) return;
-  // Snapshot zone before clearing hover state.
+  // Snapshot zone before clearing hover state. Null target idx + null
+  // zone → "end" (empty hero drop path).
   const zone: DropZone = dragOver.value ?? (targetIdx === null ? { kind: "end" } : null);
   dragOver.value = null;
-  // Capture pre-mutation rects for FLIP-move (Phase B.2). Captures top-
-  // level + every in-bundle child container so any reorder animates
-  // its scope after Vue commits + re-renders.
+  // Capture pre-mutation rects for FLIP-move. Captures top-level + every
+  // in-bundle child container so any reorder animates its scope after
+  // Vue commits + re-renders.
   const flipSnap = captureFlipSnapshot();
 
-  // Same-node bundle move — slice the whole range out + re-insert at zone.
-  if (ds.kind === "bundle" && ds.sourceNodeId === props.nodeId) {
-    const list = [...value.value.modules];
-    const bundles = value.value.bundles ?? [];
-    const rangeSize = ds.sourceEndIdx - ds.sourceStartIdx + 1;
-    const range = list.splice(ds.sourceStartIdx, rangeSize);
-    const adj = (i: number) => (i > ds.sourceEndIdx ? i - rangeSize : i);
-    let ii: number;
-    if (!zone || zone.kind === "end") ii = list.length;
-    else if (zone.kind === "row") {
-      const a = adj(zone.idx);
-      ii = zone.pos === "after" ? a + 1 : a;
-    } else if (zone.uid === ds.bundleUid) {
-      // Dropped onto self — no-op, restore.
-      list.splice(ds.sourceStartIdx, 0, ...range);
-      sameNodeDropHandled = true;
-      return;
-    } else if (zone.kind === "bundle-slot") {
-      const t = adj(zone.targetIdx);
-      ii = zone.before ? t : t + 1;
-    } else {
-      const ob = bundles.find((b) => b._uid === zone.uid);
-      if (!ob) ii = list.length;
-      else {
-        const s = adj(ob.start_idx);
-        const e = adj(ob.end_idx);
-        // "inside" another bundle treated as "after" — no nesting v1.
-        ii = zone.zone === "before" ? s : e + 1;
-      }
-    }
-    list.splice(ii, 0, ...range);
-
-    // Nested-bundle move bookkeeping. The dragged bundle may have a
-    // parent_uid (it's an inner bundle). Two cases on drop:
-    //   a) Drop position lands inside the original parent's range →
-    //      keep parent_uid; reconcile updates the inner's start/end.
-    //   b) Drop position lands anywhere else (top level, a different
-    //      bundle's body, end of list) → clear parent_uid so the
-    //      inner becomes top-level. Without this, the inner survives
-    //      in bundles[] but its parent_uid points at the original
-    //      outer, the renderer keeps treating it as nested, and the
-    //      moved frame goes invisible.
-    let nextBundles = bundles;
-    const moved = bundles.find((b) => b._uid === ds.bundleUid);
-    if (moved && typeof moved.parent_uid === "string") {
-      const parent = bundles.find((b) => b._uid === moved.parent_uid);
-      // ii is the insertion position in the SHRUNKEN list (range
-      // already removed). Parent's range in the shrunken list:
-      // anything > sourceEndIdx shifts left by rangeSize; sourceStart
-      // ≤ idx ≤ sourceEnd is gone.
-      let insideParent = false;
-      if (parent) {
-        const ps = adj(parent.start_idx);
-        const pe = adj(parent.end_idx);
-        insideParent = ii >= ps && ii <= pe + 1;
-      }
-      if (!insideParent) {
-        nextBundles = bundles.map((b) =>
-          b._uid === ds.bundleUid ? { ...b, parent_uid: null } : b,
-        );
-      }
-    }
-
-    holdSuppressMove();
-    commitModules(list, nextBundles);
+  // Same-node module drop — applyDrop covers the full reorder +
+  // bundle_origin rewriting in one pure step.
+  if (ds.kind === "module" && ds.sourceNodeId === props.nodeId) {
+    const dragUid = ds.module._uid;
+    // Fallback resolution when sourceIdx was invalidated mid-drag.
+    // Prefer matching the per-instance _uid so the right sibling moves;
+    // matching `m.id` (library uuid) would hit the FIRST sibling.
+    const list = value.value.modules;
+    const fromIdx = ds.sourceIdx >= 0 && ds.sourceIdx < list.length
+      ? ds.sourceIdx
+      : dragUid
+        ? list.findIndex((mm) => mm._uid === dragUid)
+        : list.findIndex((mm) => mm.id === ds.module.id);
+    if (fromIdx < 0) return;
+    const payload: DropPayload = { kind: "module", sourceIdx: fromIdx, sourceUid: dragUid ?? "" };
+    const next = applyDrop(zone, payload, value.value);
+    // Cross-scope detection for the FLIP/arriving animation seam.
+    const movedRow = next.modules.find((mm) => mm._uid === dragUid);
+    const newOrigin = (movedRow as ModuleEntry & { bundle_origin?: string } | undefined)?.bundle_origin ?? null;
+    const crossScope = (ds.sourceBundleUid ?? null) !== newOrigin;
+    if (crossScope && dragUid) excludeFromFlipSnapshot(flipSnap, dragUid);
+    // Auto-expand the destination bundle when a row drops INTO it —
+    // without this the child lands invisibly under a collapsed frame.
+    const finalBundles = (next.bundles ?? []).map((b) =>
+      newOrigin && b._uid === newOrigin && b.collapsed ? { ...b, collapsed: false } : b,
+    );
+    commitModules(next.modules, finalBundles);
     await nextTick();
     playFlipSnapshot(flipSnap);
-    // Pulse the bundle wrapper AND every child so a collapsed bundle
-    // still shows a landing flash (children invisible when collapsed,
-    // so the wrapper carries the cue).
-    pulseDrop([ds.bundleUid, ...range.map(r => r._uid).filter((u): u is string => !!u)]);
+    if (crossScope && dragUid && modulesContainer.value) {
+      await animateEnterBatch([dragUid], modulesContainer.value);
+    }
+    pulseDrop(dragUid ?? undefined);
     sameNodeDropHandled = true;
     return;
   }
 
-  if (ds.kind === "module" && ds.sourceNodeId === props.nodeId) {
-    const list = [...value.value.modules];
-    // Fallback resolution when sourceIdx was invalidated (e.g. a
-    // sibling above the dragged row was removed mid-drag). Prefer
-    // matching the per-instance _uid so the right sibling moves —
-    // matching `m.id` (library uuid) would hit the FIRST sibling and
-    // silently move the wrong row. Library-id fallback kept for
-    // pre-_uid migration entries.
-    const dragUid = ds.module._uid;
-    const fromIdx = ds.sourceIdx >= 0 && ds.sourceIdx < list.length
-      ? ds.sourceIdx
-      : dragUid
-        ? list.findIndex((m) => m._uid === dragUid)
-        : list.findIndex((m) => m.id === ds.module.id);
-    if (fromIdx < 0) return;
-    const [moved] = list.splice(fromIdx, 1);
-    let ii: number;
-    let stamp: string | undefined;
-    if (!zone || zone.kind === "end") ii = list.length;
-    else if (zone.kind === "row") {
-      const a = zone.idx > fromIdx ? zone.idx - 1 : zone.idx;
-      ii = zone.pos === "after" ? a + 1 : a;
-    } else if (zone.kind === "bundle-slot") {
-      const t = zone.targetIdx > fromIdx ? zone.targetIdx - 1 : zone.targetIdx;
-      ii = zone.before ? t : t + 1;
-      stamp = zone.uid;
-    } else {
-      const ob = (value.value.bundles ?? []).find((b) => b._uid === zone.uid);
-      if (!ob) ii = list.length;
-      else {
-        const s = ob.start_idx - (fromIdx < ob.start_idx ? 1 : 0);
-        const e = ob.end_idx - (fromIdx <= ob.end_idx ? 1 : 0);
-        if (zone.zone === "before") ii = s;
-        else { ii = e + 1; if (zone.zone === "inside") stamp = zone.uid; }
-      }
+  // Same-node bundle move — applyDrop slices the range out + re-inserts
+  // at the resolved position + rewrites parent_uid.
+  if (ds.kind === "bundle" && ds.sourceNodeId === props.nodeId) {
+    const payload: DropPayload = {
+      kind: "bundle",
+      bundleUid: ds.bundleUid,
+      sourceStartIdx: ds.sourceStartIdx,
+      sourceEndIdx: ds.sourceEndIdx,
+    };
+    const next = applyDrop(zone, payload, value.value);
+    // No-op when applyDrop returns the same value object (self-drop
+    // guard inside applyDrop fires for header on own uid).
+    if (next === value.value) {
+      sameNodeDropHandled = true;
+      return;
     }
-    const m = { ...moved } as ModuleEntry & { bundle_origin?: string };
-    if (stamp) m.bundle_origin = stamp;
-    else delete m.bundle_origin;
-    list.splice(ii, 0, m);
-    // Auto-expand the target bundle when a row drops INTO it — without
-    // this the child lands invisibly under a collapsed frame.
-    const preBundles = (value.value.bundles ?? []).map((b) =>
-      stamp && b._uid === stamp && b.collapsed ? { ...b, collapsed: false } : b,
-    );
-    // Cross-scope detection: row changed container (standalone ↔ bundle,
-    // or bundle A ↔ bundle B). When true, exclude the moved row from
-    // the FLIP pass and apply a fade-slide via --arriving instead — FLIP
-    // would only animate vertical translate within its OLD container,
-    // but a cross-scope move feels better as a horizontal entry into
-    // the new container.
-    const crossScope = (ds.sourceBundleUid ?? null) !== (stamp ?? null);
-    if (crossScope && m._uid) excludeFromFlipSnapshot(flipSnap, m._uid);
-
-    commitModules(list, preBundles);
+    holdSuppressMove();
+    commitModules(next.modules, next.bundles);
     await nextTick();
     playFlipSnapshot(flipSnap);
-    if (crossScope && m._uid && modulesContainer.value) {
-      await animateEnterBatch([m._uid], modulesContainer.value);
-    }
-    pulseDrop(m._uid);
+    // Pulse the bundle wrapper AND every row in its range so a
+    // collapsed bundle still shows a landing flash.
+    const rangeRows = next.modules.slice(
+      (next.bundles ?? []).find((b) => b._uid === ds.bundleUid)?.start_idx ?? 0,
+      ((next.bundles ?? []).find((b) => b._uid === ds.bundleUid)?.end_idx ?? -1) + 1,
+    );
+    pulseDrop([ds.bundleUid, ...rangeRows.map((r) => r._uid).filter((u): u is string => !!u)]);
     sameNodeDropHandled = true;
     return;
   }
@@ -3429,25 +3250,12 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   // Cross-node bundle drag. Receiver splices the bundle's children
   // (with fresh _uid + new bundle_origin) into its modules array at the
   // zone-resolved position and registers a new BundleInstance pointing
-  // at the same library entry.
+  // at the same library entry. The resolver enforces tier-2 cap, so
+  // the dropped bundle's parent_uid stays null on cross-node lands.
   if (ds.kind === "bundle") {
     const list = [...value.value.modules];
     const bundles = value.value.bundles ?? [];
-    // Resolve insertIdx from the zone (zone is always outside any
-    // other bundle when the drag is a bundle-as-unit — see resolver).
-    let insertIdx: number;
-    if (!zone || zone.kind === "end") {
-      insertIdx = list.length;
-    } else if (zone.kind === "row") {
-      insertIdx = zone.pos === "after" ? zone.idx + 1 : zone.idx;
-    } else if (zone.kind === "bundle") {
-      const ob = bundles.find((b) => b._uid === zone.uid);
-      if (!ob) insertIdx = list.length;
-      else if (zone.zone === "before") insertIdx = ob.start_idx;
-      else insertIdx = ob.end_idx + 1;
-    } else {
-      insertIdx = list.length;
-    }
+    const { insertIdx } = resolveCrossNodeInsertion(zone, list, bundles);
     const newBundle: BundleInstance = {
       ...emptyBundleInstance(ds.libraryId),
       start_idx: insertIdx,
@@ -3466,31 +3274,18 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     commitModules(list, [...bundles, newBundle]);
     await nextTick();
     playFlipSnapshot(flipSnap);
-    // Phase B.4: pulse the bundle wrapper AND every newly-inserted
-    // child. Collapsed bundles still get a visible landing cue via
-    // the wrapper; expanded bundles cascade child-by-child.
-    pulseDrop([newBundle._uid, ...newChildren.map(c => c._uid).filter((u): u is string => !!u)]);
+    pulseDrop([newBundle._uid, ...newChildren.map((c) => c._uid).filter((u): u is string => !!u)]);
     dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
   }
 
-  // Cross-node drop. Keep the source module's id — for library-picked
-  // entries that id IS the canonical 8-hex uuid the catalog keys by,
-  // and re-id'ing it would silently break `@{uuid}` ref resolution
-  // for nested wildcards. If the target widget already has that id
-  // (same module embedded twice), dedupe by skipping; the picker
-  // applies the same rule. Toast so the user gets feedback —
-  // pre-fix the drop appeared to silently fail because the visual
-  // reorder cue cleared but the module never appeared.
+  // Cross-node MODULE drop. Same dedupe rule as before.
   if (value.value.modules.some((m) => m.id === ds.module.id)) {
     const dupName = ds.module.meta?.name?.trim() || ds.module.type;
     pushToast(
       `"${dupName}" is already in this node. Use right-click → Duplicate to add another instance.`,
       { severity: "error" },
     );
-    // Phase B: 200ms shake on the existing row so the user sees what
-    // was rejected. Pre-Phase-B the visual feedback was just the toast;
-    // the row stayed silent, which felt like the drop disappeared.
     const existingEl = document.querySelector<HTMLElement>(
       `[data-module-id="${ds.module.id}"]`,
     );
@@ -3501,9 +3296,6 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     sameNodeDropHandled = true;
     return;
   }
-  // Inline-created fixed_values modules don't carry a library uuid,
-  // so a fresh random id keeps the value.modules invariant
-  // (each entry's id unique within a widget) when copying them.
   const isLibraryBacked = ds.module.type !== "fixed_values"
     || (ds.module.payload !== undefined && Object.keys(ds.module.payload ?? {}).length > 0);
   const baseInsert: ModuleEntry = isLibraryBacked
@@ -3512,31 +3304,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   const list = [...value.value.modules];
   const bundles = value.value.bundles ?? [];
 
-  // Resolve insertIdx + bundle stamp from the dragOver zone (same model
-  // as same-node module drop). targetIdx is unused now that drops bubble
-  // up to .wp-page; the resolver has already classified the slot.
-  let insertIdx: number;
-  let stamp: string | undefined;
-  if (!zone || zone.kind === "end") {
-    insertIdx = list.length;
-  } else if (zone.kind === "row") {
-    insertIdx = zone.pos === "after" ? zone.idx + 1 : zone.idx;
-  } else if (zone.kind === "bundle-slot") {
-    insertIdx = zone.before ? zone.targetIdx : zone.targetIdx + 1;
-    stamp = zone.uid;
-  } else {
-    const ob = bundles.find((b) => b._uid === zone.uid);
-    if (!ob) {
-      insertIdx = list.length;
-    } else if (zone.zone === "before") {
-      insertIdx = ob.start_idx;
-    } else if (zone.zone === "after") {
-      insertIdx = ob.end_idx + 1;
-    } else {
-      insertIdx = ob.end_idx + 1;
-      stamp = zone.uid;
-    }
-  }
+  const { insertIdx, stamp } = resolveCrossNodeInsertion(zone, list, bundles);
   const inserted = { ...baseInsert } as ModuleEntry & { bundle_origin?: string };
   if (stamp) inserted.bundle_origin = stamp;
   else delete inserted.bundle_origin;
@@ -3549,6 +3317,36 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   playFlipSnapshot(flipSnap);
   pulseDrop(inserted._uid);
   dragState.value = { ...ds, consumedBy: props.nodeId };
+}
+
+/** Map the container-scoped DropZone to `{insertIdx, stamp}` for the
+ *  cross-node insertion paths (where we're adding a NEW row/bundle to
+ *  this widget rather than moving an existing one). Same mapping as
+ *  applyDrop's helpers but inlined for the cross-node branch which
+ *  doesn't go through applyDrop (it doesn't have a source row to
+ *  splice). */
+function resolveCrossNodeInsertion(
+  zone: DropZone,
+  modules: ModuleEntry[],
+  bundles: BundleInstance[],
+): { insertIdx: number; stamp: string | undefined } {
+  if (!zone || zone.kind === "end") {
+    return { insertIdx: modules.length, stamp: undefined };
+  }
+  if (zone.kind === "row") {
+    const insertIdx = zone.pos === "after" ? zone.insertIdx + 1 : zone.insertIdx;
+    return { insertIdx, stamp: zone.containerUid ?? undefined };
+  }
+  if (zone.kind === "empty") {
+    const target = bundles.find((b) => b._uid === zone.uid);
+    const insertIdx = target ? target.start_idx : modules.length;
+    return { insertIdx, stamp: zone.uid };
+  }
+  // kind === "header": sibling drop at target's parent scope.
+  const target = bundles.find((b) => b._uid === zone.uid);
+  if (!target) return { insertIdx: modules.length, stamp: undefined };
+  const insertIdx = zone.pos === "before" ? target.start_idx : target.end_idx + 1;
+  return { insertIdx, stamp: target.parent_uid ?? undefined };
 }
 
 // Top-level render list: standalone modules + bundle wrappers, in
@@ -3675,10 +3473,7 @@ const bundleFrameCtx: BundleFrameCtx = {
   openBundleContextMenu,
   onBundleDragStart,
   onDragEnd,
-  // Stub: real implementation lands in the ContextWidget rewire task.
-  // Until then the bar stays hidden — drag indicator falls back to the
-  // pre-existing wp-gap-before / wp-gap-after row classes.
-  dropBarFor: () => null,
+  dropBarFor,
 };
 provide(BundleFrameCtxKey, bundleFrameCtx);
 </script>
@@ -3778,20 +3573,14 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
           class="wp-modules-frame"
           ref="modulesContainer"
         >
-        <!-- Persistent drop-zone bar. Single element kept under the
-             modules container; position computed from `dragOver`. -->
-        <Transition name="wp-gap-bar">
-          <div
-            v-if="gapBarStyle"
-            class="wp-gap-bar"
-            :style="gapBarStyle"
-            aria-hidden="true"
-          />
-        </Transition>
         <div
           class="wp-modules"
           :data-suppress-move="suppressMove ? 'true' : null"
         >
+        <!-- Floating drop indicator for top-level scope. Hidden when
+             the resolved zone targets a nested bundle container — that
+             container renders its own BundleDropBar. -->
+        <BundleDropBar :container-uid="null" />
       <template v-for="item in topLevelItems" :key="item.key">
         <BundleFrame
           v-if="item.kind === 'bundle'"
@@ -4022,6 +3811,10 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
   display: flex;
   flex-direction: column;
   gap: var(--wp-row-gap);
+  /* Drop-bar anchor — the floating <BundleDropBar :container-uid="null">
+   * is absolutely positioned and needs this as its offset parent so
+   * its top/left coordinates resolve against the top-level scope. */
+  position: relative;
 }
 
 /* ── Bundle frame (Phase 2 Task 10b) ───────────────────────────────
@@ -4512,30 +4305,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
   transition: border-width var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease, box-shadow var(--wp-motion-quick) ease;
 }
 .wp-bundle.wp-gap-before { margin-top: 14px; }
-
-/* The bar itself. Animates between slots; enter/leave via Transition. */
-.wp-gap-bar {
-  position: absolute;
-  height: 3px;
-  background: var(--wp-accent);
-  border-radius: 2px;
-  box-shadow: 0 0 8px var(--wp-accent);
-  pointer-events: none;
-  z-index: 4;
-  transform-origin: center;
-  transition: top var(--wp-motion-quick) ease,
-    left var(--wp-motion-quick) ease,
-    width 0.1s ease;
-}
-.wp-gap-bar-enter-active,
-.wp-gap-bar-leave-active {
-  transition: opacity var(--wp-motion-quick) ease, transform var(--wp-motion-fade) var(--wp-motion-curve-flip);
-}
-.wp-gap-bar-enter-from,
-.wp-gap-bar-leave-to {
-  opacity: 0;
-  transform: scaleX(0.4) scaleY(0.5);
-}
+.wp-bundle.wp-gap-after { margin-bottom: 14px; }
 
 /* Source ghost — lift the row while it's mid-drag. */
 .wp-module--dragging {

@@ -50,6 +50,7 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
       'wp-bundle--drop-inside': ctx.isBundleInsideTarget(bundle._uid),
       'wp-bundle--nested': nested,
       'wp-gap-before': ctx.bundleHeaderGap(bundle._uid) === 'before',
+      'wp-gap-after': ctx.bundleHeaderGap(bundle._uid) === 'after',
       'wp-drop-pulse': ctx.recentDropUids.value.has(bundle._uid),
     }"
     :style="{
