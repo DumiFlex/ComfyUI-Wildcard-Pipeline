@@ -218,6 +218,42 @@ def deserialize_node_input(
         list(raw_modules) if isinstance(raw_modules, list) else []
     )
 
+    # Bundle enable-gate. `BundleInstance.enabled` used to cascade into
+    # every child's `module.enabled` at toggle time, which destroyed each
+    # child's individual on/off state every time the user disabled a
+    # bundle. Now the bundle gate is a non-destructive overlay applied at
+    # the engine boundary: child.instance.enabled stays whatever the user
+    # set, and we AND it with the bundle's gate here so the engine
+    # (which only knows about flat `modules[].enabled`) sees the
+    # effective view without needing bundle awareness.
+    #
+    # Effective enabled = bundle.enabled AND child.enabled.
+    # Nested bundles (tier-2) will extend this to AND through the
+    # parent chain — currently flat, one level only.
+    raw_bundles = data.get("bundles")
+    bundle_enabled: dict[str, bool] = {}
+    if isinstance(raw_bundles, list):
+        for b in raw_bundles:
+            if not isinstance(b, dict):
+                continue
+            uid = b.get("_uid")
+            if isinstance(uid, str):
+                bundle_enabled[uid] = bool(b.get("enabled", True))
+    if bundle_enabled:
+        gated: list[dict[str, Any]] = []
+        for m in modules:
+            if not isinstance(m, dict):
+                gated.append(m)
+                continue
+            origin = m.get("bundle_origin")
+            if isinstance(origin, str) and bundle_enabled.get(origin, True) is False:
+                # Shallow-clone so we don't mutate the workflow-state
+                # row the SPA holds onto for undo / restore.
+                gated.append({**m, "enabled": False})
+            else:
+                gated.append(m)
+        modules = gated
+
     # Build the wildcard catalog from the modules list directly.
     # Filter by `type == "wildcard"` and synthesise a SnapshotEntry
     # per row keyed by `id`. Resolver looks up `ctx["__wp_catalog__"][uuid]`

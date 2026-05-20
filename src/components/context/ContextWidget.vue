@@ -637,16 +637,14 @@ function toggleBundleEnabled(uid: string, enabled: boolean): void {
   const updated = { ...bundles[bIdx], enabled };
   const nextBundles = [...bundles];
   nextBundles[bIdx] = updated;
-  // Cascade enabled flag to every child module in the bundle range.
-  // Engine's pipeline reads `module.enabled` per-row, so this is all
-  // we need — no engine changes required for bundle-level disable.
-  const nextModules = value.value.modules.map((m, mIdx) => {
-    if (mIdx >= updated.start_idx && mIdx <= updated.end_idx) {
-      return { ...m, enabled };
-    }
-    return m;
-  });
-  commitModules(nextModules, nextBundles);
+  // Bundle.enabled is a gate, not a mutator. Children keep their own
+  // instance.enabled state untouched — re-enabling the bundle restores
+  // every child to its previous individual on/off. The engine sees the
+  // gated view via `deserialize_node_input` (wp_nodes/types.py), which
+  // ANDs bundle.enabled with each child's enabled at execute time. The
+  // renderer dims the disabled bundle's children via CSS at the bundle
+  // level (.wp-bundle--disabled overlay), no per-row class change.
+  commitModules(value.value.modules, nextBundles);
 }
 
 // Container ref for list-level drag handlers + bar positioning.
@@ -3590,6 +3588,7 @@ provide(ModuleRowCtxKey, moduleRowCtx);
           class="wp-bundle"
           :class="{
             'wp-bundle--collapsed': item.bundle!.collapsed,
+            'wp-bundle--disabled': !item.bundle!.enabled,
             'wp-bundle--drop-inside': isBundleInsideTarget(item.bundle!._uid),
             'wp-gap-before': bundleHeaderGap(item.bundle!._uid) === 'before',
             'wp-drop-pulse': recentDropUids.has(item.bundle!._uid),
@@ -3962,6 +3961,29 @@ provide(ModuleRowCtxKey, moduleRowCtx);
 }
 .wp-bundle--collapsed {
   grid-template-rows: auto 0fr;
+}
+/* Bundle disabled overlay — dims the entire frame (children included)
+ * without touching each row's `wp-disabled` class. Children keep their
+ * own `instance.enabled` state on the workflow side; the bundle gate is
+ * purely visual. Re-enabling the bundle pops every row back to its
+ * previous individual state with zero data loss. Matches the
+ * BundleHeader's diagonal-stripe pattern via the same `.wp-disabled`
+ * cosmetic vocabulary so a disabled bundle and a disabled module read
+ * as cousins of the same off-state. */
+.wp-bundle--disabled {
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--wp-bg3),
+    var(--wp-bg3) 6px,
+    var(--wp-bg2) 6px,
+    var(--wp-bg2) 8px
+  );
+}
+.wp-bundle--disabled .wp-bundle-children {
+  /* Stripes shine through; lighten children one notch so the bundle
+   * stripe pattern reads as a single overlay across header + body. */
+  background: transparent;
 }
 .wp-bundle-children {
   padding: 5px 6px 7px 6px;
