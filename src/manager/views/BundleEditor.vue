@@ -224,6 +224,13 @@ const childrenSubtitle = computed<string>(() => {
   if (!selectedChildId.value || !selectedChild.value) {
     return "Frozen snapshots — click row to edit on the right.";
   }
+  // Bundle-typed children are LIVE references, not snapshots — the
+  // subtitle has to match the pane banner or the user will think
+  // they're about to edit a private copy.
+  if (selectedChild.value.type === "bundle") {
+    const name = (selectedChild.value.name as string | undefined) ?? "(unnamed bundle)";
+    return `Viewing reference to ${name} — click × on the pane to close`;
+  }
   const meta = selectedChild.value.meta as { name?: string } | undefined;
   const name = meta?.name ?? "(unnamed)";
   return `Editing snapshot of ${name} — click × on the pane to close`;
@@ -357,13 +364,22 @@ function onAddPick(row: ModuleRow) {
  *  See `_validate_bundle_refs` in wp_api/bundles.py: bundle children
  *  persist as id-only pointers, and GET /bundles/{id} expands them
  *  inline on read. Display fields cached so the parent renders a
- *  placeholder if the referenced bundle is later deleted. */
+ *  placeholder if the referenced bundle is later deleted.
+ *
+ *  Inner children are attached inline at pick time so the SPA's
+ *  in-memory shape matches what the GET expander would produce on
+ *  reload — pane summaries (inner-count) and any future canvas insert
+ *  pre-flatten then read the right data immediately. The save path
+ *  strips this back to the reference shape (stripBundleChildrenForSave)
+ *  so the wire payload stays canonical. */
 function onAddBundlePick(row: BundleRow) {
   const ref: Record<string, unknown> = {
     id: row.id,
     type: "bundle",
     name: row.name,
     color: row.color,
+    children: Array.isArray(row.children) ? [...row.children] : [],
+    _resolved_from: row.id,
   };
   children.value = [...children.value, ref];
 }
