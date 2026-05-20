@@ -741,6 +741,11 @@ async function removeBundle(uid: string): Promise<void> {
   const removedChildren = value.value.modules.slice(target.start_idx, target.end_idx + 1);
   const anchorAfter = value.value.modules[target.end_idx + 1]?._uid ?? null;
   const restoredBundle = target;
+  // Capture nested BundleInstances under this outer so undo restores
+  // them too. Without this, Undo brings back the leaves + outer frame
+  // but the inner frames vanish permanently, surfacing every
+  // inner-leaf as a direct child of the outer instead.
+  const restoredInners = bundles.filter((b) => b.parent_uid === uid);
 
   // Suppress legacy wp-list-move + leave-active CSS immediately so any
   // downstream layout shifts during the fade don't double-animate via
@@ -762,9 +767,31 @@ async function removeBundle(uid: string): Promise<void> {
   const before = value.value.modules.slice(0, target.start_idx);
   const after = value.value.modules.slice(target.end_idx + 1);
   const removedCount = target.end_idx - target.start_idx + 1;
+  // Walk parent_uid descendants of the targeted bundle — every nested
+  // bundle inside this frame goes with it. Without this drop, the inner
+  // BundleInstance survives the removal with a parent_uid pointing at a
+  // deleted bundle, the renderer never picks it up as top-level (because
+  // it still has parent_uid), and the leaves it pointed at are gone
+  // anyway. Net result: orphaned BundleInstance + ghost in bundles[].
+  const removedUids = new Set<string>([uid]);
+  // BFS over parent_uid pointers — tier-2 cap → at most one hop, but
+  // walk generically in case the model gains depth later.
+  let frontier = [uid];
+  for (let safety = 0; safety < 8 && frontier.length > 0; safety++) {
+    const next: string[] = [];
+    for (const f of frontier) {
+      for (const b of bundles) {
+        if (b.parent_uid === f && !removedUids.has(b._uid)) {
+          removedUids.add(b._uid);
+          next.push(b._uid);
+        }
+      }
+    }
+    frontier = next;
+  }
   // Adjust any sibling bundle indices that sit after the removed range.
   const remainingBundles = bundles
-    .filter((b) => b._uid !== uid)
+    .filter((b) => !removedUids.has(b._uid))
     .map((b) => {
       if (b.start_idx > target.end_idx) {
         return {
@@ -799,9 +826,16 @@ async function removeBundle(uid: string): Promise<void> {
           ...current.slice(insertAt),
         ];
         const curBundles = value.value.bundles ?? [];
-        const nextBundlesArr = curBundles.some((b) => b._uid === restoredBundle._uid)
-          ? curBundles
-          : [...curBundles, restoredBundle];
+        // Restore the outer + every inner BundleInstance the remove
+        // dropped along with it. Skips entries that already exist
+        // (e.g. user undid a sibling op that recreated the inner).
+        const present = new Set(curBundles.map((b) => b._uid));
+        const toRestore = [restoredBundle, ...restoredInners].filter(
+          (b) => !present.has(b._uid),
+        );
+        const nextBundlesArr = toRestore.length > 0
+          ? [...curBundles, ...toRestore]
+          : curBundles;
         commitModules(list, nextBundlesArr);
       },
     },
@@ -3162,8 +3196,52 @@ function onListDragOver(ev: DragEvent) {
       return;
     }
 
-    // Pointer is in the bundle children area. Find the closest gap.
+    // Pointer is in the bundle children area. Before walking the leaf
+    // rows, check if the pointer sits inside a nested bundle wrapper —
+    // when it does, reassign the target to that inner bundle so drops
+    // land in the right scope (its bundle_origin stamp, its range).
+    const nestedBundles = (bundles ?? []).filter((b) => b.parent_uid === it.uid);
+    for (const nb of nestedBundles) {
+      const nbEl = container.querySelector<HTMLElement>(`.wp-bundle[data-bundle-uid="${nb._uid}"]`);
+      if (!nbEl) continue;
+      const nbr = nbEl.getBoundingClientRect();
+      if (cy < nbr.top || cy > nbr.bottom) continue;
+      // Pointer inside a nested wrapper. Test the nested header for
+      // before/inside/after the same way as a top-level bundle.
+      const nbHEl = nbEl.querySelector<HTMLElement>("[data-bundle-header]");
+      const nbHr = nbHEl?.getBoundingClientRect();
+      const nbCrossing = !(ds.kind === "module" && ds.sourceBundleUid === nb._uid);
+      if (nbHr && cy <= nbHr.bottom) {
+        if (cy < nbHr.top + nbHr.height / 2) {
+          dragOver.value = { kind: "bundle", uid: nb._uid, zone: "before" };
+        } else if (nbCrossing || nb.end_idx < nb.start_idx) {
+          dragOver.value = { kind: "bundle", uid: nb._uid, zone: "inside" };
+        } else {
+          dragOver.value = { kind: "bundle-slot", uid: nb._uid, targetIdx: nb.start_idx, before: true, crossing: false };
+        }
+        return;
+      }
+      // Body of nested — find the closest gap inside it.
+      for (let m = nb.start_idx; m <= nb.end_idx; m++) {
+        const cEl = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${m}"]`);
+        if (!cEl) continue;
+        const cr = cEl.getBoundingClientRect();
+        if (cy < cr.top + cr.height / 2) {
+          dragOver.value = { kind: "bundle-slot", uid: nb._uid, targetIdx: m, before: true, crossing: nbCrossing };
+          return;
+        }
+      }
+      dragOver.value = { kind: "bundle-slot", uid: nb._uid, targetIdx: nb.end_idx, before: false, crossing: nbCrossing };
+      return;
+    }
+    // Fall through: pointer is in the outer's body but outside any
+    // nested frame. Find the closest gap among the outer's direct
+    // leaves (skip rows whose bundle_origin doesn't match the outer —
+    // those belong to a nested bundle and shouldn't pull the drop
+    // target back to the outer).
     for (let m = it.bundleStartIdx!; m <= it.bundleEndIdx!; m++) {
+      const mod = modules[m] as ModuleEntry & { bundle_origin?: string };
+      if (mod && mod.bundle_origin !== it.uid) continue;
       const cEl = container.querySelector<HTMLElement>(`.wp-module[data-module-idx="${m}"]`);
       if (!cEl) continue;
       const cr = cEl.getBoundingClientRect();
@@ -3247,8 +3325,40 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
       }
     }
     list.splice(ii, 0, ...range);
+
+    // Nested-bundle move bookkeeping. The dragged bundle may have a
+    // parent_uid (it's an inner bundle). Two cases on drop:
+    //   a) Drop position lands inside the original parent's range →
+    //      keep parent_uid; reconcile updates the inner's start/end.
+    //   b) Drop position lands anywhere else (top level, a different
+    //      bundle's body, end of list) → clear parent_uid so the
+    //      inner becomes top-level. Without this, the inner survives
+    //      in bundles[] but its parent_uid points at the original
+    //      outer, the renderer keeps treating it as nested, and the
+    //      moved frame goes invisible.
+    let nextBundles = bundles;
+    const moved = bundles.find((b) => b._uid === ds.bundleUid);
+    if (moved && typeof moved.parent_uid === "string") {
+      const parent = bundles.find((b) => b._uid === moved.parent_uid);
+      // ii is the insertion position in the SHRUNKEN list (range
+      // already removed). Parent's range in the shrunken list:
+      // anything > sourceEndIdx shifts left by rangeSize; sourceStart
+      // ≤ idx ≤ sourceEnd is gone.
+      let insideParent = false;
+      if (parent) {
+        const ps = adj(parent.start_idx);
+        const pe = adj(parent.end_idx);
+        insideParent = ii >= ps && ii <= pe + 1;
+      }
+      if (!insideParent) {
+        nextBundles = bundles.map((b) =>
+          b._uid === ds.bundleUid ? { ...b, parent_uid: null } : b,
+        );
+      }
+    }
+
     holdSuppressMove();
-    commitModules(list, bundles);
+    commitModules(list, nextBundles);
     await nextTick();
     playFlipSnapshot(flipSnap);
     // Pulse the bundle wrapper AND every child so a collapsed bundle
