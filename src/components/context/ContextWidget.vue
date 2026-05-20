@@ -21,7 +21,8 @@ import {
 } from "../../extension/preview-resolver";
 import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
-import BundleHeader from "./bundles/BundleHeader.vue";
+import BundleFrame from "./bundles/BundleFrame.vue";
+import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
@@ -3452,27 +3453,85 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
 // document order. Each bundle entry packs its child rows so the
 // template can iterate once + nest children inside a real .wp-bundle
 // div (no more absolute-positioned overlay).
+//
+// Tier-2 nesting: a bundle's `children[]` may include a NESTED bundle
+// wrapper (an inner BundleInstance whose parent_uid points at the
+// outer). The renderer recurses one level — the API cap forbids
+// deeper chains so a single `BundleChild` recursion is enough.
+type BundleChild =
+  | { kind: "mod"; key: string; module: ModuleEntry; idx: number }
+  | { kind: "bundle"; key: string; bundle: BundleInstance; children: BundleChild[] };
+
 interface TopLevelItem {
   kind: "mod" | "bundle";
   key: string;
   module?: ModuleEntry;
   idx?: number;
   bundle?: BundleInstance;
-  children?: Array<{ module: ModuleEntry; idx: number }>;
+  children?: BundleChild[];
 }
+
 const topLevelItems = computed<TopLevelItem[]>(() => {
   const modules = value.value.modules;
   const bundles = value.value.bundles ?? [];
+
+  // Group inner bundles by parent_uid for O(1) lookup during the walk.
+  const innersByParent = new Map<string, BundleInstance[]>();
+  for (const b of bundles) {
+    const parent = typeof b.parent_uid === "string" ? b.parent_uid : null;
+    if (!parent) continue;
+    const list = innersByParent.get(parent) ?? [];
+    list.push(b);
+    innersByParent.set(parent, list);
+  }
+
+  // Build the child list for a bundle range [start, end]. Walks the
+  // module positions; when a position matches an inner bundle's
+  // start_idx, emits a nested bundle wrapper covering that inner's
+  // span. Other positions emit leaf module sub-items.
+  function bundleChildren(parentUid: string, start: number, end: number): BundleChild[] {
+    const inners = (innersByParent.get(parentUid) ?? []).slice().sort(
+      (a, b) => a.start_idx - b.start_idx,
+    );
+    const out: BundleChild[] = [];
+    let j = start;
+    while (j <= end) {
+      const inner = inners.find((ii) => ii.start_idx === j && ii.end_idx >= ii.start_idx);
+      if (inner) {
+        // Inner bundle: recurse into its grandchildren. Tier-2 cap →
+        // the recursive call will find no further inners under this
+        // inner, but the structure stays uniform for the template.
+        out.push({
+          kind: "bundle",
+          key: `b-${inner._uid}`,
+          bundle: inner,
+          children: bundleChildren(inner._uid, inner.start_idx, inner.end_idx),
+        });
+        j = inner.end_idx + 1;
+        continue;
+      }
+      const m = modules[j];
+      if (m) {
+        out.push({ kind: "mod", key: m._uid ?? `m-${j}`, module: m, idx: j });
+      }
+      j++;
+    }
+    return out;
+  }
+
   const out: TopLevelItem[] = [];
   let i = 0;
   while (i < modules.length) {
-    const b = bundles.find((bb) => bb.start_idx === i);
+    // Top-level bundles only — bundles with a parent_uid render inside
+    // their parent's children list via bundleChildren, not at the top.
+    const b = bundles.find((bb) => bb.start_idx === i && !bb.parent_uid);
     if (b && b.end_idx >= b.start_idx) {
-      const kids: Array<{ module: ModuleEntry; idx: number }> = [];
-      for (let j = b.start_idx; j <= b.end_idx; j++) {
-        kids.push({ module: modules[j], idx: j });
-      }
-      out.push({ kind: "bundle", key: `b-${b._uid}`, bundle: b, children: kids });
+      out.push({
+        kind: "bundle",
+        key: `b-${b._uid}`,
+        bundle: b,
+        children: bundleChildren(b._uid, b.start_idx, b.end_idx),
+      });
       i = b.end_idx + 1;
     } else {
       const m = modules[i];
@@ -3496,6 +3555,26 @@ const moduleRowCtx: ModuleRowCtx = {
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
+
+const bundleFrameCtx: BundleFrameCtx = {
+  bundleChildDriftCount,
+  isBundleLibraryDrifted,
+  bundleInternalState,
+  bundleLockState,
+  isBundleInsideTarget,
+  bundleHeaderGap,
+  recentDropUids,
+  pulseDelayFor,
+  toggleBundleCollapsed,
+  toggleBundleEnabled,
+  toggleBundleInternal,
+  toggleBundleLock,
+  removeBundle,
+  openBundleContextMenu,
+  onBundleDragStart,
+  onDragEnd,
+};
+provide(BundleFrameCtxKey, bundleFrameCtx);
 </script>
 
 <template>
@@ -3608,59 +3687,12 @@ provide(ModuleRowCtxKey, moduleRowCtx);
           :data-suppress-move="suppressMove ? 'true' : null"
         >
       <template v-for="item in topLevelItems" :key="item.key">
-        <!-- Bundle wrapper: header + children container, real DOM
-             nesting (no more absolute overlay). Border/bg painted by
-             .wp-bundle directly. -->
-        <div
+        <BundleFrame
           v-if="item.kind === 'bundle'"
-          class="wp-bundle"
-          :class="{
-            'wp-bundle--collapsed': item.bundle!.collapsed,
-            'wp-bundle--disabled': !item.bundle!.enabled,
-            'wp-bundle--drop-inside': isBundleInsideTarget(item.bundle!._uid),
-            'wp-gap-before': bundleHeaderGap(item.bundle!._uid) === 'before',
-            'wp-drop-pulse': recentDropUids.has(item.bundle!._uid),
-          }"
-          :style="{
-            '--wp-bundle-color': item.bundle!.color ? item.bundle!.color : 'var(--wp-bundle-default)',
-            ...(recentDropUids.has(item.bundle!._uid) ? { animationDelay: pulseDelayFor(item.bundle!._uid) } : {}),
-          }"
-          :data-bundle-uid="item.bundle!._uid"
-          :data-uid="item.bundle!._uid"
-        >
-          <BundleHeader
-            :instance="item.bundle!"
-            :name="item.bundle!.name ?? 'Bundle'"
-            :color="item.bundle!.color"
-            :child-count="item.children!.length"
-            :drifted-count="bundleChildDriftCount(item.bundle!)"
-            :library-drifted="isBundleLibraryDrifted(item.bundle!)"
-            :internal-state="bundleInternalState(item.bundle!)"
-            :lock-state="bundleLockState(item.bundle!)"
-            @toggle-collapse="toggleBundleCollapsed(item.bundle!._uid)"
-            @toggle-enabled="(next) => toggleBundleEnabled(item.bundle!._uid, next)"
-            @toggle-internal="toggleBundleInternal(item.bundle!._uid)"
-            @toggle-lock="toggleBundleLock(item.bundle!._uid)"
-            @remove="removeBundle(item.bundle!._uid)"
-            @contextmenu="(ev) => openBundleContextMenu(ev, item.bundle!._uid)"
-            @dragstart="(ev) => onBundleDragStart(ev, item.bundle!._uid)"
-            @dragend="onDragEnd"
-          />
-          <!-- Plain v-for, no inner TransitionGroup. Collapse/expand
-               is pure CSS via grid-template-rows on .wp-bundle — drop
-               v-show so children stay in DOM and the transition can
-               animate frame + opacity together (Phase B.1). -->
-          <div class="wp-bundle-children">
-            <ModuleRow
-              v-for="child in item.children"
-              :key="child.module._uid ?? `${child.module.id}|${child.idx}`"
-              :module="child.module"
-              :idx="child.idx"
-              :data-uid="child.module._uid"
-            />
-          </div>
-        </div>
-        <!-- Standalone module — rendered directly via ModuleRow. -->
+          :bundle="item.bundle!"
+          :children="item.children!"
+          :nested="false"
+        />
         <ModuleRow
           v-else
           :module="item.module!"
