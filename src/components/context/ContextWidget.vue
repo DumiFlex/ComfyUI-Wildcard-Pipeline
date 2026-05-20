@@ -534,11 +534,16 @@ async function onPickBundle(bundleId: string): Promise<void> {
       payload_hash: entry.payload_hash,
     };
     const insertIdx = value.value.modules.length;
-    const { modulesToSplice, bundleInstance } = buildBundleInsertion(libEntry, insertIdx);
+    const { modulesToSplice, bundleInstance, innerInstances } = buildBundleInsertion(libEntry, insertIdx);
     // Honor "Collapse new bundles by default". Default false keeps
     // bundles open on insert (existing behaviour); when true, stamp
-    // the collapsed flag so the frame mounts header-only.
-    if (getBundleCollapsedByDefault()) bundleInstance.collapsed = true;
+    // the collapsed flag so the frame mounts header-only. Inner
+    // (nested) bundles inherit the same default so the user sees a
+    // consistent collapse state across the whole insert.
+    if (getBundleCollapsedByDefault()) {
+      bundleInstance.collapsed = true;
+      for (const inner of innerInstances) inner.collapsed = true;
+    }
     // Mutate via spread to keep the ref's identity stable + trigger
     // Vue reactivity. modules[] gets the new rows at the tail, bundles[]
     // gets the new instance.
@@ -572,7 +577,7 @@ async function onPickBundle(bundleId: string): Promise<void> {
     });
     commitModules(
       [...value.value.modules, ...splice],
-      [...(value.value.bundles ?? []), bundleInstance],
+      [...(value.value.bundles ?? []), bundleInstance, ...innerInstances],
     );
     // Phase B.6: animate the new bundle wrapper + its children with
     // the same fade-slide as picker-add. Bundle wrapper carries the
@@ -928,10 +933,18 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
     // elsewhere; we just replace its content.
     const startIdx = target.start_idx;
     const replacementInsertion = buildBundleInsertion(libEntry, startIdx);
+    // Preserve the existing outer's _uid so the bundle frame doesn't
+    // visually disappear. Inner-bundle leaves carry their FRESH inner
+    // _uids verbatim — those nested BundleInstances are brand new.
+    const newOuterUid = replacementInsertion.bundleInstance._uid;
     const newChildren = replacementInsertion.modulesToSplice.map((c) => {
       const rec = c as Record<string, unknown>;
       const meta = (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" };
       const entries = (rec.entries as ModuleEntry["entries"] | undefined) ?? [];
+      // Outer-leaf bundle_origin gets rewritten to the EXISTING outer
+      // uid; inner-leaf bundle_origin (pointing at a fresh inner _uid)
+      // stays as-is.
+      const origin = c.bundle_origin === newOuterUid ? target._uid : c.bundle_origin;
       return {
         id: c.id,
         _uid: c._uid,
@@ -943,17 +956,26 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
         payload: c.payload,
         instance: c.instance,
         payload_hash: c.payload_hash,
-        // Stamp bundle_origin to the EXISTING bundle's _uid so the
-        // frame stays attached to the same BundleInstance.
-        bundle_origin: target._uid,
+        bundle_origin: origin,
       } as ModuleEntry;
     });
+    // Inner BundleInstances: rewrite their parent_uid from the freshly
+    // minted outer to the existing outer so the nested frames sit
+    // inside the preserved bundle wrapper.
+    const newInnerInstances = replacementInsertion.innerInstances.map((b) => ({
+      ...b,
+      parent_uid: target._uid,
+    }));
     const before = value.value.modules.slice(0, startIdx);
     const after = value.value.modules.slice(target.end_idx + 1);
     const sizeDelta = newChildren.length - (target.end_idx - target.start_idx + 1);
     // Update bundle range to match new children length + shift
     // later bundles by the delta.
-    const nextBundles = bundles.map((b) => {
+    const nextBundles = bundles
+      // Drop the OLD inner bundles attached to this outer — the new
+      // insertion replaces them wholesale with fresh inner instances.
+      .filter((b) => b.parent_uid !== target._uid)
+      .map((b) => {
       if (b._uid === uid) {
         return {
           ...b,
@@ -970,7 +992,7 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       }
       return b;
     });
-    commitModules([...before, ...newChildren, ...after], nextBundles);
+    commitModules([...before, ...newChildren, ...after], [...nextBundles, ...newInnerInstances]);
     await nextTick();
     // Flash every fresh child + the bundle wrapper so the user sees
     // which rows just got replaced with the library snapshot.

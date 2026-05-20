@@ -110,3 +110,73 @@ def test_gate_handles_missing_bundle_origin():
     }
     modules, _, _ = deserialize_node_input(raw)
     assert [m["enabled"] for m in modules] == [False, True]
+
+
+# ── Tier-2 nesting: parent_uid chain ──────────────────────────────────────
+
+
+def test_gate_ands_through_parent_chain_disabled_outer():
+    """An inner bundle (parent_uid → outer) inherits the outer's
+    disabled state. The leaf's bundle_origin points at the INNER, but
+    the gate walks parent_uid up and ANDs through the chain — disabled
+    outer disables every leaf in every inner."""
+    raw = {
+        "bundles": [
+            {"_uid": "OUTER", "enabled": False, "start_idx": 0, "end_idx": 0},
+            {"_uid": "INNER", "enabled": True, "parent_uid": "OUTER",
+             "start_idx": 0, "end_idx": 0},
+        ],
+        "modules": [_wildcard("m1", enabled=True, bundle_origin="INNER")],
+    }
+    modules, _, _ = deserialize_node_input(raw)
+    assert modules[0]["enabled"] is False
+
+
+def test_gate_allows_when_both_inner_and_outer_enabled():
+    raw = {
+        "bundles": [
+            {"_uid": "OUTER", "enabled": True, "start_idx": 0, "end_idx": 0},
+            {"_uid": "INNER", "enabled": True, "parent_uid": "OUTER",
+             "start_idx": 0, "end_idx": 0},
+        ],
+        "modules": [_wildcard("m1", enabled=True, bundle_origin="INNER")],
+    }
+    modules, _, _ = deserialize_node_input(raw)
+    assert modules[0]["enabled"] is True
+
+
+def test_gate_disables_when_only_inner_is_off():
+    """Outer enabled, inner disabled — inner-leaf disabled."""
+    raw = {
+        "bundles": [
+            {"_uid": "OUTER", "enabled": True, "start_idx": 0, "end_idx": 1},
+            {"_uid": "INNER", "enabled": False, "parent_uid": "OUTER",
+             "start_idx": 0, "end_idx": 0},
+        ],
+        "modules": [
+            _wildcard("inner_leaf", enabled=True, bundle_origin="INNER"),
+            _wildcard("outer_leaf", enabled=True, bundle_origin="OUTER"),
+        ],
+    }
+    modules, _, _ = deserialize_node_input(raw)
+    # Inner-leaf gated off; outer-direct leaf still on.
+    assert [m["enabled"] for m in modules] == [False, True]
+
+
+def test_gate_walk_terminates_on_cycle():
+    """Defensive depth cap — a corrupt cycle in parent_uid must not
+    spin forever. Gate falls through with the leaf's own enabled."""
+    raw = {
+        "bundles": [
+            {"_uid": "A", "enabled": True, "parent_uid": "B",
+             "start_idx": 0, "end_idx": 0},
+            {"_uid": "B", "enabled": True, "parent_uid": "A",
+             "start_idx": 0, "end_idx": 0},
+        ],
+        "modules": [_wildcard("m1", enabled=True, bundle_origin="A")],
+    }
+    # Should NOT raise; just return the row as-is (or gated off if
+    # any ancestor in the partial walk was disabled — both A and B
+    # are enabled here, so the result is True).
+    modules, _, _ = deserialize_node_input(raw)
+    assert modules[0]["enabled"] is True

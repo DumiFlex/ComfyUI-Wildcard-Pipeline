@@ -517,15 +517,18 @@ export function collectUpstreamChain(
     // gate, the assembler's API preview returns bindings from
     // bundle-disabled modules while the static fallback (which IS
     // gated) doesn't, and chip strip / preview disagree.
-    const bundleEnabled = buildBundleEnabledMap(v.bundles);
-    if (bundleEnabled.size === 0) {
+    const bundleIndex = buildBundleEnabledMap(v.bundles);
+    if (bundleIndex.enabled.size === 0) {
       out.push(v.modules);
       continue;
     }
     const gated = v.modules.map((m) => {
       if (m.enabled === false) return m;
-      const origin = (m as { bundle_origin?: string }).bundle_origin;
-      if (typeof origin === "string" && bundleEnabled.get(origin) === false) {
+      // isModuleEffectivelyEnabled walks the parent_uid chain so a
+      // disabled outer disables inner-bundle leaves too. AND with the
+      // module's own enabled (which we know is true from the early
+      // return above) → use directly.
+      if (!isModuleEffectivelyEnabled(m, bundleIndex)) {
         return { ...m, enabled: false };
       }
       return m;

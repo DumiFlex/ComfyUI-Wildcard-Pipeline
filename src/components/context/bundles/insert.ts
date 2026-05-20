@@ -3,20 +3,26 @@
  *
  * Given a bundle library entry + the index where it's being inserted
  * into a Context's `modules[]`, produces:
- *   1. The list of module entries to splice into `modules[]` — each
- *      one a deserialized child snapshot with regenerated uuid +
- *      `bundle_origin` stamped + fresh `_uid` for Vue v-for keys.
- *   2. A `BundleInstance` record to push into `ContextWidgetValue.bundles[]`
- *      with `start_idx` / `end_idx` covering the spliced range.
+ *   1. The flat list of leaf modules to splice into `modules[]`. Each
+ *      leaf is a deep-cloned child snapshot with `_uid` minted +
+ *      `bundle_origin` stamped at its immediate bundle's `_uid`.
+ *   2. One or more `BundleInstance` records to push into
+ *      `ContextWidgetValue.bundles[]`. Tier-2 nesting (an inner-bundle
+ *      reference) produces TWO instances: the outer (no `parent_uid`)
+ *      and the inner (`parent_uid` points at the outer's `_uid`). Both
+ *      cover overlapping ranges over `modules[]`; the outer's span
+ *      contains the inner's.
  *
- * Caller (ContextWidget) is responsible for the actual splice +
+ * The caller (ContextWidget) is responsible for the actual splice +
  * BundleInstance push + writing back the new widget value.
  *
  * Bundle children carry the same fields top-level modules do
  * (id, type, payload, instance, _uid, payload_hash) plus an optional
  * `bundle_origin` pointer back to the parent BundleInstance._uid.
- * The engine ignores `bundle_origin`; it's a frontend-only marker
- * for the bundle frame renderer + the bundle-aware menu logic.
+ * The engine ignores `bundle_origin`; it's a frontend marker for the
+ * bundle frame renderer + the bundle-aware menu logic AND the bundle
+ * enable-gate (engine reads bundle_origin via deserialize_node_input
+ * to apply BundleInstance.enabled at execute time).
  */
 import {
   emptyBundleInstance,
@@ -40,17 +46,21 @@ export interface BundleLibraryEntry {
 /** Output shape from `buildBundleInsertion`. */
 export interface BundleInsertion {
   /** Module rows to `modules.splice(insertIdx, 0, ...modulesToSplice)`.
-   *  Each entry already has `id` regenerated, `_uid` minted,
-   *  `bundle_origin` stamped, and any `@{uuid}` refs rewritten. */
+   *  Each entry already has `_uid` minted, `bundle_origin` stamped
+   *  (at the immediate bundle's `_uid`), `collapsed: true`. */
   modulesToSplice: Array<ChildSnapshot & {
     _uid: string;
     bundle_origin: string;
     payload_hash?: string;
   }>;
-  /** BundleInstance to push into `ContextWidgetValue.bundles[]`.
-   *  Already has `library_id`, `start_idx`, `end_idx`,
-   *  `inserted_at_hash` filled in. */
+  /** BundleInstance for the outer bundle. Always present. */
   bundleInstance: BundleInstance;
+  /** BundleInstances for any inner-bundle references inside the outer.
+   *  Each has `parent_uid` set to the outer's `_uid` + a range covering
+   *  just its own leaves. Empty when the outer has no bundle children.
+   *  Tier-2 cap guarantees these inner instances themselves have no
+   *  bundle children, so the list is flat (no recursion). */
+  innerInstances: BundleInstance[];
 }
 
 /** Builds the splice payload for inserting a bundle into a Context at
@@ -66,77 +76,61 @@ export function buildBundleInsertion(
   entry: BundleLibraryEntry,
   insertIdx: number,
 ): BundleInsertion {
-  const bundleInstance = emptyBundleInstance(entry.id);
-  // Pre-flatten any bundle-typed children. Tier-2 nesting (one level of
-  // bundle inside a bundle) is a library-only construct — the canvas
-  // surface is flat: a Context's modules[] is a list of leaf modules
-  // spanned by BundleInstance ranges. The GET /bundles/{id} response
-  // server-resolves bundle references inline (attaching the referenced
-  // bundle's current children under the bundle-typed entry's `children`
-  // key), so all this helper has to do is splice those inner children
-  // into the outer module list. The API validator caps nesting at
-  // tier 2, so flattenBundleChildren never has to recurse.
-  const flatChildren = flattenBundleChildren(entry.children);
-  bundleInstance.start_idx = insertIdx;
-  bundleInstance.end_idx = insertIdx + flatChildren.length - 1;
-  bundleInstance.inserted_at_hash = entry.payload_hash;
-  // Denormalize library metadata onto the instance so the bundle
-  // header can render immediately + saved workflows retain the
-  // name/color even if the library entry gets renamed or deleted.
-  bundleInstance.name = entry.name;
-  bundleInstance.color = entry.color ?? null;
+  const outer = emptyBundleInstance(entry.id);
+  outer.inserted_at_hash = entry.payload_hash;
+  outer.name = entry.name;
+  outer.color = entry.color ?? null;
 
-  // Children keep their ORIGINAL library uuids — that's what the
-  // existing per-kind drift logic (`isDrifted` / `isMissingFromLibrary`)
-  // matches against. Regenerating ids here breaks the library link
-  // and surfaces every child as "missing".
-  //
-  // Multi-instance bundles (same bundle inserted twice into one
-  // Context) intentionally produce children that share `id` — same
-  // pattern existing modules use when duplicate-fork'd. Per-instance
-  // disambiguation lives in `_uid` (fresh per row).
-  //
-  // Known limitation: constraints + @{uuid} refs inside a bundle
-  // that target other bundle children will cross-talk between
-  // instances. Documented as v2 polish — adds bundle-scope-aware
-  // ref resolution.
-  const modulesToSplice = flatChildren.map((c) => ({
-    ...c,
-    _uid: newRowUid(),
-    bundle_origin: bundleInstance._uid,
-    // Bundle children START collapsed by default — the bundle frame
-    // is the visual container; expanded summaries inside the frame
-    // create noise on first insert. Users can expand individual
-    // children after via the collapse chevron.
-    collapsed: true,
-  }));
+  // Walk the entry's children, expanding any bundle-typed reference
+  // inline. Each leaf gets a fresh _uid and a bundle_origin pointing
+  // at the bundle whose snapshot it came from (the outer for direct
+  // leaves, the inner BundleInstance for inner-bundle leaves). The
+  // tier-2 API cap guarantees inner-bundle children are themselves
+  // leaves — no recursion needed.
+  const modulesToSplice: BundleInsertion["modulesToSplice"] = [];
+  const innerInstances: BundleInstance[] = [];
 
-  return { modulesToSplice, bundleInstance };
-}
-
-/** Replace any bundle-typed entries in `children` with their resolved
- *  inner children, inline. The API expander attaches the referenced
- *  bundle's current children under the same `children` key (along with
- *  a `_resolved_from` marker), so a single pass is enough — the tier-2
- *  cap guarantees those grandchildren are themselves leaves. A bundle
- *  entry that arrives without an inner `children` array (e.g. a missing
- *  reference flagged with `_missing_ref`) is dropped from the splice so
- *  the canvas surface stays free of dangling placeholders. The bundle
- *  frame's drift logic can still flag the parent as having lost an
- *  inner reference via the BundleInstance's `inserted_at_hash`. */
-function flattenBundleChildren(children: ChildSnapshot[]): ChildSnapshot[] {
-  const out: ChildSnapshot[] = [];
-  for (const c of children) {
+  for (const c of entry.children) {
     if (c.type === "bundle") {
-      const inner = (c as ChildSnapshot & { children?: ChildSnapshot[] }).children;
-      if (Array.isArray(inner)) {
-        for (const grandchild of inner) {
-          out.push(grandchild);
-        }
+      const innerChildren = (c as ChildSnapshot & { children?: ChildSnapshot[] }).children;
+      if (!Array.isArray(innerChildren) || innerChildren.length === 0) {
+        // Missing reference (server flagged `_missing_ref`) or empty
+        // inner bundle — drop the entry. The outer BundleInstance's
+        // drift detection still surfaces staleness via inserted_at_hash.
+        continue;
       }
+      const innerLibraryId = typeof c.id === "string" ? c.id : "";
+      const inner = emptyBundleInstance(innerLibraryId);
+      inner.parent_uid = outer._uid;
+      inner.name = (c as { name?: string }).name ?? innerLibraryId;
+      inner.color = (c as { color?: string | null }).color ?? null;
+      // Inner bundle's start_idx = the next module position post-splice.
+      // end_idx fills in once we know how many leaves it contributes.
+      const innerStart = insertIdx + modulesToSplice.length;
+      for (const gc of innerChildren) {
+        modulesToSplice.push({
+          ...(gc as ChildSnapshot),
+          _uid: newRowUid(),
+          bundle_origin: inner._uid,
+          collapsed: true,
+        });
+      }
+      inner.start_idx = innerStart;
+      inner.end_idx = innerStart + innerChildren.length - 1;
+      innerInstances.push(inner);
       continue;
     }
-    out.push(c);
+    // Direct leaf: belongs to the outer.
+    modulesToSplice.push({
+      ...c,
+      _uid: newRowUid(),
+      bundle_origin: outer._uid,
+      collapsed: true,
+    });
   }
-  return out;
+
+  outer.start_idx = insertIdx;
+  outer.end_idx = insertIdx + modulesToSplice.length - 1;
+
+  return { modulesToSplice, bundleInstance: outer, innerInstances };
 }

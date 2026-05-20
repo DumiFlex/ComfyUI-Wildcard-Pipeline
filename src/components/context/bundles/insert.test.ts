@@ -96,15 +96,16 @@ describe("buildBundleInsertion", () => {
     }
   });
 
-  // ── Tier-2 nesting pre-flatten (reference model) ──────────────────────
+  // ── Tier-2 nesting (reference model — preserves inner identity) ──────
   // GET /bundles/{id} server-resolves any bundle-typed children inline
   // by attaching the referenced bundle's current children under the
-  // bundle entry's `children` key. buildBundleInsertion expands those
-  // grandchildren into the outer canvas module list so the BundleInstance
-  // covers a flat span. The inner-bundle's name/color is dropped at
-  // insert — once on canvas the leaves belong to the outer bundle frame.
+  // bundle entry's `children` key. buildBundleInsertion mints a NEW
+  // BundleInstance per inner-bundle reference (parent_uid points at
+  // the outer) so the canvas frame renderer can draw the nested frame
+  // recursively. Inner-bundle leaves get `bundle_origin` stamped at
+  // the INNER's _uid; the outer's direct leaves point at the outer.
 
-  it("pre-flattens an expanded inner-bundle reference into the outer module list", () => {
+  it("expands inner-bundle children inline + mints an inner BundleInstance per ref", () => {
     const nested: BundleLibraryEntry = {
       id: "lib-outer",
       name: "outer",
@@ -117,9 +118,6 @@ describe("buildBundleInsertion", () => {
           payload_hash: "h-leading",
         },
         {
-          // Bundle reference entry as returned by the API expander:
-          // server-attached `children` reflects the live referenced
-          // bundle's contents.
           id: "bb000001",
           type: "bundle",
           name: "inner",
@@ -153,15 +151,58 @@ describe("buildBundleInsertion", () => {
       payload_hash: "outer-hash",
     };
     const result = buildBundleInsertion(nested, 0);
+    // Flat splice: 1 leading leaf + 2 inner leaves + 1 trailing leaf.
     expect(result.modulesToSplice).toHaveLength(4);
     expect(result.modulesToSplice.map((m) => m.id))
       .toEqual(["ll000001", "ii000001", "ii000002", "tt000001"]);
     for (const m of result.modulesToSplice) {
       expect(m.type).not.toBe("bundle");
     }
+    // One inner BundleInstance for the single bundle-typed child.
+    expect(result.innerInstances).toHaveLength(1);
+    const inner = result.innerInstances[0];
+    expect(inner.parent_uid).toBe(result.bundleInstance._uid);
+    expect(inner.name).toBe("inner");
+    expect(inner.color).toBe("#abcdef");
+    // Inner's range covers ONLY its own leaves (ii000001 + ii000002).
+    expect(inner.start_idx).toBe(1);
+    expect(inner.end_idx).toBe(2);
   });
 
-  it("BundleInstance range covers the post-flatten length", () => {
+  it("inner-bundle leaves get bundle_origin = inner._uid, direct leaves = outer._uid", () => {
+    const nested: BundleLibraryEntry = {
+      id: "lib-outer",
+      name: "outer",
+      children: [
+        {
+          id: "ll000001",
+          type: "wildcard",
+          payload: { var_binding: "leading" },
+          instance: {},
+          payload_hash: "h-leading",
+        },
+        {
+          id: "bb000001",
+          type: "bundle",
+          name: "inner",
+          children: [
+            { id: "i1", type: "wildcard", payload: {}, instance: {}, payload_hash: "h" },
+          ],
+        } as unknown as BundleLibraryEntry["children"][number],
+      ],
+      payload_hash: "h",
+    };
+    const result = buildBundleInsertion(nested, 0);
+    const outerUid = result.bundleInstance._uid;
+    const innerUid = result.innerInstances[0]._uid;
+    expect(innerUid).not.toBe(outerUid);
+    // Leading leaf → outer's bundle_origin.
+    expect(result.modulesToSplice[0].bundle_origin).toBe(outerUid);
+    // Inner leaf → inner's bundle_origin.
+    expect(result.modulesToSplice[1].bundle_origin).toBe(innerUid);
+  });
+
+  it("outer BundleInstance.end_idx covers the FULL flat span (direct + inner leaves)", () => {
     const nested: BundleLibraryEntry = {
       id: "lib-outer",
       name: "outer",
@@ -182,32 +223,12 @@ describe("buildBundleInsertion", () => {
     const result = buildBundleInsertion(nested, 10);
     expect(result.bundleInstance.start_idx).toBe(10);
     expect(result.bundleInstance.end_idx).toBe(12);
+    // Inner range sits INSIDE outer range.
+    expect(result.innerInstances[0].start_idx).toBe(10);
+    expect(result.innerInstances[0].end_idx).toBe(12);
   });
 
-  it("expanded inner-bundle leaves inherit the OUTER bundle_origin", () => {
-    const nested: BundleLibraryEntry = {
-      id: "lib-outer",
-      name: "outer",
-      children: [
-        {
-          id: "bb000001",
-          type: "bundle",
-          name: "inner",
-          children: [
-            { id: "i1", type: "wildcard", payload: {}, instance: {}, payload_hash: "h" },
-          ],
-        } as unknown as BundleLibraryEntry["children"][number],
-      ],
-      payload_hash: "h",
-    };
-    const result = buildBundleInsertion(nested, 0);
-    expect(result.modulesToSplice[0].bundle_origin).toBe(result.bundleInstance._uid);
-  });
-
-  it("drops a missing-reference bundle entry from the splice", () => {
-    // The API marks an unresolvable reference with _missing_ref and no
-    // children array. Pre-flatten skips the entry entirely so the
-    // canvas doesn't end up with a dangling placeholder row.
+  it("drops a missing-reference bundle entry from the splice (no inner instance)", () => {
     const broken: BundleLibraryEntry = {
       id: "lib-outer",
       name: "outer",
@@ -225,5 +246,12 @@ describe("buildBundleInsertion", () => {
     const result = buildBundleInsertion(broken, 0);
     expect(result.modulesToSplice).toHaveLength(1);
     expect(result.modulesToSplice[0].id).toBe("ok000001");
+    // No inner BundleInstance minted for an unresolvable reference.
+    expect(result.innerInstances).toHaveLength(0);
+  });
+
+  it("non-nested bundle produces zero inner instances", () => {
+    const result = buildBundleInsertion(bundle, 0);
+    expect(result.innerInstances).toHaveLength(0);
   });
 });

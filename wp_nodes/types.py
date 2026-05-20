@@ -227,11 +227,13 @@ def deserialize_node_input(
     # (which only knows about flat `modules[].enabled`) sees the
     # effective view without needing bundle awareness.
     #
-    # Effective enabled = bundle.enabled AND child.enabled.
-    # Nested bundles (tier-2) will extend this to AND through the
-    # parent chain — currently flat, one level only.
+    # Effective enabled = bundle.enabled AND every ancestor bundle's
+    # enabled AND child.enabled. Tier-2 nesting walks one parent_uid
+    # hop; the API cap forbids deeper chains so the loop terminates
+    # in at most two steps.
     raw_bundles = data.get("bundles")
     bundle_enabled: dict[str, bool] = {}
+    bundle_parent: dict[str, str | None] = {}
     if isinstance(raw_bundles, list):
         for b in raw_bundles:
             if not isinstance(b, dict):
@@ -239,14 +241,31 @@ def deserialize_node_input(
             uid = b.get("_uid")
             if isinstance(uid, str):
                 bundle_enabled[uid] = bool(b.get("enabled", True))
+                parent = b.get("parent_uid")
+                bundle_parent[uid] = parent if isinstance(parent, str) else None
     if bundle_enabled:
+        def _bundle_chain_enabled(uid: str) -> bool:
+            # Walk up parent_uid, return false on the first disabled ancestor.
+            # Defensive depth cap (8) absorbs corrupt cycles even though
+            # the API tier-2 rule keeps real chains at 1–2 hops.
+            seen: set[str] = set()
+            cur: str | None = uid
+            depth = 0
+            while cur is not None and cur not in seen and depth < 8:
+                seen.add(cur)
+                if bundle_enabled.get(cur, True) is False:
+                    return False
+                cur = bundle_parent.get(cur)
+                depth += 1
+            return True
+
         gated: list[dict[str, Any]] = []
         for m in modules:
             if not isinstance(m, dict):
                 gated.append(m)
                 continue
             origin = m.get("bundle_origin")
-            if isinstance(origin, str) and bundle_enabled.get(origin, True) is False:
+            if isinstance(origin, str) and not _bundle_chain_enabled(origin):
                 # Shallow-clone so we don't mutate the workflow-state
                 # row the SPA holds onto for undo / restore.
                 gated.append({**m, "enabled": False})

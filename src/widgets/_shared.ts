@@ -407,6 +407,19 @@ export interface BundleInstance {
    *  rationale as `name`. Optional / nullable — when missing, the
    *  frame uses the `--wp-bundle-default` token. */
   color?: string | null;
+  /** Tier-2 nesting: when this BundleInstance is itself a child of
+   *  another bundle (a bundle reference expanded at insert time),
+   *  `parent_uid` points at the outer instance's `_uid`. Top-level
+   *  bundles have `parent_uid === null` (or omitted, treated as null).
+   *
+   *  The tier-2 API cap (wp_api/bundles.py:_validate_bundle_refs)
+   *  guarantees this chain is at most one hop deep — an inner bundle
+   *  cannot itself contain bundle children. The frame renderer
+   *  groups bundles by `parent_uid` to render the nested frame
+   *  recursively (one level), and the engine/frontend enabled gate
+   *  ANDs up the chain so disabling the outer disables every leaf in
+   *  every inner. */
+  parent_uid?: string | null;
 }
 
 /** Module kind discriminator — the five kinds the SPA library carries. */
@@ -823,19 +836,32 @@ export function newRowUid(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Build a per-Context map from `BundleInstance._uid` → enabled. Used
- *  by `isModuleEffectivelyEnabled` callers that walk the same modules
- *  list multiple times — building the map once per walk avoids the
- *  inner O(N) scan over bundles[] each lookup. */
+/** Pre-built bundle lookup tables used by isModuleEffectivelyEnabled.
+ *  enabled: per-bundle enabled flag.
+ *  parent:  per-bundle parent_uid (or null/undefined for top-level).
+ *  Both keyed by BundleInstance._uid. */
+export interface BundleEnabledIndex {
+  enabled: Map<string, boolean>;
+  parent: Map<string, string | null>;
+}
+
+/** Build a per-Context lookup from bundles[]. Used by every reader
+ *  that walks the same modules list multiple times — building the
+ *  map once per walk avoids the inner O(N) scan over bundles[] per
+ *  lookup. Returns both `enabled` and `parent` maps because the
+ *  tier-2 gate walks the parent chain to AND through. */
 export function buildBundleEnabledMap(
   bundles: readonly BundleInstance[] | undefined,
-): Map<string, boolean> {
-  const map = new Map<string, boolean>();
-  if (!bundles) return map;
+): BundleEnabledIndex {
+  const enabled = new Map<string, boolean>();
+  const parent = new Map<string, string | null>();
+  if (!bundles) return { enabled, parent };
   for (const b of bundles) {
-    if (b && typeof b._uid === "string") map.set(b._uid, b.enabled !== false);
+    if (!b || typeof b._uid !== "string") continue;
+    enabled.set(b._uid, b.enabled !== false);
+    parent.set(b._uid, typeof b.parent_uid === "string" ? b.parent_uid : null);
   }
-  return map;
+  return { enabled, parent };
 }
 
 /** Resolves the effective enabled state of a module, taking the bundle
@@ -844,44 +870,48 @@ export function buildBundleEnabledMap(
  *  mutates child state; the gate is just applied at every read site
  *  (engine, conflict scanner, graph walkers, assembler preview).
  *
+ *  Effective enabled = child.enabled AND immediate-bundle.enabled AND
+ *  every ancestor bundle's enabled along the parent_uid chain.
+ *
  *  When `module.enabled` is falsy → not enabled regardless of bundles.
- *  When `module.bundle_origin` resolves to a bundle in `bundlesOrMap`
- *  whose `enabled` is false → not enabled.
- *  Otherwise → enabled.
+ *  When `module.bundle_origin` resolves to a bundle whose chain
+ *  contains any disabled ancestor → not enabled.
+ *  Orphan bundle_origin (uid not in the index) passes through with the
+ *  child's own enabled, matching the engine-side fallback.
  *
  *  Pass either the raw `bundles[]` array (one-shot calls) or a
- *  pre-built map from `buildBundleEnabledMap` (hot-path walks).
- *
- *  Nested case (tier-2): the child's `bundle_origin` points at its
- *  IMMEDIATE bundle. That bundle's `parent_uid` lets the walker step
- *  up the chain. Currently flat (one level); the nesting work will
- *  extend the AND through `parent_uid` once the field lands.
+ *  pre-built BundleEnabledIndex from `buildBundleEnabledMap`
+ *  (hot-path walks).
  */
 export function isModuleEffectivelyEnabled(
   module: { enabled?: boolean; bundle_origin?: string | null } | undefined | null,
-  bundlesOrMap: readonly BundleInstance[] | Map<string, boolean> | undefined,
+  bundlesOrIndex: readonly BundleInstance[] | BundleEnabledIndex | undefined,
 ): boolean {
   if (!module) return false;
   if (module.enabled === false) return false;
   const origin = module.bundle_origin;
   if (typeof origin !== "string" || !origin) return true;
-  const lookup = bundlesOrMap instanceof Map
-    ? bundlesOrMap.get(origin)
-    : findBundleEnabled(bundlesOrMap, origin);
-  // Unknown / orphan bundle_origin → don't gate. The module's own
-  // enabled flag wins. Matches the engine-boundary behaviour in
-  // `wp_nodes/types.py:deserialize_node_input`.
-  if (lookup === undefined) return true;
-  return lookup;
+  const index = isBundleIndex(bundlesOrIndex)
+    ? bundlesOrIndex
+    : buildBundleEnabledMap(bundlesOrIndex);
+  if (!index.enabled.has(origin)) return true; // orphan
+  // Walk the parent chain. Tier-2 API cap → at most 2 hops; defensive
+  // depth limit absorbs corrupt cycles.
+  const seen = new Set<string>();
+  let cur: string | null | undefined = origin;
+  let depth = 0;
+  while (cur != null && !seen.has(cur) && depth < 8) {
+    seen.add(cur);
+    if (index.enabled.get(cur) === false) return false;
+    cur = index.parent.get(cur) ?? null;
+    depth++;
+  }
+  return true;
 }
 
-function findBundleEnabled(
-  bundles: readonly BundleInstance[] | undefined,
-  uid: string,
-): boolean | undefined {
-  if (!bundles) return undefined;
-  for (const b of bundles) {
-    if (b && b._uid === uid) return b.enabled !== false;
-  }
-  return undefined;
+function isBundleIndex(x: unknown): x is BundleEnabledIndex {
+  return !!x
+    && typeof x === "object"
+    && "enabled" in (x as Record<string, unknown>)
+    && (x as { enabled: unknown }).enabled instanceof Map;
 }

@@ -29,24 +29,86 @@ function bundle(uid: string, enabled: boolean): BundleInstance {
 }
 
 describe("buildBundleEnabledMap", () => {
-  it("returns an empty map when bundles is undefined or empty", () => {
-    expect(buildBundleEnabledMap(undefined).size).toBe(0);
-    expect(buildBundleEnabledMap([]).size).toBe(0);
+  it("returns empty maps when bundles is undefined or empty", () => {
+    expect(buildBundleEnabledMap(undefined).enabled.size).toBe(0);
+    expect(buildBundleEnabledMap([]).enabled.size).toBe(0);
   });
 
   it("maps each bundle's _uid to its enabled flag", () => {
-    const m = buildBundleEnabledMap([
+    const idx = buildBundleEnabledMap([
       bundle("A", true),
       bundle("B", false),
     ]);
-    expect(m.get("A")).toBe(true);
-    expect(m.get("B")).toBe(false);
+    expect(idx.enabled.get("A")).toBe(true);
+    expect(idx.enabled.get("B")).toBe(false);
   });
 
   it("treats undefined enabled as true (defensive default)", () => {
     const malformed = { _uid: "X" } as unknown as BundleInstance;
-    const m = buildBundleEnabledMap([malformed]);
-    expect(m.get("X")).toBe(true);
+    const idx = buildBundleEnabledMap([malformed]);
+    expect(idx.enabled.get("X")).toBe(true);
+  });
+
+  it("records parent_uid for nested bundles", () => {
+    const inner: BundleInstance = {
+      ...bundle("INNER", true),
+      parent_uid: "OUTER",
+    };
+    const idx = buildBundleEnabledMap([bundle("OUTER", true), inner]);
+    expect(idx.parent.get("OUTER")).toBeNull();
+    expect(idx.parent.get("INNER")).toBe("OUTER");
+  });
+});
+
+describe("isModuleEffectivelyEnabled — nested (tier-2) parent chain", () => {
+  it("returns false when an ANCESTOR bundle is disabled", () => {
+    const outer = bundle("OUTER", false);
+    const inner: BundleInstance = { ...bundle("INNER", true), parent_uid: "OUTER" };
+    // Module belongs to the inner (which is enabled), but the outer's
+    // disabled gate cascades down through parent_uid.
+    expect(
+      isModuleEffectivelyEnabled(
+        { enabled: true, bundle_origin: "INNER" },
+        [outer, inner],
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true when both inner + outer are enabled", () => {
+    const outer = bundle("OUTER", true);
+    const inner: BundleInstance = { ...bundle("INNER", true), parent_uid: "OUTER" };
+    expect(
+      isModuleEffectivelyEnabled(
+        { enabled: true, bundle_origin: "INNER" },
+        [outer, inner],
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when the INNER is disabled even if outer is enabled", () => {
+    const outer = bundle("OUTER", true);
+    const inner: BundleInstance = { ...bundle("INNER", false), parent_uid: "OUTER" };
+    expect(
+      isModuleEffectivelyEnabled(
+        { enabled: true, bundle_origin: "INNER" },
+        [outer, inner],
+      ),
+    ).toBe(false);
+  });
+
+  it("an outer-only leaf is unaffected by an inner-bundle's disabled state", () => {
+    // The outer has TWO bundle children: one direct wildcard whose
+    // bundle_origin points at OUTER, and one inner bundle whose
+    // children point at INNER. Disabling INNER must NOT gate the
+    // OUTER's direct leaf.
+    const outer = bundle("OUTER", true);
+    const inner: BundleInstance = { ...bundle("INNER", false), parent_uid: "OUTER" };
+    expect(
+      isModuleEffectivelyEnabled(
+        { enabled: true, bundle_origin: "OUTER" },
+        [outer, inner],
+      ),
+    ).toBe(true);
   });
 });
 
