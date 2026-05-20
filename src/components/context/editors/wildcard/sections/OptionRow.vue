@@ -170,12 +170,23 @@ function fmtPct(p: number): string {
         <span
           v-if="tok.kind === 'ref'"
           class="opt__tok opt__tok--ref"
+          :class="{ 'opt__tok--filtered': Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0 }"
           :data-uuid="tok.meta?.uuid"
-        >{{ refDisplay(tok.meta?.uuid, tok.raw) }}</span>
+        >
+          <span class="opt__tok-icon" aria-hidden="true">✦</span>
+          <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.raw) }}</span>
+          <span
+            v-if="Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0"
+            class="opt__tok-suffix"
+          >·&nbsp;{{ tok.meta.sub_categories.join(", ") }}</span>
+        </span>
         <span
           v-else-if="tok.kind === 'var'"
           class="opt__tok opt__tok--var"
-        >{{ tok.raw }}</span>
+        >
+          <span class="opt__tok-icon" aria-hidden="true">⌘</span>
+          <span class="opt__tok-label">{{ tok.raw }}</span>
+        </span>
         <span
           v-else-if="tok.kind === 'dp-brace' || tok.kind === 'dp-multi'"
           class="opt__tok opt__tok--dp"
@@ -292,29 +303,40 @@ function fmtPct(p: number): string {
   color: var(--wp-text-dim, var(--wp-text3));
   text-decoration: line-through;
 }
-/* Inline-syntax chips inside option values. Mirror the SPA's
- * rich-text.css colour palette so an `@nestedName` reads the same
- * here as in the SPA editor — wildcard pink for refs, accent violet
- * for vars, warn yellow for choice-blocks, muted for escapes. */
+/* Inline-syntax chips inside option values. Matches the SPA's
+ * `wp-refchip` palette + icon prefix so an `@nestedName` reads the
+ * same on the canvas as in the SPA editor — purple ✦ for refs,
+ * green ⌘ for vars, amber `· subcat` suffix when the ref carries a
+ * sub-category filter. */
 .opt__tok {
-  border-radius: 3px;
-  padding: 0 4px;
   margin: 0 1px;
   font-weight: 500;
-  /* Inline-block so vertical padding + box-shadow render without
-   * interfering with the surrounding line's baseline. */
-  display: inline-block;
+  display: inline-flex;
+  align-items: baseline;
   vertical-align: baseline;
 }
+.opt__tok--ref,
+.opt__tok--var {
+  border-radius: 4px;
+  padding: 1px 6px;
+  gap: 4px;
+  border: 1px solid;
+}
+.opt__tok-icon { font-size: 9px; opacity: 0.75; }
+.opt__tok-suffix {
+  color: var(--wp-status-modified, #fbbf24);
+  font-size: 9px;
+  opacity: 0.9;
+}
 .opt__tok--ref {
-  color: var(--wp-kind-wildcard, #f0abfc);
-  background: color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 22%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-kind-wildcard, #c026d3) 45%, transparent);
+  background: color-mix(in srgb, #a855f7 15%, transparent);
+  border-color: color-mix(in srgb, #a855f7 50%, transparent);
+  color: #d8b4fe;
 }
 .opt__tok--var {
-  color: var(--wp-accent-text-strong, var(--wp-accent-text, #c4b5fd));
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
+  background: color-mix(in srgb, #22c55e 15%, transparent);
+  border-color: color-mix(in srgb, #22c55e 50%, transparent);
+  color: #86efac;
 }
 .opt__tok--dp {
   color: var(--wp-warn, #fcd34d);

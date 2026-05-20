@@ -166,7 +166,8 @@ describe("OptionRow", () => {
     expect(ref.exists()).toBe(true);
     expect(ref.attributes("data-uuid")).toBe("a361dbdc");
     // Until preview-resolver lands the lookup, raw form is the fallback.
-    expect(ref.text()).toBe("@{a361dbdc}");
+    // Read the identity-text span so the chip icon prefix doesn't bleed in.
+    expect(ref.find(".opt__tok-label").text()).toBe("@{a361dbdc}");
   });
 
   it("renders @{uuid} ref as @<varBinding> once resolver caches the entry", () => {
@@ -174,7 +175,7 @@ describe("OptionRow", () => {
     const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_category: "warm" };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
-    expect(ref.text()).toBe("@subject_name");
+    expect(ref.find(".opt__tok-label").text()).toBe("@subject_name");
   });
 
   it("renders {a|b|c} brace block as a dp token (warn colour)", () => {
@@ -186,7 +187,7 @@ describe("OptionRow", () => {
   it("renders $varname as a var token", () => {
     const opt = { id: "o9", value: "uses $style here", weight: 1, sub_category: "warm" };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    expect(w.find('[data-test="opt-name"] .opt__tok--var').text()).toBe("$style");
+    expect(w.find('[data-test="opt-name"] .opt__tok--var .opt__tok-label').text()).toBe("$style");
   });
 
   it("typing weight back to library default clears the override (null)", async () => {

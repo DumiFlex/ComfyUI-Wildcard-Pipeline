@@ -43,6 +43,7 @@ export interface TokenMeta {
   name?: string;
   // ref tokens
   uuid?: string;
+  sub_categories?: string[];
   // escape tokens
   literal?: string;
   // dp-brace / dp-multi tokens
