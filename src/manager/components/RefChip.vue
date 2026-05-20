@@ -75,11 +75,12 @@ function onClick(ev: MouseEvent): void {
 .wp-refchip {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
-  padding: 1px 6px;
-  border-radius: 4px;
+  gap: 3px;
+  padding: 0 5px;
+  margin: 1px 1px;
+  border-radius: 3px;
   border: 1px solid;
-  font: 12px var(--wp-font-mono);
+  font: 10px/1.4 var(--wp-font-mono);
   user-select: none;
   cursor: default;
   vertical-align: baseline;
@@ -102,6 +103,6 @@ function onClick(ev: MouseEvent): void {
   color: #fca5a5;
   cursor: help;
 }
-.wp-refchip__icon { font-size: 10px; opacity: 0.75; }
-.wp-refchip__suffix { color: var(--wp-status-modified, #fbbf24); font-size: 10px; opacity: 0.9; }
+.wp-refchip__icon { font-size: 8px; opacity: 0.75; }
+.wp-refchip__suffix { color: var(--wp-status-modified, #fbbf24); font-size: 9px; opacity: 0.9; }
 </style>

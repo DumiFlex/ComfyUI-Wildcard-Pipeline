@@ -1311,7 +1311,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 .wp-rt__host--multi {
   padding: var(--wp-space-4) var(--wp-space-5);
-  line-height: 1.5;
+  line-height: 1.9;
   min-height: 72px;
   white-space: pre-wrap;
   word-break: break-word;
