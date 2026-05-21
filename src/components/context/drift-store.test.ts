@@ -152,6 +152,31 @@ describe("drift-store: refreshMany happy path", () => {
     expect(result.refreshed[0].instance?.locked_seed).toBe(42);
     expect(result.refreshed[0].collapsed).toBe(true);
   });
+
+  it("preserves bundle_origin so refreshing rows inside a bundle doesn't dissolve it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const snapshots: Record<string, SnapshotEntry> = {
+          aaaaaaaa: {
+            snapshot_version: 1,
+            uuid: "aaaaaaaa",
+            type: "wildcard",
+            name: "fresh",
+            payload: { options: ["x"] },
+            payload_hash: "h-fresh",
+            source: { kind: "user" },
+          },
+        };
+        return new Response(JSON.stringify({ snapshots, pickOrder: ["aaaaaaaa"] }), { status: 200 });
+      }),
+    );
+    const inBundle = mkEntry({ id: "aaaaaaaa" }) as ModuleEntry & { bundle_origin?: string };
+    inBundle.bundle_origin = "bundle-uid-XX";
+    const result = await refreshMany([inBundle]);
+    expect(result.refreshed).toHaveLength(1);
+    expect((result.refreshed[0] as ModuleEntry & { bundle_origin?: string }).bundle_origin).toBe("bundle-uid-XX");
+  });
 });
 
 describe("drift-store: refreshMany partial failure", () => {

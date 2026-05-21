@@ -164,7 +164,7 @@ export async function refreshMany(modules: ModuleEntry[]): Promise<RefreshResult
  * actually move.
  */
 export function mergeRefresh(m: ModuleEntry, live: SnapshotEntry): ModuleEntry {
-  return {
+  const merged: ModuleEntry & { bundle_origin?: string } = {
     type: live.type,
     meta: {
       name: live.name ?? m.meta.name,
@@ -180,6 +180,13 @@ export function mergeRefresh(m: ModuleEntry, live: SnapshotEntry): ModuleEntry {
     collapsed: m.collapsed,
     _uid: m._uid,
   };
+  // Preserve bundle_origin from the source row. Without this, refreshing
+  // a drifted module inside a bundle stripped its bundle membership →
+  // the bundle's range became non-contiguous on next reconcile (or
+  // dissolved entirely when only nested-bundle leaves remained).
+  const sourceOrigin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+  if (sourceOrigin) merged.bundle_origin = sourceOrigin;
+  return merged;
 }
 
 /** Update the local library-hash for one module id. Used by save-to-library

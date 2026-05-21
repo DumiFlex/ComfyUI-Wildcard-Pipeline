@@ -1642,7 +1642,11 @@ async function refreshOne(idx: number): Promise<void> {
     if (value.value.modules[idx] !== m) return;  // row shifted while loading
     const next = [...value.value.modules];
     next[idx] = merged;
-    value.value.modules = next;
+    // Route through commitModules so reconcileBundleRanges re-envelopes
+    // bundle ranges around the refreshed row. Direct assignment skipped
+    // reconcile, so when mergeRefresh used to strip bundle_origin (now
+    // fixed) the bundle silently dissolved on the next mutation.
+    commitModules(next);
     await nextTick();
     if (modulesContainer.value) {
       void flashRows([merged._uid], modulesContainer.value, 0);
@@ -1690,7 +1694,11 @@ async function refreshAllDrifted(): Promise<void> {
         if (merged._uid) refreshedUids.push(merged._uid);
       }
     }
-    value.value.modules = next;
+    // commitModules (vs direct assignment) re-runs reconcileBundleRanges
+    // so bundles[] envelopes the refreshed rows correctly. Critical when
+    // any refreshed row sits inside a bundle — direct assignment skipped
+    // reconcile and the bundle silently dissolved on the next mutation.
+    commitModules(next);
     await nextTick();
     if (modulesContainer.value && refreshedUids.length > 0) {
       void flashRows(refreshedUids, modulesContainer.value);
