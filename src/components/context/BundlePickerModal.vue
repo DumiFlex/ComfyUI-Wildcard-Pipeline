@@ -81,6 +81,10 @@ function kindCompositionPills(b: BundleRow): Array<{ label: string; cls: string 
     ["combine",     "Cb", "comp-pill comp-c"],
     ["fixed_values","F",  "comp-pill comp-f"],
     ["derivation",  "D",  "comp-pill comp-d"],
+    // Inner bundle references stored as {type:"bundle", id, name, color}
+    // in the library entry's children[]. Surfaces nested structure
+    // before the user inserts — no more "blind nesting" surprises.
+    ["bundle",      "B",  "comp-pill comp-b"],
   ];
   const out: Array<{ label: string; cls: string }> = [];
   for (const [type, abbr, cls] of order) {
@@ -528,6 +532,16 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 .comp-f { background: color-mix(in srgb, var(--wp-kind-fixed) 22%, transparent); color: var(--wp-kind-fixed); }
 .comp-d { background: color-mix(in srgb, var(--wp-kind-derivation) 22%, transparent); color: var(--wp-kind-derivation); }
 .comp-x { background: color-mix(in srgb, var(--wp-kind-constraint) 22%, transparent); color: var(--wp-kind-constraint); }
+/* Inner-bundle pill uses the bundle default token so the chip reads
+ * as "this contains another bundle" without colliding with module kind
+ * pills. Slightly stronger background tint + dashed outline so the
+ * nesting signal is visible at a glance. */
+.comp-b {
+  background: color-mix(in srgb, var(--wp-bundle-default) 28%, transparent);
+  color: var(--wp-bundle-default);
+  outline: 1px dashed color-mix(in srgb, var(--wp-bundle-default) 60%, transparent);
+  outline-offset: -1px;
+}
 
 /* Footer — keyboard hints inline with Cancel + Create. Matches the
  * module picker pattern: kbd chips are neutral, not amber. */

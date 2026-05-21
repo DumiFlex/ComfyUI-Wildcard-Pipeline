@@ -320,9 +320,16 @@ const summary = computed(() => {
 }
 /* Bundle icon base from shared .wp-row-type-icon (16×16 inline-flex).
  * Bundle-specific override: color from bundle frame token, font-size
- * 12 for visual parity with ModuleRow's .wp-row-type-icon density. */
-.wp-bundle-icon { color: var(--b); }
-.wp-bundle-icon .pi { font-size: 12px; }
+ * 12 for visual parity with ModuleRow's .wp-row-type-icon density.
+ *
+ * Chained `.wp-bundle-icon.wp-row-type-icon` (specificity 0,0,2,0) so
+ * the rule wins over ContextWidget's blanket
+ * `.wp-row-type-icon { color: var(--wp-kind-wildcard); }` (specificity
+ * 0,0,1,0). Without the chain, the bundle icon picked up the default
+ * wildcard purple regardless of the bundle's actual color, so the
+ * 📦 glyph never matched the frame's border. */
+.wp-bundle-icon.wp-row-type-icon { color: var(--b); }
+.wp-bundle-icon.wp-row-type-icon .pi { font-size: 12px; color: var(--b); }
 .wp-bundle-chip {
   /* line-height 1.2 keeps room for descenders — line-height: 1 clipped
    * the bottom of letters like 'g' / 'p' / 'y' in the rendered chip. */
