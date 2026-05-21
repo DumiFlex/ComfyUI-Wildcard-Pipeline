@@ -360,36 +360,18 @@ function classifyAgainst(
   value: ContextWidgetValue,
   drag: DragPayload | null,
 ): DropZone {
-  // Skip the dragged bundle's frame + EVERYTHING that moves with it.
-  // For a bundle drag, "everything" includes:
-  //   - the dragged bundle itself
-  //   - any nested bundles whose parent chain leads to the dragged bundle
-  //   - any module rows whose bundle_origin matches the dragged bundle
-  //     OR any of its descendant bundles
-  // Without this broader skip, dragging the outer bundle DOWN past
-  // its own children would let the resolver match the outer's inner
-  // bundle or the inner's leaves as drop targets — but those rows
-  // move with the outer, so they're not valid landings.
-  const draggedBundleUid = drag?.kind === "bundle" ? drag.bundleUid : null;
-  const movingBundleUids = draggedBundleUid
-    ? collectMovingBundleUids(draggedBundleUid, value.bundles ?? [])
-    : new Set<string>();
-  const filtered = candidates.filter((el) => {
-    if (el.classList.contains("wp-bundle")) {
-      const uid = el.dataset.bundleUid ?? "";
-      if (isSelfHover(uid, drag)) return false;
-      if (movingBundleUids.has(uid)) return false;
-      return true;
-    }
-    if (draggedBundleUid) {
-      const idxRaw = el.dataset.moduleIdx;
-      if (idxRaw !== undefined) {
-        const m = value.modules[Number(idxRaw)] as ModuleEntry & { bundle_origin?: string } | undefined;
-        if (m?.bundle_origin && movingBundleUids.has(m.bundle_origin)) return false;
-      }
-    }
-    return true;
-  });
+  // KEEP the dragged bundle + its descendants in the candidates list.
+  // If we removed them, the resolver would skip over them and the
+  // drop indicator would paint at the position of the NEXT non-moving
+  // candidate — typically far away from the pointer. User-visible
+  // bug: hover in the gap just above the dragged bundle, bar shows
+  // at chain_b way down the list.
+  //
+  // Drop-on-self is handled by classifyWithinBundle's self-hover +
+  // movingUids guards (returns null when pointer is INSIDE the
+  // dragged region) and by applyDrop's self-drop guard. The candidate
+  // list stays complete so the visual indicator follows the pointer.
+  const filtered = candidates;
   if (filtered.length === 0) return { kind: "end" };
 
   for (let k = 0; k < filtered.length; k++) {
