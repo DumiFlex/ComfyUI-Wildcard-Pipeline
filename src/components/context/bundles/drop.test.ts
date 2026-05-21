@@ -144,3 +144,80 @@ describe("applyDrop — bundle drops (slot zone)", () => {
     expect(next).toBe(v);
   });
 });
+
+describe("applyDrop — nested bundle scenarios", () => {
+  it("drag leaf out of inner bundle to top-level: clears bundle_origin, inner range shrinks", () => {
+    // Outer B1 [0..3] with inner B2 [1..2]. Drag i2 (inner leaf at idx 2)
+    // to top-level slot 4 (end).
+    const v = value(
+      [
+        mod("d1", { bundle_origin: "B1" }),
+        mod("i1", { bundle_origin: "B2" }),
+        mod("i2", { bundle_origin: "B2" }),
+        mod("d2", { bundle_origin: "B1" }),
+      ],
+      [bundle("B1", "L1", 0, 3), bundle("B2", "L2", 1, 2, "B1")],
+    );
+    const drag: DropPayload = { kind: "module", sourceIdx: 2, sourceUid: "u-i2" };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 4 };
+    const next = applyDrop(zone, drag, v);
+    expect(next.modules.map((m) => m.id)).toEqual(["d1", "i1", "d2", "i2"]);
+    // i2 stripped of bundle_origin (lives at top-level now)
+    expect((next.modules[3] as { bundle_origin?: string }).bundle_origin).toBeUndefined();
+    // Inner range shrinks to [1..1]; outer shrinks to [0..2].
+    const b2 = next.bundles!.find((b) => b._uid === "B2")!;
+    expect(b2.start_idx).toBe(1);
+    expect(b2.end_idx).toBe(1);
+    const b1 = next.bundles!.find((b) => b._uid === "B1")!;
+    expect(b1.start_idx).toBe(0);
+    expect(b1.end_idx).toBe(2);
+  });
+
+  it("drag last leaf out of inner bundle → inner auto-dissolves", () => {
+    // Outer B1 [0..2] with inner B2 [1..1] (only 1 leaf). Drag that
+    // leaf out → inner has 0 leaves → reconcile drops it.
+    const v = value(
+      [
+        mod("d1", { bundle_origin: "B1" }),
+        mod("lonely", { bundle_origin: "B2" }),
+        mod("d2", { bundle_origin: "B1" }),
+      ],
+      [bundle("B1", "L1", 0, 2), bundle("B2", "L2", 1, 1, "B1")],
+    );
+    const drag: DropPayload = { kind: "module", sourceIdx: 1, sourceUid: "u-lonely" };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 3 };
+    const next = applyDrop(zone, drag, v);
+    // B2 should be gone — no children, no contiguous range.
+    expect(next.bundles!.find((b) => b._uid === "B2")).toBeUndefined();
+    // B1 outer survives with its 2 direct leaves [0..1].
+    const b1 = next.bundles!.find((b) => b._uid === "B1")!;
+    expect(b1.start_idx).toBe(0);
+    expect(b1.end_idx).toBe(1);
+  });
+
+  it("drag inner-bundle leaf to OUTER scope (sibling drop): rewrites bundle_origin to outer", () => {
+    // Outer B1 [0..3] with inner B2 [1..2]. Drag i1 (inner idx 1) to
+    // slot inside outer but past inner, at insertIdx 3 (outer scope).
+    const v = value(
+      [
+        mod("d1", { bundle_origin: "B1" }),
+        mod("i1", { bundle_origin: "B2" }),
+        mod("i2", { bundle_origin: "B2" }),
+        mod("d2", { bundle_origin: "B1" }),
+      ],
+      [bundle("B1", "L1", 0, 3), bundle("B2", "L2", 1, 2, "B1")],
+    );
+    const drag: DropPayload = { kind: "module", sourceIdx: 1, sourceUid: "u-i1" };
+    const zone: DropZone = { kind: "slot", containerUid: "B1", insertIdx: 3 };
+    const next = applyDrop(zone, drag, v);
+    // i1 now lives in outer's direct scope between i2 and d2 — wait,
+    // need to trace: removed from idx 1, splice at clamped idx 2.
+    // Result: [d1, i2, i1, d2]. i1.bundle_origin = "B1".
+    expect(next.modules.map((m) => m.id)).toEqual(["d1", "i2", "i1", "d2"]);
+    expect((next.modules[2] as { bundle_origin?: string }).bundle_origin).toBe("B1");
+    // Inner shrinks to [1..1] (just i2); outer envelopes everything still.
+    const b2 = next.bundles!.find((b) => b._uid === "B2")!;
+    expect(b2.start_idx).toBe(1);
+    expect(b2.end_idx).toBe(1);
+  });
+});

@@ -785,3 +785,153 @@ describe("conflict scanner — cross-kind same-node override demotion", () => {
     expect(dupes[0]).toMatchObject({ moduleId: "w2", variable: "color" });
   });
 });
+
+describe("scanConflicts — nested bundle gate cascade", () => {
+  // Bundles are presentation-only in conflict logic — the scanner only
+  // cares about each module's EFFECTIVE enabled state, which walks the
+  // parent_uid chain via isModuleEffectivelyEnabled. These tests assert
+  // the cascade actually fires for tier-2 (parent_uid chain depth 1).
+
+  it("disabled outer bundle suppresses conflicts on its DIRECT children", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "w1", type: "wildcard", enabled: true,
+          meta: { name: "a" }, entries: [],
+          payload: { var_binding: "style", options: [] },
+          bundle_origin: "outer-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+        {
+          id: "w2", type: "wildcard", enabled: true,
+          meta: { name: "b" }, entries: [],
+          payload: { var_binding: "style", options: [] }, // would dup
+          bundle_origin: "outer-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+      ],
+      bundles: [{
+        _uid: "outer-u", library_id: "lib-outer",
+        start_idx: 0, end_idx: 1,
+        enabled: false, collapsed: false, inserted_at_hash: "h",
+        name: "Outer", color: null, parent_uid: null,
+      }],
+    };
+    // Outer disabled → both children effectively disabled → no duplicate.
+    const out = scanConflicts(value, []);
+    expect(out.filter((c) => c.type === "duplicate_variable")).toEqual([]);
+  });
+
+  it("disabled outer cascades to INNER bundle's leaves", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "w1", type: "wildcard", enabled: true,
+          meta: { name: "a" }, entries: [],
+          payload: { var_binding: "style", options: [] },
+          bundle_origin: "inner-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+        {
+          id: "w2", type: "wildcard", enabled: true,
+          meta: { name: "b" }, entries: [],
+          payload: { var_binding: "style", options: [] },
+          bundle_origin: "inner-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+      ],
+      bundles: [
+        {
+          _uid: "outer-u", library_id: "lib-outer",
+          start_idx: 0, end_idx: 1,
+          enabled: false, collapsed: false, inserted_at_hash: "h",
+          name: "Outer", color: null, parent_uid: null,
+        },
+        {
+          _uid: "inner-u", library_id: "lib-inner",
+          start_idx: 0, end_idx: 1,
+          enabled: true, collapsed: false, inserted_at_hash: "h",
+          name: "Inner", color: null, parent_uid: "outer-u",
+        },
+      ],
+    };
+    // Inner's own enabled is TRUE but outer is FALSE → cascade disables
+    // both inner leaves → no duplicate flagged.
+    const out = scanConflicts(value, []);
+    expect(out.filter((c) => c.type === "duplicate_variable")).toEqual([]);
+  });
+
+  it("enabled outer + disabled inner: inner leaves suppressed, outer leaf still scanned", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "w-outer", type: "wildcard", enabled: true,
+          meta: { name: "outer-leaf" }, entries: [],
+          payload: { var_binding: "style", options: [] },
+          bundle_origin: "outer-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+        {
+          id: "w-inner", type: "wildcard", enabled: true,
+          meta: { name: "inner-leaf" }, entries: [],
+          payload: { var_binding: "style", options: [] }, // would dup with w-outer
+          bundle_origin: "inner-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+      ],
+      bundles: [
+        {
+          _uid: "outer-u", library_id: "lib-outer",
+          start_idx: 0, end_idx: 1,
+          enabled: true, collapsed: false, inserted_at_hash: "h",
+          name: "Outer", color: null, parent_uid: null,
+        },
+        {
+          _uid: "inner-u", library_id: "lib-inner",
+          start_idx: 1, end_idx: 1,
+          enabled: false, collapsed: false, inserted_at_hash: "h",
+          name: "Inner", color: null, parent_uid: "outer-u",
+        },
+      ],
+    };
+    // Inner disabled suppresses w-inner → no duplicate (only w-outer
+    // effectively enabled writing `$style`).
+    const out = scanConflicts(value, []);
+    expect(out.filter((c) => c.type === "duplicate_variable")).toEqual([]);
+  });
+
+  it("cross-bundle duplicate flagged when both bundles enabled", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        {
+          id: "w-outer", type: "wildcard", enabled: true,
+          meta: { name: "outer-leaf" }, entries: [],
+          payload: { var_binding: "style", options: [] },
+          bundle_origin: "outer-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+        {
+          id: "w-inner", type: "wildcard", enabled: true,
+          meta: { name: "inner-leaf" }, entries: [],
+          payload: { var_binding: "style", options: [] },
+          bundle_origin: "inner-u",
+        } as ContextWidgetValue["modules"][number] & { bundle_origin?: string },
+      ],
+      bundles: [
+        {
+          _uid: "outer-u", library_id: "lib-outer",
+          start_idx: 0, end_idx: 1,
+          enabled: true, collapsed: false, inserted_at_hash: "h",
+          name: "Outer", color: null, parent_uid: null,
+        },
+        {
+          _uid: "inner-u", library_id: "lib-inner",
+          start_idx: 1, end_idx: 1,
+          enabled: true, collapsed: false, inserted_at_hash: "h",
+          name: "Inner", color: null, parent_uid: "outer-u",
+        },
+      ],
+    };
+    const out = scanConflicts(value, []);
+    const dupes = out.filter((c) => c.type === "duplicate_variable");
+    expect(dupes).toHaveLength(1);
+    expect(dupes[0]).toMatchObject({ variable: "style" });
+  });
+});
