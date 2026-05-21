@@ -428,11 +428,26 @@ function classifyAgainst(
   return { kind: "end" };
 }
 
-/** Compute a bundle frame's effective bounding box as the union of its
- *  header + any visible child rows. The frame's own
- *  getBoundingClientRect may underreport (collapsed bundles, jsdom
- *  test stubs, CSS layout quirks) so a manual union is more reliable. */
+/** Compute a bundle frame's effective bounding box.
+ *
+ *  Primary source is `bundleEl.getBoundingClientRect()` — that's the
+ *  VISIBLE bounds (CSS box, post-grid-collapse for collapsed bundles).
+ *  Falling back to the union-with-children only when the frame's own
+ *  rect reports zero height (test stubs without a stubbed bundle rect).
+ *
+ *  **Why not always union with children:** for a COLLAPSED bundle,
+ *  the children are still in DOM at their natural layout positions —
+ *  `overflow: hidden` clips paint, not layout. Unioning with child
+ *  rects extends the effective rect FAR below the visibly-collapsed
+ *  bundle, which makes the resolver believe the pointer is "inside"
+ *  the bundle when it's actually several rows below. That breaks
+ *  drag-down: the self-hover guard catches the drop and no-ops. */
 function effectiveBundleRect(bundleEl: HTMLElement): { top: number; bottom: number; height: number } {
+  const own = bundleEl.getBoundingClientRect();
+  if (own.height > 0 || own.bottom !== own.top) {
+    return { top: own.top, bottom: own.bottom, height: own.height };
+  }
+  // Fallback for unstubbed test rects: union header + child rows.
   let top = Number.POSITIVE_INFINITY;
   let bottom = Number.NEGATIVE_INFINITY;
   const headerEl = bundleEl.querySelector<HTMLElement>("[data-bundle-header]");
@@ -452,8 +467,7 @@ function effectiveBundleRect(bundleEl: HTMLElement): { top: number; bottom: numb
     }
   }
   if (!isFinite(top) || !isFinite(bottom)) {
-    const r = bundleEl.getBoundingClientRect();
-    return { top: r.top, bottom: r.bottom, height: r.height };
+    return { top: own.top, bottom: own.bottom, height: own.height };
   }
   return { top, bottom, height: bottom - top };
 }
