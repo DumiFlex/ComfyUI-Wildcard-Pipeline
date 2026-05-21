@@ -34,6 +34,7 @@ describe("RichTextInput.vue", () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "a @{aabbccdd:warm} b",
+        surface: "wildcard",
         varSuggestions: [],
         uuidToName: new Map([["aabbccdd", "color"]]),
       },
@@ -126,24 +127,42 @@ describe("RichTextInput.vue", () => {
     expect(wrap.find(".wp-rt").classes()).toContain("wp-rt--multi");
   });
 
-  it("renders RefChip atoms for $var/@{uuid}/@{uuid:subcat} tokens", () => {
-    // Vars always render as resolved chips regardless of whether they
-    // appear in `varSuggestions` (runtime/forward-declared vars are valid).
-    // `uuidToName` resolves `aabbccdd` → `color`; `deadbeef` stays unresolved.
+  it("renders RefChip atoms for @{uuid}/@{uuid:subcat} tokens in wildcard surface", () => {
+    // Surface enum gates which atom kinds chipify:
+    //   - "wildcard": @{uuid} chips, $var stays plain text (wildcards
+    //     don't expand $name substitution)
+    //   - "combine"/"derivation"/"assembler": $var chips, @{uuid} stays
+    //     plain text (template surfaces don't expand nested wildcards)
+    // This test covers the wildcard side. See the next test for combine.
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "$person sees @{aabbccdd} and @{deadbeef:warm} of {red|blue}",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "color"]]),
+      },
+    });
+    const chips = wrap.findAll(".wp-refchip");
+    // 2 refs chip — $person collapses to text since this is wildcard surface.
+    expect(chips.length).toBe(2);
+    expect(chips[0].text()).toContain("@color");
+    expect(chips[1].text()).toContain("?");  // deadbeef unresolved
+    expect(chips[1].text()).toContain("deadbeef");
+  });
+
+  it("renders RefChip atoms for $var tokens in template surface, ignores @{uuid}", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "$person sees @{aabbccdd}",
+        surface: "combine",
         varSuggestions: ["person"],
         uuidToName: new Map([["aabbccdd", "color"]]),
       },
     });
     const chips = wrap.findAll(".wp-refchip");
-    // var + 2 refs = 3 chips; {red|blue} stays as text in this model
-    expect(chips.length).toBe(3);
+    // Only the $person var chip — @{uuid} stays as plain text on
+    // template surfaces (no nested wildcard expansion at runtime).
+    expect(chips.length).toBe(1);
     expect(chips[0].text()).toContain("$person");
-    expect(chips[1].text()).toContain("@color");
-    expect(chips[2].text()).toContain("?");  // deadbeef unresolved
-    expect(chips[2].text()).toContain("deadbeef");
   });
 
   it("renders $$ escapes as literal text without classifying as a var chip", () => {
@@ -579,6 +598,30 @@ describe("RichTextInput.vue", () => {
   //   2. `renderTick` bump on every programmatic atom apply forces Vue
   //      to mint fresh `:key`s and tear down stale DOM spans whose
   //      `textContent` had been mutated outside the v-for diff.
+  it("Delete (forward) immediately before a chip removes it atomically", async () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$x hello", varSuggestions: ["x"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    // Place caret at offset 0 (before the $x chip in raw text).
+    const range = document.createRange();
+    const sp = (host.element as HTMLElement).querySelector(".wp-rt__text");
+    if (sp && sp.firstChild) {
+      range.setStart(sp.firstChild, 0);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    await host.trigger("keydown", { key: "Delete" });
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    // After forward-delete on the chip, only " hello" remains.
+    expect(events[events.length - 1]?.[0]).toBe(" hello");
+    wrap.unmount();
+  });
+
   it("typed $name + chip insert without probe-set acStart emits a single chip (no duplication)", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", varSuggestions: [] },

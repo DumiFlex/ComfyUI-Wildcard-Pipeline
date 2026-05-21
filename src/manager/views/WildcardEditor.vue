@@ -34,7 +34,6 @@ import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
 import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 import {
-  collectLibraryVarHints,
   collectLibraryWildcardRefs,
 } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
@@ -181,12 +180,10 @@ const uuidToSubCategories = computed<Map<string, string[]>>(() => {
   return out;
 });
 
-// Suggestions: union of upstream `$var` names for inline `$`-trigger
-// autocomplete. Delegates to the shared walker so wildcard, combine,
-// and derivation editors share one source of truth (and one bug surface).
-const varSuggestions = computed<string[]>(
-  () => collectLibraryVarHints(moduleStore, props.id).map((h) => h.label),
-);
+// Var-suggestions removed: wildcard option values don't support $name
+// substitution at runtime (only @{uuid} nested refs + {a|b|c} inline
+// choices). RichTextInput's surface="wildcard" gates the $-trigger
+// popover so even pasted `$name` text stays plain.
 
 const subCategoryOptions = computed(() => [
   { value: "", label: "(none)" },
@@ -495,8 +492,8 @@ defineExpose({ historyEntries, applyRestore, options });
             <td>
               <RichTextInput
                 v-model="o.value"
+                surface="wildcard"
                 :ref-suggestions="wcSuggestions"
-                :var-suggestions="varSuggestions"
                 :uuid-to-name="nameByUuid"
                 :uuid-to-sub-categories="uuidToSubCategories"
                 placeholder="value (type @ for nested wildcards · {a|b|c} for inline choices)"

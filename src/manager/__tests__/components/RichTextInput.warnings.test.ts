@@ -118,6 +118,7 @@ describe("RichTextInput — UUID name display via RefChip", () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "@{aabbccdd}",
+        surface: "wildcard",
         uuidToName: new Map([["aabbccdd", "color"]]),
       },
     });
@@ -134,6 +135,7 @@ describe("RichTextInput — UUID name display via RefChip", () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "@{deadbeef}",
+        surface: "wildcard",
         // uuidToName intentionally empty — `deadbeef` should be unresolved.
       },
     });

@@ -52,7 +52,13 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  surface: "wildcard",
+  // Default = "combine" (permissive template surface allowing $vars,
+  // disallowing nested @{uuid} refs). Wildcard option editor MUST
+  // pass surface="wildcard" explicitly — that surface BLOCKS $vars
+  // (wildcards don't expand $name substitution at runtime) and
+  // ALLOWS @{uuid} nested wildcard refs. Other template surfaces
+  // (combine, derivation, assembler) share the same default semantics.
+  surface: "combine",
   warnings: () => [],
   multiline: false,
   rows: 4,
@@ -174,7 +180,49 @@ function padAtoms(list: Atom[]): Atom[] {
   return out;
 }
 
-const atoms = ref<Atom[]>(padAtoms(parse(props.modelValue || "")));
+/** Parse with surface-aware atom filtering.
+ *
+ *  - "wildcard" surface: collapse `var` atoms back into plain text
+ *    (wildcards don't use `$name` substitution at runtime — option
+ *    text containing `$name` should display as literal text).
+ *  - other surfaces: collapse `ref` atoms back into plain text
+ *    (combine/derivation templates don't expand `@{uuid}` nested
+ *    wildcards — only wildcards themselves do).
+ *
+ *  Adjacent text atoms produced by the collapse are merged so the
+ *  padAtoms invariant ("no adjacent text atoms") still holds. */
+function parseForSurface(text: string): Atom[] {
+  const atoms = parse(text);
+  const collapseKind: "var" | "ref" =
+    props.surface === "wildcard" ? "var" : "ref";
+  const out: Atom[] = [];
+  for (const a of atoms) {
+    if (a.kind === collapseKind) {
+      // Re-serialise back to raw text and merge into adjacent text.
+      const raw = a.kind === "var"
+        ? "$" + a.name
+        : (a.subCategories.length > 0
+            ? "@{" + a.uuid + ":" + a.subCategories.join(",") + "}"
+            : "@{" + a.uuid + "}");
+      const last = out[out.length - 1];
+      if (last && last.kind === "text") {
+        out[out.length - 1] = { kind: "text", text: last.text + raw };
+      } else {
+        out.push({ kind: "text", text: raw });
+      }
+      continue;
+    }
+    const last = out[out.length - 1];
+    if (a.kind === "text" && last && last.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: last.text + a.text };
+    } else {
+      out.push(a);
+    }
+  }
+  return out;
+}
+
+const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 let lastEmittedValue = props.modelValue || "";
 
 watch(() => props.modelValue, (next) => {
@@ -183,7 +231,7 @@ watch(() => props.modelValue, (next) => {
   // a stale user-typed text in a span (typed since the last echo) gets
   // wiped via the renderTick bump. Same v-for diff pitfall as
   // programmatic edits.
-  applyAtoms(parse(next || ""));
+  applyAtoms(parseForSurface(next || ""));
 });
 
 /** Emit `update:modelValue` and remember the value so the watcher
@@ -352,8 +400,18 @@ function refreshAutocompleteFromHost(): void {
     acOpen.value = false;
     return;
   }
-  // Gate `@` autocomplete — only available in the "wildcard" surface.
+  // Gate `@` autocomplete — only available in the "wildcard" surface
+  // (nested wildcard refs make sense only inside a wildcard option).
   if (hit.trigger === "@" && props.surface !== "wildcard") {
+    acOpen.value = false;
+    return;
+  }
+  // Gate `$` autocomplete — wildcards don't use $var substitution at
+  // runtime; only template surfaces (combine, derivation, assembler)
+  // do. Blocking the popover in wildcard surface stops the user from
+  // typing `$name` into an option value and ending up with a chip
+  // that has no engine meaning.
+  if (hit.trigger === "$" && props.surface === "wildcard") {
     acOpen.value = false;
     return;
   }
@@ -602,7 +660,7 @@ function insertChipAtCaret(chipText: string): void {
   const before = text.slice(0, cutFrom);
   const after = text.slice(caret);
   const newText = before + chipText + after;
-  applyAtoms(parse(newText));
+  applyAtoms(parseForSurface(newText));
   emitValue(newText);
   const newCaret = (before + chipText).length;
   void nextTick(() => restoreCursorAtChar(newCaret));
@@ -825,7 +883,7 @@ const SETTLE_DELIMITERS = /[\s,;:./()[\]{}!?]/;
 function settleAtomsFromHost(): void {
   const text = readHostAsText();
   const caret = currentCursorCharOffset();
-  const parsed = parse(text);
+  const parsed = parseForSurface(text);
   // Skip if parse didn't produce more chips than we already have — avoids
   // a re-render churn on every space when there's no `$`/`@` token to settle.
   const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
@@ -1045,7 +1103,7 @@ function onHostPaste(ev: ClipboardEvent): void {
   const before = currentText.slice(0, caret);
   const after = currentText.slice(caret);
   const newText = before + pasted + after;
-  applyAtoms(parse(newText));
+  applyAtoms(parseForSurface(newText));
   emitValue(newText);
   const newCaret = (before + pasted).length;
   void nextTick(() => restoreCursorAtChar(newCaret));
@@ -1057,7 +1115,7 @@ function onHostBlur(): void {
   // a settle-by-delimiter during typing chips up here. Caret already gone,
   // so no need to restore it — atoms re-render is enough.
   const text = readHostAsText();
-  const parsed = parse(text);
+  const parsed = parseForSurface(text);
   const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
   const chipsNext = parsed.filter((a) => a.kind !== "text").length;
   if (chipsNext > chipsNow) applyAtoms(parsed);
@@ -1165,12 +1223,31 @@ function onHostKeydown(ev: KeyboardEvent): void {
     if (chipMatch) {
       ev.preventDefault();
       const newText = before.slice(0, -chipMatch[0].length) + rawText.slice(rawCaret);
-      applyAtoms(parse(newText));
+      applyAtoms(parseForSurface(newText));
       emitValue(newText);
       const newCaret = before.length - chipMatch[0].length;
       void nextTick(() => restoreCursorAtChar(newCaret));
     }
     // Otherwise let the browser handle char-level deletion natively.
+    return;
+  }
+  if (ev.key === "Delete") {
+    // Forward-delete (key right of Backspace on most keyboards). Mirror
+    // the Backspace path but check the chars immediately AFTER the
+    // caret for a complete chip serialisation. Same atomic-removal
+    // contract so the user can't end up half-deleting a chip.
+    const rawText = readHostAsText();
+    const rawCaret = currentCursorCharOffset();
+    if (rawCaret >= rawText.length) return;
+    const after = rawText.slice(rawCaret);
+    const chipMatch = after.match(/^(\$[A-Za-z_][A-Za-z0-9_]*|@\{[0-9a-f]{8}(?::[^}]*)?\})/);
+    if (chipMatch) {
+      ev.preventDefault();
+      const newText = rawText.slice(0, rawCaret) + after.slice(chipMatch[0].length);
+      applyAtoms(parseForSurface(newText));
+      emitValue(newText);
+      void nextTick(() => restoreCursorAtChar(rawCaret));
+    }
     return;
   }
   // Arrow keys: defer to native browser handling. Modern browsers skip
