@@ -22,6 +22,13 @@ export interface BundleFrameCtx {
    *  `wp-gap-before`/`wp-gap-after` margin class so a gap opens for the
    *  drop-bar. */
   bundleHeaderGap: (uid: string) => "before" | "after" | null;
+  /** True when the current drag's resolved slot zone targets THIS
+   *  bundle's body — i.e. the drop will land inside this bundle. Drives
+   *  a frame-level highlight (ring + tinted background) so users get a
+   *  glance-readable "this is the receiving container" affordance,
+   *  whether they're dropping a leaf, an inner bundle, or a top-level
+   *  bundle becoming a nested inner. */
+  isBundleDropTarget: (uid: string) => boolean;
   recentDropUids: Ref<Set<string>>;
   pulseDelayFor: (uid: string | null | undefined) => string;
   toggleBundleCollapsed: (uid: string) => void;

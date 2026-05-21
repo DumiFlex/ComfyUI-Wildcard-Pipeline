@@ -245,6 +245,17 @@ function bundleHeaderGap(uid: string): "before" | "after" | null {
   return a.pos;
 }
 
+// True when the slot zone's container is THIS bundle's body — i.e. the
+// drop will land somewhere inside it. Drives the frame-level highlight.
+// Fires for in-bundle reorder AND for crossing into the bundle from
+// outside; both cases are "drop will land in this container", so the
+// affordance is consistent.
+function isBundleDropTarget(uid: string): boolean {
+  const z = dragOver.value;
+  if (!z) return false;
+  return z.containerUid === uid;
+}
+
 /** Looks up the indicator-bar position for a drop container.
  *
  *  `containerUid = null` → top-level list (the `.wp-modules` container
@@ -3590,6 +3601,7 @@ const bundleFrameCtx: BundleFrameCtx = {
   bundleInternalState,
   bundleLockState,
   bundleHeaderGap,
+  isBundleDropTarget,
   recentDropUids,
   pulseDelayFor,
   toggleBundleCollapsed,
@@ -4102,10 +4114,20 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
   transform: translateY(-8px);
   pointer-events: none;
 }
-/* `.wp-bundle--drop-inside` class removed in slot-zone redesign — no
- * "drop into" zone exists now (empty bundles can't be created, and
- * non-empty bundles always resolve to a slot between their children).
- * Border-state styling reduced to the standard frame chrome. */
+/* Drop-target highlight — fires when the slot zone's container is
+ * this bundle's body. Single rule covers in-bundle reorder AND
+ * crossing into the bundle from outside, since "drop will land here"
+ * is the same affordance either way. Tinted background reads as
+ * "this is the receiving container"; outer accent ring stands clear
+ * from the standard frame border without hiding bundle color. */
+.wp-bundle.wp-bundle--drop-target {
+  background: color-mix(
+    in srgb,
+    var(--wp-bundle-color, var(--wp-bundle-default)) 14%,
+    transparent
+  );
+  box-shadow: 0 0 0 2px var(--wp-accent-glow, rgba(99, 102, 241, 0.45));
+}
 /* Header divider — snap off at start of collapse, snap on at END of expand.
  * Default rule (no collapsed class) waits MOTION_COLLAPSE_MS before snapping
  * border-bottom visible; collapsed rule snaps immediately to transparent. */

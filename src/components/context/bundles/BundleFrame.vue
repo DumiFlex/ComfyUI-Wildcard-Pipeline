@@ -48,6 +48,7 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
       'wp-bundle--collapsed': bundle.collapsed,
       'wp-bundle--disabled': !bundle.enabled,
       'wp-bundle--nested': nested,
+      'wp-bundle--drop-target': ctx.isBundleDropTarget(bundle._uid),
       'wp-gap-before': ctx.bundleHeaderGap(bundle._uid) === 'before',
       'wp-gap-after': ctx.bundleHeaderGap(bundle._uid) === 'after',
       'wp-drop-pulse': ctx.recentDropUids.value.has(bundle._uid),
