@@ -1305,7 +1305,20 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
     pushToast(`Saved "${updated.name}" to library`, { severity: "success" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    pushToast(`Save failed: ${msg}`, { severity: "error" });
+    // Tier-3 cap rejections come back from the server with "tier" or
+    // "referenced by" in the body. Surface a clearer user-facing
+    // message so the recovery path is obvious — the raw server text
+    // explains WHICH parents conflict and is preserved verbatim.
+    const lc = msg.toLowerCase();
+    const isTierCap = lc.includes("tier") || lc.includes("referenced by");
+    if (isTierCap) {
+      pushToast(
+        `Can't save "${target.name || "bundle"}" — would create tier-3 nesting (forbidden). ${msg}`,
+        { severity: "error", lifeMs: 9000 },
+      );
+    } else {
+      pushToast(`Save failed: ${msg}`, { severity: "error" });
+    }
   }
 }
 
