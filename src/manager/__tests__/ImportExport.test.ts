@@ -160,6 +160,15 @@ describe("ImportExport.vue — Import tab", () => {
       value: [file], configurable: true,
     });
     await input.trigger("change");
+    // handleFile() in ImportExport.vue has `await new Promise(r =>
+    // setTimeout(r, 0))` before parsing — a macrotask yield that gives
+    // the parsing UI time to paint before file.text()+JSON.parse run.
+    // `flushPromises()` only flushes microtasks, so in a busy suite
+    // the setTimeout-0 can stay pending after flushPromises returns,
+    // and the test asserts on a DOM that doesn't have the parsed rows
+    // yet. Wait one real tick to drain the macrotask, then flush
+    // microtasks again to settle the post-parse render.
+    await new Promise((r) => setTimeout(r, 0));
     await flushPromises();
   }
 

@@ -214,24 +214,30 @@ function dropBarFor(containerUid: string | null): { top: number } | null {
   const z = dragOver.value;
   const containerEl = findContainerEl(containerUid);
   if (!z || !containerEl) return null;
-  const cr = containerEl.getBoundingClientRect();
-  const rel = (y: number): number => y - cr.top;
+
+  // CRITICAL: ComfyUI applies `transform: scale(zoom)` to the
+  // dom-widget container. `getBoundingClientRect` returns VIEWPORT
+  // pixels (scaled). Setting `style.top` to that value places the bar
+  // wrong by the zoom factor (the bar drifted upward proportional to
+  // zoom < 1.0). `offsetTop` is in CSS pixels, relative to the
+  // offsetParent — that's the right unit for `position:absolute; top`.
+  const offsetWithin = (el: HTMLElement): number => elementOffsetTopWithin(el, containerEl);
 
   switch (z.kind) {
     case "row": {
       if ((z.containerUid ?? null) !== (containerUid ?? null)) return null;
       const rowEl = findRowEl(z.insertIdx, containerEl);
       if (!rowEl) return null;
-      const rr = rowEl.getBoundingClientRect();
+      const off = offsetWithin(rowEl);
       return {
         top: z.pos === "before"
-          ? rel(rr.top) - GAP_BAR_OFFSET
-          : rel(rr.bottom) + GAP_BAR_OFFSET,
+          ? off - GAP_BAR_OFFSET
+          : off + rowEl.offsetHeight + GAP_BAR_OFFSET,
       };
     }
     case "empty": {
       if (containerUid !== z.uid) return null;
-      return { top: cr.height / 2 };
+      return { top: containerEl.clientHeight / 2 };
     }
     case "header": {
       // Only paint in the container that is the targeted bundle's
@@ -246,11 +252,11 @@ function dropBarFor(containerUid: string | null): { top: number } | null {
       if (parentScope !== containerUid) return null;
       const bundleEl = findBundleFrameEl(z.uid, containerEl);
       if (!bundleEl) return null;
-      const br = bundleEl.getBoundingClientRect();
+      const off = offsetWithin(bundleEl);
       return {
         top: z.pos === "before"
-          ? rel(br.top) - GAP_BAR_OFFSET
-          : rel(br.bottom) + GAP_BAR_OFFSET,
+          ? off - GAP_BAR_OFFSET
+          : off + bundleEl.offsetHeight + GAP_BAR_OFFSET,
       };
     }
     case "end": {
@@ -258,12 +264,30 @@ function dropBarFor(containerUid: string | null): { top: number } | null {
       const children = Array.from(
         containerEl.querySelectorAll<HTMLElement>(":scope > .wp-module, :scope > .wp-bundle"),
       );
-      if (children.length === 0) return { top: cr.height / 2 };
+      if (children.length === 0) return { top: containerEl.clientHeight / 2 };
       const last = children[children.length - 1];
-      const lr = last.getBoundingClientRect();
-      return { top: rel(lr.bottom) + GAP_BAR_OFFSET };
+      return { top: offsetWithin(last) + last.offsetHeight + GAP_BAR_OFFSET };
     }
   }
+}
+
+/** Walks `offsetParent` chain from `el` up until reaching `containerEl`,
+ *  accumulating CSS-pixel offsets. Returns `el`'s top relative to
+ *  `containerEl`'s padding edge (i.e. the same unit `position:absolute;
+ *  top: <value>` resolves against when `containerEl` is positioned).
+ *  Falls back to `el.offsetTop` if `containerEl` isn't reachable via
+ *  the offsetParent chain (defensive — would indicate broken layout). */
+function elementOffsetTopWithin(el: HTMLElement, containerEl: HTMLElement): number {
+  let off = 0;
+  let cur: HTMLElement | null = el;
+  let safety = 0;
+  while (cur && cur !== containerEl && safety < 32) {
+    off += cur.offsetTop;
+    cur = cur.offsetParent as HTMLElement | null;
+    safety += 1;
+  }
+  if (cur !== containerEl) return el.offsetTop;
+  return off;
 }
 
 /** Locate the offset container for a given scope. Top-level → the

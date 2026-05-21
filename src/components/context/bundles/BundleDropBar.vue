@@ -14,8 +14,19 @@
  * The container provides a `dropBarFor(containerUid)` lookup through
  * BundleFrameCtx. ContextWidget owns the dragOver ref + the rect math;
  * this component is purely declarative.
+ *
+ * **Why nextTick + ref:** dropBarFor reads getBoundingClientRect on
+ * row/bundle elements. Vue's reactive flush runs effects (including
+ * this component's computed) BEFORE patching DOM — so the rects
+ * reflect PRE-patch layout. By the time the DOM actually updates
+ * (rows get `wp-gap-before` margin → shift down 14px), our computed
+ * has already used the OLD positions. The bar paints in the wrong
+ * place — typically 14-22px too high, increasing as more rows below
+ * also shift. We fix this by deferring the position computation to
+ * the next tick: watch the zone reactively, then on the next flush
+ * (after DOM patch) re-read the rects and update the bar's position.
  */
-import { computed, inject } from "vue";
+import { inject, ref, watch } from "vue";
 import { BundleFrameCtxKey } from "./bundle-frame-ctx";
 
 interface Props {
@@ -26,13 +37,35 @@ const props = defineProps<Props>();
 
 const ctx = inject(BundleFrameCtxKey);
 
-/** When the resolved zone targets this container, returns the bar's
- *  vertical offset relative to the container's top. Otherwise null
- *  → bar stays hidden. */
-const position = computed<{ top: number } | null>(() => {
-  if (!ctx) return null;
-  return ctx.dropBarFor(props.containerUid);
-});
+/** Bar position — null when no zone targets this container. Updated
+ *  via watchEffect that defers the actual rect read to the next
+ *  microtask after the DOM patches the relevant row's gap-before
+ *  margin. */
+const position = ref<{ top: number } | null>(null);
+
+watch(
+  () => (ctx ? ctx.dropBarFor(props.containerUid) : null),
+  (val) => {
+    if (!val) {
+      position.value = null;
+      return;
+    }
+    // Eager paint so the bar shows up on the same frame as the
+    // dragover. Then refine on the NEXT animation frame — at that
+    // point the browser has reflowed after the wp-gap-before margin
+    // (Vue's flush:"post" runs after Vue's render, but the BROWSER
+    // hasn't necessarily painted yet — rAF guarantees that). The
+    // refined dropBarFor reads getBoundingClientRect on the row
+    // POST-margin-applied, giving the correct position.
+    position.value = val;
+    requestAnimationFrame(() => {
+      if (!ctx) return;
+      const refined = ctx.dropBarFor(props.containerUid);
+      if (refined) position.value = refined;
+    });
+  },
+  { flush: "post", immediate: true },
+);
 </script>
 
 <template>
@@ -55,6 +88,5 @@ const position = computed<{ top: number } | null>(() => {
   pointer-events: none;
   z-index: 5;
   box-shadow: 0 0 6px var(--wp-accent, #6366f1);
-  transition: top 80ms ease-out;
 }
 </style>
