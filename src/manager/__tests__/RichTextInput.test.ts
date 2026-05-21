@@ -561,6 +561,55 @@ describe("RichTextInput.vue", () => {
     expect(events[events.length - 1]?.[0]).toBe("alpha @{aabbccdd} beta");
     wrap.unmount();
   });
+
+  // Regression: chip duplication after Enter-without-probe-set-acStart.
+  // Path: user types `$testo` into the wp-rt__text span (browser DOM
+  // path, bypasses Vue reactivity), then triggers chip insertion via
+  // Enter or a code path where `refreshAutocompleteFromHost` hadn't
+  // yet set `acStart`. Pre-fix, `insertChipAtCaret` left `cutFrom` at
+  // `caret` (default for acStart === -1), so the chip got APPENDED
+  // after the user-typed text — emit became `$testo$testo`. Each
+  // subsequent blur saw the same raw text + chip, parsed → 2 var
+  // atoms, added another chip, compounding.
+  //
+  // Two fixes layered:
+  //   1. Scan-backward fallback in `insertChipAtCaret` re-derives the
+  //      `$<query>` / `@<query>` slice when `acStart` is unset or
+  //      doesn't point at a trigger char.
+  //   2. `renderTick` bump on every programmatic atom apply forces Vue
+  //      to mint fresh `:key`s and tear down stale DOM spans whose
+  //      `textContent` had been mutated outside the v-for diff.
+  it("typed $name + chip insert without probe-set acStart emits a single chip (no duplication)", async () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+
+    // Simulate user typing "$testo" directly into the empty span. This
+    // mirrors what real browsers do on contenteditable: the existing
+    // span's textContent is extended in place, no input event involves
+    // Vue's reactivity for atoms[0].text (stays "").
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text");
+    if (span) span.textContent = "$testo";
+    await host.trigger("input");
+
+    // Test-seam path: __triggerAutocompleteForTest does NOT set acStart
+    // (it only flips acOpen/acTrigger). This reproduces the event-order
+    // race where Enter fires before `refreshAutocompleteFromHost` has
+    // probed the latest text. Without the scan-backward fallback, the
+    // chip would land AFTER the typed text.
+    await (wrap.vm as unknown as { __triggerAutocompleteForTest: (t: "@" | "$") => Promise<void> })
+      .__triggerAutocompleteForTest("$");
+    await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
+      .__applyAutocompleteForTest("testo");
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    // Critical assertion: emit equals "$testo" (one chip), NOT
+    // "$testo$testo" (text + chip).
+    expect(events[events.length - 1]?.[0]).toBe("$testo");
+    wrap.unmount();
+  });
 });
 
 describe("RichTextPreview.vue", () => {

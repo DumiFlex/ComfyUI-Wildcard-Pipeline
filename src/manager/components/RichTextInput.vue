@@ -179,7 +179,11 @@ let lastEmittedValue = props.modelValue || "";
 
 watch(() => props.modelValue, (next) => {
   if (next === lastEmittedValue) return;  // echo of our own emit — ignore
-  atoms.value = padAtoms(parse(next || ""));
+  // External value swap from the parent — route through applyAtoms so
+  // a stale user-typed text in a span (typed since the last echo) gets
+  // wiped via the renderTick bump. Same v-for diff pitfall as
+  // programmatic edits.
+  applyAtoms(parse(next || ""));
 });
 
 /** Emit `update:modelValue` and remember the value so the watcher
@@ -537,6 +541,39 @@ function currentCursorCharOffset(): number {
   return acc;
 }
 
+/** Programmatic-apply render tick. Bumped before every atom array
+ *  reassign that originates from a programmatic edit (autocomplete
+ *  insert, chip-backspace, picker apply, paste, blur-settle, external
+ *  modelValue swap). Combined with `:key="${idx}-${renderTick}"` on
+ *  the v-for, every programmatic apply mints fresh keys → Vue tears
+ *  down ALL existing DOM nodes and re-renders from scratch.
+ *
+ *  Why: text-atom spans bind `{{ atom.text || ZWSP }}`. When the user
+ *  types raw text into a span, the DOM textContent updates in place
+ *  but `atom.text` stays "" (atoms are reactive source-of-truth only
+ *  updated via emitValue echo or programmatic ops, NOT typing). On a
+ *  subsequent programmatic atom reassign that keeps the same text-atom
+ *  positions, Vue's PatchFlags.TEXT diff sees old vnode text "" == new
+ *  vnode text "" and SKIPS the DOM patch — leaving the user-typed
+ *  characters stranded in the DOM but absent from `atoms.value`.
+ *
+ *  Next `readHostAsText()` then sees BOTH the stranded raw text AND
+ *  the freshly-inserted chip, returning `"$testo$testo"`. Each blur
+ *  then `parse`s that → 2 var atoms → adds another chip in front of
+ *  the still-stranded text. Subsequent blurs compound.
+ *
+ *  Bumping renderTick forces Vue to throw away the entire v-for sub-
+ *  tree (key mismatch) and re-render every atom against a fresh DOM —
+ *  no PatchFlags.TEXT diff path can leak stale span content. User-
+ *  typing inputs do NOT bump this tick, so the live-edit path keeps
+ *  the in-place DOM reuse Vue's caret-stability relies on. */
+const renderTick = ref(0);
+
+function applyAtoms(next: Atom[]): void {
+  renderTick.value += 1;
+  atoms.value = padAtoms(next);
+}
+
 function insertChipAtCaret(chipText: string): void {
   // Operate in raw-text space — much simpler than atom-cursor surgery.
   const text = readHostAsText();
@@ -544,11 +581,28 @@ function insertChipAtCaret(chipText: string): void {
   // Strip the typed trigger fragment (`@col`, `$per`) before inserting
   // the chip. `acStart` holds the raw-text offset of the trigger `@` /
   // `$`; the slice [acStart, caret] is the trigger + typed query text.
-  const cutFrom = acStart.value >= 0 ? Math.min(acStart.value, caret) : caret;
+  //
+  // Defensive scan-backward: if acStart is unset (-1) OR doesn't point
+  // at a valid trigger character, re-derive it by scanning back from
+  // the caret for a `$<ident>` or `@<ident>` run. Catches event-order
+  // races where Enter fires before refreshAutocompleteFromHost has
+  // probed the latest text, AND the test-seam path where __apply runs
+  // without ever calling the probe. Without this, the previously-typed
+  // `$testo` would survive alongside the freshly-inserted chip.
+  let cutFrom = acStart.value >= 0 ? Math.min(acStart.value, caret) : caret;
+  const cutChar = text[cutFrom];
+  if (cutChar !== "$" && cutChar !== "@") {
+    const head = text.slice(0, caret);
+    // Match a trailing trigger + typed query. `$ident` / `@ident` /
+    // `@{partial-uuid` cases. Falls back to no-op (cutFrom unchanged)
+    // when no pattern matches.
+    const m = head.match(/[$@](?:[A-Za-z_][A-Za-z0-9_]*|\{[0-9a-fA-F:,_ -]*\}?)?$/);
+    if (m) cutFrom = head.length - m[0].length;
+  }
   const before = text.slice(0, cutFrom);
   const after = text.slice(caret);
   const newText = before + chipText + after;
-  atoms.value = padAtoms(parse(newText));
+  applyAtoms(parse(newText));
   emitValue(newText);
   const newCaret = (before + chipText).length;
   void nextTick(() => restoreCursorAtChar(newCaret));
@@ -577,7 +631,7 @@ function onPickerApply(subCats: string[]): void {
         ...target,
         subCategories: subCats,
       });
-      atoms.value = padAtoms(next);
+      applyAtoms(next);
       emitValue(serialise(atoms.value));
     }
   }
@@ -596,7 +650,7 @@ function onPickerDelete(): void {
   if (pickerTargetAtomIndex.value !== null) {
     const idx = pickerTargetAtomIndex.value;
     const next = atoms.value.filter((_, i) => i !== idx);
-    atoms.value = padAtoms(next);
+    applyAtoms(next);
     emitValue(serialise(atoms.value));
   }
   pickerOpen.value = false;
@@ -777,7 +831,7 @@ function settleAtomsFromHost(): void {
   const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
   const chipsNext = parsed.filter((a) => a.kind !== "text").length;
   if (chipsNext <= chipsNow) return;
-  atoms.value = padAtoms(parsed);
+  applyAtoms(parsed);
   void nextTick(() => restoreCursorAtChar(caret));
 }
 
@@ -991,7 +1045,7 @@ function onHostPaste(ev: ClipboardEvent): void {
   const before = currentText.slice(0, caret);
   const after = currentText.slice(caret);
   const newText = before + pasted + after;
-  atoms.value = padAtoms(parse(newText));
+  applyAtoms(parse(newText));
   emitValue(newText);
   const newCaret = (before + pasted).length;
   void nextTick(() => restoreCursorAtChar(newCaret));
@@ -1006,7 +1060,7 @@ function onHostBlur(): void {
   const parsed = parse(text);
   const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
   const chipsNext = parsed.filter((a) => a.kind !== "text").length;
-  if (chipsNext > chipsNow) atoms.value = padAtoms(parsed);
+  if (chipsNext > chipsNow) applyAtoms(parsed);
 }
 
 function onHostFocus(): void {
@@ -1111,7 +1165,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     if (chipMatch) {
       ev.preventDefault();
       const newText = before.slice(0, -chipMatch[0].length) + rawText.slice(rawCaret);
-      atoms.value = padAtoms(parse(newText));
+      applyAtoms(parse(newText));
       emitValue(newText);
       const newCaret = before.length - chipMatch[0].length;
       void nextTick(() => restoreCursorAtChar(newCaret));
@@ -1161,7 +1215,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       @beforeinput="onHostBeforeInput"
       @paste="onHostPaste"
     >
-      <template v-for="(atom, idx) in atoms" :key="idx">
+      <template v-for="(atom, idx) in atoms" :key="`${renderTick}-${idx}`">
         <RefChip
           v-if="atom.kind === 'ref' || atom.kind === 'var'"
           :kind="atom.kind"
