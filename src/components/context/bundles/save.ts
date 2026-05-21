@@ -49,19 +49,52 @@ export function toChildSnapshot(m: ModuleEntry): Record<string, unknown> {
  *
  *  Inner BundleInstances are recognised via `parent_uid === target._uid`.
  *  Tier-2 cap (one hop max) means we never need to recurse — an inner
- *  cannot itself contain a bundle child. */
+ *  cannot itself contain a bundle child.
+ *
+ *  Defensive integrity check: any module in `target`'s range whose
+ *  `bundle_origin` points at a bundle uid that's neither `target._uid`
+ *  nor one of the detected inners is an "orphan" — its owning bundle
+ *  either has the wrong `parent_uid` or doesn't exist. Such modules
+ *  serialise as direct children of `target`, which silently flattens
+ *  the user's intended nesting. We surface the orphan list so callers
+ *  can warn + flag the corrupted state without changing the save
+ *  contract (still emits something for every module, never crashes).
+ */
+export interface LibraryChildrenResult {
+  children: Record<string, unknown>[];
+  /** Bundle uids of modules whose `bundle_origin` pointed at a bundle
+   *  that didn't qualify as an inner of `target` (wrong parent_uid,
+   *  missing BundleInstance, or other corruption). Empty in the happy
+   *  path. Callers may surface these via toast/log. */
+  orphanedInnerUids: string[];
+}
+
 export function buildLibraryChildren(
   target: BundleInstance,
   modules: ModuleEntry[],
   bundles: BundleInstance[],
 ): Record<string, unknown>[] {
+  return buildLibraryChildrenWithIntegrity(target, modules, bundles).children;
+}
+
+/** Same as `buildLibraryChildren` but returns the orphan-uid set so
+ *  the caller can surface a warning. Kept separate from the legacy
+ *  signature so existing call sites + tests don't need to destructure. */
+export function buildLibraryChildrenWithIntegrity(
+  target: BundleInstance,
+  modules: ModuleEntry[],
+  bundles: BundleInstance[],
+): LibraryChildrenResult {
   const innerByLeadingIdx = new Map<number, BundleInstance>();
+  const innerUids = new Set<string>();
   const skipIndices = new Set<number>();
   for (const ib of bundles) {
     if (ib.parent_uid !== target._uid) continue;
     innerByLeadingIdx.set(ib.start_idx, ib);
+    innerUids.add(ib._uid);
     for (let i = ib.start_idx; i <= ib.end_idx; i++) skipIndices.add(i);
   }
+  const orphanedInnerUids = new Set<string>();
   const out: Record<string, unknown>[] = [];
   for (let i = target.start_idx; i <= target.end_idx; i++) {
     const inner = innerByLeadingIdx.get(i);
@@ -76,7 +109,17 @@ export function buildLibraryChildren(
     }
     if (skipIndices.has(i)) continue;
     const m = modules[i];
-    if (m) out.push(toChildSnapshot(m));
+    if (!m) continue;
+    const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+    // Orphan detection: module claims membership in a bundle that's
+    // neither the target nor one of its detected inners. Likely cause:
+    // an inner bundle exists with a stale/wrong parent_uid. Save still
+    // emits the leaf snapshot so user data isn't lost on round-trip,
+    // but the nesting structure is flattened.
+    if (origin && origin !== target._uid && !innerUids.has(origin)) {
+      orphanedInnerUids.add(origin);
+    }
+    out.push(toChildSnapshot(m));
   }
-  return out;
+  return { children: out, orphanedInnerUids: [...orphanedInnerUids] };
 }

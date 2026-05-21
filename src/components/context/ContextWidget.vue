@@ -26,7 +26,7 @@ import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-c
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
-import { buildLibraryChildren, toChildSnapshot } from "./bundles/save";
+import { buildLibraryChildrenWithIntegrity, toChildSnapshot } from "./bundles/save";
 import { reconcileBundleRanges } from "./bundles/drag";
 import { resolveDropZone, type DropZone } from "./bundles/drop-zone";
 import { applyDrop, type DropPayload } from "./bundles/drop";
@@ -1272,7 +1272,18 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
   // surfaced here. The confirm dialog above gates accidental
   // overwrites when the local instance has speculative edits the
   // user didn't intend to publish.
-  const childrenOut = buildLibraryChildren(target, value.value.modules, bundles);
+  const integrity = buildLibraryChildrenWithIntegrity(target, value.value.modules, bundles);
+  const childrenOut = integrity.children;
+  // Surface any orphaned inner uids — the leaves got serialised, but the
+  // user's intended nesting flattened. Likely cause: a stale parent_uid
+  // on an inner BundleInstance. Toast so users notice; library write
+  // still proceeds because the leaf data isn't lost.
+  if (integrity.orphanedInnerUids.length > 0) {
+    pushToast(
+      `Bundle saved with flattened nesting — ${integrity.orphanedInnerUids.length} inner reference(s) didn't link to "${target.name || "bundle"}". Check the bundle's children if nesting looks wrong after reset.`,
+      { severity: "warning", lifeMs: 8000 },
+    );
+  }
   try {
     const updated = await api.bundles.update(target.library_id, {
       children: childrenOut,
