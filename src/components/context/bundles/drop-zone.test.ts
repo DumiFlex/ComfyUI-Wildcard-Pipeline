@@ -136,6 +136,7 @@ function bundleDrag(uid: string, startIdx = 0, endIdx = 0): DragPayload {
     bundleCollapsed: false,
     bundleEnabled: true,
     children: [],
+    innerInstances: [],
   };
 }
 

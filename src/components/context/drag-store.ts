@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import type { ModuleEntry } from "../../widgets/_shared";
+import type { BundleInstance, ModuleEntry } from "../../widgets/_shared";
 
 // Module-scoped reactive state shared across every ContextWidget Vue app
 // instance on the page. Each Context node mounts its own Vue app, so we
@@ -38,8 +38,17 @@ export type DragPayload =
       bundleEnabled: boolean;
       /** Deep snapshots of the bundle's children (in order). Receiver
        *  splices these into its modules array + stamps fresh `_uid`
-       *  + `bundle_origin` on each. */
+       *  + `bundle_origin` on each. Each child's `bundle_origin`
+       *  carries the SOURCE uid (outer or inner) so the receiver can
+       *  remap to fresh uids and preserve the nesting chain. */
       children: ModuleEntry[];
+      /** Inner BundleInstances under the dragged outer
+       *  (`parent_uid === bundleUid`). Tier-2 cap: at most one level
+       *  of nesting; this array holds the SIBLING inners under the
+       *  outer. Empty when the outer is flat. Receiver mints fresh
+       *  uids per inner and remaps each child's `bundle_origin` via
+       *  the source-uid → fresh-uid map. */
+      innerInstances: BundleInstance[];
       consumedBy?: number;
     };
 

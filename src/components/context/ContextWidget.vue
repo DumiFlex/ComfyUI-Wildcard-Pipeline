@@ -30,6 +30,7 @@ import { buildLibraryChildren, toChildSnapshot } from "./bundles/save";
 import { reconcileBundleRanges } from "./bundles/drag";
 import { resolveDropZone, type DropZone } from "./bundles/drop-zone";
 import { applyDrop, type DropPayload } from "./bundles/drop";
+import { buildCrossNodeBundleInsertion } from "./bundles/cross-node-nested";
 import BundleDropBar from "./bundles/BundleDropBar.vue";
 import {
   captureRects,
@@ -3093,10 +3094,19 @@ function onBundleDragStart(ev: DragEvent, uid: string) {
   if (!b) return;
   // Snapshot children so cross-node drop can splice them into a
   // different Context. Deep clone via JSON to detach from the source
-  // node's reactive state.
+  // node's reactive state. Children carry their ORIGINAL bundle_origin
+  // (which may be outer-uid OR inner-uid) so the receiver can remap
+  // the nesting chain after minting fresh uids.
   const children = value.value.modules
     .slice(b.start_idx, b.end_idx + 1)
     .map((m) => JSON.parse(JSON.stringify(m)) as ModuleEntry);
+  // Capture inner BundleInstances (parent_uid === outer). Without
+  // this, cross-node drop loses the nesting — receiver only mints
+  // the outer and stamps every child with outer.uid, flattening any
+  // inner bundle structure. Deep-clone to detach from source state.
+  const innerInstances = (value.value.bundles ?? [])
+    .filter((bb) => bb.parent_uid === uid)
+    .map((bb) => JSON.parse(JSON.stringify(bb)) as BundleInstance);
   dragState.value = {
     kind: "bundle",
     sourceNodeId: props.nodeId,
@@ -3109,6 +3119,7 @@ function onBundleDragStart(ev: DragEvent, uid: string) {
     bundleCollapsed: b.collapsed,
     bundleEnabled: b.enabled,
     children,
+    innerInstances,
   };
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = "move";
@@ -3146,12 +3157,21 @@ function onDragEnd() {
         }
       } else if (ds.kind === "bundle") {
         // Cross-node bundle drop — remove the bundle's range from source
-        // modules + drop the BundleInstance.
+        // modules + drop the outer BundleInstance AND every inner under
+        // it. Without dropping inners, the source would keep orphaned
+        // BundleInstance objects whose start_idx/end_idx point at rows
+        // that were spliced out.
         const before = value.value.modules.slice(0, ds.sourceStartIdx);
         const after = value.value.modules.slice(ds.sourceEndIdx + 1);
         const removedCount = ds.sourceEndIdx - ds.sourceStartIdx + 1;
+        const movingBundleUids = new Set<string>([ds.bundleUid]);
+        for (const b of value.value.bundles ?? []) {
+          if (b.parent_uid && movingBundleUids.has(b.parent_uid)) {
+            movingBundleUids.add(b._uid);
+          }
+        }
         const remainingBundles = (value.value.bundles ?? [])
-          .filter((b) => b._uid !== ds.bundleUid)
+          .filter((b) => !movingBundleUids.has(b._uid))
           .map((b) => (b.start_idx > ds.sourceEndIdx
             ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
             : b));
@@ -3320,33 +3340,43 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   }
 
   // Cross-node bundle drag. Receiver splices the bundle's children
-  // (with fresh _uid + new bundle_origin) into its modules array at the
-  // zone-resolved position and registers a new BundleInstance pointing
-  // at the same library entry. The resolver enforces tier-2 cap, so
-  // the dropped bundle's parent_uid stays null on cross-node lands.
+  // (with fresh _uid + remapped bundle_origin) into its modules array
+  // at the zone-resolved position, and registers a fresh BundleInstance
+  // for the outer + every inner. Source-uid → fresh-uid map preserves
+  // the nesting chain across the cross-node trip. The resolver enforces
+  // tier-2 cap, so the dropped outer's parent_uid stays null on
+  // cross-node lands.
   if (ds.kind === "bundle") {
     const list = [...value.value.modules];
     const bundles = value.value.bundles ?? [];
     const { insertIdx } = resolveCrossNodeInsertion(zone, list, bundles);
-    const newBundle: BundleInstance = {
-      ...emptyBundleInstance(ds.libraryId),
-      start_idx: insertIdx,
-      end_idx: insertIdx + ds.children.length - 1,
-      name: ds.bundleName,
-      color: ds.bundleColor,
-      collapsed: ds.bundleCollapsed,
-      enabled: ds.bundleEnabled,
-    };
-    const newChildren = ds.children.map((c) => {
-      const fresh = { ...c, _uid: newRowUid() } as ModuleEntry & { bundle_origin?: string };
-      fresh.bundle_origin = newBundle._uid;
-      return fresh;
-    });
+    const { newBundle, freshInners, newChildren } = buildCrossNodeBundleInsertion(
+      {
+        bundleUid: ds.bundleUid,
+        libraryId: ds.libraryId,
+        bundleName: ds.bundleName,
+        bundleColor: ds.bundleColor,
+        bundleCollapsed: ds.bundleCollapsed,
+        bundleEnabled: ds.bundleEnabled,
+        children: ds.children,
+        innerInstances: ds.innerInstances,
+      },
+      insertIdx,
+      newRowUid,
+      emptyBundleInstance,
+    );
     list.splice(insertIdx, 0, ...newChildren);
-    commitModules(list, [...bundles, newBundle]);
+    // reconcileBundleRanges (via commitModules) will recompute
+    // start_idx/end_idx for every bundle from each child's bundle_origin
+    // chain — the placeholder ranges on freshInners get overwritten.
+    commitModules(list, [...bundles, newBundle, ...freshInners]);
     await nextTick();
     playFlipSnapshot(flipSnap);
-    pulseDrop([newBundle._uid, ...newChildren.map((c) => c._uid).filter((u): u is string => !!u)]);
+    pulseDrop([
+      newBundle._uid,
+      ...freshInners.map((b) => b._uid),
+      ...newChildren.map((c) => c._uid).filter((u): u is string => !!u),
+    ]);
     dragState.value = { ...ds, consumedBy: props.nodeId };
     return;
   }
