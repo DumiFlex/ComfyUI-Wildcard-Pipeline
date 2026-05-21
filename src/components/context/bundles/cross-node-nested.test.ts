@@ -54,7 +54,7 @@ describe("buildCrossNodeBundleInsertion", () => {
       children: [mod("a", { bundle_origin: "src-outer" })],
       innerInstances: [],
     };
-    const { newBundle } = buildCrossNodeBundleInsertion(ds, 5, deterministicUid, emptyBundle);
+    const { newBundle } = buildCrossNodeBundleInsertion(ds, 5, null, deterministicUid, emptyBundle);
     expect(newBundle._uid).not.toBe("src-outer");
     expect(newBundle.library_id).toBe("lib-A");
     expect(newBundle.name).toBe("Outer");
@@ -79,7 +79,7 @@ describe("buildCrossNodeBundleInsertion", () => {
       innerInstances: [],
     };
     const { newBundle, freshInners, newChildren } = buildCrossNodeBundleInsertion(
-      ds, 0, deterministicUid, emptyBundle,
+      ds, 0, null, deterministicUid, emptyBundle,
     );
     expect(freshInners).toEqual([]);
     expect(newChildren).toHaveLength(2);
@@ -106,7 +106,7 @@ describe("buildCrossNodeBundleInsertion", () => {
       innerInstances: [sourceInner("src-inner", "src-outer")],
     };
     const { newBundle, freshInners, newChildren } = buildCrossNodeBundleInsertion(
-      ds, 10, deterministicUid, emptyBundle,
+      ds, 10, null, deterministicUid, emptyBundle,
     );
     expect(freshInners).toHaveLength(1);
     const inner = freshInners[0];
@@ -139,7 +139,7 @@ describe("buildCrossNodeBundleInsertion", () => {
       ],
     };
     const { newBundle, freshInners, newChildren } = buildCrossNodeBundleInsertion(
-      ds, 0, deterministicUid, emptyBundle,
+      ds, 0, null, deterministicUid, emptyBundle,
     );
     expect(freshInners).toHaveLength(2);
     expect(freshInners[0]._uid).not.toBe(freshInners[1]._uid);
@@ -162,9 +162,41 @@ describe("buildCrossNodeBundleInsertion", () => {
       innerInstances: [],
     };
     const { newBundle, newChildren } = buildCrossNodeBundleInsertion(
-      ds, 0, deterministicUid, emptyBundle,
+      ds, 0, null, deterministicUid, emptyBundle,
     );
     expect((newChildren[0] as ModuleEntry & { bundle_origin?: string }).bundle_origin).toBe(newBundle._uid);
+  });
+
+  it("outerParentUid set → newBundle becomes nested inner of receiver bundle", () => {
+    counter = 0;
+    const ds: CrossNodeBundlePayload = {
+      bundleUid: "src-outer",
+      libraryId: "lib-A",
+      bundleName: "Outer", bundleColor: null,
+      bundleCollapsed: false, bundleEnabled: true,
+      children: [mod("a", { bundle_origin: "src-outer" })],
+      innerInstances: [],
+    };
+    const { newBundle } = buildCrossNodeBundleInsertion(
+      ds, 5, "receiver-bundle-uid", deterministicUid, emptyBundle,
+    );
+    expect(newBundle.parent_uid).toBe("receiver-bundle-uid");
+  });
+
+  it("outerParentUid null → newBundle is top-level", () => {
+    counter = 0;
+    const ds: CrossNodeBundlePayload = {
+      bundleUid: "src-outer",
+      libraryId: "lib-A",
+      bundleName: "Outer", bundleColor: null,
+      bundleCollapsed: false, bundleEnabled: true,
+      children: [mod("a", { bundle_origin: "src-outer" })],
+      innerInstances: [],
+    };
+    const { newBundle } = buildCrossNodeBundleInsertion(
+      ds, 0, null, deterministicUid, emptyBundle,
+    );
+    expect(newBundle.parent_uid).toBeNull();
   });
 
   it("every child gets a fresh _uid", () => {
@@ -178,7 +210,7 @@ describe("buildCrossNodeBundleInsertion", () => {
       innerInstances: [],
     };
     const { newChildren } = buildCrossNodeBundleInsertion(
-      ds, 0, deterministicUid, emptyBundle,
+      ds, 0, null, deterministicUid, emptyBundle,
     );
     const uids = new Set(newChildren.map((c) => c._uid));
     expect(uids.size).toBe(3); // all distinct, all fresh

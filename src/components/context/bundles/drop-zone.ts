@@ -85,6 +85,15 @@ export function resolveDropZone(
     drag?.kind === "bundle"
       ? collectMovingBundleUids(drag.bundleUid, value.bundles ?? [])
       : new Set<string>();
+  // Dragged bundle has nested inners → dropping anywhere INSIDE
+  // another bundle would create a tier-3 chain (forbidden). Cross-node
+  // drags carry the inners on the payload; same-node falls back to
+  // walking the local value.bundles. Either way, when this is true
+  // the walk-up must skip ALL bundle bodies and resolve at top-level.
+  const dragHasNested =
+    drag?.kind === "bundle" &&
+    ((drag.innerInstances?.length ?? 0) > 0 ||
+      (value.bundles ?? []).some((b) => b.parent_uid === drag.bundleUid));
 
   // Walk up from the pointer hit. Skip frames + bodies of bundles in
   // the moving range, and (for bundle drags) skip nested-bundle bodies
@@ -111,9 +120,17 @@ export function resolveDropZone(
         el = parentBundle.parentElement;
         continue;
       }
-      // Tier-2 cap: dragging a bundle into a nested bundle's body
-      // would create tier-3 nesting. Skip — resolve at the outer scope.
+      // Tier-2 cap variants:
+      //   1. Dragged bundle has NESTED inners → dropping into ANY
+      //      bundle's body would create tier-3. Skip.
+      //   2. Dragged bundle is FLAT but target body belongs to a
+      //      NESTED bundle (parent_uid set) → same tier-3 risk.
+      //      Skip.
       if (drag?.kind === "bundle" && parentBundle?.classList.contains("wp-bundle")) {
+        if (dragHasNested) {
+          el = parentBundle.parentElement;
+          continue;
+        }
         const pb = (value.bundles ?? []).find((b) => b._uid === pbUid);
         if (pb && typeof pb.parent_uid === "string" && pb.parent_uid) {
           el = parentBundle.parentElement;
@@ -160,6 +177,12 @@ function resolveWithin(
   drag: DragPayload | null,
   moving: Set<string>,
 ): DropZone {
+  // Recompute dragHasNested locally (mirror of the walk-up check) so
+  // the drill-in path enforces the same tier-3 prevention.
+  const dragHasNested =
+    drag?.kind === "bundle" &&
+    ((drag.innerInstances?.length ?? 0) > 0 ||
+      (value.bundles ?? []).some((b) => b.parent_uid === drag.bundleUid));
   const kids = Array.from(
     container.querySelectorAll<HTMLElement>(
       ":scope > .wp-module[data-module-idx], :scope > .wp-bundle",
@@ -171,13 +194,15 @@ function resolveWithin(
   for (let i = 0; i < kids.length; i++) {
     const k = kids[i];
     const r = k.getBoundingClientRect();
-    // Drill into bundles whose rect contains the pointer Y.
+    // Drill into bundles whose rect contains the pointer Y. Skip the
+    // drill entirely when dragging a bundle with inners (tier-3
+    // prevention) or when target is itself nested (also tier-3).
     if (k.classList.contains("wp-bundle") && y >= r.top && y <= r.bottom && r.height > 0) {
       const uid = k.dataset.bundleUid;
       if (uid && !moving.has(uid)) {
         const b = (value.bundles ?? []).find((bb) => bb._uid === uid);
-        const tierCap =
-          drag?.kind === "bundle" && b && typeof b.parent_uid === "string" && b.parent_uid;
+        const targetIsNested = b && typeof b.parent_uid === "string" && !!b.parent_uid;
+        const tierCap = drag?.kind === "bundle" && (dragHasNested || targetIsNested);
         if (!tierCap) {
           const body = k.querySelector<HTMLElement>(":scope > .wp-bundle-children");
           if (body) return resolveWithin(body, y, uid, value, drag, moving);

@@ -3373,6 +3373,12 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     const list = [...value.value.modules];
     const bundles = value.value.bundles ?? [];
     const { insertIdx } = resolveCrossNodeInsertion(zone, list, bundles);
+    // Receiver's drop container becomes newBundle's parent_uid when
+    // dropping INSIDE another bundle's body. Without this, the
+    // newBundle is top-level while its children sit inside the
+    // receiver bundle's range — reconcile sees non-contiguous indices
+    // on the receiver and dissolves it.
+    const outerParentUid = zone?.kind === "slot" ? zone.containerUid : null;
     const { newBundle, freshInners, newChildren } = buildCrossNodeBundleInsertion(
       {
         bundleUid: ds.bundleUid,
@@ -3385,6 +3391,7 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
         innerInstances: ds.innerInstances,
       },
       insertIdx,
+      outerParentUid,
       newRowUid,
       emptyBundleInstance,
     );

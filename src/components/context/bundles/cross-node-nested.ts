@@ -56,12 +56,22 @@ export interface CrossNodeBundleResult {
 export function buildCrossNodeBundleInsertion(
   ds: CrossNodeBundlePayload,
   insertIdx: number,
+  outerParentUid: string | null,
   newRowUid: () => string,
   emptyBundleInstance: (libId: string) => BundleInstance,
 ): CrossNodeBundleResult {
   // Outer BundleInstance — fresh _uid, range pre-computed (reconcile
   // will overwrite). Carries forward instance state (collapsed/enabled
   // + color/name) so the receiver looks identical to the source.
+  //
+  // `outerParentUid` is the receiver-side container's uid:
+  //   - null → drop at top-level (newBundle.parent_uid stays null)
+  //   - <uid> → drop INSIDE that bundle's body. newBundle becomes a
+  //     nested inner of the receiver bundle. Required so reconcile's
+  //     parent-chain envelope keeps the receiver's range contiguous.
+  //     Without this, the receiver bundle's range becomes
+  //     non-contiguous post-splice (the new leaves point at
+  //     newBundle, which has no parent → receiver dissolves).
   const newBundle: BundleInstance = {
     ...emptyBundleInstance(ds.libraryId),
     start_idx: insertIdx,
@@ -70,6 +80,7 @@ export function buildCrossNodeBundleInsertion(
     color: ds.bundleColor,
     collapsed: ds.bundleCollapsed,
     enabled: ds.bundleEnabled,
+    parent_uid: outerParentUid,
   };
 
   // Inner BundleInstances — each gets a fresh _uid. Build map from
