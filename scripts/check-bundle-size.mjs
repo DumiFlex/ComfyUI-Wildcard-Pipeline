@@ -26,7 +26,12 @@ const jsonPath = jsonIdx >= 0 ? args[jsonIdx + 1] : null;
 // SPA's chip editor so canvas + SPA share one $var/@ref editing surface.
 // Explicitly approved feature request.
 const ENTRY_LIMIT = 30 * 1024;      // 30 KB
-const TOTAL_LIMIT = 312 * 1024;     // 312 KB
+// 316 KB — bumped from 312 KB during the nested-bundle drag redesign.
+// The container-scoped resolver (drop-zone.ts), pure applier (drop.ts),
+// floating indicator SFC (BundleDropBar.vue), zoom-aware offsetTop
+// walker, and moving-range filter for bundle drags added ~1 KB net.
+// Bump approved alongside the feature land.
+const TOTAL_LIMIT = 316 * 1024;     // 316 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

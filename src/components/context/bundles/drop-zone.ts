@@ -107,6 +107,26 @@ function computeDragHasNested(
   return bundles.some((b) => b.parent_uid === drag.bundleUid);
 }
 
+/** Bundle uids that move with the dragged bundle (self + descendants
+ *  via parent_uid). Filtered from drop candidates. */
+function collectMovingBundleUids(
+  draggedUid: string,
+  bundles: ReadonlyArray<{ _uid: string; parent_uid?: string | null }>,
+): Set<string> {
+  const out = new Set<string>([draggedUid]);
+  for (let i = 0; i < 8; i++) {
+    let grew = false;
+    for (const b of bundles) {
+      if (!out.has(b._uid) && b.parent_uid && out.has(b.parent_uid)) {
+        out.add(b._uid);
+        grew = true;
+      }
+    }
+    if (!grew) break;
+  }
+  return out;
+}
+
 /** Identifies whether the dragged bundle is the one we're hovering —
  *  the resolver should treat self-hover as "no-op", but we still want
  *  a zone shape so the indicator can stay parked sensibly. */
@@ -126,6 +146,14 @@ function classifyWithinBundle(
   // Self-hover: no-op zone — bundle being dragged onto its own header.
   if (isSelfHover(uid, drag)) {
     return null;
+  }
+  // Pointer inside a bundle that's part of the dragged bundle's
+  // moving range (e.g. dragging the outer, pointer in the nested
+  // inner) — no valid drop, the whole region moves with the drag.
+  // Return null so the indicator hides, signaling "can't drop here".
+  if (drag?.kind === "bundle") {
+    const movingUids = collectMovingBundleUids(drag.bundleUid, value.bundles ?? []);
+    if (movingUids.has(uid)) return null;
   }
 
   // 1) Header strip — pointer ON the header ALWAYS resolves to "drop
@@ -177,24 +205,29 @@ function classifyWithinBundle(
     return { kind: "header", uid, pos: "after" };
   }
 
-  // Collect the direct child rows + nested bundle elements (whose
-  // headers will be classified by the recursive call in normal
-  // operation — but if the pointer is over the children container
-  // background, we walk these to find the nearest slot). Only direct
-  // children matter (the resolver already drilled into a nested bundle
-  // by closest('.wp-bundle') returning the innermost ancestor).
-  //
-  // Skip the dragged bundle's frame from candidates — when the user
-  // drags an inner bundle around inside its parent's body, the inner
-  // shouldn't appear as a drop target (self-drop is a no-op + paints a
-  // misleading indicator on the source row).
+  // Collect the direct child rows + nested bundle elements. Skip the
+  // dragged bundle's frame AND every bundle/row that moves with it
+  // (descendants via parent_uid + leaves whose bundle_origin matches
+  // any moving bundle). Without the broader skip, dragging the outer
+  // bundle around its OWN body lets the resolver land on the outer's
+  // inner bundle or one of the inner's leaves — but those move with
+  // the outer, so it's a no-op + misleading indicator.
   const draggedBundleUid = drag?.kind === "bundle" ? drag.bundleUid : null;
+  const movingUids = draggedBundleUid
+    ? collectMovingBundleUids(draggedBundleUid, value.bundles ?? [])
+    : new Set<string>();
   const directRows = Array.from(
     childrenEl.querySelectorAll<HTMLElement>(":scope > .wp-module[data-module-idx], :scope > .wp-bundle"),
   ).filter((el) => {
+    if (el.classList.contains("wp-bundle")) {
+      const uid = el.dataset.bundleUid ?? "";
+      return !movingUids.has(uid);
+    }
     if (!draggedBundleUid) return true;
-    if (!el.classList.contains("wp-bundle")) return true;
-    return el.dataset.bundleUid !== draggedBundleUid;
+    const idxRaw = el.dataset.moduleIdx;
+    if (idxRaw === undefined) return true;
+    const m = value.modules[Number(idxRaw)] as ModuleEntry & { bundle_origin?: string } | undefined;
+    return !(m?.bundle_origin && movingUids.has(m.bundle_origin));
   });
   if (directRows.length === 0) {
     // Empty body OR only the dragged bundle lived here — treat as
@@ -316,27 +349,32 @@ function classifyAgainst(
   value: ContextWidgetValue,
   drag: DragPayload | null,
 ): DropZone {
-  // Skip the dragged bundle's frame entirely (and any rows owned by
-  // it — they move with it). isSelfHover catches the "drag bundle
-  // onto its own frame" case; the broader skip prevents the resolver
-  // from landing on the bundle's children when the bundle itself is
-  // being dragged (those rows are about to disappear from this scope).
+  // Skip the dragged bundle's frame + EVERYTHING that moves with it.
+  // For a bundle drag, "everything" includes:
+  //   - the dragged bundle itself
+  //   - any nested bundles whose parent chain leads to the dragged bundle
+  //   - any module rows whose bundle_origin matches the dragged bundle
+  //     OR any of its descendant bundles
+  // Without this broader skip, dragging the outer bundle DOWN past
+  // its own children would let the resolver match the outer's inner
+  // bundle or the inner's leaves as drop targets — but those rows
+  // move with the outer, so they're not valid landings.
   const draggedBundleUid = drag?.kind === "bundle" ? drag.bundleUid : null;
+  const movingBundleUids = draggedBundleUid
+    ? collectMovingBundleUids(draggedBundleUid, value.bundles ?? [])
+    : new Set<string>();
   const filtered = candidates.filter((el) => {
     if (el.classList.contains("wp-bundle")) {
       const uid = el.dataset.bundleUid ?? "";
       if (isSelfHover(uid, drag)) return false;
-      if (draggedBundleUid && uid === draggedBundleUid) return false;
+      if (movingBundleUids.has(uid)) return false;
       return true;
     }
-    // Skip module rows whose bundle_origin matches the dragged bundle —
-    // those rows belong to the bundle being dragged and disappear with
-    // it after drop. Top-level rows (no bundle_origin) always pass.
     if (draggedBundleUid) {
       const idxRaw = el.dataset.moduleIdx;
       if (idxRaw !== undefined) {
         const m = value.modules[Number(idxRaw)] as ModuleEntry & { bundle_origin?: string } | undefined;
-        if (m?.bundle_origin === draggedBundleUid) return false;
+        if (m?.bundle_origin && movingBundleUids.has(m.bundle_origin)) return false;
       }
     }
     return true;
