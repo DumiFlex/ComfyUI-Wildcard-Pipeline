@@ -143,9 +143,13 @@ function classifyWithinBundle(
   drag: DragPayload | null,
   dragHasNested: boolean,
 ): DropZone {
-  // Self-hover: no-op zone — bundle being dragged onto its own header.
+  // Self-hover: bundle hovering its own area. Show "drop above self"
+  // indicator so the user gets visual feedback at the start of the
+  // drag (matches module-row behaviour where the dragged row's slot
+  // is the "before self" gap). applyDrop's self-drop guard treats
+  // this as no-op on actual drop.
   if (isSelfHover(uid, drag)) {
-    return null;
+    return { kind: "header", uid, pos: "before" };
   }
   // Pointer inside a bundle that's part of the dragged bundle's
   // moving range (e.g. dragging the outer, pointer in the nested

@@ -440,7 +440,10 @@ describe("resolveDropZone — tier-2 cap", () => {
 });
 
 describe("resolveDropZone — self-hover", () => {
-  it("bundle drag over its own header → null (no-op)", () => {
+  it("bundle drag over its own header → header.before (visual feedback at drag start)", () => {
+    // Match module-row behaviour: the dragged thing's "before self"
+    // slot stays as a visible drop target during initial hover.
+    // applyDrop treats this as a no-op via its own guard.
     const container = buildScene({
       bundles: [{
         uid: "self", top: 100, bottom: 200,
@@ -454,6 +457,8 @@ describe("resolveDropZone — self-hover", () => {
     const value: ContextWidgetValue = {
       version: 1, modules: [], bundles: [makeBundleInstance("self")],
     };
-    expect(resolveDropZone(ev, container, value, bundleDrag("self"))).toBeNull();
+    expect(resolveDropZone(ev, container, value, bundleDrag("self"))).toEqual({
+      kind: "header", uid: "self", pos: "before",
+    });
   });
 });

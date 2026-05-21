@@ -3254,9 +3254,13 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     };
     const next = applyDrop(zone, payload, value.value);
     // No-op when applyDrop returns the same value object (self-drop
-    // guard inside applyDrop fires for header on own uid).
+    // guard inside applyDrop fires for header on own uid). Still
+    // clear drag state explicitly — browser's dragend may not fire
+    // reliably after a bundle's DOM gets re-keyed by the patch, and
+    // a lingering dragState keeps the "Drop here" affordance visible.
     if (next === value.value) {
       sameNodeDropHandled = true;
+      dragState.value = null;
       return;
     }
     holdSuppressMove();
@@ -3271,6 +3275,10 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     );
     pulseDrop([ds.bundleUid, ...rangeRows.map((r) => r._uid).filter((u): u is string => !!u)]);
     sameNodeDropHandled = true;
+    // Belt-and-suspenders: clear drag state here too. The bundle
+    // frame's dragend listener may not fire if Vue's reconciler
+    // detaches the source frame during the same-tick patch.
+    dragState.value = null;
     return;
   }
 
@@ -4333,6 +4341,14 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 }
 .wp-bundle.wp-gap-before { margin-top: 14px; }
 .wp-bundle.wp-gap-after { margin-bottom: 14px; }
+/* When a bundle has wp-gap-before (drop indicator above it) OR
+ * wp-gap-after (indicator below), HIDE the bundle's own frame border
+ * on the gap side. Otherwise the user reads two parallel lines —
+ * the floating drop bar in the middle of the gap AND the bundle's
+ * bright 1px top/bottom border at the gap edge. Restoring the border
+ * happens automatically when the class clears. */
+.wp-bundle.wp-gap-before { border-top-color: transparent; }
+.wp-bundle.wp-gap-after { border-bottom-color: transparent; }
 
 /* Source ghost — lift the row while it's mid-drag. */
 .wp-module--dragging {
