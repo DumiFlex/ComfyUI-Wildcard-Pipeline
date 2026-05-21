@@ -105,13 +105,13 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
  * same; only the children container shrinks. Border color falls back
  * to --wp-bundle-default when no explicit inner color was set. */
 .wp-bundle.wp-bundle--nested {
-  /* Subtle inset so the nested frame's left rail doesn't visually
-   * merge with the outer's left rail when they share a color, plus
-   * a few px of vertical breathing room so the inner frame's borders
-   * never look flush against the outer's frame chrome — without this
-   * the bottom of the inner frame sits flush against the outer's
-   * bottom border and the outer reads as "open at the bottom". */
-  margin: 2px 2px 4px 2px;
+  /* No horizontal margin — nested bundle frame should be the same
+   * width as sibling module rows in the same body (user requirement:
+   * "inner bundle has to be the same size as the modules inside the
+   * outer bundle"). Vertical breathing room kept so the inner's
+   * bottom border doesn't sit flush against the outer's frame edge.
+   */
+  margin: 2px 0 4px 0;
 }
 .wp-bundle.wp-bundle--nested > .wp-bundle-children {
   padding: 4px 5px 5px 5px;

@@ -235,24 +235,16 @@ const summary = computed(() => {
 @import "../../shared/row-primitives.css";
 
 .wp-bundle-header {
-  /* The bundle frame box is painted by `.wp-bundle` directly (Batch 2
-   * replaced the absolute-positioned overlay with a real DOM wrapper).
-   * Header carries only its own bottom divider
-   * separating it from the children below — no full border, no
-   * radius, no frame walls. When the bundle is collapsed, the
-   * bottom divider hides (no children below to separate from).
-   *
-   * Full border-box parity with `.wp-module` so content (left
-   * edge AND right edge / trash button) lines up identically:
-   *   - left:   3px transparent  (mirrors `.wp-module`'s 3px kind-stripe)
-   *   - right:  1px transparent  (mirrors `.wp-module`'s 1px transparent border)
-   *   - top:    1px transparent  (same)
-   *   - bottom: 1px solid var(--b)  (visible divider above children) */
+  /* The bundle frame's `.wp-bundle` already paints the 3px left rail +
+   * 1px top/right border. Re-adding a 3px transparent left border + 1px
+   * transparent top/right on this header would DOUBLE the inset —
+   * which is exactly what made the bundle header's content sit 3px
+   * RIGHT of sibling module rows inside the same body (user reported:
+   * "inner bundle has to be the same size and have the same icon
+   * spacing as the modules inside the outer bundle"). Only the
+   * bottom-divider border stays; everything else is on the frame. */
   background: color-mix(in srgb, var(--b) 18%, transparent);
-  border-top: 1px solid transparent;
-  border-right: 1px solid transparent;
   border-bottom: 1px solid var(--b);
-  border-left: 3px solid transparent;
   padding: var(--wp-pad-row, 4px 6px);
   display: flex;
   align-items: center;
