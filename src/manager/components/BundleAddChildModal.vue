@@ -317,8 +317,13 @@ function pickBundle(row: BundleRow) {
   pointer-events: none;
   font-size: var(--wp-text-sm);
 }
-.wp-bundle-add__searchinput :deep(.wp-input) { padding-left: 26px; } /* audit-exempt: 26px = search icon width + gap offset */
-.wp-bundle-add__searchinput { flex: 1; }
+/* `Input` renders bare here (no icon prop), so the parent-passed
+ * `wp-bundle-add__searchinput` class lands directly on the
+ * `<input class="wp-input">` element. `:deep(.wp-input)` looked for
+ * a DESCENDANT that doesn't exist → padding-left never applied →
+ * absolute-positioned search icon overlapped the placeholder text.
+ * Apply padding-left to the input itself. */
+.wp-bundle-add__searchinput { flex: 1; padding-left: 26px; } /* audit-exempt: 26px = icon left(8) + glyph(~13) + gap(5) */
 
 .wp-bundle-add__list {
   display: flex;
