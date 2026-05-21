@@ -1088,18 +1088,25 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
     // elsewhere; we just replace its content.
     const startIdx = target.start_idx;
     const replacementInsertion = buildBundleInsertion(libEntry, startIdx);
-    // Preserve the existing outer's _uid so the bundle frame doesn't
-    // visually disappear. Inner-bundle leaves carry their FRESH inner
-    // _uids verbatim — those nested BundleInstances are brand new.
-    const newOuterUid = replacementInsertion.bundleInstance._uid;
+    // buildBundleInsertion mints a brand-new outer + brand-new inners.
+    // For reset, we discard the new outer's identity (re-use `target._uid`
+    // so the frame stays put) but KEEP each fresh inner's identity
+    // (they're genuinely new bundles even from the user's perspective —
+    // the old inners' state is being overwritten).
+    //
+    // Identifying outer-leaves vs inner-leaves in modulesToSplice: every
+    // outer-leaf was stamped with `freshOuterUid`; every inner-leaf was
+    // stamped with one of the `innerInstances[k]._uid`s. So a child
+    // whose `bundle_origin === freshOuterUid` is an outer-leaf and
+    // needs remapping to `target._uid`; everything else is an
+    // inner-leaf whose origin already points at the fresh inner it
+    // belongs to.
+    const freshOuterUid = replacementInsertion.bundleInstance._uid;
     const newChildren = replacementInsertion.modulesToSplice.map((c) => {
       const rec = c as Record<string, unknown>;
       const meta = (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" };
       const entries = (rec.entries as ModuleEntry["entries"] | undefined) ?? [];
-      // Outer-leaf bundle_origin gets rewritten to the EXISTING outer
-      // uid; inner-leaf bundle_origin (pointing at a fresh inner _uid)
-      // stays as-is.
-      const origin = c.bundle_origin === newOuterUid ? target._uid : c.bundle_origin;
+      const origin = c.bundle_origin === freshOuterUid ? target._uid : c.bundle_origin;
       return {
         id: c.id,
         _uid: c._uid,
