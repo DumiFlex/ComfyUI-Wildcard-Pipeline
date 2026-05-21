@@ -4341,14 +4341,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 }
 .wp-bundle.wp-gap-before { margin-top: 14px; }
 .wp-bundle.wp-gap-after { margin-bottom: 14px; }
-/* When a bundle has wp-gap-before (drop indicator above it) OR
- * wp-gap-after (indicator below), HIDE the bundle's own frame border
- * on the gap side. Otherwise the user reads two parallel lines —
- * the floating drop bar in the middle of the gap AND the bundle's
- * bright 1px top/bottom border at the gap edge. Restoring the border
- * happens automatically when the class clears. */
-.wp-bundle.wp-gap-before { border-top-color: transparent; }
-.wp-bundle.wp-gap-after { border-bottom-color: transparent; }
 
 /* Source ghost — lift the row while it's mid-drag. */
 .wp-module--dragging {
