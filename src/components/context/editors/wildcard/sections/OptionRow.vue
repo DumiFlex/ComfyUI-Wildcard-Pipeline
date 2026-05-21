@@ -317,12 +317,18 @@ function fmtPct(p: number): string {
 }
 .opt__tok--ref,
 .opt__tok--var {
-  border-radius: 4px;
-  padding: 1px 6px;
-  gap: 4px;
+  border-radius: 3px;
+  padding: 0 5px;
+  gap: 3px;
   border: 1px solid;
+  /* Match SPA RefChip dimensions: 10px font + 1.4 line-height so the
+   * chip reads as a compact mark inside the option text, not a
+   * second-class label competing with the text for vertical space.
+   * Earlier 13px-inherit + 1px 6px padding made each chip ~28px tall
+   * inside a 24px row, which clipped the chip ascender. */
+  font: 10px/1.4 var(--wp-font-mono);
 }
-.opt__tok-icon { font-size: 9px; opacity: 0.75; }
+.opt__tok-icon { font-size: 8px; opacity: 0.75; }
 .opt__tok-suffix {
   color: var(--wp-status-modified, #fbbf24);
   font-size: 9px;

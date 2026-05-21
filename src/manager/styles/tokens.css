@@ -758,10 +758,14 @@ input, textarea, select { font: inherit; }
 
 /* ---------- Chips / tags ---------- */
 .wp-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px;
+  /* Reduced overall density: padding 2→1, font 11→10.5, gap 5→4 →
+   * chips feel like compact tags instead of buttons. The close-target
+   * min-height drops in lockstep so an X-bearing chip doesn't end up
+   * forced taller than its bare counterpart. */
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10.5px;
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
   border: 1px solid var(--wp-border);
@@ -785,11 +789,13 @@ input, textarea, select { font: inherit; }
 .wp-chip--info    { color: var(--wp-info);    background: color-mix(in oklab, var(--wp-info)    14%, transparent); border-color: color-mix(in oklab, var(--wp-info)    36%, transparent); }
 .wp-chip__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .wp-chip__close {
-  /* Min 24×24 touch target (WCAG 2.5.8 enhanced target size). Glyph
-   * stays small via the inner Icon component; the larger hit area is
-   * invisible padding. */
-  background: none; border: none; padding: 4px; margin-left: 2px;
-  min-width: 24px; min-height: 24px;
+  /* 20×20 hit area — slimmer than 24×24 (WCAG 2.5.8 enhanced) so the
+   * chip body doesn't get inflated by the close button, but still
+   * comfortably meets WCAG 2.5.5 AA target-size baseline. Visible glyph
+   * stays small via the inner Icon component; the surrounding padding
+   * provides the rest of the click target. */
+  background: none; border: none; padding: 2px; margin-left: 1px;
+  min-width: 20px; min-height: 20px;
   color: inherit; cursor: pointer; line-height: 0;
   display: inline-grid; place-items: center;
 }
@@ -1032,10 +1038,13 @@ input, textarea, select { font: inherit; }
    Inherits .wp-chip pill geometry; the color triple comes from inline style
    set at the call site (color = raw color, bg = color@14%, border = color@35%). */
 .wp-cat-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px;
+  /* Mirrors `.wp-chip` density pass — same padding/font/gap so the
+   * category pills don't look chunkier than neighbouring `.wp-chip`
+   * instances on category pages. */
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   border: 1px solid transparent;
   white-space: nowrap;

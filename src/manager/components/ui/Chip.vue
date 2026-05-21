@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Icon, { ICON_SM } from "./Icon.vue";
+import Icon from "./Icon.vue";
 
 type Tone = "default" | "accent" | "success" | "warn" | "danger" | "info";
 
@@ -45,9 +45,10 @@ function onRemove(e: MouseEvent) {
 
 <template>
   <span :class="classes" :style="colorStyle">
-    <!-- Was ~10px historically; promoted to ICON_SM (12) for parity with the
-         close icon and consistency with the project-wide icon scale. -->
-    <Icon v-if="icon" :name="icon" :size="ICON_SM" />
+    <!-- 10px sub-ICON_SM — pill density pass dropped chip font 11→10.5
+         and the previous 12px icon read oversized next to the smaller
+         label. Matches the new chip body weight. -->
+    <Icon v-if="icon" :name="icon" :size="10" />
     <slot />
     <button
       v-if="removable"
@@ -56,9 +57,10 @@ function onRemove(e: MouseEvent) {
       aria-label="Remove"
       @click="onRemove"
     >
-      <!-- Was 9px historically; promoted to ICON_SM (12) intentionally —
-           close button now matches the prefix icon for visual balance. -->
-      <Icon name="times" :size="ICON_SM" />
+      <!-- Close glyph also drops to 10px so chip-with-X stays balanced
+           against the slimmer body. Hit target stays 20×20 via the
+           button's min sizing in tokens.css. -->
+      <Icon name="times" :size="10" />
     </button>
   </span>
 </template>
