@@ -4117,16 +4117,32 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 /* Drop-target highlight — fires when the slot zone's container is
  * this bundle's body. Single rule covers in-bundle reorder AND
  * crossing into the bundle from outside, since "drop will land here"
- * is the same affordance either way. Tinted background reads as
- * "this is the receiving container"; outer accent ring stands clear
- * from the standard frame border without hiding bundle color. */
+ * is the same affordance either way.
+ *
+ * Visual mix:
+ *   - 28% bundle-color background tint → frame body brightens in its
+ *     own color (preserves identity, no color clash).
+ *   - 3px solid bundle-color outer ring → frame edge stands forward
+ *     from sibling rows without using a foreign accent hue.
+ *   - 10px soft glow at 60% bundle-color → silhouette pop so the
+ *     affordance reads under ComfyUI's canvas zoom-out.
+ *
+ * Earlier version used --wp-accent-glow (15% alpha) — barely visible
+ * under canvas zoom + against the standard frame border. Switched to
+ * solid bundle-color so the receiving container reads at a glance. */
 .wp-bundle.wp-bundle--drop-target {
   background: color-mix(
     in srgb,
-    var(--wp-bundle-color, var(--wp-bundle-default)) 14%,
+    var(--wp-bundle-color, var(--wp-bundle-default)) 28%,
     transparent
   );
-  box-shadow: 0 0 0 2px var(--wp-accent-glow, rgba(99, 102, 241, 0.45));
+  box-shadow:
+    0 0 0 3px var(--wp-bundle-color, var(--wp-bundle-default)),
+    0 0 10px 2px color-mix(
+      in srgb,
+      var(--wp-bundle-color, var(--wp-bundle-default)) 60%,
+      transparent
+    );
 }
 /* Header divider — snap off at start of collapse, snap on at END of expand.
  * Default rule (no collapsed class) waits MOTION_COLLAPSE_MS before snapping
