@@ -5,9 +5,10 @@ import { resolveDropZone } from "./drop-zone";
 
 // ─────────────────────────────────────────────────────────────────────
 // Helpers: build a controllable DOM scene that mirrors the live
-// ContextWidget rendering — top-level container with rows + bundles,
-// nested children with their own rows. Each element gets a stubbed
-// getBoundingClientRect so the resolver's geometry math is deterministic.
+// ContextWidget rendering — `.wp-modules` top-level container with rows
+// + `.wp-bundle` wrappers; each bundle has a `.wp-bundle-children` body
+// holding its rows + any nested bundle frames. Stubbed rects give the
+// resolver deterministic Y-midpoint math.
 
 interface RowSpec {
   idx: number;
@@ -23,7 +24,7 @@ interface BundleSpec {
   childrenTop?: number;
   childrenBottom?: number;
   rows: RowSpec[];
-  nested?: BundleSpec[]; // tier-2 only
+  nested?: BundleSpec[];
 }
 
 function stubRect(el: HTMLElement, r: { top: number; bottom: number; left?: number; right?: number }) {
@@ -46,6 +47,7 @@ function makeBundleEl(spec: BundleSpec): HTMLElement {
   stubRect(el, { top: spec.top, bottom: spec.bottom });
 
   const header = document.createElement("div");
+  header.className = "wp-bundle-header";
   header.dataset.bundleHeader = "";
   stubRect(header, spec.header);
   el.appendChild(header);
@@ -77,12 +79,22 @@ function buildScene(opts: {
   topRows?: RowSpec[];
   bundles?: BundleSpec[];
 }): HTMLElement {
+  // Real ContextWidget DOM: modulesContainer (`.wp-modules-frame`)
+  // wraps the slot container `.wp-modules`. Tests mount both so the
+  // resolver's fallback path (`:scope > .wp-modules`) is exercised.
+  const frame = document.createElement("div");
+  frame.className = "wp-modules-frame";
+  stubRect(frame, {
+    top: opts.containerTop ?? 0,
+    bottom: opts.containerBottom ?? 1000,
+  });
   const container = document.createElement("div");
-  container.className = "wp-list";
+  container.className = "wp-modules";
   stubRect(container, {
     top: opts.containerTop ?? 0,
     bottom: opts.containerBottom ?? 1000,
   });
+  frame.appendChild(container);
   for (const r of opts.topRows ?? []) {
     const row = document.createElement("div");
     row.className = "wp-module";
@@ -93,13 +105,11 @@ function buildScene(opts: {
   for (const b of opts.bundles ?? []) {
     container.appendChild(makeBundleEl(b));
   }
-  document.body.appendChild(container);
-  return container;
+  document.body.appendChild(frame);
+  return frame;
 }
 
 function dragEvent(x: number, y: number): DragEvent {
-  // jsdom doesn't expose DragEvent. Fake the minimal shape the resolver
-  // reads (clientX, clientY) — cast to DragEvent for the signature.
   return { clientX: x, clientY: y } as unknown as DragEvent;
 }
 
@@ -113,13 +123,13 @@ function moduleDrag(idx = 0): DragPayload {
   };
 }
 
-function bundleDrag(uid: string): DragPayload {
+function bundleDrag(uid: string, startIdx = 0, endIdx = 0): DragPayload {
   return {
     kind: "bundle",
     sourceNodeId: 1,
     bundleUid: uid,
-    sourceStartIdx: 0,
-    sourceEndIdx: 0,
+    sourceStartIdx: startIdx,
+    sourceEndIdx: endIdx,
     libraryId: "lib",
     bundleName: "drag",
     bundleColor: null,
@@ -129,16 +139,19 @@ function bundleDrag(uid: string): DragPayload {
   };
 }
 
-function makeBundleInstance(uid: string, parent_uid: string | null = null): BundleInstance {
+function makeBundleInstance(
+  uid: string,
+  parent_uid: string | null = null,
+  start_idx = 0,
+  end_idx = 0,
+): BundleInstance {
   return {
-    _uid: uid, library_id: "lib", start_idx: 0, end_idx: 0,
+    _uid: uid, library_id: "lib", start_idx, end_idx,
     enabled: true, collapsed: false, inserted_at_hash: "h",
     name: "B", color: null, parent_uid,
   };
 }
 
-// jsdom doesn't implement elementFromPoint — patch directly via the
-// prototype's descriptor. Restore after each test so suites stay isolated.
 let originalEFP: typeof document.elementFromPoint | undefined;
 beforeEach(() => {
   while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
@@ -159,63 +172,69 @@ function setPointerHit(el: HTMLElement | null) {
 // ─────────────────────────────────────────────────────────────────────
 
 describe("resolveDropZone — top-level", () => {
-  it("empty container + pointer anywhere → end (the dragover listener gates by container, so the resolver doesn't bounds-check)", () => {
-    const container = buildScene({});
+  it("empty container + pointer anywhere → slot at top-level idx 0", () => {
+    const frame = buildScene({});
     setPointerHit(null);
     const ev = dragEvent(-10, -10);
     const value: ContextWidgetValue = { version: 1, modules: [], bundles: [] };
-    expect(resolveDropZone(ev, container, value, null)).toEqual({ kind: "end" });
+    expect(resolveDropZone(ev, frame, value, null)).toEqual({
+      kind: "slot", containerUid: null, insertIdx: 0,
+    });
   });
 
-  it("falls back to top-level Y-walk when elementFromPoint returns null (jsdom + overlay-pointer case)", () => {
-    const container = buildScene({});
+  it("falls back to top-level Y-walk when elementFromPoint returns null", () => {
+    const frame = buildScene({
+      topRows: [{ idx: 0, top: 100, bottom: 140 }],
+    });
     setPointerHit(null);
-    const ev = dragEvent(50, 50);
-    const value: ContextWidgetValue = { version: 1, modules: [], bundles: [] };
-    // Empty top-level → end zone, not null. The fallback keeps the
-    // resolver useful in test environments without elementFromPoint
-    // AND in real environments when the pointer hits an overlay.
-    expect(resolveDropZone(ev, container, value, null)).toEqual({ kind: "end" });
-  });
-
-  it("pointer in top-half of a top-level row → row, pos:'before'", () => {
-    const container = buildScene({
-      topRows: [{ idx: 0, top: 100, bottom: 140 }],
-    });
-    const row = container.querySelector(".wp-module")!;
-    setPointerHit(row as HTMLElement);
-    const ev = dragEvent(50, 110); // top half of [100..140]
+    const ev = dragEvent(50, 110);
     const value: ContextWidgetValue = {
-      version: 1,
-      modules: [{ id: "a" } as ModuleEntry],
-      bundles: [],
+      version: 1, modules: [{ id: "a" } as ModuleEntry], bundles: [],
     };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "row", containerUid: null, insertIdx: 0, pos: "before",
+    // Pointer in top-half of row 0 → slot before row 0.
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: null, insertIdx: 0,
     });
   });
 
-  it("pointer in bottom-half of the LAST top-level row → end (canonical: bottom-of-last has no 'next' to canonicalize onto)", () => {
-    const container = buildScene({
+  it("pointer in top-half of a top-level row → slot at that row's idx", () => {
+    const frame = buildScene({
       topRows: [{ idx: 0, top: 100, bottom: 140 }],
     });
-    const row = container.querySelector(".wp-module")!;
+    const row = frame.querySelector(".wp-module")!;
+    setPointerHit(row as HTMLElement);
+    const ev = dragEvent(50, 110);
+    const value: ContextWidgetValue = {
+      version: 1, modules: [{ id: "a" } as ModuleEntry], bundles: [],
+    };
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: null, insertIdx: 0,
+    });
+  });
+
+  it("pointer in bottom-half of the LAST top-level row → slot at end", () => {
+    const frame = buildScene({
+      topRows: [{ idx: 0, top: 100, bottom: 140 }],
+    });
+    const row = frame.querySelector(".wp-module")!;
     setPointerHit(row as HTMLElement);
     const ev = dragEvent(50, 135);
     const value: ContextWidgetValue = {
       version: 1, modules: [{ id: "a" } as ModuleEntry], bundles: [],
     };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({ kind: "end" });
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: null, insertIdx: 1,
+    });
   });
 
-  it("pointer in bottom-half of a non-last row → canonical 'before next' row", () => {
-    const container = buildScene({
+  it("pointer in bottom-half of a non-last row → slot at next row's idx", () => {
+    const frame = buildScene({
       topRows: [
         { idx: 0, top: 100, bottom: 140 },
         { idx: 1, top: 140, bottom: 180 },
       ],
     });
-    const firstRow = container.querySelector(".wp-module")!;
+    const firstRow = frame.querySelector(".wp-module")!;
     setPointerHit(firstRow as HTMLElement);
     const ev = dragEvent(50, 135); // bottom-half of row 0
     const value: ContextWidgetValue = {
@@ -223,140 +242,69 @@ describe("resolveDropZone — top-level", () => {
       modules: [{ id: "a" } as ModuleEntry, { id: "b" } as ModuleEntry],
       bundles: [],
     };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "row", containerUid: null, insertIdx: 1, pos: "before",
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: null, insertIdx: 1,
     });
   });
 
-  it("pointer past every top-level candidate → end", () => {
-    const container = buildScene({
+  it("pointer past every top-level candidate → slot at modules.length", () => {
+    const frame = buildScene({
       topRows: [{ idx: 0, top: 100, bottom: 140 }],
     });
-    setPointerHit(container);
-    const ev = dragEvent(50, 500); // way past row 0
+    setPointerHit(frame);
+    const ev = dragEvent(50, 500);
     const value: ContextWidgetValue = {
       version: 1, modules: [{ id: "a" } as ModuleEntry], bundles: [],
     };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({ kind: "end" });
-  });
-
-  it("empty top-level container → end", () => {
-    const container = buildScene({});
-    setPointerHit(container);
-    const ev = dragEvent(50, 50);
-    const value: ContextWidgetValue = { version: 1, modules: [], bundles: [] };
-    expect(resolveDropZone(ev, container, value, null)).toEqual({ kind: "end" });
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: null, insertIdx: 1,
+    });
   });
 });
 
 describe("resolveDropZone — inside a bundle", () => {
-  it("pointer over bundle header (anywhere) → drop INSIDE — top-half no longer resolves to header.before (eliminates flicker at midpoint)", () => {
-    const container = buildScene({
-      bundles: [{
-        uid: "B1", top: 100, bottom: 300,
-        header: { top: 100, bottom: 140 },
-        rows: [{ idx: 0, top: 140, bottom: 200 }],
-      }],
-    });
-    const header = container.querySelector("[data-bundle-header]")!;
-    setPointerHit(header as HTMLElement);
-    const ev = dragEvent(50, 110); // top half of header
-    const value: ContextWidgetValue = {
-      version: 1, modules: [{ id: "a" } as ModuleEntry],
-      bundles: [makeBundleInstance("B1")],
-    };
-    // No longer header.before — resolver now treats the whole header
-    // strip as "inside" so the indicator stops flickering as the
-    // pointer crosses the header midpoint. Drop ABOVE the bundle is
-    // reached by hovering ABOVE the bundle's frame entirely.
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "row", containerUid: "B1", insertIdx: 0, pos: "before",
-    });
-  });
-
-  it("pointer over bundle header bottom-half (open bundle with children) → row.before of first child (drop INTO first slot)", () => {
-    const container = buildScene({
-      bundles: [{
-        uid: "B1", top: 100, bottom: 300,
-        header: { top: 100, bottom: 140 },
-        rows: [{ idx: 0, top: 140, bottom: 200 }],
-      }],
-    });
-    const header = container.querySelector("[data-bundle-header]")!;
-    setPointerHit(header as HTMLElement);
-    const ev = dragEvent(50, 135);
-    const value: ContextWidgetValue = {
-      version: 1, modules: [{ id: "a" } as ModuleEntry],
-      bundles: [makeBundleInstance("B1")],
-    };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "row", containerUid: "B1", insertIdx: 0, pos: "before",
-    });
-  });
-
-  it("pointer over bundle header bottom-half (empty/collapsed bundle) → empty zone", () => {
-    const container = buildScene({
-      bundles: [{
-        uid: "B1", top: 100, bottom: 140,
-        header: { top: 100, bottom: 140 },
-        rows: [],
-      }],
-    });
-    const header = container.querySelector("[data-bundle-header]")!;
-    setPointerHit(header as HTMLElement);
-    const ev = dragEvent(50, 135);
-    const value: ContextWidgetValue = {
-      version: 1, modules: [],
-      bundles: [makeBundleInstance("B1")],
-    };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "empty", uid: "B1",
-    });
-  });
-
-  it("pointer over a child row in a bundle → row, containerUid:bundleUid", () => {
-    const container = buildScene({
+  it("pointer over child row in a bundle → slot in bundle scope", () => {
+    const frame = buildScene({
       bundles: [{
         uid: "B1", top: 100, bottom: 300,
         header: { top: 100, bottom: 140 },
         rows: [{ idx: 5, top: 150, bottom: 200 }],
       }],
     });
-    const row = container.querySelector(".wp-bundle .wp-module")!;
+    const row = frame.querySelector(".wp-bundle .wp-module")!;
     setPointerHit(row as HTMLElement);
-    const ev = dragEvent(50, 160); // top half of [150..200]
+    const ev = dragEvent(50, 160);
     const value: ContextWidgetValue = {
       version: 1, modules: [],
-      bundles: [makeBundleInstance("B1")],
+      bundles: [makeBundleInstance("B1", null, 5, 5)],
     };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "row", containerUid: "B1", insertIdx: 5, pos: "before",
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: "B1", insertIdx: 5,
     });
   });
 
-  it("pointer in empty bundle body → empty zone", () => {
-    const container = buildScene({
+  it("pointer in bottom-half of bundle's last row → slot after last (end of bundle)", () => {
+    const frame = buildScene({
       bundles: [{
         uid: "B1", top: 100, bottom: 300,
         header: { top: 100, bottom: 140 },
-        childrenTop: 140, childrenBottom: 300,
-        rows: [],
+        rows: [{ idx: 5, top: 150, bottom: 200 }],
       }],
     });
-    const childrenEl = container.querySelector(".wp-bundle-children")!;
-    setPointerHit(childrenEl as HTMLElement);
-    const ev = dragEvent(50, 200);
+    const row = frame.querySelector(".wp-bundle .wp-module")!;
+    setPointerHit(row as HTMLElement);
+    const ev = dragEvent(50, 190); // bottom-half of [150..200]
     const value: ContextWidgetValue = {
       version: 1, modules: [],
-      bundles: [makeBundleInstance("B1")],
+      bundles: [makeBundleInstance("B1", null, 5, 5)],
     };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "empty", uid: "B1",
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: "B1", insertIdx: 6,
     });
   });
 
-  it("nested bundle inside outer: pointer in inner's row → containerUid:inner.uid (innermost wins)", () => {
-    const container = buildScene({
+  it("nested bundle: pointer in inner's row → slot in inner scope (innermost wins)", () => {
+    const frame = buildScene({
       bundles: [{
         uid: "outer", top: 50, bottom: 500,
         header: { top: 50, bottom: 90 },
@@ -371,94 +319,115 @@ describe("resolveDropZone — inside a bundle", () => {
         }],
       }],
     });
-    const innerRow = container.querySelector(".wp-bundle--nested .wp-module")!;
+    const innerRow = frame.querySelector(".wp-bundle--nested .wp-module")!;
     setPointerHit(innerRow as HTMLElement);
     const ev = dragEvent(50, 160);
     const value: ContextWidgetValue = {
       version: 1, modules: [],
       bundles: [
-        makeBundleInstance("outer"),
-        makeBundleInstance("inner", "outer"),
+        makeBundleInstance("outer", null, 2, 2),
+        makeBundleInstance("inner", "outer", 2, 2),
       ],
     };
-    expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "row", containerUid: "inner", insertIdx: 2, pos: "before",
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: "inner", insertIdx: 2,
     });
   });
 });
 
 describe("resolveDropZone — tier-2 cap", () => {
-  it("bundle drag whose dragged bundle has nested children, over another bundle's row → coerces to header.after of container", () => {
-    const container = buildScene({
+  it("bundle drag over a NESTED bundle's body → resolves at outer scope (no tier-3)", () => {
+    // Outer wraps inner; pointer drops inside inner's body. Bundle drag
+    // should bubble up past inner and land at outer scope.
+    const frame = buildScene({
       bundles: [{
-        uid: "Target", top: 100, bottom: 300,
-        header: { top: 100, bottom: 140 },
-        rows: [{ idx: 7, top: 150, bottom: 200 }],
+        uid: "outer", top: 50, bottom: 500,
+        header: { top: 50, bottom: 90 },
+        childrenTop: 90, childrenBottom: 500,
+        rows: [],
+        nested: [{
+          uid: "inner", parentUid: "outer",
+          top: 100, bottom: 400,
+          header: { top: 100, bottom: 140 },
+          childrenTop: 140, childrenBottom: 400,
+          rows: [{ idx: 2, top: 150, bottom: 200 }],
+        }],
       }],
     });
-    const row = container.querySelector(".wp-bundle .wp-module")!;
-    setPointerHit(row as HTMLElement);
+    const innerRow = frame.querySelector(".wp-bundle--nested .wp-module")!;
+    setPointerHit(innerRow as HTMLElement);
     const ev = dragEvent(50, 160);
     const value: ContextWidgetValue = {
       version: 1, modules: [],
       bundles: [
-        makeBundleInstance("Target"),
-        // Dragged "WithNested" has an inner child — tier-2 cap triggers.
-        makeBundleInstance("WithNested"),
-        makeBundleInstance("WithNestedInner", "WithNested"),
+        makeBundleInstance("outer", null, 2, 2),
+        makeBundleInstance("inner", "outer", 2, 2),
       ],
     };
-    expect(resolveDropZone(ev, container, value, bundleDrag("WithNested"))).toEqual({
-      kind: "header", uid: "Target", pos: "after",
+    // Dragged bundle "Loose" is at top-level; tier-2 cap rejects drop
+    // into inner's body and walks up to outer's body → slot in outer
+    // before the inner bundle's start_idx (2).
+    expect(resolveDropZone(ev, frame, value, bundleDrag("Loose", 9, 9))).toEqual({
+      kind: "slot", containerUid: "outer", insertIdx: 2,
     });
   });
 
-  it("bundle drag (no nested children) over another bundle's empty body → empty zone allowed", () => {
-    const container = buildScene({
+  it("module drag over a nested bundle's body → still resolves inside inner (no tier-2 cap for module drags)", () => {
+    const frame = buildScene({
       bundles: [{
-        uid: "Target", top: 100, bottom: 300,
-        header: { top: 100, bottom: 140 },
-        childrenTop: 140, childrenBottom: 300,
+        uid: "outer", top: 50, bottom: 500,
+        header: { top: 50, bottom: 90 },
+        childrenTop: 90, childrenBottom: 500,
         rows: [],
+        nested: [{
+          uid: "inner", parentUid: "outer",
+          top: 100, bottom: 400,
+          header: { top: 100, bottom: 140 },
+          childrenTop: 140, childrenBottom: 400,
+          rows: [{ idx: 2, top: 150, bottom: 200 }],
+        }],
       }],
     });
-    const childrenEl = container.querySelector(".wp-bundle-children")!;
-    setPointerHit(childrenEl as HTMLElement);
-    const ev = dragEvent(50, 200);
+    const innerRow = frame.querySelector(".wp-bundle--nested .wp-module")!;
+    setPointerHit(innerRow as HTMLElement);
+    const ev = dragEvent(50, 160);
     const value: ContextWidgetValue = {
       version: 1, modules: [],
       bundles: [
-        makeBundleInstance("Target"),
-        // Dragged "Leaf" has no nested children — allowed to land inside Target.
-        makeBundleInstance("Leaf"),
+        makeBundleInstance("outer", null, 2, 2),
+        makeBundleInstance("inner", "outer", 2, 2),
       ],
     };
-    expect(resolveDropZone(ev, container, value, bundleDrag("Leaf"))).toEqual({
-      kind: "empty", uid: "Target",
+    expect(resolveDropZone(ev, frame, value, moduleDrag())).toEqual({
+      kind: "slot", containerUid: "inner", insertIdx: 2,
     });
   });
 });
 
 describe("resolveDropZone — self-hover", () => {
-  it("bundle drag over its own header → header.before (visual feedback at drag start)", () => {
-    // Match module-row behaviour: the dragged thing's "before self"
-    // slot stays as a visible drop target during initial hover.
-    // applyDrop treats this as a no-op via its own guard.
-    const container = buildScene({
+  it("bundle drag over its own body → walk-up skips own frame + body, resolves at parent scope", () => {
+    // Dragged bundle has its own row inside its body. Pointer hovers
+    // that row. Walk-up skips own body (moving range), continues up.
+    // Since this bundle is top-level, fallback resolves at top-level.
+    const frame = buildScene({
       bundles: [{
         uid: "self", top: 100, bottom: 200,
         header: { top: 100, bottom: 140 },
-        rows: [],
+        rows: [{ idx: 0, top: 150, bottom: 190 }],
       }],
     });
-    const header = container.querySelector("[data-bundle-header]")!;
-    setPointerHit(header as HTMLElement);
-    const ev = dragEvent(50, 110);
+    const ownRow = frame.querySelector(".wp-bundle .wp-module")!;
+    setPointerHit(ownRow as HTMLElement);
+    const ev = dragEvent(50, 160);
     const value: ContextWidgetValue = {
-      version: 1, modules: [], bundles: [makeBundleInstance("self")],
+      version: 1, modules: [{ id: "a" } as ModuleEntry],
+      bundles: [makeBundleInstance("self", null, 0, 0)],
     };
-    expect(resolveDropZone(ev, container, value, bundleDrag("self"))).toEqual({
-      kind: "header", uid: "self", pos: "before",
-    });
+    // The walk-up skips self's body, falls back to top-level. Pointer Y
+    // is inside the bundle frame's rect → top-level Y walk finds the
+    // bundle and applies midpoint logic. The bundle's rect midpoint at
+    // (200+100)/2 = 150 → y=160 is past midpoint → slot AFTER the bundle.
+    const zone = resolveDropZone(ev, frame, value, bundleDrag("self", 0, 0));
+    expect(zone).toEqual({ kind: "slot", containerUid: null, insertIdx: 1 });
   });
 });

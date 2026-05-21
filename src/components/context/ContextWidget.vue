@@ -148,47 +148,100 @@ let dropPulseTimer: number | null = null;
 const suppressMove = ref(false);
 let suppressMoveTimer: number | null = null;
 
-// Gap-metaphor indicator: rows that own a "before"/"after" slot get a
-// margin so the bar paints in the visual breathing room. With the new
-// container-scoped zone shape, every `row` zone references modules by
-// their global `insertIdx`, regardless of scope — top-level rows and
-// nested bundle children alike. The CSS class on each row opens the
-// matching gap.
-function rowGap(idx: number): "before" | "after" | null {
-  const z = dragOver.value;
-  if (!z || z.kind !== "row") return null;
-  return z.insertIdx === idx ? z.pos : null;
+// Drag anchor: the row or bundle whose CSS class opens the gap for the
+// indicator bar. Computed once per dragOver change so rowGap +
+// bundleGap + dropBarFor all consult the same source of truth.
+//
+// Slot semantics:
+//   - `insertIdx === <item start_idx>` → anchor at THAT item with pos
+//     "before" (bar above)
+//   - No matching item → anchor at the LAST item in the container with
+//     pos "after" (bar below)
+//
+// Empty container → no anchor (bar paints at container center via the
+// dropBarFor fallback).
+type AnchorInfo =
+  | { kind: "row"; idx: number; pos: "before" | "after"; containerUid: string | null }
+  | { kind: "bundle"; uid: string; pos: "before" | "after"; containerUid: string | null };
+
+function containerItems(
+  containerUid: string | null,
+  val: ContextWidgetValue,
+): Array<{ kind: "mod"; idx: number } | { kind: "bundle"; bundle: BundleInstance }> {
+  const bundles = val.bundles ?? [];
+  const out: Array<{ kind: "mod"; idx: number } | { kind: "bundle"; bundle: BundleInstance }> = [];
+  if (containerUid === null) {
+    let i = 0;
+    while (i < val.modules.length) {
+      const b = bundles.find((bb) => bb.start_idx === i && !bb.parent_uid && bb.end_idx >= bb.start_idx);
+      if (b) {
+        out.push({ kind: "bundle", bundle: b });
+        i = b.end_idx + 1;
+      } else {
+        out.push({ kind: "mod", idx: i });
+        i++;
+      }
+    }
+    return out;
+  }
+  const parent = bundles.find((b) => b._uid === containerUid);
+  if (!parent || parent.end_idx < parent.start_idx) return out;
+  let j = parent.start_idx;
+  while (j <= parent.end_idx) {
+    const inner = bundles.find(
+      (b) => b.parent_uid === containerUid && b.start_idx === j && b.end_idx >= b.start_idx,
+    );
+    if (inner) {
+      out.push({ kind: "bundle", bundle: inner });
+      j = inner.end_idx + 1;
+    } else {
+      out.push({ kind: "mod", idx: j });
+      j++;
+    }
+  }
+  return out;
 }
 
-// True when the drag is targeting this bundle as a "drop inside" body.
-// Fires for:
-//   - empty zone on this uid (collapsed bundle / empty body)
-//   - row zone with containerUid = this uid AND the drag source isn't
-//     already a child of this bundle (i.e. crossing into it from outside)
-// Drives the `.wp-bundle--drop-inside` highlight border so the user
-// gets a "this whole bundle is the target" affordance when carrying a
-// row from outside.
-function isBundleInsideTarget(uid: string): boolean {
+const dragAnchor = computed<AnchorInfo | null>(() => {
+  const z = dragOver.value;
+  if (!z) return null;
+  const items = containerItems(z.containerUid, value.value);
+  if (items.length === 0) return null;
+  for (const it of items) {
+    const startIdx = it.kind === "mod" ? it.idx : it.bundle.start_idx;
+    if (startIdx === z.insertIdx) {
+      return it.kind === "mod"
+        ? { kind: "row", idx: it.idx, pos: "before", containerUid: z.containerUid }
+        : { kind: "bundle", uid: it.bundle._uid, pos: "before", containerUid: z.containerUid };
+    }
+  }
+  const last = items[items.length - 1];
+  return last.kind === "mod"
+    ? { kind: "row", idx: last.idx, pos: "after", containerUid: z.containerUid }
+    : { kind: "bundle", uid: last.bundle._uid, pos: "after", containerUid: z.containerUid };
+});
+
+// True when the resolved slot anchors at modules.length in the top-level
+// scope — drives the sticky "Drop here" footer's active state.
+const isDropEndZone = computed<boolean>(() => {
   const z = dragOver.value;
   if (!z) return false;
-  if (z.kind === "empty" && z.uid === uid) return true;
-  if (z.kind === "row" && z.containerUid === uid) {
-    const ds = dragState.value;
-    if (ds?.kind === "module" && (ds.sourceBundleUid ?? null) !== uid) return true;
-    if (ds?.kind === "bundle" && ds.bundleUid !== uid) return true;
-  }
-  return false;
+  return z.containerUid === null && z.insertIdx >= value.value.modules.length;
+});
+
+function rowGap(idx: number): "before" | "after" | null {
+  const a = dragAnchor.value;
+  if (!a || a.kind !== "row" || a.idx !== idx) return null;
+  return a.pos;
 }
 
-// Bundle header gets `wp-gap-before` when a `header` zone targets it
-// with pos:"before" — opens a gap above the bundle so the bar paints
-// in it. Sibling-after drops open the gap below; that's handled by
-// rowGap on the next top-level row OR by the bundle's own
-// `wp-gap-after` class (added below).
+// Bundle gap (frame margin opens above/below the bundle). Reads the
+// drag anchor; returns "before" when this bundle is the anchor with
+// pos "before", "after" when it's the anchor with pos "after".
 function bundleHeaderGap(uid: string): "before" | "after" | null {
-  const z = dragOver.value;
-  if (!z || z.kind !== "header" || z.uid !== uid) return null;
-  return z.pos;
+  const a = dragAnchor.value;
+  if (!a || a.kind !== "bundle" || a.uid !== uid) return null;
+  return a.pos;
 }
 
 /** Looks up the indicator-bar position for a drop container.
@@ -211,64 +264,33 @@ function bundleHeaderGap(uid: string): "before" | "after" | null {
  */
 const GAP_BAR_OFFSET = 7;
 function dropBarFor(containerUid: string | null): { top: number } | null {
-  const z = dragOver.value;
-  const containerEl = findContainerEl(containerUid);
-  if (!z || !containerEl) return null;
-
-  // CRITICAL: ComfyUI applies `transform: scale(zoom)` to the
-  // dom-widget container. `getBoundingClientRect` returns VIEWPORT
-  // pixels (scaled). Setting `style.top` to that value places the bar
-  // wrong by the zoom factor (the bar drifted upward proportional to
-  // zoom < 1.0). `offsetTop` is in CSS pixels, relative to the
-  // offsetParent — that's the right unit for `position:absolute; top`.
-  const offsetWithin = (el: HTMLElement): number => elementOffsetTopWithin(el, containerEl);
-
-  switch (z.kind) {
-    case "row": {
-      if ((z.containerUid ?? null) !== (containerUid ?? null)) return null;
-      const rowEl = findRowEl(z.insertIdx, containerEl);
-      if (!rowEl) return null;
-      const off = offsetWithin(rowEl);
-      return {
-        top: z.pos === "before"
-          ? off - GAP_BAR_OFFSET
-          : off + rowEl.offsetHeight + GAP_BAR_OFFSET,
-      };
-    }
-    case "empty": {
-      if (containerUid !== z.uid) return null;
-      return { top: containerEl.clientHeight / 2 };
-    }
-    case "header": {
-      // Only paint in the container that is the targeted bundle's
-      // ACTUAL parent scope. Without this guard, both the top-level
-      // container AND the bundle's parent container would find the
-      // nested bundle via deep-descendant fallback and paint two bars
-      // for the same drop position — user-visible as "sometimes 2
-      // lines".
-      const targetBundle = (value.value.bundles ?? []).find((b) => b._uid === z.uid);
-      if (!targetBundle) return null;
-      const parentScope = targetBundle.parent_uid ?? null;
-      if (parentScope !== containerUid) return null;
-      const bundleEl = findBundleFrameEl(z.uid, containerEl);
-      if (!bundleEl) return null;
-      const off = offsetWithin(bundleEl);
-      return {
-        top: z.pos === "before"
-          ? off - GAP_BAR_OFFSET
-          : off + bundleEl.offsetHeight + GAP_BAR_OFFSET,
-      };
-    }
-    case "end": {
-      if (containerUid !== null) return null;
-      const children = Array.from(
-        containerEl.querySelectorAll<HTMLElement>(":scope > .wp-module, :scope > .wp-bundle"),
-      );
-      if (children.length === 0) return { top: containerEl.clientHeight / 2 };
-      const last = children[children.length - 1];
-      return { top: offsetWithin(last) + last.offsetHeight + GAP_BAR_OFFSET };
-    }
+  const a = dragAnchor.value;
+  if (!a) {
+    // Empty container case (only fires for empty top-level — bundles
+    // always have ≥1 child by invariant). Paint at container center.
+    const z = dragOver.value;
+    if (!z || (z.containerUid ?? null) !== (containerUid ?? null)) return null;
+    const containerEl = findContainerEl(containerUid);
+    if (!containerEl) return null;
+    return { top: containerEl.clientHeight / 2 };
   }
+  if ((a.containerUid ?? null) !== (containerUid ?? null)) return null;
+  const containerEl = findContainerEl(containerUid);
+  if (!containerEl) return null;
+
+  // CRITICAL: ComfyUI applies `transform: scale(zoom)` to the dom-widget
+  // container. `getBoundingClientRect` returns VIEWPORT pixels (scaled).
+  // `offsetTop` is in CSS pixels relative to offsetParent — that's the
+  // right unit for `position:absolute; top` under a transformed ancestor.
+  const anchorEl: HTMLElement | null =
+    a.kind === "row" ? findRowEl(a.idx, containerEl) : findBundleFrameEl(a.uid, containerEl);
+  if (!anchorEl) return null;
+  const off = elementOffsetTopWithin(anchorEl, containerEl);
+  return {
+    top: a.pos === "before"
+      ? off - GAP_BAR_OFFSET
+      : off + anchorEl.offsetHeight + GAP_BAR_OFFSET,
+  };
 }
 
 /** Walks `offsetParent` chain from `el` up until reaching `containerEl`,
@@ -3175,14 +3197,18 @@ function onEmptyHeroDragOver(ev: DragEvent) {
   if (!ds) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  dragOver.value = { kind: "end" };
+  dragOver.value = { kind: "slot", containerUid: null, insertIdx: 0 };
 }
 
 function onEndDragOver(ev: DragEvent) {
   if (!dragState.value) return;
   ev.preventDefault();
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  dragOver.value = { kind: "end" };
+  dragOver.value = {
+    kind: "slot",
+    containerUid: null,
+    insertIdx: value.value.modules.length,
+  };
 }
 
 function onContainerLeave(ev: DragEvent) {
@@ -3198,9 +3224,20 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   const ds = dragState.value;
   if (!ds) return;
   // Snapshot zone before clearing hover state. Null target idx + null
-  // zone → "end" (empty hero drop path).
-  const zone: DropZone = dragOver.value ?? (targetIdx === null ? { kind: "end" } : null);
+  // zone → slot at end of top-level (empty hero / sticky footer drop).
+  const zone: DropZone =
+    dragOver.value ??
+    (targetIdx === null
+      ? { kind: "slot", containerUid: null, insertIdx: value.value.modules.length }
+      : null);
   dragOver.value = null;
+  // Wait for Vue to flush the dragOver=null update so the wp-gap-before
+  // / wp-gap-after class is removed from the anchor row/bundle BEFORE
+  // we capture rects. Otherwise the captured rect carries the 14px
+  // gap margin → post-Vue rect doesn't → FLIP animates a phantom
+  // 14px shift on the anchor and its siblings (user-visible as
+  // "other modules animate when swapping children").
+  await nextTick();
   // Capture pre-mutation rects for FLIP-move. Captures top-level + every
   // in-bundle child container so any reorder animates its scope after
   // Vue commits + re-renders.
@@ -3354,34 +3391,17 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   dragState.value = { ...ds, consumedBy: props.nodeId };
 }
 
-/** Map the container-scoped DropZone to `{insertIdx, stamp}` for the
- *  cross-node insertion paths (where we're adding a NEW row/bundle to
- *  this widget rather than moving an existing one). Same mapping as
- *  applyDrop's helpers but inlined for the cross-node branch which
- *  doesn't go through applyDrop (it doesn't have a source row to
- *  splice). */
+/** Map the slot DropZone to `{insertIdx, stamp}` for the cross-node
+ *  insertion paths (where we're adding a NEW row/bundle to this widget
+ *  rather than moving an existing one). Trivial under the slot model:
+ *  insertIdx + containerUid go straight through. */
 function resolveCrossNodeInsertion(
   zone: DropZone,
   modules: ModuleEntry[],
-  bundles: BundleInstance[],
+  _bundles: BundleInstance[],
 ): { insertIdx: number; stamp: string | undefined } {
-  if (!zone || zone.kind === "end") {
-    return { insertIdx: modules.length, stamp: undefined };
-  }
-  if (zone.kind === "row") {
-    const insertIdx = zone.pos === "after" ? zone.insertIdx + 1 : zone.insertIdx;
-    return { insertIdx, stamp: zone.containerUid ?? undefined };
-  }
-  if (zone.kind === "empty") {
-    const target = bundles.find((b) => b._uid === zone.uid);
-    const insertIdx = target ? target.start_idx : modules.length;
-    return { insertIdx, stamp: zone.uid };
-  }
-  // kind === "header": sibling drop at target's parent scope.
-  const target = bundles.find((b) => b._uid === zone.uid);
-  if (!target) return { insertIdx: modules.length, stamp: undefined };
-  const insertIdx = zone.pos === "before" ? target.start_idx : target.end_idx + 1;
-  return { insertIdx, stamp: target.parent_uid ?? undefined };
+  if (!zone) return { insertIdx: modules.length, stamp: undefined };
+  return { insertIdx: zone.insertIdx, stamp: zone.containerUid ?? undefined };
 }
 
 // Top-level render list: standalone modules + bundle wrappers, in
@@ -3496,7 +3516,6 @@ const bundleFrameCtx: BundleFrameCtx = {
   isBundleLibraryDrifted,
   bundleInternalState,
   bundleLockState,
-  isBundleInsideTarget,
   bundleHeaderGap,
   recentDropUids,
   pulseDelayFor,
@@ -3641,7 +3660,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
              menu on any module. -->
         <div
           class="wp-w-footer"
-          :class="{ 'wp-gap-before': dragOver?.kind === 'end' }"
         >
           <button
             class="wp-btn wp-btn--primary"
@@ -3666,7 +3684,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         v-else-if="!parseError"
         key="empty"
         class="wp-empty-hero"
-        :class="{ 'wp-empty-hero--drop-target': dragOver?.kind === 'end' }"
+        :class="{ 'wp-empty-hero--drop-target': isDropEndZone }"
         data-test="context-empty"
         @dragover="onEmptyHeroDragOver"
         @drop="(ev) => onDrop(ev, null)"
@@ -3705,7 +3723,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 
     <div
       class="wp-drop-end"
-      :class="{ 'wp-drop-end--active': dragOver?.kind === 'end', 'wp-drop-end--show': dragState !== null }"
+      :class="{ 'wp-drop-end--active': isDropEndZone, 'wp-drop-end--show': dragState !== null }"
       @dragover="onEndDragOver"
       @drop="(ev) => onDrop(ev, null)"
     >Drop here</div>
@@ -4011,13 +4029,10 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
   transform: translateY(-8px);
   pointer-events: none;
 }
-/* Frame highlight when crossing into the bundle. */
-.wp-bundle--drop-inside {
-  border-width: 2px;
-  border-left-width: 4px;
-  background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 15%, transparent);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
-}
+/* `.wp-bundle--drop-inside` class removed in slot-zone redesign — no
+ * "drop into" zone exists now (empty bundles can't be created, and
+ * non-empty bundles always resolve to a slot between their children).
+ * Border-state styling reduced to the standard frame chrome. */
 /* Header divider — snap off at start of collapse, snap on at END of expand.
  * Default rule (no collapsed class) waits MOTION_COLLAPSE_MS before snapping
  * border-bottom visible; collapsed rule snaps immediately to transparent. */

@@ -1,19 +1,18 @@
 /**
- * Pure drop applier for the container-scoped drag system.
+ * Pure drop applier for the unified slot-zone drag system.
  *
- * Given a resolved DropZone + a drag payload + the current widget
- * value, produce the next widget value with:
+ * Given a resolved DropZone (slot kind) + a drag payload + the current
+ * widget value, produce the next widget value with:
  *   - modules[] reordered (and bundle_origin rewritten for module drops)
- *   - bundles[] reconciled (start/end indices refreshed, parent_uid
+ *   - bundles[] reconciled (start/end indices refreshed; parent_uid
  *     rewritten for bundle drops)
  *
  * No Vue, no DOM, no side effects. The caller commits the result via
  * ContextWidget's existing commitModules path.
  *
- * The applier collapses what the old onDrop did across 200+ lines of
- * patched branches into a single switch over the resolved zone. The
- * resolver already pre-clamped tier-2 cap violations, so the applier
- * doesn't need to worry about them.
+ * Self-drop is handled here: if the resolved slot lands inside the
+ * dragged bundle's own current range AND in the same parent scope,
+ * the applier returns the input unchanged so the move is a no-op.
  */
 
 import type {
@@ -26,8 +25,7 @@ import type { DropZone } from "./drop-zone";
 
 /**
  * Drop payload — the dragged thing's identity + source position. Built
- * from `DragPayload` at the call site (ContextWidget). Kept narrow so
- * the applier doesn't depend on the full drag-store type.
+ * from `DragPayload` at the call site (ContextWidget).
  */
 export type DropPayload =
   | { kind: "module"; sourceIdx: number; sourceUid: string }
@@ -53,19 +51,19 @@ function applyModuleDrop(
   drag: Extract<DropPayload, { kind: "module" }>,
   value: ContextWidgetValue,
 ): ContextWidgetValue {
-  const bundles = [...(value.bundles ?? [])];
-  const insertIdx = computeInsertIdx(zone, drag.sourceIdx, /*rangeSize=*/ 1, value.modules, bundles);
   const modules = [...value.modules];
   const [row] = modules.splice(drag.sourceIdx, 1);
-  const finalIdx = clampForRemoval(insertIdx, drag.sourceIdx, 1);
+  // Pre-splice idx → post-splice idx: anything past sourceIdx shifts
+  // left by one.
+  let insertIdx = zone.insertIdx;
+  if (insertIdx > drag.sourceIdx) insertIdx -= 1;
 
-  const containerUid = resolveModuleBundleOrigin(zone, bundles);
   const updated = { ...row } as ModuleEntry & { bundle_origin?: string };
-  if (containerUid !== null) updated.bundle_origin = containerUid;
+  if (zone.containerUid !== null) updated.bundle_origin = zone.containerUid;
   else delete updated.bundle_origin;
-  modules.splice(finalIdx, 0, updated);
+  modules.splice(insertIdx, 0, updated);
 
-  const reconciled = reconcileBundleRanges(modules, bundles);
+  const reconciled = reconcileBundleRanges(modules, [...(value.bundles ?? [])]);
   return { ...value, modules, bundles: reconciled };
 }
 
@@ -79,109 +77,39 @@ function applyBundleDrop(
 ): ContextWidgetValue {
   const bundles = [...(value.bundles ?? [])];
   const rangeSize = drag.sourceEndIdx - drag.sourceStartIdx + 1;
-  // Self-drop guard: zone resolver returns null for self-hover, but the
-  // header.before/after case can still land on the dragged bundle's
-  // own header. Treat as no-op so the user can't drop a bundle on
-  // itself and corrupt the range.
-  if (zone.kind === "header" && zone.uid === drag.bundleUid) {
-    return value;
+
+  // Self-drop guard: slot lands inside the dragged bundle's own
+  // current range AND in its current parent scope → no-op. This covers
+  // the "hovering near self" case where the indicator follows the
+  // pointer back to the bundle's current position.
+  const dragBundle = bundles.find((b) => b._uid === drag.bundleUid);
+  if (dragBundle) {
+    const currentParent = dragBundle.parent_uid ?? null;
+    if (
+      (zone.containerUid ?? null) === currentParent &&
+      zone.insertIdx >= drag.sourceStartIdx &&
+      zone.insertIdx <= drag.sourceEndIdx + 1
+    ) {
+      return value;
+    }
   }
-  const insertIdx = computeInsertIdx(zone, drag.sourceStartIdx, rangeSize, value.modules, bundles);
 
   const modules = [...value.modules];
   const range = modules.splice(drag.sourceStartIdx, rangeSize);
-  const finalIdx = clampForRemoval(insertIdx, drag.sourceStartIdx, rangeSize);
-  modules.splice(finalIdx, 0, ...range);
+  // Pre-splice → post-splice clamp: indices past the removed range
+  // shift left by rangeSize; indices inside the range collapse to its
+  // start.
+  let insertIdx = zone.insertIdx;
+  if (insertIdx > drag.sourceEndIdx) insertIdx -= rangeSize;
+  else if (insertIdx > drag.sourceStartIdx) insertIdx = drag.sourceStartIdx;
+  modules.splice(insertIdx, 0, ...range);
 
-  const nextParentUid = resolveBundleParentUid(zone, bundles);
   const nextBundles = bundles.map((b) =>
-    b._uid === drag.bundleUid ? { ...b, parent_uid: nextParentUid } : b,
+    b._uid === drag.bundleUid ? { ...b, parent_uid: zone.containerUid } : b,
   );
-
   const reconciled = reconcileBundleRanges(modules, nextBundles);
   return { ...value, modules, bundles: reconciled };
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Position resolvers
-
-/** Maps a zone (with indices into the PRE-splice modules list) to an
- *  insertion index in the ORIGINAL list. The caller clamps for the
- *  post-splice list via `clampForRemoval`. */
-function computeInsertIdx(
-  zone: NonNullable<DropZone>,
-  _sourceStartIdx: number,
-  _rangeSize: number,
-  modules: ModuleEntry[],
-  bundles: BundleInstance[],
-): number {
-  switch (zone.kind) {
-    case "end":
-      return modules.length;
-    case "row":
-      return zone.pos === "before" ? zone.insertIdx : zone.insertIdx + 1;
-    case "empty": {
-      // Empty body — drop becomes the first child of this bundle. The
-      // bundle's start_idx tells us where to insert; if the bundle had
-      // a sentinel range (end<start), use start_idx anyway since
-      // reconcile will sort indices out post-drop.
-      const target = bundles.find((b) => b._uid === zone.uid);
-      if (!target) return modules.length;
-      return Math.max(0, Math.min(modules.length, target.start_idx));
-    }
-    case "header": {
-      const target = bundles.find((b) => b._uid === zone.uid);
-      if (!target) return modules.length;
-      return zone.pos === "before" ? target.start_idx : target.end_idx + 1;
-    }
-  }
-}
-
-/** Clamps a pre-splice insertion index to the post-splice list. Indices
- *  past the removed range shift left by rangeSize; indices inside the
- *  removed range collapse to its start. */
-function clampForRemoval(insertIdx: number, sourceStartIdx: number, rangeSize: number): number {
-  const sourceEnd = sourceStartIdx + rangeSize - 1;
-  if (insertIdx > sourceEnd) return insertIdx - rangeSize;
-  if (insertIdx >= sourceStartIdx) return sourceStartIdx;
-  return insertIdx;
-}
-
-/** Bundle origin for a module drop. */
-function resolveModuleBundleOrigin(
-  zone: NonNullable<DropZone>,
-  bundles: BundleInstance[],
-): string | null {
-  switch (zone.kind) {
-    case "end":
-      return null;
-    case "row":
-      return zone.containerUid;
-    case "empty":
-      return zone.uid;
-    case "header": {
-      const target = bundles.find((b) => b._uid === zone.uid);
-      // Sibling drop: dropped row sits in the target's parent scope.
-      return target?.parent_uid ?? null;
-    }
-  }
-}
-
-/** parent_uid for a bundle drop. */
-function resolveBundleParentUid(
-  zone: NonNullable<DropZone>,
-  bundles: BundleInstance[],
-): string | null {
-  switch (zone.kind) {
-    case "end":
-      return null;
-    case "row":
-      return zone.containerUid;
-    case "empty":
-      return zone.uid;
-    case "header": {
-      const target = bundles.find((b) => b._uid === zone.uid);
-      return target?.parent_uid ?? null;
-    }
-  }
-}
+// Type re-exports kept narrow for legacy import sites.
+export type { BundleInstance, ContextWidgetValue, ModuleEntry };

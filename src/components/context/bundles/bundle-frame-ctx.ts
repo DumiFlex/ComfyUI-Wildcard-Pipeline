@@ -17,7 +17,10 @@ export interface BundleFrameCtx {
   isBundleLibraryDrifted: (b: BundleInstance) => boolean;
   bundleInternalState: (b: BundleInstance) => "all" | "none" | "partial" | null;
   bundleLockState: (b: BundleInstance) => "all" | "none" | "partial" | null;
-  isBundleInsideTarget: (uid: string) => boolean;
+  /** Returns "before"/"after" when this bundle is the indicator anchor
+   *  for the current slot zone, null otherwise. Drives the
+   *  `wp-gap-before`/`wp-gap-after` margin class so a gap opens for the
+   *  drop-bar. */
   bundleHeaderGap: (uid: string) => "before" | "after" | null;
   recentDropUids: Ref<Set<string>>;
   pulseDelayFor: (uid: string | null | undefined) => string;

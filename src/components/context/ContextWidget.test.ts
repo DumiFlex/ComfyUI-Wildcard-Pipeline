@@ -1696,6 +1696,10 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
   // List-level dragover resolver iterates ALL top-level items so each
   // test fixture needs every visible row + bundle-header rect stubbed.
   // Standard layout: header at y=0 (30px), 4 module cards 30px each.
+  // Bundle frame's rect = union of its header + 3 inner cards = [0..120].
+  // Children container = [30..120]. Stubbed because slot-zone resolver
+  // drills into bundles via the frame rect — unstubbed rect collapses
+  // to zeros, defeating the drill-in path in jsdom.
   function stubFixtureRects(wrapper: ReturnType<typeof mount>) {
     const header = wrapper.find(".wp-bundle-header");
     if (header.exists()) {
@@ -1706,6 +1710,16 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     cards.forEach((c, i) => {
       (c.element as HTMLElement).getBoundingClientRect = rectOf(30 + i * 30, 30);
     });
+    const bundle = wrapper.find(".wp-bundle");
+    if (bundle.exists()) {
+      // Outer frame spans header + 3 bundled cards (idx 0..2): [0..120].
+      (bundle.element as HTMLElement).getBoundingClientRect = rectOf(0, 120);
+    }
+    const body = wrapper.find(".wp-bundle-children");
+    if (body.exists()) {
+      // Body spans the 3 inner cards: [30..120].
+      (body.element as HTMLElement).getBoundingClientRect = rectOf(30, 90);
+    }
   }
 
   it("#5 — BundleHeader is draggable + dragstart populates kind:'bundle' payload", async () => {
@@ -1815,24 +1829,12 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     wrapper.unmount();
   });
 
-  it("#10 — dragging from OUTSIDE into bundle paints frame highlight", async () => {
-    const { wrapper } = mountWithBundle();
-    await flushPromises();
-    stubFixtureRects(wrapper);
-    const cards = wrapper.findAll(".wp-module");
-
-    // ch1 at y=60..90, mid=75. clientY=70 → inside bundle, top half of ch1.
-    await cards[3].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[1].trigger("dragover", { clientY: 70, dataTransfer: makeDataTransfer() });
-    await flushPromises();
-
-    const overlay = wrapper.find(".wp-bundle");
-    expect(overlay.exists()).toBe(true);
-    expect(overlay.classes()).toContain("wp-bundle--drop-inside");
-
-    await cards[3].trigger("dragend");
-    wrapper.unmount();
-  });
+  // (Test "dragging from OUTSIDE into bundle paints frame highlight"
+  // deleted with the slot-zone redesign — the `.wp-bundle--drop-inside`
+  // class was removed when the `into`/`empty` zone kinds collapsed
+  // into the unified slot model. Frame highlight no longer signals
+  // "crossing in"; the indicator bar's position inside the bundle's
+  // body conveys the same intent.)
 
   it("auto-expand: dropping a row INTO a collapsed bundle flips collapsed → false", async () => {
     const modules = [
@@ -1875,6 +1877,16 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     (header.element as HTMLElement).getBoundingClientRect = rectOf(0, 30);
     const stdCard = wrapper.find('[data-module-id="stdaaaaa"]');
     (stdCard.element as HTMLElement).getBoundingClientRect = rectOf(80, 30);
+    // Collapsed bundle frame rect = just the header strip (children
+    // container has 0 height via grid-template-rows: auto 0fr). The
+    // slot-zone resolver drills via the frame rect so it needs to be
+    // > 0 height for drill-in to fire.
+    const bundle = wrapper.find(".wp-bundle");
+    (bundle.element as HTMLElement).getBoundingClientRect = rectOf(0, 30);
+    const body = wrapper.find(".wp-bundle-children");
+    if (body.exists()) {
+      (body.element as HTMLElement).getBoundingClientRect = rectOf(30, 0);
+    }
 
     // Drag std → bundle header bottom half (clientY in bottom 15px window).
     await stdCard.trigger("dragstart", { dataTransfer: makeDataTransfer() });
@@ -1892,23 +1904,9 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     wrapper.unmount();
   });
 
-  it("#10 — in-bundle reorder does NOT paint frame highlight (gap line only)", async () => {
-    const { wrapper } = mountWithBundle();
-    await flushPromises();
-    stubFixtureRects(wrapper);
-    const cards = wrapper.findAll(".wp-module");
-
-    await cards[0].trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await cards[1].trigger("dragover", { clientY: 70, dataTransfer: makeDataTransfer() });
-    await flushPromises();
-
-    const overlay = wrapper.find(".wp-bundle");
-    expect(overlay.exists()).toBe(true);
-    expect(overlay.classes()).not.toContain("wp-bundle--drop-inside");
-
-    await cards[0].trigger("dragend");
-    wrapper.unmount();
-  });
+  // (Test "in-bundle reorder does NOT paint frame highlight" deleted —
+  // see slot-zone note above. The negative-case mirror of the deleted
+  // positive test is also obsolete since the class no longer exists.)
 });
 
 describe("ContextWidget bundle collapse class (Phase B.1)", () => {

@@ -6,9 +6,10 @@
  * the bar appears at the correct slot; otherwise it stays hidden.
  *
  * The bar is absolutely positioned, sized to the container's content
- * width (via left/right inset = 0). Drop-inside zones (kind:"empty"
- * + the container itself) toggle a separate `--inside` modifier the
- * parent frame paints — this SFC only handles the gap-bar variant.
+ * width (via left/right inset = 0). With the slot-zone redesign there
+ * is only one zone kind — every drop resolves to a slot anchor in
+ * exactly one container, so this SFC handles the full indicator
+ * painting on its own.
  *
  * The container provides a `dropBarFor(containerUid)` lookup through
  * BundleFrameCtx. ContextWidget owns the dragOver ref + the rect math;

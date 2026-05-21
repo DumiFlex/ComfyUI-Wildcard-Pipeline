@@ -27,151 +27,114 @@ function value(modules: ModuleEntry[], bundles: BundleInstance[]): ContextWidget
   return { version: 1, modules, bundles };
 }
 
-describe("applyDrop — module drops", () => {
-  it("module drop into top-level row.after — clears bundle_origin", () => {
+describe("applyDrop — module drops (slot zone)", () => {
+  it("module drop into top-level slot at end clears bundle_origin", () => {
     const v = value(
       [mod("a", { bundle_origin: "B1" }), mod("b")],
       [bundle("B1", "L1", 0, 0)],
     );
     const drag: DropPayload = { kind: "module", sourceIdx: 0, sourceUid: "u-a" };
-    const zone: DropZone = { kind: "row", containerUid: null, insertIdx: 1, pos: "after" };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 2 };
     const next = applyDrop(zone, drag, v);
     expect(next.modules.map((m) => m.id)).toEqual(["b", "a"]);
     expect((next.modules[1] as { bundle_origin?: string }).bundle_origin).toBeUndefined();
   });
 
-  it("module drop into bundle row.before — stamps bundle_origin", () => {
+  it("module drop into bundle slot stamps bundle_origin", () => {
     const v = value(
       [mod("a"), mod("b", { bundle_origin: "B1" }), mod("c", { bundle_origin: "B1" })],
       [bundle("B1", "L1", 1, 2)],
     );
     const drag: DropPayload = { kind: "module", sourceIdx: 0, sourceUid: "u-a" };
-    const zone: DropZone = { kind: "row", containerUid: "B1", insertIdx: 2, pos: "before" };
+    const zone: DropZone = { kind: "slot", containerUid: "B1", insertIdx: 2 };
     const next = applyDrop(zone, drag, v);
-    // a now sits before c, inside bundle. Modules: [b, a, c]
     expect(next.modules.map((m) => m.id)).toEqual(["b", "a", "c"]);
     expect((next.modules[1] as { bundle_origin?: string }).bundle_origin).toBe("B1");
-    // Bundle range envelopes all three rows now.
     expect(next.bundles?.[0].start_idx).toBe(0);
     expect(next.bundles?.[0].end_idx).toBe(2);
   });
 
-  it("module drop into empty bundle body — stamps bundle_origin + lands at start_idx", () => {
-    // B1 is empty (end<start) — start_idx points where its first child would go.
-    const v = value(
-      [mod("a"), mod("b")],
-      [bundle("B1", "L1", 2, 1)],
-    );
-    const drag: DropPayload = { kind: "module", sourceIdx: 0, sourceUid: "u-a" };
-    const zone: DropZone = { kind: "empty", uid: "B1" };
-    const next = applyDrop(zone, drag, v);
-    expect(next.modules.map((m) => m.id)).toEqual(["b", "a"]);
-    expect((next.modules[1] as { bundle_origin?: string }).bundle_origin).toBe("B1");
-  });
-
-  it("module drop on header.before of a top-level bundle — module becomes top-level sibling above bundle", () => {
+  it("module drop into top-level slot above a bundle clears bundle_origin", () => {
+    // ext is at idx 1 (top-level), bundle B1 owns row idx 0. Drop ext
+    // at top-level slot insertIdx=0 (above B1) → ext becomes idx 0.
     const v = value(
       [mod("inB", { bundle_origin: "B1" }), mod("after")],
       [bundle("B1", "L1", 0, 0)],
     );
     const drag: DropPayload = { kind: "module", sourceIdx: 1, sourceUid: "u-after" };
-    const zone: DropZone = { kind: "header", uid: "B1", pos: "before" };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 0 };
     const next = applyDrop(zone, drag, v);
-    // "after" should now sit before B1's only leaf "inB".
     expect(next.modules.map((m) => m.id)).toEqual(["after", "inB"]);
     expect((next.modules[0] as { bundle_origin?: string }).bundle_origin).toBeUndefined();
   });
 
-  it("module drop on header.before of a nested inner bundle — module stays inside outer scope", () => {
-    // Outer B1 at [0..3], inner B2 (parent_uid: B1) at [1..2].
-    const v = value(
-      [
-        mod("d1", { bundle_origin: "B1" }),
-        mod("i1", { bundle_origin: "B2" }),
-        mod("i2", { bundle_origin: "B2" }),
-        mod("d2", { bundle_origin: "B1" }),
-        mod("ext"),
-      ],
-      [bundle("B1", "L1", 0, 3), bundle("B2", "L2", 1, 2, "B1")],
-    );
-    const drag: DropPayload = { kind: "module", sourceIdx: 4, sourceUid: "u-ext" };
-    // Drop above the inner B2's header — should land in outer scope.
-    const zone: DropZone = { kind: "header", uid: "B2", pos: "before" };
-    const next = applyDrop(zone, drag, v);
-    expect(next.modules.map((m) => m.id)).toEqual(["d1", "ext", "i1", "i2", "d2"]);
-    // ext gets B1's bundle_origin (sibling drop = inner's parent scope).
-    expect((next.modules[1] as { bundle_origin?: string }).bundle_origin).toBe("B1");
-  });
-
-  it("module drop at kind:'end' — clears bundle_origin + lands at end of list", () => {
+  it("module drop at top-level end stamps no bundle_origin", () => {
     const v = value(
       [mod("in", { bundle_origin: "B1" }), mod("b")],
       [bundle("B1", "L1", 0, 0)],
     );
     const drag: DropPayload = { kind: "module", sourceIdx: 0, sourceUid: "u-in" };
-    const zone: DropZone = { kind: "end" };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 2 };
     const next = applyDrop(zone, drag, v);
     expect(next.modules.map((m) => m.id)).toEqual(["b", "in"]);
     expect((next.modules[1] as { bundle_origin?: string }).bundle_origin).toBeUndefined();
   });
 });
 
-describe("applyDrop — bundle drops", () => {
-  it("bundle drop into top-level row.before — clears parent_uid", () => {
-    // B1 outer at [0..2] with inner B2 (parent B1) at [1..1].
-    // Drag B2 out, drop at top-level above B1.
+describe("applyDrop — bundle drops (slot zone)", () => {
+  it("bundle drop at top-level slot clears parent_uid", () => {
+    // Outer B1 [0..2] with inner B2 [1..1]. Drag B2 to top-level slot 0.
     const v = value(
       [mod("d1", { bundle_origin: "B1" }), mod("i1", { bundle_origin: "B2" }), mod("d2", { bundle_origin: "B1" })],
       [bundle("B1", "L1", 0, 2), bundle("B2", "L2", 1, 1, "B1")],
     );
     const drag: DropPayload = { kind: "bundle", bundleUid: "B2", sourceStartIdx: 1, sourceEndIdx: 1 };
-    const zone: DropZone = { kind: "row", containerUid: null, insertIdx: 0, pos: "before" };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 0 };
     const next = applyDrop(zone, drag, v);
-    // i1 (B2's row) moves to position 0; d1 + d2 stay.
     expect(next.modules.map((m) => m.id)).toEqual(["i1", "d1", "d2"]);
-    // B2 detached: parent_uid is null.
     const b2 = next.bundles!.find((b) => b._uid === "B2")!;
     expect(b2.parent_uid).toBeNull();
     expect(b2.start_idx).toBe(0);
     expect(b2.end_idx).toBe(0);
   });
 
-  it("bundle drop into another bundle's empty body — sets parent_uid to that bundle", () => {
-    // B1 outer (no children yet, end<start). B2 standalone with leaves.
-    // Drag B2 into B1's empty body.
+  it("bundle drop into another bundle's slot sets parent_uid to that bundle", () => {
+    // B1 + B2 are siblings. Drag B2 into B1 by hovering B1's only
+    // row's bottom-half → slot at insertIdx=1 (end of B1's range).
     const v = value(
-      [mod("x", { bundle_origin: "B2" }), mod("y", { bundle_origin: "B2" })],
-      [bundle("B1", "L1", 2, 1), bundle("B2", "L2", 0, 1)],
+      [mod("a", { bundle_origin: "B1" }), mod("x", { bundle_origin: "B2" }), mod("y", { bundle_origin: "B2" })],
+      [bundle("B1", "L1", 0, 0), bundle("B2", "L2", 1, 2)],
     );
-    const drag: DropPayload = { kind: "bundle", bundleUid: "B2", sourceStartIdx: 0, sourceEndIdx: 1 };
-    const zone: DropZone = { kind: "empty", uid: "B1" };
+    const drag: DropPayload = { kind: "bundle", bundleUid: "B2", sourceStartIdx: 1, sourceEndIdx: 2 };
+    const zone: DropZone = { kind: "slot", containerUid: "B1", insertIdx: 1 };
     const next = applyDrop(zone, drag, v);
     const b2 = next.bundles!.find((b) => b._uid === "B2")!;
     expect(b2.parent_uid).toBe("B1");
   });
 
-  it("bundle drop on header.after of another top-level bundle — sibling drop, parent_uid stays null", () => {
+  it("self-drop on own current parent + insertIdx inside own range → no-op", () => {
+    // Bundle at [0..1] with parent_uid=null. Slot at containerUid=null
+    // insertIdx=0 → inside own range → no-op.
     const v = value(
-      [mod("a", { bundle_origin: "B1" }), mod("b", { bundle_origin: "B2" })],
-      [bundle("B1", "L1", 0, 0), bundle("B2", "L2", 1, 1)],
+      [mod("a", { bundle_origin: "B1" }), mod("b", { bundle_origin: "B1" })],
+      [bundle("B1", "L1", 0, 1)],
     );
-    const drag: DropPayload = { kind: "bundle", bundleUid: "B2", sourceStartIdx: 1, sourceEndIdx: 1 };
-    // Drop B2 right after B1's header.
-    const zone: DropZone = { kind: "header", uid: "B1", pos: "after" };
+    const drag: DropPayload = { kind: "bundle", bundleUid: "B1", sourceStartIdx: 0, sourceEndIdx: 1 };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 0 };
     const next = applyDrop(zone, drag, v);
-    const b2 = next.bundles!.find((b) => b._uid === "B2")!;
-    // Sibling drop — B1's parent_uid is null, so B2 stays top-level.
-    expect(b2.parent_uid).toBeNull();
+    expect(next).toBe(v);
   });
 
-  it("self-drop on own header — no-op (returns input unchanged)", () => {
-    const v = value([mod("a", { bundle_origin: "B1" })], [bundle("B1", "L1", 0, 0)]);
+  it("bundle drop at slot just past own range (same parent) → no-op", () => {
+    // insertIdx === sourceEndIdx + 1 → still own slot → no-op.
+    const v = value(
+      [mod("a", { bundle_origin: "B1" })],
+      [bundle("B1", "L1", 0, 0)],
+    );
     const drag: DropPayload = { kind: "bundle", bundleUid: "B1", sourceStartIdx: 0, sourceEndIdx: 0 };
-    const zone: DropZone = { kind: "header", uid: "B1", pos: "before" };
+    const zone: DropZone = { kind: "slot", containerUid: null, insertIdx: 1 };
     const next = applyDrop(zone, drag, v);
-    // Modules + bundles unchanged.
-    expect(next.modules).toEqual(v.modules);
-    expect(next.bundles).toEqual(v.bundles);
+    expect(next).toBe(v);
   });
 
   it("null zone → returns input unchanged", () => {
