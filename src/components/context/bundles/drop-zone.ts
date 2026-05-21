@@ -386,14 +386,18 @@ function classifyAgainst(
       : el.getBoundingClientRect();
     if (y < r.top) {
       // Pointer in gap BELOW the previous candidate. If that previous
-      // candidate was a bundle, bias to `header.after of bundle` so
-      // the wp-gap-after class kicks in (margin opens + bottom border
-      // hides via the CSS fix). Without this bias, the user sees
-      // TWO horizontal lines: the bundle's own bottom border AND the
-      // drop bar 7px above the next row's top (since chain_b's
-      // gap-before opens but bundle stays intact).
+      // candidate was a bundle (and NOT the bundle currently being
+      // dragged), bias to `header.after of prev-bundle` so the visual
+      // gap opens around the bundle (wp-gap-after margin + clean
+      // single-bar look). Skip the bias when prev is the dragged
+      // bundle — that would resolve to `header.after of dragged`,
+      // which applyDrop's self-drop guard no-ops, breaking the
+      // ability to drop the bundle anywhere below its current spot.
       const prev = filtered[k - 1];
-      if (prev && prev.classList.contains("wp-bundle")) {
+      const draggedUid = drag?.kind === "bundle" ? drag.bundleUid : null;
+      const prevIsBundle = prev?.classList.contains("wp-bundle") ?? false;
+      const prevIsDragged = prevIsBundle && prev?.dataset.bundleUid === draggedUid;
+      if (prevIsBundle && !prevIsDragged) {
         return topLevelSlot(prev, "after", value);
       }
       return topLevelSlot(el, "before", value);
