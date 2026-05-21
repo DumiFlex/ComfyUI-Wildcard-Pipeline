@@ -706,13 +706,18 @@ async function onPickBundle(bundleId: string): Promise<void> {
         modulesContainer.value,
       );
     }
-    // Delta-undo capture: just the _uids we added. Undo filters
-    // them out of whatever modules/bundles arrays look like at click
-    // time. Composes correctly with any other op's Undo regardless of
-    // click order — full-snapshot restore would overwrite a sibling
-    // op's state.
+    // Delta-undo capture: every _uid we added (modules + outer + inners).
+    // Undo filters them out of whatever modules/bundles arrays look like
+    // at click time. Composes correctly with any other op's Undo
+    // regardless of click order — full-snapshot restore would overwrite
+    // a sibling op's state. Without capturing inner uids, undoing a
+    // nested-bundle insert orphaned the inner BundleInstances (the outer
+    // was removed but its inners stayed, dangling).
     const insertedModuleUids = new Set(splice.map((c) => c._uid).filter((u): u is string => !!u));
-    const insertedBundleUid = bundleInstance._uid;
+    const insertedBundleUids = new Set<string>([
+      bundleInstance._uid,
+      ...innerInstances.map((b) => b._uid),
+    ]);
     pushToast(`Inserted bundle "${entry.name}"`, {
       severity: "success",
       lifeMs: 5000,
@@ -724,7 +729,7 @@ async function onPickBundle(bundleId: string): Promise<void> {
           );
           const curBundles = value.value.bundles ?? [];
           const nextBundlesArr = curBundles.filter(
-            (b) => b._uid !== insertedBundleUid,
+            (b) => !insertedBundleUids.has(b._uid),
           );
           commitModules(list, nextBundlesArr);
         },
