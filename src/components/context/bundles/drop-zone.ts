@@ -143,13 +143,20 @@ function classifyWithinBundle(
   drag: DragPayload | null,
   dragHasNested: boolean,
 ): DropZone {
-  // Self-hover: bundle hovering its own area. Show "drop above self"
-  // indicator so the user gets visual feedback at the start of the
-  // drag (matches module-row behaviour where the dragged row's slot
-  // is the "before self" gap). applyDrop's self-drop guard treats
-  // this as no-op on actual drop.
+  // Self-hover: bundle hovering its own area. Indicator position
+  // depends on collapsed state:
+  //   - Expanded → "drop above self" (header.before). Matches the
+  //     module-row pattern where the dragged row's slot is the
+  //     "before self" gap.
+  //   - Collapsed → "drop below self" (header.after). A collapsed
+  //     bundle has no body — dropping "above" with a 14px gap above
+  //     the header reads strangely. "Below" lets the user see where
+  //     the bundle WOULD land if they released here (no-op via
+  //     applyDrop's self-drop guard either way).
   if (isSelfHover(uid, drag)) {
-    return { kind: "header", uid, pos: "before" };
+    const selfBundle = (value.bundles ?? []).find((b) => b._uid === uid);
+    const collapsed = selfBundle?.collapsed === true;
+    return { kind: "header", uid, pos: collapsed ? "after" : "before" };
   }
   // Pointer inside a bundle that's part of the dragged bundle's
   // moving range (e.g. dragging the outer, pointer in the nested
@@ -396,6 +403,17 @@ function classifyAgainst(
       ? effectiveBundleRect(el)
       : el.getBoundingClientRect();
     if (y < r.top) {
+      // Pointer in gap BELOW the previous candidate. If that previous
+      // candidate was a bundle, bias to `header.after of bundle` so
+      // the wp-gap-after class kicks in (margin opens + bottom border
+      // hides via the CSS fix). Without this bias, the user sees
+      // TWO horizontal lines: the bundle's own bottom border AND the
+      // drop bar 7px above the next row's top (since chain_b's
+      // gap-before opens but bundle stays intact).
+      const prev = filtered[k - 1];
+      if (prev && prev.classList.contains("wp-bundle")) {
+        return topLevelSlot(prev, "after", value);
+      }
       return topLevelSlot(el, "before", value);
     }
     if (y >= r.top && y <= r.bottom) {
