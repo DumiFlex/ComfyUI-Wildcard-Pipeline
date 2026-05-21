@@ -4137,7 +4137,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
     transparent
   );
   box-shadow:
-    0 0 0 3px var(--wp-bundle-color, var(--wp-bundle-default)),
+    0 0 0 2px var(--wp-bundle-color, var(--wp-bundle-default)),
     0 0 8px 0 color-mix(
       in srgb,
       var(--wp-bundle-color, var(--wp-bundle-default)) 30%,
