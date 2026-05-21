@@ -102,6 +102,17 @@ function emitWeight(next: number | null): void {
   emit("weight", props.option.id, next);
 }
 
+/** Minimum allowed weight. 0 or negative never picks (probability
+ *  normalises away), so refusing them in the input is honest: to
+ *  disable an option, use the per-row toggle (engine respects that).
+ *  Floor at 0.01 leaves room for "low but possible" without silent
+ *  zeroes from typos. */
+const WEIGHT_MIN = 0.01;
+
+function clampWeight(n: number): number {
+  return Number.isFinite(n) && n > 0 ? n : WEIGHT_MIN;
+}
+
 function onWeightInput(ev: Event): void {
   const raw = (ev.target as HTMLInputElement).value.trim();
   if (raw === "") {
@@ -110,7 +121,7 @@ function onWeightInput(ev: Event): void {
   }
   const n = Number(raw);
   if (Number.isFinite(n)) {
-    emitWeight(n);
+    emitWeight(clampWeight(n));
   }
 }
 
@@ -119,7 +130,10 @@ const WEIGHT_STEP = 0.1;
 function bumpWeight(direction: 1 | -1): void {
   if (!enabled.value) return;
   // Round to 1 decimal so 1.0 + 0.1 doesn't drift to 1.0999... visually.
-  const next = Math.max(0, Math.round((weight.value + direction * WEIGHT_STEP) * 10) / 10);
+  const next = Math.max(
+    WEIGHT_MIN,
+    Math.round((weight.value + direction * WEIGHT_STEP) * 10) / 10,
+  );
   emitWeight(next);
 }
 
@@ -210,7 +224,7 @@ function fmtPct(p: number): string {
         data-test="opt-weight"
         type="number"
         step="0.1"
-        min="0"
+        min="0.01"
         :value="weight"
         :disabled="!enabled"
         :aria-label="`Weight for ${option.value}`"

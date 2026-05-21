@@ -96,11 +96,15 @@ function toggleRequiresValue(currentOp: DerivationOp): DerivationOp {
   }
 }
 
-/** Whether the displayed base op is a presence-check (and thus the
- *  tick checkbox should render). Compare ops never get the tick. */
+/** Whether the displayed base op is one that supports the "must have
+ *  value" tick. Only `exists` qualifies — the tick asks "and the
+ *  value is non-empty?", which is meaningless when the var doesn't
+ *  exist in the first place (`not_exists`). `is_unset` is the engine-
+ *  level variant of `not_exists`; we don't expose a tick for it
+ *  either, so a saved `is_unset` rule round-trips as `not_exists` in
+ *  the UI with no tick. Compare ops never get the tick. */
 function isPresenceOp(op: DerivationOp): boolean {
-  const base = displayedOp(op);
-  return base === "exists" || base === "not_exists";
+  return displayedOp(op) === "exists";
 }
 
 const MODE_OPTIONS: Array<{ label: string; value: DerivationMode }> = [

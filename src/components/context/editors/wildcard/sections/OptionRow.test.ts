@@ -141,12 +141,15 @@ describe("OptionRow", () => {
     expect(w.emitted("weight")?.[0]).toEqual(["o1", 1.4]);
   });
 
-  it("down spinner clamps weight to 0 (no negative weights)", async () => {
+  it("down spinner clamps weight to floor 0.01 (no zero/negative weights)", async () => {
+    // Weight 0 / negative never picks (probability normalises away),
+    // so the editor floors at 0.01. To disable an option entirely,
+    // use the per-row toggle — engine respects that.
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: { option_weights: { o1: 0 } } },
     });
     await w.find('[data-test="opt-weight-down"]').trigger("click");
-    expect(w.emitted("weight")?.[0]).toEqual(["o1", 0]);
+    expect(w.emitted("weight")?.[0]).toEqual(["o1", 0.01]);
   });
 
   it("spinner buttons disabled when option is unchecked", () => {

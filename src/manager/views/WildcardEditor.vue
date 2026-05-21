@@ -478,8 +478,18 @@ defineExpose({ historyEntries, applyRestore, options });
                 :model-value="o.weight"
                 type="number"
                 size="sm"
+                min="0.01"
+                step="0.1"
                 aria-label="Option weight"
-                @update:model-value="(v) => (o.weight = Number(v) || 0)"
+                @update:model-value="(v) => {
+                  // Clamp to >0 — weight 0 or negative never picks
+                  // (probability normalises away). Editor floors at
+                  // 0.01 so a typo can't silently disable an option.
+                  // To disable an option, use the per-instance toggle
+                  // in the Context node (engine respects that).
+                  const n = Number(v);
+                  o.weight = Number.isFinite(n) && n > 0 ? n : 0.01;
+                }"
               />
             </td>
             <td>

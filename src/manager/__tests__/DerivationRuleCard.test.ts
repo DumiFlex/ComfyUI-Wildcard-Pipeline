@@ -293,19 +293,21 @@ describe("DerivationRuleCard.vue", () => {
     expect(next.branches[0].condition.op).toBe("is_set");
   });
 
-  it("toggling tick off (op=is_unset) emits op=not_exists", async () => {
-    const rule = makeRule({
-      branches: [{
-        condition: { var: "x", op: "is_unset", value: "" },
-        action: { target_var: "out", mode: "replace", value: "v" },
-      }],
-    });
-    const wrap = mountCard(rule, 0);
-    await wrap.find('[data-test="cond-must-have-value-input-0-0"]').trigger("change");
-    const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events.length).toBe(1);
-    const next = events[0][0] as DerivationRule;
-    expect(next.branches[0].condition.op).toBe("not_exists");
+  it("'must have value' tick is HIDDEN for not_exists / is_unset ops", () => {
+    // The tick asks 'and the value is non-empty?'. That's meaningless
+    // when the var doesn't exist (not_exists / is_unset). UI hides the
+    // tick for those ops; engine still accepts is_unset for back-compat
+    // but the user surface only ever shows it on `exists`.
+    for (const op of ["not_exists", "is_unset"] as const) {
+      const rule = makeRule({
+        branches: [{
+          condition: { var: "x", op, value: "" },
+          action: { target_var: "out", mode: "replace", value: "v" },
+        }],
+      });
+      const wrap = mountCard(rule, 0);
+      expect(wrap.find('[data-test="cond-must-have-value-0-0"]').exists()).toBe(false);
+    }
   });
 
   // ── 2026-05-10 follow-up: var autocomplete uses RichTextInput popover style ──
