@@ -69,6 +69,7 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
       :library-drifted="ctx.isBundleLibraryDrifted(bundle)"
       :internal-state="ctx.bundleInternalState(bundle)"
       :lock-state="ctx.bundleLockState(bundle)"
+      :snapshot-modified="ctx.isBundleSnapshotModified(bundle)"
       @toggle-collapse="ctx.toggleBundleCollapsed(bundle._uid)"
       @toggle-enabled="(next: boolean) => ctx.toggleBundleEnabled(bundle._uid, next)"
       @toggle-internal="ctx.toggleBundleInternal(bundle._uid)"

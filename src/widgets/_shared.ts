@@ -420,6 +420,18 @@ export interface BundleInstance {
    *  ANDs up the chain so disabling the outer disables every leaf in
    *  every inner. */
   parent_uid?: string | null;
+  /** Content-fingerprint of the bundle's children at the last
+   *  insert/save/reset moment. Compared against the live fingerprint
+   *  via `bundleSnapshotModified` to power the bundle-level "modified"
+   *  indicator (this instance has unsaved local edits since insert).
+   *
+   *  Optional / missing on workflows saved before MOD detection
+   *  landed — `bundleSnapshotModified` treats absent as "clean
+   *  baseline" so existing bundles never spuriously light up after
+   *  upgrade. A backfill pass on initial parse stamps a fingerprint
+   *  from current state so subsequent edits flip the bundle modified
+   *  correctly. */
+  snapshot_fingerprint?: string;
 }
 
 /** Module kind discriminator — the five kinds the SPA library carries. */

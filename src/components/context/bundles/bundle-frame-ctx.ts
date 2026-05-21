@@ -29,6 +29,12 @@ export interface BundleFrameCtx {
    *  whether they're dropping a leaf, an inner bundle, or a top-level
    *  bundle becoming a nested inner. */
   isBundleDropTarget: (uid: string) => boolean;
+  /** True when this bundle's local children diverge from the snapshot
+   *  fingerprint captured at insert/save/reset. Drives the "modified"
+   *  badge on the bundle header — equivalent UX grammar to the
+   *  per-module MOD dot, but at bundle scope. False when no
+   *  fingerprint is stored yet (backfill case). */
+  isBundleSnapshotModified: (b: BundleInstance) => boolean;
   recentDropUids: Ref<Set<string>>;
   pulseDelayFor: (uid: string | null | undefined) => string;
   toggleBundleCollapsed: (uid: string) => void;

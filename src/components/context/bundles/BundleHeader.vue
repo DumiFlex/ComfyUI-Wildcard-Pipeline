@@ -41,8 +41,16 @@ const props = withDefaults(
      *  hidden in that case so non-applicable bundles don't show a
      *  control that would no-op. */
     lockState?: "all" | "none" | "partial" | null;
+    /** True when the bundle's local children diverge from its
+     *  snapshot fingerprint (user edits + refresh-from-module-library
+     *  + drag in/out since last insert/save/reset). Surfaces a
+     *  "modified" dot + chip in the header next to the
+     *  library-drifted "library updated" badge. Both signals can fire
+     *  simultaneously — they represent independent axes (modified =
+     *  local-vs-snapshot; libraryDrifted = library-vs-snapshot). */
+    snapshotModified?: boolean;
   }>(),
-  { color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null },
+  { color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false },
 );
 
 const emit = defineEmits<{
@@ -151,12 +159,24 @@ const summary = computed(() => {
          subtitle ("N drifted") since each child row already carries
          its own dot — re-stacking them at the bundle level would be
          visual noise. -->
-    <span v-if="libraryDrifted" class="wp-mod-dots">
-      <span class="wp-mod-dot wp-mod-dot--drift"
-        title="Library entry has been edited since this bundle was inserted. Right-click → Reset to library."
-        aria-hidden="true"></span>
-      <span class="wp-mod-badge wp-mod-badge--drift"
-        title="Library entry has been edited since this bundle was inserted. Right-click → Reset to library.">library updated</span>
+    <span v-if="libraryDrifted || snapshotModified" class="wp-mod-dots">
+      <!-- Visual hierarchy: LIBRARY UPDATED (drift) dominates → MOD
+           sits to its right with its own dot + chip. Both can show
+           at once when local edits + library edits both pending. -->
+      <template v-if="libraryDrifted">
+        <span class="wp-mod-dot wp-mod-dot--drift"
+          title="Library entry has been edited since this bundle was inserted. Right-click → Reset to library."
+          aria-hidden="true"></span>
+        <span class="wp-mod-badge wp-mod-badge--drift"
+          title="Library entry has been edited since this bundle was inserted. Right-click → Reset to library.">library updated</span>
+      </template>
+      <template v-if="snapshotModified">
+        <span class="wp-mod-dot wp-mod-dot--modified"
+          title="This bundle has unsaved changes since insert. Right-click → Save to library."
+          aria-hidden="true"></span>
+        <span class="wp-mod-badge wp-mod-badge--mod"
+          title="This bundle has unsaved changes since insert. Right-click → Save to library.">modified</span>
+      </template>
     </span>
     <span class="wp-bundle-summary">{{ summary }}</span>
     <!-- Master toggles: cascade the per-child internal / seed-lock

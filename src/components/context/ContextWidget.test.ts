@@ -1967,3 +1967,131 @@ describe("ContextWidget bundle collapse class (Phase B.1)", () => {
     wrapper.unmount();
   });
 });
+
+describe("ContextWidget bundle MOD detection", () => {
+  function makeBundleJson(opts: { childHash: string; fingerprint?: string }): string {
+    return JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "leaf-aaa", _uid: "u-leaf", type: "wildcard", enabled: true,
+          meta: { name: "leaf" }, entries: [],
+          payload: { var_binding: "v", options: [] },
+          payload_hash: opts.childHash,
+          bundle_origin: "buid-mod-test",
+        },
+      ],
+      bundles: [{
+        _uid: "buid-mod-test", library_id: "lib-mod-test",
+        start_idx: 0, end_idx: 0,
+        enabled: true, collapsed: false,
+        inserted_at_hash: "h-B", name: "MOD test", color: null,
+        ...(opts.fingerprint !== undefined ? { snapshot_fingerprint: opts.fingerprint } : {}),
+      }],
+    });
+  }
+
+  it("backfill: workflow without snapshot_fingerprint mounts clean (no modified chip)", async () => {
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9401,
+        initialJson: makeBundleJson({ childHash: "h-leaf-1" }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    await flushPromises();
+    const modifiedBadge = wrapper.find(".wp-mod-badge--mod");
+    expect(modifiedBadge.exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("stored fingerprint matches current state → no modified chip", async () => {
+    // Compute the fingerprint the helper would produce for this leaf
+    // arrangement, embed it as the stored snapshot_fingerprint, and
+    // verify the chip stays off (no divergence).
+    const { computeBundleFingerprint } = await import("./bundles/bundle-fingerprint");
+    const leafMod = {
+      _uid: "u-leaf", id: "leaf-aaa", type: "wildcard" as const,
+      enabled: true, collapsed: false,
+      meta: { name: "leaf" }, entries: [],
+      payload: { var_binding: "v", options: [] },
+      payload_hash: "h-leaf-1", bundle_origin: "buid-mod-test",
+      instance: {},
+    };
+    const fp = computeBundleFingerprint(
+      { _uid: "buid-mod-test", library_id: "lib", start_idx: 0, end_idx: 0,
+        enabled: true, collapsed: false, inserted_at_hash: "h",
+        name: "x", color: null },
+      [leafMod],
+    );
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9402,
+        initialJson: makeBundleJson({ childHash: "h-leaf-1", fingerprint: fp }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find(".wp-mod-badge--mod").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("stored fingerprint differs from current state → modified chip appears", async () => {
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9403,
+        // Fingerprint deliberately set to a value that won't match
+        // any computation over the actual leaf → modified=true.
+        initialJson: makeBundleJson({
+          childHash: "h-leaf-1",
+          fingerprint: "00000000",  // stale baseline
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    await flushPromises();
+    const modifiedBadge = wrapper.find(".wp-mod-badge--mod");
+    expect(modifiedBadge.exists()).toBe(true);
+    expect(modifiedBadge.text()).toBe("modified");
+    wrapper.unmount();
+  });
+
+  it("library-drifted AND snapshot-modified can both fire (both chips render)", async () => {
+    // Set inserted_at_hash != live library hash AND fingerprint mismatch.
+    const json = JSON.stringify({
+      version: 1,
+      modules: [{
+        id: "leaf-aaa", _uid: "u-leaf", type: "wildcard", enabled: true,
+        meta: { name: "leaf" }, entries: [],
+        payload: { var_binding: "v", options: [] },
+        payload_hash: "h-leaf-1",
+        bundle_origin: "buid-mod-test",
+      }],
+      bundles: [{
+        _uid: "buid-mod-test", library_id: "lib-mod-test",
+        start_idx: 0, end_idx: 0,
+        enabled: true, collapsed: false,
+        inserted_at_hash: "h-OLD", name: "Both", color: null,
+        snapshot_fingerprint: "00000000",  // mismatch
+      }],
+    });
+    // Stub the bundle-hashes store so libraryDrifted = true.
+    const { bundleHashes } = await import("./drift-store");
+    bundleHashes.value = { "lib-mod-test": "h-NEW" };
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 9404, initialJson: json, upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    expect(wrapper.find(".wp-mod-badge--drift").exists()).toBe(true);
+    expect(wrapper.find(".wp-mod-badge--mod").exists()).toBe(true);
+    wrapper.unmount();
+    bundleHashes.value = null; // restore
+  });
+});

@@ -31,6 +31,7 @@ import { reconcileBundleRanges } from "./bundles/drag";
 import { resolveDropZone, type DropZone } from "./bundles/drop-zone";
 import { applyDrop, type DropPayload } from "./bundles/drop";
 import { buildCrossNodeBundleInsertion } from "./bundles/cross-node-nested";
+import { computeBundleFingerprint, bundleSnapshotModified } from "./bundles/bundle-fingerprint";
 import BundleDropBar from "./bundles/BundleDropBar.vue";
 import {
   captureRects,
@@ -555,6 +556,7 @@ watch(dragState, (v) => { if (v === null) clearDragHover(); });
 // the debug/assembler widgets which don't need recovery semantics.
 const initialParse = parseWidgetJsonWithRecovery(props.initialJson, emptyContextValue());
 ensureRowUids(initialParse.value.modules);
+ensureBundleFingerprints(initialParse.value.bundles ?? [], initialParse.value.modules);
 const value = ref<ContextWidgetValue>(initialParse.value);
 
 /**
@@ -612,6 +614,43 @@ function ensureRowUids(modules: ModuleEntry[]): boolean {
     }
   }
   return mutated;
+}
+
+/** Stamp `snapshot_fingerprint` on any BundleInstance missing one.
+ *  Backfill-on-load: workflows saved before MOD detection landed get a
+ *  false-clean baseline computed from current state. Subsequent edits
+ *  flip the bundle to modified correctly; existing bundles don't
+ *  spuriously light up after the upgrade. */
+function ensureBundleFingerprints(
+  bundles: BundleInstance[],
+  modules: ModuleEntry[],
+): boolean {
+  let mutated = false;
+  for (const b of bundles) {
+    if (b.snapshot_fingerprint === undefined) {
+      b.snapshot_fingerprint = computeBundleFingerprint(b, modules);
+      mutated = true;
+    }
+  }
+  return mutated;
+}
+
+/** Re-snap fingerprints for the given bundle uids using the current
+ *  modules + bundles state. Returns a new bundles array with updated
+ *  fingerprints. Call sites: post-insert (sync local state with library
+ *  snapshot), post-save (record what we just published), post-reset
+ *  (record the library state we just pulled), post-cross-node (record
+ *  the freshly-cloned snapshot). */
+function snapBundleFingerprints(
+  bundles: BundleInstance[],
+  modules: ModuleEntry[],
+  uidsToSnap: Set<string>,
+): BundleInstance[] {
+  return bundles.map((b) =>
+    uidsToSnap.has(b._uid)
+      ? { ...b, snapshot_fingerprint: computeBundleFingerprint(b, modules) }
+      : b,
+  );
 }
 const parseError = ref<string | null>(initialParse.error);
 const parseRaw = ref<string>(initialParse.raw);
@@ -706,6 +745,20 @@ async function onPickBundle(bundleId: string): Promise<void> {
       [...value.value.modules, ...splice],
       [...(value.value.bundles ?? []), bundleInstance, ...innerInstances],
     );
+    // Snap fingerprints on the freshly-inserted bundles so the local
+    // state is recorded as the "clean baseline" — subsequent user
+    // edits flip them to modified, post-commit so reconcileBundleRanges
+    // has already set the correct start_idx/end_idx for the walk.
+    {
+      const justInserted = new Set<string>([
+        bundleInstance._uid,
+        ...innerInstances.map((b) => b._uid),
+      ]);
+      value.value = {
+        ...value.value,
+        bundles: snapBundleFingerprints(value.value.bundles ?? [], value.value.modules, justInserted),
+      };
+    }
     // Phase B.6: animate the new bundle wrapper + its children with
     // the same fade-slide as picker-add. Bundle wrapper carries the
     // same --arriving/--arrived classes thanks to the .wp-bundle CSS
@@ -1166,6 +1219,20 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
       return b;
     });
     commitModules([...before, ...newChildren, ...after], [...nextBundles, ...newInnerInstances]);
+    // Re-snap fingerprints for the outer + every fresh inner so the
+    // reset registers as the new clean baseline. Without this, MOD
+    // would stay true after reset (current state != stale fingerprint
+    // from previous insert).
+    {
+      const justReset = new Set<string>([
+        target._uid,
+        ...newInnerInstances.map((b) => b._uid),
+      ]);
+      value.value = {
+        ...value.value,
+        bundles: snapBundleFingerprints(value.value.bundles ?? [], value.value.modules, justReset),
+      };
+    }
     await nextTick();
     // Flash every fresh child + the bundle wrapper so the user sees
     // which rows just got replaced with the library snapshot.
@@ -1301,9 +1368,17 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
     });
     // Refresh the BundleInstance's `inserted_at_hash` so a future
     // resetBundleToLibrary call would compare against the newly
-    // written hash (i.e. "no drift").
+    // written hash (i.e. "no drift"). Re-snap `snapshot_fingerprint`
+    // so the bundle's MOD indicator clears — local state now matches
+    // what we just published.
     const nextBundles = bundles.map((b) =>
-      b._uid === uid ? { ...b, inserted_at_hash: updated.payload_hash } : b,
+      b._uid === uid
+        ? {
+            ...b,
+            inserted_at_hash: updated.payload_hash,
+            snapshot_fingerprint: computeBundleFingerprint(b, value.value.modules),
+          }
+        : b,
     );
     value.value = { ...value.value, bundles: nextBundles };
     await nextTick();
@@ -1364,6 +1439,16 @@ async function wrapIntoNewBundle(idx: number): Promise<void> {
       nextModules,
       [...(value.value.bundles ?? []), bundleInstance],
     );
+    // Snap fingerprint on the freshly-wrapped bundle so its MOD
+    // indicator starts clean (matches what we just published to lib).
+    value.value = {
+      ...value.value,
+      bundles: snapBundleFingerprints(
+        value.value.bundles ?? [],
+        value.value.modules,
+        new Set([bundleInstance._uid]),
+      ),
+    };
     await nextTick();
     // Sibling rows shift to accommodate the new bundle wrapper around
     // the wrapped row. Bundle wrapper fades-slides in; the wrapped
@@ -1637,6 +1722,12 @@ function isDrifted(m: ModuleEntry): boolean {
 async function refreshOne(idx: number): Promise<void> {
   const m = value.value.modules[idx];
   if (!m) return;
+  // Track whether the refreshed row was inside a bundle BEFORE the
+  // refresh so we can extend the success toast with a "bundle has
+  // unsaved changes" hint. mergeRefresh preserves bundle_origin so the
+  // membership doesn't change, but its payload_hash will diverge from
+  // the bundle's snapshot fingerprint → modified=true.
+  const sourceBundleUid = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin ?? null;
   try {
     const merged = await refreshModule(m);
     if (value.value.modules[idx] !== m) return;  // row shifted while loading
@@ -1651,7 +1742,13 @@ async function refreshOne(idx: number): Promise<void> {
     if (modulesContainer.value) {
       void flashRows([merged._uid], modulesContainer.value, 0);
     }
-    pushToast(`Refreshed "${merged.meta.name || merged.type}".`, { severity: "success" });
+    const bundleName = sourceBundleUid
+      ? (value.value.bundles ?? []).find((b) => b._uid === sourceBundleUid)?.name ?? null
+      : null;
+    const toastBody = bundleName
+      ? `Refreshed "${merged.meta.name || merged.type}". Bundle "${bundleName}" has unsaved changes — Save to library to update.`
+      : `Refreshed "${merged.meta.name || merged.type}".`;
+    pushToast(toastBody, { severity: "success", lifeMs: bundleName ? 7000 : undefined });
     await forceRefreshHashes();
   } catch (err) {
     const msg = (err as Error).message ?? "unknown";
@@ -1675,6 +1772,22 @@ async function refreshAllDrifted(): Promise<void> {
   if (driftedIdx.length === 0) return;
 
   const driftedRows = driftedIdx.map((i) => value.value.modules[i]);
+  // Collect uids of bundles that own any drifted row BEFORE the refresh
+  // — used to append a "bundle has unsaved changes" hint to the success
+  // toast. Each refresh diverges the row's payload_hash from the
+  // bundle's snapshot fingerprint → modified=true.
+  const affectedBundleUids = new Set<string>();
+  for (const m of driftedRows) {
+    const o = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+    if (o) {
+      affectedBundleUids.add(o);
+      // Also walk parent chain so an inner-leaf refresh marks the outer
+      // bundle modified too (it owns the inner's range).
+      const cur = (value.value.bundles ?? []).find((b) => b._uid === o);
+      const pu = cur?.parent_uid;
+      if (typeof pu === "string" && pu) affectedBundleUids.add(pu);
+    }
+  }
   const result = await refreshMany(driftedRows);
 
   if (result.refreshed.length > 0) {
@@ -1706,12 +1819,25 @@ async function refreshAllDrifted(): Promise<void> {
     await forceRefreshHashes();
   }
 
+  // Resolve human-readable names for the affected bundles (post-refresh
+  // state, in case any vanished via reconcile).
+  const bundleNames = [...affectedBundleUids]
+    .map((uid) => (value.value.bundles ?? []).find((b) => b._uid === uid)?.name)
+    .filter((n): n is string => !!n);
+  const bundleHint = bundleNames.length === 0
+    ? ""
+    : bundleNames.length === 1
+      ? ` Bundle "${bundleNames[0]}" has unsaved changes — Save to library to update.`
+      : ` ${bundleNames.length} bundles have unsaved changes — Save each to library to update.`;
   if (result.failed.length === 0) {
-    pushToast(`Refreshed all ${result.refreshed.length}.`, { severity: "success" });
+    pushToast(
+      `Refreshed all ${result.refreshed.length}.${bundleHint}`,
+      { severity: "success", lifeMs: bundleHint ? 7000 : undefined },
+    );
   } else {
     pushToast(
-      `Refreshed ${result.refreshed.length} of ${driftedRows.length}; ${result.failed.length} stayed drifted.`,
-      { severity: "warning" },
+      `Refreshed ${result.refreshed.length} of ${driftedRows.length}; ${result.failed.length} stayed drifted.${bundleHint}`,
+      { severity: "warning", lifeMs: bundleHint ? 7000 : undefined },
     );
   }
 }
@@ -3432,6 +3558,19 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
     // start_idx/end_idx for every bundle from each child's bundle_origin
     // chain — the placeholder ranges on freshInners get overwritten.
     commitModules(list, [...bundles, newBundle, ...freshInners]);
+    // Snap fingerprints on the freshly-cloned outer + inners so the
+    // cross-node receive registers as a clean baseline (matches the
+    // semantics of a library insert).
+    {
+      const justReceived = new Set<string>([
+        newBundle._uid,
+        ...freshInners.map((b) => b._uid),
+      ]);
+      value.value = {
+        ...value.value,
+        bundles: snapBundleFingerprints(value.value.bundles ?? [], value.value.modules, justReceived),
+      };
+    }
     await nextTick();
     playFlipSnapshot(flipSnap);
     pulseDrop([
@@ -3610,6 +3749,7 @@ const bundleFrameCtx: BundleFrameCtx = {
   bundleLockState,
   bundleHeaderGap,
   isBundleDropTarget,
+  isBundleSnapshotModified: (b: BundleInstance) => bundleSnapshotModified(b, value.value.modules),
   recentDropUids,
   pulseDelayFor,
   toggleBundleCollapsed,
