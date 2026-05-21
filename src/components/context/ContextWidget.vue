@@ -4133,14 +4133,14 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 .wp-bundle.wp-bundle--drop-target {
   background: color-mix(
     in srgb,
-    var(--wp-bundle-color, var(--wp-bundle-default)) 28%,
+    var(--wp-bundle-color, var(--wp-bundle-default)) 16%,
     transparent
   );
   box-shadow:
     0 0 0 3px var(--wp-bundle-color, var(--wp-bundle-default)),
-    0 0 10px 2px color-mix(
+    0 0 8px 0 color-mix(
       in srgb,
-      var(--wp-bundle-color, var(--wp-bundle-default)) 60%,
+      var(--wp-bundle-color, var(--wp-bundle-default)) 30%,
       transparent
     );
 }
