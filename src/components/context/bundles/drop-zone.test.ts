@@ -250,7 +250,7 @@ describe("resolveDropZone — top-level", () => {
 });
 
 describe("resolveDropZone — inside a bundle", () => {
-  it("pointer over bundle header top-half → header.before", () => {
+  it("pointer over bundle header (anywhere) → drop INSIDE — top-half no longer resolves to header.before (eliminates flicker at midpoint)", () => {
     const container = buildScene({
       bundles: [{
         uid: "B1", top: 100, bottom: 300,
@@ -260,13 +260,17 @@ describe("resolveDropZone — inside a bundle", () => {
     });
     const header = container.querySelector("[data-bundle-header]")!;
     setPointerHit(header as HTMLElement);
-    const ev = dragEvent(50, 110); // top half of [100..140]
+    const ev = dragEvent(50, 110); // top half of header
     const value: ContextWidgetValue = {
       version: 1, modules: [{ id: "a" } as ModuleEntry],
       bundles: [makeBundleInstance("B1")],
     };
+    // No longer header.before — resolver now treats the whole header
+    // strip as "inside" so the indicator stops flickering as the
+    // pointer crosses the header midpoint. Drop ABOVE the bundle is
+    // reached by hovering ABOVE the bundle's frame entirely.
     expect(resolveDropZone(ev, container, value, moduleDrag())).toEqual({
-      kind: "header", uid: "B1", pos: "before",
+      kind: "row", containerUid: "B1", insertIdx: 0, pos: "before",
     });
   });
 

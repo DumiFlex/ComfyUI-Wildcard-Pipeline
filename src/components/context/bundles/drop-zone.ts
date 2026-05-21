@@ -128,20 +128,20 @@ function classifyWithinBundle(
     return null;
   }
 
-  // 1) Header strip:
-  //    - top half → sibling drop above the bundle (header.before)
-  //    - bottom half (collapsed or empty bundle) → drop INTO the bundle
-  //      (empty zone)
-  //    - bottom half (open bundle with children) → drop INTO first slot
-  //      (row.before of first child)
+  // 1) Header strip — pointer ON the header ALWAYS resolves to "drop
+  //    INSIDE the bundle". No top/bottom-half split (that caused
+  //    indicator flicker at the header midpoint — every pixel of
+  //    vertical movement flipped the zone between "above" and "inside"
+  //    while the user was just trying to land on the header).
+  //
+  //    To drop ABOVE the bundle, the pointer must sit ABOVE the
+  //    bundle's frame entirely — handled by the parent scope's
+  //    row/bundle walk (the parent's classifyWithinBundle or, for
+  //    top-level bundles, classifyTopLevel).
   const headerEl = bundleEl.querySelector<HTMLElement>("[data-bundle-header]");
   if (headerEl) {
     const hr = headerEl.getBoundingClientRect();
     if (y >= hr.top && y <= hr.bottom) {
-      if (y < hr.top + hr.height / 2) {
-        return { kind: "header", uid, pos: "before" };
-      }
-      // Bottom half: check whether the bundle has rendered children.
       const childrenContainer = bundleEl.querySelector<HTMLElement>(".wp-bundle-children");
       const firstRow = childrenContainer?.querySelector<HTMLElement>(
         ":scope > .wp-module[data-module-idx], :scope > .wp-bundle",
@@ -150,7 +150,6 @@ function classifyWithinBundle(
         if (dragHasNested) return { kind: "header", uid, pos: "after" };
         return { kind: "empty", uid };
       }
-      // Open bundle: drop into first slot.
       if (firstRow.classList.contains("wp-bundle")) {
         const nestedUid = firstRow.dataset.bundleUid;
         if (nestedUid) {
@@ -222,14 +221,19 @@ function classifyWithinBundle(
       }
       const next = directRows[k + 1];
       if (next) return classifyRowSlot(next, uid, "before", dragHasNested);
-      // Bottom-half of last row → drop after the last (no canonical
-      // next slot inside this bundle).
+      // Bottom-half of last row → drop after the last (still inside).
       return classifyRowSlot(rowEl, uid, "after", dragHasNested);
     }
   }
-  // Past every row → drop after the last.
-  const last = directRows[directRows.length - 1];
-  return classifyRowSlot(last, uid, "after", dragHasNested);
+  // Past every row, still inside bundle's body padding → user is
+  // "exiting" the bundle. Resolve to sibling drop AFTER bundle
+  // (header.after) instead of "inside at end". Without this, the
+  // body's gap-after expansion makes the pointer slippery: as it
+  // approaches the bundle bottom, the body grows downward and the
+  // pointer stays "inside" — user can't easily express "drop after
+  // bundle". To drop AT END of bundle, user lands on the bottom-half
+  // of the last row directly.
+  return { kind: "header", uid, pos: "after" };
 }
 
 /** Builds a zone for a specific row inside a bundle's children. Handles
