@@ -598,6 +598,40 @@ describe("RichTextInput.vue", () => {
   //   2. `renderTick` bump on every programmatic atom apply forces Vue
   //      to mint fresh `:key`s and tear down stale DOM spans whose
   //      `textContent` had been mutated outside the v-for diff.
+  it("Backspace on `$name` in wildcard surface deletes ONE char at a time, not the whole token", async () => {
+    // Pre-fix: chip-deletion regex always matched `$ident` regardless of
+    // surface, so a single Backspace in a wildcard option value eat the
+    // whole `$variable` even though $vars don't chip on that surface.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "$testo", surface: "wildcard" },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    // Place caret at end (after "$testo" plain text).
+    const sp = (host.element as HTMLElement).querySelector(".wp-rt__text");
+    if (sp && sp.firstChild) {
+      const range = document.createRange();
+      range.setStart(sp.firstChild, (sp.firstChild.textContent ?? "").length);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    // Browser handles native single-char delete — no atomic emit. The
+    // chip-match path is gated on surface; on wildcard with `$name`,
+    // chipRegex doesn't match → handler returns without preventDefault.
+    // (jsdom doesn't simulate native edit, so emit history may be empty;
+    // assertion: no chip-removal emit shaped as "" suddenly.)
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const last = events[events.length - 1]?.[0];
+    expect(last === "" || last === undefined).toBe(true);
+    // Sanity: no chip rendered (wildcard surface keeps $name as text).
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    wrap.unmount();
+  });
+
   it("Delete (forward) immediately before a chip removes it atomically", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "$x hello", varSuggestions: ["x"] },

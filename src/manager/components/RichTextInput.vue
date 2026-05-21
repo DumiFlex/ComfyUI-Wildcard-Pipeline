@@ -1219,7 +1219,14 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const rawCaret = currentCursorCharOffset();
     if (rawCaret === 0) return;
     const before = rawText.slice(0, rawCaret);
-    const chipMatch = before.match(/(\$[A-Za-z_][A-Za-z0-9_]*|@\{[0-9a-f]{8}(?::[^}]*)?\})$/);
+    // Surface-gated chip detection: only patterns that ACTUALLY chipify
+    // on this surface qualify for atomic delete. Without this, `$name`
+    // in a wildcard option (where $ is plain text per surface contract)
+    // would be eaten whole by a single Backspace — user reported.
+    const chipRegex = props.surface === "wildcard"
+      ? /(@\{[0-9a-f]{8}(?::[^}]*)?\})$/
+      : /(\$[A-Za-z_][A-Za-z0-9_]*)$/;
+    const chipMatch = before.match(chipRegex);
     if (chipMatch) {
       ev.preventDefault();
       const newText = before.slice(0, -chipMatch[0].length) + rawText.slice(rawCaret);
@@ -1235,12 +1242,17 @@ function onHostKeydown(ev: KeyboardEvent): void {
     // Forward-delete (key right of Backspace on most keyboards). Mirror
     // the Backspace path but check the chars immediately AFTER the
     // caret for a complete chip serialisation. Same atomic-removal
-    // contract so the user can't end up half-deleting a chip.
+    // contract so the user can't end up half-deleting a chip — AND
+    // same surface gate so `$name` in a wildcard-surface input
+    // forward-deletes one char at a time, not the whole serialisation.
     const rawText = readHostAsText();
     const rawCaret = currentCursorCharOffset();
     if (rawCaret >= rawText.length) return;
     const after = rawText.slice(rawCaret);
-    const chipMatch = after.match(/^(\$[A-Za-z_][A-Za-z0-9_]*|@\{[0-9a-f]{8}(?::[^}]*)?\})/);
+    const chipRegex = props.surface === "wildcard"
+      ? /^(@\{[0-9a-f]{8}(?::[^}]*)?\})/
+      : /^(\$[A-Za-z_][A-Za-z0-9_]*)/;
+    const chipMatch = after.match(chipRegex);
     if (chipMatch) {
       ev.preventDefault();
       const newText = rawText.slice(0, rawCaret) + after.slice(chipMatch[0].length);
