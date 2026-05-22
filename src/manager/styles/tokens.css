@@ -1604,6 +1604,17 @@ input, textarea, select { font: inherit; }
   border-color: var(--wp-accent-500);
   color: #fff; /* audit-exempt: white checkmark on accent-600 background ≥4.5:1 both themes */
 }
+/* Indeterminate (tri-state) — must look visually distinct from an empty box.
+   The base .wp-check sets color: transparent, so the dash SVG (stroke="currentColor")
+   would be invisible without flipping color here. Mirrors the checked-state fill so
+   a section-checkbox with a partial selection is unmistakably "some, not none, not all".
+   Visibility contract: see src/manager/components/ui/Checkbox.vue (indeterminate prop)
+   and src/manager/__tests__/ui/Checkbox.test.ts (data-indeterminate assertions). */
+.wp-check[data-indeterminate="true"] {
+  background: var(--wp-accent-600);
+  border-color: var(--wp-accent-500);
+  color: #fff; /* audit-exempt: white dash on accent-600 background ≥4.5:1 both themes */
+}
 .wp-check svg { width: 12px; height: 12px; display: block; }
 .wp-check:disabled { opacity: 0.45; cursor: not-allowed; }
 .wp-check:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
