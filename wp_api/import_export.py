@@ -13,7 +13,7 @@ from engine.db.repositories import (
     ModuleRepository,
 )
 from engine.exporter import build_export_payload
-from engine.importer import commit_import, undo_import
+from engine.importer import commit_import, get_undo_entry, undo_import
 from engine.modules.snapshot import payload_hash
 from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import validate_body_size
@@ -306,15 +306,22 @@ async def import_undo(request: web.Request) -> web.Response:
         return json_error("undo_entry_id must be a string", status=400)
 
     with db_session(request) as conn:
+        # Structural 404: existence check before attempting the undo.
+        # Mirrors the typed-exception pattern used by ModuleNotFound /
+        # BundleNotFound / CategoryNotFound elsewhere in wp_api — the
+        # HTTP status is decided by row presence, not by parsing engine
+        # error wording. Same connection drives both reads so we keep a
+        # single transaction context.
+        entry = get_undo_entry(conn, undo_entry_id)
+        if entry is None:
+            return json_error(
+                f"undo entry {undo_entry_id!r} not found", status=404,
+            )
         result = undo_import(conn, undo_entry_id)
     if not result.get("ok"):
-        error = result.get("error", "undo failed")
-        # "undo entry ... not found" → 404. Any other error string is
-        # a corrupt-blob or DB-layer failure and stays at 400. The
-        # engine message is the only place "not found" appears in the
-        # undo error envelope, so substring match is safe.
-        status = 404 if "not found" in error else 400
-        return json_error(error, status=status)
+        # Remaining failures (corrupt undo blob, IntegrityError during
+        # restore) are all proper 400s — the 404 path is handled above.
+        return json_error(result.get("error", "undo failed"), status=400)
     return json_ok({"ok": True})
 
 
