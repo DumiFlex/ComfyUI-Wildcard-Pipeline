@@ -11,6 +11,7 @@ import { useToast } from "../composables/useToast";
 import { catChipStyle } from "../utils/catChip";
 import { api } from "../api/client";
 import type { BundleRow, CategoryRow, ImportBundle, ModuleRow } from "../api/types";
+import ExportTab from "../import-export/ExportTab.vue";
 import {
   buildFilteredBundle,
   bundleSizeBytes,
@@ -31,7 +32,7 @@ import {
   type GroupMeta,
 } from "../utils/bundleSelection";
 
-type Mode = "export" | "import";
+type Mode = "export" | "export-v2" | "import";
 
 const toast = useToast();
 
@@ -615,6 +616,15 @@ watch(
         data-test="io-tab-export"
         @click="setMode('export')"
       >
+        <Icon name="pi-download" /> Export (legacy)
+      </button>
+      <button
+        type="button" role="tab" class="wp-tab"
+        :data-active="mode === 'export-v2' ? 'true' : 'false'"
+        :aria-selected="mode === 'export-v2'"
+        data-test="io-tab-export-v2"
+        @click="setMode('export-v2')"
+      >
         <Icon name="pi-download" /> Export
       </button>
       <button
@@ -626,6 +636,15 @@ watch(
       >
         <Icon name="pi-upload" /> Import
       </button>
+    </div>
+
+    <!-- Export tab (v2 — 7-bucket picker, POST /wp/api/export/build) -->
+    <div
+      v-if="mode === 'export-v2'"
+      class="wp-io-export-v2-pane"
+      data-test="io-export-v2-pane"
+    >
+      <ExportTab />
     </div>
 
     <!-- Export tab -->
@@ -766,7 +785,7 @@ watch(
     </div>
 
     <!-- Import tab -->
-    <div v-else class="wp-io-grid" data-test="io-import-pane">
+    <div v-else-if="mode === 'import'" class="wp-io-grid" data-test="io-import-pane">
       <div class="wp-io-import-main">
         <Card title="Source bundle">
           <p class="wp-io-help wp-dim">
