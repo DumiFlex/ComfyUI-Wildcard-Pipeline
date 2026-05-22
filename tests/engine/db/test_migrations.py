@@ -31,7 +31,7 @@ def test_migrate_records_version(tmp_path):
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
     # ``engine/db/migrations_sql``.
-    assert current_version(conn) == 6
+    assert current_version(conn) == 7
     conn.close()
 
 
@@ -51,6 +51,26 @@ def test_migrate_creates_bundles_table_with_expected_columns(tmp_path):
         "id", "name", "description", "color", "category_id",
         "tags", "is_favorite", "children", "payload_hash",
         "version", "created_at", "updated_at",
+    }
+    conn.close()
+
+
+def test_migrate_creates_import_undo_table_with_expected_columns(tmp_path):
+    """Migration 007 adds the import_undo metadata table used by
+    `engine.importer` to persist enough info to reverse a commit."""
+    conn = get_connection(tmp_path / "u.db")
+    migrate(conn)
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table';"
+        ).fetchall()
+    }
+    assert "import_undo" in tables
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(import_undo);")}
+    assert cols == {
+        "id", "created_at", "imported_records",
+        "replaced_snapshots", "rename_map",
     }
     conn.close()
 
@@ -227,5 +247,5 @@ def test_004_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 6
+    assert current_version(conn) == 7
     conn.close()
