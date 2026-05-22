@@ -51,9 +51,23 @@ export function buildDepGraph(payload: RawPayload): DepGraph {
   return graph;
 }
 
-/** Walk outgoing refs starting from `seed` until fixed point. */
-export function transitiveClosure(payload: RawPayload, seed: Set<string>): Set<string> {
-  const graph = buildDepGraph(payload);
+/** Walk outgoing refs from `seed` to fixed point. Two forms:
+ *  - `(payload, seed)`: convenience — builds graph internally. O(N+E) extra work.
+ *  - `(graph, seed)`: efficient — caller passes a cached `buildDepGraph(payload)`.
+ *    Use this in picker UIs that compute the graph once and reuse for many
+ *    selection-change recomputes.
+ */
+export function transitiveClosure(graph: DepGraph, seed: Set<string>): Set<string>;
+export function transitiveClosure(payload: RawPayload, seed: Set<string>): Set<string>;
+export function transitiveClosure(
+  graphOrPayload: DepGraph | RawPayload,
+  seed: Set<string>,
+): Set<string> {
+  // Distinguish RawPayload from DepGraph: RawPayload has the `bundles` array.
+  const graph: DepGraph =
+    "bundles" in graphOrPayload && Array.isArray((graphOrPayload as RawPayload).bundles)
+      ? buildDepGraph(graphOrPayload as RawPayload)
+      : (graphOrPayload as DepGraph);
   const visited = new Set<string>(seed);
   const queue: string[] = [...seed];
   while (queue.length > 0) {

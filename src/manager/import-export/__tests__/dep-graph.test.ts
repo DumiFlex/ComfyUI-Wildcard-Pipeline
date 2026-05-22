@@ -184,3 +184,28 @@ describe("regex strictness", () => {
     expect(graph["11111111"]).toContain("aabbccdd");
   });
 });
+
+describe("transitiveClosure overload", () => {
+  it("accepts a pre-built graph and returns identical result to the payload form", () => {
+    const payload = makePayload({
+      wildcards: [
+        { uuid: "11111111", name: "a", options: [{ value: "@{22222222}", weight: 1 }], tags: [] },
+        { uuid: "22222222", name: "b", options: [{ value: "@{33333333}", weight: 1 }], tags: [] },
+        { uuid: "33333333", name: "c", options: [], tags: [] },
+      ],
+    });
+    const graph = buildDepGraph(payload);
+    const fromPayload = transitiveClosure(payload, new Set(["11111111"]));
+    const fromGraph = transitiveClosure(graph, new Set(["11111111"]));
+    expect(fromGraph).toEqual(fromPayload);
+    expect(fromGraph).toEqual(new Set(["11111111", "22222222", "33333333"]));
+  });
+
+  it("graph-form does not require all UUIDs to be keys (empty edges treated as no-deps)", () => {
+    // Caller may pass a graph derived from a partial payload. Missing keys
+    // should behave like empty edge lists (no-deps).
+    const graph: Record<string, string[]> = { "11111111": ["22222222"] };
+    const closure = transitiveClosure(graph, new Set(["11111111"]));
+    expect(closure).toEqual(new Set(["11111111", "22222222"]));
+  });
+});
