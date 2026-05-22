@@ -1,13 +1,19 @@
 import { mount, flushPromises } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import ConflictModal from "../ConflictModal.vue";
-import type { BatchConflict, PerItemIssue } from "../ConflictModal.vue";
+import type { BatchConflict, PerItemIssue } from "../conflict-types";
 
 /**
  * Helpers — small factories so each test reads as the case it covers,
  * not as a wall of prop scaffolding. `id` is the entity key everywhere
  * (per the Task 17 alignment fix); no `uuid` field is used.
+ *
+ * The modal now teleports through the shared `Modal.vue` wrapper to
+ * `document.body`, so DOM-level selectors must look at the body, not
+ * the mount root. The `wrap.emitted(...)` API still works because Vue
+ * Test Utils tracks emits on the wrapper regardless of where the DOM
+ * actually rendered.
  */
 function makeBatchConflict(
   overrides: Partial<BatchConflict> = {},
@@ -39,8 +45,28 @@ function mountModal(opts: {
       batchConflicts: opts.batchConflicts ?? [],
       perItemIssues: opts.perItemIssues ?? [],
     },
+    attachTo: document.body,
   });
 }
+
+/** Body-level selector helper — every interactive node lives there. */
+function $(selector: string): HTMLElement {
+  const el = document.body.querySelector(selector);
+  if (!el) throw new Error(`selector not found: ${selector}`);
+  return el as HTMLElement;
+}
+
+function find(selector: string): HTMLElement | null {
+  return document.body.querySelector(selector) as HTMLElement | null;
+}
+
+afterEach(() => {
+  // Teleported DOM doesn't auto-clean between tests — remove any
+  // leftover modal nodes so the next test starts with a clean body.
+  for (const node of Array.from(document.body.children)) {
+    node.remove();
+  }
+});
 
 describe("ConflictModal.vue", () => {
   it("renders count summary with both batch + per-item counts", () => {
@@ -51,35 +77,38 @@ describe("ConflictModal.vue", () => {
       ],
       perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
     });
-    const summary = wrap.get('[data-test="conflict-modal-summary"]');
-    expect(summary.text()).toContain("2");
-    expect(summary.text()).toContain("1");
+    const summary = $('[data-test="conflict-modal-summary"]');
+    expect(summary.textContent).toContain("2");
+    expect(summary.textContent).toContain("1");
+    wrap.unmount();
   });
 
   it("disables the Import button while any per-item issue is unresolved", () => {
     const wrap = mountModal({
       perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
     });
-    const btn = wrap.get('[data-test="commit-btn"]');
-    expect(btn.attributes("disabled")).toBeDefined();
+    const btn = $('[data-test="commit-btn"]') as HTMLButtonElement;
+    expect(btn.hasAttribute("disabled")).toBe(true);
+    wrap.unmount();
   });
 
-  it("Skip resolution replaces buttons with a ✓ skip indicator + enables Import", async () => {
+  it("Skip resolution replaces buttons with a check skip indicator + enables Import", async () => {
     const wrap = mountModal({
       perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
     });
-    await wrap.get('[data-test="resolve-b1-skip"]').trigger("click");
+    $('[data-test="resolve-b1-skip"]').click();
     await flushPromises();
 
     // Skip + Accept buttons are gone; resolved indicator is in their place.
-    expect(wrap.find('[data-test="resolve-b1-skip"]').exists()).toBe(false);
-    expect(wrap.find('[data-test="resolve-b1-accept"]').exists()).toBe(false);
-    const resolved = wrap.get('[data-test="resolved-b1"]');
-    expect(resolved.text()).toContain("skip");
+    expect(find('[data-test="resolve-b1-skip"]')).toBeNull();
+    expect(find('[data-test="resolve-b1-accept"]')).toBeNull();
+    const resolved = $('[data-test="resolved-b1"]');
+    expect(resolved.textContent).toContain("skip");
 
     // Import button enabled now that every per-item issue is resolved.
-    const btn = wrap.get('[data-test="commit-btn"]');
-    expect(btn.attributes("disabled")).toBeUndefined();
+    const btn = $('[data-test="commit-btn"]') as HTMLButtonElement;
+    expect(btn.hasAttribute("disabled")).toBe(false);
+    wrap.unmount();
   });
 
   it("Accept resolution records 'accept' + enables Import for non-tier-3 issues", async () => {
@@ -91,13 +120,14 @@ describe("ConflictModal.vue", () => {
         }),
       ],
     });
-    await wrap.get('[data-test="resolve-fp1-accept"]').trigger("click");
+    $('[data-test="resolve-fp1-accept"]').click();
     await flushPromises();
 
-    const resolved = wrap.get('[data-test="resolved-fp1"]');
-    expect(resolved.text()).toContain("accept");
-    const btn = wrap.get('[data-test="commit-btn"]');
-    expect(btn.attributes("disabled")).toBeUndefined();
+    const resolved = $('[data-test="resolved-fp1"]');
+    expect(resolved.textContent).toContain("accept");
+    const btn = $('[data-test="commit-btn"]') as HTMLButtonElement;
+    expect(btn.hasAttribute("disabled")).toBe(false);
+    wrap.unmount();
   });
 
   it("tier-3 issues render NO Import-anyway button (non-overridable)", () => {
@@ -110,8 +140,9 @@ describe("ConflictModal.vue", () => {
       ],
     });
     // Skip stays available, but the accept button is suppressed.
-    expect(wrap.find('[data-test="resolve-tier3item-skip"]').exists()).toBe(true);
-    expect(wrap.find('[data-test="resolve-tier3item-accept"]').exists()).toBe(false);
+    expect(find('[data-test="resolve-tier3item-skip"]')).not.toBeNull();
+    expect(find('[data-test="resolve-tier3item-accept"]')).toBeNull();
+    wrap.unmount();
   });
 
   it("emits commit-ready with batchDefault + perItemDecisions keyed by id", async () => {
@@ -132,11 +163,11 @@ describe("ConflictModal.vue", () => {
     });
 
     // Resolve both per-item issues — one skip, one accept.
-    await wrap.get('[data-test="resolve-b1-skip"]').trigger("click");
-    await wrap.get('[data-test="resolve-fp1-accept"]').trigger("click");
+    $('[data-test="resolve-b1-skip"]').click();
+    $('[data-test="resolve-fp1-accept"]').click();
     await flushPromises();
 
-    await wrap.get('[data-test="commit-btn"]').trigger("click");
+    $('[data-test="commit-btn"]').click();
     await flushPromises();
 
     const events = wrap.emitted("commit-ready");
@@ -154,6 +185,7 @@ describe("ConflictModal.vue", () => {
     expect(Object.keys(payload.perItemDecisions).sort()).toEqual(["b1", "fp1"]);
     expect(payload.perItemDecisions.b1.kind).toBe("skip");
     expect(payload.perItemDecisions.fp1.kind).toBe("accept");
+    wrap.unmount();
   });
 
   it("changes batchDefault when the dropdown is set to 'replace'", async () => {
@@ -165,11 +197,12 @@ describe("ConflictModal.vue", () => {
       perItemIssues: [],
     });
 
-    const select = wrap.get('[data-test="batch-default-select"]');
-    await select.setValue("replace");
+    const select = $('[data-test="batch-default-select"]') as HTMLSelectElement;
+    select.value = "replace";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
     await flushPromises();
 
-    await wrap.get('[data-test="commit-btn"]').trigger("click");
+    $('[data-test="commit-btn"]').click();
     await flushPromises();
 
     const events = wrap.emitted("commit-ready");
@@ -182,16 +215,18 @@ describe("ConflictModal.vue", () => {
       perItemDecisions: Record<string, { kind: string }>;
     };
     expect(payload.batchDefault).toBe("replace");
+    wrap.unmount();
   });
 
   it("emits 'cancel' when the Cancel button is clicked", async () => {
     const wrap = mountModal({
       perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
     });
-    await wrap.get('[data-test="cancel-btn"]').trigger("click");
+    $('[data-test="cancel-btn"]').click();
     await flushPromises();
     expect(wrap.emitted("cancel")).toBeTruthy();
     expect(wrap.emitted("commit-ready")).toBeFalsy();
+    wrap.unmount();
   });
 
   it("enables Import immediately when batch-only (no per-item issues)", () => {
@@ -202,7 +237,41 @@ describe("ConflictModal.vue", () => {
       ],
       perItemIssues: [],
     });
-    const btn = wrap.get('[data-test="commit-btn"]');
-    expect(btn.attributes("disabled")).toBeUndefined();
+    const btn = $('[data-test="commit-btn"]') as HTMLButtonElement;
+    expect(btn.hasAttribute("disabled")).toBe(false);
+    wrap.unmount();
+  });
+
+  // -------- Accessibility floor (Modal wrapper contract) -----------------
+
+  it("renders the modal with role='dialog' and aria-modal='true'", () => {
+    const wrap = mountModal({
+      perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
+    });
+    const dialog = $('.wp-modal[role="dialog"]');
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    wrap.unmount();
+  });
+
+  it("teleports the modal to document.body (Modal wrapper contract)", () => {
+    const wrap = mountModal({
+      perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
+    });
+    // Backdrop sits as a direct descendant of <body>, NOT inside the
+    // test wrapper's mount root.
+    expect(document.body.querySelector('[data-test="modal-backdrop"]')).not.toBeNull();
+    wrap.unmount();
+  });
+
+  it("Esc keypress emits cancel + closes the modal via update:open", async () => {
+    const wrap = mountModal({
+      perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
+    });
+    // The shared Modal listens on window for Escape.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushPromises();
+    expect(wrap.emitted("cancel")).toBeTruthy();
+    expect(wrap.emitted("update:open")?.[0]).toEqual([false]);
+    wrap.unmount();
   });
 });

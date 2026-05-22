@@ -44,67 +44,49 @@
  * State updates use the immutable-replacement pattern (full record
  * clone) so any downstream `computed` that observes
  * `perItemDecisions` reruns when a single key flips.
+ *
+ * Accessibility: the visual chrome (role="dialog", aria-modal,
+ * Esc-to-close, backdrop click, Teleport-to-body) is delegated to the
+ * shared `Modal` wrapper from `manager/components/ui/Modal.vue`. The
+ * `open` prop is optional (defaults to `true`) so the simplest caller
+ * pattern — `<ConflictModal v-if="conflicts" ... @cancel="dismiss" />`
+ * — works without extra wiring. Closing via Esc/backdrop routes
+ * through `update:open` and emits `cancel`.
  */
 import { computed, ref } from "vue";
-import type { EntityKind } from "./commit";
+import Modal from "../components/ui/Modal.vue";
+import type {
+  BatchConflict,
+  PerItemDecision,
+  PerItemIssue,
+} from "./conflict-types";
 
-/**
- * Tag for one per-item integrity issue. Mirrors the upstream
- * verify pipeline (see parse.ts + the importer/exporter spec):
- *
- *   - broken-inner-ref      — bundle/constraint edge references an id
- *                             that isn't in the picker selection.
- *   - broken-uuid-ref       — wildcard option uses `@{id}` syntax
- *                             targeting an unknown id.
- *   - broken-constraint-ref — constraint source/target points at an
- *                             entity not in the import set.
- *   - tier-3                — entity contains a forward-incompatible
- *                             construct the server cannot accept;
- *                             non-overridable.
- *   - lossy-migration       — migration chain ran but dropped fields
- *                             from the original payload.
- *   - fingerprint-mismatch  — payload-stamped `snapshot_fingerprint`
- *                             disagrees with the value recomputed from
- *                             the row contents.
- */
-export type PerItemKind =
-  | "broken-inner-ref"
-  | "broken-uuid-ref"
-  | "broken-constraint-ref"
-  | "tier-3"
-  | "lossy-migration"
-  | "fingerprint-mismatch";
-
-/**
- * One UUID collision against the live DB. `kind` is the 7-bucket
- * `EntityKind` from `./commit` so the same partitioner downstream can
- * route the resolved entity to the correct server-side bucket. The
- * `entity` blob is the full payload row (passed through verbatim).
- */
-export interface BatchConflict {
-  kind: EntityKind;
-  id: string;
-  entity: Record<string, unknown>;
-}
-
-/**
- * One per-item integrity issue. `entity` MUST carry `id`; `name` is
- * optional for the display fallback (`id` shown if name absent). The
- * generic `detail` slot lets callers stash any diagnostic context the
- * modal doesn't need to interpret (e.g. specific broken-ref target).
- */
-export interface PerItemIssue {
-  kind: PerItemKind;
-  entity: Record<string, unknown> & { id: string; name?: string };
-  detail?: unknown;
-}
+// Re-export types from the dedicated module so existing consumers
+// that happen to import from this SFC keep working. New consumers
+// should import from `./conflict-types` directly — see the module
+// comment for why named-type re-exports from `*.vue` are fragile
+// under plain `tsc` / IDE diagnostic engines.
+export type {
+  BatchAction,
+  BatchConflict,
+  PerItemDecision,
+  PerItemIssue,
+  PerItemKind,
+} from "./conflict-types";
 
 interface Props {
   batchConflicts: BatchConflict[];
   perItemIssues: PerItemIssue[];
+  /**
+   * Controls modal visibility. Optional with default `true` so a
+   * parent that gates the modal via `v-if` doesn't need to bind it;
+   * a parent that wants the `update:open` two-way contract can pass
+   * a ref and listen to the event.
+   */
+  open?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { open: true });
 
 /**
  * Resolution emit payload:
@@ -124,21 +106,14 @@ const emit = defineEmits<{
     e: "commit-ready",
     resolution: {
       batchDefault: "skip" | "replace";
-      perItemDecisions: Record<
-        string,
-        { kind: "skip" | "replace" | "rename" | "accept"; new_name?: string }
-      >;
+      perItemDecisions: Record<string, PerItemDecision>;
     },
   ): void;
   (e: "cancel"): void;
+  (e: "update:open", v: boolean): void;
 }>();
 
 const batchDefault = ref<"skip" | "replace">("skip");
-
-type PerItemDecision = {
-  kind: "skip" | "replace" | "rename" | "accept";
-  new_name?: string;
-};
 
 const perItemDecisions = ref<Record<string, PerItemDecision>>({});
 
@@ -186,6 +161,18 @@ function onCommit(): void {
 
 function onCancel(): void {
   emit("cancel");
+  emit("update:open", false);
+}
+
+/**
+ * Forwarded from the Modal wrapper. `Modal` fires `update:open=false`
+ * on Esc / close-button / backdrop click — every one of those paths is
+ * a cancel from this modal's perspective, so we re-emit `cancel` to
+ * keep the public contract simple. Callers can listen to either event.
+ */
+function onModalUpdateOpen(v: boolean): void {
+  emit("update:open", v);
+  if (!v) emit("cancel");
 }
 
 /**
@@ -206,93 +193,96 @@ function onBatchDefaultChange(ev: Event): void {
 </script>
 
 <template>
-  <div class="wp-conflict-modal" data-test="conflict-modal">
-    <header class="wp-conflict-modal__header">
-      <h3 class="wp-conflict-modal__title">Resolve conflicts</h3>
+  <Modal
+    :open="props.open"
+    title="Resolve conflicts"
+    size="lg"
+    @update:open="onModalUpdateOpen"
+  >
+    <div class="wp-conflict-modal" data-test="conflict-modal">
       <p class="wp-conflict-modal__summary" data-test="conflict-modal-summary">
         {{ props.batchConflicts.length }}
         {{ props.batchConflicts.length === 1 ? "batch conflict" : "batch conflicts" }},
         {{ props.perItemIssues.length }}
         {{ props.perItemIssues.length === 1 ? "per-item issue" : "per-item issues" }}.
       </p>
-    </header>
 
-    <section
-      v-if="props.batchConflicts.length > 0"
-      class="wp-conflict-modal__section"
-      data-test="conflict-modal-batch-section"
-    >
-      <h4 class="wp-conflict-modal__section-title">Batch resolution</h4>
-      <p class="wp-conflict-modal__section-hint">
-        UUID collisions
-        ({{ props.batchConflicts.length }}{{ props.batchConflicts.length === 1 ? "" : "" }})
-        — applied uniformly to all matching rows.
-      </p>
-      <label
-        for="wp-conflict-modal-batch-default"
-        class="wp-conflict-modal__batch-row"
+      <section
+        v-if="props.batchConflicts.length > 0"
+        class="wp-conflict-modal__section"
+        data-test="conflict-modal-batch-section"
       >
-        <span class="wp-conflict-modal__batch-label">Default action</span>
-        <select
-          id="wp-conflict-modal-batch-default"
-          class="wp-conflict-modal__select"
-          :value="batchDefault"
-          data-test="batch-default-select"
-          @change="onBatchDefaultChange"
+        <h4 class="wp-conflict-modal__section-title">Batch resolution</h4>
+        <p class="wp-conflict-modal__section-hint">
+          UUID collisions ({{ props.batchConflicts.length }})
+          — applied uniformly to all matching rows.
+        </p>
+        <label
+          for="wp-conflict-modal-batch-default"
+          class="wp-conflict-modal__batch-row"
         >
-          <option value="skip">Skip — keep live-DB version</option>
-          <option value="replace">Replace — overwrite live-DB row</option>
-        </select>
-      </label>
-    </section>
-
-    <section
-      v-if="props.perItemIssues.length > 0"
-      class="wp-conflict-modal__section"
-      data-test="conflict-modal-per-item-section"
-    >
-      <h4 class="wp-conflict-modal__section-title">Per-item issues</h4>
-      <ul class="wp-conflict-modal__items">
-        <li
-          v-for="issue in props.perItemIssues"
-          :key="issue.entity.id"
-          class="wp-conflict-modal__item"
-          :data-test="`conflict-modal-item-${issue.entity.id}`"
-        >
-          <div class="wp-conflict-modal__item-meta">
-            <span class="wp-conflict-modal__row-name">
-              {{ issue.entity.name ?? issue.entity.id }}
-            </span>
-            <span class="wp-conflict-modal__row-kind">{{ issue.kind }}</span>
-          </div>
-          <div
-            v-if="perItemDecisions[issue.entity.id]"
-            class="wp-conflict-modal__resolved"
-            :data-test="`resolved-${issue.entity.id}`"
+          <span class="wp-conflict-modal__batch-label">Default action</span>
+          <select
+            id="wp-conflict-modal-batch-default"
+            class="wp-conflict-modal__select"
+            :value="batchDefault"
+            data-test="batch-default-select"
+            @change="onBatchDefaultChange"
           >
-            <span aria-hidden="true">✓</span>
-            {{ perItemDecisions[issue.entity.id].kind }}
-          </div>
-          <div v-else class="wp-conflict-modal__actions">
-            <button
-              type="button"
-              class="wp-conflict-modal__btn"
-              :data-test="`resolve-${issue.entity.id}-skip`"
-              @click="resolveItem(issue.entity.id, 'skip')"
-            >Skip</button>
-            <button
-              v-if="issue.kind !== 'tier-3'"
-              type="button"
-              class="wp-conflict-modal__btn wp-conflict-modal__btn--warn"
-              :data-test="`resolve-${issue.entity.id}-accept`"
-              @click="resolveItem(issue.entity.id, 'accept')"
-            >Import anyway</button>
-          </div>
-        </li>
-      </ul>
-    </section>
+            <option value="skip">Skip — keep live-DB version</option>
+            <option value="replace">Replace — overwrite live-DB row</option>
+          </select>
+        </label>
+      </section>
 
-    <footer class="wp-conflict-modal__footer">
+      <section
+        v-if="props.perItemIssues.length > 0"
+        class="wp-conflict-modal__section"
+        data-test="conflict-modal-per-item-section"
+      >
+        <h4 class="wp-conflict-modal__section-title">Per-item issues</h4>
+        <ul class="wp-conflict-modal__items">
+          <li
+            v-for="issue in props.perItemIssues"
+            :key="issue.entity.id"
+            class="wp-conflict-modal__item"
+            :data-test="`conflict-modal-item-${issue.entity.id}`"
+          >
+            <div class="wp-conflict-modal__item-meta">
+              <span class="wp-conflict-modal__row-name">
+                {{ issue.entity.name ?? issue.entity.id }}
+              </span>
+              <span class="wp-conflict-modal__row-kind">{{ issue.kind }}</span>
+            </div>
+            <div
+              v-if="perItemDecisions[issue.entity.id]"
+              class="wp-conflict-modal__resolved"
+              :data-test="`resolved-${issue.entity.id}`"
+            >
+              <span aria-hidden="true">✓</span>
+              {{ perItemDecisions[issue.entity.id].kind }}
+            </div>
+            <div v-else class="wp-conflict-modal__actions">
+              <button
+                type="button"
+                class="wp-conflict-modal__btn"
+                :data-test="`resolve-${issue.entity.id}-skip`"
+                @click="resolveItem(issue.entity.id, 'skip')"
+              >Skip</button>
+              <button
+                v-if="issue.kind !== 'tier-3'"
+                type="button"
+                class="wp-conflict-modal__btn wp-conflict-modal__btn--warn"
+                :data-test="`resolve-${issue.entity.id}-accept`"
+                @click="resolveItem(issue.entity.id, 'accept')"
+              >Import anyway</button>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <template #footer>
       <span
         v-if="unresolvedCount > 0"
         class="wp-conflict-modal__unresolved"
@@ -315,8 +305,8 @@ function onBatchDefaultChange(ev: Event): void {
         data-test="commit-btn"
         @click="onCommit"
       >Import</button>
-    </footer>
-  </div>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
@@ -324,23 +314,7 @@ function onBatchDefaultChange(ev: Event): void {
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-5);
-  padding: var(--wp-space-6);
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-lg);
   color: var(--wp-text);
-}
-
-.wp-conflict-modal__header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-3);
-}
-
-.wp-conflict-modal__title {
-  margin: 0;
-  font-size: var(--wp-text-lg);
-  line-height: var(--wp-line-lg);
 }
 
 .wp-conflict-modal__summary {
@@ -498,14 +472,6 @@ function onBatchDefaultChange(ev: Event): void {
 .wp-conflict-modal__btn--primary:hover:not(:disabled) {
   background: linear-gradient(180deg, var(--wp-accent-400), var(--wp-accent-500));
   border-color: var(--wp-accent-500);
-}
-
-.wp-conflict-modal__footer {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  padding-top: var(--wp-space-4);
-  border-top: 1px solid var(--wp-border);
 }
 
 .wp-conflict-modal__unresolved {
