@@ -45,6 +45,7 @@ outer transaction — mirroring the legacy ``wp_api/import_export.py``
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import sqlite3
 from typing import Any
@@ -52,6 +53,18 @@ from typing import Any
 from engine._fingerprint import module_fingerprint
 from engine._utils import now_iso
 from engine.modules.snapshot import payload_hash
+
+logger = logging.getLogger(__name__)
+
+
+class _ImporterContractError(ValueError):
+    """Raised for importer-defined contract violations.
+
+    Carries a user-safe message. Caught separately from raw sqlite
+    errors so the envelope can preserve our wording but generalize
+    sqlite's (which can leak column/constraint internals).
+    """
+
 
 # Module kinds dispatched to the `modules` table. Mirrors the 5 entries
 # of `engine.db.repositories._VALID_TYPES` — kept duplicated here so a
@@ -64,6 +77,27 @@ _MODULE_KINDS: frozenset[str] = frozenset({
 
 def _is_module_kind(kind: str) -> bool:
     return kind in _MODULE_KINDS
+
+
+def _require_entity_fields(
+    kind: str, op: str, entity: dict[str, Any], required: tuple[str, ...],
+) -> None:
+    """Raise ``_ImporterContractError`` listing every missing field.
+
+    Treats ``None``, missing key, and falsy non-empty-string values as
+    missing. Empty strings ``""`` are allowed — callers explicitly opt
+    into "must be non-empty" by passing the field name; empty string
+    fields like ``description`` are NOT included in ``required``.
+    """
+    missing = [
+        k for k in required
+        if entity.get(k) is None
+        or (not entity.get(k) and entity.get(k) != "")
+    ]
+    if missing:
+        raise _ImporterContractError(
+            f"{op} for {kind} missing required field(s): {sorted(missing)}",
+        )
 
 
 def _gen_undo_id() -> str:
@@ -107,6 +141,11 @@ def _insert_module(
     insert under a freshly-allocated id. When None, ``entity["id"]``
     is used verbatim (the add path).
     """
+    # When target_id is supplied (rename path), the caller has already
+    # validated new_id; only `name` is required from the entity.
+    required = ("name",) if target_id else ("name", "id")
+    op_label = "rename" if target_id else "add"
+    _require_entity_fields(kind, op_label, entity, required)
     mid = target_id or entity["id"]
     now = now_iso()
     fp = _module_fp_for_entity({**entity, "type": kind})
@@ -142,6 +181,9 @@ def _insert_bundle(
     may not match this DB's hashing rules — we always recompute on
     insert).
     """
+    required = ("name",) if target_id else ("name", "id")
+    op_label = "rename" if target_id else "add"
+    _require_entity_fields("bundle", op_label, entity, required)
     bid = target_id or entity["id"]
     children_blob = list(entity.get("children") or [])
     ph = payload_hash({"children": children_blob})
@@ -177,6 +219,7 @@ def _update_module(
     routed us here so type is implied). Bumps `version` and stamps
     `updated_at` like `ModuleRepository.update`.
     """
+    _require_entity_fields(kind, "replace", content, ("name",))
     now = now_iso()
     fp = _module_fp_for_entity({**content, "type": kind})
     conn.execute(
@@ -200,6 +243,7 @@ def _update_bundle(
     conn: sqlite3.Connection, bid: str, content: dict[str, Any],
 ) -> None:
     """UPDATE the bundles row identified by `bid` to mirror `content`."""
+    _require_entity_fields("bundle", "replace", content, ("name",))
     children_blob = list(content.get("children") or [])
     ph = payload_hash({"children": children_blob})
     now = now_iso()
@@ -311,12 +355,16 @@ def commit_import(
                 kind = op.get("kind")
                 entity = op.get("entity") or {}
                 if kind == "category":
-                    name = (entity.get("name") or "").strip()
+                    # Mirror legacy wp_api/import_export.py:76 verbatim
+                    # (no .strip()) so behaviour stays bit-for-bit
+                    # compatible. Tightening here would silently change
+                    # name-merge semantics for whitespace-padded names.
+                    name = entity.get("name") or ""
                     if not name:
                         # Skip nameless categories the same way the
                         # legacy import_bundle does — but loudly, since
                         # the new pipeline pre-validates.
-                        raise ValueError(
+                        raise _ImporterContractError(
                             "category add missing 'name' field",
                         )
                     # Name-based merge (case-insensitive). Matches the
@@ -333,7 +381,7 @@ def commit_import(
                     cid = entity.get("id") or name.lower()
                     if _category_id_exists(conn, cid):
                         # Same id, different name — treat as collision.
-                        raise sqlite3.IntegrityError(
+                        raise _ImporterContractError(
                             f"category id collision: {cid!r}",
                         )
                     conn.execute(
@@ -349,29 +397,33 @@ def commit_import(
                     imported_records.append({"kind": "category", "id": cid})
 
                 elif kind == "bundle":
-                    bid = entity.get("id")
-                    if not bid:
-                        raise ValueError("bundle add missing 'id' field")
+                    _require_entity_fields(
+                        "bundle", "add", entity, ("id", "name"),
+                    )
+                    bid = entity["id"]
                     if _bundle_exists(conn, bid):
-                        raise sqlite3.IntegrityError(
+                        raise _ImporterContractError(
                             f"bundle id collision on add: {bid!r}",
                         )
                     _insert_bundle(conn, entity)
                     imported_records.append({"kind": "bundle", "id": bid})
 
                 elif _is_module_kind(kind or ""):
-                    mid = entity.get("id")
-                    if not mid:
-                        raise ValueError(f"{kind} add missing 'id' field")
+                    _require_entity_fields(
+                        kind, "add", entity, ("id", "name"),  # type: ignore[arg-type]
+                    )
+                    mid = entity["id"]
                     if _module_exists(conn, mid):
-                        raise sqlite3.IntegrityError(
+                        raise _ImporterContractError(
                             f"module id collision on add: {mid!r}",
                         )
                     _insert_module(conn, kind, entity)  # type: ignore[arg-type]
                     imported_records.append({"kind": kind, "id": mid})  # type: ignore[dict-item]
 
                 else:
-                    raise ValueError(f"unknown kind in add: {kind!r}")
+                    raise _ImporterContractError(
+                        f"unknown kind in add: {kind!r}",
+                    )
 
             # ---- REPLACES ----------------------------------------------
             # Categories never appear here (spec lock #2).
@@ -380,11 +432,13 @@ def commit_import(
                 rid = op.get("id")
                 new_content = op.get("new_content") or {}
                 if not rid:
-                    raise ValueError(f"{kind} replace missing 'id' field")
+                    raise _ImporterContractError(
+                        f"{kind} replace missing 'id' field",
+                    )
                 if kind == "bundle":
                     existing = _fetch_bundle_row(conn, rid)
                     if existing is None:
-                        raise ValueError(
+                        raise _ImporterContractError(
                             f"bundle replace target {rid!r} not found",
                         )
                     replaced_snapshots[rid] = {"kind": "bundle", "row": existing}
@@ -392,13 +446,15 @@ def commit_import(
                 elif _is_module_kind(kind or ""):
                     existing = _fetch_module_row(conn, rid)
                     if existing is None:
-                        raise ValueError(
+                        raise _ImporterContractError(
                             f"{kind} replace target {rid!r} not found",
                         )
                     replaced_snapshots[rid] = {"kind": kind, "row": existing}  # type: ignore[dict-item]
                     _update_module(conn, rid, kind, new_content)  # type: ignore[arg-type]
                 else:
-                    raise ValueError(f"unknown kind in replace: {kind!r}")
+                    raise _ImporterContractError(
+                        f"unknown kind in replace: {kind!r}",
+                    )
 
             # ---- RENAMES -----------------------------------------------
             # Insert at new_id, treat as a fresh add for undo purposes.
@@ -409,12 +465,22 @@ def commit_import(
                 new_id = op.get("new_id")
                 content = op.get("content") or {}
                 if not new_id:
-                    raise ValueError(f"{kind} rename missing 'new_id' field")
+                    raise _ImporterContractError(
+                        f"{kind} rename missing 'new_id' field",
+                    )
                 if not old_id:
-                    raise ValueError(f"{kind} rename missing 'old_id' field")
+                    raise _ImporterContractError(
+                        f"{kind} rename missing 'old_id' field",
+                    )
+                # Content carries the renamed entity; `name` must be
+                # present (id field is irrelevant — we use new_id).
+                if not content.get("name"):
+                    raise _ImporterContractError(
+                        f"{kind} rename missing 'name' field in content",
+                    )
                 if kind == "bundle":
                     if _bundle_exists(conn, new_id):
-                        raise sqlite3.IntegrityError(
+                        raise _ImporterContractError(
                             f"bundle new_id collision on rename: {new_id!r}",
                         )
                     _insert_bundle(conn, content, target_id=new_id)
@@ -422,14 +488,16 @@ def commit_import(
                     rename_map[old_id] = new_id
                 elif _is_module_kind(kind or ""):
                     if _module_exists(conn, new_id):
-                        raise sqlite3.IntegrityError(
+                        raise _ImporterContractError(
                             f"module new_id collision on rename: {new_id!r}",
                         )
                     _insert_module(conn, kind, content, target_id=new_id)  # type: ignore[arg-type]
                     imported_records.append({"kind": kind, "id": new_id})  # type: ignore[dict-item]
                     rename_map[old_id] = new_id
                 else:
-                    raise ValueError(f"unknown kind in rename: {kind!r}")
+                    raise _ImporterContractError(
+                        f"unknown kind in rename: {kind!r}",
+                    )
 
             # ---- UNDO ROW ----------------------------------------------
             undo_id = _gen_undo_id()
@@ -445,10 +513,21 @@ def commit_import(
                     json.dumps(rename_map),
                 ),
             )
-    except (sqlite3.IntegrityError, sqlite3.DatabaseError, ValueError) as exc:
+    except _ImporterContractError as exc:
         # `with conn:` already rolled back on exception. Return the
-        # error envelope the wp_api layer (Task 14) expects.
+        # importer-side contract message verbatim — we wrote it, it's
+        # safe.
         return {"ok": False, "error": str(exc)}
+    except (sqlite3.IntegrityError, sqlite3.DatabaseError) as exc:
+        # Raw sqlite error — don't leak column/constraint internals.
+        # The pre-checks above (`_module_exists`, `_bundle_exists`,
+        # `_require_entity_fields`) cover every contract-level
+        # violation we expect; reaching here means the DB rejected
+        # the write for a lower-level reason (e.g. FK, NOT NULL,
+        # corruption). Log the real cause for ops; return a generic
+        # envelope to the caller.
+        logger.warning("import commit failed at DB layer: %s", exc)
+        return {"ok": False, "error": "database integrity violation"}
 
     return {
         "ok": True,
@@ -551,7 +630,7 @@ def undo_import(
                         ),
                     )
                 else:
-                    raise ValueError(
+                    raise _ImporterContractError(
                         f"unknown kind {kind!r} in undo snapshot",
                     )
 
@@ -573,7 +652,7 @@ def undo_import(
                         "DELETE FROM modules WHERE id = ?;", (rec_id,),
                     )
                 else:
-                    raise ValueError(
+                    raise _ImporterContractError(
                         f"unknown kind {kind!r} in imported_records",
                     )
 
@@ -581,7 +660,18 @@ def undo_import(
             conn.execute(
                 "DELETE FROM import_undo WHERE id = ?;", (undo_id,),
             )
-    except (sqlite3.DatabaseError, ValueError, KeyError) as exc:
+    except _ImporterContractError as exc:
         return {"ok": False, "error": str(exc)}
+    except KeyError as exc:
+        # Corrupt undo metadata (missing 'kind'/'id'/'row' keys). Treat
+        # as our contract violation — the undo blob is internal so the
+        # safe message names the missing field without leaking SQL.
+        return {
+            "ok": False,
+            "error": f"corrupt undo metadata: missing key {exc!s}",
+        }
+    except sqlite3.DatabaseError as exc:
+        logger.warning("undo failed at DB layer: %s", exc)
+        return {"ok": False, "error": "database integrity violation"}
 
     return {"ok": True}

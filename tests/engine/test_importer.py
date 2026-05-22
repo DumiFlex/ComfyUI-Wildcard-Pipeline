@@ -356,6 +356,26 @@ def test_commit_rolls_back_on_error(wp_db):
     assert rows["n"] == 0
 
 
+def test_commit_returns_error_on_missing_required_field(wp_db):
+    """A malformed add (id present, name absent) must return an error
+    envelope rather than raising KeyError. The contract is 'never raise
+    — return error envelope on contract violations.'"""
+    payload = {
+        "adds": [{"kind": "wildcard", "entity": {"id": "abcd1234"}}],
+        "replaces": [], "renames": [],
+    }
+    # Should NOT raise — even though `entity["name"]` would KeyError on
+    # bracket access in `_insert_module`, the pre-check turns it into a
+    # clean error envelope.
+    result = commit_import(wp_db, payload)
+    assert result["ok"] is False
+    assert "name" in result["error"].lower()
+
+    # No undo entry created.
+    rows = wp_db.execute("SELECT COUNT(*) AS n FROM import_undo;").fetchone()
+    assert rows["n"] == 0
+
+
 # ---------------------------------------------------------------------------
 # undo
 # ---------------------------------------------------------------------------
