@@ -16,11 +16,11 @@ function makePayload(parts: Partial<RawPayload>): RawPayload {
 }
 
 describe("buildDepGraph", () => {
-  it("captures wildcard @{uuid} refs in option values as outgoing edges", () => {
+  it("captures wildcard @{id} refs in option values as outgoing edges", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "11111111", name: "x", options: [{ value: "see @{22222222} now", weight: 1 }], tags: [] },
-        { uuid: "22222222", name: "y", options: [], tags: [] },
+        { id: "11111111", name: "x", options: [{ value: "see @{22222222} now", weight: 1 }], tags: [] },
+        { id: "22222222", name: "y", options: [], tags: [] },
       ],
     });
     const graph = buildDepGraph(payload);
@@ -31,8 +31,8 @@ describe("buildDepGraph", () => {
   it("captures bundle children inner-bundle refs", () => {
     const payload = makePayload({
       bundles: [
-        { uuid: "bbbb1111", name: "outer", children: [{ uuid: "bbbb2222", type: "bundle" }] },
-        { uuid: "bbbb2222", name: "inner", children: [] },
+        { id: "bbbb1111", name: "outer", children: [{ id: "bbbb2222", type: "bundle" }] },
+        { id: "bbbb2222", name: "inner", children: [] },
       ],
     });
     const graph = buildDepGraph(payload);
@@ -42,16 +42,21 @@ describe("buildDepGraph", () => {
   it("ignores bundle children with non-bundle type", () => {
     const payload = makePayload({
       bundles: [
-        { uuid: "bbbb1111", name: "x", children: [{ uuid: "ddddffff", type: "module" }] },
+        { id: "bbbb1111", name: "x", children: [{ id: "ddddffff", type: "module" }] },
       ],
     });
     const graph = buildDepGraph(payload);
     expect(graph["bbbb1111"]).not.toContain("ddddffff");
   });
 
-  it("captures constraint source + target as outgoing edges", () => {
+  it("captures constraint source + target (nested under payload) as outgoing edges", () => {
     const payload = makePayload({
-      constraints: [{ uuid: "cccc1111", source_uuid: "eeee1111", target_uuid: "eeee2222", op: "equals", value: "x" }],
+      constraints: [{
+        id: "cccc1111",
+        type: "constraint",
+        name: "c",
+        payload: { source_wildcard_id: "eeee1111", target_wildcard_id: "eeee2222" },
+      }],
     });
     const graph = buildDepGraph(payload);
     expect(graph["cccc1111"]).toEqual(expect.arrayContaining(["eeee1111", "eeee2222"]));
@@ -59,7 +64,7 @@ describe("buildDepGraph", () => {
 
   it("fixed_values have empty edge list", () => {
     const payload = makePayload({
-      fixed_values: [{ uuid: "eeee1111", name: "v1", value: "x", tags: [] }],
+      fixed_values: [{ id: "eeee1111", name: "v1", value: "x", tags: [] }],
     });
     const graph = buildDepGraph(payload);
     expect(graph["eeee1111"]).toEqual([]);
@@ -67,7 +72,7 @@ describe("buildDepGraph", () => {
 
   it("combines have empty edge list", () => {
     const payload = makePayload({
-      combines: [{ uuid: "cccc1112", name: "cb1", template: "hello $x", tags: [] }],
+      combines: [{ id: "cccc1112", name: "cb1", template: "hello $x", tags: [] }],
     });
     const graph = buildDepGraph(payload);
     expect(graph["cccc1112"]).toEqual([]);
@@ -75,7 +80,7 @@ describe("buildDepGraph", () => {
 
   it("derivations have empty edge list", () => {
     const payload = makePayload({
-      derivations: [{ uuid: "dddd1113", name: "dr1", tags: [] }],
+      derivations: [{ id: "dddd1113", name: "dr1", tags: [] }],
     });
     const graph = buildDepGraph(payload);
     expect(graph["dddd1113"]).toEqual([]);
@@ -83,16 +88,16 @@ describe("buildDepGraph", () => {
 
   it("categories have empty edge list", () => {
     const payload = makePayload({
-      categories: [{ uuid: "cat11111", name: "palette" }],
+      categories: [{ id: "cat11111", name: "palette" }],
     });
     const graph = buildDepGraph(payload);
     expect(graph["cat11111"]).toEqual([]);
   });
 
-  it("dedupes multiple refs to same UUID in same wildcard", () => {
+  it("dedupes multiple refs to same id in same wildcard", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "11111111", name: "x", options: [
+        { id: "11111111", name: "x", options: [
           { value: "@{22222222} and @{22222222}", weight: 1 },
         ], tags: [] },
       ],
@@ -106,9 +111,9 @@ describe("transitiveClosure", () => {
   it("walks outgoing refs to fixed point", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "aaaaaaaa", name: "a", options: [{ value: "@{bbbbbbbb}", weight: 1 }], tags: [] },
-        { uuid: "bbbbbbbb", name: "b", options: [{ value: "@{cccccccc}", weight: 1 }], tags: [] },
-        { uuid: "cccccccc", name: "c", options: [], tags: [] },
+        { id: "aaaaaaaa", name: "a", options: [{ value: "@{bbbbbbbb}", weight: 1 }], tags: [] },
+        { id: "bbbbbbbb", name: "b", options: [{ value: "@{cccccccc}", weight: 1 }], tags: [] },
+        { id: "cccccccc", name: "c", options: [], tags: [] },
       ],
     });
     const closure = transitiveClosure(payload, new Set(["aaaaaaaa"]));
@@ -118,8 +123,8 @@ describe("transitiveClosure", () => {
   it("handles cycles without infinite loop", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "aaaaaaaa", name: "a", options: [{ value: "@{bbbbbbbb}", weight: 1 }], tags: [] },
-        { uuid: "bbbbbbbb", name: "b", options: [{ value: "@{aaaaaaaa}", weight: 1 }], tags: [] },
+        { id: "aaaaaaaa", name: "a", options: [{ value: "@{bbbbbbbb}", weight: 1 }], tags: [] },
+        { id: "bbbbbbbb", name: "b", options: [{ value: "@{aaaaaaaa}", weight: 1 }], tags: [] },
       ],
     });
     const closure = transitiveClosure(payload, new Set(["aaaaaaaa"]));
@@ -128,10 +133,15 @@ describe("transitiveClosure", () => {
 
   it("does not include reverse deps (constraints referencing a selected fixed_value)", () => {
     const payload = makePayload({
-      constraints: [{ uuid: "cccc1111", source_uuid: "eeee1111", target_uuid: "eeee2222", op: "equals", value: "x" }],
+      constraints: [{
+        id: "cccc1111",
+        type: "constraint",
+        name: "c",
+        payload: { source_wildcard_id: "eeee1111", target_wildcard_id: "eeee2222" },
+      }],
       fixed_values: [
-        { uuid: "eeee1111", name: "v1", value: "", tags: [] },
-        { uuid: "eeee2222", name: "v2", value: "", tags: [] },
+        { id: "eeee1111", name: "v1", value: "", tags: [] },
+        { id: "eeee2222", name: "v2", value: "", tags: [] },
       ],
     });
     const closure = transitiveClosure(payload, new Set(["eeee1111"]));
@@ -140,7 +150,7 @@ describe("transitiveClosure", () => {
 
   it("empty seed returns empty closure", () => {
     const payload = makePayload({
-      wildcards: [{ uuid: "aaaaaaaa", name: "a", options: [], tags: [] }],
+      wildcards: [{ id: "aaaaaaaa", name: "a", options: [], tags: [] }],
     });
     expect(transitiveClosure(payload, new Set())).toEqual(new Set());
   });
@@ -150,8 +160,18 @@ describe("constraintsBothSidesIn", () => {
   it("returns constraints whose source AND target are in selection", () => {
     const payload = makePayload({
       constraints: [
-        { uuid: "cccc1111", source_uuid: "eeee1111", target_uuid: "eeee2222", op: "equals", value: "" },
-        { uuid: "cccc2222", source_uuid: "eeee1111", target_uuid: "eeee3333", op: "equals", value: "" },
+        {
+          id: "cccc1111",
+          type: "constraint",
+          name: "c1",
+          payload: { source_wildcard_id: "eeee1111", target_wildcard_id: "eeee2222" },
+        },
+        {
+          id: "cccc2222",
+          type: "constraint",
+          name: "c2",
+          payload: { source_wildcard_id: "eeee1111", target_wildcard_id: "eeee3333" },
+        },
       ],
     });
     const result = constraintsBothSidesIn(payload, new Set(["eeee1111", "eeee2222"]));
@@ -160,9 +180,12 @@ describe("constraintsBothSidesIn", () => {
 
   it("returns empty when no constraints have both sides selected", () => {
     const payload = makePayload({
-      constraints: [
-        { uuid: "cccc1111", source_uuid: "eeee1111", target_uuid: "eeee2222", op: "equals", value: "" },
-      ],
+      constraints: [{
+        id: "cccc1111",
+        type: "constraint",
+        name: "c1",
+        payload: { source_wildcard_id: "eeee1111", target_wildcard_id: "eeee2222" },
+      }],
     });
     const result = constraintsBothSidesIn(payload, new Set(["eeee1111"]));
     expect(result).toEqual([]);
@@ -173,7 +196,7 @@ describe("regex strictness", () => {
   it("does NOT match @{nothex} (non-hex char)", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "11111111", name: "x", options: [{ value: "@{nothex01}", weight: 1 }], tags: [] },
+        { id: "11111111", name: "x", options: [{ value: "@{nothex01}", weight: 1 }], tags: [] },
       ],
     });
     const graph = buildDepGraph(payload);
@@ -183,7 +206,7 @@ describe("regex strictness", () => {
   it("does NOT match @{1234567} (7 chars, too short)", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "11111111", name: "x", options: [{ value: "@{1234567}", weight: 1 }], tags: [] },
+        { id: "11111111", name: "x", options: [{ value: "@{1234567}", weight: 1 }], tags: [] },
       ],
     });
     const graph = buildDepGraph(payload);
@@ -193,7 +216,7 @@ describe("regex strictness", () => {
   it("does NOT match @{123456789} (9 chars, too long)", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "11111111", name: "x", options: [{ value: "@{123456789}", weight: 1 }], tags: [] },
+        { id: "11111111", name: "x", options: [{ value: "@{123456789}", weight: 1 }], tags: [] },
       ],
     });
     const graph = buildDepGraph(payload);
@@ -201,10 +224,10 @@ describe("regex strictness", () => {
     expect(graph["11111111"]).toEqual([]);
   });
 
-  it("matches subcategory suffix @{uuid:subcat}", () => {
+  it("matches subcategory suffix @{id:subcat}", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "11111111", name: "x", options: [{ value: "@{aabbccdd:color}", weight: 1 }], tags: [] },
+        { id: "11111111", name: "x", options: [{ value: "@{aabbccdd:color}", weight: 1 }], tags: [] },
       ],
     });
     const graph = buildDepGraph(payload);
@@ -216,9 +239,9 @@ describe("transitiveClosure overload", () => {
   it("accepts a pre-built graph and returns identical result to the payload form", () => {
     const payload = makePayload({
       wildcards: [
-        { uuid: "11111111", name: "a", options: [{ value: "@{22222222}", weight: 1 }], tags: [] },
-        { uuid: "22222222", name: "b", options: [{ value: "@{33333333}", weight: 1 }], tags: [] },
-        { uuid: "33333333", name: "c", options: [], tags: [] },
+        { id: "11111111", name: "a", options: [{ value: "@{22222222}", weight: 1 }], tags: [] },
+        { id: "22222222", name: "b", options: [{ value: "@{33333333}", weight: 1 }], tags: [] },
+        { id: "33333333", name: "c", options: [], tags: [] },
       ],
     });
     const graph = buildDepGraph(payload);
@@ -228,7 +251,7 @@ describe("transitiveClosure overload", () => {
     expect(fromGraph).toEqual(new Set(["11111111", "22222222", "33333333"]));
   });
 
-  it("graph-form does not require all UUIDs to be keys (empty edges treated as no-deps)", () => {
+  it("graph-form does not require all ids to be keys (empty edges treated as no-deps)", () => {
     // Caller may pass a graph derived from a partial payload. Missing keys
     // should behave like empty edge lists (no-deps).
     const graph: Record<string, string[]> = { "11111111": ["22222222"] };

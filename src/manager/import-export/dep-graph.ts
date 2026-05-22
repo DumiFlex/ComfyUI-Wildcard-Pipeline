@@ -1,12 +1,19 @@
 /**
  * Outgoing-direction dependency graph computed from a parsed payload.
  *
- *   - Wildcard option value `@{uuid}` refs → outgoing edge
- *   - Bundle children[].uuid (for bundle-typed children, tier-2 refs) → outgoing edge
- *   - Constraint source_uuid + target_uuid → outgoing edges
+ *   - Wildcard option value `@{id}` refs → outgoing edge
+ *   - Bundle children[].id (for bundle-typed children, tier-2 refs) → outgoing edge
+ *   - Constraint payload.source_wildcard_id + payload.target_wildcard_id → outgoing edges
  *
  * Pure function. No I/O. Used by picker UI for dep-indicator rendering
  * and by the `Select with dependencies` action.
+ *
+ * Entity-key convention: every entity row in the parsed payload carries
+ * its 8-hex short UUID under the `id` field (per migration 004 of the
+ * SQLite schema and `engine/exporter.py`). The `REF_REGEX` name is kept
+ * for historical reasons — it still matches the `@{8hex}` syntax in
+ * option values; the regex's match group is just a hex string, not
+ * field-named.
  */
 
 import type { RawPayload } from "./migrations";
@@ -26,7 +33,7 @@ function extractRefsFromText(text: string): string[] {
 export function buildDepGraph(payload: RawPayload): DepGraph {
   const graph: DepGraph = {};
   for (const w of payload.wildcards) {
-    const wid = (w as { uuid: string }).uuid;
+    const wid = (w as { id: string }).id;
     const edges = new Set<string>();
     const options = (w as { options?: Array<{ value: string }> }).options ?? [];
     for (const opt of options) {
@@ -35,26 +42,29 @@ export function buildDepGraph(payload: RawPayload): DepGraph {
     graph[wid] = [...edges];
   }
   for (const b of payload.bundles) {
-    const bid = (b as { uuid: string }).uuid;
-    const children = (b as { children?: Array<{ uuid: string; type: string }> }).children ?? [];
-    graph[bid] = children.filter((c) => c.type === "bundle").map((c) => c.uuid);
+    const bid = (b as { id: string }).id;
+    const children = (b as { children?: Array<{ id: string; type: string }> }).children ?? [];
+    graph[bid] = children.filter((c) => c.type === "bundle").map((c) => c.id);
   }
   for (const v of payload.fixed_values) {
-    graph[(v as { uuid: string }).uuid] = [];
+    graph[(v as { id: string }).id] = [];
   }
   for (const v of payload.combines) {
-    graph[(v as { uuid: string }).uuid] = [];
+    graph[(v as { id: string }).id] = [];
   }
   for (const v of payload.derivations) {
-    graph[(v as { uuid: string }).uuid] = [];
+    graph[(v as { id: string }).id] = [];
   }
   for (const v of payload.categories) {
-    graph[(v as { uuid: string }).uuid] = [];
+    graph[(v as { id: string }).id] = [];
   }
   for (const c of payload.constraints) {
-    const cid = (c as { uuid: string }).uuid;
-    const src = (c as { source_uuid?: string }).source_uuid;
-    const tgt = (c as { target_uuid?: string }).target_uuid;
+    const cid = (c as { id: string }).id;
+    // Constraint source/target ids live under `payload` per the
+    // `engine.modules.constraint` schema (see constraint_handler.py:126).
+    const cp = (c as { payload?: { source_wildcard_id?: string; target_wildcard_id?: string } }).payload;
+    const src = cp?.source_wildcard_id;
+    const tgt = cp?.target_wildcard_id;
     graph[cid] = [src, tgt].filter((x): x is string => Boolean(x));
   }
   return graph;
@@ -96,9 +106,10 @@ export function transitiveClosure(
 export function constraintsBothSidesIn(payload: RawPayload, selection: Set<string>): string[] {
   const matches: string[] = [];
   for (const c of payload.constraints) {
-    const cid = (c as { uuid: string }).uuid;
-    const src = (c as { source_uuid?: string }).source_uuid;
-    const tgt = (c as { target_uuid?: string }).target_uuid;
+    const cid = (c as { id: string }).id;
+    const cp = (c as { payload?: { source_wildcard_id?: string; target_wildcard_id?: string } }).payload;
+    const src = cp?.source_wildcard_id;
+    const tgt = cp?.target_wildcard_id;
     if (src && tgt && selection.has(src) && selection.has(tgt)) matches.push(cid);
   }
   return matches;

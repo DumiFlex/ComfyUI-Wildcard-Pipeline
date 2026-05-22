@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { detectCollisions, type LibraryRow } from "../collision";
 import { moduleFingerprint, type ModuleRow } from "../fingerprint";
 
-function modRow(parts: Partial<ModuleRow> & { uuid: string }): ModuleRow & { uuid: string } {
+function modRow(parts: Partial<ModuleRow> & { id: string }): ModuleRow & { id: string } {
   return {
     type: "wildcard",
     name: "x",
@@ -14,15 +14,15 @@ function modRow(parts: Partial<ModuleRow> & { uuid: string }): ModuleRow & { uui
 }
 
 describe("detectCollisions", () => {
-  it("returns no-collision when UUID not in library", () => {
-    const incoming = [modRow({ uuid: "11111111" })];
+  it("returns no-collision when id not in library", () => {
+    const incoming = [modRow({ id: "11111111" })];
     const library = new Map<string, LibraryRow>();
     const result = detectCollisions(incoming, library);
     expect(result["11111111"]).toBe("no-collision");
   });
 
-  it("returns silent-skip when UUID matches + fingerprint matches", () => {
-    const incoming = modRow({ uuid: "11111111", name: "color", payload_hash: "abc" });
+  it("returns silent-skip when id matches + fingerprint matches", () => {
+    const incoming = modRow({ id: "11111111", name: "color", payload_hash: "abc" });
     const fp = moduleFingerprint(incoming);
     const library = new Map<string, LibraryRow>([
       ["11111111", { snapshot_fingerprint: fp }],
@@ -31,8 +31,8 @@ describe("detectCollisions", () => {
     expect(result["11111111"]).toBe("silent-skip");
   });
 
-  it("returns conflict when UUID matches + fingerprint differs", () => {
-    const incoming = [modRow({ uuid: "11111111", name: "color" })];
+  it("returns conflict when id matches + fingerprint differs", () => {
+    const incoming = [modRow({ id: "11111111", name: "color" })];
     const library = new Map<string, LibraryRow>([
       ["11111111", { snapshot_fingerprint: "deadbeef" }],
     ]);
@@ -41,7 +41,7 @@ describe("detectCollisions", () => {
   });
 
   it("returns conflict when library has empty fingerprint (defensive)", () => {
-    const incoming = [modRow({ uuid: "11111111" })];
+    const incoming = [modRow({ id: "11111111" })];
     const library = new Map<string, LibraryRow>([
       ["11111111", { snapshot_fingerprint: "" }],
     ]);
@@ -50,16 +50,16 @@ describe("detectCollisions", () => {
   });
 
   it("returns conflict when library row has no snapshot_fingerprint field at all", () => {
-    const incoming = [modRow({ uuid: "11111111" })];
+    const incoming = [modRow({ id: "11111111" })];
     const library = new Map<string, LibraryRow>([["11111111", {}]]);
     const result = detectCollisions(incoming, library);
     expect(result["11111111"]).toBe("conflict");
   });
 
   it("classifies multiple incoming modules independently", () => {
-    const a = modRow({ uuid: "aaaaaaaa", name: "a", payload_hash: "ha" });
-    const b = modRow({ uuid: "bbbbbbbb", name: "b", payload_hash: "hb" });
-    const c = modRow({ uuid: "cccccccc", name: "c", payload_hash: "hc" });
+    const a = modRow({ id: "aaaaaaaa", name: "a", payload_hash: "ha" });
+    const b = modRow({ id: "bbbbbbbb", name: "b", payload_hash: "hb" });
+    const c = modRow({ id: "cccccccc", name: "c", payload_hash: "hc" });
     const library = new Map<string, LibraryRow>([
       ["aaaaaaaa", { snapshot_fingerprint: moduleFingerprint(a) }],
       ["bbbbbbbb", { snapshot_fingerprint: "different" }],
@@ -71,7 +71,7 @@ describe("detectCollisions", () => {
   });
 
   it("treats different module types uniformly via moduleFingerprint", () => {
-    const constraint = modRow({ uuid: "ccccdddd", type: "constraint", name: "c1" });
+    const constraint = modRow({ id: "ccccdddd", type: "constraint", name: "c1" });
     const fp = moduleFingerprint(constraint);
     const library = new Map<string, LibraryRow>([
       ["ccccdddd", { snapshot_fingerprint: fp }],

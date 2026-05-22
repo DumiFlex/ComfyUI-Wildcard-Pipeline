@@ -16,7 +16,11 @@ import { moduleFingerprint, type ModuleRow } from "./fingerprint";
 export type WarningField = "bundle" | "wildcard" | "fixed_value" | "combine" | "derivation" | "constraint" | "category";
 
 export interface IntegrityWarning {
-  uuid: string;
+  /** Short UUID of the entity (the `id` field of the entity row, per
+   *  migration 004 of the SQLite schema). Empty string when the row is
+   *  missing the field entirely — picker UIs should fall back to index
+   *  routing in that case. */
+  id: string;
   field: WarningField;
   reason: string;
 }
@@ -63,7 +67,7 @@ function verifyOne(entity: Record<string, unknown>, kind: WarningField): Integri
   const recomputed = moduleFingerprint(entity as unknown as ModuleRow);
   if (recomputed === stamped) return null;
   return {
-    uuid: typeof entity.uuid === "string" ? entity.uuid : "",  // TODO(task-7): pass index fallback when picker needs routing
+    id: typeof entity.id === "string" ? entity.id : "",  // TODO(task-7): pass index fallback when picker needs routing
     field: kind,
     reason: `${kind} fingerprint mismatch (stamped ${stamped}, recomputed ${recomputed})`,
   };

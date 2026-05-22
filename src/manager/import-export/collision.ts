@@ -22,24 +22,24 @@ export interface LibraryRow {
 }
 
 export function detectCollisions(
-  incoming: Array<ModuleRow & { uuid: string }>,
+  incoming: Array<ModuleRow & { id: string }>,
   library: Map<string, LibraryRow>,
 ): Record<string, CollisionState> {
   const result: Record<string, CollisionState> = {};
   for (const entity of incoming) {
-    const uuid = entity.uuid;
-    const libRow = library.get(uuid);
+    const id = entity.id;
+    const libRow = library.get(id);
     if (!libRow) {
-      result[uuid] = "no-collision";
+      result[id] = "no-collision";
       continue;
     }
     const libFp = libRow.snapshot_fingerprint;
     if (!libFp) {
-      result[uuid] = "conflict";
+      result[id] = "conflict";
       continue;
     }
     const incomingFp = moduleFingerprint(entity);
-    result[uuid] = incomingFp === libFp ? "silent-skip" : "conflict";
+    result[id] = incomingFp === libFp ? "silent-skip" : "conflict";
   }
   return result;
 }
