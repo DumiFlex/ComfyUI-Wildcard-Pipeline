@@ -1,7 +1,8 @@
 import { mount, flushPromises } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
+import { useResolveWarnings } from "../composables/useResolveWarnings";
 
 describe("RichTextInput.vue", () => {
   it("renders bound value as text+chip atoms inside the host", () => {
@@ -715,5 +716,81 @@ describe("RichTextPreview.vue", () => {
     expect(chips[0].text()).toContain("$person");
     expect(chips[1].text()).toContain("@color");
     expect(chips[1].text()).toContain("warm");
+  });
+});
+
+describe("RichTextInput / RichTextPreview — useResolveWarnings merge", () => {
+  // The store is a module-level singleton — wipe before each case so
+  // a left-over push from a prior test can't poison this suite. Tests
+  // use a unique module_id per case as a belt-and-suspenders.
+  beforeEach(() => {
+    useResolveWarnings().clearAll();
+  });
+
+  it("RichTextInput merges store warnings when moduleId is provided", async () => {
+    useResolveWarnings().push([
+      {
+        type: "broken_ref_on_import", severity: "warn",
+        module_id: "wc_target", source_field: "options[0].value",
+        position: 5, token_index: null, detail: {}, message: "broken",
+      },
+    ]);
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "hello", moduleId: "wc_target", varSuggestions: [] },
+    });
+    await flushPromises();
+    // Warning bucket renders one marker per warning.
+    const markers = wrap.findAll(".wp-rt-warn-marker");
+    expect(markers.length).toBe(1);
+    expect(markers[0]?.attributes("data-warning-position")).toBe("5");
+    wrap.unmount();
+  });
+
+  it("RichTextInput ignores store warnings without moduleId prop", async () => {
+    useResolveWarnings().push([
+      {
+        type: "broken_ref_on_import", severity: "warn",
+        module_id: "wc_target", source_field: "options[0].value",
+        position: 5, token_index: null, detail: {}, message: "broken",
+      },
+    ]);
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "hello", varSuggestions: [] },
+    });
+    await flushPromises();
+    expect(wrap.findAll(".wp-rt-warn-marker").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("RichTextPreview merges store warnings when moduleId is provided", async () => {
+    useResolveWarnings().push([
+      {
+        type: "broken_ref_on_import", severity: "warn",
+        module_id: "wc_p", source_field: "options[0].value",
+        position: 0, token_index: null, detail: {}, message: "preview",
+      },
+    ]);
+    const wrap = mount(RichTextPreview, {
+      props: { modelValue: "x", moduleId: "wc_p" },
+    });
+    await flushPromises();
+    expect(wrap.findAll(".wp-rt-warn-marker").length).toBe(1);
+    wrap.unmount();
+  });
+
+  it("Prop warnings remain when moduleId not set (prop-only path preserved)", async () => {
+    const wrap = mount(RichTextPreview, {
+      props: {
+        modelValue: "y",
+        warnings: [{
+          type: "unknown_ref", severity: "warn",
+          module_id: "other", source_field: "f", position: 0,
+          token_index: null, detail: {}, message: "prop-only",
+        }],
+      },
+    });
+    await flushPromises();
+    expect(wrap.findAll(".wp-rt-warn-marker").length).toBe(1);
+    wrap.unmount();
   });
 });

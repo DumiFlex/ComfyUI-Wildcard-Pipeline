@@ -21,6 +21,7 @@
 import { computed } from "vue";
 import RefChip from "./RefChip.vue";
 import { parse, type Atom } from "./atomicEditorModel";
+import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 
 interface Props {
@@ -36,6 +37,10 @@ interface Props {
   surface?: SurfaceKind;
   /** Warning markers rendered at the trailing edge of the preview. */
   warnings?: ResolveWarning[];
+  /** When set, merges `warnings` with the shared `useResolveWarnings` store
+   *  filtered to `module_id === moduleId`. Mirrors RichTextInput's behavior
+   *  so import-export's post-commit broken-ref warnings show up here too. */
+  moduleId?: string;
   /** When true, resolved ref chips become clickable and emit `ref-click(uuid)`. */
   clickableRefs?: boolean;
 }
@@ -47,8 +52,18 @@ const props = withDefaults(defineProps<Props>(), {
   varSuggestions: () => [],
   surface: "wildcard",
   warnings: () => [],
+  moduleId: undefined,
   clickableRefs: false,
 });
+
+const { forModule: forModuleWarnings } = useResolveWarnings();
+const storeWarnings = computed<ResolveWarning[]>(() =>
+  props.moduleId ? forModuleWarnings(props.moduleId).value : [],
+);
+const effectiveWarnings = computed<ResolveWarning[]>(() => [
+  ...props.warnings,
+  ...storeWarnings.value,
+]);
 
 const emit = defineEmits<{
   "ref-click": [uuid: string];
@@ -105,8 +120,8 @@ function onRefChipClick(atom: Atom): void {
       <span v-else class="wp-rt-text wp-rtp__text">{{ atom.text }}</span>
     </template>
     <span
-      v-for="w in warnings"
-      :key="`${w.position}-${w.severity}`"
+      v-for="w in effectiveWarnings"
+      :key="`${w.position}-${w.severity}-${w.module_id}-${w.source_field}`"
       class="wp-rt-warn-marker"
       :class="`wp-rt-warn-${w.severity}`"
       :data-warning-position="w.position"

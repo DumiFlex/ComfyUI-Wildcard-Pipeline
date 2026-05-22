@@ -30,12 +30,18 @@ import {
 } from "./atomicEditorModel";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
+import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 
 interface Props {
   modelValue: string;
   surface?: SurfaceKind;
   warnings?: ResolveWarning[];
+  /** When set, the editor merges `warnings` with any entries in the
+   *  shared `useResolveWarnings` store filtered by `module_id === moduleId`.
+   *  Lets post-commit broken-ref discovery surface inline without the
+   *  owning view needing to thread the prop through every editor. */
+  moduleId?: string;
   multiline?: boolean;
   rows?: number;
   placeholder?: string;
@@ -60,6 +66,7 @@ const props = withDefaults(defineProps<Props>(), {
   // (combine, derivation, assembler) share the same default semantics.
   surface: "combine",
   warnings: () => [],
+  moduleId: undefined,
   multiline: false,
   rows: 4,
   placeholder: "",
@@ -70,6 +77,17 @@ const props = withDefaults(defineProps<Props>(), {
   ariaLabel: undefined,
   disabled: false,
 });
+
+// Lazy-pull store on first prop access — singleton so doesn't matter
+// when we instantiate. `effectiveWarnings` merges prop + store-filtered.
+const { forModule: forModuleWarnings } = useResolveWarnings();
+const storeWarnings = computed<ResolveWarning[]>(() =>
+  props.moduleId ? forModuleWarnings(props.moduleId).value : [],
+);
+const effectiveWarnings = computed<ResolveWarning[]>(() => [
+  ...props.warnings,
+  ...storeWarnings.value,
+]);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -1455,13 +1473,13 @@ function onHostKeydown(ev: KeyboardEvent): void {
          anchored at the UTF-16 offset corresponding to the warning position.
          `data-warning-position` records the original code-point index for tests. -->
     <div
-      v-if="warnings.length > 0"
+      v-if="effectiveWarnings.length > 0"
       class="wp-rt__warnings"
       aria-hidden="true"
     >
       <span
-        v-for="w in warnings"
-        :key="`${w.position}-${w.severity}`"
+        v-for="w in effectiveWarnings"
+        :key="`${w.position}-${w.severity}-${w.module_id}-${w.source_field}`"
         class="wp-rt-warn-marker"
         :class="`wp-rt-warn-${w.severity}`"
         :data-warning-position="w.position"
