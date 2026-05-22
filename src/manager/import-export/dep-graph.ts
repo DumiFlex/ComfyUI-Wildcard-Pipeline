@@ -37,6 +37,10 @@ export function buildDepGraph(payload: RawPayload): DepGraph {
     const edges = new Set<string>();
     const options = (w as { options?: Array<{ value: string }> }).options ?? [];
     for (const opt of options) {
+      // Guard against malformed payloads where opt.value may be null,
+      // undefined, or non-string. The cast above asserts `string` but does
+      // not enforce it, so skip non-string values defensively.
+      if (typeof opt?.value !== "string") continue;
       for (const ref of extractRefsFromText(opt.value)) edges.add(ref);
     }
     graph[wid] = [...edges];

@@ -592,6 +592,14 @@ function setMode(next: Mode) {
 // and emit a marker the next stage will read.
 
 interface ImportV2State {
+  /**
+   * Stable per-payload id. Used as `:key` on <ImportPicker> so Vue
+   * unmounts + remounts the picker on every payload swap — that resets
+   * the picker's internal `seeded`/`selected` state so a stale selection
+   * from a prior file (which would be an orphan id the server can't
+   * find) can't leak into the Continue emit.
+   */
+  id: string;
   payload: RawPayload;
   migratedCount: number;
   integrityWarnings: IntegrityWarning[];
@@ -605,7 +613,12 @@ function onImportV2PayloadReady(
   migratedCount: number,
   integrityWarnings: IntegrityWarning[],
 ): void {
-  importV2State.value = { payload, migratedCount, integrityWarnings };
+  // Fresh id per payload-ready call so the picker remounts (`:key` change).
+  // `Date.now().toString(36)` matches the codebase's existing id pattern
+  // (see useToast.ts:28, DerivationEditor.vue:134) and avoids depending on
+  // `crypto.randomUUID` — not used elsewhere in this project.
+  const id = `imp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  importV2State.value = { id, payload, migratedCount, integrityWarnings };
   // Reset any prior selection when a new payload lands — the previous
   // ids may not even exist in the new payload.
   importV2Selection.value = null;
@@ -1026,6 +1039,7 @@ watch(
       <ImportTab @payload-ready="onImportV2PayloadReady" />
       <ImportPicker
         v-if="importV2State"
+        :key="importV2State.id"
         :payload="importV2State.payload"
         :migrated-entity-count="importV2State.migratedCount"
         :integrity-warnings="importV2State.integrityWarnings"

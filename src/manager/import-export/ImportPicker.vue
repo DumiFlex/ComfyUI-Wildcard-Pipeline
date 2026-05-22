@@ -222,7 +222,26 @@ function deselectAll(): void {
 
 function emitContinue(): void {
   if (selected.value.size === 0) return;
-  emit("selection-ready", selected.value);
+  // Belt-and-suspenders: even though the parent applies `:key` on
+  // `importV2State.id` to force a full remount across payload swaps
+  // (which by itself resets `seeded` + `selected`), filter the emit
+  // against the current payload's id set so a stale id can NEVER reach
+  // the commit stage. Without this, a regression in the parent's :key
+  // wiring would resurface the orphan-id bug.
+  const validIds = new Set<string>();
+  for (const b of BUCKETS) {
+    for (const entity of entitiesForBucket(b.key)) {
+      if (typeof entity.id === "string" && entity.id.length > 0) {
+        validIds.add(entity.id);
+      }
+    }
+  }
+  const filtered = new Set<string>();
+  for (const id of selected.value) {
+    if (validIds.has(id)) filtered.add(id);
+  }
+  if (filtered.size === 0) return;
+  emit("selection-ready", filtered);
 }
 </script>
 

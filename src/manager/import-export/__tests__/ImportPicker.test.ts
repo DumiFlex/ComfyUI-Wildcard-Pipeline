@@ -272,4 +272,91 @@ describe("ImportPicker.vue", () => {
     const note = wrap.get('[data-test="import-picker-integrity-note"]');
     expect(note.text()).toMatch(/2\s+entities\s+have\s+integrity\s+warnings/i);
   });
+
+  // Defensive-filter test: covers the belt-and-suspenders path inside the
+  // picker that drops stale ids on emit. The primary fix lives in the
+  // parent (ImportExport.vue applies `:key="importV2State.id"` on
+  // <ImportPicker> so Vue unmount + remount on every payload swap,
+  // resetting `seeded` + `selected`). This test exercise the in-picker
+  // safety net by swapping `payload` via setProps (which does NOT trigger
+  // a remount inside an isolated mount) and verifying the orphan id is
+  // filtered out of the emit.
+  it("drops stale selection ids from emit when payload swaps mid-mount", async () => {
+    // Mount with a 1-entity payload — smart-default selects it.
+    const wrap = mount(ImportPicker, {
+      props: {
+        payload: makePayload({
+          wildcards: [{ id: "aaaa1111", name: "x", options: [], tags: [] }],
+        }),
+        migratedEntityCount: 0,
+        integrityWarnings: [] as IntegrityWarning[],
+      },
+    });
+    await flushPromises();
+    // Smart-default should have selected aaaa1111.
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("1 of 1");
+
+    // Swap to a different payload — none of the same ids. The `seeded`
+    // closure-let in ImportPicker prevents the smart-default from
+    // re-running, so the stale aaaa1111 selection persists in this
+    // isolated mount (matching the parent-bug shape before the :key fix).
+    await wrap.setProps({
+      payload: makePayload({
+        wildcards: [{ id: "bbbb2222", name: "y", options: [], tags: [] }],
+      }),
+    });
+    await flushPromises();
+
+    // Continue button should still be enabled (selection.size > 0).
+    const cont = wrap.get('[data-test="import-picker-continue"]');
+    expect(cont.attributes("disabled")).toBeUndefined();
+    await cont.trigger("click");
+    await flushPromises();
+
+    // The defensive emit-filter must have stripped the stale id, leaving
+    // nothing to emit — so selection-ready should NOT have fired.
+    const emitted = wrap.emitted("selection-ready");
+    expect(emitted).toBeFalsy();
+  });
+
+  it("emits selection-ready with only ids present in the current payload", async () => {
+    // Boot with two entities, smart-default leave 0 selected.
+    const wrap = mount(ImportPicker, {
+      props: {
+        payload: makePayload({
+          wildcards: [
+            { id: "aaaa1111", name: "x", options: [], tags: [] },
+            { id: "bbbb2222", name: "y", options: [], tags: [] },
+          ],
+        }),
+        migratedEntityCount: 0,
+        integrityWarnings: [] as IntegrityWarning[],
+      },
+    });
+    await flushPromises();
+    // User picks both.
+    await wrap.get('[data-test="import-picker-row-aaaa1111"] button[role="checkbox"]').trigger("click");
+    await wrap.get('[data-test="import-picker-row-bbbb2222"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("2 of 2");
+
+    // Swap payload mid-mount — keep only one of the previously selected ids.
+    await wrap.setProps({
+      payload: makePayload({
+        wildcards: [{ id: "bbbb2222", name: "y", options: [], tags: [] }],
+      }),
+    });
+    await flushPromises();
+
+    await wrap.get('[data-test="import-picker-continue"]').trigger("click");
+    await flushPromises();
+
+    const emitted = wrap.emitted("selection-ready");
+    expect(emitted).toBeTruthy();
+    const ids = emitted![0]![0] as Set<string>;
+    // Stale id (aaaa1111) filtered out; surviving id passes through.
+    expect(ids.has("aaaa1111")).toBe(false);
+    expect(ids.has("bbbb2222")).toBe(true);
+    expect(ids.size).toBe(1);
+  });
 });
