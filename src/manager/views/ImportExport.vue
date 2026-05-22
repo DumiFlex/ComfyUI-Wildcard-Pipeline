@@ -13,6 +13,7 @@ import { api } from "../api/client";
 import type { BundleRow, CategoryRow, ImportBundle, ModuleRow } from "../api/types";
 import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
+import ImportPicker from "../import-export/ImportPicker.vue";
 import type { RawPayload } from "../import-export/migrations";
 import type { IntegrityWarning } from "../import-export/parse";
 import {
@@ -582,12 +583,13 @@ function setMode(next: Mode) {
   mode.value = next;
 }
 
-// ---------- Import tab (v2 — 7-bucket parse pipeline) ----------
+// ---------- Import tab (v2 — 7-bucket parse + picker pipeline) ----------
 //
-// Task 16 only wires the entry surface (file pick + clipboard paste) to a
-// stash. Task 17 will render the picker over this payload + drive the
-// commit through /wp/api/import/commit. For now we surface a short summary
-// so reviewers can verify the parse-and-emit handshake end-to-end.
+// Task 16 wired the entry surface (file pick + clipboard paste). Task 17
+// renders the picker over the parsed payload and stashes the selection
+// for the commit stage. The commit handshake (POST /wp/api/import/commit)
+// is wired in Task 18 — for now we stop after the user clicks Continue
+// and emit a marker the next stage will read.
 
 interface ImportV2State {
   payload: RawPayload;
@@ -596,20 +598,7 @@ interface ImportV2State {
 }
 
 const importV2State = ref<ImportV2State | null>(null);
-
-const importV2EntityCount = computed<number>(() => {
-  const s = importV2State.value;
-  if (!s) return 0;
-  return (
-    s.payload.bundles.length +
-    s.payload.wildcards.length +
-    s.payload.fixed_values.length +
-    s.payload.combines.length +
-    s.payload.derivations.length +
-    s.payload.constraints.length +
-    s.payload.categories.length
-  );
-});
+const importV2Selection = ref<Set<string> | null>(null);
 
 function onImportV2PayloadReady(
   payload: RawPayload,
@@ -617,10 +606,18 @@ function onImportV2PayloadReady(
   integrityWarnings: IntegrityWarning[],
 ): void {
   importV2State.value = { payload, migratedCount, integrityWarnings };
+  // Reset any prior selection when a new payload lands — the previous
+  // ids may not even exist in the new payload.
+  importV2Selection.value = null;
+}
+
+function onImportV2SelectionReady(ids: Set<string>): void {
+  importV2Selection.value = ids;
 }
 
 function clearImportV2() {
   importV2State.value = null;
+  importV2Selection.value = null;
 }
 
 // Run seed once mount loads data.
@@ -1020,24 +1017,30 @@ watch(
       </div>
     </div>
 
-    <!-- Import tab (v2 — 7-bucket parse + migrate, picker arrives in Task 17) -->
+    <!-- Import tab (v2 — 7-bucket parse + picker; commit handshake lands in Task 18) -->
     <div
       v-else-if="mode === 'import-v2'"
       class="wp-io-import-v2-pane"
       data-test="io-import-v2-pane"
     >
       <ImportTab @payload-ready="onImportV2PayloadReady" />
-      <div
+      <ImportPicker
         v-if="importV2State"
+        :payload="importV2State.payload"
+        :migrated-entity-count="importV2State.migratedCount"
+        :integrity-warnings="importV2State.integrityWarnings"
+        data-test="io-import-v2-picker"
+        @selection-ready="onImportV2SelectionReady"
+      />
+      <div
+        v-if="importV2Selection"
         class="wp-io-import-v2-stash"
         data-test="io-import-v2-stash"
       >
         <p class="wp-io-import-v2-stash__line">
-          Payload ready: {{ importV2EntityCount }}
-          {{ importV2EntityCount === 1 ? "entity" : "entities" }}
-          (migrated {{ importV2State.migratedCount }},
-          {{ importV2State.integrityWarnings.length }} integrity
-          {{ importV2State.integrityWarnings.length === 1 ? "warning" : "warnings" }})
+          Selection ready: {{ importV2Selection.size }}
+          {{ importV2Selection.size === 1 ? "entity" : "entities" }} picked
+          (commit handshake arrives in Task 18).
         </p>
         <Button
           variant="ghost" size="sm" icon="pi-times"
