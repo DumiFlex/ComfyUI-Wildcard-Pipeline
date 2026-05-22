@@ -125,7 +125,7 @@ describe("constraintFingerprint", () => {
 describe("prefix-suffix collision prevention", () => {
   // Without a separator between fields, two entities with different
   // field splits but identical concatenation would hash the same.
-  // The `\n` separator (matching bundle-fingerprint.ts:79) prevents
+  // The `\n` separator (matching src/components/context/bundles/bundle-fingerprint.ts:79) prevents
   // this. These tests lock that contract.
 
   it("wildcard: name 'ab' + var_binding '' differs from name 'a' + var_binding 'b'", () => {
