@@ -12,6 +12,9 @@ import { catChipStyle } from "../utils/catChip";
 import { api } from "../api/client";
 import type { BundleRow, CategoryRow, ImportBundle, ModuleRow } from "../api/types";
 import ExportTab from "../import-export/ExportTab.vue";
+import ImportTab from "../import-export/ImportTab.vue";
+import type { RawPayload } from "../import-export/migrations";
+import type { IntegrityWarning } from "../import-export/parse";
 import {
   buildFilteredBundle,
   bundleSizeBytes,
@@ -32,7 +35,7 @@ import {
   type GroupMeta,
 } from "../utils/bundleSelection";
 
-type Mode = "export" | "export-v2" | "import";
+type Mode = "export" | "export-v2" | "import" | "import-v2";
 
 const toast = useToast();
 
@@ -579,6 +582,47 @@ function setMode(next: Mode) {
   mode.value = next;
 }
 
+// ---------- Import tab (v2 — 7-bucket parse pipeline) ----------
+//
+// Task 16 only wires the entry surface (file pick + clipboard paste) to a
+// stash. Task 17 will render the picker over this payload + drive the
+// commit through /wp/api/import/commit. For now we surface a short summary
+// so reviewers can verify the parse-and-emit handshake end-to-end.
+
+interface ImportV2State {
+  payload: RawPayload;
+  migratedCount: number;
+  integrityWarnings: IntegrityWarning[];
+}
+
+const importV2State = ref<ImportV2State | null>(null);
+
+const importV2EntityCount = computed<number>(() => {
+  const s = importV2State.value;
+  if (!s) return 0;
+  return (
+    s.payload.bundles.length +
+    s.payload.wildcards.length +
+    s.payload.fixed_values.length +
+    s.payload.combines.length +
+    s.payload.derivations.length +
+    s.payload.constraints.length +
+    s.payload.categories.length
+  );
+});
+
+function onImportV2PayloadReady(
+  payload: RawPayload,
+  migratedCount: number,
+  integrityWarnings: IntegrityWarning[],
+): void {
+  importV2State.value = { payload, migratedCount, integrityWarnings };
+}
+
+function clearImportV2() {
+  importV2State.value = null;
+}
+
 // Run seed once mount loads data.
 watch(
   () => seedWatcher.value,
@@ -634,7 +678,16 @@ watch(
         data-test="io-tab-import"
         @click="setMode('import')"
       >
-        <Icon name="pi-upload" /> Import
+        <Icon name="pi-upload" /> Import (legacy)
+      </button>
+      <button
+        type="button" role="tab" class="wp-tab"
+        :data-active="mode === 'import-v2' ? 'true' : 'false'"
+        :aria-selected="mode === 'import-v2'"
+        data-test="io-tab-import-v2"
+        @click="setMode('import-v2')"
+      >
+        <Icon name="pi-upload" /> Import (preview)
       </button>
     </div>
 
@@ -966,6 +1019,33 @@ watch(
         </Card>
       </div>
     </div>
+
+    <!-- Import tab (v2 — 7-bucket parse + migrate, picker arrives in Task 17) -->
+    <div
+      v-else-if="mode === 'import-v2'"
+      class="wp-io-import-v2-pane"
+      data-test="io-import-v2-pane"
+    >
+      <ImportTab @payload-ready="onImportV2PayloadReady" />
+      <div
+        v-if="importV2State"
+        class="wp-io-import-v2-stash"
+        data-test="io-import-v2-stash"
+      >
+        <p class="wp-io-import-v2-stash__line">
+          Payload ready: {{ importV2EntityCount }}
+          {{ importV2EntityCount === 1 ? "entity" : "entities" }}
+          (migrated {{ importV2State.migratedCount }},
+          {{ importV2State.integrityWarnings.length }} integrity
+          {{ importV2State.integrityWarnings.length === 1 ? "warning" : "warnings" }})
+        </p>
+        <Button
+          variant="ghost" size="sm" icon="pi-times"
+          data-test="io-import-v2-clear"
+          @click="clearImportV2"
+        >Clear</Button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1173,5 +1253,26 @@ watch(
   flex-direction: column;
   gap: var(--wp-space-3);
   margin-top: var(--wp-space-5);
+}
+
+.wp-io-import-v2-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-6);
+}
+.wp-io-import-v2-stash {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wp-space-5);
+  padding: var(--wp-space-5);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  font-size: var(--wp-text-sm);
+}
+.wp-io-import-v2-stash__line {
+  margin: 0;
+  color: var(--wp-text-muted);
 }
 </style>
