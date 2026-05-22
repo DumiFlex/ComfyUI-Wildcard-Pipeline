@@ -120,22 +120,72 @@ describe("buildCommitPayload", () => {
     );
   });
 
-  it("rejects category decisions other than add at the type level", () => {
-    const sel: ResolvedSelection = emptySelection();
-    // The picker can only ever produce {kind:"add"} for categories.
-    // Trying to wire a replace decision must fail at compile time.
-    sel.categories = [
-      // @ts-expect-error — categories accept only {kind:"add"}; replace is invalid.
-      { entity: cat("cat_x"), decision: { kind: "replace" } },
-    ];
-    // Runtime: even if someone bypasses the type system, the defensive
-    // dispatch in buildCommitPayload only emits when kind === "add", so
-    // a smuggled-in replace silently drops rather than corrupting the
-    // server contract. Verify the result actually filters it out.
-    const result = buildCommitPayload(sel);
-    expect(result.adds).toHaveLength(0);
-    expect(result.replaces).toHaveLength(0);
-    expect(result.renames).toHaveLength(0);
+  it("throws if category bucket receives a non-add decision (defensive runtime guard)", () => {
+    // The picker can only ever produce {kind:"add"} for categories;
+    // CategoryDecision narrows the type so any other decision must fail
+    // at compile time. Runtime: if the type narrowing is ever loosened
+    // (or someone smuggles in a value via `as any`), the partitioner
+    // must throw rather than silently drop — a silent drop would hide
+    // the bug and the user would see "I clicked replace and nothing
+    // happened" with no diagnostic trail.
+    expect(() =>
+      buildCommitPayload({
+        bundles: [],
+        wildcards: [],
+        fixed_values: [],
+        combines: [],
+        derivations: [],
+        constraints: [],
+        categories: [
+          // @ts-expect-error — runtime guard for if TS narrowing is ever loosened.
+          { entity: cat("cat_x"), decision: { kind: "replace" } },
+        ],
+      }),
+    ).toThrow(/non-add decision/i);
+  });
+
+  it("rename strips source-DB timestamps + version + recomputable hashes from content", () => {
+    // The server's _insert_module / _insert_bundle copy client-supplied
+    // created_at / updated_at / version / snapshot_fingerprint /
+    // payload_hash verbatim and only fall back to now() / recompute
+    // when those fields are absent. The rename path MUST strip them so
+    // the imported row lands with fresh lifecycle metadata — otherwise
+    // newest-first sort breaks and the cached fingerprint is keyed
+    // against the wrong id.
+    const result = buildCommitPayload({
+      bundles: [],
+      wildcards: [
+        {
+          entity: {
+            id: "aabb1111",
+            name: "old",
+            description: "",
+            tags: [],
+            payload: {},
+            payload_hash: "stale",
+            snapshot_fingerprint: "stalefp",
+            version: 17,
+            created_at: "2020-01-01T00:00:00Z",
+            updated_at: "2020-01-02T00:00:00Z",
+          },
+          decision: { kind: "rename", new_id: "ccdd2222", new_name: "renamed" },
+        },
+      ],
+      fixed_values: [],
+      combines: [],
+      derivations: [],
+      constraints: [],
+      categories: [],
+    });
+    expect(result.renames).toHaveLength(1);
+    const content = result.renames[0]!.content as Record<string, unknown>;
+    expect(content.id).toBe("ccdd2222");
+    expect(content.name).toBe("renamed");
+    expect(content).not.toHaveProperty("created_at");
+    expect(content).not.toHaveProperty("updated_at");
+    expect(content).not.toHaveProperty("version");
+    expect(content).not.toHaveProperty("snapshot_fingerprint");
+    expect(content).not.toHaveProperty("payload_hash");
   });
 
   it("returns three empty arrays for an empty selection", () => {

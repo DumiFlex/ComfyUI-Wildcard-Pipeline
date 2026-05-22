@@ -133,18 +133,6 @@ export interface CommitOk {
 }
 
 /**
- * Failure envelope — kept exported for callers that prefer to switch on
- * a discriminated union rather than catch ``ApiError``. The default
- * code path uses exception-based error handling via the shared
- * ``request<T>`` helper in ``api/client.ts``, so ``CommitFail`` only
- * shows up on consumers that explicitly unwrap an ``ApiError``.
- */
-export interface CommitFail {
-  ok: false;
-  error: string;
-}
-
-/**
  * Walk one bucket of resolved entities and append each row to the
  * matching slot in ``out``. The function is intentionally
  * type-flexible on the input ``list`` so the category bucket (with its
@@ -152,12 +140,20 @@ export interface CommitFail {
  * partitioner — TypeScript still rejects replace/rename decisions for
  * categories at the call site because the union is narrowed there.
  *
- * Rename path: the partitioner clones ``entity`` and stamps
- * ``id = new_id`` and ``name = new_name`` onto the clone. This matches
- * what the server expects in ``rename.content`` — the row is inserted
- * under ``new_id`` regardless of whatever ``id`` lived in the original
- * payload, but the engine still reads ``content.name`` for the row's
- * display name so we have to overwrite both fields together.
+ * Rename path: the partitioner clones ``entity``, stamps
+ * ``id = new_id`` and ``name = new_name`` onto the clone, and strips
+ * the server-stamped lifecycle fields (``created_at``, ``updated_at``,
+ * ``version``, ``snapshot_fingerprint``, ``payload_hash``). The server's
+ * insert paths (``_insert_module`` / ``_insert_bundle`` in
+ * ``engine/importer.py``) treat missing fields as "default to now() /
+ * recompute" but copy client-supplied values verbatim — so leaving the
+ * source-DB values in would land an imported row with a stale
+ * ``created_at`` (breaking newest-first sort) and a stale fingerprint
+ * keyed against the wrong id. The ``replace`` branch is unaffected:
+ * ``_update_module`` always bumps ``version`` and stamps
+ * ``updated_at = now()`` regardless of client input. The ``add`` branch
+ * preserves identity by design — the user explicitly opted to insert
+ * under the original id.
  */
 function partition(
   kind: EntityKind,
@@ -173,11 +169,18 @@ function partition(
         out.replaces.push({ kind, id: r.entity.id, new_content: r.entity });
         break;
       case "rename": {
-        const newContent = {
-          ...r.entity,
-          id: r.decision.new_id,
-          name: r.decision.new_name,
-        };
+        const newContent: Record<string, unknown> = { ...r.entity };
+        newContent.id = r.decision.new_id;
+        newContent.name = r.decision.new_name;
+        // Strip lifecycle fields so the server's now() defaults +
+        // fingerprint/hash recomputation kick in. Leaving stale values
+        // would mis-sort the imported row and cache an inappropriate
+        // fingerprint against the freshly-allocated new_id.
+        delete newContent.created_at;
+        delete newContent.updated_at;
+        delete newContent.version;
+        delete newContent.snapshot_fingerprint;
+        delete newContent.payload_hash;
         out.renames.push({
           kind,
           old_id: r.entity.id,
@@ -208,13 +211,19 @@ export function buildCommitPayload(selection: ResolvedSelection): CommitPayload 
   partition("combine", selection.combines, out);
   partition("derivation", selection.derivations, out);
   partition("constraint", selection.constraints, out);
-  // Categories: only "add" is valid (enforced by CategoryDecision). The
-  // discriminant check keeps the production code honest if the type
-  // narrowing is ever loosened.
+  // Categories: only "add" is valid (enforced by CategoryDecision).
+  // Fail loudly if a non-add decision is smuggled past the type system —
+  // silently dropping it would mask a real bug at the picker boundary
+  // and the user would see "I clicked replace/rename and nothing
+  // happened" with no diagnostic trail.
   for (const r of selection.categories) {
-    if (r.decision.kind === "add") {
-      out.adds.push({ kind: "category", entity: r.entity });
+    if (r.decision.kind !== "add") {
+      throw new Error(
+        `category bucket received non-add decision: ${r.decision.kind} ` +
+          `(programmer error — CategoryDecision is narrowed to "add" only)`,
+      );
     }
+    out.adds.push({ kind: "category", entity: r.entity });
   }
   return out;
 }
