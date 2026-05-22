@@ -1,148 +1,75 @@
 import { describe, expect, it } from "vitest";
-import {
-  wildcardFingerprint,
-  variableFingerprint,
-  constraintFingerprint,
-} from "../fingerprint";
+import { moduleFingerprint, type ModuleRow } from "../fingerprint";
 
-describe("wildcardFingerprint", () => {
+function row(parts: Partial<ModuleRow>): ModuleRow {
+  return {
+    type: "wildcard",
+    name: "x",
+    description: "",
+    tags: [],
+    payload_hash: "deadbeef",
+    ...parts,
+  };
+}
+
+describe("moduleFingerprint", () => {
   it("stable across calls with same input", () => {
-    const w = {
-      uuid: "aabbccdd",
-      name: "color",
-      options: [{ value: "red", weight: 1 }],
-      tags: ["color"],
-    };
-    expect(wildcardFingerprint(w)).toBe(wildcardFingerprint(w));
+    const m = row({ name: "color", description: "Basic colors", tags: ["palette", "demo"], payload_hash: "abc123" });
+    expect(moduleFingerprint(m)).toBe(moduleFingerprint(m));
   });
 
-  it("differs when options change", () => {
-    const a = {
-      uuid: "aabbccdd",
-      name: "x",
-      options: [{ value: "red", weight: 1 }],
-      tags: [],
-    };
-    const b = {
-      uuid: "aabbccdd",
-      name: "x",
-      options: [{ value: "blue", weight: 1 }],
-      tags: [],
-    };
-    expect(wildcardFingerprint(a)).not.toBe(wildcardFingerprint(b));
+  it("returns 8 lowercase hex chars", () => {
+    expect(moduleFingerprint(row({}))).toMatch(/^[0-9a-f]{8}$/);
   });
 
-  it("differs when tags change", () => {
-    const a = {
-      uuid: "aabbccdd",
-      name: "x",
-      options: [{ value: "red", weight: 1 }],
-      tags: ["a"],
-    };
-    const b = {
-      uuid: "aabbccdd",
-      name: "x",
-      options: [{ value: "red", weight: 1 }],
-      tags: ["b"],
-    };
-    expect(wildcardFingerprint(a)).not.toBe(wildcardFingerprint(b));
+  it("differs when type changes", () => {
+    expect(moduleFingerprint(row({ type: "wildcard" }))).not.toBe(moduleFingerprint(row({ type: "combine" })));
   });
 
-  it("order-insensitive for tags but order-sensitive for options", () => {
-    const a = {
-      uuid: "x",
-      name: "x",
-      options: [
-        { value: "r", weight: 1 },
-        { value: "b", weight: 1 },
-      ],
-      tags: ["x", "y"],
-    };
-    const b = {
-      uuid: "x",
-      name: "x",
-      options: [
-        { value: "r", weight: 1 },
-        { value: "b", weight: 1 },
-      ],
-      tags: ["y", "x"],
-    };
-    const c = {
-      uuid: "x",
-      name: "x",
-      options: [
-        { value: "b", weight: 1 },
-        { value: "r", weight: 1 },
-      ],
-      tags: ["x", "y"],
-    };
-    expect(wildcardFingerprint(a)).toBe(wildcardFingerprint(b));
-    expect(wildcardFingerprint(a)).not.toBe(wildcardFingerprint(c));
-  });
-});
-
-describe("variableFingerprint", () => {
-  it("stable + sensitive to value", () => {
-    const a = { uuid: "u", name: "v1", value: "foo", tags: [] };
-    const b = { uuid: "u", name: "v1", value: "bar", tags: [] };
-    expect(variableFingerprint(a)).toBe(variableFingerprint(a));
-    expect(variableFingerprint(a)).not.toBe(variableFingerprint(b));
-  });
-});
-
-describe("constraintFingerprint", () => {
-  it("stable + sensitive to op + source + target", () => {
-    const a = {
-      uuid: "u",
-      source_uuid: "s",
-      target_uuid: "t",
-      op: "equals",
-      value: "x",
-    };
-    const b = {
-      uuid: "u",
-      source_uuid: "s",
-      target_uuid: "t",
-      op: "not_equals",
-      value: "x",
-    };
-    expect(constraintFingerprint(a)).toBe(constraintFingerprint(a));
-    expect(constraintFingerprint(a)).not.toBe(constraintFingerprint(b));
+  it("differs when name changes", () => {
+    expect(moduleFingerprint(row({ name: "a" }))).not.toBe(moduleFingerprint(row({ name: "b" })));
   });
 
-  it("returns 8 hex chars", () => {
-    const c = {
-      uuid: "u",
-      source_uuid: "s",
-      target_uuid: "t",
-      op: "exists",
-      value: null,
-    };
-    expect(constraintFingerprint(c)).toMatch(/^[0-9a-f]{8}$/);
+  it("differs when description changes", () => {
+    expect(moduleFingerprint(row({ description: "a" }))).not.toBe(moduleFingerprint(row({ description: "b" })));
+  });
+
+  it("differs when tags differ", () => {
+    expect(moduleFingerprint(row({ tags: ["a"] }))).not.toBe(moduleFingerprint(row({ tags: ["b"] })));
+  });
+
+  it("tags are order-insensitive (set semantics)", () => {
+    expect(moduleFingerprint(row({ tags: ["x", "y"] }))).toBe(moduleFingerprint(row({ tags: ["y", "x"] })));
+  });
+
+  it("differs when payload_hash changes", () => {
+    expect(moduleFingerprint(row({ payload_hash: "abc" }))).not.toBe(moduleFingerprint(row({ payload_hash: "def" })));
+  });
+
+  it("ignores fields not in fingerprint scope (id, category_id, is_favorite, version)", () => {
+    const a = { ...row({}), id: "u1", category_id: "c1", is_favorite: true, version: 1 } as ModuleRow;
+    const b = { ...row({}), id: "u2", category_id: "c2", is_favorite: false, version: 9 } as ModuleRow;
+    expect(moduleFingerprint(a)).toBe(moduleFingerprint(b));
   });
 });
 
 describe("prefix-suffix collision prevention", () => {
-  // Without a separator between fields, two entities with different
-  // field splits but identical concatenation would hash the same.
-  // The `\n` separator (matching src/components/context/bundles/bundle-fingerprint.ts:79) prevents
-  // this. These tests lock that contract.
-
-  it("wildcard: name 'ab' + var_binding '' differs from name 'a' + var_binding 'b'", () => {
-    const a = { uuid: "u", name: "ab", var_binding: "", options: [], tags: [] };
-    const b = { uuid: "u", name: "a", var_binding: "b", options: [], tags: [] };
-    expect(wildcardFingerprint(a)).not.toBe(wildcardFingerprint(b));
+  it("name 'ab' + description '' differs from name 'a' + description 'b'", () => {
+    const a = row({ name: "ab", description: "" });
+    const b = row({ name: "a", description: "b" });
+    expect(moduleFingerprint(a)).not.toBe(moduleFingerprint(b));
   });
+});
 
-  it("variable: name 'ab' + value '' differs from name 'a' + value 'b'", () => {
-    const a = { uuid: "u", name: "ab", value: "", tags: [] };
-    const b = { uuid: "u", name: "a", value: "b", tags: [] };
-    expect(variableFingerprint(a)).not.toBe(variableFingerprint(b));
-  });
-
-  it("constraint: source 'st' + target '' differs from source 's' + target 't'", () => {
-    const a = { uuid: "u", source_uuid: "st", target_uuid: "", op: "equals", value: "x" };
-    const b = { uuid: "u", source_uuid: "s", target_uuid: "t", op: "equals", value: "x" };
-    expect(constraintFingerprint(a)).not.toBe(constraintFingerprint(b));
+describe("cross-language parity", () => {
+  it("matches reference hash for known wildcard module", () => {
+    const m: ModuleRow = {
+      type: "wildcard",
+      name: "color",
+      description: "Basic colors",
+      tags: ["palette", "demo"],
+      payload_hash: "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd",
+    };
+    expect(moduleFingerprint(m)).toBe("ba7a57fa");
   });
 });

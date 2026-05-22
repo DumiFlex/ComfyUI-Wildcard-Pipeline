@@ -1,23 +1,18 @@
-"""Per-entity-type content fingerprints. Mirror of TypeScript
-`src/manager/import-export/fingerprint.ts`. Pure functions — no
-DB access, no ComfyUI imports.
+"""Module content fingerprint. Mirror of TypeScript
+`src/manager/import-export/fingerprint.ts:moduleFingerprint`.
+
+Single unified helper for all 5 module types. Hashes
+[type, name, description, sorted_tags_csv, payload_hash] joined by '\\n'.
+
+Pure function — no DB access, no ComfyUI imports.
 
 Cross-language contract: identical djb2 output for identical input
-strings. Two pitfalls handled here that would otherwise diverge:
-
-1. djb2 iterates UTF-16 code units (matching JS `charCodeAt`),
-   not Python codepoints. Without this, any string with a non-BMP
-   character (emoji, ancient scripts, etc.) hashes differently.
-
-2. Numbers are normalised to JS-string form before serialisation.
-   Python `str(1.0)` is `"1.0"` but JS `${1}` is `"1"` — they refer
-   to the same number value. We coerce integer-valued floats to int
-   so wildcard option weights and constraint values produce the
-   same string on both sides.
+strings. djb2 iterates UTF-16 code units (matching JS `charCodeAt`)
+so any string — including non-BMP characters like emoji — hashes
+identically on both sides.
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 
@@ -37,83 +32,18 @@ def _djb2(s: str) -> str:
     return f"{h:08x}"
 
 
-def _js_num_str(n: Any) -> str:
-    """Format a number the way JavaScript's `${num}` template literal does.
+def module_fingerprint(m: dict[str, Any]) -> str:
+    """Content fingerprint of a module row.
 
-    JS Number is a single type — `1` and `1.0` are identical and both
-    serialise to `"1"`. Python distinguishes `int` from `float`, so we
-    coerce integer-valued floats to their int representation up to the
-    JS exponential-notation boundary at 1e21.
-
-    Booleans are handled first (returning `"true"`/`"false"` to match
-    JS template literal coercion) so the `isinstance(n, float)` branch
-    doesn't accidentally apply to them (bool is a subclass of int in
-    Python).
+    Reads keys: type, name, description, tags (list[str]), payload_hash.
+    Other keys (id, category_id, is_favorite, version, etc.) are ignored
+    by design — they are not content.
     """
-    if isinstance(n, bool):
-        return "true" if n else "false"
-    if isinstance(n, float) and n.is_integer() and abs(n) < 1e21:
-        return str(int(n))
-    return str(n)
-
-
-def _normalise_for_json(value: Any) -> Any:
-    """Normalise a value so json.dumps produces JS JSON.stringify output.
-
-    Specifically: integer-valued floats become int. Other types pass
-    through unchanged. Keeps `JSON.stringify(1.0) === "1"` invariant.
-    """
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, float) and value.is_integer() and abs(value) < 1e21:
-        return int(value)
-    return value
-
-
-def wildcard_fingerprint(w: dict[str, Any]) -> str:
-    """Fingerprint a wildcard entity.
-
-    Covers: name, var_binding, options (order-sensitive), tags (order-insensitive).
-    UUID is identity, not content — excluded.
-    """
-    name = w.get("name", "")
-    var_binding = w.get("var_binding", "") or ""
-    options = w.get("options") or []
-    tags = w.get("tags") or []
-
-    options_str = "|".join(
-        f"{o.get('value', '')}:{_js_num_str(o.get('weight', 1))}"
-        for o in options
-    )
-    tags_str = ",".join(sorted(tags))
-
-    parts = [name, var_binding, options_str, tags_str]
-    return _djb2("\n".join(parts))
-
-
-def variable_fingerprint(v: dict[str, Any]) -> str:
-    """Fingerprint a variable entity.
-
-    Covers: name, value, tags (order-insensitive).
-    UUID is identity, not content — excluded.
-    """
-    name = v.get("name", "")
-    value = v.get("value", "")
-    tags = v.get("tags") or []
-
-    parts = [name, value, ",".join(sorted(tags))]
-    return _djb2("\n".join(parts))
-
-
-def constraint_fingerprint(c: dict[str, Any]) -> str:
-    """Fingerprint a constraint entity.
-
-    Covers: source_uuid, target_uuid, op, value.
-    """
-    source = c.get("source_uuid", "")
-    target = c.get("target_uuid", "")
-    op = c.get("op", "")
-    value = _normalise_for_json(c.get("value", None))
-
-    parts = [source, target, op, json.dumps(value)]
+    parts = [
+        m.get("type", ""),
+        m.get("name", ""),
+        m.get("description", ""),
+        ",".join(sorted(m.get("tags") or [])),
+        m.get("payload_hash", ""),
+    ]
     return _djb2("\n".join(parts))

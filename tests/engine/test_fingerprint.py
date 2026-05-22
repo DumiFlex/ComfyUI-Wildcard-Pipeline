@@ -1,134 +1,100 @@
-from engine._fingerprint import (
-    _djb2,
-    _js_num_str,
-    constraint_fingerprint,
-    variable_fingerprint,
-    wildcard_fingerprint,
-)
+from engine._fingerprint import module_fingerprint
 
 
-def test_wildcard_fingerprint_stable():
-    w = {"name": "color", "options": [{"value": "red", "weight": 1}], "tags": ["color"]}
-    assert wildcard_fingerprint(w) == wildcard_fingerprint(w)
+def _row(**overrides):
+    base = {
+        "type": "wildcard",
+        "name": "x",
+        "description": "",
+        "tags": [],
+        "payload_hash": "deadbeef",
+    }
+    base.update(overrides)
+    return base
 
 
-def test_wildcard_fingerprint_differs_on_option_change():
-    a = {"name": "x", "options": [{"value": "red", "weight": 1}], "tags": []}
-    b = {"name": "x", "options": [{"value": "blue", "weight": 1}], "tags": []}
-    assert wildcard_fingerprint(a) != wildcard_fingerprint(b)
+def test_module_fingerprint_stable():
+    m = _row(
+        name="color", description="Basic colors", tags=["palette", "demo"], payload_hash="abc123"
+    )
+    assert module_fingerprint(m) == module_fingerprint(m)
 
 
-def test_wildcard_fingerprint_tag_order_insensitive():
-    a = {"name": "x", "options": [], "tags": ["a", "b"]}
-    b = {"name": "x", "options": [], "tags": ["b", "a"]}
-    assert wildcard_fingerprint(a) == wildcard_fingerprint(b)
-
-
-def test_variable_fingerprint_value_sensitive():
-    a = {"name": "v1", "value": "foo", "tags": []}
-    b = {"name": "v1", "value": "bar", "tags": []}
-    assert variable_fingerprint(a) != variable_fingerprint(b)
-
-
-def test_constraint_fingerprint_op_sensitive():
-    a = {"source_uuid": "s", "target_uuid": "t", "op": "equals", "value": "x"}
-    b = {"source_uuid": "s", "target_uuid": "t", "op": "not_equals", "value": "x"}
-    assert constraint_fingerprint(a) != constraint_fingerprint(b)
-
-
-def test_constraint_fingerprint_returns_8_hex():
-    c = {"source_uuid": "s", "target_uuid": "t", "op": "exists", "value": None}
-    fp = constraint_fingerprint(c)
+def test_module_fingerprint_returns_8_hex():
+    fp = module_fingerprint(_row())
     assert len(fp) == 8
     int(fp, 16)
 
 
+def test_module_fingerprint_differs_on_type_change():
+    assert module_fingerprint(_row(type="wildcard")) != module_fingerprint(_row(type="combine"))
+
+
+def test_module_fingerprint_differs_on_name_change():
+    assert module_fingerprint(_row(name="a")) != module_fingerprint(_row(name="b"))
+
+
+def test_module_fingerprint_differs_on_description_change():
+    assert module_fingerprint(_row(description="a")) != module_fingerprint(_row(description="b"))
+
+
+def test_module_fingerprint_tag_order_insensitive():
+    assert module_fingerprint(_row(tags=["x", "y"])) == module_fingerprint(_row(tags=["y", "x"]))
+
+
+def test_module_fingerprint_differs_on_payload_hash_change():
+    assert module_fingerprint(_row(payload_hash="abc")) != module_fingerprint(
+        _row(payload_hash="def")
+    )
+
+
+def test_module_fingerprint_ignores_out_of_scope_fields():
+    a = _row()
+    a.update({"id": "u1", "category_id": "c1", "is_favorite": True, "version": 1})
+    b = _row()
+    b.update({"id": "u2", "category_id": "c2", "is_favorite": False, "version": 9})
+    assert module_fingerprint(a) == module_fingerprint(b)
+
+
+def test_module_fingerprint_collision_prevention():
+    """name='ab'+description='' must differ from name='a'+description='b'."""
+    assert module_fingerprint(_row(name="ab", description="")) != module_fingerprint(
+        _row(name="a", description="b")
+    )
+
+
 def test_python_matches_typescript_djb2_for_known_input():
-    """Cross-language invariant: same djb2 output for identical input string."""
+    """Cross-language invariant: same djb2 output for identical input string.
+
+    Verified value: djb2("test") == "7c73af33". Reproducible in TS via:
+        let h=5381; for(let i=0;i<'test'.length;i++) h=((h*33)^'test'.charCodeAt(i))>>>0;
+        console.log(h.toString(16).padStart(8,'0'));
+    """
+    from engine._fingerprint import _djb2
     assert _djb2("test") == "7c73af33"
 
 
-def test_wildcard_collision_prevention():
-    """Without \\n separator, 'ab'+'' would hash identically to 'a'+'b'."""
-    a = {"name": "ab", "var_binding": "", "options": [], "tags": []}
-    b = {"name": "a", "var_binding": "b", "options": [], "tags": []}
-    assert wildcard_fingerprint(a) != wildcard_fingerprint(b)
-
-
-def test_variable_collision_prevention():
-    a = {"name": "ab", "value": "", "tags": []}
-    b = {"name": "a", "value": "b", "tags": []}
-    assert variable_fingerprint(a) != variable_fingerprint(b)
-
-
-def test_constraint_collision_prevention():
-    a = {"source_uuid": "st", "target_uuid": "", "op": "equals", "value": "x"}
-    b = {"source_uuid": "s", "target_uuid": "t", "op": "equals", "value": "x"}
-    assert constraint_fingerprint(a) != constraint_fingerprint(b)
-
-
 def test_djb2_unicode_non_bmp_parity():
-    """Non-BMP characters (emoji etc.) must hash same as JS.
+    """Non-BMP characters (emoji etc.) must hash same as JS charCodeAt.
 
-    Verified TS value:
-        let h=5381; for(let i=0;i<'happy 😀'.length;i++)
-          h=((h*33)^'happy 😀'.charCodeAt(i))>>>0;
-        h.toString(16).padStart(8,'0')  // => '38a7d268'
+    Verified TS value: djb2('happy 😀') == '38a7d268'.
     """
+    from engine._fingerprint import _djb2
     assert _djb2("happy 😀") == "38a7d268"
 
 
-def test_wildcard_fingerprint_float_weight_matches_int():
-    """Integer-valued float weight produces same hash as int weight.
+def test_module_fingerprint_cross_language_parity():
+    """Reference hash computed once via Node and locked in.
 
-    DB rows can deserialise weight as either Python int or float; both
-    must produce the same hash so library MOD detection works regardless
-    of round-trip type.
+    Input parts: ["wildcard","color","Basic colors","demo,palette",
+                  "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd"]
+    joined by "\\n" → djb2 → "ba7a57fa"
     """
-    w_int = {"name": "x", "options": [{"value": "r", "weight": 1}], "tags": []}
-    w_float = {"name": "x", "options": [{"value": "r", "weight": 1.0}], "tags": []}
-    assert wildcard_fingerprint(w_int) == wildcard_fingerprint(w_float)
-
-
-def test_constraint_fingerprint_float_value_matches_int():
-    """Integer-valued float constraint value hashes same as int value.
-
-    Mirror of the wildcard weight invariant: json.dumps would otherwise
-    diverge for Python float vs int even though JS sees one Number type.
-    """
-    c_int = {"source_uuid": "s", "target_uuid": "t", "op": "equals", "value": 5}
-    c_float = {"source_uuid": "s", "target_uuid": "t", "op": "equals", "value": 5.0}
-    assert constraint_fingerprint(c_int) == constraint_fingerprint(c_float)
-
-
-def test_cross_language_parity_wildcard_fixed_hash():
-    """Hard-coded parity check against the TypeScript implementation.
-
-    Computed once via Node:
-        function djb2(s){let h=5381; for(let i=0;i<s.length;i++)
-          h=((h*33)^s.charCodeAt(i))>>>0; return h.toString(16).padStart(8,'0');}
-        const parts=['color','','red:1','a,b'];
-        djb2(parts.join('\\n'));  // => '754cfde5'
-    """
-    w = {
+    m = {
+        "type": "wildcard",
         "name": "color",
-        "var_binding": "",
-        "options": [{"value": "red", "weight": 1}],
-        "tags": ["a", "b"],
+        "description": "Basic colors",
+        "tags": ["palette", "demo"],
+        "payload_hash": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd",
     }
-    assert wildcard_fingerprint(w) == "754cfde5"
-
-
-def test_js_num_str_1e16_boundary():
-    """JS keeps integer notation for `1e16` through `1e20`; only `1e21`+ switches to exponential.
-
-    Verified TS values:
-        String(1e16) -> "10000000000000000"
-        String(1e20) -> "100000000000000000000"
-        String(1e21) -> "1e+21"
-    """
-    assert _js_num_str(1e16) == "10000000000000000"
-    assert _js_num_str(1e20) == "100000000000000000000"
-    # At/above 1e21 we fall through to Python str() which yields "1e+21" —
-    # also matches JS at that boundary.
-    assert _js_num_str(1e21) == "1e+21"
+    assert module_fingerprint(m) == "ba7a57fa"
