@@ -8,6 +8,15 @@ from wp_api import register_routes
 
 
 @pytest.fixture
+def db_conn(tmp_path):
+    """In-memory (well, tmp-file) migrated SQLite connection for repository tests."""
+    conn = get_connection(tmp_path / "repo_test.db")
+    migrate(conn)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
 def wp_app(tmp_path, monkeypatch):
     monkeypatch.setenv("WP_DB_PATH", str(tmp_path / "api.db"))
     conn = get_connection()

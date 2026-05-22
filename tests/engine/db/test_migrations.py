@@ -31,7 +31,7 @@ def test_migrate_records_version(tmp_path):
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
     # ``engine/db/migrations_sql``.
-    assert current_version(conn) == 5
+    assert current_version(conn) == 6
     conn.close()
 
 
@@ -74,8 +74,8 @@ def test_modules_table_has_expected_columns(tmp_path):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(modules);")}
     assert cols == {
         "id", "type", "name", "description", "category_id",
-        "tags", "is_favorite", "payload", "version",
-        "created_at", "updated_at",
+        "tags", "is_favorite", "payload", "snapshot_fingerprint",
+        "version", "created_at", "updated_at",
     }
     conn.close()
 
@@ -227,5 +227,5 @@ def test_004_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 5
+    assert current_version(conn) == 6
     conn.close()

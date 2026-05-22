@@ -12,6 +12,7 @@ import secrets
 import sqlite3
 from typing import Any
 
+from engine._fingerprint import module_fingerprint
 from engine._utils import now_iso as _now
 from engine.modules.snapshot import payload_hash
 
@@ -64,6 +65,7 @@ def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
         "is_favorite": bool(row["is_favorite"]),
         "payload": payload,
         "payload_hash": payload_hash(payload),
+        "snapshot_fingerprint": row["snapshot_fingerprint"],  # NULL for pre-006 rows
         "version": row["version"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -121,17 +123,24 @@ class ModuleRepository:
                     f"id must be a {_ID_HEX_LEN}-char lowercase-hex string"
                 )
             mid = id
+        fp = module_fingerprint({
+            "type": type,
+            "name": name,
+            "description": description,
+            "tags": tags,
+            "payload_hash": payload_hash(payload),
+        })
         now = _now()
         with self._conn:
             self._conn.execute(
                 "INSERT INTO modules("
                 "id, type, name, description, category_id, tags, "
-                "is_favorite, payload, version, created_at, updated_at"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
+                "is_favorite, payload, snapshot_fingerprint, version, created_at, updated_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);",
                 (
                     mid, type, name, description, category_id,
                     json.dumps(tags), int(is_favorite),
-                    json.dumps(payload), now, now,
+                    json.dumps(payload), fp, now, now,
                 ),
             )
         return self.get(mid)
@@ -205,18 +214,26 @@ class ModuleRepository:
                 existing["is_favorite"] if isinstance(is_favorite, _Unset) else is_favorite
             ),
         }
+        new_payload_hash = payload_hash(new["payload"])
+        new_fp = module_fingerprint({
+            "type": existing["type"],
+            "name": new["name"],
+            "description": new["description"],
+            "tags": new["tags"],
+            "payload_hash": new_payload_hash,
+        })
         now = _now()
         with self._conn:
             self._conn.execute(
                 "UPDATE modules SET "
                 "name = ?, description = ?, category_id = ?, tags = ?, "
-                "is_favorite = ?, payload = ?, version = version + 1, "
-                "updated_at = ? "
+                "is_favorite = ?, payload = ?, snapshot_fingerprint = ?, "
+                "version = version + 1, updated_at = ? "
                 "WHERE id = ?;",
                 (
                     new["name"], new["description"], new["category_id"],
                     json.dumps(new["tags"]), int(new["is_favorite"]),
-                    json.dumps(new["payload"]), now, module_id,
+                    json.dumps(new["payload"]), new_fp, now, module_id,
                 ),
             )
         return self.get(module_id)
