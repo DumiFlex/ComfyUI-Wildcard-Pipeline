@@ -1,12 +1,12 @@
 # Importer / Exporter — Implementation Checkpoint
 
 **Branch:** `feat/importer-exporter-v2` (off `main`)
-**Tip commit:** `571b13f` (Task 9: Python exporter)
-**Date checkpointed:** 2026-05-22
+**Tip commit:** `2cc388c` (Task 22: contract docs)
+**Date checkpointed:** 2026-05-23
 **Spec:** `docs/superpowers/specs/2026-05-22-importer-exporter-design.md` (gitignored, per-contributor)
 **Plan:** `docs/superpowers/plans/2026-05-22-importer-exporter.md` (gitignored, per-contributor)
 
-## Status: 9 of 22 plan tasks complete
+## Status: 22 of 22 plan tasks complete ✅
 
 | # | Task | Status | Key commits |
 |---|------|--------|-------------|
@@ -20,29 +20,19 @@
 | 8 | TS collision detection (`detectCollisions`) | ✅ | `7714906` |
 | — | 7-bucket cascade refactor (Tasks 4-8 code) | ✅ | `f5de301` |
 | 9 | Python exporter (`build_export_payload`) | ✅ | `571b13f` |
-
-## Tasks remaining (10-22)
-
-### Phase 4 — Export side
-- **Task 10:** Export endpoint `POST /wp/api/export/build` in `wp_api/import_export.py`
-- **Task 11:** Shared `PickerSection.vue` + `PickerRow.vue` Vue components
-- **Task 12:** `ExportTab.vue` wiring picker + `/wp/api/export/build` + file download
-
-### Phase 5 — Import side
-- **Task 13:** Python importer (`engine/importer.py`) — atomic commit transaction + undo metadata
-- **Task 14:** Import + Undo endpoints in `wp_api/import_export.py`
-- **Task 15:** TS `commit.ts` — build commit payload + POST + integrate with manager undo stack
-- **Task 16:** `ImportTab.vue` — file pick + clipboard paste entry
-- **Task 17:** `ImportPicker.vue` — smart-default selection + inline dep indicators
-- **Task 18:** `ConflictModal.vue` — batch dropdowns + per-item expandable list
-- **Task 19:** `conflict-rows/Tier3ChainViz.vue` — tier-3 chain visualization
-- **Task 20:** `ImportAsNewRename.vue` — inline rename for Import-as-new flow
-
-### Phase 6 — Post-commit + docs
-- **Task 21:** Broken-ref discovery + `RichTextInput` warning surfacing (`broken-refs.ts`)
-- **Task 22:** `docs/import-export-contract.md` — shared TS+Python contract doc
-
-**IMPORTANT:** Task 10+ plan body in `docs/superpowers/plans/2026-05-22-importer-exporter.md` was written with the original 4-bucket assumption (bundles/wildcards/variables/constraints). The actual schema is 7-bucket (bundles/wildcards/fixed_values/combines/derivations/constraints/categories) — `RawPayload` and all helper code reflect this corrected shape. **Each Task 10+ implementer dispatch must override the plan body's 4-bucket shape with the 7-bucket reality.** The exporter (Task 9) already follows this pattern.
+| 10 | Export endpoint `POST /wp/api/export/build` | ✅ | `92a9d65` |
+| 11 | `PickerSection.vue` + `PickerRow.vue` + Checkbox indeterminate | ✅ | `0d37362` → `846e624` → `20d5c14` → `adf2c5f` |
+| 12 | `ExportTab.vue` + `api.importExport.build` + view wire | ✅ | `3f5430e` → `e4c6622` → `fa6351b` (review fixes) |
+| 13 | `engine/importer.py` — atomic commit + snapshot undo | ✅ | `9afdf85` → `eb2dee4` (error envelope tightening) |
+| 14 | `/wp/api/import/commit` + `/wp/api/import/undo` endpoints | ✅ | `53bedab` → `1c8bf31` (structural 404 for missing undo) |
+| 15 | `commit.ts` — 7-bucket partitioner + api.importExport.commit/undo | ✅ | `af90e28` → `d7ceeee` (rename strips stale timestamps + category guard) |
+| 16 | `ImportTab.vue` — file pick + clipboard paste | ✅ | `ea45677` → `b72e60a` (view wire) |
+| 17 | `ImportPicker.vue` + entity `uuid`→`id` alignment fix | ✅ | `9cf37c7` (alignment) → `f69a599` → `53ec3f4` (view wire) → `d8aad84` (payload-swap reset) |
+| 18 | `ConflictModal.vue` — batch + per-item resolution | ✅ | `c893ca3` → `0d80d43` (a11y + type module split) |
+| 19 | `Tier3ChainViz.vue` — non-overridable chain visualization | ✅ | `d923052` |
+| 20 | `ImportAsNewRename.vue` — inline rename flow | ✅ | `8760fac` |
+| 21 | `broken-refs.ts` — post-commit dangling ref discovery | ✅ | `ba4dff7` (warning-store wire-in deferred — see Outstanding) |
+| 22 | `docs/import-export-contract.md` — cross-language contract | ✅ | `2cc388c` |
 
 ## Key design decisions (locked)
 
@@ -77,11 +67,14 @@
 - `POST /wp/api/import/commit` (Task 14) — body: `{ adds, replaces, renames }`. Response: `{ ok, undo_entry_id }`. Atomic transaction.
 - `POST /wp/api/import/undo` (Task 14) — body: `{ undo_entry_id }`. Response: `{ ok }`. Reverses commit.
 
-## Outstanding concerns (deferred to fix when relevant task lands)
+## Outstanding concerns (deferred to follow-up work)
 
 - **Task 5 mutation hazard:** Python `migrate_payload` doesn't deep-copy normalized arrays. Future v1→v2 migrations that mutate list items in-place would corrupt caller's payload. Current v0→v1 uses dict-spread and is safe. Fix when adding any new migration that touches list items.
-- **Task 6 non-string uuid fallback:** `verifyOne` falls back to `""` for `IntegrityWarning.uuid` when entity has non-string uuid. TODO marker at the call site; address when Task 17 picker needs entity-routing for warnings.
-- **Task 8 LibraryRow shape narrow:** only exposes `snapshot_fingerprint`. Task 17 picker will need full entity content for diff display — caller responsibility to wrap/extend `LibraryRow`.
+- **Task 8 LibraryRow shape narrow:** only exposes `snapshot_fingerprint`. ImportPicker (Task 17) already consumes full payload entities; revisit if a future caller needs an intermediate LibraryRow type.
+- **Task 12 "Select with dependencies" deferred:** ExportTab doesn't build the dep-walk against the live library (which is `ModuleRow[]`/etc., not `RawPayload`). Either build a RawPayload-equivalent adapter or extend dep-graph helpers to accept live rows. TODO comment in `ExportTab.vue`.
+- **Task 18 per-item batch override:** ConflictModal supports a single batch default (skip/replace). Per-item override expansion within the batch list is additive — `perItemDecisions` map already accepts `replace`/`rename` decisions, so the UI can be extended without breaking the wire format.
+- **Task 19 chain-toggle a11y:** `Tier3ChainViz` toggle button missing `aria-expanded` + matching `aria-controls` on the chain body. Polish-grade follow-up.
+- **Task 21 commit orchestrator + warning store wire-in:** `broken-refs.ts` ships as a pure function. The actual post-commit handshake — invoking `api.importExport.commit(...)` after picker+conflict resolution, then feeding results through `discoverBrokenRefsForImport(...)` into a manager-level warning store consumed by `RichTextInput`/`RichTextPreview` — requires (1) building the commit orchestrator in ImportExport.vue (not yet wired), and (2) introducing a centralized `ResolveWarning` store (currently `RichTextInput` accepts warnings as props). Both are natural follow-ups, scoped beyond Task 21's primitive.
 
 ## How to resume
 
@@ -95,15 +88,41 @@ In a fresh session:
 
 ## Test suite status at checkpoint
 
-- Vitest: 1896 passed, 3 skipped (all pre-existing skips)
-- Pytest: 476 passed
+- Vitest: 1989 passed, 3 skipped (all pre-existing skips)
+- Pytest: ~509 passed (engine 323 + wp_api 206)
 - Typecheck (`pnpm typecheck` via vue-tsc): clean
 - Pre-commit hooks (lint + typecheck + test + build + size + pytest): green on every commit landed on this branch
-- Bundle size: within budget (entry ≤ 30 KB, total ≤ 316 KB)
+- Bundle size: within budget (entry ≤ 30 KB, total ≤ 316 KB) — manager build holds the new picker/importer UI; extension entry untouched
 
-## Commits since fork from main (count: 14 + 1 refactor + 1 checkpoint pending)
+## Commits since fork from main (count: 42 + 1 refactor + 1 checkpoint)
 
 ```
+2cc388c docs(import-export): canonical cross-language contract reference
+ba4dff7 feat(import-export): broken-ref discovery function + tests
+8760fac feat(import-export): inline rename for import-as-new flow
+d923052 feat(import-export): tier-3 chain visualization in conflict modal
+0d80d43 fix(import-export): conflict modal accessibility + type module split + dead ternary
+c893ca3 feat(import-export): conflict modal with batch + per-item resolution
+d8aad84 fix(import-export): reset picker state on payload swap + guard non-string opt values
+53ec3f4 feat(import-export): wire import picker into ImportExport view
+f69a599 feat(import-export): import picker with smart-default + dep indicators
+9cf37c7 fix(import-export): align entity key reads to 'id' across dep-graph/collision/parse
+b72e60a feat(import-export): wire import-tab into ImportExport view
+ea45677 feat(import-export): import-tab component with file pick + clipboard paste entry
+d7ceeee fix(import-export): strip stale timestamps on rename + fail loudly on smuggled category decisions
+af90e28 feat(import-export): commit + undo client helpers with 7-bucket partitioner
+1c8bf31 refactor(wp_api): structural 404 for missing undo entry
+53bedab feat(wp_api): /wp/api/import/commit + /wp/api/import/undo endpoints
+eb2dee4 fix(engine): tighten importer error envelope + missing-field guards
+9afdf85 feat(engine): atomic import commit + snapshot undo with 7-bucket dispatch
+fa6351b fix(import-export): address task 12 code review feedback
+e4c6622 feat(import-export): export tab component + v2 tab wiring
+3f5430e feat(api): exportBuild client method calling /wp/api/export/build
+adf2c5f refactor(import-export): use typed emit binding in PickerRow
+20d5c14 fix(ui): make checkbox indeterminate state visually distinct
+846e624 feat(import-export): shared PickerSection + PickerRow components
+0d37362 feat(ui): add indeterminate prop to shared Checkbox component
+92a9d65 feat(wp_api): post /wp/api/export/build endpoint
 571b13f feat(engine): export payload builder with 7-bucket grouping + transitive bundle walk
 f5de301 refactor(import-export): expand RawPayload to 7 buckets matching actual schema
 7714906 feat(import-export): uuid + fingerprint collision detector for modules
