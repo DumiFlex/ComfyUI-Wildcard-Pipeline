@@ -8,12 +8,35 @@ import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useToast } from "../composables/useToast";
+import { useResolveWarnings } from "../composables/useResolveWarnings";
 import { catChipStyle } from "../utils/catChip";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import type { BundleRow, CategoryRow, ImportBundle, ModuleRow } from "../api/types";
 import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
 import ImportPicker from "../import-export/ImportPicker.vue";
+import ConflictModal from "../import-export/ConflictModal.vue";
+import { detectCollisions, type LibraryRow } from "../import-export/collision";
+import {
+  buildCommitPayload,
+  type CommitPayload,
+  type Decision,
+  type EntityKind,
+  type ResolvedEntity,
+  type ResolvedCategoryEntity,
+  type ResolvedSelection,
+} from "../import-export/commit";
+import {
+  discoverBrokenRefsForImport,
+  type ImportedConstraint,
+  type ImportedWildcard,
+} from "../import-export/broken-refs";
+import type {
+  BatchConflict,
+  PerItemDecision,
+  PerItemIssue,
+} from "../import-export/conflict-types";
+import type { ModuleRow as FingerprintModuleRow } from "../import-export/fingerprint";
 import type { RawPayload } from "../import-export/migrations";
 import type { IntegrityWarning } from "../import-export/parse";
 import {
@@ -583,13 +606,35 @@ function setMode(next: Mode) {
   mode.value = next;
 }
 
-// ---------- Import tab (v2 — 7-bucket parse + picker pipeline) ----------
+// ---------- Import tab (v2 — 7-bucket parse + picker + commit) ----------
 //
-// Task 16 wired the entry surface (file pick + clipboard paste). Task 17
-// renders the picker over the parsed payload and stashes the selection
-// for the commit stage. The commit handshake (POST /wp/api/import/commit)
-// is wired in Task 18 — for now we stop after the user clicks Continue
-// and emit a marker the next stage will read.
+// Pipeline:
+//   1. `ImportTab` parses a payload → emits `payload-ready`.
+//   2. `ImportPicker` lets the user pick ids → emits `selection-ready`.
+//   3. This view runs the collision + integrity scan:
+//        - For the 5 module buckets, `detectCollisions(incoming, library)`
+//          classifies each picked entity into no-collision / silent-skip
+//          / conflict against the live DB.
+//        - `integrityWarnings` (from parse) is converted into per-item
+//          `fingerprint-mismatch` issues. Tier-3 + broken-inner-ref are
+//          deferred per Item 4 spec (no production-grade detector yet).
+//      Silent-skip ids are dropped from the selection (true dup → no
+//      work for the server, no user-visible action).
+//      If `batchConflicts.length + perItemIssues.length > 0`, the
+//      ConflictModal opens. Otherwise we skip straight to commit.
+//   4. On `commit-ready` (or directly when no modal opens) we build a
+//      `ResolvedSelection`, call `buildCommitPayload`, POST to
+//      `/wp/api/import/commit`.
+//   5. On success: reload library, run `discoverBrokenRefsForImport`
+//      over the just-committed wildcards + constraints, push the
+//      resulting warnings into the shared `useResolveWarnings` store so
+//      Wildcard / Constraint editors surface them inline. The success
+//      toast carries an Undo action that calls
+//      `/wp/api/import/undo` + clears the matching warnings.
+//
+// Strict TS: no `any`, no `as any`. Every payload row is typed as
+// `Record<string, unknown> & { id: string }`; field reads use narrow
+// `typeof` / property guards before treating fields as strings.
 
 interface ImportV2State {
   /**
@@ -605,8 +650,301 @@ interface ImportV2State {
   integrityWarnings: IntegrityWarning[];
 }
 
+/** Picked entity carrying enough context to route the partitioner. */
+interface SelectedEntity {
+  /** Server bucket the entity routes to. */
+  kind: EntityKind;
+  /** Raw row from the payload. Always has `id`; other fields opaque. */
+  entity: Record<string, unknown> & { id: string };
+  /** Collision state. Computed at orchestrator entry from `detectCollisions`. */
+  collision: "no-collision" | "silent-skip" | "conflict";
+}
+
 const importV2State = ref<ImportV2State | null>(null);
 const importV2Selection = ref<Set<string> | null>(null);
+const importV2Committing = ref(false);
+const conflictsOpen = ref(false);
+const batchConflicts = ref<BatchConflict[]>([]);
+const perItemIssues = ref<PerItemIssue[]>([]);
+/** Snapshot of the selection-resolution scan, stashed when the modal
+ *  opens so the commit-ready callback can build a `ResolvedSelection`
+ *  without recomputing collisions against a possibly-stale library. */
+const pendingSelection = ref<SelectedEntity[]>([]);
+
+const resolveWarningsStore = useResolveWarnings();
+
+/**
+ * Map from `EntityKind` discriminant to the corresponding bucket on
+ * `RawPayload`. The 5 module kinds + bundle map to plural array names;
+ * category → "categories". Used by `buildSelectedEntities` to walk
+ * every picked id back to its source bucket. Type narrows to only the
+ * array-typed fields of `RawPayload` (excludes `schema_version: number`)
+ * so the row iterator is statically `Record<string, unknown>[]`.
+ */
+type RawPayloadArrayKey = Exclude<keyof RawPayload, "schema_version">;
+const BUCKET_FOR_KIND: Record<EntityKind, RawPayloadArrayKey> = {
+  bundle: "bundles",
+  wildcard: "wildcards",
+  fixed_values: "fixed_values",
+  combine: "combines",
+  derivation: "derivations",
+  constraint: "constraints",
+  category: "categories",
+};
+
+const ALL_KINDS: EntityKind[] = [
+  "bundle", "wildcard", "fixed_values", "combine",
+  "derivation", "constraint", "category",
+];
+
+/** Module kinds carry `snapshot_fingerprint` and route through the
+ *  collision detector. Bundles + categories don't. */
+const MODULE_KINDS: ReadonlySet<EntityKind> = new Set<EntityKind>([
+  "wildcard", "fixed_values", "combine", "derivation", "constraint",
+]);
+
+/**
+ * Narrow `unknown` to `Record<string, unknown> & { id: string }`. The
+ * picker filters its emit to ids that exist in the payload so this
+ * guard succeeds in practice; defensive in case of stale state.
+ */
+function hasStringId(row: Record<string, unknown>): row is Record<string, unknown> & { id: string } {
+  return typeof row.id === "string" && row.id.length > 0;
+}
+
+/** Build a `LibraryRow` map keyed by id for the collision detector.
+ *  Module + bundle rows both carry an optional `snapshot_fingerprint`
+ *  on the wire (added by migration 006); we lift only that field. */
+function buildLibraryMap(): Map<string, LibraryRow> {
+  const m = new Map<string, LibraryRow>();
+  // Use unknown-cast through index signatures because ModuleRow / BundleRow
+  // do not statically expose snapshot_fingerprint (added post-API typing).
+  for (const row of localModules.value as unknown as Array<Record<string, unknown> & { id: string }>) {
+    const fp = row.snapshot_fingerprint;
+    m.set(row.id, { snapshot_fingerprint: typeof fp === "string" ? fp : undefined });
+  }
+  for (const row of localBundles.value as unknown as Array<Record<string, unknown> & { id: string }>) {
+    const fp = row.snapshot_fingerprint;
+    m.set(row.id, { snapshot_fingerprint: typeof fp === "string" ? fp : undefined });
+  }
+  return m;
+}
+
+/**
+ * Walk every selected id back to its source bucket and collect
+ * `SelectedEntity` records. Ids that point at no bucket (defensive —
+ * picker filtered to valid ids) are silently dropped. Collision state
+ * runs only for module kinds; bundles + categories are always
+ * treated as `no-collision` because the partitioner has no replace
+ * semantic for them in this version.
+ */
+function buildSelectedEntities(
+  payload: RawPayload,
+  selection: Set<string>,
+  library: Map<string, LibraryRow>,
+): SelectedEntity[] {
+  const result: SelectedEntity[] = [];
+  // Group payload entities by id for cheap lookup.
+  type Hit = { kind: EntityKind; entity: Record<string, unknown> & { id: string } };
+  const idIndex = new Map<string, Hit>();
+  for (const kind of ALL_KINDS) {
+    const arr = payload[BUCKET_FOR_KIND[kind]];
+    for (const row of arr) {
+      if (!hasStringId(row)) continue;
+      if (!idIndex.has(row.id)) idIndex.set(row.id, { kind, entity: row });
+    }
+  }
+  // Pre-compute collision states once per kind for the module buckets.
+  const moduleEntitiesByKind: Record<string, Array<FingerprintModuleRow & { id: string }>> = {};
+  for (const id of selection) {
+    const hit = idIndex.get(id);
+    if (!hit) continue;
+    if (!MODULE_KINDS.has(hit.kind)) continue;
+    const list = moduleEntitiesByKind[hit.kind] ?? [];
+    list.push(hit.entity as unknown as FingerprintModuleRow & { id: string });
+    moduleEntitiesByKind[hit.kind] = list;
+  }
+  const collisionByKind: Record<string, Record<string, "no-collision" | "silent-skip" | "conflict">> = {};
+  for (const [kind, rows] of Object.entries(moduleEntitiesByKind)) {
+    collisionByKind[kind] = detectCollisions(rows, library);
+  }
+  for (const id of selection) {
+    const hit = idIndex.get(id);
+    if (!hit) continue;
+    const collision = MODULE_KINDS.has(hit.kind)
+      ? (collisionByKind[hit.kind]?.[id] ?? "no-collision")
+      : "no-collision";
+    result.push({ kind: hit.kind, entity: hit.entity, collision });
+  }
+  return result;
+}
+
+/** Map a payload entity's optional `name` field (always `string` when
+ *  present) onto the `PerItemIssue.entity.name` slot used by the modal. */
+function entityNameOf(entity: Record<string, unknown>): string | undefined {
+  const n = entity.name;
+  return typeof n === "string" ? n : undefined;
+}
+
+/** Convert parse-time `IntegrityWarning`s into per-item issues the
+ *  modal renders + the user must resolve. Only `fingerprint-mismatch`
+ *  is surfaced today (Task 21 parse pipeline emits exactly that). */
+function buildPerItemIssues(
+  selected: SelectedEntity[],
+  integrityWarnings: IntegrityWarning[],
+): PerItemIssue[] {
+  const pickedIds = new Set(selected.map((s) => s.entity.id));
+  const out: PerItemIssue[] = [];
+  for (const w of integrityWarnings) {
+    if (!w.id || !pickedIds.has(w.id)) continue;
+    const hit = selected.find((s) => s.entity.id === w.id);
+    if (!hit) continue;
+    const name = entityNameOf(hit.entity);
+    out.push({
+      kind: "fingerprint-mismatch",
+      entity: name ? { id: w.id, name } : { id: w.id },
+      detail: { reason: w.reason, field: w.field },
+    });
+  }
+  return out;
+}
+
+/** Build `BatchConflict[]` from module-kind entities marked `"conflict"`. */
+function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
+  const out: BatchConflict[] = [];
+  for (const s of selected) {
+    if (s.collision !== "conflict") continue;
+    out.push({ kind: s.kind, id: s.entity.id, entity: s.entity });
+  }
+  return out;
+}
+
+/**
+ * Convert the user's `{batchDefault, perItemDecisions}` resolution into a
+ * `ResolvedSelection` shaped for `buildCommitPayload`. The decision for
+ * each entity follows these rules:
+ *
+ *   - `silent-skip` → never reaches the commit (excluded upstream).
+ *   - Per-item issue resolved → use that decision verbatim:
+ *       * `skip`    → drop
+ *       * `replace` → `{kind: "replace"}`
+ *       * `accept`  → `{kind: "add"}` (proceed despite the warning)
+ *       * `rename`  → `{kind: "rename", new_id, new_name}`
+ *   - Batch conflict resolved by `batchDefault`:
+ *       * `skip`    → drop
+ *       * `replace` → `{kind: "replace"}`
+ *   - Everything else → `{kind: "add"}`
+ *
+ * Categories are routed straight to `categories` with `{kind: "add"}`
+ * (the `CategoryDecision` constraint downstream rejects anything else
+ * at compile time).
+ */
+function partitionSelection(
+  selected: SelectedEntity[],
+  resolution: { batchDefault: "skip" | "replace"; perItemDecisions: Record<string, PerItemDecision> },
+  perItemIds: ReadonlySet<string>,
+): ResolvedSelection {
+  const out: ResolvedSelection = {
+    bundles: [], wildcards: [], fixed_values: [], combines: [],
+    derivations: [], constraints: [], categories: [],
+  };
+  for (const s of selected) {
+    if (s.collision === "silent-skip") continue;
+    let decision: Decision | null;
+    if (perItemIds.has(s.entity.id)) {
+      const pd = resolution.perItemDecisions[s.entity.id];
+      if (!pd || pd.kind === "skip") {
+        decision = null;
+      } else if (pd.kind === "replace") {
+        decision = { kind: "replace" };
+      } else if (pd.kind === "accept") {
+        decision = { kind: "add" };
+      } else if (pd.kind === "rename" && pd.new_id && pd.new_name) {
+        decision = { kind: "rename", new_id: pd.new_id, new_name: pd.new_name };
+      } else {
+        decision = null;
+      }
+    } else if (s.collision === "conflict") {
+      decision = resolution.batchDefault === "replace"
+        ? { kind: "replace" }
+        : null;
+    } else {
+      decision = { kind: "add" };
+    }
+    if (!decision) continue;
+    if (s.kind === "category") {
+      // Type narrowing — categories only support `add`. If we somehow
+      // end up here with replace/rename it's a programmer error (the
+      // earlier branches don't put categories into per-item or batch
+      // conflict buckets), so coerce to add and stash the warning.
+      const decKind: "add" = "add";
+      const entry: ResolvedCategoryEntity = { entity: s.entity, decision: { kind: decKind } };
+      out.categories.push(entry);
+      continue;
+    }
+    const entry: ResolvedEntity = { entity: s.entity, decision };
+    switch (s.kind) {
+      case "bundle":      out.bundles.push(entry); break;
+      case "wildcard":    out.wildcards.push(entry); break;
+      case "fixed_values":out.fixed_values.push(entry); break;
+      case "combine":     out.combines.push(entry); break;
+      case "derivation":  out.derivations.push(entry); break;
+      case "constraint":  out.constraints.push(entry); break;
+    }
+  }
+  return out;
+}
+
+/** Convenience: return the wildcards + constraints from a CommitPayload
+ *  routed into the shape `discoverBrokenRefsForImport` expects. */
+function extractWildcardsAndConstraints(payload: CommitPayload): {
+  wildcards: ImportedWildcard[];
+  constraints: ImportedConstraint[];
+} {
+  const wildcards: ImportedWildcard[] = [];
+  const constraints: ImportedConstraint[] = [];
+  const acceptRow = (kind: EntityKind, row: Record<string, unknown>) => {
+    if (typeof row.id !== "string" || row.id.length === 0) return;
+    if (kind === "wildcard") {
+      const opts = row.options;
+      wildcards.push({
+        id: row.id,
+        options: Array.isArray(opts)
+          ? opts as Array<{ value: unknown; weight?: number }>
+          : undefined,
+      });
+    } else if (kind === "constraint") {
+      const p = row.payload;
+      const payloadObj = p && typeof p === "object" ? p as Record<string, unknown> : null;
+      const src = payloadObj?.source_wildcard_id;
+      const tgt = payloadObj?.target_wildcard_id;
+      constraints.push({
+        id: row.id,
+        payload: {
+          source_wildcard_id: typeof src === "string" ? src : undefined,
+          target_wildcard_id: typeof tgt === "string" ? tgt : undefined,
+        },
+      });
+    }
+  };
+  for (const a of payload.adds) acceptRow(a.kind, a.entity);
+  for (const r of payload.replaces) acceptRow(r.kind, r.new_content);
+  for (const r of payload.renames) acceptRow(r.kind, r.content);
+  return { wildcards, constraints };
+}
+
+/** Collect every id the commit payload will land in the library so the
+ *  broken-ref walker can answer "is this referenced id present?". For
+ *  renames the new id is the live-DB id post-commit. */
+function commitPayloadIds(payload: CommitPayload): Set<string> {
+  const ids = new Set<string>();
+  for (const a of payload.adds) {
+    if (typeof a.entity.id === "string") ids.add(a.entity.id);
+  }
+  for (const r of payload.replaces) ids.add(r.id);
+  for (const r of payload.renames) ids.add(r.new_id);
+  return ids;
+}
 
 function onImportV2PayloadReady(
   payload: RawPayload,
@@ -619,18 +957,137 @@ function onImportV2PayloadReady(
   // `crypto.randomUUID` — not used elsewhere in this project.
   const id = `imp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   importV2State.value = { id, payload, migratedCount, integrityWarnings };
-  // Reset any prior selection when a new payload lands — the previous
-  // ids may not even exist in the new payload.
+  // Reset any prior selection / modal state when a new payload lands.
   importV2Selection.value = null;
+  conflictsOpen.value = false;
+  batchConflicts.value = [];
+  perItemIssues.value = [];
+  pendingSelection.value = [];
 }
 
-function onImportV2SelectionReady(ids: Set<string>): void {
+/**
+ * Picker `selection-ready` handler — kicks off the commit pipeline.
+ * Stashes the selection for diagnostic display, computes collisions
+ * and per-item issues, and either opens the ConflictModal or commits
+ * directly when no conflicts surface.
+ */
+async function onImportV2SelectionReady(ids: Set<string>): Promise<void> {
+  const state = importV2State.value;
+  if (!state) return;
   importV2Selection.value = ids;
+  const library = buildLibraryMap();
+  const selected = buildSelectedEntities(state.payload, ids, library);
+  pendingSelection.value = selected;
+  const bConflicts = buildBatchConflicts(selected);
+  const issues = buildPerItemIssues(selected, state.integrityWarnings);
+  batchConflicts.value = bConflicts;
+  perItemIssues.value = issues;
+  if (bConflicts.length > 0 || issues.length > 0) {
+    conflictsOpen.value = true;
+    return;
+  }
+  // Frictionless path — no conflicts at all → commit with all `add`s.
+  await runCommit({ batchDefault: "skip", perItemDecisions: {} });
+}
+
+function onConflictCommitReady(resolution: {
+  batchDefault: "skip" | "replace";
+  perItemDecisions: Record<string, PerItemDecision>;
+}): void {
+  conflictsOpen.value = false;
+  void runCommit(resolution);
+}
+
+function onConflictCancel(): void {
+  // Leave selection intact so the user can re-trigger after adjusting
+  // upstream state — just close the modal.
+  conflictsOpen.value = false;
+}
+
+async function runCommit(resolution: {
+  batchDefault: "skip" | "replace";
+  perItemDecisions: Record<string, PerItemDecision>;
+}): Promise<void> {
+  const selected = pendingSelection.value;
+  if (selected.length === 0) return;
+  const perItemIds = new Set(perItemIssues.value.map((p) => p.entity.id));
+  const selection = partitionSelection(selected, resolution, perItemIds);
+  const payload = buildCommitPayload(selection);
+  importV2Committing.value = true;
+  try {
+    const result = await api.importExport.commit(payload);
+    // Reload library before we compute broken refs so the just-committed
+    // ids land in the libraryIds set.
+    await loadLibrary();
+    const libraryIds = new Set<string>();
+    for (const m of localModules.value) libraryIds.add(m.id);
+    for (const b of localBundles.value) libraryIds.add(b.id);
+    // Belt-and-suspenders — also add ids from the payload itself in
+    // case the reload is still in-flight when the broken-ref walker
+    // runs (loadLibrary is awaited above; this just hardens against
+    // ordering edge cases).
+    for (const id of commitPayloadIds(payload)) libraryIds.add(id);
+    const { wildcards, constraints } = extractWildcardsAndConstraints(payload);
+    const brokenWarnings = discoverBrokenRefsForImport(wildcards, constraints, libraryIds);
+    if (brokenWarnings.length > 0) {
+      resolveWarningsStore.push(brokenWarnings);
+    }
+    const undoId = result.undo_entry_id;
+    const summary = result.summary ?? {};
+    const added = summary.added ?? payload.adds.length;
+    const replaced = summary.replaced ?? payload.replaces.length;
+    const renamed = summary.renamed ?? payload.renames.length;
+    toast.push({
+      severity: "success",
+      summary: "Import committed",
+      detail: `${added} added · ${replaced} replaced · ${renamed} renamed`,
+      action: { label: "Undo", run: () => undoImport(undoId) },
+      life: 8000,
+    });
+    importV2State.value = null;
+    importV2Selection.value = null;
+    pendingSelection.value = [];
+    batchConflicts.value = [];
+    perItemIssues.value = [];
+  } catch (err) {
+    const message = err instanceof ApiError
+      ? `${err.status}: ${err.message}`
+      : err instanceof Error ? err.message : String(err);
+    toast.push({
+      severity: "error",
+      summary: "Import failed",
+      detail: message,
+      life: 5000,
+    });
+    // Preserve selection + state so the user can retry.
+  } finally {
+    importV2Committing.value = false;
+  }
+}
+
+async function undoImport(undoEntryId: string): Promise<void> {
+  try {
+    await api.importExport.undo(undoEntryId);
+    await loadLibrary();
+    resolveWarningsStore.clearByType("broken_ref_on_import");
+    toast.push({ severity: "info", summary: "Import undone", life: 4000 });
+  } catch (err) {
+    const message = err instanceof ApiError
+      ? `${err.status}: ${err.message}`
+      : err instanceof Error ? err.message : String(err);
+    toast.push({
+      severity: "error", summary: "Undo failed", detail: message, life: 5000,
+    });
+  }
 }
 
 function clearImportV2() {
   importV2State.value = null;
   importV2Selection.value = null;
+  conflictsOpen.value = false;
+  batchConflicts.value = [];
+  perItemIssues.value = [];
+  pendingSelection.value = [];
 }
 
 // Run seed once mount loads data.
@@ -1030,7 +1487,7 @@ watch(
       </div>
     </div>
 
-    <!-- Import tab (v2 — 7-bucket parse + picker; commit handshake lands in Task 18) -->
+    <!-- Import tab (v2 — 7-bucket parse + picker + commit orchestrator) -->
     <div
       v-else-if="mode === 'import-v2'"
       class="wp-io-import-v2-pane"
@@ -1047,21 +1504,34 @@ watch(
         @selection-ready="onImportV2SelectionReady"
       />
       <div
-        v-if="importV2Selection"
+        v-if="importV2Selection && !conflictsOpen"
         class="wp-io-import-v2-stash"
         data-test="io-import-v2-stash"
       >
         <p class="wp-io-import-v2-stash__line">
-          Selection ready: {{ importV2Selection.size }}
-          {{ importV2Selection.size === 1 ? "entity" : "entities" }} picked
-          (commit handshake arrives in Task 18).
+          <template v-if="importV2Committing">
+            Committing {{ importV2Selection.size }}
+            {{ importV2Selection.size === 1 ? "entity" : "entities" }}…
+          </template>
+          <template v-else>
+            {{ importV2Selection.size }}
+            {{ importV2Selection.size === 1 ? "entity" : "entities" }} picked.
+          </template>
         </p>
         <Button
           variant="ghost" size="sm" icon="pi-times"
           data-test="io-import-v2-clear"
+          :disabled="importV2Committing"
           @click="clearImportV2"
         >Clear</Button>
       </div>
+      <ConflictModal
+        v-if="conflictsOpen"
+        :batch-conflicts="batchConflicts"
+        :per-item-issues="perItemIssues"
+        @commit-ready="onConflictCommitReady"
+        @cancel="onConflictCancel"
+      />
     </div>
   </div>
 </template>
