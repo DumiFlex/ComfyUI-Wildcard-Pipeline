@@ -11,7 +11,7 @@
 
 import type { RawPayload } from "./migrations";
 
-const REF_REGEX = /@\{([a-z0-9]+)(?::[^}]*)?\}/g;
+const REF_REGEX = /@\{([0-9a-f]{8})(?::[^}]*)?\}/g;
 
 export type DepGraph = Record<string, string[]>;
 
