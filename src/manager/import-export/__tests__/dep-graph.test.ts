@@ -7,8 +7,11 @@ function makePayload(parts: Partial<RawPayload>): RawPayload {
     schema_version: 1,
     bundles: parts.bundles ?? [],
     wildcards: parts.wildcards ?? [],
-    variables: parts.variables ?? [],
+    fixed_values: parts.fixed_values ?? [],
+    combines: parts.combines ?? [],
+    derivations: parts.derivations ?? [],
     constraints: parts.constraints ?? [],
+    categories: parts.categories ?? [],
   };
 }
 
@@ -54,12 +57,36 @@ describe("buildDepGraph", () => {
     expect(graph["cccc1111"]).toEqual(expect.arrayContaining(["eeee1111", "eeee2222"]));
   });
 
-  it("variables have empty edge list", () => {
+  it("fixed_values have empty edge list", () => {
     const payload = makePayload({
-      variables: [{ uuid: "eeee1111", name: "v1", value: "x", tags: [] }],
+      fixed_values: [{ uuid: "eeee1111", name: "v1", value: "x", tags: [] }],
     });
     const graph = buildDepGraph(payload);
     expect(graph["eeee1111"]).toEqual([]);
+  });
+
+  it("combines have empty edge list", () => {
+    const payload = makePayload({
+      combines: [{ uuid: "cccc1112", name: "cb1", template: "hello $x", tags: [] }],
+    });
+    const graph = buildDepGraph(payload);
+    expect(graph["cccc1112"]).toEqual([]);
+  });
+
+  it("derivations have empty edge list", () => {
+    const payload = makePayload({
+      derivations: [{ uuid: "dddd1113", name: "dr1", tags: [] }],
+    });
+    const graph = buildDepGraph(payload);
+    expect(graph["dddd1113"]).toEqual([]);
+  });
+
+  it("categories have empty edge list", () => {
+    const payload = makePayload({
+      categories: [{ uuid: "cat11111", name: "palette" }],
+    });
+    const graph = buildDepGraph(payload);
+    expect(graph["cat11111"]).toEqual([]);
   });
 
   it("dedupes multiple refs to same UUID in same wildcard", () => {
@@ -99,10 +126,10 @@ describe("transitiveClosure", () => {
     expect(closure).toEqual(new Set(["aaaaaaaa", "bbbbbbbb"]));
   });
 
-  it("does not include reverse deps (constraints referencing a selected variable)", () => {
+  it("does not include reverse deps (constraints referencing a selected fixed_value)", () => {
     const payload = makePayload({
       constraints: [{ uuid: "cccc1111", source_uuid: "eeee1111", target_uuid: "eeee2222", op: "equals", value: "x" }],
-      variables: [
+      fixed_values: [
         { uuid: "eeee1111", name: "v1", value: "", tags: [] },
         { uuid: "eeee2222", name: "v2", value: "", tags: [] },
       ],

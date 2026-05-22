@@ -39,7 +39,16 @@ export function buildDepGraph(payload: RawPayload): DepGraph {
     const children = (b as { children?: Array<{ uuid: string; type: string }> }).children ?? [];
     graph[bid] = children.filter((c) => c.type === "bundle").map((c) => c.uuid);
   }
-  for (const v of payload.variables) {
+  for (const v of payload.fixed_values) {
+    graph[(v as { uuid: string }).uuid] = [];
+  }
+  for (const v of payload.combines) {
+    graph[(v as { uuid: string }).uuid] = [];
+  }
+  for (const v of payload.derivations) {
+    graph[(v as { uuid: string }).uuid] = [];
+  }
+  for (const v of payload.categories) {
     graph[(v as { uuid: string }).uuid] = [];
   }
   for (const c of payload.constraints) {

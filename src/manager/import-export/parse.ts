@@ -13,7 +13,7 @@
 import { migratePayload, type RawPayload } from "./migrations";
 import { moduleFingerprint, type ModuleRow } from "./fingerprint";
 
-export type WarningField = "bundle" | "wildcard" | "variable" | "constraint";
+export type WarningField = "bundle" | "wildcard" | "fixed_value" | "combine" | "derivation" | "constraint" | "category";
 
 export interface IntegrityWarning {
   uuid: string;
@@ -38,13 +38,16 @@ export interface ParseFail {
 
 export type ParseResult = ParseOk | ParseFail;
 
-const ENTITY_ARRAYS = ["bundles", "wildcards", "variables", "constraints"] as const;
+const ENTITY_ARRAYS = ["bundles", "wildcards", "fixed_values", "combines", "derivations", "constraints", "categories"] as const;
 
 const PLURAL_TO_SINGULAR: Record<string, WarningField> = {
   bundles: "bundle",
   wildcards: "wildcard",
-  variables: "variable",
+  fixed_values: "fixed_value",
+  combines: "combine",
+  derivations: "derivation",
   constraints: "constraint",
+  categories: "category",
 };
 
 function verifyOne(entity: Record<string, unknown>, kind: WarningField): IntegrityWarning | null {
@@ -54,6 +57,9 @@ function verifyOne(entity: Record<string, unknown>, kind: WarningField): Integri
   // and are out of scope for this verify pass. The bundle-side MOD flow
   // already covers bundle fingerprint drift via existing infrastructure.
   if (kind === "bundle") return null;
+  // Categories are organizational metadata (name-based merge-or-create).
+  // They carry no snapshot_fingerprint, so fingerprint verification is N/A.
+  if (kind === "category") return null;
   const recomputed = moduleFingerprint(entity as unknown as ModuleRow);
   if (recomputed === stamped) return null;
   return {
@@ -90,8 +96,11 @@ export function parsePayload(raw: string): ParseResult {
   for (const [kindPlural, arr] of [
     ["bundles", migrated.bundles] as const,
     ["wildcards", migrated.wildcards] as const,
-    ["variables", migrated.variables] as const,
+    ["fixed_values", migrated.fixed_values] as const,
+    ["combines", migrated.combines] as const,
+    ["derivations", migrated.derivations] as const,
     ["constraints", migrated.constraints] as const,
+    ["categories", migrated.categories] as const,
   ]) {
     const kindSingular = PLURAL_TO_SINGULAR[kindPlural];
     for (const e of arr) {

@@ -24,8 +24,9 @@ def migrate_payload(payload: dict[str, Any]) -> dict[str, Any]:
     Returns one of:
     - {"ok": True, "migrated": <dict>, "migrated_entity_count": int}
       where migrated_entity_count is the cumulative entity count across
-      all migration steps (total bundles+wildcards+variables+constraints
-      that passed through any step). Matches TS `migratedEntityCount`.
+      all migration steps (total bundles+wildcards+fixed_values+combines+
+      derivations+constraints+categories that passed through any step).
+      Matches TS `migratedEntityCount`.
     - {"ok": False, "reason": str}
     """
     version = payload.get("schema_version")
@@ -40,8 +41,11 @@ def migrate_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "schema_version": version,
         "bundles": payload.get("bundles", []),
         "wildcards": payload.get("wildcards", []),
-        "variables": payload.get("variables", []),
+        "fixed_values": payload.get("fixed_values", []),
+        "combines": payload.get("combines", []),
+        "derivations": payload.get("derivations", []),
         "constraints": payload.get("constraints", []),
+        "categories": payload.get("categories", []),
     }
     migrated_entity_count = 0
     while current["schema_version"] < CURRENT_SCHEMA_VERSION:
@@ -51,7 +55,8 @@ def migrate_payload(payload: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "reason": f"no migration registered for v{ver}"}
         before = sum(
             len(current[k])
-            for k in ("bundles", "wildcards", "variables", "constraints")
+            for k in ("bundles", "wildcards", "fixed_values", "combines",
+                      "derivations", "constraints", "categories")
         )
         current = fn(current)
         migrated_entity_count += before
