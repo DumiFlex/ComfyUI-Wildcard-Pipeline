@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from "vue";
+
 interface Props {
   modelValue: boolean;
   label?: string;
@@ -6,12 +8,31 @@ interface Props {
   error?: boolean;
   id?: string;
   ariaLabel?: string;
+  /**
+   * Tri-state indicator. When true AND `modelValue` is false, the
+   * checkbox renders a horizontal dash instead of a checkmark and
+   * announces `aria-checked="mixed"`. Used by group/select-all
+   * controls where the underlying collection is partially selected.
+   * `modelValue=true` always wins — a fully-checked box never
+   * renders as indeterminate even if the prop is set.
+   */
+  indeterminate?: boolean;
 }
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
 }>();
+
+const showIndeterminate = computed<boolean>(
+  () => !!props.indeterminate && !props.modelValue,
+);
+
+const ariaChecked = computed<"true" | "false" | "mixed">(() => {
+  if (props.modelValue) return "true";
+  if (showIndeterminate.value) return "mixed";
+  return "false";
+});
 
 function toggle() {
   if (props.disabled) return;
@@ -31,7 +52,8 @@ function toggle() {
       type="button"
       class="wp-check"
       :data-checked="modelValue ? 'true' : 'false'"
-      :aria-checked="modelValue"
+      :data-indeterminate="showIndeterminate ? 'true' : 'false'"
+      :aria-checked="ariaChecked"
       :aria-label="ariaLabel ?? label"
       :aria-invalid="error || undefined"
       :disabled="disabled"
@@ -56,6 +78,22 @@ function toggle() {
           stroke-width="1.8"
           stroke-linecap="round"
           stroke-linejoin="round"
+        />
+      </svg>
+      <!-- Indeterminate dash. Same pointer-events override as the
+           checkmark above so the box stays a single click target. -->
+      <svg
+        v-else-if="showIndeterminate"
+        viewBox="0 0 12 12"
+        fill="none"
+        aria-hidden="true"
+        style="display: block; pointer-events: none"
+      >
+        <path
+          d="M3 6h6"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
         />
       </svg>
     </button>
