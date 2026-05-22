@@ -1,5 +1,6 @@
 from engine._fingerprint import (
     _djb2,
+    _js_num_str,
     constraint_fingerprint,
     variable_fingerprint,
     wildcard_fingerprint,
@@ -116,3 +117,18 @@ def test_cross_language_parity_wildcard_fixed_hash():
         "tags": ["a", "b"],
     }
     assert wildcard_fingerprint(w) == "754cfde5"
+
+
+def test_js_num_str_1e16_boundary():
+    """JS keeps integer notation for `1e16` through `1e20`; only `1e21`+ switches to exponential.
+
+    Verified TS values:
+        String(1e16) -> "10000000000000000"
+        String(1e20) -> "100000000000000000000"
+        String(1e21) -> "1e+21"
+    """
+    assert _js_num_str(1e16) == "10000000000000000"
+    assert _js_num_str(1e20) == "100000000000000000000"
+    # At/above 1e21 we fall through to Python str() which yields "1e+21" —
+    # also matches JS at that boundary.
+    assert _js_num_str(1e21) == "1e+21"

@@ -42,14 +42,17 @@ def _js_num_str(n: Any) -> str:
 
     JS Number is a single type — `1` and `1.0` are identical and both
     serialise to `"1"`. Python distinguishes `int` from `float`, so we
-    coerce integer-valued floats to their int representation. Booleans
-    fall through to their natural Python str (since `${true}` → `"true"`
-    in JS, matching `str(True).lower()`; for our use case (weights +
-    constraint scalars) booleans render the same way through this path).
+    coerce integer-valued floats to their int representation up to the
+    JS exponential-notation boundary at 1e21.
+
+    Booleans are handled first (returning `"true"`/`"false"` to match
+    JS template literal coercion) so the `isinstance(n, float)` branch
+    doesn't accidentally apply to them (bool is a subclass of int in
+    Python).
     """
     if isinstance(n, bool):
         return "true" if n else "false"
-    if isinstance(n, float) and n.is_integer() and abs(n) < 1e16:
+    if isinstance(n, float) and n.is_integer() and abs(n) < 1e21:
         return str(int(n))
     return str(n)
 
@@ -62,7 +65,7 @@ def _normalise_for_json(value: Any) -> Any:
     """
     if isinstance(value, bool):
         return value
-    if isinstance(value, float) and value.is_integer() and abs(value) < 1e16:
+    if isinstance(value, float) and value.is_integer() and abs(value) < 1e21:
         return int(value)
     return value
 
