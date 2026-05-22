@@ -66,12 +66,48 @@ def test_constraint_collision_prevention():
     assert constraint_fingerprint(a) != constraint_fingerprint(b)
 
 
-def test_cross_language_parity_wildcard():
-    """Same wildcard input → same fingerprint as TypeScript wildcardFingerprint.
+def test_djb2_unicode_non_bmp_parity():
+    """Non-BMP characters (emoji etc.) must hash same as JS.
 
-    The TS implementation uses parts.join("\\n") on parts:
-      [name, var_binding ?? "", options as 'value:weight' joined by '|', sorted tags joined by ',']
-    Python must produce byte-identical output.
+    Verified TS value:
+        let h=5381; for(let i=0;i<'happy 😀'.length;i++)
+          h=((h*33)^'happy 😀'.charCodeAt(i))>>>0;
+        h.toString(16).padStart(8,'0')  // => '38a7d268'
+    """
+    assert _djb2("happy 😀") == "38a7d268"
+
+
+def test_wildcard_fingerprint_float_weight_matches_int():
+    """Integer-valued float weight produces same hash as int weight.
+
+    DB rows can deserialise weight as either Python int or float; both
+    must produce the same hash so library MOD detection works regardless
+    of round-trip type.
+    """
+    w_int = {"name": "x", "options": [{"value": "r", "weight": 1}], "tags": []}
+    w_float = {"name": "x", "options": [{"value": "r", "weight": 1.0}], "tags": []}
+    assert wildcard_fingerprint(w_int) == wildcard_fingerprint(w_float)
+
+
+def test_constraint_fingerprint_float_value_matches_int():
+    """Integer-valued float constraint value hashes same as int value.
+
+    Mirror of the wildcard weight invariant: json.dumps would otherwise
+    diverge for Python float vs int even though JS sees one Number type.
+    """
+    c_int = {"source_uuid": "s", "target_uuid": "t", "op": "equals", "value": 5}
+    c_float = {"source_uuid": "s", "target_uuid": "t", "op": "equals", "value": 5.0}
+    assert constraint_fingerprint(c_int) == constraint_fingerprint(c_float)
+
+
+def test_cross_language_parity_wildcard_fixed_hash():
+    """Hard-coded parity check against the TypeScript implementation.
+
+    Computed once via Node:
+        function djb2(s){let h=5381; for(let i=0;i<s.length;i++)
+          h=((h*33)^s.charCodeAt(i))>>>0; return h.toString(16).padStart(8,'0');}
+        const parts=['color','','red:1','a,b'];
+        djb2(parts.join('\\n'));  // => '754cfde5'
     """
     w = {
         "name": "color",
@@ -79,11 +115,4 @@ def test_cross_language_parity_wildcard():
         "options": [{"value": "red", "weight": 1}],
         "tags": ["a", "b"],
     }
-    # Run the TS equivalent in your head: parts = ["color", "", "red:1", "a,b"]
-    # joined by "\n" -> "color\n\nred:1\na,b"
-    # djb2("color\n\nred:1\na,b") -> some 8-hex value
-    # We don't assert a specific hex value here (would couple test to djb2 internals);
-    # instead this test just exercises the canonical shape and confirms it's 8-hex.
-    fp = wildcard_fingerprint(w)
-    assert len(fp) == 8
-    int(fp, 16)
+    assert wildcard_fingerprint(w) == "754cfde5"
