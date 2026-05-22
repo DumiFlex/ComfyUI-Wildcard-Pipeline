@@ -13,15 +13,20 @@
 import { migratePayload, type RawPayload } from "./migrations";
 import { moduleFingerprint, type ModuleRow } from "./fingerprint";
 
+export type WarningField = "bundle" | "wildcard" | "variable" | "constraint";
+
 export interface IntegrityWarning {
   uuid: string;
-  field: string;  // e.g., "wildcard" | "bundle" | "variable" | "constraint"
+  field: WarningField;
   reason: string;
 }
 
 export interface ParseOk {
   ok: true;
   payload: RawPayload;
+  /** Total entity count across all migration steps (NOT distinct entity count).
+   *  A 5-entity v0 payload passing through 1 step returns 5; through 2 steps
+   *  returns 10. Matches `migratePayload.migratedEntityCount` semantics. */
   migratedEntityCount: number;
   integrityWarnings: IntegrityWarning[];
 }
@@ -35,7 +40,14 @@ export type ParseResult = ParseOk | ParseFail;
 
 const ENTITY_ARRAYS = ["bundles", "wildcards", "variables", "constraints"] as const;
 
-function verifyOne(entity: Record<string, unknown>, kind: string): IntegrityWarning | null {
+const PLURAL_TO_SINGULAR: Record<string, WarningField> = {
+  bundles: "bundle",
+  wildcards: "wildcard",
+  variables: "variable",
+  constraints: "constraint",
+};
+
+function verifyOne(entity: Record<string, unknown>, kind: WarningField): IntegrityWarning | null {
   const stamped = entity.snapshot_fingerprint;
   if (typeof stamped !== "string" || stamped.length === 0) return null;
   // Bundle fingerprints use a different algorithm (see bundle-fingerprint.ts)
@@ -45,7 +57,7 @@ function verifyOne(entity: Record<string, unknown>, kind: string): IntegrityWarn
   const recomputed = moduleFingerprint(entity as unknown as ModuleRow);
   if (recomputed === stamped) return null;
   return {
-    uuid: typeof entity.uuid === "string" ? entity.uuid : "",
+    uuid: typeof entity.uuid === "string" ? entity.uuid : "",  // TODO(task-7): pass index fallback when picker needs routing
     field: kind,
     reason: `${kind} fingerprint mismatch (stamped ${stamped}, recomputed ${recomputed})`,
   };
@@ -58,7 +70,7 @@ export function parsePayload(raw: string): ParseResult {
   } catch (e) {
     return { ok: false, reason: `invalid JSON: ${(e as Error).message}` };
   }
-  if (!json || typeof json !== "object") {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
     return { ok: false, reason: "payload must be a JSON object" };
   }
   const obj = json as Record<string, unknown>;
@@ -81,7 +93,7 @@ export function parsePayload(raw: string): ParseResult {
     ["variables", migrated.variables] as const,
     ["constraints", migrated.constraints] as const,
   ]) {
-    const kindSingular = kindPlural.slice(0, -1);  // strip 's'
+    const kindSingular = PLURAL_TO_SINGULAR[kindPlural];
     for (const e of arr) {
       const w = verifyOne(e, kindSingular);
       if (w) integrityWarnings.push(w);

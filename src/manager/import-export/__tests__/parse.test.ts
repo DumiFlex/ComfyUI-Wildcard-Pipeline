@@ -115,4 +115,12 @@ describe("parsePayload", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.integrityWarnings).toEqual([]);
   });
+
+  describe("edge cases", () => {
+    it("rejects top-level JSON array with object error message", () => {
+      const result = parsePayload("[]");
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toMatch(/must be a json object/i);
+    });
+  });
 });
