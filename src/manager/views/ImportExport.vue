@@ -616,7 +616,7 @@ watch(
         data-test="io-tab-export"
         @click="setMode('export')"
       >
-        <Icon name="pi-download" /> Export (legacy)
+        <Icon name="pi-download" /> Export
       </button>
       <button
         type="button" role="tab" class="wp-tab"
@@ -625,7 +625,7 @@ watch(
         data-test="io-tab-export-v2"
         @click="setMode('export-v2')"
       >
-        <Icon name="pi-download" /> Export
+        <Icon name="pi-download" /> Export (preview)
       </button>
       <button
         type="button" role="tab" class="wp-tab"

@@ -263,4 +263,18 @@ describe("ExportTab.vue", () => {
     const btn = wrap.get('[data-test="export-tab-submit"]');
     expect(btn.attributes("disabled")).toBeUndefined();
   });
+
+  it("pushes an error toast when library load fails", async () => {
+    // Reject one of the three Promise.all branches in loadLibrary. The
+    // catch wraps the whole gather, so a single rejection should surface
+    // exactly one "Failed to load library" toast and leave the component
+    // mounted (no throw escaping onMounted).
+    apiAny.modules.list.mockRejectedValueOnce(new ApiError(500, "down"));
+    mount(ExportTab);
+    await flushPromises();
+    expect(pushMock).toHaveBeenCalledWith(expect.objectContaining({
+      severity: "error",
+      summary: expect.stringMatching(/load|library/i),
+    }));
+  });
 });

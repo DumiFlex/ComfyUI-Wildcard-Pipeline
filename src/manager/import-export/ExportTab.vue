@@ -105,6 +105,13 @@ onMounted(loadLibrary);
 
 // ---------- Selection state ----------
 
+// TODO(task-13+): "Select with dependencies" button.
+// Walks outgoing closure via dep-graph.ts (transitiveClosure / constraintsBothSidesIn).
+// Deferred because those helpers expect RawPayload-shape input, while ExportTab
+// holds live ModuleRow[] / BundleRow[] / CategoryRow[]. Either:
+//   (a) build a RawPayload-equivalent from the loaded library before walking, or
+//   (b) overload the dep-graph helpers to accept live library rows.
+
 /**
  * Per-bucket selection. Keyed by BucketKey → Set<uuid>. One Record
  * keeps reactivity-tracked state in a single ref so the per-section
