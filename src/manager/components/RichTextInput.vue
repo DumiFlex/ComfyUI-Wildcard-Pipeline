@@ -228,8 +228,9 @@ let lastEmittedValue = props.modelValue || "";
 watch(() => props.modelValue, (next) => {
   if (next === lastEmittedValue) return;  // echo of our own emit — ignore
   // External value swap from the parent — route through applyAtoms so
-  // a stale user-typed text in a span (typed since the last echo) gets
-  // wiped via the renderTick bump. Same v-for diff pitfall as
+  // any stale user-typed text in a span (typed since the last echo)
+  // gets force-synced to the new atom shape via the post-patch
+  // imperative DOM-sync in `applyAtoms`. Same v-for diff pitfall as
   // programmatic edits.
   applyAtoms(parseForSurface(next || ""));
 });
@@ -544,11 +545,79 @@ function restoreCursorAtChar(targetChar: number): void {
   host.focus();
 }
 
+/** Map a DOM (node, offset) pair to its position in the host's raw
+ *  text (the same coordinate space `readHostAsText()` produces).
+ *  Counts chars across host children, skipping ZWSPs in pad spans
+ *  and adding full serialised chip length for non-text atoms. */
+function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
+  const host = hostEl.value;
+  if (!host || !host.contains(targetNode)) return readHostAsText().length;
+  const charsBefore = (s: string, n: number): number =>
+    s.slice(0, n).replace(ZWSP_RE, "").length;
+  // Length contribution of a single host child to the raw-text space.
+  const childRawLen = (child: ChildNode): number => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      return (child.textContent ?? "").replace(ZWSP_RE, "").length;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) return 0;
+    const el = child as HTMLElement;
+    if (el.classList.contains("wp-refchip")) {
+      const idx = Number(el.getAttribute("data-atom-index"));
+      const atom = atoms.value[idx];
+      if (atom && atom.kind !== "text") return serialise([atom]).length;
+      return 0;
+    }
+    if (el.classList.contains("wp-rt__text")) {
+      return (el.textContent ?? "").replace(ZWSP_RE, "").length;
+    }
+    return 0;
+  };
+  // Special case: selection anchored ON the host itself (e.g. after
+  // `range.selectNodeContents(host)` → startContainer=host,
+  // startOffset=0, endContainer=host, endOffset=childCount). offset is
+  // the CHILD INDEX, NOT a char offset. Sum raw lengths of children
+  // up to that index. Without this, Ctrl+A-style selections collapsed
+  // to total-length-for-both-endpoints, making paste-over-selection
+  // append instead of replace.
+  if (targetNode === host) {
+    let acc = 0;
+    const children = Array.from(host.childNodes);
+    const stop = Math.min(targetOffset, children.length);
+    for (let i = 0; i < stop; i++) acc += childRawLen(children[i]);
+    return acc;
+  }
+  let acc = 0;
+  for (const child of host.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      const t = child.textContent ?? "";
+      if (child === targetNode) return acc + charsBefore(t, targetOffset);
+      acc += childRawLen(child);
+      continue;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = child as HTMLElement;
+    if (el.classList.contains("wp-refchip")) {
+      acc += childRawLen(child);
+      continue;
+    }
+    if (el.classList.contains("wp-rt__text")) {
+      const tn = el.firstChild;
+      if (tn === targetNode) {
+        return acc + charsBefore(tn.textContent ?? "", targetOffset);
+      }
+      if (el === targetNode) {
+        const full = (el.textContent ?? "").replace(ZWSP_RE, "");
+        return acc + (targetOffset === 0 ? 0 : full.length);
+      }
+      acc += childRawLen(child);
+      continue;
+    }
+  }
+  return acc;
+}
+
 /** Caret offset (in serialised raw text) where the cursor currently
- *  sits. Walks meaningful host children accumulating their serialised
- *  lengths; for a wp-rt__text span containing the cursor, adds the
- *  intra-span offset; for cursor sitting adjacent to a chip, includes
- *  the chip's full serialised length on the appropriate side. */
+ *  sits. Wraps `rangeOffsetToRaw` for the range start. */
 function currentCursorCharOffset(): number {
   const host = hostEl.value;
   if (!host) return 0;
@@ -556,80 +625,74 @@ function currentCursorCharOffset(): number {
   if (!sel || sel.rangeCount === 0) return readHostAsText().length;
   const range = sel.getRangeAt(0);
   if (!host.contains(range.startContainer)) return readHostAsText().length;
-  // Count chars up to the caret in raw-text space. ZWSPs in empty pad
-  // spans don't count — readHostAsText strips them too, so the offset
-  // must agree.
-  const charsBefore = (s: string, n: number): number =>
-    s.slice(0, n).replace(ZWSP_RE, "").length;
-  let acc = 0;
-  for (const child of host.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      const t = child.textContent ?? "";
-      if (child === range.startContainer) {
-        return acc + charsBefore(t, range.startOffset);
-      }
-      acc += t.replace(ZWSP_RE, "").length;
-      continue;
-    }
-    if (child.nodeType !== Node.ELEMENT_NODE) continue;
-    const el = child as HTMLElement;
-    if (el.classList.contains("wp-refchip")) {
-      // Range may be anchored ON the host with offset === child index;
-      // that case is handled below. Range can't realistically land
-      // inside a chip (contenteditable=false).
-      const idx = Number(el.getAttribute("data-atom-index"));
-      const atom = atoms.value[idx];
-      if (atom && atom.kind !== "text") acc += serialise([atom]).length;
-      continue;
-    }
-    if (el.classList.contains("wp-rt__text")) {
-      const tn = el.firstChild;
-      if (tn === range.startContainer) {
-        return acc + charsBefore(tn.textContent ?? "", range.startOffset);
-      }
-      if (el === range.startContainer) {
-        // Range anchored on the span itself — offset is child-index
-        const full = (el.textContent ?? "").replace(ZWSP_RE, "");
-        return acc + (range.startOffset === 0 ? 0 : full.length);
-      }
-      acc += (el.textContent ?? "").replace(ZWSP_RE, "").length;
-      continue;
-    }
-  }
-  return acc;
+  return rangeOffsetToRaw(range.startContainer, range.startOffset);
 }
 
-/** Programmatic-apply render tick. Bumped before every atom array
- *  reassign that originates from a programmatic edit (autocomplete
- *  insert, chip-backspace, picker apply, paste, blur-settle, external
- *  modelValue swap). Combined with `:key="${idx}-${renderTick}"` on
- *  the v-for, every programmatic apply mints fresh keys → Vue tears
- *  down ALL existing DOM nodes and re-renders from scratch.
+/** Raw-text positions of the current selection's start AND end.
+ *  For a collapsed caret, start === end. Non-collapsed selections
+ *  (e.g. after Ctrl+A or shift-arrow) need both endpoints so the
+ *  caller can replace the selected range — single-offset readers
+ *  treat the selection as a caret and lose the selected content. */
+function currentSelectionRangeRaw(): { start: number; end: number } {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) {
+    const len = readHostAsText().length;
+    return { start: len, end: len };
+  }
+  const r = sel.getRangeAt(0);
+  const start = rangeOffsetToRaw(r.startContainer, r.startOffset);
+  const end = rangeOffsetToRaw(r.endContainer, r.endOffset);
+  return start <= end ? { start, end } : { start: end, end: start };
+}
+
+/** Imperative DOM-sync for text spans after a programmatic atom apply.
  *
- *  Why: text-atom spans bind `{{ atom.text || ZWSP }}`. When the user
- *  types raw text into a span, the DOM textContent updates in place
- *  but `atom.text` stays "" (atoms are reactive source-of-truth only
- *  updated via emitValue echo or programmatic ops, NOT typing). On a
- *  subsequent programmatic atom reassign that keeps the same text-atom
- *  positions, Vue's PatchFlags.TEXT diff sees old vnode text "" == new
- *  vnode text "" and SKIPS the DOM patch — leaving the user-typed
- *  characters stranded in the DOM but absent from `atoms.value`.
+ *  Why this exists: text-atom spans bind `{{ atom.text || ZWSP }}`.
+ *  When the user types raw text into a span, the DOM `textContent`
+ *  updates in place but `atom.text` stays at whatever it was (atoms
+ *  are reactive source-of-truth, only updated via `emitValue` echo or
+ *  programmatic ops — NOT live typing). On a subsequent programmatic
+ *  atom reassign that keeps the same text-atom positions, Vue's
+ *  `PatchFlags.TEXT` diff sees old vnode text === new vnode text and
+ *  SKIPS the DOM patch — leaving user-typed characters stranded in
+ *  the DOM but absent from `atoms.value`. Next `readHostAsText()` then
+ *  sees BOTH the stranded raw text AND any freshly-inserted chip
+ *  serialisation, returning corrupt text like `"$testo$testo"`. Each
+ *  blur re-parses that → adds another chip in front of the still-
+ *  stranded text. Compounds.
  *
- *  Next `readHostAsText()` then sees BOTH the stranded raw text AND
- *  the freshly-inserted chip, returning `"$testo$testo"`. Each blur
- *  then `parse`s that → 2 var atoms → adds another chip in front of
- *  the still-stranded text. Subsequent blurs compound.
+ *  Earlier this was solved with a `renderTick` counter on the v-for
+ *  key (`:key="${renderTick}-${idx}"`) — every programmatic apply
+ *  bumped the tick → all keys changed → Vue tore down and re-created
+ *  every atom node. Worked but heavy-handed: lost caret stability
+ *  during legit programmatic ops, and the teardown-rebuild churn was
+ *  itself a source of corruption when paired with native browser
+ *  Backspace/Delete (DOM mutated mid-render-cycle → atoms model
+ *  diverges from DOM).
  *
- *  Bumping renderTick forces Vue to throw away the entire v-for sub-
- *  tree (key mismatch) and re-render every atom against a fresh DOM —
- *  no PatchFlags.TEXT diff path can leak stale span content. User-
- *  typing inputs do NOT bump this tick, so the live-edit path keeps
- *  the in-place DOM reuse Vue's caret-stability relies on. */
-const renderTick = ref(0);
+ *  Imperative sync: after `atoms.value = padAtoms(next)`, await Vue's
+ *  patch via `nextTick`, then walk the live `.wp-rt__text` spans and
+ *  force `textContent` for each to match its atom's `text || ZWSP`.
+ *  Bypasses Vue's PatchFlags.TEXT diff entirely — no key churn, no
+ *  full teardown, no DOM/atom drift. Spans keep stable identity for
+ *  caret restore; text gets corrected in-place. */
+function syncTextSpansToAtoms(): void {
+  const host = hostEl.value;
+  if (!host) return;
+  const spans = host.querySelectorAll<HTMLElement>(".wp-rt__text");
+  for (const span of spans) {
+    const idx = Number(span.getAttribute("data-atom-index"));
+    const atom = atoms.value[idx];
+    if (atom && atom.kind === "text") {
+      const want = atom.text || ZWSP;
+      if (span.textContent !== want) span.textContent = want;
+    }
+  }
+}
 
 function applyAtoms(next: Atom[]): void {
-  renderTick.value += 1;
   atoms.value = padAtoms(next);
+  void nextTick(() => syncTextSpansToAtoms());
 }
 
 function insertChipAtCaret(chipText: string): void {
@@ -1095,13 +1158,18 @@ function onHostPaste(ev: ClipboardEvent): void {
   if (data == null) return;
   ev.preventDefault();
   const currentText = readHostAsText();
-  const caret = currentCursorCharOffset();
+  // Read selection BOUNDS, not just a caret — a non-collapsed
+  // selection (e.g. after Ctrl+A or shift-drag) must be REPLACED by
+  // the paste, not have the paste appended at one endpoint while the
+  // selection stays. Without this, pasting over `hello world` left
+  // `hello worldreplaced` instead of `replaced`.
+  const { start, end } = currentSelectionRangeRaw();
   // Strip CRLF / LF normalisation — single-line inputs ignore newlines,
   // multi-line inputs keep them. Atoms model treats text atoms as
   // opaque strings either way.
   const pasted = props.multiline ? data : data.replace(/[\r\n]+/g, " ");
-  const before = currentText.slice(0, caret);
-  const after = currentText.slice(caret);
+  const before = currentText.slice(0, start);
+  const after = currentText.slice(end);
   const newText = before + pasted + after;
   applyAtoms(parseForSurface(newText));
   emitValue(newText);
@@ -1216,7 +1284,21 @@ function onHostKeydown(ev: KeyboardEvent): void {
     // atoms that the DOM-derived cursor doesn't know about, so the wrong
     // atom gets deleted. Raw-text space sidesteps the alignment problem.
     const rawText = readHostAsText();
-    const rawCaret = currentCursorCharOffset();
+    // Non-collapsed selection (e.g. Ctrl+A + Backspace, or any drag-select +
+    // Backspace) — delete the entire selected range as a raw-text slice. The
+    // native Backspace path corrupts the atom model because the browser
+    // collapses across `contenteditable=false` chip nodes and leaves orphan
+    // chip elements that re-render as zombie atoms. Handle it imperatively.
+    const range = currentSelectionRangeRaw();
+    if (range.start !== range.end) {
+      ev.preventDefault();
+      const newText = rawText.slice(0, range.start) + rawText.slice(range.end);
+      applyAtoms(parseForSurface(newText));
+      emitValue(newText);
+      void nextTick(() => restoreCursorAtChar(range.start));
+      return;
+    }
+    const rawCaret = range.start;
     if (rawCaret === 0) return;
     const before = rawText.slice(0, rawCaret);
     // Surface-gated chip detection: only patterns that ACTUALLY chipify
@@ -1228,14 +1310,37 @@ function onHostKeydown(ev: KeyboardEvent): void {
       : /(\$[A-Za-z_][A-Za-z0-9_]*)$/;
     const chipMatch = before.match(chipRegex);
     if (chipMatch) {
+      // Escape-boundary guard: end-anchored regex scans backwards and
+      // would match `$cost` inside `$$cost` (the second `$` + ident).
+      // If the char immediately preceding the matched chip serialisation
+      // is the same trigger char, this is a literal escape (`$$cost`,
+      // `@@literal`) — let the browser handle native single-char delete.
+      const matchStart = before.length - chipMatch[0].length;
+      const trigger = chipMatch[0][0]; // '$' or '@'
+      const charBefore = matchStart > 0 ? before[matchStart - 1] : "";
+      if (charBefore === trigger) {
+        return;
+      }
       ev.preventDefault();
       const newText = before.slice(0, -chipMatch[0].length) + rawText.slice(rawCaret);
       applyAtoms(parseForSurface(newText));
       emitValue(newText);
       const newCaret = before.length - chipMatch[0].length;
       void nextTick(() => restoreCursorAtChar(newCaret));
+      return;
     }
-    // Otherwise let the browser handle char-level deletion natively.
+    // No chip match — single-char delete imperatively. Relying on native
+    // browser Backspace here is the source of user-reported corruption:
+    // when the chip-flanking text span shrinks to empty, the browser may
+    // collapse the caret across a `contenteditable=false` chip into the
+    // wrong adjacent span, and Vue's v-for diff (index-keyed) can patch
+    // the wrong text node. Imperative slice → applyAtoms → restore caret
+    // keeps the atom model and DOM in lock-step.
+    ev.preventDefault();
+    const newText = rawText.slice(0, rawCaret - 1) + rawText.slice(rawCaret);
+    applyAtoms(parseForSurface(newText));
+    emitValue(newText);
+    void nextTick(() => restoreCursorAtChar(rawCaret - 1));
     return;
   }
   if (ev.key === "Delete") {
@@ -1246,7 +1351,17 @@ function onHostKeydown(ev: KeyboardEvent): void {
     // same surface gate so `$name` in a wildcard-surface input
     // forward-deletes one char at a time, not the whole serialisation.
     const rawText = readHostAsText();
-    const rawCaret = currentCursorCharOffset();
+    // Symmetric to Backspace: non-collapsed selection means range delete.
+    const range = currentSelectionRangeRaw();
+    if (range.start !== range.end) {
+      ev.preventDefault();
+      const newText = rawText.slice(0, range.start) + rawText.slice(range.end);
+      applyAtoms(parseForSurface(newText));
+      emitValue(newText);
+      void nextTick(() => restoreCursorAtChar(range.start));
+      return;
+    }
+    const rawCaret = range.start;
     if (rawCaret >= rawText.length) return;
     const after = rawText.slice(rawCaret);
     const chipRegex = props.surface === "wildcard"
@@ -1254,12 +1369,29 @@ function onHostKeydown(ev: KeyboardEvent): void {
       : /^(\$[A-Za-z_][A-Za-z0-9_]*)/;
     const chipMatch = after.match(chipRegex);
     if (chipMatch) {
+      // Escape-boundary guard (mirror of Backspace path): the chip
+      // serialisation is at offset `rawCaret`, immediately after the
+      // caret. If the char at `rawCaret - 1` is the SAME trigger, the
+      // pair is an escape sequence (`$$cost` / `@@literal`) — skip
+      // atomic delete, native single-char delete handles it.
+      const trigger = chipMatch[0][0]; // '$' or '@'
+      const charBefore = rawCaret > 0 ? rawText[rawCaret - 1] : "";
+      if (charBefore === trigger) {
+        return;
+      }
       ev.preventDefault();
       const newText = rawText.slice(0, rawCaret) + after.slice(chipMatch[0].length);
       applyAtoms(parseForSurface(newText));
       emitValue(newText);
       void nextTick(() => restoreCursorAtChar(rawCaret));
+      return;
     }
+    // Symmetric to Backspace: imperative single-char forward-delete.
+    ev.preventDefault();
+    const newText = rawText.slice(0, rawCaret) + rawText.slice(rawCaret + 1);
+    applyAtoms(parseForSurface(newText));
+    emitValue(newText);
+    void nextTick(() => restoreCursorAtChar(rawCaret));
     return;
   }
   // Arrow keys: defer to native browser handling. Modern browsers skip
@@ -1304,7 +1436,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       @beforeinput="onHostBeforeInput"
       @paste="onHostPaste"
     >
-      <template v-for="(atom, idx) in atoms" :key="`${renderTick}-${idx}`">
+      <template v-for="(atom, idx) in atoms" :key="idx">
         <RefChip
           v-if="atom.kind === 'ref' || atom.kind === 'var'"
           :kind="atom.kind"

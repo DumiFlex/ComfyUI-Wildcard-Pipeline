@@ -619,14 +619,14 @@ describe("RichTextInput.vue", () => {
     }
     await host.trigger("keydown", { key: "Backspace" });
     await flushPromises();
-    // Browser handles native single-char delete — no atomic emit. The
-    // chip-match path is gated on surface; on wildcard with `$name`,
-    // chipRegex doesn't match → handler returns without preventDefault.
-    // (jsdom doesn't simulate native edit, so emit history may be empty;
-    // assertion: no chip-removal emit shaped as "" suddenly.)
+    // Imperative single-char delete: handler removes ONE char (last "o"),
+    // emits "$test". The chip-atomic-delete path is gated on surface; on
+    // wildcard with `$name`, chipRegex doesn't match → falls through to
+    // the single-char delete branch. Assertion: last emit is `$test` (one
+    // char removed), NOT "" (which would mean atomic-delete fired).
     const events = wrap.emitted("update:modelValue") ?? [];
     const last = events[events.length - 1]?.[0];
-    expect(last === "" || last === undefined).toBe(true);
+    expect(last).toBe("$test");
     // Sanity: no chip rendered (wildcard surface keeps $name as text).
     expect(wrap.findAll(".wp-refchip").length).toBe(0);
     wrap.unmount();
