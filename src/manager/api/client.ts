@@ -1,3 +1,4 @@
+import type { CommitOk, CommitPayload } from "../import-export/commit";
 import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
@@ -189,6 +190,29 @@ export const api = {
     build(req: ExportBuildRequest) {
       return request<RawExportPayload>("/wp/api/export/build", {
         method: "POST", body: JSON.stringify(req),
+      });
+    },
+    /**
+     * POST /wp/api/import/commit — apply a classified commit payload
+     * (built by `buildCommitPayload` in `import-export/commit.ts`).
+     * On 2xx the server returns `{ok: true, undo_entry_id, summary}`;
+     * non-2xx is mapped to `ApiError` by `request<T>` so the resolved
+     * value type is the success envelope only.
+     */
+    commit(payload: CommitPayload) {
+      return request<CommitOk>("/wp/api/import/commit", {
+        method: "POST", body: JSON.stringify(payload),
+      });
+    },
+    /**
+     * POST /wp/api/import/undo — reverse a previous commit by its
+     * `undo_entry_id`. Returns `{ok: true}` on success; 404 (unknown
+     * id) and 400 (corrupt undo blob, DB error) surface as `ApiError`.
+     */
+    undo(undoEntryId: string) {
+      return request<{ ok: true }>("/wp/api/import/undo", {
+        method: "POST",
+        body: JSON.stringify({ undo_entry_id: undoEntryId }),
       });
     },
   },
