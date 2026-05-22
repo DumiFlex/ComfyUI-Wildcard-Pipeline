@@ -37,7 +37,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), { indent: 0 });
-defineEmits<{ (e: "update:checked", v: boolean): void }>();
+const emit = defineEmits<{ (e: "update:checked", v: boolean): void }>();
 </script>
 
 <template>
@@ -50,7 +50,7 @@ defineEmits<{ (e: "update:checked", v: boolean): void }>();
       class="wp-picker-row__check"
       :model-value="checked"
       :aria-label="name"
-      @update:model-value="(v: boolean) => $emit('update:checked', v)"
+      @update:model-value="(v: boolean) => emit('update:checked', v)"
     />
     <span class="wp-picker-row__name">{{ name }}</span>
     <span
