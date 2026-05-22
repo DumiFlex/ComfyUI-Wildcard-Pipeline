@@ -172,4 +172,61 @@ export const api = {
       method: "POST", body: JSON.stringify(bundle),
     });
   },
+  /**
+   * v2 import/export endpoints. Clustered into a nested namespace so the
+   * Task 14 `commit` + `undo` peers (and any later additions) sit next to
+   * `build` without polluting the top-level surface. The legacy
+   * `exportBundle()` / `importBundle()` pair above stays untouched until
+   * the v2 path fully supersedes it.
+   */
+  importExport: {
+    /**
+     * POST /wp/api/export/build — assemble a 7-bucket export payload from
+     * picked UUIDs. Response is the payload itself (no `{ok, payload}`
+     * wrapper); the shared `request<T>` helper already throws ApiError on
+     * non-2xx so callers can treat the resolved value as success.
+     */
+    build(req: ExportBuildRequest) {
+      return request<RawExportPayload>("/wp/api/export/build", {
+        method: "POST", body: JSON.stringify(req),
+      });
+    },
+  },
 };
+
+/**
+ * Request body for POST /wp/api/export/build. Every key is optional on
+ * the wire (default `[]`) but the picker always sends all seven so the
+ * intent is unambiguous. Bucket names match the engine's 7-bucket schema
+ * — wildcards/fixed_values/combines/derivations/constraints are five
+ * separate module-type buckets, NOT a flat "variables" array.
+ */
+export interface ExportBuildRequest {
+  bundle_uuids: string[];
+  wildcard_uuids: string[];
+  fixed_values_uuids: string[];
+  combine_uuids: string[];
+  derivation_uuids: string[];
+  constraint_uuids: string[];
+  category_uuids: string[];
+}
+
+/**
+ * Response payload from POST /wp/api/export/build. Mirrors the
+ * `RawPayload` shape used by the import-side migrations so the same
+ * bytes can be round-tripped through import. Entity records are kept as
+ * opaque dictionaries here because each bucket has a distinct payload
+ * shape and the typed views live in `api/types.ts` for the live-library
+ * surface, not for serialized exports.
+ */
+export interface RawExportPayload {
+  schema_version: number;
+  exported_at: string;
+  bundles: Array<Record<string, unknown>>;
+  wildcards: Array<Record<string, unknown>>;
+  fixed_values: Array<Record<string, unknown>>;
+  combines: Array<Record<string, unknown>>;
+  derivations: Array<Record<string, unknown>>;
+  constraints: Array<Record<string, unknown>>;
+  categories: Array<Record<string, unknown>>;
+}
