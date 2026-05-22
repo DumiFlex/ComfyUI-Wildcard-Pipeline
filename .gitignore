@@ -42,9 +42,10 @@ Thumbs.db
 # Backups dropped by /caveman:compress next to compressed files
 *.original.md
 
-# Docs — ignore everything except per-node help pages
+# Docs — ignore everything except per-node help pages + canonical contracts
 /docs/*
 !/docs/help/
+!/docs/import-export-contract.md
 
 # Semantic release
 .releaserc.local.js
