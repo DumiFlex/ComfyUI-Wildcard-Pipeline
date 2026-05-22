@@ -73,3 +73,17 @@ describe("cross-language parity", () => {
     expect(moduleFingerprint(m)).toBe("ba7a57fa");
   });
 });
+
+describe("null-safety", () => {
+  it("tolerates null tags without throwing", () => {
+    const m = { type: "wildcard", name: "x", description: "", tags: null as unknown as string[], payload_hash: "deadbeef" };
+    expect(() => moduleFingerprint(m)).not.toThrow();
+    expect(moduleFingerprint(m)).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it("null tags hashes same as empty tags array", () => {
+    const a = { type: "wildcard", name: "x", description: "", tags: [], payload_hash: "deadbeef" };
+    const b = { type: "wildcard", name: "x", description: "", tags: null as unknown as string[], payload_hash: "deadbeef" };
+    expect(moduleFingerprint(a)).toBe(moduleFingerprint(b));
+  });
+});

@@ -39,7 +39,7 @@ export function moduleFingerprint(m: ModuleRow): string {
     m.type,
     m.name,
     m.description,
-    [...m.tags].sort().join(","),
+    [...(m.tags ?? [])].sort().join(","),
     m.payload_hash,
   ];
   return djb2(parts.join("\n"));
