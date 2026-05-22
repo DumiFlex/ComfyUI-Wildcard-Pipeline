@@ -72,11 +72,21 @@ export interface PerItemIssue {
 export type BatchAction = "skip" | "replace";
 
 /**
- * Per-item resolution. `new_name` is only attached on the rename
- * branch — it's reserved here so a follow-up rename UI can wire
- * through without breaking callers.
+ * Per-item resolution. `new_id` + `new_name` are only attached on the
+ * rename branch — Task 20 introduces the inline rename UI
+ * (`ImportAsNewRename.vue`) which mints a fresh 8-hex-char id
+ * client-side and pairs it with a user-edited name. Both fields are
+ * optional so the skip/replace/accept branches don't carry them.
+ *
+ * The field naming mirrors the server-side commit contract exactly
+ * (Task 13/14/15): the rename rows in `CommitPayload.renames` carry
+ * `new_id` + `new_name`. The plan body talks about `new_uuid` — that's
+ * stale; the locked server contract uses `new_id` and the entire TS
+ * import-export surface aligned to `id` (NOT `uuid`) in commit
+ * `9cf37c7` (Task 17).
  */
 export interface PerItemDecision {
   kind: "skip" | "replace" | "rename" | "accept";
+  new_id?: string;
   new_name?: string;
 }

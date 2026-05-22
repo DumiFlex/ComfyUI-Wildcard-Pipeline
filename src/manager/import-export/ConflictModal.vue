@@ -55,6 +55,7 @@
  */
 import { computed, ref } from "vue";
 import Modal from "../components/ui/Modal.vue";
+import ImportAsNewRename from "./ImportAsNewRename.vue";
 import Tier3ChainViz from "./conflict-rows/Tier3ChainViz.vue";
 import type { ChainStep } from "./conflict-rows/chain-types";
 import type {
@@ -134,23 +135,78 @@ const unresolvedCount = computed<number>(() => {
 });
 
 /**
+ * Per-item ids currently in "rename input" mode. When `renamingIds`
+ * contains an issue's id, that row renders `<ImportAsNewRename>`
+ * instead of the Skip / Import-anyway / Import-as-new button trio.
+ * Cleared on rename-applied (decision recorded) or rename-cancel
+ * (row returns to the button trio).
+ *
+ * A `Set<string>` rather than a `Record<string, boolean>` so the
+ * mutation API stays small (`add` / `delete`) — Vue 3's reactivity
+ * tracks Set membership the same way it tracks object keys.
+ */
+const renamingIds = ref<Set<string>>(new Set());
+
+/**
  * Record a per-item decision under `entity.id`. Uses the
  * immutable-replacement pattern (`{ ...prev, [id]: next }`) so
  * downstream `computed` graphs observing `perItemDecisions` rerun.
- * `new_name` is only attached to the stored record when supplied —
- * skips/accepts/replaces never carry it, matching the commit-side
- * shape.
+ *
+ * The rename branch (`kind === "rename"`) carries both `new_id` and
+ * `new_name` per the locked server contract (Tasks 13/14/15); they're
+ * minted by `ImportAsNewRename.vue` and threaded straight through to
+ * `commit.ts`'s partitioner.
  */
 function resolveItem(
   id: string,
   kind: "skip" | "replace" | "rename" | "accept",
-  new_name?: string,
+  rename?: { new_id: string; new_name: string },
 ): void {
-  const next: PerItemDecision =
-    typeof new_name === "string" && new_name.length > 0
-      ? { kind, new_name }
-      : { kind };
+  const next: PerItemDecision = rename
+    ? { kind, new_id: rename.new_id, new_name: rename.new_name }
+    : { kind };
   perItemDecisions.value = { ...perItemDecisions.value, [id]: next };
+}
+
+/**
+ * Toggle a per-item row into rename-input mode. The button trio is
+ * swapped out for the `<ImportAsNewRename>` component until the user
+ * confirms (→ `onRenameApplied`) or cancels (→ `onRenameCancel`).
+ */
+function startRename(id: string): void {
+  // Set membership change isn't observed in Vue 3 unless we replace
+  // the Set wholesale (Sets are reactive but the .add() mutation
+  // doesn't always trigger template re-eval on existing renders —
+  // immutable replacement matches the perItemDecisions pattern).
+  const next = new Set(renamingIds.value);
+  next.add(id);
+  renamingIds.value = next;
+}
+
+/**
+ * Confirm a rename from `<ImportAsNewRename>` — store the decision
+ * and exit rename-input mode. Strict typing on the payload mirrors
+ * the component's emit signature so any future contract drift
+ * surfaces at compile time.
+ */
+function onRenameApplied(
+  id: string,
+  payload: { new_id: string; new_name: string },
+): void {
+  resolveItem(id, "rename", payload);
+  const next = new Set(renamingIds.value);
+  next.delete(id);
+  renamingIds.value = next;
+}
+
+/**
+ * Cancel from `<ImportAsNewRename>` — exit rename-input mode without
+ * recording a decision so the row returns to the button trio.
+ */
+function onRenameCancel(id: string): void {
+  const next = new Set(renamingIds.value);
+  next.delete(id);
+  renamingIds.value = next;
 }
 
 function onCommit(): void {
@@ -317,6 +373,12 @@ function onBatchDefaultChange(ev: Event): void {
                 <span aria-hidden="true">✓</span>
                 {{ perItemDecisions[issue.entity.id].kind }}
               </div>
+              <ImportAsNewRename
+                v-else-if="renamingIds.has(issue.entity.id)"
+                :original-name="issue.entity.name ?? issue.entity.id"
+                @applied="(p) => onRenameApplied(issue.entity.id, p)"
+                @cancel="onRenameCancel(issue.entity.id)"
+              />
               <div v-else class="wp-conflict-modal__actions">
                 <button
                   type="button"
@@ -324,6 +386,12 @@ function onBatchDefaultChange(ev: Event): void {
                   :data-test="`resolve-${issue.entity.id}-skip`"
                   @click="resolveItem(issue.entity.id, 'skip')"
                 >Skip</button>
+                <button
+                  type="button"
+                  class="wp-conflict-modal__btn"
+                  :data-test="`resolve-${issue.entity.id}-rename`"
+                  @click="startRename(issue.entity.id)"
+                >Import as new</button>
                 <button
                   type="button"
                   class="wp-conflict-modal__btn wp-conflict-modal__btn--warn"
