@@ -55,6 +55,8 @@
  */
 import { computed, ref } from "vue";
 import Modal from "../components/ui/Modal.vue";
+import Tier3ChainViz from "./conflict-rows/Tier3ChainViz.vue";
+import type { ChainStep } from "./conflict-rows/chain-types";
 import type {
   BatchConflict,
   PerItemDecision,
@@ -176,6 +178,32 @@ function onModalUpdateOpen(v: boolean): void {
 }
 
 /**
+ * Pull a `ChainStep[]` out of an issue's untyped `detail` blob. The
+ * `PerItemIssue.detail` slot is typed as `unknown` so callers can stash
+ * arbitrary diagnostic context; the tier-3 row needs to fish a
+ * specific `{ name, id }[]` shape out of that. We narrow with type
+ * guards (NOT `as any` — banned by CLAUDE.md), returning `[]` on any
+ * shape mismatch so the viz degrades to "outer name + badge only"
+ * rather than crashing the modal.
+ *
+ * Why per-step filtering rather than a single array-level check: we
+ * want to defensively skip malformed entries (server bug, future
+ * payload schema drift) without losing the well-formed ones.
+ */
+function extractChain(issue: PerItemIssue): ChainStep[] {
+  const d = issue.detail;
+  if (!d || typeof d !== "object") return [];
+  const c = (d as { chain?: unknown }).chain;
+  if (!Array.isArray(c)) return [];
+  return c.filter(
+    (s): s is ChainStep =>
+      typeof s === "object" && s !== null
+      && typeof (s as { name?: unknown }).name === "string"
+      && typeof (s as { id?: unknown }).id === "string",
+  );
+}
+
+/**
  * Map the dropdown's typed `<select>` value back into the ref via a
  * dedicated handler. Letting Vue coerce a generic Event target to our
  * literal-string union via v-model would require an `as` cast we'd
@@ -248,35 +276,62 @@ function onBatchDefaultChange(ev: Event): void {
             class="wp-conflict-modal__item"
             :data-test="`conflict-modal-item-${issue.entity.id}`"
           >
-            <div class="wp-conflict-modal__item-meta">
-              <span class="wp-conflict-modal__row-name">
-                {{ issue.entity.name ?? issue.entity.id }}
-              </span>
-              <span class="wp-conflict-modal__row-kind">{{ issue.kind }}</span>
-            </div>
-            <div
-              v-if="perItemDecisions[issue.entity.id]"
-              class="wp-conflict-modal__resolved"
-              :data-test="`resolved-${issue.entity.id}`"
-            >
-              <span aria-hidden="true">✓</span>
-              {{ perItemDecisions[issue.entity.id].kind }}
-            </div>
-            <div v-else class="wp-conflict-modal__actions">
-              <button
-                type="button"
-                class="wp-conflict-modal__btn"
-                :data-test="`resolve-${issue.entity.id}-skip`"
-                @click="resolveItem(issue.entity.id, 'skip')"
-              >Skip</button>
-              <button
-                v-if="issue.kind !== 'tier-3'"
-                type="button"
-                class="wp-conflict-modal__btn wp-conflict-modal__btn--warn"
-                :data-test="`resolve-${issue.entity.id}-accept`"
-                @click="resolveItem(issue.entity.id, 'accept')"
-              >Import anyway</button>
-            </div>
+            <template v-if="issue.kind === 'tier-3'">
+              <Tier3ChainViz
+                :bundle-name="issue.entity.name ?? issue.entity.id"
+                :chain="extractChain(issue)"
+              />
+              <div
+                v-if="perItemDecisions[issue.entity.id]"
+                class="wp-conflict-modal__resolved"
+                :data-test="`resolved-${issue.entity.id}`"
+              >
+                <span aria-hidden="true">✓</span>
+                {{ perItemDecisions[issue.entity.id].kind }}
+              </div>
+              <div v-else class="wp-conflict-modal__actions">
+                <button
+                  type="button"
+                  class="wp-conflict-modal__btn"
+                  :data-test="`resolve-${issue.entity.id}-skip`"
+                  @click="resolveItem(issue.entity.id, 'skip')"
+                >Skip</button>
+                <!-- Tier-3 is non-overridable per spec lock #9; no
+                     "Import anyway" button here. The Tier3ChainViz
+                     shows the user *why* via the chain, and Skip is
+                     the only resolution path. -->
+              </div>
+            </template>
+            <template v-else>
+              <div class="wp-conflict-modal__item-meta">
+                <span class="wp-conflict-modal__row-name">
+                  {{ issue.entity.name ?? issue.entity.id }}
+                </span>
+                <span class="wp-conflict-modal__row-kind">{{ issue.kind }}</span>
+              </div>
+              <div
+                v-if="perItemDecisions[issue.entity.id]"
+                class="wp-conflict-modal__resolved"
+                :data-test="`resolved-${issue.entity.id}`"
+              >
+                <span aria-hidden="true">✓</span>
+                {{ perItemDecisions[issue.entity.id].kind }}
+              </div>
+              <div v-else class="wp-conflict-modal__actions">
+                <button
+                  type="button"
+                  class="wp-conflict-modal__btn"
+                  :data-test="`resolve-${issue.entity.id}-skip`"
+                  @click="resolveItem(issue.entity.id, 'skip')"
+                >Skip</button>
+                <button
+                  type="button"
+                  class="wp-conflict-modal__btn wp-conflict-modal__btn--warn"
+                  :data-test="`resolve-${issue.entity.id}-accept`"
+                  @click="resolveItem(issue.entity.id, 'accept')"
+                >Import anyway</button>
+              </div>
+            </template>
           </li>
         </ul>
       </section>
