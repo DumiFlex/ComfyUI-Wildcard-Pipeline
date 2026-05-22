@@ -16,7 +16,12 @@ export const CURRENT_SCHEMA_VERSION = 1;
 export interface MigrationOk<T> {
   ok: true;
   migrated: T;
-  migratedCount: number;
+  /**
+   * Total count of ENTITIES (bundles + wildcards + variables + constraints)
+   * that passed through ANY migration step. A single 10-entity payload going
+   * through 1 step → 10. A 5-entity payload going through 2 steps → 10.
+   */
+  migratedEntityCount: number;
 }
 
 export interface MigrationLossy {
@@ -42,6 +47,10 @@ function migrateV0ToV1(payload: RawPayload): RawPayload {
   return {
     ...payload,
     schema_version: 1,
+    // NOTE: explicitly enumerates the four known entity arrays. If a future
+    // schema version adds a fifth entity array to RawPayload, update both
+    // RawPayload AND every migration in the chain to tag the new array.
+    // Otherwise migrations will silently pass the new array through untagged.
     bundles: payload.bundles.map(tag),
     wildcards: payload.wildcards.map(tag),
     variables: payload.variables.map(tag),
@@ -70,7 +79,7 @@ export function migratePayload(payload: Partial<RawPayload>): MigrationResult<Ra
     variables: payload.variables ?? [],
     constraints: payload.constraints ?? [],
   };
-  let migratedCount = 0;
+  let migratedEntityCount = 0;
   while (current.schema_version < CURRENT_SCHEMA_VERSION) {
     const fn = MIGRATION_CHAIN[current.schema_version];
     if (!fn) {
@@ -79,7 +88,7 @@ export function migratePayload(payload: Partial<RawPayload>): MigrationResult<Ra
     const entitiesBefore =
       current.bundles.length + current.wildcards.length + current.variables.length + current.constraints.length;
     current = fn(current);
-    migratedCount += entitiesBefore;
+    migratedEntityCount += entitiesBefore;
   }
-  return { ok: true, migrated: current, migratedCount };
+  return { ok: true, migrated: current, migratedEntityCount };
 }

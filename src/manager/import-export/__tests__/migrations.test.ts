@@ -8,7 +8,7 @@ describe("migratePayload", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.migrated).toEqual(payload);
-      expect(result.migratedCount).toBe(0);
+      expect(result.migratedEntityCount).toBe(0);
     }
   });
 
@@ -20,7 +20,7 @@ describe("migratePayload", () => {
   });
 
   it("rejects payload with missing schema_version", () => {
-    const payload = { bundles: [], wildcards: [], variables: [], constraints: [] } as any;
+    const payload = { bundles: [], wildcards: [], variables: [], constraints: [] } as Record<string, unknown>;
     const result = migratePayload(payload);
     expect(result.ok).toBe(false);
   });
@@ -31,7 +31,7 @@ describe("migratePayload", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.migrated.schema_version).toBe(CURRENT_SCHEMA_VERSION);
-      expect(result.migratedCount).toBeGreaterThan(0);
+      expect(result.migratedEntityCount).toBe(1);  // 1 wildcard entity migrated
     }
   });
 
@@ -40,8 +40,18 @@ describe("migratePayload", () => {
     const result = migratePayload(v0Payload);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const w = result.migrated.wildcards[0] as any;
+      const w = result.migrated.wildcards[0] as Record<string, unknown>;
       expect(w.migrated_from).toBe(0);
+    }
+  });
+
+  it("walks chain on empty payload, returns zero migrated entities", () => {
+    const v0Empty = { schema_version: 0, bundles: [], wildcards: [], variables: [], constraints: [] };
+    const result = migratePayload(v0Empty);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.migrated.schema_version).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.migratedEntityCount).toBe(0);
     }
   });
 });
