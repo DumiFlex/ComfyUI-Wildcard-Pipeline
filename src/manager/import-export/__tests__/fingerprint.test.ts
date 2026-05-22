@@ -121,3 +121,28 @@ describe("constraintFingerprint", () => {
     expect(constraintFingerprint(c)).toMatch(/^[0-9a-f]{8}$/);
   });
 });
+
+describe("prefix-suffix collision prevention", () => {
+  // Without a separator between fields, two entities with different
+  // field splits but identical concatenation would hash the same.
+  // The `\n` separator (matching bundle-fingerprint.ts:79) prevents
+  // this. These tests lock that contract.
+
+  it("wildcard: name 'ab' + var_binding '' differs from name 'a' + var_binding 'b'", () => {
+    const a = { uuid: "u", name: "ab", var_binding: "", options: [], tags: [] };
+    const b = { uuid: "u", name: "a", var_binding: "b", options: [], tags: [] };
+    expect(wildcardFingerprint(a)).not.toBe(wildcardFingerprint(b));
+  });
+
+  it("variable: name 'ab' + value '' differs from name 'a' + value 'b'", () => {
+    const a = { uuid: "u", name: "ab", value: "", tags: [] };
+    const b = { uuid: "u", name: "a", value: "b", tags: [] };
+    expect(variableFingerprint(a)).not.toBe(variableFingerprint(b));
+  });
+
+  it("constraint: source 'st' + target '' differs from source 's' + target 't'", () => {
+    const a = { uuid: "u", source_uuid: "st", target_uuid: "", op: "equals", value: "x" };
+    const b = { uuid: "u", source_uuid: "s", target_uuid: "t", op: "equals", value: "x" };
+    expect(constraintFingerprint(a)).not.toBe(constraintFingerprint(b));
+  });
+});

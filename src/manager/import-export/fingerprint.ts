@@ -33,7 +33,7 @@ export function wildcardFingerprint(w: WildcardFingerprintInput): string {
     w.options.map((o) => `${o.value}:${o.weight}`).join("|"),
     [...w.tags].sort().join(","),
   ];
-  return djb2(parts.join(""));
+  return djb2(parts.join("\n"));
 }
 
 interface VariableFingerprintInput {
@@ -44,7 +44,7 @@ interface VariableFingerprintInput {
 
 export function variableFingerprint(v: VariableFingerprintInput): string {
   const parts = [v.name, v.value, [...v.tags].sort().join(",")];
-  return djb2(parts.join(""));
+  return djb2(parts.join("\n"));
 }
 
 interface ConstraintFingerprintInput {
@@ -56,5 +56,5 @@ interface ConstraintFingerprintInput {
 
 export function constraintFingerprint(c: ConstraintFingerprintInput): string {
   const parts = [c.source_uuid, c.target_uuid, c.op, JSON.stringify(c.value)];
-  return djb2(parts.join(""));
+  return djb2(parts.join("\n"));
 }
