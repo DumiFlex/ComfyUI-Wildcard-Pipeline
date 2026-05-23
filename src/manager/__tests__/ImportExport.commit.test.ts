@@ -427,6 +427,70 @@ describe("ImportExport.vue — commit orchestrator", () => {
     wrap.unmount();
   });
 
+  it("Phase 13: multiple unselected refs on one source aggregate into a single issue row", async () => {
+    // backdrop refs @{c14e7527} (mood) + @{a361dbdc} (color); user only
+    // selects backdrop. Should produce ONE unselected-dep issue with
+    // a targets array of length 2, not two separate issues.
+    apiM.modules.list.mockResolvedValue({ items: [], total: 0 });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinueWithIds(
+      wrap,
+      mkPayload({
+        wildcards: [
+          mkWildcardEntity("b0219910", [
+            { value: "@{c14e7527} and @{a361dbdc}", weight: 1 },
+          ]),
+          mkWildcardEntity("c14e7527"),
+          mkWildcardEntity("a361dbdc"),
+        ],
+      }),
+      new Set(["b0219910"]),
+    );
+    const modal = wrap.findComponent(ConflictModal);
+    const issues = modal.props("perItemIssues") as PerItemIssue[];
+    const u = issues.filter(
+      (i) => i.kind === "unselected-dep" && i.entity.id === "b0219910",
+    );
+    expect(u.length).toBe(1);
+    const targets = (u[0]!.detail as { targets?: Array<{ id: string }> }).targets;
+    expect(targets).toBeDefined();
+    expect(targets!.length).toBe(2);
+    const ids = targets!.map((t) => t.id).sort();
+    expect(ids).toEqual(["a361dbdc", "c14e7527"]);
+    wrap.unmount();
+  });
+
+  it("Phase 13: include-deps expands selection + reruns the pipeline", async () => {
+    apiM.modules.list.mockResolvedValue({ items: [], total: 0 });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinueWithIds(
+      wrap,
+      mkPayload({
+        wildcards: [
+          mkWildcardEntity("b0219910", [{ value: "@{c14e7527}", weight: 1 }]),
+          mkWildcardEntity("c14e7527"),
+        ],
+      }),
+      new Set(["b0219910"]),
+    );
+    // Modal opens with one unselected-dep issue for backdrop.
+    let modal = wrap.findComponent(ConflictModal);
+    let issues = modal.props("perItemIssues") as PerItemIssue[];
+    expect(issues.some((i) => i.kind === "unselected-dep")).toBe(true);
+    // Click Include deps → orchestrator folds c14e7527 into selection +
+    // reruns the pipeline. The unselected-dep issue should now be gone.
+    modal.vm.$emit("include-deps", ["c14e7527"]);
+    await flushPromises();
+    modal = wrap.findComponent(ConflictModal);
+    if (modal.exists()) {
+      issues = modal.props("perItemIssues") as PerItemIssue[];
+      expect(issues.some((i) => i.kind === "unselected-dep")).toBe(false);
+    }
+    wrap.unmount();
+  });
+
   it("Phase 12: row appearing in BOTH batch + per-item is deduped — per-item wins", async () => {
     // Wildcard a1a1a1a1 has matching library content (silent-skip) AND
     // references an unresolved id @{deadbeef} → would normally land in

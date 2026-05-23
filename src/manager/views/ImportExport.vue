@@ -871,35 +871,74 @@ function buildPerItemIssues(
     }
   }
   const graph = buildDepGraph(payload);
+  // Aggregate per (source, kind) so each entity gets at most one
+  // broken-inner-ref row and one unselected-dep row, each carrying a
+  // `targets` array. Avoids the noisy "one row per missing target"
+  // pattern that asked the user to skip/rename/accept the same row N
+  // times when it just had N references to resolve.
+  type Bucket = { targets: Array<{ id: string; name?: string }> };
+  const brokenBucket = new Map<string, Bucket>();
+  const unselectedBucket = new Map<string, Bucket>();
+  const kindBySource = new Map<string, string>();
+  const nameBySource = new Map<string, string | undefined>();
   for (const s of selected) {
     const edges = graph[s.entity.id] ?? [];
-    const name = entityNameOf(s.entity);
+    if (edges.length === 0) continue;
+    kindBySource.set(s.entity.id, s.kind);
+    nameBySource.set(s.entity.id, entityNameOf(s.entity));
     for (const target of edges) {
       if (!payloadIds.has(target)) {
-        out.push({
-          kind: "broken-inner-ref",
-          entity: {
-            id: s.entity.id,
-            ...(name !== undefined ? { name } : {}),
-            kind: s.kind,
-          },
-          detail: { target },
-        });
+        const bucket = brokenBucket.get(s.entity.id) ?? { targets: [] };
+        bucket.targets.push({ id: target });
+        brokenBucket.set(s.entity.id, bucket);
       } else if (!pickedIds.has(target)) {
-        out.push({
-          kind: "unselected-dep",
-          entity: {
-            id: s.entity.id,
-            ...(name !== undefined ? { name } : {}),
-            kind: s.kind,
-          },
-          detail: {
-            target,
-            target_name: payloadNameById.get(target),
-          },
-        });
+        const bucket = unselectedBucket.get(s.entity.id) ?? { targets: [] };
+        const targetName = payloadNameById.get(target);
+        bucket.targets.push(
+          targetName !== undefined
+            ? { id: target, name: targetName }
+            : { id: target },
+        );
+        unselectedBucket.set(s.entity.id, bucket);
       }
     }
+  }
+  for (const [sourceId, bucket] of brokenBucket) {
+    const name = nameBySource.get(sourceId);
+    const kind = kindBySource.get(sourceId) ?? "bundle";
+    out.push({
+      kind: "broken-inner-ref",
+      entity: {
+        id: sourceId,
+        ...(name !== undefined ? { name } : {}),
+        kind,
+      },
+      // Preserve the legacy `target` slot for the first target so older
+      // assertions that read `detail.target` keep working alongside the
+      // new `targets` array.
+      detail: {
+        target: bucket.targets[0]!.id,
+        targets: bucket.targets,
+      },
+    });
+  }
+  for (const [sourceId, bucket] of unselectedBucket) {
+    const name = nameBySource.get(sourceId);
+    const kind = kindBySource.get(sourceId) ?? "bundle";
+    const first = bucket.targets[0]!;
+    out.push({
+      kind: "unselected-dep",
+      entity: {
+        id: sourceId,
+        ...(name !== undefined ? { name } : {}),
+        kind,
+      },
+      detail: {
+        target: first.id,
+        target_name: first.name,
+        targets: bucket.targets,
+      },
+    });
   }
   return out;
 }
@@ -1216,6 +1255,20 @@ function onConflictCancel(): void {
   // Leave selection intact so the user can re-trigger after adjusting
   // upstream state — just close the modal.
   conflictsOpen.value = false;
+}
+
+/**
+ * Phase 13: user clicked "Include deps" on an unselected-dep per-item
+ * issue. Close the modal, fold the target ids into the live selection,
+ * and re-run the orchestrator pipeline. ConflictModal will reopen with
+ * fresh batchConflicts + perItemIssues (or stay closed if everything
+ * now resolves cleanly).
+ */
+function onConflictIncludeDeps(targetIds: string[]): void {
+  conflictsOpen.value = false;
+  const next = new Set<string>(importV2Selection.value);
+  for (const id of targetIds) next.add(id);
+  void onImportV2SelectionReady(next);
 }
 
 async function runCommit(resolution: {
@@ -1778,6 +1831,7 @@ watch(
         :per-item-issues="perItemIssues"
         @commit-ready="onConflictCommitReady"
         @cancel="onConflictCancel"
+        @include-deps="onConflictIncludeDeps"
       />
     </div>
   </div>

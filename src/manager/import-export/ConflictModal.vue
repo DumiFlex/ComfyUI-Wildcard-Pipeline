@@ -139,6 +139,14 @@ const emit = defineEmits<{
     },
   ): void;
   (e: "cancel"): void;
+  /**
+   * User clicked "Include dependencies" on an unselected-dep per-item
+   * issue. Carries the target ids the parent should add to the live
+   * selection + re-run the pipeline. Parent typically closes the modal,
+   * expands the selection, and re-runs `onImportV2SelectionReady` so
+   * the modal reopens (or doesn't, if nothing left to resolve).
+   */
+  (e: "include-deps", targetIds: string[]): void;
   (e: "update:open", v: boolean): void;
 }>();
 
@@ -305,6 +313,21 @@ function extractChain(issue: PerItemIssue): ChainStep[] {
  */
 function setBatchDefault(value: "skip" | "replace" | "rename"): void {
   batchDefault.value = value;
+}
+
+/**
+ * Handler for the unselected-dep row's "Include deps" button. Records
+ * the row's decision as `accept` so the gating doesn't keep this row
+ * "unresolved" after the parent expands the selection + re-runs the
+ * pipeline, then emits the target ids upward. Parent closes the modal,
+ * adds the targets to the live selection, and reopens the modal with
+ * a fresh batchConflicts + perItemIssues pass.
+ */
+function includeDepsFor(issue: PerItemIssue): void {
+  const targets = issueTargets(issue);
+  const ids = targets.map((t) => t.id);
+  resolveItem(issue.entity.id, "accept");
+  emit("include-deps", ids);
 }
 
 /**
@@ -494,30 +517,69 @@ function issueBadgeVariant(issue: PerItemIssue): string {
  * defensively so the modal degrades to a generic line on malformed
  * payloads.
  */
-function issueDetailText(issue: PerItemIssue): string {
+interface IssueTarget { id: string; name?: string }
+
+/** Read the aggregated `targets` array off an issue's `detail` blob.
+ *  Falls back to the single-target form (`detail.target` /
+ *  `detail.target_name`) for back-compat with callers that haven't
+ *  switched to the array shape yet. */
+function issueTargets(issue: PerItemIssue): IssueTarget[] {
   const d = issue.detail;
-  let targetId: string | undefined;
-  let targetName: string | undefined;
   if (d && typeof d === "object") {
-    const t = (d as { target?: unknown }).target;
-    if (typeof t === "string" && t.length > 0) targetId = t;
-    const tn = (d as { target_name?: unknown }).target_name;
-    if (typeof tn === "string" && tn.length > 0) targetName = tn;
-  }
-  if (issue.kind === "broken-inner-ref" || issue.kind === "broken-uuid-ref" || issue.kind === "broken-constraint-ref") {
-    if (targetId) {
-      return `References @{${targetId}} — not in payload, not in library. Importing will leave a dangling ref.`;
+    const arr = (d as { targets?: unknown }).targets;
+    if (Array.isArray(arr)) {
+      const out: IssueTarget[] = [];
+      for (const t of arr) {
+        if (t && typeof t === "object") {
+          const id = (t as { id?: unknown }).id;
+          const name = (t as { name?: unknown }).name;
+          if (typeof id === "string" && id.length > 0) {
+            out.push(
+              typeof name === "string" && name.length > 0
+                ? { id, name }
+                : { id },
+            );
+          }
+        }
+      }
+      if (out.length > 0) return out;
     }
-    return "References an entity that is not in the payload or the library.";
+    const t = (d as { target?: unknown }).target;
+    if (typeof t === "string" && t.length > 0) {
+      const name = (d as { target_name?: unknown }).target_name;
+      return [
+        typeof name === "string" && name.length > 0
+          ? { id: t, name }
+          : { id: t },
+      ];
+    }
+  }
+  return [];
+}
+
+function formatTargetList(targets: IssueTarget[]): string {
+  return targets
+    .map((t) => (t.name ? `${t.name} @{${t.id}}` : `@{${t.id}}`))
+    .join(", ");
+}
+
+function issueDetailText(issue: PerItemIssue): string {
+  const targets = issueTargets(issue);
+  if (issue.kind === "broken-inner-ref" || issue.kind === "broken-uuid-ref" || issue.kind === "broken-constraint-ref") {
+    if (targets.length === 0) {
+      return "References an entity that is not in the payload or the library.";
+    }
+    const list = formatTargetList(targets);
+    const noun = targets.length === 1 ? "ref" : "refs";
+    return `References ${list} — not in payload, not in library. Importing will leave dangling ${noun}.`;
   }
   if (issue.kind === "unselected-dep") {
-    if (targetId && targetName) {
-      return `References ${targetName} @{${targetId}} — present in the payload but NOT in your selection. Importing now leaves a dangling ref unless you also select the target.`;
+    if (targets.length === 0) {
+      return "References entities present in the payload but not selected.";
     }
-    if (targetId) {
-      return `References @{${targetId}} — present in the payload but NOT in your selection. Importing now leaves a dangling ref unless you also select the target.`;
-    }
-    return "References an entity present in the payload but not selected.";
+    const list = formatTargetList(targets);
+    const verb = targets.length === 1 ? "is" : "are";
+    return `Requires ${list} — ${verb} in the payload but NOT in your selection.`;
   }
   if (issue.kind === "fingerprint-mismatch") {
     return "Payload-stamped fingerprint disagrees with the row content.";
@@ -928,10 +990,33 @@ const importItemCount = computed<number>(() => {
               @applied="(p) => onRenameApplied(issue.entity.id, p)"
               @cancel="onRenameCancel(issue.entity.id)"
             />
-            <!-- Non-tier-3 per-item issues get the 3-button segmented
-                 control. Note "Import anyway" keeps its distinct label
-                 (it's not a UUID-collision replace — could be a
-                 fingerprint mismatch, broken ref, etc.). -->
+            <!-- Phase 13: unselected-dep is user-fixable (the deps live
+                 in the payload, the user just didn't pick them) so it
+                 gets a 2-button group leading with "Include deps". The
+                 other non-tier-3 per-item kinds (broken-inner-ref,
+                 fingerprint-mismatch, etc.) keep the 3-button skip /
+                 import-as-new / import-anyway control. -->
+            <div
+              v-else-if="issue.kind === 'unselected-dep'"
+              class="wp-action-group"
+              role="radiogroup"
+              :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
+              :data-test="`resolve-group-${issue.entity.id}`"
+            >
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                :data-test="`resolve-${issue.entity.id}-accept`"
+                @click="resolveItem(issue.entity.id, 'accept')"
+              ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                data-active="true"
+                :data-test="`resolve-${issue.entity.id}-include-deps`"
+                @click="includeDepsFor(issue)"
+              ><i class="pi pi-sitemap" aria-hidden="true" /> Include deps</button>
+            </div>
             <div
               v-else
               class="wp-action-group"

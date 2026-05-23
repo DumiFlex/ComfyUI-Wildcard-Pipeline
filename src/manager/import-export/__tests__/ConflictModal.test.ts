@@ -932,7 +932,11 @@ describe("ConflictModal.vue", () => {
         {
           kind: "unselected-dep",
           entity: { id: "b0219910", name: "backdrop", kind: "wildcard" },
-          detail: { target: "c14e7527", target_name: "mood" },
+          detail: {
+            target: "c14e7527",
+            target_name: "mood",
+            targets: [{ id: "c14e7527", name: "mood" }],
+          },
         },
       ],
     });
@@ -943,6 +947,72 @@ describe("ConflictModal.vue", () => {
     expect(row.textContent).toContain("mood");
     expect(row.textContent).toContain("c14e7527");
     expect(row.textContent).toContain("NOT in your selection");
+    wrap.unmount();
+  });
+
+  it("Phase 13: unselected-dep row lists every target on a single row", () => {
+    const wrap = mountModal({
+      batchConflicts: [],
+      perItemIssues: [
+        {
+          kind: "unselected-dep",
+          entity: { id: "b0219910", name: "backdrop", kind: "wildcard" },
+          detail: {
+            target: "c14e7527",
+            target_name: "mood",
+            targets: [
+              { id: "c14e7527", name: "mood" },
+              { id: "a361dbdc", name: "color" },
+            ],
+          },
+        },
+      ],
+    });
+    // Only ONE row for backdrop — not two.
+    const rows = document.body.querySelectorAll(
+      '[data-test^="conflict-modal-item-"]',
+    );
+    expect(rows.length).toBe(1);
+    const row = rows[0]!;
+    expect(row.textContent).toContain("mood");
+    expect(row.textContent).toContain("color");
+    expect(row.textContent).toContain("c14e7527");
+    expect(row.textContent).toContain("a361dbdc");
+    wrap.unmount();
+  });
+
+  it("Phase 13: unselected-dep row shows Include deps + Import anyway (no Skip / Import as new)", async () => {
+    const wrap = mountModal({
+      batchConflicts: [],
+      perItemIssues: [
+        {
+          kind: "unselected-dep",
+          entity: { id: "b0219910", name: "backdrop", kind: "wildcard" },
+          detail: {
+            target: "c14e7527",
+            target_name: "mood",
+            targets: [{ id: "c14e7527", name: "mood" }],
+          },
+        },
+      ],
+    });
+    const group = $('[data-test="resolve-group-b0219910"]');
+    const buttons = group.querySelectorAll("button");
+    const labels = [...buttons].map((b) => b.textContent?.trim() ?? "");
+    expect(labels.some((l) => /Include deps/i.test(l))).toBe(true);
+    expect(labels.some((l) => /Import anyway/i.test(l))).toBe(true);
+    expect(labels.some((l) => /^Skip$/i.test(l))).toBe(false);
+    expect(labels.some((l) => /Import as new/i.test(l))).toBe(false);
+    // Click Include deps → modal emits include-deps with the target ids.
+    document
+      .querySelector<HTMLButtonElement>(
+        '[data-test="resolve-b0219910-include-deps"]',
+      )!
+      .click();
+    await flushPromises();
+    const emitted = wrap.emitted("include-deps");
+    expect(emitted).toBeTruthy();
+    expect(emitted![0]![0]).toEqual(["c14e7527"]);
     wrap.unmount();
   });
 });
