@@ -31,7 +31,7 @@
  * plain-`tsc` + IDE diagnostic engines resolve it cleanly (Task 18
  * type-export pattern).
  */
-import { ref } from "vue";
+import { ref, useId } from "vue";
 import type { ChainStep } from "./chain-types";
 
 interface Props {
@@ -42,6 +42,15 @@ interface Props {
 defineProps<Props>();
 
 const expanded = ref<boolean>(false);
+
+/**
+ * Stable id for the collapsible chain body so the toggle's
+ * `aria-controls` can reference it. Vue 3.5+ `useId()` gives us a
+ * deterministic, SSR-safe id per component instance — required for
+ * the assistive-tech announcement of expanded/collapsed state on the
+ * toggle button (see WAI-ARIA disclosure pattern).
+ */
+const bodyId = useId();
 </script>
 
 <template>
@@ -53,6 +62,8 @@ const expanded = ref<boolean>(false);
         type="button"
         class="wp-tier3-row__toggle"
         data-test="chain-toggle"
+        :aria-expanded="expanded ? 'true' : 'false'"
+        :aria-controls="bodyId"
         @click="expanded = !expanded"
       >
         {{ expanded ? "Hide why" : "Why?" }}
@@ -60,6 +71,7 @@ const expanded = ref<boolean>(false);
     </div>
     <div
       v-if="expanded"
+      :id="bodyId"
       class="wp-tier3-row__chain"
       data-test="chain-body"
     >

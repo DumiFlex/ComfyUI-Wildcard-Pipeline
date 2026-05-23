@@ -131,4 +131,51 @@ describe("Tier3ChainViz", () => {
     await toggle.trigger("click");
     expect(wrap.find('[data-test="chain-body"]').exists()).toBe(false);
   });
+
+  // -- a11y: disclosure-pattern ARIA attributes --
+  // The toggle button is a WAI-ARIA disclosure trigger: it must
+  // expose `aria-expanded` reflecting current state, and
+  // `aria-controls` pointing at the body's `id`. Without these,
+  // screen readers can't announce the collapsed/expanded toggle
+  // semantics. Item 3 of the deferred a11y follow-ups.
+  it("sets aria-expanded='false' on the toggle when collapsed", () => {
+    const wrap = mount(Tier3ChainViz, {
+      props: {
+        bundleName: "Outer",
+        chain: makeChain("Outer", "Inner"),
+      },
+    });
+    const toggle = wrap.find('[data-test="chain-toggle"]');
+    expect(toggle.attributes("aria-expanded")).toBe("false");
+  });
+
+  it("sets aria-expanded='true' on the toggle when expanded", async () => {
+    const wrap = mount(Tier3ChainViz, {
+      props: {
+        bundleName: "Outer",
+        chain: makeChain("Outer", "Inner"),
+      },
+    });
+    const toggle = wrap.find('[data-test="chain-toggle"]');
+    await toggle.trigger("click");
+    expect(toggle.attributes("aria-expanded")).toBe("true");
+  });
+
+  it("links the toggle's aria-controls to the body's id", async () => {
+    const wrap = mount(Tier3ChainViz, {
+      props: {
+        bundleName: "Outer",
+        chain: makeChain("Outer", "Inner"),
+      },
+    });
+    const toggle = wrap.find('[data-test="chain-toggle"]');
+    const ariaControls = toggle.attributes("aria-controls");
+    // `aria-controls` is always present (points to the id even when
+    // the body is unmounted) — that's the spec-compliant shape, but
+    // we only have a body to compare against after expanding.
+    expect(ariaControls).toBeTruthy();
+    await toggle.trigger("click");
+    const body = wrap.find('[data-test="chain-body"]');
+    expect(body.attributes("id")).toBe(ariaControls);
+  });
 });
