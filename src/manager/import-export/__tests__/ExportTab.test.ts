@@ -630,4 +630,134 @@ describe("ExportTab.vue", () => {
         .attributes("aria-checked"),
     ).toBe("false");
   });
+
+  // ---------- Phase 2: unselectedDeps wiring ----------
+
+  it("PickerSection for wildcards receives kind=wildcard so the header icon renders", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    const section = wrap.get('[data-test="export-tab-section-wildcard"]');
+    const icon = section.find('[data-test="picker-section-icon"]');
+    expect(icon.exists()).toBe(true);
+    expect(icon.attributes("class") ?? "").toContain("wp-row-type-icon--wildcard");
+  });
+
+  it("PickerRow.unselectedDeps lists referenced-but-unselected ids on a selected row", async () => {
+    // Wildcard A references @{bbbbbbbb}; select only A. The row for A
+    // should receive a non-empty `unselectedDeps` listing B with its
+    // library-known name + kind.
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+
+    // Select only A.
+    await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+
+    const rowA = wrap
+      .get('[data-test="export-tab-row-wildcard-aaaaaaaa"]')
+      .findComponent(PickerRow);
+    const deps = rowA.props("unselectedDeps") as Array<{ id: string; name: string; type?: string }>;
+    expect(deps).toHaveLength(1);
+    expect(deps[0]!.id).toBe("bbbbbbbb");
+    expect(deps[0]!.name).toBe("$b");
+    expect(deps[0]!.type).toBe("wildcard");
+  });
+
+  it("PickerRow.unselectedDeps is empty when both source and target are selected", async () => {
+    // Same fixture as above, but select both rows — no unmet deps left.
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+
+    await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+    await wrap.get('[data-test="export-tab-row-wildcard-bbbbbbbb"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+
+    const rowA = wrap
+      .get('[data-test="export-tab-row-wildcard-aaaaaaaa"]')
+      .findComponent(PickerRow);
+    expect(rowA.props("unselectedDeps")).toEqual([]);
+  });
+
+  it("PickerRow.unselectedDeps is empty on an UNSELECTED row even when it has unresolved refs", async () => {
+    // Wildcard A references @{bbbbbbbb} but A itself isn't selected.
+    // Surfacing dep chips on unchecked rows would be advisory noise — the
+    // user hasn't picked the row, so there's nothing to "resolve".
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+
+    // Don't select anything.
+    const rowA = wrap
+      .get('[data-test="export-tab-row-wildcard-aaaaaaaa"]')
+      .findComponent(PickerRow);
+    expect(rowA.props("unselectedDeps")).toEqual([]);
+  });
 });

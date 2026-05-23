@@ -22,6 +22,7 @@ import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
+import type { DepRef } from "./PickerRow.vue";
 import { liveLibraryToRawPayload } from "./live-library-adapter";
 import { buildDepGraph, transitiveClosure, constraintsBothSidesIn } from "./dep-graph";
 
@@ -257,6 +258,83 @@ function selectWithDependencies(): void {
   applyClosureToSelection(closure);
 }
 
+// ---------- Dep graph + unselected deps ----------
+//
+// Compute the live library's dep graph ONCE per library snapshot so the
+// per-row chip lookup is O(edges) per row instead of rebuilding on every
+// selection mutation. Selection changes only flip set membership — they
+// don't change the graph structure — so `depGraph` only rebuilds when
+// modules/bundles/categories themselves change.
+
+const depGraph = computed(() => {
+  const payload = liveLibraryToRawPayload(
+    modules.value,
+    bundles.value,
+    categories.value,
+  );
+  return buildDepGraph(payload);
+});
+
+/**
+ * Flat `id → {name, type}` lookup across every loaded entity. Used by
+ * `unselectedDepsForId` to surface human-readable name + kind in the
+ * expanded dep list. Modules contribute their `type` subtype; bundles +
+ * categories supply the bucket kind so the dep list's mini type-icon
+ * picks up the right tint.
+ */
+const libraryRowById = computed<Map<string, { name: string; type: string }>>(() => {
+  const m = new Map<string, { name: string; type: string }>();
+  for (const mod of modules.value) {
+    m.set(mod.id, { name: mod.name, type: mod.type });
+  }
+  for (const b of bundles.value) {
+    m.set(b.id, { name: b.name, type: "bundle" });
+  }
+  for (const c of categories.value) {
+    m.set(c.id, { name: c.name, type: "category" });
+  }
+  return m;
+});
+
+/**
+ * Union of every selection set across all 7 buckets. Recomputed on any
+ * selection mutation. Used by `unselectedDepsForId` for membership
+ * checks — once per chip lookup rather than re-iterating 7 Sets per
+ * outgoing edge.
+ */
+const allSelectedIds = computed<Set<string>>(() => {
+  const s = new Set<string>();
+  for (const b of BUCKETS) {
+    for (const id of selection.value[b.key]) s.add(id);
+  }
+  return s;
+});
+
+/**
+ * Outgoing refs from `id` that aren't currently selected. Only surfaced
+ * on SELECTED rows — an unchecked row hasn't been picked for export, so
+ * its missing-deps would be advisory noise.
+ *
+ * Targets present in `libraryRowById` resolve through the live library
+ * adapter (the user can opt them in via "Select with dependencies");
+ * targets absent from BOTH selection AND library are skipped — they
+ * can't happen in normal flow since the live library is the source of
+ * the dep edges. Defensive skip avoids surfacing a stale-data warning
+ * that the user can't act on from the export side.
+ */
+function unselectedDepsForId(id: string): DepRef[] {
+  if (!allSelectedIds.value.has(id)) return [];
+  const edges = depGraph.value[id] ?? [];
+  const out: DepRef[] = [];
+  for (const target of edges) {
+    if (allSelectedIds.value.has(target)) continue;
+    const row = libraryRowById.value.get(target);
+    if (!row) continue; // target outside the live library — skip
+    out.push({ id: target, name: row.name, type: row.type });
+  }
+  return out;
+}
+
 // ---------- Export ----------
 
 function buildRequest(): ExportBuildRequest {
@@ -446,6 +524,7 @@ function presetFavoritesOnly(): void {
           :total-count="bucketTotalCount(bucket.key)"
           :selected-count="bucketSelectedCount(bucket.key)"
           :default-open="false"
+          :kind="bucket.key"
           :data-test="`export-tab-section-${bucket.key}`"
           @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
         >
@@ -460,7 +539,7 @@ function presetFavoritesOnly(): void {
             :show-id="true"
             :checked="isRowSelected(bucket.key, row.id)"
             :status-badges="[]"
-            :unselected-deps="[]"
+            :unselected-deps="unselectedDepsForId(row.id)"
             :missing-deps="[]"
             :data-test="`export-tab-row-${bucket.key}-${row.id}`"
             @update:checked="(v: boolean) => toggleRow(bucket.key, row.id, v)"

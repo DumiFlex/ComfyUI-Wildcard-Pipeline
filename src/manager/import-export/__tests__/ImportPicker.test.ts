@@ -180,11 +180,12 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "wildcards");
     const row1 = wrap.get('[data-test="import-picker-row-w1"]');
-    expect(row1.text()).toContain("migrated from v0");
+    // Phase 2 label includes the source → current schema version pair.
+    expect(row1.text()).toContain("MIGRATED v0→1");
     // Shared `wp-mod-badge--migrated` primitive — blue/info tint.
     expect(row1.find(".wp-mod-badge.wp-mod-badge--migrated").exists()).toBe(true);
     const row2 = wrap.get('[data-test="import-picker-row-w2"]');
-    expect(row2.text()).not.toContain("migrated from v0");
+    expect(row2.text()).not.toContain("MIGRATED");
   });
 
   it("renders the integrity-warning badge for entities listed in integrityWarnings", async () => {
@@ -200,11 +201,12 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "wildcards");
     const row1 = wrap.get('[data-test="import-picker-row-w1"]');
-    expect(row1.text()).toContain("integrity warning");
+    // Phase 2 label: short uppercase "INTEGRITY" sticker.
+    expect(row1.text()).toContain("INTEGRITY");
     // Drift variant = amber for schema/integrity drift.
     expect(row1.find(".wp-mod-badge.wp-mod-badge--drift").exists()).toBe(true);
     const row2 = wrap.get('[data-test="import-picker-row-w2"]');
-    expect(row2.text()).not.toContain("integrity warning");
+    expect(row2.text()).not.toContain("INTEGRITY");
   });
 
   it("shows a Requires N chip when a selected wildcard references an unselected id", async () => {
@@ -515,7 +517,7 @@ describe("ImportPicker.vue", () => {
     expect(row.props("categoryColor")).toBeUndefined();
   });
 
-  it("adds a conflict badge when libraryRows carries a different fingerprint for a wildcard", async () => {
+  it("adds a MODIFIED badge when libraryRows carries a different fingerprint for a wildcard", async () => {
     // Incoming wildcard fingerprint vs different library fingerprint.
     const incoming = mkModuleRow({
       id: "w1", name: "a", type: "wildcard",
@@ -536,29 +538,31 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    const conflictBadge = badges.find((b) => b.label === "conflict");
-    expect(conflictBadge).toBeDefined();
-    // Compat shim maps "conflict" → MOD variant; Phase 2 will retire this
-    // in favour of NEW vs MOD vs DRIFT classification done by the
-    // orchestrator.
-    expect(conflictBadge!.variant).toBe("mod");
+    const modBadge = badges.find((b) => b.label === "MODIFIED");
+    expect(modBadge).toBeDefined();
+    expect(modBadge!.variant).toBe("mod");
   });
 
-  it("does NOT add a conflict badge when libraryRows lacks the entity id", async () => {
+  it("adds a NEW badge when libraryRows lacks the entity id (no-collision state)", async () => {
+    // no-collision → NEW (green) — clean import, no decision needed.
     const wrap = mountPicker({
       payload: makePayload({
         wildcards: [mkModuleRow({ id: "w1", name: "a" })],
       }),
-      libraryRows: new Map(), // empty
+      libraryRows: new Map(), // empty → no-collision
     });
     await flushPromises();
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
+    const newBadge = badges.find((b) => b.label === "NEW");
+    expect(newBadge).toBeDefined();
+    expect(newBadge!.variant).toBe("new");
+    // And NO MODIFIED badge alongside it.
+    expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
   });
 
-  it("does NOT add a conflict badge for silent-skip (matching fingerprint)", async () => {
+  it("does NOT add a status badge for silent-skip (matching fingerprint)", async () => {
     // Identical fingerprint on both sides → silent-skip → no inline badge
     // (entity will be auto-excluded at commit-time anyway).
     const incoming = mkModuleRow({
@@ -578,12 +582,14 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
+    // Neither NEW nor MODIFIED — silent-skip emits nothing.
+    expect(badges.find((b) => b.label === "NEW")).toBeUndefined();
+    expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
   });
 
   it("computes no collision states when libraryRows prop is absent", async () => {
     // No `libraryRows` passed — picker falls back to empty record so
-    // no conflict badges land on any row.
+    // no NEW/MODIFIED badges land on any row.
     const wrap = mountPicker({
       payload: makePayload({
         wildcards: [mkModuleRow({ id: "w1", name: "a" })],
@@ -593,10 +599,11 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
+    expect(badges.find((b) => b.label === "NEW")).toBeUndefined();
+    expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
   });
 
-  it("adds a conflict badge for a bundle when libraryRows contains its id (presence-only check)", async () => {
+  it("adds a MODIFIED badge for a bundle when libraryRows contains its id (presence-only check)", async () => {
     // Bundles use id-presence (not fingerprint) for the inline badge.
     const wrap = mountPicker({
       payload: makePayload({
@@ -610,10 +617,12 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "bundles");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    expect(badges.find((b) => b.label === "conflict")).toBeDefined();
+    const modBadge = badges.find((b) => b.label === "MODIFIED");
+    expect(modBadge).toBeDefined();
+    expect(modBadge!.variant).toBe("mod");
   });
 
-  it("never adds a conflict badge to a category row even when libraryRows has its id", async () => {
+  it("never adds a collision badge to a category row even when libraryRows has its id", async () => {
     // Categories merge by name; id-presence in libraryRows is irrelevant.
     const wrap = mountPicker({
       payload: makePayload({
@@ -627,6 +636,132 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "categories");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
+    expect(badges.find((b) => b.label === "NEW")).toBeUndefined();
+    expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
+  });
+
+  // ---------- Phase 2: new status-badge taxonomy ----------
+
+  it("stacks MIGRATED + MODIFIED badges in the correct order on a single row", async () => {
+    // Row with BOTH migrated_from AND a uuid+fingerprint collision: should
+    // emit two badges. MIGRATED comes first (schema event), then MODIFIED
+    // (collision state) — matches the documented ordering.
+    const incoming = mkModuleRow({
+      id: "w1", name: "a", type: "wildcard",
+      payload_hash: "incoming-hash",
+    });
+    (incoming as Record<string, unknown>).migrated_from = 0;
+    const libraryFp = moduleFingerprint(
+      mkModuleRow({ name: "a", type: "wildcard", payload_hash: "different-hash" }),
+    );
+    const wrap = mountPicker({
+      payload: makePayload({
+        wildcards: [incoming],
+      }),
+      libraryRows: new Map([
+        ["w1", { snapshot_fingerprint: libraryFp }],
+      ]),
+    });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow)[0]!;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
+    expect(badges).toHaveLength(2);
+    expect(badges[0]!.variant).toBe("migrated");
+    expect(badges[0]!.label).toBe("MIGRATED v0→1");
+    expect(badges[1]!.variant).toBe("mod");
+    expect(badges[1]!.label).toBe("MODIFIED");
+  });
+
+  it("PickerSection for wildcards receives kind=wildcard so the header icon renders", async () => {
+    const payload = makePayload({
+      wildcards: [{ id: "w1", name: "a" }],
+    });
+    const wrap = mountPicker({ payload });
+    await flushPromises();
+    // Section header carries the wildcard-tinted icon (data-test set in
+    // PickerSection when `kind` resolves to wildcard).
+    const section = wrap.get('[data-test="import-picker-section-wildcards"]');
+    const icon = section.find('[data-test="picker-section-icon"]');
+    expect(icon.exists()).toBe(true);
+    expect(icon.attributes("class") ?? "").toContain("wp-row-type-icon--wildcard");
+  });
+
+  it("computes missingDeps for refs that resolve in neither payload nor library", async () => {
+    // wildcard w1 references @{deadbeef} via its option value. The target
+    // is NOT in the payload AND NOT in `libraryRows` → red Missing chip.
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "w1",
+          name: "a",
+          options: [{ value: "ref @{deadbeef}", weight: 1 }],
+          tags: [],
+        },
+      ],
+    });
+    const wrap = mountPicker({ payload, libraryRows: new Map() });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow).find(
+      (r) => r.props("uuid") === "w1",
+    );
+    expect(row).toBeDefined();
+    const missing = row!.props("missingDeps") as Array<{ id: string; name: string }>;
+    expect(missing).toHaveLength(1);
+    expect(missing[0]!.id).toBe("deadbeef");
+    // Falls back to `@{...}` name format when target absent from both
+    // payload + library.
+    expect(missing[0]!.name).toBe("@{deadbeef}");
+  });
+
+  it("treats a ref present in libraryRows as resolved (not missing)", async () => {
+    // Same ref pattern as above, but this time `deadbeef` exists in the
+    // receiver library — picker should NOT flag it as missing.
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "w1",
+          name: "a",
+          options: [{ value: "ref @{deadbeef}", weight: 1 }],
+          tags: [],
+        },
+      ],
+    });
+    const wrap = mountPicker({
+      payload,
+      libraryRows: new Map([["deadbeef", { snapshot_fingerprint: "abc" }]]),
+    });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow).find(
+      (r) => r.props("uuid") === "w1",
+    );
+    expect(row).toBeDefined();
+    expect(row!.props("missingDeps")).toEqual([]);
+  });
+
+  it("treats a ref present in payload as resolved (not missing)", async () => {
+    // Both w1 and deadbeef are in the payload → no missing dep, even
+    // though deadbeef isn't selected (that's the amber chip's job).
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "w1",
+          name: "a",
+          options: [{ value: "ref @{deadbeef}", weight: 1 }],
+          tags: [],
+        },
+        { id: "deadbeef", name: "target", options: [], tags: [] },
+      ],
+    });
+    const wrap = mountPicker({ payload });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow).find(
+      (r) => r.props("uuid") === "w1",
+    );
+    expect(row).toBeDefined();
+    expect(row!.props("missingDeps")).toEqual([]);
   });
 });
