@@ -397,6 +397,145 @@ describe("ImportExport.vue — commit orchestrator", () => {
     wrap.unmount();
   });
 
+  it("batch default rename → orchestrator mints new_id + suffixes name with ' (imported)'", async () => {
+    // Pre-seed library so the picker selection generates a BatchConflict
+    // for entity 22222222. The user picks "Rename (keep both)" on the
+    // batch dropdown — orchestrator mints a fresh id + appends the
+    // " (imported)" suffix to the name.
+    apiM.modules.list.mockResolvedValue({
+      items: [mkModule({ id: "22222222", type: "wildcard", name: "live" })],
+      total: 1,
+    });
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u", summary: { added: 0, replaced: 0, renamed: 1 },
+    });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinue(wrap, mkPayload({
+      wildcards: [mkWildcardEntity("22222222")],
+    }));
+    // Modal teleported — drive its batch dropdown directly.
+    const sel = document.body.querySelector<HTMLSelectElement>(
+      '[data-test="batch-default-select"]',
+    );
+    if (!sel) throw new Error("batch-default-select missing");
+    sel.value = "rename";
+    sel.dispatchEvent(new Event("change"));
+    await flushPromises();
+    const commitBtn = document.body.querySelector<HTMLButtonElement>(
+      '[data-test="commit-btn"]',
+    );
+    commitBtn?.click();
+    await flushPromises();
+    expect(apiM.importExport.commit).toHaveBeenCalledTimes(1);
+    const firstCall = apiM.importExport.commit.mock.calls[0];
+    if (!firstCall) throw new Error("commit was not called");
+    const payload = firstCall[0] as CommitPayload;
+    expect(payload.adds.length).toBe(0);
+    expect(payload.replaces.length).toBe(0);
+    expect(payload.renames.length).toBe(1);
+    const r = payload.renames[0];
+    expect(r?.kind).toBe("wildcard");
+    expect(r?.old_id).toBe("22222222");
+    // Minted id is fresh 8-hex-char value distinct from the old id.
+    expect(typeof r?.new_id).toBe("string");
+    expect(r?.new_id.length).toBe(8);
+    expect(r?.new_id).not.toBe("22222222");
+    expect(/^[0-9a-f]{8}$/.test(r?.new_id ?? "")).toBe(true);
+    // Content carries the suffixed display name + the minted id.
+    expect(r?.content.name).toBe("wc_22222222 (imported)");
+    expect(r?.content.id).toBe(r?.new_id);
+    wrap.unmount();
+  });
+
+  it("per-item override rename (no explicit new_id/new_name) → orchestrator mints id + suffixes name", async () => {
+    // Same setup as the batch-rename test, but the resolution arrives
+    // through the per-row override path. ConflictModal emits
+    // `perItemDecisions: { "33333333": { kind: "rename" } }` — no
+    // `new_id` or `new_name`. The orchestrator must mint both.
+    apiM.modules.list.mockResolvedValue({
+      items: [mkModule({ id: "33333333", type: "wildcard", name: "live" })],
+      total: 1,
+    });
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u", summary: { added: 0, replaced: 0, renamed: 1 },
+    });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinue(wrap, mkPayload({
+      wildcards: [mkWildcardEntity("33333333")],
+    }));
+    // Drive ConflictModal directly with the override-only payload — the
+    // batch override per-row dropdown writes `{kind: "rename"}` (no
+    // new_id / new_name) into perItemDecisions, exactly the shape we
+    // emit here.
+    const modalCmp = wrap.findComponent(ConflictModal);
+    if (!modalCmp.exists()) throw new Error("ConflictModal not mounted");
+    modalCmp.vm.$emit("commit-ready", {
+      batchDefault: "skip",
+      perItemDecisions: {
+        "33333333": { kind: "rename" },
+      },
+    });
+    await flushPromises();
+    expect(apiM.importExport.commit).toHaveBeenCalledTimes(1);
+    const firstCall = apiM.importExport.commit.mock.calls[0];
+    if (!firstCall) throw new Error("commit was not called");
+    const payload = firstCall[0] as CommitPayload;
+    expect(payload.renames.length).toBe(1);
+    const r = payload.renames[0];
+    expect(r?.old_id).toBe("33333333");
+    expect(typeof r?.new_id).toBe("string");
+    expect(r?.new_id.length).toBe(8);
+    expect(r?.new_id).not.toBe("33333333");
+    expect(r?.content.name).toBe("wc_33333333 (imported)");
+    expect(r?.content.id).toBe(r?.new_id);
+    wrap.unmount();
+  });
+
+  it("per-item override rename (explicit new_id + new_name) → orchestrator uses those values verbatim", async () => {
+    // The inline `<ImportAsNewRename>` flow on a per-item issue row
+    // emits `{ kind: "rename", new_id, new_name }`. The orchestrator
+    // must thread those values through unchanged — no re-mint, no
+    // " (imported)" suffix on top of the user-edited name.
+    apiM.modules.list.mockResolvedValue({
+      items: [mkModule({ id: "44444444", type: "wildcard", name: "live" })],
+      total: 1,
+    });
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u", summary: { added: 0, replaced: 0, renamed: 1 },
+    });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinue(wrap, mkPayload({
+      wildcards: [mkWildcardEntity("44444444")],
+    }));
+    const modalCmp = wrap.findComponent(ConflictModal);
+    if (!modalCmp.exists()) throw new Error("ConflictModal not mounted");
+    modalCmp.vm.$emit("commit-ready", {
+      batchDefault: "skip",
+      perItemDecisions: {
+        "44444444": {
+          kind: "rename",
+          new_id: "ffff0000",
+          new_name: "Custom",
+        },
+      },
+    });
+    await flushPromises();
+    expect(apiM.importExport.commit).toHaveBeenCalledTimes(1);
+    const firstCall = apiM.importExport.commit.mock.calls[0];
+    if (!firstCall) throw new Error("commit was not called");
+    const payload = firstCall[0] as CommitPayload;
+    expect(payload.renames.length).toBe(1);
+    const r = payload.renames[0];
+    expect(r?.old_id).toBe("44444444");
+    expect(r?.new_id).toBe("ffff0000");
+    expect(r?.content.id).toBe("ffff0000");
+    expect(r?.content.name).toBe("Custom");
+    wrap.unmount();
+  });
+
   it("missing per-item decision → console.warn + entity dropped, commit proceeds for the rest", async () => {
     // Build a payload with two wildcards. One carries a wrong
     // snapshot_fingerprint → `parsePayload` emits an IntegrityWarning →

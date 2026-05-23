@@ -58,6 +58,7 @@ import {
   type GroupKey,
   type GroupMeta,
 } from "../utils/bundleSelection";
+import { newShortId } from "../utils/ids";
 
 type Mode = "export" | "export-v2" | "import" | "import-v2";
 
@@ -838,19 +839,55 @@ function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
 }
 
 /**
+ * Build a `{kind: "rename"}` Decision for an entity, minting a fresh
+ * client-side id and suffixing the display name with `" (imported)"`.
+ *
+ * Used by the batch default `rename` branch and by per-item override
+ * rows where the user picked "Rename (keep both)" from the per-row
+ * dropdown — neither path surfaces the inline `<ImportAsNewRename>` UI
+ * so the orchestrator is responsible for the id mint + name suffix.
+ *
+ * Falls back to the entity id when `entity.name` is absent or not a
+ * string — same display-fallback the modal uses for row labels. Mirrors
+ * the existing legacy import flow (`runImport`, this same file) which
+ * appends `" (imported)"` to renamed module + bundle names.
+ */
+function mintRenameDecision(
+  entity: Record<string, unknown> & { id: string },
+): Decision {
+  const raw = entity.name;
+  const base = typeof raw === "string" && raw.length > 0 ? raw : entity.id;
+  return { kind: "rename", new_id: newShortId(), new_name: `${base} (imported)` };
+}
+
+/**
  * Convert the user's `{batchDefault, perItemDecisions}` resolution into a
- * `ResolvedSelection` shaped for `buildCommitPayload`. The decision for
- * each entity follows these rules:
+ * `ResolvedSelection` shaped for `buildCommitPayload`. Decision precedence
+ * matches the modal's contract: a `perItemDecisions[id]` entry — whether
+ * sourced from a per-item issue row or a per-row batch override —
+ * outranks `batchDefault`.
  *
  *   - `silent-skip` → never reaches the commit (excluded upstream).
- *   - Per-item issue resolved → use that decision verbatim:
+ *   - `perItemDecisions[id]` present (per-item issue OR per-row override):
  *       * `skip`    → drop
  *       * `replace` → `{kind: "replace"}`
  *       * `accept`  → `{kind: "add"}` (proceed despite the warning)
- *       * `rename`  → `{kind: "rename", new_id, new_name}`
- *   - Batch conflict resolved by `batchDefault`:
+ *       * `rename`  → `{kind: "rename", new_id, new_name}` when the
+ *                     decision carries explicit `new_id` + `new_name`
+ *                     (the inline `<ImportAsNewRename>` flow on a
+ *                     per-item issue row). When either field is missing
+ *                     (per-row batch override dropdown picked "rename"
+ *                     without the inline UI) the orchestrator mints
+ *                     them via `mintRenameDecision`.
+ *   - `perItemDecisions[id]` absent AND id is a per-item issue: that
+ *     means the modal emitted without a resolution for that row — log
+ *     diagnostic + drop. Should not happen in normal UX (the Import
+ *     button is disabled until every per-item issue is resolved).
+ *   - Batch conflict (no per-item decision) → `batchDefault`:
  *       * `skip`    → drop
  *       * `replace` → `{kind: "replace"}`
+ *       * `rename`  → `mintRenameDecision(entity)` — fresh id +
+ *                     `" (imported)"` suffix per conflict entity.
  *   - Everything else → `{kind: "add"}`
  *
  * Categories are routed straight to `categories` with `{kind: "add"}`
@@ -859,7 +896,10 @@ function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
  */
 function partitionSelection(
   selected: SelectedEntity[],
-  resolution: { batchDefault: "skip" | "replace"; perItemDecisions: Record<string, PerItemDecision> },
+  resolution: {
+    batchDefault: "skip" | "replace" | "rename";
+    perItemDecisions: Record<string, PerItemDecision>;
+  },
   perItemIds: ReadonlySet<string>,
 ): ResolvedSelection {
   const out: ResolvedSelection = {
@@ -869,39 +909,49 @@ function partitionSelection(
   for (const s of selected) {
     if (s.collision === "silent-skip") continue;
     let decision: Decision | null;
-    if (perItemIds.has(s.entity.id)) {
-      const pd = resolution.perItemDecisions[s.entity.id];
-      if (!pd) {
-        // Missing decision for a per-item issue means the modal closed
-        // without resolving it — should not happen in normal UX since the
-        // Import button stays disabled until every per-item row has a
-        // decision. Log for diagnostics rather than silently dropping.
-        console.warn(
-          `[import-commit] no decision recorded for per-item issue ${s.entity.id}; dropping`,
-        );
-        decision = null;
-      } else if (pd.kind === "skip") {
+    const pd = resolution.perItemDecisions[s.entity.id];
+    if (pd) {
+      // Decision present — applies regardless of whether this id is a
+      // per-item issue or a batch conflict with a per-row override.
+      if (pd.kind === "skip") {
         decision = null;
       } else if (pd.kind === "replace") {
         decision = { kind: "replace" };
       } else if (pd.kind === "accept") {
         decision = { kind: "add" };
       } else if (pd.kind === "rename") {
-        if (!pd.new_id || !pd.new_name) {
-          console.warn(
-            `[import-commit] rename decision for ${s.entity.id} missing new_id/new_name; dropping`,
-          );
-          decision = null;
-        } else {
+        // Two paths land here:
+        //   1. Inline `<ImportAsNewRename>` confirm → pd carries both
+        //      `new_id` + `new_name` from the user-edited input. Use
+        //      verbatim.
+        //   2. Per-row batch override dropdown picked "rename" — pd
+        //      arrives as `{kind: "rename"}` with no extra fields, same
+        //      shape as the batch-default rename path. Mint here so the
+        //      override matches the batch-default semantic.
+        if (pd.new_id && pd.new_name) {
           decision = { kind: "rename", new_id: pd.new_id, new_name: pd.new_name };
+        } else {
+          decision = mintRenameDecision(s.entity);
         }
       } else {
         decision = null;
       }
+    } else if (perItemIds.has(s.entity.id)) {
+      // Per-item issue without a recorded decision — the Import button
+      // gating in ConflictModal should prevent this, so surface as a
+      // diagnostic rather than silently dropping.
+      console.warn(
+        `[import-commit] no decision recorded for per-item issue ${s.entity.id}; dropping`,
+      );
+      decision = null;
     } else if (s.collision === "conflict") {
-      decision = resolution.batchDefault === "replace"
-        ? { kind: "replace" }
-        : null;
+      if (resolution.batchDefault === "replace") {
+        decision = { kind: "replace" };
+      } else if (resolution.batchDefault === "rename") {
+        decision = mintRenameDecision(s.entity);
+      } else {
+        decision = null;
+      }
     } else {
       decision = { kind: "add" };
     }
@@ -1025,7 +1075,7 @@ async function onImportV2SelectionReady(ids: Set<string>): Promise<void> {
 }
 
 function onConflictCommitReady(resolution: {
-  batchDefault: "skip" | "replace";
+  batchDefault: "skip" | "replace" | "rename";
   perItemDecisions: Record<string, PerItemDecision>;
 }): void {
   conflictsOpen.value = false;
@@ -1039,7 +1089,7 @@ function onConflictCancel(): void {
 }
 
 async function runCommit(resolution: {
-  batchDefault: "skip" | "replace";
+  batchDefault: "skip" | "replace" | "rename";
   perItemDecisions: Record<string, PerItemDecision>;
 }): Promise<void> {
   const selected = pendingSelection.value;

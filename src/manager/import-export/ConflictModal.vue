@@ -99,19 +99,31 @@ const props = withDefaults(defineProps<Props>(), { open: true });
  *   - batchDefault       — applies uniformly to every batch UUID
  *                          collision; the parent threads it into the
  *                          per-row decisions before calling commit.
+ *                          `"rename"` means "Import as new (keep both)"
+ *                          — the orchestrator mints a fresh id per
+ *                          conflict entity + suffixes the name with
+ *                          `" (imported)"`. The batch dropdown doesn't
+ *                          surface the inline rename UI; users who want
+ *                          a custom new name use the per-item issue
+ *                          row's inline rename (which writes explicit
+ *                          `new_id` + `new_name`).
  *   - perItemDecisions   — keyed by entity `id` (NOT `uuid`). Each
  *                          value carries the chosen action and an
- *                          optional `new_name` for the rename case.
- *                          The rename branch isn't surfaced in the
- *                          current UI but the type leaves room so a
- *                          follow-up can wire it without breaking
- *                          callers.
+ *                          optional `new_id` / `new_name` pair for the
+ *                          rename case. When `kind === "rename"` lacks
+ *                          `new_id`/`new_name` (e.g. the batch override
+ *                          per-row dropdown was set to "rename") the
+ *                          orchestrator mints them the same way it
+ *                          handles `batchDefault === "rename"`. When
+ *                          they're present (set via the inline rename
+ *                          on a per-item issue row) the orchestrator
+ *                          uses those values verbatim.
  */
 const emit = defineEmits<{
   (
     e: "commit-ready",
     resolution: {
-      batchDefault: "skip" | "replace";
+      batchDefault: "skip" | "replace" | "rename";
       perItemDecisions: Record<string, PerItemDecision>;
     },
   ): void;
@@ -119,7 +131,7 @@ const emit = defineEmits<{
   (e: "update:open", v: boolean): void;
 }>();
 
-const batchDefault = ref<"skip" | "replace">("skip");
+const batchDefault = ref<"skip" | "replace" | "rename">("skip");
 
 const perItemDecisions = ref<Record<string, PerItemDecision>>({});
 
@@ -281,7 +293,7 @@ function onBatchDefaultChange(ev: Event): void {
   const target = ev.target as HTMLSelectElement | null;
   if (!target) return;
   const v = target.value;
-  if (v === "skip" || v === "replace") {
+  if (v === "skip" || v === "replace" || v === "rename") {
     batchDefault.value = v;
   }
 }
@@ -289,27 +301,30 @@ function onBatchDefaultChange(ev: Event): void {
 /**
  * Read the current per-row override for a batch conflict. Returns
  * `"default"` when no override exists (i.e. the row will follow the
- * batch dropdown's value at commit time). Returns `"skip"` or
- * `"replace"` when the user has explicitly overridden this row.
+ * batch dropdown's value at commit time). Returns `"skip"`, `"replace"`,
+ * or `"rename"` when the user has explicitly overridden this row.
  *
  * The "default" sentinel keeps the `<select>` bound state cleanly
- * tri-valued — without it, a row with no entry in `perItemDecisions`
+ * multi-valued — without it, a row with no entry in `perItemDecisions`
  * would either render as "skip" (misleading: user hasn't chosen) or as
  * blank (confusing in the dropdown). Mapping the absence-of-entry to a
  * named option makes the intent explicit in the UI.
  *
- * Decisions with `kind` other than `skip`/`replace` (i.e. `rename` or
- * `accept`, which the batch override flow does not surface) coerce to
- * `"default"` so the override dropdown reflects "no batch-side
- * override" without misrepresenting the underlying decision. This
- * doesn't happen in practice today (the batch override path only
- * writes skip/replace) but the type widens to those values, so the
- * narrowing is defensive.
+ * Decisions with `kind === "accept"` (which the batch override flow does
+ * not surface) coerce to `"default"` so the override dropdown reflects
+ * "no batch-side override" without misrepresenting the underlying
+ * decision. This doesn't happen in practice today (the batch override
+ * path only writes skip/replace/rename) but the type widens to those
+ * values, so the narrowing is defensive.
  */
-function batchOverrideFor(id: string): "default" | "skip" | "replace" {
+function batchOverrideFor(
+  id: string,
+): "default" | "skip" | "replace" | "rename" {
   const d = perItemDecisions.value[id];
   if (!d) return "default";
-  if (d.kind === "skip" || d.kind === "replace") return d.kind;
+  if (d.kind === "skip" || d.kind === "replace" || d.kind === "rename") {
+    return d.kind;
+  }
   return "default";
 }
 
@@ -317,15 +332,24 @@ function batchOverrideFor(id: string): "default" | "skip" | "replace" {
  * Apply a per-row batch override decision keyed by entity id. Picking
  * `"default"` deletes the entry from `perItemDecisions` so the batch
  * dropdown's value applies at commit time (clean state — no lingering
- * stub). Picking `"skip"` or `"replace"` writes the decision into the
- * map, where it takes precedence over `batchDefault` for that id.
+ * stub). Picking `"skip"` / `"replace"` / `"rename"` writes the decision
+ * into the map, where it takes precedence over `batchDefault` for that
+ * id.
+ *
+ * The `"rename"` override stores `{kind: "rename"}` WITHOUT
+ * `new_id`/`new_name`. The orchestrator (`partitionSelection` in
+ * `ImportExport.vue`) mints a fresh id + suffixes the name with
+ * `" (imported)"` at commit time, matching the batch-default rename
+ * semantics. This keeps the override dropdown compact (no inline rename
+ * UI per row); users who want a custom new name use the per-item issue
+ * row's inline `<ImportAsNewRename>` component instead.
  *
  * Immutable replacement matches the `resolveItem` pattern so any
  * downstream `computed` observing `perItemDecisions` reruns.
  */
 function setBatchOverride(
   id: string,
-  value: "default" | "skip" | "replace",
+  value: "default" | "skip" | "replace" | "rename",
 ): void {
   if (value === "default") {
     const next = { ...perItemDecisions.value };
@@ -348,7 +372,9 @@ function onBatchOverrideChange(id: string, ev: Event): void {
   const target = ev.target as HTMLSelectElement | null;
   if (!target) return;
   const v = target.value;
-  if (v === "default" || v === "skip" || v === "replace") {
+  if (
+    v === "default" || v === "skip" || v === "replace" || v === "rename"
+  ) {
     setBatchOverride(id, v);
   }
 }
@@ -404,6 +430,7 @@ function batchRowName(conflict: BatchConflict): string {
           >
             <option value="skip">Skip — keep live-DB version</option>
             <option value="replace">Replace — overwrite live-DB row</option>
+            <option value="rename">Rename (keep both)</option>
           </select>
           <button
             type="button"
@@ -441,6 +468,7 @@ function batchRowName(conflict: BatchConflict): string {
               <option value="default">Use batch default</option>
               <option value="skip">Skip</option>
               <option value="replace">Replace</option>
+              <option value="rename">Rename (keep both)</option>
             </select>
           </li>
         </ul>

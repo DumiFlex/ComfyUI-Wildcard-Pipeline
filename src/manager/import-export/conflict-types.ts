@@ -66,10 +66,24 @@ export interface PerItemIssue {
 }
 
 /**
- * Default action applied uniformly to every batch UUID collision —
- * skip (keep live-DB version) or replace (overwrite the live-DB row).
+ * Default action applied uniformly to every batch UUID collision.
+ *
+ *   - `skip`    — drop the incoming row; keep the live-DB version.
+ *   - `replace` — overwrite the live-DB row with the incoming content.
+ *   - `rename`  — "Import as new (keep both)": mint a fresh id per
+ *                 entity client-side, suffix the name with
+ *                 `" (imported)"`, and add the resulting row alongside
+ *                 the existing live-DB row. The orchestrator
+ *                 (`partitionSelection` in `ImportExport.vue`) is
+ *                 responsible for minting the id + suffixing the name
+ *                 when this default applies, since the batch dropdown
+ *                 doesn't surface the inline rename UI (kept compact).
+ *                 Per-row overrides + per-item issue rows that need
+ *                 user-edited names still route through
+ *                 `ImportAsNewRename.vue` and emit explicit
+ *                 `{ new_id, new_name }`.
  */
-export type BatchAction = "skip" | "replace";
+export type BatchAction = "skip" | "replace" | "rename";
 
 /**
  * Per-item resolution. `new_id` + `new_name` are only attached on the

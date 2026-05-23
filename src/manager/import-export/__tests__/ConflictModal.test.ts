@@ -435,6 +435,157 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
+  // -------- Rename (keep both) — Feature D ---------------------------
+
+  it("batch default dropdown includes the 'Rename (keep both)' option", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
+      ],
+    });
+    const select = $('[data-test="batch-default-select"]') as HTMLSelectElement;
+    const renameOpt = Array.from(select.options).find((o) => o.value === "rename");
+    expect(renameOpt).toBeDefined();
+    expect(renameOpt?.textContent ?? "").toContain("Rename (keep both)");
+    wrap.unmount();
+  });
+
+  it("batch default 'rename' emits commit-ready with batchDefault='rename'", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
+      ],
+      perItemIssues: [],
+    });
+
+    const select = $('[data-test="batch-default-select"]') as HTMLSelectElement;
+    select.value = "rename";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+
+    const events = wrap.emitted("commit-ready");
+    expect(events).toBeTruthy();
+    const firstCall = events?.[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) return;
+    const payload = firstCall[0] as {
+      batchDefault: "skip" | "replace" | "rename";
+      perItemDecisions: Record<string, { kind: string }>;
+    };
+    expect(payload.batchDefault).toBe("rename");
+    // Batch-default rename leaves perItemDecisions empty — the
+    // orchestrator mints id + name suffix at commit time.
+    expect(Object.keys(payload.perItemDecisions)).toEqual([]);
+    wrap.unmount();
+  });
+
+  it("per-row override dropdown includes the 'Rename (keep both)' option", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
+    const renameOpt = Array.from(select.options).find((o) => o.value === "rename");
+    expect(renameOpt).toBeDefined();
+    expect(renameOpt?.textContent ?? "").toContain("Rename (keep both)");
+    wrap.unmount();
+  });
+
+  it("per-row override 'rename' writes {kind: 'rename'} (no new_id/new_name)", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
+    select.value = "rename";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+
+    const events = wrap.emitted("commit-ready");
+    expect(events).toBeTruthy();
+    const firstCall = events?.[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) return;
+    const payload = firstCall[0] as {
+      batchDefault: "skip" | "replace" | "rename";
+      perItemDecisions: Record<string, {
+        kind: string;
+        new_id?: string;
+        new_name?: string;
+      }>;
+    };
+    // Compact override path — orchestrator mints new_id + new_name; the
+    // modal does NOT pre-populate them. Strict equality on the shape
+    // keeps the contract honest.
+    expect(payload.perItemDecisions.w1).toEqual({ kind: "rename" });
+    expect(payload.perItemDecisions.w1?.new_id).toBeUndefined();
+    expect(payload.perItemDecisions.w1?.new_name).toBeUndefined();
+    wrap.unmount();
+  });
+
+  it("per-item issue 'Import as new' button still surfaces the inline rename UI (Task 20 path)", async () => {
+    // Regression check — Task 20 wired ImportAsNewRename for non-tier-3
+    // per-item issues. Feature D must not regress that path.
+    const wrap = mountModal({
+      perItemIssues: [
+        makePerItemIssue({
+          kind: "fingerprint-mismatch",
+          entity: { id: "fp1", name: "FP1" },
+        }),
+      ],
+    });
+    // The "Import as new" button on the issue row toggles the inline
+    // rename component (NOT a per-row dropdown — that's the batch
+    // override surface).
+    $('[data-test="resolve-fp1-rename"]').click();
+    await flushPromises();
+    expect(find('[data-test="rename-row"]')).not.toBeNull();
+    expect(find('[data-test="rename-input"]')).not.toBeNull();
+    expect(find('[data-test="rename-confirm"]')).not.toBeNull();
+
+    // Confirming writes the {kind, new_id, new_name} triple via the
+    // existing onRenameApplied path.
+    $('[data-test="rename-confirm"]').click();
+    await flushPromises();
+
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+
+    const events = wrap.emitted("commit-ready");
+    expect(events).toBeTruthy();
+    const firstCall = events?.[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) return;
+    const payload = firstCall[0] as {
+      batchDefault: "skip" | "replace" | "rename";
+      perItemDecisions: Record<string, {
+        kind: string;
+        new_id?: string;
+        new_name?: string;
+      }>;
+    };
+    expect(payload.perItemDecisions.fp1?.kind).toBe("rename");
+    // Inline UI populated both fields — orchestrator uses them verbatim.
+    expect(typeof payload.perItemDecisions.fp1?.new_id).toBe("string");
+    expect(payload.perItemDecisions.fp1?.new_id?.length).toBe(8);
+    expect(payload.perItemDecisions.fp1?.new_name).toContain("FP1");
+    wrap.unmount();
+  });
+
   // -------- Accessibility floor (Modal wrapper contract) -----------------
 
   it("renders the modal with role='dialog' and aria-modal='true'", () => {
