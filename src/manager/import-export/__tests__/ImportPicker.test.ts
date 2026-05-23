@@ -1,5 +1,5 @@
 import { mount, flushPromises } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import ImportPicker from "../ImportPicker.vue";
 import PickerRow from "../PickerRow.vue";
 import type { RawPayload } from "../migrations";
@@ -776,9 +776,9 @@ describe("ImportPicker.vue", () => {
     const missing = row!.props("missingDeps") as Array<{ id: string; name: string }>;
     expect(missing).toHaveLength(1);
     expect(missing[0]!.id).toBe("deadbeef");
-    // Falls back to `@{...}` name format when target absent from both
-    // payload + library.
-    expect(missing[0]!.name).toBe("@{deadbeef}");
+    // Name is literal "unknown" — the `@{id}` form would duplicate the
+    // id-span PickerRow already renders next to the name.
+    expect(missing[0]!.name).toBe("unknown");
   });
 
   it("treats a ref present in libraryRows as resolved (not missing)", async () => {
@@ -805,6 +805,110 @@ describe("ImportPicker.vue", () => {
     );
     expect(row).toBeDefined();
     expect(row!.props("missingDeps")).toEqual([]);
+  });
+
+  // ---------- Phase 9: favorite star + dep warning confirm ----------
+
+  it("passes isFavorite=true to PickerRow when entity carries is_favorite", async () => {
+    const payload = makePayload({
+      wildcards: [{ id: "w1", name: "fav", is_favorite: true }],
+    });
+    const wrap = mountPicker({ payload });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow).find(
+      (r) => r.props("uuid") === "w1",
+    );
+    expect(row).toBeDefined();
+    expect(row!.props("isFavorite")).toBe(true);
+  });
+
+  it("passes isFavorite=false when entity has no is_favorite field", async () => {
+    const payload = makePayload({
+      wildcards: [{ id: "w1", name: "x" }],
+    });
+    const wrap = mountPicker({ payload });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow).find(
+      (r) => r.props("uuid") === "w1",
+    );
+    expect(row).toBeDefined();
+    expect(row!.props("isFavorite")).toBe(false);
+  });
+
+  it("calls window.confirm on Continue when selected row has unresolvable deps", async () => {
+    // Wildcard w1 references @{deadbeef} that is NOT in payload + NOT in
+    // library. Select w1 → continue triggers window.confirm.
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "w1",
+          name: "a",
+          options: [{ value: "ref @{deadbeef}", weight: 1 }],
+          tags: [],
+        },
+      ],
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      const wrap = mountPicker({ payload, libraryRows: new Map() });
+      await flushPromises();
+      // Smart default selects w1 (only entity in payload).
+      const cont = wrap.get('[data-test="import-picker-continue"]');
+      expect(cont.attributes("disabled")).toBeUndefined();
+      await cont.trigger("click");
+      await flushPromises();
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(confirmSpy.mock.calls[0]?.[0]).toMatch(/missing from payload and library/i);
+      // Declined → no emit.
+      expect(wrap.emitted("selection-ready")).toBeFalsy();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("Continue proceeds + emits when user accepts dep warning", async () => {
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "w1",
+          name: "a",
+          options: [{ value: "ref @{deadbeef}", weight: 1 }],
+          tags: [],
+        },
+      ],
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const wrap = mountPicker({ payload, libraryRows: new Map() });
+      await flushPromises();
+      await wrap.get('[data-test="import-picker-continue"]').trigger("click");
+      await flushPromises();
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      const events = wrap.emitted("selection-ready");
+      expect(events).toBeTruthy();
+      expect(events![0]![0]).toEqual(new Set(["w1"]));
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("Continue does NOT fire window.confirm when no selected row has missing deps", async () => {
+    const payload = makePayload({
+      wildcards: [{ id: "w1", name: "a", options: [], tags: [] }],
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const wrap = mountPicker({ payload });
+      await flushPromises();
+      await wrap.get('[data-test="import-picker-continue"]').trigger("click");
+      await flushPromises();
+      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(wrap.emitted("selection-ready")).toBeTruthy();
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 
   it("treats a ref present in payload as resolved (not missing)", async () => {

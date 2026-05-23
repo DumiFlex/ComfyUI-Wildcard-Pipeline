@@ -821,6 +821,167 @@ describe("ExportTab.vue", () => {
 
   // ---------- Phase 8: + select dep button wires through to bucket toggle ----------
 
+  // ---------- Phase 9: favorite star + dep warning confirm ----------
+
+  it("passes isFavorite=true to PickerRow for a favorited module", async () => {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({ id: "w1", type: "wildcard", name: "$fav", is_favorite: true }),
+      ],
+      total: 1,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+    const pickerRow = wrap
+      .get('[data-test="export-tab-row-wildcard-w1"]')
+      .findComponent(PickerRow);
+    expect(pickerRow.props("isFavorite")).toBe(true);
+  });
+
+  it("passes isFavorite=false to PickerRow for category rows (categories don't carry favorites)", async () => {
+    apiAny.modules.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({
+      items: [mkCategory({ id: "cat1", name: "Cat1" })],
+    });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "category");
+    const pickerRow = wrap
+      .get('[data-test="export-tab-row-category-cat1"]')
+      .findComponent(PickerRow);
+    expect(pickerRow.props("isFavorite")).toBe(false);
+  });
+
+  it("calls window.confirm before export when a selected row has unresolved deps", async () => {
+    // Wildcard A references @{bbbbbbbb}; select only A → A has 1 unselected
+    // dep → window.confirm fires. User declines → no export request.
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      const wrap = mount(ExportTab);
+      await flushPromises();
+      await expandSection(wrap, "wildcard");
+      await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+      await flushPromises();
+      await wrap.get('[data-test="export-tab-submit"]').trigger("click");
+      await flushPromises();
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(confirmSpy.mock.calls[0]?.[0]).toMatch(/unresolved dependencies/i);
+      // Declined → no API call.
+      expect(apiAny.importExport.build).not.toHaveBeenCalled();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("export proceeds when window.confirm returns true (user accepts dep warning)", async () => {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const wrap = mount(ExportTab);
+      await flushPromises();
+      await expandSection(wrap, "wildcard");
+      await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+      await flushPromises();
+      await wrap.get('[data-test="export-tab-submit"]').trigger("click");
+      await flushPromises();
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(apiAny.importExport.build).toHaveBeenCalledTimes(1);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("export proceeds without window.confirm when all selected rows have satisfied deps", async () => {
+    // Select both wildcards — A's ref to B is satisfied. No confirm
+    // should fire.
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const wrap = mount(ExportTab);
+      await flushPromises();
+      await expandSection(wrap, "wildcard");
+      await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+      await wrap.get('[data-test="export-tab-row-wildcard-bbbbbbbb"] button[role="checkbox"]').trigger("click");
+      await flushPromises();
+      await wrap.get('[data-test="export-tab-submit"]').trigger("click");
+      await flushPromises();
+      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(apiAny.importExport.build).toHaveBeenCalledTimes(1);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
   it("PickerRow's select-dep emit adds the target id to the matching bucket selection", async () => {
     // Wildcard A references @{bbbbbbbb}; select only A so the expanded
     // dep list (which only renders for SELECTED rows) becomes visible

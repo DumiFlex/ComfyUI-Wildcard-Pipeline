@@ -97,6 +97,10 @@ interface Props {
   missingDeps?: DepRef[];
   /** 0..n indent levels. Each level adds 16px of left padding. */
   indent?: number;
+  /** When true, render a small warning-tinted star next to the badges
+   *  column to surface favorite-entity status. Categories never carry
+   *  favorites; modules + bundles do. */
+  isFavorite?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -108,6 +112,7 @@ const props = withDefaults(defineProps<Props>(), {
   unselectedDeps: () => [],
   missingDeps: () => [],
   indent: 0,
+  isFavorite: false,
 });
 const emit = defineEmits<{
   (e: "update:checked", v: boolean): void;
@@ -220,7 +225,16 @@ function depIconClass(d: DepRef): string {
     >{{ props.categoryName }}</span>
     <span v-else class="wp-picker-row__col-spacer" aria-hidden="true" />
 
-    <span v-if="props.statusBadges.length > 0" class="wp-picker-row__badges">
+    <span
+      v-if="props.statusBadges.length > 0 || props.isFavorite"
+      class="wp-picker-row__badges"
+    >
+      <i
+        v-if="props.isFavorite"
+        class="pi pi-star-fill wp-picker-row__fav"
+        aria-label="Favorite"
+        data-test="picker-row-fav"
+      />
       <span
         v-for="b in props.statusBadges"
         :key="b.label"
@@ -428,6 +442,14 @@ function depIconClass(d: DepRef): string {
   flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
+}
+
+/* Favorite star — prototype line 811. Warning-tinted 10px glyph,
+ * sits as a leading element inside the badges column. */
+.wp-picker-row__fav {
+  color: var(--wp-warn);
+  font-size: 10px;
+  flex-shrink: 0;
 }
 
 .wp-picker-row__dep-chips {

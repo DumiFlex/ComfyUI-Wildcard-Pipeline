@@ -38,6 +38,7 @@ import { useResolveWarnings } from "../composables/useResolveWarnings";
 import { useToast } from "../composables/useToast";
 import type { ModuleRow } from "../api/types";
 import type { CommitPayload, CommitOk } from "../import-export/commit";
+import type { PerItemIssue } from "../import-export/conflict-types";
 
 interface MockedApi {
   modules: { list: ReturnType<typeof vi.fn> };
@@ -111,6 +112,12 @@ beforeEach(() => {
   apiM.categories.list.mockResolvedValue({ items: [] });
   apiM.bundles.list.mockResolvedValue({ items: [], total: 0 });
   useResolveWarnings().clearAll();
+  // Phase 9: Continue gating uses window.confirm when selected rows have
+  // unresolvable deps. jsdom doesn't implement confirm → stub it to
+  // accept by default so the orchestrator pipeline continues past the
+  // picker. Individual tests can re-stub if they need to assert the
+  // confirm call signature.
+  vi.spyOn(window, "confirm").mockReturnValue(true);
   // Wipe any toasts left from a prior test.
   const t = useToast();
   while (t.toasts.value.length > 0) {
@@ -303,11 +310,19 @@ describe("ImportExport.vue — commit orchestrator", () => {
     await flushPromises();
     // Wildcard option references @{deadbeef} which is NOT in the local
     // library + NOT in the payload — broken-refs walker should flag it.
+    // Phase 9: this now also produces a broken-inner-ref per-item issue
+    // so the ConflictModal opens; drive commit-ready to proceed.
     await feedPayloadAndContinue(wrap, mkPayload({
       wildcards: [
         mkWildcardEntity("cccccccc", [{ value: "blue @{deadbeef}", weight: 1 }]),
       ],
     }));
+    const modalCmp = wrap.findComponent(ConflictModal);
+    if (!modalCmp.exists()) throw new Error("ConflictModal not mounted");
+    modalCmp.vm.$emit("commit-ready", {
+      batchDefault: "skip",
+      perItemDecisions: { "cccccccc": { kind: "accept" } },
+    });
     await flushPromises();
     const warns = useResolveWarnings().warnings.value;
     const brokenForC = warns.find(
@@ -365,12 +380,20 @@ describe("ImportExport.vue — commit orchestrator", () => {
     const wrap = mountView();
     await flushPromises();
     // First import: wildcard with broken @{deadbeef} ref → broken-ref
-    // warning lands in the store keyed to module_id=ffffffff.
+    // warning lands in the store keyed to module_id=ffffffff. Phase 9:
+    // broken-inner-ref now opens the ConflictModal — drive commit-ready
+    // to proceed past the modal.
     await feedPayloadAndContinue(wrap, mkPayload({
       wildcards: [
         mkWildcardEntity("ffffffff", [{ value: "blue @{deadbeef}", weight: 1 }]),
       ],
     }));
+    const modal1 = wrap.findComponent(ConflictModal);
+    if (!modal1.exists()) throw new Error("ConflictModal not mounted (first commit)");
+    modal1.vm.$emit("commit-ready", {
+      batchDefault: "skip",
+      perItemDecisions: { "ffffffff": { kind: "accept" } },
+    });
     await flushPromises();
     const store = useResolveWarnings();
     const firstBatch = store.warnings.value.filter(
@@ -535,6 +558,42 @@ describe("ImportExport.vue — commit orchestrator", () => {
     expect(r?.new_id).toBe("ffff0000");
     expect(r?.content.id).toBe("ffff0000");
     expect(r?.content.name).toBe("Custom");
+    wrap.unmount();
+  });
+
+  it("selected entity referencing absent id emits broken-inner-ref per-item issue", async () => {
+    // Wildcard a1 references @{deadbeef} via its option value. The
+    // target id is NOT in the payload AND the library is empty →
+    // orchestrator must surface a broken-inner-ref per-item issue so
+    // the ConflictModal opens for resolution.
+    apiM.modules.list.mockResolvedValue({ items: [], total: 0 });
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u", summary: { added: 1, replaced: 0, renamed: 0 },
+    });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinue(wrap, mkPayload({
+      wildcards: [
+        mkWildcardEntity("a1a1a1a1", [{ value: "ref @{deadbeef}", weight: 1 }]),
+      ],
+    }));
+    // Modal opens because the broken ref produces a per-item issue.
+    const modalEl = document.body.querySelector('[data-test="conflict-modal"]');
+    expect(modalEl).not.toBeNull();
+    // Assert the orchestrator emitted the right shape — not just that some
+    // text rendered. Locks in `kind="broken-inner-ref"`, target id, and the
+    // entity kind ConflictModal needs for the type-icon.
+    const modal = wrap.findComponent(ConflictModal);
+    const perItemIssues = modal.props("perItemIssues") as PerItemIssue[];
+    const brokenRefIssue = perItemIssues.find(
+      (i) => i.kind === "broken-inner-ref" && i.entity.id === "a1a1a1a1",
+    );
+    expect(brokenRefIssue).toBeDefined();
+    expect(brokenRefIssue?.entity).toMatchObject({ id: "a1a1a1a1", kind: "wildcard" });
+    expect((brokenRefIssue?.detail as { target?: string } | undefined)?.target).toBe("deadbeef");
+    // Surface-level sanity that the modal also renders the badge/id.
+    expect(modalEl?.textContent).toContain("MISSING DEP");
+    expect(modalEl?.textContent).toContain("deadbeef");
     wrap.unmount();
   });
 

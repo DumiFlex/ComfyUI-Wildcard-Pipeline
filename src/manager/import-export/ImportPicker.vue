@@ -61,6 +61,9 @@ interface PayloadEntity {
   /** Module type slug ("wildcard", "fixed_values", etc.). Present on
    *  module-bucket entities. */
   type?: string;
+  /** Favorite flag — modules + bundles carry it. Surface a star in the
+   *  picker's badges column when true. Categories never carry favorites. */
+  is_favorite?: boolean;
 }
 
 /**
@@ -427,11 +430,13 @@ function missingDepsFor(entity: PayloadEntity): DepRef[] {
   for (const target of edges) {
     if (payloadIds.value.has(target)) continue;          // resolves within payload
     if (props.libraryRows?.has(target) === true) continue; // resolves against library
+    // Name is literal "unknown" so it never collides with the `@{id}`
+    // id-span that PickerRow renders separately. No type info — target
+    // absent from both sources; row renders the generic pi-circle glyph
+    // from PickerRow's depIconClass fallback.
     refs.push({
       id: target,
-      name: `@{${target}}`,
-      // No type info — target absent from both sources; row renders the
-      // generic pi-circle glyph from PickerRow's depIconClass fallback.
+      name: "unknown",
     });
   }
   return refs;
@@ -454,23 +459,38 @@ function deselectAll(): void {
 
 function emitContinue(): void {
   if (selected.value.size === 0) return;
+  // Warn the user when any selected row carries unresolvable deps
+  // (target absent from both payload AND receiver library). The user
+  // can still proceed; the broken-ref state will surface in the commit
+  // step's per-item resolution. Lookup goes through a single payload-wide
+  // id→entity map so the count is O(selected) instead of O(selected × buckets).
+  const entityById = new Map<string, PayloadEntity>();
+  for (const b of BUCKETS) {
+    for (const e of entitiesForBucket(b.key)) {
+      if (typeof e.id === "string" && e.id.length > 0) entityById.set(e.id, e);
+    }
+  }
+  let missingCount = 0;
+  for (const id of selected.value) {
+    const entity = entityById.get(id);
+    if (entity && missingDepsFor(entity).length > 0) missingCount += 1;
+  }
+  if (missingCount > 0) {
+    const proceed = window.confirm(
+      `${missingCount} selected ${missingCount === 1 ? "item has" : "items have"} dependencies missing from payload and library. Continue anyway?`,
+    );
+    if (!proceed) return;
+  }
   // Belt-and-suspenders: even though the parent applies `:key` on
   // `importV2State.id` to force a full remount across payload swaps
   // (which by itself resets `seeded` + `selected`), filter the emit
   // against the current payload's id set so a stale id can NEVER reach
   // the commit stage. Without this, a regression in the parent's :key
-  // wiring would resurface the orphan-id bug.
-  const validIds = new Set<string>();
-  for (const b of BUCKETS) {
-    for (const entity of entitiesForBucket(b.key)) {
-      if (typeof entity.id === "string" && entity.id.length > 0) {
-        validIds.add(entity.id);
-      }
-    }
-  }
+  // wiring would resurface the orphan-id bug. Reuse the entityById map
+  // built above so we don't walk every bucket twice in one click.
   const filtered = new Set<string>();
   for (const id of selected.value) {
-    if (validIds.has(id)) filtered.add(id);
+    if (entityById.has(id)) filtered.add(id);
   }
   if (filtered.size === 0) return;
   emit("selection-ready", filtered);
@@ -527,6 +547,7 @@ function emitContinue(): void {
           :status-badges="badgesForEntity(entity, bucket.key)"
           :unselected-deps="unselectedDepsForEntity(entity)"
           :missing-deps="missingDepsFor(entity)"
+          :is-favorite="entity.is_favorite ?? false"
           :data-test="`import-picker-row-${entity.id}`"
           @update:checked="(v: boolean) => toggleRow(entity.id, v)"
           @select-dep="(id: string) => toggleRow(id, true)"

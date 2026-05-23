@@ -137,6 +137,9 @@ interface RowItem {
   kind: string;
   categoryName?: string;
   categoryColor?: string;
+  /** Surface the favorite-star indicator. Modules + bundles carry it;
+   *  categories don't (always false). */
+  isFavorite: boolean;
 }
 
 /**
@@ -164,13 +167,17 @@ function rowsForBucket(b: BucketKey): RowItem[] {
         kind: "bundle",
         categoryName: cat?.name,
         categoryColor: cat?.color,
+        isFavorite: x.is_favorite,
       };
     });
   }
   if (b === "category") {
     // Categories ARE the category — surface kind for the icon but skip
-    // the category chip since it would duplicate the row name.
-    return categories.value.map((x) => ({ id: x.id, name: x.name, kind: "category" }));
+    // the category chip since it would duplicate the row name. Categories
+    // don't carry favorites.
+    return categories.value.map((x) => ({
+      id: x.id, name: x.name, kind: "category", isFavorite: false,
+    }));
   }
   return modulesForBucket(b).map((x) => {
     const cat = lookupCategory(x.category_id);
@@ -180,6 +187,7 @@ function rowsForBucket(b: BucketKey): RowItem[] {
       kind: x.type,
       categoryName: cat?.name,
       categoryColor: cat?.color,
+      isFavorite: x.is_favorite,
     };
   });
 }
@@ -400,6 +408,21 @@ function downloadPayload(payload: unknown) {
 
 async function runExport() {
   if (totalSelected.value === 0) return;
+  // Warn before export when any selected row has unselected deps inside
+  // the library. Bypass via `window.confirm` so the user can still ship
+  // an intentionally-pruned bundle (e.g. wildcards-only).
+  let depWarnCount = 0;
+  for (const b of BUCKETS) {
+    for (const id of selection.value[b.key]) {
+      if (unselectedDepsForId(id).length > 0) depWarnCount += 1;
+    }
+  }
+  if (depWarnCount > 0) {
+    const proceed = window.confirm(
+      `${depWarnCount} selected ${depWarnCount === 1 ? "item has" : "items have"} unresolved dependencies. Export anyway?`,
+    );
+    if (!proceed) return;
+  }
   exporting.value = true;
   try {
     const payload = await api.importExport.build(buildRequest());
@@ -549,6 +572,7 @@ function presetFavoritesOnly(): void {
           :status-badges="[]"
           :unselected-deps="unselectedDepsForId(row.id)"
           :missing-deps="[]"
+          :is-favorite="row.isFavorite"
           :data-test="`export-tab-row-${bucket.key}-${row.id}`"
           @update:checked="(v: boolean) => toggleRow(bucket.key, row.id, v)"
           @select-dep="(id: string) => onSelectDep(id)"

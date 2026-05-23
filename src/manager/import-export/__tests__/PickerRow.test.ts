@@ -304,4 +304,55 @@ describe("PickerRow", () => {
     expect(wrap.find('[data-test="dep-warn-chip"]').exists()).toBe(true);
     expect(wrap.find('[data-test="dep-missing-chip"]').exists()).toBe(true);
   });
+
+  // ---------- Favorite star ----------
+
+  it("renders the favorite star when isFavorite is true", () => {
+    const wrap = mount(PickerRow, {
+      props: { uuid: "u", name: "x", checked: false, isFavorite: true },
+    });
+    const star = wrap.find('[data-test="picker-row-fav"]');
+    expect(star.exists()).toBe(true);
+    expect(star.attributes("class") ?? "").toContain("pi-star-fill");
+  });
+
+  it("hides the favorite star when isFavorite is false (default)", () => {
+    const wrap = mount(PickerRow, {
+      props: { uuid: "u", name: "x", checked: false },
+    });
+    expect(wrap.find('[data-test="picker-row-fav"]').exists()).toBe(false);
+  });
+
+  it("renders favorite star + status badge in the same column", () => {
+    const wrap = mount(PickerRow, {
+      props: {
+        uuid: "u",
+        name: "x",
+        checked: false,
+        isFavorite: true,
+        statusBadges: [{ variant: "drift", label: "EXISTING" }],
+      },
+    });
+    const badgesCell = wrap.get(".wp-picker-row__badges");
+    expect(badgesCell.find('[data-test="picker-row-fav"]').exists()).toBe(true);
+    expect(badgesCell.find(".wp-mod-badge--drift").exists()).toBe(true);
+  });
+
+  // ---------- MISSING + EXISTING badge coexistence ----------
+
+  it("renders EXISTING badge and missingDeps chip in the same row", () => {
+    // Verifies the brief's Fix #3 — status badges + dep chips occupy
+    // separate grid cells so a row with both still surfaces both.
+    const wrap = mount(PickerRow, {
+      props: {
+        uuid: "u",
+        name: "x",
+        checked: true,
+        statusBadges: [{ variant: "drift", label: "EXISTING" }],
+        missingDeps: [{ id: "deadbeef", name: "unknown" }],
+      },
+    });
+    expect(wrap.find(".wp-mod-badge--drift").exists()).toBe(true);
+    expect(wrap.find('[data-test="dep-missing-chip"]').exists()).toBe(true);
+  });
 });
