@@ -227,13 +227,14 @@ describe("ImportExport.vue — commit orchestrator", () => {
     await feedPayloadAndContinue(wrap, mkPayload({
       wildcards: [mkWildcardEntity("11111111")],
     }));
-    // Modal lives in document.body (Teleport target). Drive its select
-    // and Import button directly.
-    const sel = document.body.querySelector<HTMLSelectElement>('[data-test="batch-default-select"]');
-    expect(sel).not.toBeNull();
-    if (!sel) throw new Error("batch-default-select missing");
-    sel.value = "replace";
-    sel.dispatchEvent(new Event("change"));
+    // Modal lives in document.body (Teleport target). Drive its
+    // segmented control + Import button directly. Phase 3 swapped the
+    // batch <select> for a 3-button action group — click the Replace
+    // button instead of changing a select value.
+    const replaceBtn = document.body.querySelector<HTMLButtonElement>('[data-test="batch-action-replace"]');
+    expect(replaceBtn).not.toBeNull();
+    if (!replaceBtn) throw new Error("batch-action-replace missing");
+    replaceBtn.click();
     await flushPromises();
     const commitBtn = document.body.querySelector<HTMLButtonElement>('[data-test="commit-btn"]');
     expect(commitBtn).not.toBeNull();
@@ -399,9 +400,10 @@ describe("ImportExport.vue — commit orchestrator", () => {
 
   it("batch default rename → orchestrator mints new_id + suffixes name with ' (imported)'", async () => {
     // Pre-seed library so the picker selection generates a BatchConflict
-    // for entity 22222222. The user picks "Rename (keep both)" on the
-    // batch dropdown — orchestrator mints a fresh id + appends the
-    // " (imported)" suffix to the name.
+    // for entity 22222222. The user clicks "Import as new" on the batch
+    // segmented control — orchestrator mints a fresh id + appends the
+    // " (imported)" suffix to the name. (The engine value sent over the
+    // wire is still `rename`; Phase 3 only relabeled the UI.)
     apiM.modules.list.mockResolvedValue({
       items: [mkModule({ id: "22222222", type: "wildcard", name: "live" })],
       total: 1,
@@ -414,13 +416,13 @@ describe("ImportExport.vue — commit orchestrator", () => {
     await feedPayloadAndContinue(wrap, mkPayload({
       wildcards: [mkWildcardEntity("22222222")],
     }));
-    // Modal teleported — drive its batch dropdown directly.
-    const sel = document.body.querySelector<HTMLSelectElement>(
-      '[data-test="batch-default-select"]',
+    // Modal teleported — click the "Import as new" button on the
+    // segmented control. Engine value emitted is still `rename`.
+    const renameBtn = document.body.querySelector<HTMLButtonElement>(
+      '[data-test="batch-action-rename"]',
     );
-    if (!sel) throw new Error("batch-default-select missing");
-    sel.value = "rename";
-    sel.dispatchEvent(new Event("change"));
+    if (!renameBtn) throw new Error("batch-action-rename missing");
+    renameBtn.click();
     await flushPromises();
     const commitBtn = document.body.querySelector<HTMLButtonElement>(
       '[data-test="commit-btn"]',

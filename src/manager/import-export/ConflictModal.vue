@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Conflict modal — Task 18.
+ * Conflict modal — Task 18 (Phase 3 relabel + segmented control).
  *
  * Sits between ImportPicker (`selection-ready`) and the commit endpoint.
  * The parent runs Task 8's `detectCollisions` over the chosen ids plus
@@ -11,27 +11,37 @@
  * `commit-ready` carrying a resolution payload the parent threads into
  * `buildCommitPayload`.
  *
+ * Label / engine-value mapping (Phase 3): the UI surfaces user-facing
+ * labels Skip / Replace / Import as new while the emit payload + the
+ * stored `BatchAction` / `PerItemDecision.kind` values keep the engine
+ * vocabulary `skip` / `replace` / `rename`. The orchestrator + server
+ * contract are unchanged; only the rendered text + control affordance
+ * shifted (dropdowns → segmented buttons).
+ *
  * Two distinct surfaces:
  *
  *   - **Batch section** (only when `batchConflicts.length > 0`).
- *     UUID collisions where the live-DB row has different content. One
- *     dropdown sets the default action — skip or replace — applied
- *     uniformly. An expandable per-row override list (collapsed by
- *     default) lets the user override individual batch conflicts without
- *     changing the batch default; overrides are written into
- *     `perItemDecisions` alongside per-item-issue decisions, and the
- *     orchestrator at commit time already prefers `perItemDecisions[id]`
- *     over `batchDefault`.
+ *     UUID collisions where the live-DB row has different content. A
+ *     3-button segmented control sets the default action — Skip /
+ *     Replace / Import as new — applied uniformly. An expandable
+ *     per-row override list (collapsed by default) lets the user
+ *     override individual batch conflicts without changing the batch
+ *     default; overrides are written into `perItemDecisions` alongside
+ *     per-item-issue decisions, and the orchestrator at commit time
+ *     already prefers `perItemDecisions[id]` over `batchDefault`.
  *
  *   - **Per-item section** (only when `perItemIssues.length > 0`).
  *     One row per issue with the entity name, the issue kind label,
- *     and action buttons. Two actions:
- *       • Skip — drop this entity from the import.
- *       • Import anyway — proceed despite the issue.
+ *     and action buttons. Non-tier-3 rows surface a 3-button
+ *     segmented control: Skip / Import as new / Import anyway. (Import
+ *     anyway keeps its distinct label because the per-item issue may
+ *     not be a UUID collision at all — fingerprint mismatch, broken
+ *     ref, etc. — so "Replace" would be semantically wrong.)
  *     **Tier-3 is non-overridable** per spec lock #9 in
  *     CHECKPOINT-importer-exporter.md, so tier-3 rows render the Skip
- *     button only. Once resolved, the buttons collapse into a "✓ skip"
- *     / "✓ accept" indicator so the user sees their choice stuck.
+ *     button only. Once resolved, the buttons collapse into a
+ *     "✓ Skip" / "✓ Import as new" / "✓ Import anyway" indicator so
+ *     the user sees their choice stuck.
  *
  * The Import button stays disabled until every per-item issue has a
  * decision, gated by `unresolvedCount`. The footer surfaces the count
@@ -99,25 +109,26 @@ const props = withDefaults(defineProps<Props>(), { open: true });
  *   - batchDefault       — applies uniformly to every batch UUID
  *                          collision; the parent threads it into the
  *                          per-row decisions before calling commit.
- *                          `"rename"` means "Import as new (keep both)"
- *                          — the orchestrator mints a fresh id per
- *                          conflict entity + suffixes the name with
- *                          `" (imported)"`. The batch dropdown doesn't
- *                          surface the inline rename UI; users who want
- *                          a custom new name use the per-item issue
- *                          row's inline rename (which writes explicit
- *                          `new_id` + `new_name`).
+ *                          `"rename"` means "Import as new" — the
+ *                          orchestrator mints a fresh id per conflict
+ *                          entity + suffixes the name with
+ *                          `" (imported)"`. The batch segmented control
+ *                          doesn't surface the inline rename UI; users
+ *                          who want a custom new name use the per-item
+ *                          issue row's inline rename (which writes
+ *                          explicit `new_id` + `new_name`).
  *   - perItemDecisions   — keyed by entity `id` (NOT `uuid`). Each
  *                          value carries the chosen action and an
  *                          optional `new_id` / `new_name` pair for the
  *                          rename case. When `kind === "rename"` lacks
  *                          `new_id`/`new_name` (e.g. the batch override
- *                          per-row dropdown was set to "rename") the
- *                          orchestrator mints them the same way it
- *                          handles `batchDefault === "rename"`. When
- *                          they're present (set via the inline rename
- *                          on a per-item issue row) the orchestrator
- *                          uses those values verbatim.
+ *                          per-row segmented control was set to
+ *                          "Import as new") the orchestrator mints them
+ *                          the same way it handles
+ *                          `batchDefault === "rename"`. When they're
+ *                          present (set via the inline rename on a
+ *                          per-item issue row) the orchestrator uses
+ *                          those values verbatim.
  */
 const emit = defineEmits<{
   (
@@ -283,35 +294,52 @@ function extractChain(issue: PerItemIssue): ChainStep[] {
 }
 
 /**
- * Map the dropdown's typed `<select>` value back into the ref via a
- * dedicated handler. Letting Vue coerce a generic Event target to our
- * literal-string union via v-model would require an `as` cast we'd
- * rather avoid; explicit `change` handler keeps the surface strict-TS
- * clean.
+ * Set the batch default from a segmented-control click. The literal
+ * union signature keeps the call sites at the template strict — Vue
+ * type-checks the inline `@click="setBatchDefault('skip')"` against
+ * the parameter type without an `as` cast.
+ *
+ * Phase 3 replaced the `<select>` + `onBatchDefaultChange` indirection
+ * with this direct setter; the segmented control buttons each carry
+ * their literal action and call this on click.
  */
-function onBatchDefaultChange(ev: Event): void {
-  const target = ev.target as HTMLSelectElement | null;
-  if (!target) return;
-  const v = target.value;
-  if (v === "skip" || v === "replace" || v === "rename") {
-    batchDefault.value = v;
-  }
+function setBatchDefault(value: "skip" | "replace" | "rename"): void {
+  batchDefault.value = value;
+}
+
+/**
+ * Map an engine action (`skip` / `replace` / `rename`) to its display
+ * label (`Skip` / `Replace` / `Import as new`). Centralised so the
+ * label vocabulary lives in exactly one spot — when the locked-engine
+ * `rename` field eventually surfaces in a new context, we relabel here
+ * only. Used by the resolved-state pill for batch overrides and by the
+ * per-item resolved pill (`accept` maps to "Import anyway", which is
+ * the only label not parallel to the batch-action vocabulary).
+ */
+function labelForKind(
+  kind: "skip" | "replace" | "rename" | "accept",
+): string {
+  if (kind === "skip") return "Skip";
+  if (kind === "replace") return "Replace";
+  if (kind === "rename") return "Import as new";
+  return "Import anyway";
 }
 
 /**
  * Read the current per-row override for a batch conflict. Returns
  * `"default"` when no override exists (i.e. the row will follow the
- * batch dropdown's value at commit time). Returns `"skip"`, `"replace"`,
+ * batch default's value at commit time). Returns `"skip"`, `"replace"`,
  * or `"rename"` when the user has explicitly overridden this row.
  *
- * The "default" sentinel keeps the `<select>` bound state cleanly
- * multi-valued — without it, a row with no entry in `perItemDecisions`
- * would either render as "skip" (misleading: user hasn't chosen) or as
- * blank (confusing in the dropdown). Mapping the absence-of-entry to a
- * named option makes the intent explicit in the UI.
+ * The "default" sentinel keeps the segmented-control's active state
+ * cleanly multi-valued — without it, a row with no entry in
+ * `perItemDecisions` would have no button painted active, leaving the
+ * user unsure whether they'd ever touched the row. Mapping the
+ * absence-of-entry to a named option (the "Default" button) makes the
+ * intent explicit in the UI.
  *
  * Decisions with `kind === "accept"` (which the batch override flow does
- * not surface) coerce to `"default"` so the override dropdown reflects
+ * not surface) coerce to `"default"` so the override row reflects
  * "no batch-side override" without misrepresenting the underlying
  * decision. This doesn't happen in practice today (the batch override
  * path only writes skip/replace/rename) but the type widens to those
@@ -331,7 +359,7 @@ function batchOverrideFor(
 /**
  * Apply a per-row batch override decision keyed by entity id. Picking
  * `"default"` deletes the entry from `perItemDecisions` so the batch
- * dropdown's value applies at commit time (clean state — no lingering
+ * default's value applies at commit time (clean state — no lingering
  * stub). Picking `"skip"` / `"replace"` / `"rename"` writes the decision
  * into the map, where it takes precedence over `batchDefault` for that
  * id.
@@ -340,7 +368,7 @@ function batchOverrideFor(
  * `new_id`/`new_name`. The orchestrator (`partitionSelection` in
  * `ImportExport.vue`) mints a fresh id + suffixes the name with
  * `" (imported)"` at commit time, matching the batch-default rename
- * semantics. This keeps the override dropdown compact (no inline rename
+ * semantics. This keeps the per-row override compact (no inline rename
  * UI per row); users who want a custom new name use the per-item issue
  * row's inline `<ImportAsNewRename>` component instead.
  *
@@ -360,22 +388,6 @@ function setBatchOverride(
       ...perItemDecisions.value,
       [id]: { kind: value },
     };
-  }
-}
-
-/**
- * Map the per-row override `<select>` change event to `setBatchOverride`.
- * Same rationale as `onBatchDefaultChange` — explicit handler keeps the
- * literal-string union strict without an `as` cast on the event target.
- */
-function onBatchOverrideChange(id: string, ev: Event): void {
-  const target = ev.target as HTMLSelectElement | null;
-  if (!target) return;
-  const v = target.value;
-  if (
-    v === "default" || v === "skip" || v === "replace" || v === "rename"
-  ) {
-    setBatchOverride(id, v);
   }
 }
 
@@ -416,22 +428,48 @@ function batchRowName(conflict: BatchConflict): string {
           UUID collisions ({{ props.batchConflicts.length }})
           — applied uniformly to all matching rows.
         </p>
-        <label
-          for="wp-conflict-modal-batch-default"
-          class="wp-conflict-modal__batch-row"
-        >
+        <div class="wp-conflict-modal__batch-row">
           <span class="wp-conflict-modal__batch-label">Default action</span>
-          <select
-            id="wp-conflict-modal-batch-default"
-            class="wp-conflict-modal__select"
-            :value="batchDefault"
-            data-test="batch-default-select"
-            @change="onBatchDefaultChange"
+          <div
+            class="wp-action-group"
+            role="radiogroup"
+            aria-label="Default action for batch conflicts"
+            data-test="batch-action-group"
           >
-            <option value="skip">Skip — keep live-DB version</option>
-            <option value="replace">Replace — overwrite live-DB row</option>
-            <option value="rename">Rename (keep both)</option>
-          </select>
+            <button
+              type="button"
+              class="wp-action-group__btn"
+              role="radio"
+              :aria-checked="batchDefault === 'skip' ? 'true' : 'false'"
+              :data-active="batchDefault === 'skip' ? 'true' : 'false'"
+              data-test="batch-action-skip"
+              @click="setBatchDefault('skip')"
+            >
+              <i class="pi pi-times" aria-hidden="true" /> Skip
+            </button>
+            <button
+              type="button"
+              class="wp-action-group__btn"
+              role="radio"
+              :aria-checked="batchDefault === 'replace' ? 'true' : 'false'"
+              :data-active="batchDefault === 'replace' ? 'true' : 'false'"
+              data-test="batch-action-replace"
+              @click="setBatchDefault('replace')"
+            >
+              <i class="pi pi-arrow-circle-down" aria-hidden="true" /> Replace
+            </button>
+            <button
+              type="button"
+              class="wp-action-group__btn"
+              role="radio"
+              :aria-checked="batchDefault === 'rename' ? 'true' : 'false'"
+              :data-active="batchDefault === 'rename' ? 'true' : 'false'"
+              data-test="batch-action-rename"
+              @click="setBatchDefault('rename')"
+            >
+              <i class="pi pi-plus" aria-hidden="true" /> Import as new
+            </button>
+          </div>
           <button
             type="button"
             class="wp-conflict-modal__btn wp-conflict-modal__batch-override-toggle"
@@ -442,7 +480,7 @@ function batchRowName(conflict: BatchConflict): string {
           >
             {{ batchExpanded ? "Hide per-conflict overrides" : "Show per-conflict overrides" }}
           </button>
-        </label>
+        </div>
         <ul
           v-if="batchExpanded"
           id="wp-conflict-modal-batch-overrides"
@@ -458,18 +496,49 @@ function batchRowName(conflict: BatchConflict): string {
             <span class="wp-conflict-modal__batch-override-name">
               {{ batchRowName(conflict) }}
             </span>
-            <select
-              class="wp-conflict-modal__select wp-conflict-modal__batch-override-select"
-              :value="batchOverrideFor(conflict.id)"
-              :data-test="`batch-override-select-${conflict.id}`"
+            <div
+              class="wp-action-group wp-action-group--sm"
+              role="radiogroup"
               :aria-label="`Override action for ${batchRowName(conflict)}`"
-              @change="(ev) => onBatchOverrideChange(conflict.id, ev)"
+              :data-test="`batch-override-group-${conflict.id}`"
             >
-              <option value="default">Use batch default</option>
-              <option value="skip">Skip</option>
-              <option value="replace">Replace</option>
-              <option value="rename">Rename (keep both)</option>
-            </select>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                role="radio"
+                :aria-checked="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
+                :data-active="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
+                :data-test="`batch-override-${conflict.id}-default`"
+                @click="setBatchOverride(conflict.id, 'default')"
+              >Default</button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                role="radio"
+                :aria-checked="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
+                :data-active="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
+                :data-test="`batch-override-${conflict.id}-skip`"
+                @click="setBatchOverride(conflict.id, 'skip')"
+              >Skip</button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                role="radio"
+                :aria-checked="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
+                :data-active="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
+                :data-test="`batch-override-${conflict.id}-replace`"
+                @click="setBatchOverride(conflict.id, 'replace')"
+              >Replace</button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                role="radio"
+                :aria-checked="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
+                :data-active="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
+                :data-test="`batch-override-${conflict.id}-rename`"
+                @click="setBatchOverride(conflict.id, 'rename')"
+              >Import as new</button>
+            </div>
           </li>
         </ul>
       </section>
@@ -498,8 +567,12 @@ function batchRowName(conflict: BatchConflict): string {
                 :data-test="`resolved-${issue.entity.id}`"
               >
                 <span aria-hidden="true">✓</span>
-                {{ perItemDecisions[issue.entity.id].kind }}
+                {{ labelForKind(perItemDecisions[issue.entity.id].kind) }}
               </div>
+              <!-- Tier-3 is non-overridable per spec lock #9; only the
+                   Skip path is offered. Single-button group instead of
+                   a segmented control because there's nothing to switch
+                   between. The Tier3ChainViz above shows the *why*. -->
               <div v-else class="wp-conflict-modal__actions">
                 <button
                   type="button"
@@ -507,10 +580,6 @@ function batchRowName(conflict: BatchConflict): string {
                   :data-test="`resolve-${issue.entity.id}-skip`"
                   @click="resolveItem(issue.entity.id, 'skip')"
                 >Skip</button>
-                <!-- Tier-3 is non-overridable per spec lock #9; no
-                     "Import anyway" button here. The Tier3ChainViz
-                     shows the user *why* via the chain, and Skip is
-                     the only resolution path. -->
               </div>
             </template>
             <template v-else>
@@ -524,9 +593,12 @@ function batchRowName(conflict: BatchConflict): string {
                 v-if="perItemDecisions[issue.entity.id]"
                 class="wp-conflict-modal__resolved"
                 :data-test="`resolved-${issue.entity.id}`"
+                :title="perItemDecisions[issue.entity.id].kind === 'rename'
+                  ? perItemDecisions[issue.entity.id].new_name
+                  : undefined"
               >
                 <span aria-hidden="true">✓</span>
-                {{ perItemDecisions[issue.entity.id].kind }}
+                {{ labelForKind(perItemDecisions[issue.entity.id].kind) }}
               </div>
               <ImportAsNewRename
                 v-else-if="renamingIds.has(issue.entity.id)"
@@ -534,25 +606,35 @@ function batchRowName(conflict: BatchConflict): string {
                 @applied="(p) => onRenameApplied(issue.entity.id, p)"
                 @cancel="onRenameCancel(issue.entity.id)"
               />
-              <div v-else class="wp-conflict-modal__actions">
+              <!-- Non-tier-3 per-item issues get the 3-button segmented
+                   control. Note "Import anyway" keeps its distinct label
+                   (it's not a UUID-collision replace — could be a
+                   fingerprint mismatch, broken ref, etc.). -->
+              <div
+                v-else
+                class="wp-action-group"
+                role="radiogroup"
+                :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
+                :data-test="`resolve-group-${issue.entity.id}`"
+              >
                 <button
                   type="button"
-                  class="wp-conflict-modal__btn"
+                  class="wp-action-group__btn"
                   :data-test="`resolve-${issue.entity.id}-skip`"
                   @click="resolveItem(issue.entity.id, 'skip')"
-                >Skip</button>
+                ><i class="pi pi-times" aria-hidden="true" /> Skip</button>
                 <button
                   type="button"
-                  class="wp-conflict-modal__btn"
+                  class="wp-action-group__btn"
                   :data-test="`resolve-${issue.entity.id}-rename`"
                   @click="startRename(issue.entity.id)"
-                >Import as new</button>
+                ><i class="pi pi-plus" aria-hidden="true" /> Import as new</button>
                 <button
                   type="button"
-                  class="wp-conflict-modal__btn wp-conflict-modal__btn--warn"
+                  class="wp-action-group__btn"
                   :data-test="`resolve-${issue.entity.id}-accept`"
                   @click="resolveItem(issue.entity.id, 'accept')"
-                >Import anyway</button>
+                ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
               </div>
             </template>
           </li>
@@ -635,21 +717,64 @@ function batchRowName(conflict: BatchConflict): string {
   font-weight: var(--wp-weight-semibold);
 }
 
-.wp-conflict-modal__select {
-  flex: 1;
-  height: var(--wp-btn-h);
-  padding: 0 var(--wp-space-4);
+/* ---- Segmented action-group (Phase 3) -----------------------------
+ *
+ * Replaces the dropdowns previously used for batch default, per-row
+ * batch override, and the per-item issue button trio. Three sizes:
+ *
+ *   - default       — used for the batch default + per-item issue rows.
+ *   - `--sm`        — used for the per-row override list (slightly
+ *                     reduced padding so it nests inside the batch
+ *                     section without dominating).
+ *
+ * `data-active="true"` on the chosen button paints the accent fill.
+ * Keep the `border-right` chain working: last child drops the divider.
+ */
+.wp-action-group {
+  display: inline-flex;
+  border: 1px solid var(--wp-border-strong);
+  border-radius: var(--wp-radius);
+  overflow: hidden;
   background: var(--wp-bg-2);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  font-family: inherit;
-  font-size: var(--wp-text-base);
+  flex: 0 0 auto;
 }
-.wp-conflict-modal__select:focus-visible {
+.wp-action-group__btn {
+  background: transparent;
+  border: none;
+  color: var(--wp-text-muted);
+  font-family: var(--wp-font-sans);
+  font-size: var(--wp-text-sm);
+  font-weight: 500;
+  padding: 5px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-right: 1px solid var(--wp-border-strong);
+}
+.wp-action-group__btn:last-child { border-right: none; }
+.wp-action-group__btn:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wp-action-group__btn:focus-visible {
   outline: none;
-  border-color: var(--wp-accent-500);
   box-shadow: var(--wp-focus-ring);
+  /* Pull the ring inside the rounded group so it doesn't escape the
+     overflow:hidden clip — the focus ring stays visible because the
+     box-shadow ignores the parent's overflow. */
+  position: relative;
+  z-index: 1;
+}
+.wp-action-group__btn[data-active="true"] {
+  background: var(--wp-accent-600);
+  /* audit-exempt: white on accent fill ≥4.5:1 in both themes */
+  color: #fff;
+  font-weight: 600;
+}
+.wp-action-group__btn[data-active="true"]:hover { background: var(--wp-accent-500); }
+.wp-action-group__btn .pi { font-size: 10px; }
+
+.wp-action-group--sm .wp-action-group__btn {
+  padding: 4px 9px;
+  font-size: var(--wp-text-xs);
 }
 
 .wp-conflict-modal__batch-override-toggle {
@@ -688,14 +813,6 @@ function batchRowName(conflict: BatchConflict): string {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-}
-
-.wp-conflict-modal__batch-override-select {
-  /* Override the parent `flex: 1` so the override dropdown stays
-     compact next to the entity name (the row already grants the name
-     `flex: 1`). */
-  flex: 0 0 auto;
-  min-width: 12ch;
 }
 
 .wp-conflict-modal__items {

@@ -14,6 +14,12 @@ import type { BatchConflict, PerItemIssue } from "../conflict-types";
  * the mount root. The `wrap.emitted(...)` API still works because Vue
  * Test Utils tracks emits on the wrapper regardless of where the DOM
  * actually rendered.
+ *
+ * Phase 3 swapped dropdowns for a `wp-action-group` segmented control.
+ * Engine values (`skip` / `replace` / `rename` / `accept`) stayed the
+ * same; only the UI labels + click handlers shifted. Selectors below
+ * target the new `data-test` hooks (`batch-action-skip` etc.) instead
+ * of the old `<select>`-based ones.
  */
 function makeBatchConflict(
   overrides: Partial<BatchConflict> = {},
@@ -92,18 +98,23 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  it("Skip resolution replaces buttons with a check skip indicator + enables Import", async () => {
+  it("Skip resolution replaces buttons with a ✓ Skip indicator + enables Import", async () => {
     const wrap = mountModal({
       perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
     });
     $('[data-test="resolve-b1-skip"]').click();
     await flushPromises();
 
-    // Skip + Accept buttons are gone; resolved indicator is in their place.
+    // Action group buttons are gone; resolved indicator is in their place.
     expect(find('[data-test="resolve-b1-skip"]')).toBeNull();
     expect(find('[data-test="resolve-b1-accept"]')).toBeNull();
+    expect(find('[data-test="resolve-group-b1"]')).toBeNull();
     const resolved = $('[data-test="resolved-b1"]');
-    expect(resolved.textContent).toContain("skip");
+    // Phase 3 swapped engine value display ("skip") for the user-facing
+    // label ("Skip"). The check mark glyph is unchanged.
+    expect(resolved.textContent).toContain("Skip");
+    expect(resolved.textContent).not.toContain("skip ");
+    expect(resolved.textContent).toContain("✓");
 
     // Import button enabled now that every per-item issue is resolved.
     const btn = $('[data-test="commit-btn"]') as HTMLButtonElement;
@@ -111,7 +122,7 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  it("Accept resolution records 'accept' + enables Import for non-tier-3 issues", async () => {
+  it("Accept resolution displays '✓ Import anyway' + enables Import for non-tier-3 issues", async () => {
     const wrap = mountModal({
       perItemIssues: [
         makePerItemIssue({
@@ -124,13 +135,16 @@ describe("ConflictModal.vue", () => {
     await flushPromises();
 
     const resolved = $('[data-test="resolved-fp1"]');
-    expect(resolved.textContent).toContain("accept");
+    // Phase 3: "Import anyway" stays distinct from "Replace" because
+    // the per-item issue may not be a UUID collision at all.
+    expect(resolved.textContent).toContain("Import anyway");
+    expect(resolved.textContent).not.toContain("accept");
     const btn = $('[data-test="commit-btn"]') as HTMLButtonElement;
     expect(btn.hasAttribute("disabled")).toBe(false);
     wrap.unmount();
   });
 
-  it("tier-3 issues render NO Import-anyway button (non-overridable)", () => {
+  it("tier-3 issues render NO Import-anyway button + NO Import-as-new button (non-overridable)", () => {
     const wrap = mountModal({
       perItemIssues: [
         makePerItemIssue({
@@ -139,13 +153,17 @@ describe("ConflictModal.vue", () => {
         }),
       ],
     });
-    // Skip stays available, but the accept button is suppressed.
+    // Skip stays available, but accept + rename are both suppressed.
     expect(find('[data-test="resolve-tier3item-skip"]')).not.toBeNull();
     expect(find('[data-test="resolve-tier3item-accept"]')).toBeNull();
+    expect(find('[data-test="resolve-tier3item-rename"]')).toBeNull();
+    // Tier-3 also does NOT use the segmented `wp-action-group` shell —
+    // it's a single Skip button.
+    expect(find('[data-test="resolve-group-tier3item"]')).toBeNull();
     wrap.unmount();
   });
 
-  it("emits commit-ready with batchDefault + perItemDecisions keyed by id", async () => {
+  it("emits commit-ready with batchDefault + perItemDecisions keyed by id (engine values unchanged)", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
@@ -180,6 +198,7 @@ describe("ConflictModal.vue", () => {
       batchDefault: "skip" | "replace";
       perItemDecisions: Record<string, { kind: string; new_name?: string }>;
     };
+    // Engine value vocabulary is unchanged — Phase 3 only relabeled the UI.
     expect(payload.batchDefault).toBe("skip");
     // Keys must be entity.id values — NOT "uuid".
     expect(Object.keys(payload.perItemDecisions).sort()).toEqual(["b1", "fp1"]);
@@ -188,7 +207,7 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  it("changes batchDefault when the dropdown is set to 'replace'", async () => {
+  it("clicking the 'Replace' batch button updates batchDefault to 'replace'", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
@@ -197,9 +216,8 @@ describe("ConflictModal.vue", () => {
       perItemIssues: [],
     });
 
-    const select = $('[data-test="batch-default-select"]') as HTMLSelectElement;
-    select.value = "replace";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    // Skip starts active by default; click Replace to flip.
+    $('[data-test="batch-action-replace"]').click();
     await flushPromises();
 
     $('[data-test="commit-btn"]').click();
@@ -283,7 +301,7 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  it("per-row override dropdown defaults to 'default' for untouched rows", async () => {
+  it("per-row override segmented control defaults to 'Default' active for untouched rows", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
@@ -292,12 +310,16 @@ describe("ConflictModal.vue", () => {
     $('[data-test="batch-override-toggle"]').click();
     await flushPromises();
 
-    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
-    expect(select.value).toBe("default");
+    const defaultBtn = $('[data-test="batch-override-w1-default"]');
+    expect(defaultBtn.getAttribute("data-active")).toBe("true");
+    // Other buttons are inactive.
+    expect($('[data-test="batch-override-w1-skip"]').getAttribute("data-active")).toBe("false");
+    expect($('[data-test="batch-override-w1-replace"]').getAttribute("data-active")).toBe("false");
+    expect($('[data-test="batch-override-w1-rename"]').getAttribute("data-active")).toBe("false");
     wrap.unmount();
   });
 
-  it("picking 'skip' on a row writes {kind: 'skip'} to perItemDecisions", async () => {
+  it("clicking 'Skip' on a per-row override writes {kind: 'skip'} to perItemDecisions", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
@@ -306,10 +328,12 @@ describe("ConflictModal.vue", () => {
     $('[data-test="batch-override-toggle"]').click();
     await flushPromises();
 
-    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
-    select.value = "skip";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    $('[data-test="batch-override-w1-skip"]').click();
     await flushPromises();
+
+    // Active state flipped to Skip.
+    expect($('[data-test="batch-override-w1-skip"]').getAttribute("data-active")).toBe("true");
+    expect($('[data-test="batch-override-w1-default"]').getAttribute("data-active")).toBe("false");
 
     $('[data-test="commit-btn"]').click();
     await flushPromises();
@@ -327,7 +351,7 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  it("picking 'replace' on a row writes {kind: 'replace'} to perItemDecisions", async () => {
+  it("clicking 'Replace' on a per-row override writes {kind: 'replace'} to perItemDecisions", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
@@ -336,9 +360,7 @@ describe("ConflictModal.vue", () => {
     $('[data-test="batch-override-toggle"]').click();
     await flushPromises();
 
-    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
-    select.value = "replace";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    $('[data-test="batch-override-w1-replace"]').click();
     await flushPromises();
 
     $('[data-test="commit-btn"]').click();
@@ -357,7 +379,7 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  it("picking 'default' after a non-default removes the entry from perItemDecisions", async () => {
+  it("clicking 'Default' after a non-default removes the entry from perItemDecisions", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
@@ -366,15 +388,12 @@ describe("ConflictModal.vue", () => {
     $('[data-test="batch-override-toggle"]').click();
     await flushPromises();
 
-    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
     // First override → skip.
-    select.value = "skip";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    $('[data-test="batch-override-w1-skip"]').click();
     await flushPromises();
 
     // Then revert to default.
-    select.value = "default";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    $('[data-test="batch-override-w1-default"]').click();
     await flushPromises();
 
     // Commit + assert the entry is GONE from perItemDecisions (not
@@ -410,9 +429,7 @@ describe("ConflictModal.vue", () => {
     $('[data-test="batch-override-toggle"]').click();
     await flushPromises();
 
-    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
-    select.value = "replace";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    $('[data-test="batch-override-w1-replace"]').click();
     await flushPromises();
 
     $('[data-test="commit-btn"]').click();
@@ -435,22 +452,33 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  // -------- Rename (keep both) — Feature D ---------------------------
+  // -------- Phase 3: segmented control structure + labels ----------------
 
-  it("batch default dropdown includes the 'Rename (keep both)' option", () => {
+  it("renders the batch action group with exactly 3 buttons (Skip / Replace / Import as new)", () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
       ],
     });
-    const select = $('[data-test="batch-default-select"]') as HTMLSelectElement;
-    const renameOpt = Array.from(select.options).find((o) => o.value === "rename");
-    expect(renameOpt).toBeDefined();
-    expect(renameOpt?.textContent ?? "").toContain("Rename (keep both)");
+
+    const group = $('[data-test="batch-action-group"]');
+    expect(group.getAttribute("role")).toBe("radiogroup");
+    const btns = group.querySelectorAll("button");
+    expect(btns.length).toBe(3);
+
+    // Order matters — prototype shows Skip → Replace → Import as new.
+    expect(btns[0]?.textContent ?? "").toContain("Skip");
+    expect(btns[1]?.textContent ?? "").toContain("Replace");
+    expect(btns[2]?.textContent ?? "").toContain("Import as new");
+
+    // Initial active state is Skip (batchDefault default).
+    expect($('[data-test="batch-action-skip"]').getAttribute("data-active")).toBe("true");
+    expect($('[data-test="batch-action-replace"]').getAttribute("data-active")).toBe("false");
+    expect($('[data-test="batch-action-rename"]').getAttribute("data-active")).toBe("false");
     wrap.unmount();
   });
 
-  it("batch default 'rename' emits commit-ready with batchDefault='rename'", async () => {
+  it("clicking each batch action button updates batchDefault + active state", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
@@ -458,9 +486,142 @@ describe("ConflictModal.vue", () => {
       perItemIssues: [],
     });
 
-    const select = $('[data-test="batch-default-select"]') as HTMLSelectElement;
-    select.value = "rename";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    // Click Replace → only Replace active.
+    $('[data-test="batch-action-replace"]').click();
+    await flushPromises();
+    expect($('[data-test="batch-action-replace"]').getAttribute("data-active")).toBe("true");
+    expect($('[data-test="batch-action-skip"]').getAttribute("data-active")).toBe("false");
+    expect($('[data-test="batch-action-rename"]').getAttribute("data-active")).toBe("false");
+
+    // Click Import as new → only rename active.
+    $('[data-test="batch-action-rename"]').click();
+    await flushPromises();
+    expect($('[data-test="batch-action-rename"]').getAttribute("data-active")).toBe("true");
+    expect($('[data-test="batch-action-replace"]').getAttribute("data-active")).toBe("false");
+
+    // Commit + confirm the engine value emitted is "rename" (NOT
+    // "Import as new" — the engine vocabulary stays put).
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+    const events = wrap.emitted("commit-ready");
+    const payload = events?.[0]?.[0] as { batchDefault: string };
+    expect(payload?.batchDefault).toBe("rename");
+    wrap.unmount();
+  });
+
+  it("renders the per-row override group with exactly 4 buttons (Default + 3 actions)", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const group = $('[data-test="batch-override-group-w1"]');
+    expect(group.getAttribute("role")).toBe("radiogroup");
+    const btns = group.querySelectorAll("button");
+    expect(btns.length).toBe(4);
+
+    // Order: Default → Skip → Replace → Import as new.
+    expect(btns[0]?.textContent ?? "").toContain("Default");
+    expect(btns[1]?.textContent ?? "").toContain("Skip");
+    expect(btns[2]?.textContent ?? "").toContain("Replace");
+    expect(btns[3]?.textContent ?? "").toContain("Import as new");
+    wrap.unmount();
+  });
+
+  it("non-tier-3 per-item issue row renders a 3-button segmented control", () => {
+    const wrap = mountModal({
+      perItemIssues: [
+        makePerItemIssue({
+          kind: "fingerprint-mismatch",
+          entity: { id: "fp1", name: "FP1" },
+        }),
+      ],
+    });
+    const group = $('[data-test="resolve-group-fp1"]');
+    expect(group.getAttribute("role")).toBe("radiogroup");
+    const btns = group.querySelectorAll("button");
+    expect(btns.length).toBe(3);
+
+    // Order: Skip → Import as new → Import anyway.
+    expect(btns[0]?.textContent ?? "").toContain("Skip");
+    expect(btns[1]?.textContent ?? "").toContain("Import as new");
+    expect(btns[2]?.textContent ?? "").toContain("Import anyway");
+
+    // Per-row hooks still exist for individual clicks.
+    expect(find('[data-test="resolve-fp1-skip"]')).not.toBeNull();
+    expect(find('[data-test="resolve-fp1-rename"]')).not.toBeNull();
+    expect(find('[data-test="resolve-fp1-accept"]')).not.toBeNull();
+    wrap.unmount();
+  });
+
+  it("tier-3 per-item row renders a single Skip button (no segmented control)", () => {
+    const wrap = mountModal({
+      perItemIssues: [
+        makePerItemIssue({
+          kind: "tier-3",
+          entity: { id: "t1", name: "Tier3" },
+        }),
+      ],
+    });
+    // Skip button still present.
+    expect(find('[data-test="resolve-t1-skip"]')).not.toBeNull();
+    // No segmented `wp-action-group` shell, no rename/accept buttons.
+    expect(find('[data-test="resolve-group-t1"]')).toBeNull();
+    expect(find('[data-test="resolve-t1-accept"]')).toBeNull();
+    expect(find('[data-test="resolve-t1-rename"]')).toBeNull();
+    wrap.unmount();
+  });
+
+  it("does not contain old labels ('Keep mine' / 'Use theirs' / 'Keep both')", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+      perItemIssues: [
+        makePerItemIssue({
+          kind: "fingerprint-mismatch",
+          entity: { id: "fp1", name: "FP1" },
+        }),
+      ],
+    });
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("Keep mine");
+    expect(body).not.toContain("Use theirs");
+    expect(body).not.toContain("Keep both");
+    expect(body).not.toContain("Rename (keep both)");
+    wrap.unmount();
+  });
+
+  it("surfaces the new Skip / Replace / Import as new labels in the batch group", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    const group = $('[data-test="batch-action-group"]');
+    const txt = group.textContent ?? "";
+    expect(txt).toContain("Skip");
+    expect(txt).toContain("Replace");
+    expect(txt).toContain("Import as new");
+    wrap.unmount();
+  });
+
+  // -------- Rename (Feature D) — kept under new labels ----------------
+
+  it("batch 'Import as new' button is present + emits batchDefault='rename'", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
+      ],
+      perItemIssues: [],
+    });
+    const renameBtn = $('[data-test="batch-action-rename"]');
+    expect(renameBtn.textContent).toContain("Import as new");
+
+    renameBtn.click();
     await flushPromises();
 
     $('[data-test="commit-btn"]').click();
@@ -482,7 +643,7 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
-  it("per-row override dropdown includes the 'Rename (keep both)' option", async () => {
+  it("per-row override 'Import as new' button writes {kind: 'rename'} (no new_id/new_name)", async () => {
     const wrap = mountModal({
       batchConflicts: [
         makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
@@ -491,25 +652,9 @@ describe("ConflictModal.vue", () => {
     $('[data-test="batch-override-toggle"]').click();
     await flushPromises();
 
-    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
-    const renameOpt = Array.from(select.options).find((o) => o.value === "rename");
-    expect(renameOpt).toBeDefined();
-    expect(renameOpt?.textContent ?? "").toContain("Rename (keep both)");
-    wrap.unmount();
-  });
-
-  it("per-row override 'rename' writes {kind: 'rename'} (no new_id/new_name)", async () => {
-    const wrap = mountModal({
-      batchConflicts: [
-        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
-      ],
-    });
-    $('[data-test="batch-override-toggle"]').click();
-    await flushPromises();
-
-    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
-    select.value = "rename";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const renameBtn = $('[data-test="batch-override-w1-rename"]');
+    expect(renameBtn.textContent).toContain("Import as new");
+    renameBtn.click();
     await flushPromises();
 
     $('[data-test="commit-btn"]').click();
@@ -539,7 +684,9 @@ describe("ConflictModal.vue", () => {
 
   it("per-item issue 'Import as new' button still surfaces the inline rename UI (Task 20 path)", async () => {
     // Regression check — Task 20 wired ImportAsNewRename for non-tier-3
-    // per-item issues. Feature D must not regress that path.
+    // per-item issues. Phase 3 must not regress that path; only the
+    // button is now part of a segmented control instead of a separate
+    // pill, but the click still toggles the inline rename component.
     const wrap = mountModal({
       perItemIssues: [
         makePerItemIssue({
@@ -561,6 +708,10 @@ describe("ConflictModal.vue", () => {
     // existing onRenameApplied path.
     $('[data-test="rename-confirm"]').click();
     await flushPromises();
+
+    // The resolved pill now reads "✓ Import as new".
+    const resolved = $('[data-test="resolved-fp1"]');
+    expect(resolved.textContent).toContain("Import as new");
 
     $('[data-test="commit-btn"]').click();
     await flushPromises();
