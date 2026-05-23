@@ -57,7 +57,6 @@ def write_undo_entry(
             json.dumps(snapshot_after or []),
         ),
     )
-    conn.commit()
     return undo_id
 
 
@@ -81,13 +80,12 @@ def undo_cascade(conn: sqlite3.Connection, undo_id: str) -> dict[str, Any]:
     snapshot_before: list[dict[str, Any]] = json.loads(row["snapshot_before"])
 
     try:
-        for entity in snapshot_before:
-            _dispatch_restore(conn, entity)
-        conn.execute("DELETE FROM cascade_undo WHERE id = ?", (undo_id,))
-        conn.commit()
+        with conn:
+            for entity in snapshot_before:
+                _dispatch_restore(conn, entity)
+            conn.execute("DELETE FROM cascade_undo WHERE id = ?", (undo_id,))
         return {"ok": True}
     except Exception as exc:
-        conn.rollback()
         return {"ok": False, "error": str(exc)}
 
 
@@ -226,4 +224,3 @@ def _restore_category(conn: sqlite3.Connection, entity: dict[str, Any]) -> None:
                 entity.get("sort_order", 0),
             ),
         )
-        conn.commit()

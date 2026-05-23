@@ -25,20 +25,21 @@ from engine.db.repositories import (
 )
 
 
-def _delete_target(conn: sqlite3.Connection, kind: str, target_id: str) -> dict[str, Any] | None:
-    """Delete the primary target entity and return its BEFORE-snapshot."""
+def _delete_target(conn: sqlite3.Connection, kind: str, target_id: str) -> dict[str, Any]:
+    """Delete the primary target entity and return its BEFORE-snapshot.
+
+    Raises XNotFound (e.g. ModuleNotFound, CategoryNotFound) if the target
+    does not exist — propagates to the caller's try/except error envelope.
+    """
     if kind == "bundle":
         repo: Any = BundleRepository(conn)
     elif kind == "category":
         repo = CategoryRepository(conn)
     else:
         repo = ModuleRepository(conn)
-    try:
-        snapshot = repo.get(target_id)
-        repo.delete(target_id)
-        return snapshot
-    except Exception:
-        return None
+    snapshot = repo.get(target_id)  # raises XNotFound if missing → caller catches
+    repo.delete(target_id)
+    return snapshot
 
 
 def _rename_subcat_target_only(
@@ -122,15 +123,19 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
                     snap = _rename_subcat_target_only(conn, target_id, old_name, new_name)
                     if snap is not None:
                         snapshot_before.append(snap)
+                elif kind == "combine_output_var":
+                    # Update the combine's output_var field only (not its name).
+                    mod = ModuleRepository(conn)
+                    cb = mod.get(target_id)
+                    snapshot_before.append(cb)
+                    new_payload = {**(cb.get("payload") or {}), "output_var": new_name}
+                    mod.update(target_id, payload=new_payload)
                 else:
                     # Generic module rename: snapshot then update name.
                     repo = ModuleRepository(conn)
-                    try:
-                        before = repo.get(target_id)
-                        snapshot_before.append(before)
-                        repo.update(target_id, name=new_name)
-                    except Exception:
-                        return {"ok": False, "error": f"target {target_id} not found"}
+                    before = repo.get(target_id)
+                    snapshot_before.append(before)
+                    repo.update(target_id, name=new_name)
                 undo_id = write_undo_entry(
                     conn,
                     target_kind=kind,
@@ -149,6 +154,10 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
             return {"ok": False, "error": str(exc)}
 
     # --- Cascade-on path: dispatch fixer + target delete + undo -------------
+    # Validate rename operands before opening the transaction.
+    if action == "rename" and kind in ("subcategory", "combine_output_var") and not new_name:
+        return {"ok": False, "error": "new_name required for rename"}
+
     try:
         with conn:
             touched_before: list[dict[str, Any]] = []
@@ -162,16 +171,12 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
                     conn, target_id, extra.get("subcat_name", "")
                 )
             elif key == ("subcategory", "rename"):
-                if not new_name:
-                    return {"ok": False, "error": "new_name required for rename"}
                 touched_before, diff = fix_subcat_rename(
-                    conn, target_id, extra.get("subcat_name", ""), new_name,
+                    conn, target_id, extra.get("subcat_name", ""), new_name,  # type: ignore[arg-type]
                 )
             elif key == ("combine_output_var", "rename"):
-                if not new_name:
-                    return {"ok": False, "error": "new_name required for rename"}
                 touched_before, diff = fix_combine_output_var_rename(
-                    conn, target_id, extra.get("old_name", ""), new_name,
+                    conn, target_id, extra.get("old_name", ""), new_name,  # type: ignore[arg-type]
                 )
             elif key == ("category", "delete"):
                 touched_before, diff = fix_category_delete(conn, target_id)
@@ -186,9 +191,8 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
             # mutated the source wildcard's payload; there is no separate row.
             if action == "delete" and kind in ("wildcard", "category", "bundle"):
                 target_snapshot = _delete_target(conn, kind, target_id)
-                if target_snapshot is not None:
-                    touched_before.append(target_snapshot)
-                    diff.append({"entity_id": target_id, "removed": True})
+                touched_before.append(target_snapshot)
+                diff.append({"entity_id": target_id, "removed": True})
 
             undo_id = write_undo_entry(
                 conn,

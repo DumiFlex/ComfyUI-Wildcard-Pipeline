@@ -9,6 +9,33 @@ from engine.db.repositories import (
 )
 
 
+def test_delete_target_not_found_returns_error(wp_db):
+    """Deleting a nonexistent target propagates as error envelope, not silent ok."""
+    resp = apply_cascade(wp_db, {
+        "kind": "wildcard", "id": "00000000", "action": "delete",
+    })
+    assert resp["ok"] is False
+    assert "error" in resp
+
+
+def test_combine_output_var_opt_out_rename_updates_payload_output_var(wp_db):
+    """Opt-out rename of combine output_var updates payload.output_var, NOT name."""
+    mod = ModuleRepository(wp_db)
+    cb = mod.create(type="combine", name="my_combine", description="", category_id=None,
+                    tags=[], payload={"template": "$a", "output_var": "mood"})
+
+    resp = apply_cascade(wp_db, {
+        "kind": "combine_output_var", "id": cb["id"], "action": "rename",
+        "cascade_refs": False, "new_name": "tone",
+        "extra": {"old_name": "mood"},
+    })
+
+    assert resp["ok"] is True
+    cb_after = mod.get(cb["id"])
+    assert cb_after["payload"]["output_var"] == "tone"
+    assert cb_after["name"] == "my_combine"  # name field unchanged
+
+
 def test_dry_run_returns_affected_without_mutating(wp_db):
     mod = ModuleRepository(wp_db)
     wc = mod.create(type="wildcard", name="x", description="", category_id=None,
