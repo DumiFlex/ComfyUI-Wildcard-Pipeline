@@ -19,6 +19,15 @@ Contracts:
   undo entry.
 - All mutations go through repository methods — never raw SQL.
 - Zero ComfyUI imports. Stdlib ``re`` + repositories only.
+
+Caller contract (atomicity)
+---------------------------
+The caller (orchestrator at engine/cascade/orchestrator.py, Task 5)
+MUST wrap each fixer call in an explicit BEGIN…COMMIT/ROLLBACK
+transaction. Individual repository methods auto-commit via their
+own `with conn:` blocks; the outer transaction the orchestrator
+opens is the only rollback boundary if a fixer raises mid-loop.
+Without an outer transaction, partial mutations are persisted.
 """
 from __future__ import annotations
 
@@ -28,11 +37,6 @@ import sqlite3
 from typing import Any
 
 from engine.db.repositories import BundleRepository, ModuleRepository
-
-# Same regexes as scan.py / dep-graph.ts
-_REF_REGEX = re.compile(r"@\{([0-9a-f]{8})(?::([^}]*))?\}")
-_VAR_REGEX = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -53,14 +57,6 @@ def _rewrite_var_in_string(s: str, old_name: str, new_name: str) -> str:
         r"\$" + re.escape(old_name) + r"(?![A-Za-z0-9_])"
     )
     return pattern.sub(f"${new_name}", s)
-
-
-def _strip_var_in_string(s: str, old_name: str) -> str:
-    """Remove ``$old_name`` occurrences (no trailing word chars) from *s*."""
-    pattern = re.compile(
-        r"\$" + re.escape(old_name) + r"(?![A-Za-z0-9_])"
-    )
-    return pattern.sub("", s)
 
 
 def _rewrite_subcat_ref_in_string(

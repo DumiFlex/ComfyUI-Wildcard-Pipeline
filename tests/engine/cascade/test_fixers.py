@@ -1,5 +1,7 @@
 """Tests for per-mutation cleanup fixers in engine/cascade/fixers.py."""
 
+import pytest
+
 from engine.cascade.fixers import (
     fix_category_delete,
     fix_combine_output_var_rename,
@@ -10,6 +12,7 @@ from engine.cascade.fixers import (
 from engine.db.repositories import (
     BundleRepository,
     CategoryRepository,
+    ModuleNotFound,
     ModuleRepository,
 )
 
@@ -30,11 +33,8 @@ def test_fix_wildcard_delete_strips_constraints_and_bundle_refs(wp_db):
     touched, diff = fix_wildcard_delete(wp_db, wc["id"])
 
     # Constraint referencing wc must be deleted.
-    try:
+    with pytest.raises(ModuleNotFound):
         mod.get(c["id"])
-        raise AssertionError("constraint should be deleted")
-    except Exception:
-        pass
     # Bundle should now have only `other` as a child.
     bundle_after = BundleRepository(wp_db).get(b["id"])
     assert {ch["id"] for ch in bundle_after["children"]} == {other["id"]}
@@ -42,6 +42,15 @@ def test_fix_wildcard_delete_strips_constraints_and_bundle_refs(wp_db):
     assert any(t["id"] == c["id"] for t in touched)
     assert any(t["id"] == b["id"] for t in touched)
     assert len(diff) >= 2
+    # Verify diff shape: constraint removal + bundle ref removal
+    assert any(
+        d.get("entity_id") == c["id"] and d.get("removed") is True for d in diff
+    )
+    assert any(
+        d.get("entity_id") == b["id"]
+        and d.get("remove_ref", {}).get("kind") == "wildcard"
+        for d in diff
+    )
 
 
 def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
@@ -96,6 +105,17 @@ def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
     assert "cool" in c_after["payload"]["matrix"]
     wc_after = mod.get(wc["id"])
     assert wc_after["payload"]["options"][0]["sub_categories"] == ["cool"]
+    # Verify diff shape: constraint + wildcard mutations
+    assert any(
+        d.get("entity_id") == c["id"]
+        and d.get("remove_ref", {}).get("kind") == "subcat"
+        for d in diff
+    )
+    assert any(
+        d.get("entity_id") == wc["id"]
+        and d.get("remove_ref", {}).get("kind") == "subcat"
+        for d in diff
+    )
 
 
 def test_fix_subcat_delete_strips_text_refs(wp_db):
@@ -130,6 +150,17 @@ def test_fix_subcat_delete_strips_text_refs(wp_db):
 
     ref_after = mod.get(referrer["id"])
     assert ":warm}" not in ref_after["payload"]["options"][0]["value"]
+    # Verify diff shape: target wildcard + referrer wildcard
+    assert any(
+        d.get("entity_id") == target["id"]
+        and d.get("remove_ref", {}).get("kind") == "subcat"
+        for d in diff
+    )
+    assert any(
+        d.get("entity_id") == referrer["id"]
+        and d.get("remove_ref", {}).get("kind") == "subcat"
+        for d in diff
+    )
 
 
 def test_fix_subcat_rename_rewrites_matrix_keys_and_text_refs(wp_db):
@@ -175,6 +206,22 @@ def test_fix_subcat_rename_rewrites_matrix_keys_and_text_refs(wp_db):
     c_after = mod.get(c["id"])
     assert "warm" not in c_after["payload"]["matrix"]
     assert "hot" in c_after["payload"]["matrix"]
+    # Verify diff shape: source wildcard + referrer + constraint mutations
+    assert any(
+        d.get("entity_id") == wc["id"]
+        and d.get("rename_ref", {}).get("kind") == "subcat"
+        for d in diff
+    )
+    assert any(
+        d.get("entity_id") == referrer["id"]
+        and d.get("rename_ref", {}).get("kind") == "subcat"
+        for d in diff
+    )
+    assert any(
+        d.get("entity_id") == c["id"]
+        and d.get("rename_ref", {}).get("kind") == "subcat"
+        for d in diff
+    )
 
 
 def test_fix_combine_output_var_rename_rewrites_var_refs(wp_db):
@@ -226,6 +273,22 @@ def test_fix_combine_output_var_rename_rewrites_var_refs(wp_db):
     assert "$mood" not in wc_after["payload"]["options"][0]["value"]
     deriv_after = mod.get(deriv["id"])
     assert deriv_after["payload"]["rules"][0]["branches"][0]["actions"][0]["set_var"] == "tone"
+    # Verify diff shape: combine + wildcard + derivation mutations
+    assert any(
+        d.get("entity_id") == cb["id"]
+        and d.get("rename_ref", {}).get("kind") == "var"
+        for d in diff
+    )
+    assert any(
+        d.get("entity_id") == wc["id"]
+        and d.get("rename_ref", {}).get("kind") == "var"
+        for d in diff
+    )
+    assert any(
+        d.get("entity_id") == deriv["id"]
+        and d.get("rename_ref", {}).get("kind") == "var"
+        for d in diff
+    )
 
 
 def test_fix_category_delete_nulls_category_id(wp_db):
@@ -239,3 +302,9 @@ def test_fix_category_delete_nulls_category_id(wp_db):
     m1_after = mod.get(m1["id"])
     assert m1_after["category_id"] is None
     assert any(t["id"] == m1["id"] for t in touched)
+    # Verify diff shape: module category removal
+    assert any(
+        d.get("entity_id") == m1["id"]
+        and d.get("remove_ref", {}).get("kind") == "category"
+        for d in diff
+    )
