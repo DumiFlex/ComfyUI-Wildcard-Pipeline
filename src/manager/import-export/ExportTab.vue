@@ -16,7 +16,6 @@
  */
 import { computed, onMounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
 import { useToast } from "../composables/useToast";
 import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
@@ -214,6 +213,17 @@ function toggleAllInBucket(b: BucketKey, on: boolean) {
 const totalSelected = computed<number>(() => {
   let n = 0;
   for (const b of BUCKETS) n += selection.value[b.key].size;
+  return n;
+});
+
+/**
+ * Total row count across every bucket — the denominator in the footer
+ * counter ("N of M selected"). Re-derived on library snapshot changes
+ * via the existing reactive refs.
+ */
+const totalRowsCount = computed<number>(() => {
+  let n = 0;
+  for (const b of BUCKETS) n += bucketTotalCount(b.key);
   return n;
 });
 
@@ -471,196 +481,189 @@ function presetFavoritesOnly(): void {
 
 <template>
   <div class="wp-export-tab" data-test="export-tab-v2">
-    <Card title="Pick what to export" :padding="false">
-      <template #actions>
-        <Button
-          variant="ghost"
-          size="sm"
-          data-test="export-tab-clear"
-          :disabled="totalSelected === 0"
-          @click="clearAll"
-        >Clear all</Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon="pi-share-alt"
-          data-test="export-select-deps"
-          :disabled="totalSelected === 0"
-          @click="selectWithDependencies"
-        >Select with dependencies</Button>
-      </template>
+    <div
+      class="wp-export-tab__presets"
+      role="group"
+      aria-label="Quick selection presets"
+    >
+      <span class="wp-export-tab__presets-label">QUICK SELECT</span>
+      <button
+        class="wp-preset-btn"
+        data-test="preset-full"
+        type="button"
+        @click="presetFullLibrary"
+      ><i class="pi pi-database" /> Full library</button>
+      <button
+        class="wp-preset-btn"
+        data-test="preset-wildcards"
+        type="button"
+        @click="presetWildcardsOnly"
+      ><i class="pi pi-sparkles" /> Wildcards only</button>
+      <button
+        class="wp-preset-btn"
+        data-test="preset-favorites"
+        type="button"
+        @click="presetFavoritesOnly"
+      ><i class="pi pi-star-fill" /> Favorites only</button>
+    </div>
 
-      <div
-        class="wp-export-tab__presets"
-        role="group"
-        aria-label="Quick selection presets"
+    <div class="wp-export-tab__sections">
+      <PickerSection
+        v-for="bucket in BUCKETS"
+        :key="bucket.key"
+        :title="bucket.title"
+        :total-count="bucketTotalCount(bucket.key)"
+        :selected-count="bucketSelectedCount(bucket.key)"
+        :default-open="false"
+        :kind="bucket.key"
+        :data-test="`export-tab-section-${bucket.key}`"
+        @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
       >
-        <span class="wp-export-tab__presets-label">Quick select:</span>
-        <button
-          class="wp-export-tab__preset"
-          data-test="preset-full"
-          type="button"
-          @click="presetFullLibrary"
-        >Full library</button>
-        <button
-          class="wp-export-tab__preset"
-          data-test="preset-wildcards"
-          type="button"
-          @click="presetWildcardsOnly"
-        >Wildcards only</button>
-        <button
-          class="wp-export-tab__preset"
-          data-test="preset-favorites"
-          type="button"
-          @click="presetFavoritesOnly"
-        >Favorites only</button>
-      </div>
-
-      <div class="wp-export-tab__sections">
-        <PickerSection
-          v-for="bucket in BUCKETS"
-          :key="bucket.key"
-          :title="bucket.title"
-          :total-count="bucketTotalCount(bucket.key)"
-          :selected-count="bucketSelectedCount(bucket.key)"
-          :default-open="false"
-          :kind="bucket.key"
-          :data-test="`export-tab-section-${bucket.key}`"
-          @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
+        <PickerRow
+          v-for="row in rowsForBucket(bucket.key)"
+          :key="`${bucket.key}:${row.id}`"
+          :uuid="row.id"
+          :name="row.name"
+          :kind="row.kind"
+          :category-name="row.categoryName"
+          :category-color="row.categoryColor"
+          :show-id="true"
+          :checked="isRowSelected(bucket.key, row.id)"
+          :status-badges="[]"
+          :unselected-deps="unselectedDepsForId(row.id)"
+          :missing-deps="[]"
+          :data-test="`export-tab-row-${bucket.key}-${row.id}`"
+          @update:checked="(v: boolean) => toggleRow(bucket.key, row.id, v)"
+        />
+        <div
+          v-if="bucketTotalCount(bucket.key) === 0"
+          class="wp-export-tab__empty"
         >
-          <PickerRow
-            v-for="row in rowsForBucket(bucket.key)"
-            :key="`${bucket.key}:${row.id}`"
-            :uuid="row.id"
-            :name="row.name"
-            :kind="row.kind"
-            :category-name="row.categoryName"
-            :category-color="row.categoryColor"
-            :show-id="true"
-            :checked="isRowSelected(bucket.key, row.id)"
-            :status-badges="[]"
-            :unselected-deps="unselectedDepsForId(row.id)"
-            :missing-deps="[]"
-            :data-test="`export-tab-row-${bucket.key}-${row.id}`"
-            @update:checked="(v: boolean) => toggleRow(bucket.key, row.id, v)"
-          />
-          <div
-            v-if="bucketTotalCount(bucket.key) === 0"
-            class="wp-export-tab__empty"
-          >
-            <em>No {{ bucket.title.toLowerCase() }} in library.</em>
-          </div>
-        </PickerSection>
-      </div>
-    </Card>
+          <em>No {{ bucket.title.toLowerCase() }} in library.</em>
+        </div>
+      </PickerSection>
+    </div>
 
-    <div class="wp-export-tab__side">
-      <Card title="Summary">
-        <dl class="wp-export-tab__stats" data-test="export-tab-summary">
-          <dt>Bundles</dt><dd>{{ bucketSelectedCount("bundle") }}</dd>
-          <dt>Wildcards</dt><dd>{{ bucketSelectedCount("wildcard") }}</dd>
-          <dt>Fixed values</dt><dd>{{ bucketSelectedCount("fixed_values") }}</dd>
-          <dt>Combines</dt><dd>{{ bucketSelectedCount("combine") }}</dd>
-          <dt>Derivations</dt><dd>{{ bucketSelectedCount("derivation") }}</dd>
-          <dt>Constraints</dt><dd>{{ bucketSelectedCount("constraint") }}</dd>
-          <dt>Categories</dt><dd>{{ bucketSelectedCount("category") }}</dd>
-        </dl>
-        <div class="wp-export-tab__divider" />
-        <dl class="wp-export-tab__stats">
-          <dt>Total selected</dt><dd>{{ totalSelected }}</dd>
-        </dl>
-        <Button
-          variant="primary"
-          icon="pi-download"
-          class="wp-export-tab__submit"
-          :disabled="totalSelected === 0 || exporting"
-          :loading="exporting"
-          data-test="export-tab-submit"
-          @click="runExport"
-        >Export {{ totalSelected }} selected</Button>
-      </Card>
+    <div class="wp-export-tab__footer" data-test="export-tab-footer">
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="pi-share-alt"
+        data-test="export-select-deps"
+        :disabled="totalSelected === 0"
+        @click="selectWithDependencies"
+      >Select with dependencies</Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        data-test="export-tab-clear"
+        :disabled="totalSelected === 0"
+        @click="clearAll"
+      >Deselect all</Button>
+      <div class="wp-export-tab__footer-spacer" />
+      <span
+        class="wp-export-tab__footer-counter"
+        data-test="export-tab-counter"
+      ><strong>{{ totalSelected }}</strong> of {{ totalRowsCount }} selected</span>
+      <Button
+        variant="primary"
+        icon="pi-download"
+        :disabled="totalSelected === 0 || exporting"
+        :loading="exporting"
+        data-test="export-tab-submit"
+        @click="runExport"
+      >Export</Button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .wp-export-tab {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--wp-space-6);
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
-@media (max-width: 960px) {
-  .wp-export-tab { grid-template-columns: 1fr; }
-}
+
 .wp-export-tab__presets {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-4) var(--wp-space-5);
-  border-bottom: 1px solid var(--wp-border);
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  margin-bottom: 10px;
 }
 .wp-export-tab__presets-label {
-  font-size: var(--wp-text-sm);
-  color: var(--wp-text-muted);
-  margin-right: var(--wp-space-2);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+  letter-spacing: 0.06em;
+  margin-right: 6px;
+  text-transform: uppercase;
+  font-weight: 600;
 }
-.wp-export-tab__preset {
-  font-size: var(--wp-text-sm);
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  cursor: pointer;
-  font-family: var(--wp-font-sans);
-  line-height: 1.4;
-}
-.wp-export-tab__preset:hover {
+.wp-preset-btn {
   background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text);
+  font-family: var(--wp-font);
+  font-size: var(--wp-text-sm);
+  padding: 4px 11px;
+  border-radius: var(--wp-radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+.wp-preset-btn:hover {
+  background: var(--wp-bg-4);
   border-color: var(--wp-border-strong);
 }
-.wp-export-tab__preset:focus-visible {
+.wp-preset-btn .pi {
+  font-size: 10px;
+  color: var(--wp-text-muted);
+}
+.wp-preset-btn:focus-visible {
   outline: 2px solid var(--wp-accent-500);
   outline-offset: 2px;
 }
+
 .wp-export-tab__sections {
-  padding: var(--wp-space-5);
-  max-height: 540px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
+
 .wp-export-tab__empty {
   font-size: var(--wp-text-sm);
   color: var(--wp-text-muted);
   padding: var(--wp-space-3) var(--wp-space-5);
 }
-.wp-export-tab__side {
+
+.wp-export-tab__footer {
   display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-5);
-  position: sticky;
-  top: 0;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  margin-top: 10px;
 }
-.wp-export-tab__stats {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: var(--wp-space-3);
-  margin: 0;
+.wp-export-tab__footer-spacer {
+  flex: 1;
+}
+.wp-export-tab__footer-counter {
   font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+  font-feature-settings: "tnum";
+  font-family: var(--wp-font);
 }
-.wp-export-tab__stats dt { color: var(--wp-text-muted); }
-.wp-export-tab__stats dd {
-  margin: 0;
-  font-family: var(--wp-font-mono);
-  text-align: right;
-}
-.wp-export-tab__divider {
-  border-top: 1px solid var(--wp-border);
-  margin: var(--wp-space-5) 0;
-}
-.wp-export-tab__submit {
-  width: 100%;
-  margin-top: var(--wp-space-5);
+.wp-export-tab__footer-counter strong {
+  color: var(--wp-text);
+  font-weight: 600;
 }
 </style>

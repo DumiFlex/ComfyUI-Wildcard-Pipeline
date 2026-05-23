@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Collapsible picker section: header (title + count + section-checkbox +
- * "selected / total" caption) over a slot of PickerRow children.
+ * Collapsible picker section: header (chevron + section-checkbox +
+ * type icon + title + count + selection pill) over a slot of PickerRow
+ * children.
  *
  * Pure presentational. Selection logic stays in the parent — section
  * emits `toggle-all` when the user clicks the section-checkbox; parent
@@ -14,6 +15,13 @@
  * the header next to the title — same `.wp-row-type-icon--{slug}`
  * primitive PickerRow uses. Bundles + categories override the kind
  * icon (`pi pi-folder` for category vs. `pi pi-box` for bundle).
+ *
+ * Phase-4 redesign: the header itself is a clickable bar — anywhere
+ * on the header (except the inner checkbox) collapses/expands the
+ * section. The title is plain text (no parens), with the total count
+ * surfaced as a muted "{n} items" sibling and the selection state as
+ * a tinted "n / m" pill that switches to a muted background when no
+ * rows are selected.
  */
 import { ref, computed } from "vue";
 import Checkbox from "../components/ui/Checkbox.vue";
@@ -68,22 +76,42 @@ const kindClass = computed<string | null>(() => {
   if (!props.kind) return null;
   return KIND_CLASS[props.kind] ?? "bundle";
 });
+
+/**
+ * Header click handler — toggles open/closed when the user clicks
+ * anywhere on the header bar EXCEPT the section-checkbox inside it.
+ * The checkbox's own click handler has its own intent ("toggle all in
+ * bucket"), so we filter it out to keep behaviors orthogonal.
+ */
+function onHeaderClick(evt: MouseEvent): void {
+  const target = evt.target as HTMLElement | null;
+  if (target && target.closest('[data-test="picker-section-checkbox"]')) return;
+  open.value = !open.value;
+}
 </script>
 
 <template>
-  <section class="wp-picker-section">
-    <header class="wp-picker-section__header">
+  <section class="wp-picker-section" :data-open="open ? 'true' : 'false'">
+    <header
+      class="wp-picker-section__header"
+      :aria-expanded="open"
+      role="button"
+      tabindex="0"
+      @click="onHeaderClick"
+      @keydown.enter.prevent="open = !open"
+      @keydown.space.prevent="open = !open"
+    >
       <button
         type="button"
         class="wp-picker-section__toggle"
-        :aria-expanded="open"
         :aria-label="open ? 'Collapse section' : 'Expand section'"
-        @click="open = !open"
+        tabindex="-1"
       >
         {{ open ? "▼" : "▶" }}
       </button>
       <Checkbox
         class="wp-picker-section__check"
+        data-test="picker-section-checkbox"
         :model-value="allSelected"
         :indeterminate="indeterminate"
         :aria-label="`Select all ${title}`"
@@ -98,10 +126,12 @@ const kindClass = computed<string | null>(() => {
       >
         <i :class="iconClass" />
       </span>
-      <span class="wp-picker-section__title">{{ title }} ({{ totalCount }})</span>
-      <span class="wp-picker-section__count">
-        {{ selectedCount }} / {{ totalCount }} selected
-      </span>
+      <span class="wp-picker-section__title">{{ title }}</span>
+      <span class="wp-picker-section__count">{{ totalCount }} items</span>
+      <span
+        class="wp-picker-section__sel-pill"
+        :data-empty="selectedCount === 0 ? 'true' : 'false'"
+      >{{ selectedCount }} / {{ totalCount }}</span>
     </header>
     <div v-if="open" class="wp-picker-section__body">
       <slot />
@@ -113,24 +143,36 @@ const kindClass = computed<string | null>(() => {
 @import "../../components/shared/row-primitives.css";
 
 .wp-picker-section {
-  margin-bottom: 16px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  margin-bottom: 6px;
+  overflow: hidden;
 }
 .wp-picker-section__header {
   display: grid;
-  grid-template-columns: 14px 18px auto 1fr auto;
+  grid-template-columns: 14px 18px auto auto 1fr auto auto;
+  gap: 10px;
   align-items: center;
-  column-gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--wp-border);
+  padding: 9px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.wp-picker-section__header:hover {
+  background: color-mix(in oklab, var(--wp-bg-3) 60%, transparent);
+}
+.wp-picker-section__header:focus-visible {
+  outline: 2px solid var(--wp-accent-500);
+  outline-offset: -2px;
 }
 .wp-picker-section__toggle {
   background: none;
   border: none;
   cursor: pointer;
   padding: 0 4px;
-  color: var(--wp-text2);
+  color: var(--wp-text-dim);
   font-family: var(--wp-font-mono);
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1;
 }
 .wp-picker-section__toggle:hover {
@@ -139,15 +181,33 @@ const kindClass = computed<string | null>(() => {
 .wp-picker-section__title {
   font-weight: 600;
   color: var(--wp-text);
-  font-family: var(--wp-font-sans);
+  font-family: var(--wp-font);
+  font-size: var(--wp-text-md);
+  letter-spacing: -0.005em;
 }
 .wp-picker-section__count {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--wp-text2);
-  font-family: var(--wp-font-sans);
+  color: var(--wp-text-muted);
+  font-size: var(--wp-text-sm);
+  font-family: var(--wp-font);
+  font-feature-settings: "tnum";
+}
+.wp-picker-section__sel-pill {
+  font-size: var(--wp-text-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
+  color: var(--wp-accent-text);
+  font-family: var(--wp-font);
+  font-feature-settings: "tnum";
+}
+.wp-picker-section__sel-pill[data-empty="true"] {
+  background: var(--wp-bg-3);
+  color: var(--wp-text-dim);
 }
 .wp-picker-section__body {
+  border-top: 1px solid var(--wp-border);
+  background: var(--wp-bg-1);
   padding-top: 4px;
 }
 </style>

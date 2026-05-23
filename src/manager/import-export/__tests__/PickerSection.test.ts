@@ -3,14 +3,36 @@ import { describe, expect, it } from "vitest";
 import PickerSection from "../PickerSection.vue";
 
 describe("PickerSection", () => {
-  it("renders title with total count", () => {
+  it("renders title and count as separate nodes (no parens)", () => {
     const wrap = mount(PickerSection, {
       props: { title: "Wildcards", totalCount: 5, selectedCount: 2, defaultOpen: true },
       slots: { default: "<div class='row'>row1</div>" },
     });
-    expect(wrap.text()).toContain("Wildcards");
-    expect(wrap.text()).toContain("5");
-    expect(wrap.text()).toContain("2 / 5 selected");
+    const title = wrap.get(".wp-picker-section__title");
+    expect(title.text()).toBe("Wildcards");
+    // No "(5)" trailing text — the count is its own muted sibling.
+    expect(title.text()).not.toContain("(");
+    const count = wrap.get(".wp-picker-section__count");
+    expect(count.text()).toBe("5 items");
+  });
+
+  it("renders the selection pill with N / M format", () => {
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 5, selectedCount: 2, defaultOpen: true },
+    });
+    const pill = wrap.get(".wp-picker-section__sel-pill");
+    expect(pill.text()).toBe("2 / 5");
+    // Non-zero selection → not the empty state.
+    expect(pill.attributes("data-empty")).toBe("false");
+  });
+
+  it("sets data-empty=true on the selection pill when selectedCount is zero", () => {
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 5, selectedCount: 0, defaultOpen: true },
+    });
+    const pill = wrap.get(".wp-picker-section__sel-pill");
+    expect(pill.text()).toBe("0 / 5");
+    expect(pill.attributes("data-empty")).toBe("true");
   });
 
   it("emits toggle-all=true when section checkbox is clicked from empty state", async () => {
@@ -30,6 +52,18 @@ describe("PickerSection", () => {
     expect(wrap.emitted("toggle-all")?.[0]).toEqual([false]);
   });
 
+  it("clicking the section checkbox does NOT collapse the section", async () => {
+    // Phase-4: header is a click target, but clicks INSIDE the checkbox
+    // must be filtered out so toggling selection doesn't also flip open.
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 5, selectedCount: 0, defaultOpen: true },
+      slots: { default: "<div class='row'>x</div>" },
+    });
+    expect(wrap.find(".row").exists()).toBe(true);
+    await wrap.get('button[role="checkbox"]').trigger("click");
+    expect(wrap.find(".row").exists()).toBe(true);
+  });
+
   it("collapses when the toggle button is clicked", async () => {
     const wrap = mount(PickerSection, {
       props: { title: "Wildcards", totalCount: 5, selectedCount: 0, defaultOpen: true },
@@ -37,6 +71,17 @@ describe("PickerSection", () => {
     });
     expect(wrap.find(".row").exists()).toBe(true);
     await wrap.get(".wp-picker-section__toggle").trigger("click");
+    expect(wrap.find(".row").exists()).toBe(false);
+  });
+
+  it("collapses when the header is clicked anywhere outside the checkbox", async () => {
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 5, selectedCount: 0, defaultOpen: true },
+      slots: { default: "<div class='row'>x</div>" },
+    });
+    expect(wrap.find(".row").exists()).toBe(true);
+    // Click the title — should collapse via the header click handler.
+    await wrap.get(".wp-picker-section__title").trigger("click");
     expect(wrap.find(".row").exists()).toBe(false);
   });
 

@@ -129,6 +129,62 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("ExportTab.vue", () => {
+  // ---------- Phase 4: page-level chrome ----------
+
+  it("does NOT render an outer 'Pick what to export' Card wrapper", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    // The legacy chrome rendered a Card titled "Pick what to export".
+    // Phase-4 drops it; assert it's gone.
+    expect(wrap.text()).not.toContain("Pick what to export");
+    // And the legacy side-panel host class is absent too.
+    expect(wrap.find(".wp-export-tab__side").exists()).toBe(false);
+  });
+
+  it("preset buttons have icons + an uppercase QUICK SELECT label without trailing colon", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    // Label is "QUICK SELECT" (uppercase, no colon).
+    const label = wrap.get(".wp-export-tab__presets-label");
+    expect(label.text()).toBe("QUICK SELECT");
+    expect(label.text()).not.toContain(":");
+    // Each preset button carries its expected pi icon.
+    expect(
+      wrap.get('[data-test="preset-full"]').find("i.pi.pi-database").exists(),
+    ).toBe(true);
+    expect(
+      wrap.get('[data-test="preset-wildcards"]').find("i.pi.pi-sparkles").exists(),
+    ).toBe(true);
+    expect(
+      wrap.get('[data-test="preset-favorites"]').find("i.pi.pi-star-fill").exists(),
+    ).toBe(true);
+  });
+
+  it("renders a footer bar with all action buttons + counter", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    const footer = wrap.get('[data-test="export-tab-footer"]');
+    expect(footer.find('[data-test="export-select-deps"]').exists()).toBe(true);
+    expect(footer.find('[data-test="export-tab-clear"]').exists()).toBe(true);
+    expect(footer.find('[data-test="export-tab-counter"]').exists()).toBe(true);
+    expect(footer.find('[data-test="export-tab-submit"]').exists()).toBe(true);
+  });
+
+  it("footer counter shows 'N of M selected' with selected count", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    const counter = wrap.get('[data-test="export-tab-counter"]');
+    // Library seed = 5 modules + 1 bundle + 1 category = 7 rows total.
+    // Nothing selected at boot.
+    expect(counter.text()).toMatch(/^\s*0\s+of\s+7\s+selected\s*$/);
+    // Select one wildcard.
+    await expandSection(wrap, "wildcard");
+    await wrap.get('[data-test="export-tab-row-wildcard-w1"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+    const counter2 = wrap.get('[data-test="export-tab-counter"]');
+    expect(counter2.text()).toMatch(/^\s*1\s+of\s+7\s+selected\s*$/);
+  });
+
   it("renders all 7 section headers", async () => {
     const wrap = mount(ExportTab);
     await flushPromises();
@@ -507,11 +563,12 @@ describe("ExportTab.vue", () => {
     await wrap.get('[data-test="preset-full"]').trigger("click");
     await flushPromises();
 
-    // The submit-button label embeds totalSelected — 5 modules + 1 bundle
+    // The footer counter surfaces totalSelected — 5 modules + 1 bundle
     // + 1 category = 7. Cheaper than expanding 7 sections to count
     // individual checkboxes, and exercises the same computed.
+    const counter = wrap.get('[data-test="export-tab-counter"]');
+    expect(counter.text()).toContain("7");
     const btn = wrap.get('[data-test="export-tab-submit"]');
-    expect(btn.text()).toContain("7");
     expect(btn.attributes("disabled")).toBeUndefined();
 
     // Spot-check a couple of buckets to prove rows are actually checked.
@@ -559,8 +616,8 @@ describe("ExportTab.vue", () => {
     await flushPromises();
 
     // Total = 2 wildcards. Bundle/fixed/combine/category all empty.
-    const btn = wrap.get('[data-test="export-tab-submit"]');
-    expect(btn.text()).toContain("2");
+    const counter = wrap.get('[data-test="export-tab-counter"]');
+    expect(counter.text()).toContain("2");
 
     // Bundle b1 should now be unchecked (preset cleared the pre-selection).
     const bundleCb = wrap.get('[data-test="export-tab-row-bundle-b1"] button[role="checkbox"]');
@@ -602,8 +659,8 @@ describe("ExportTab.vue", () => {
     await flushPromises();
 
     // 1 fav wildcard + 1 fav combine + 1 fav bundle = 3 selected.
-    const btn = wrap.get('[data-test="export-tab-submit"]');
-    expect(btn.text()).toContain("3");
+    const counter = wrap.get('[data-test="export-tab-counter"]');
+    expect(counter.text()).toContain("3");
 
     await expandSection(wrap, "wildcard");
     await expandSection(wrap, "combine");

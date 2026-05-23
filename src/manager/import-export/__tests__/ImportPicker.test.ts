@@ -84,6 +84,33 @@ function mkModuleRow(
 }
 
 describe("ImportPicker.vue", () => {
+  // ---------- Phase 4: page-level chrome ----------
+
+  it("does NOT render an outer 'Pick what to import' Card wrapper", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({ wildcards: [{ id: "w1", name: "a" }, { id: "w2", name: "b" }] }),
+    });
+    await flushPromises();
+    // The legacy chrome rendered a Card titled "Pick what to import".
+    expect(wrap.text()).not.toContain("Pick what to import");
+    // And the legacy side-panel host class is absent too.
+    expect(wrap.find(".wp-import-picker__side").exists()).toBe(false);
+  });
+
+  it("renders a footer bar with action buttons + counter + Continue", async () => {
+    const wrap = mountPicker({
+      payload: makePayload({ wildcards: [{ id: "w1", name: "a" }, { id: "w2", name: "b" }] }),
+    });
+    await flushPromises();
+    const footer = wrap.get('[data-test="import-picker-footer"]');
+    expect(footer.find('[data-test="import-picker-select-deps"]').exists()).toBe(true);
+    expect(footer.find('[data-test="import-picker-deselect-all"]').exists()).toBe(true);
+    expect(footer.find('[data-test="import-picker-selected-count"]').exists()).toBe(true);
+    expect(footer.find('[data-test="import-picker-continue"]').exists()).toBe(true);
+    // Continue is disabled at boot (no selection).
+    expect(footer.get('[data-test="import-picker-continue"]').attributes("disabled")).toBeDefined();
+  });
+
   it("renders all 7 section headers with correct counts", async () => {
     const payload = makePayload({
       bundles:      [{ id: "b1", name: "B1" }],
@@ -96,14 +123,22 @@ describe("ImportPicker.vue", () => {
     });
     const wrap = mountPicker({ payload });
     await flushPromises();
-    const text = wrap.text();
-    expect(text).toContain("Bundles (1)");
-    expect(text).toContain("Wildcards (2)");
-    expect(text).toContain("Fixed values (0)");
-    expect(text).toContain("Combines (1)");
-    expect(text).toContain("Derivations (0)");
-    expect(text).toContain("Constraints (0)");
-    expect(text).toContain("Categories (1)");
+    // Phase-4: title and count are separate nodes ("Bundles" + "1 items").
+    // Read the section header's text directly per bucket.
+    const sections: Array<[string, string, number]> = [
+      ["bundles",      "Bundles",      1],
+      ["wildcards",    "Wildcards",    2],
+      ["fixed_values", "Fixed values", 0],
+      ["combines",     "Combines",     1],
+      ["derivations",  "Derivations",  0],
+      ["constraints",  "Constraints",  0],
+      ["categories",   "Categories",   1],
+    ];
+    for (const [key, title, count] of sections) {
+      const section = wrap.get(`[data-test="import-picker-section-${key}"]`);
+      expect(section.get(".wp-picker-section__title").text()).toBe(title);
+      expect(section.get(".wp-picker-section__count").text()).toBe(`${count} items`);
+    }
   });
 
   it("smart-default selects the one entity when payload has exactly 1 entity", async () => {

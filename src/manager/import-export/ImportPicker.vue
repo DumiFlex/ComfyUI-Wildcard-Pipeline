@@ -36,7 +36,6 @@
  */
 import { computed, ref, watchEffect } from "vue";
 import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
 import type { StatusBadge, DepRef } from "./PickerRow.vue";
@@ -470,133 +469,114 @@ function emitContinue(): void {
 
 <template>
   <div class="wp-import-picker" data-test="import-picker">
-    <Card title="Pick what to import" :padding="false">
-      <template #actions>
-        <Button
-          variant="ghost"
-          size="sm"
-          data-test="import-picker-deselect-all"
-          :disabled="selected.size === 0"
-          @click="deselectAll"
-        >Deselect all</Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon="pi-share-alt"
-          data-test="import-picker-select-deps"
-          :disabled="selected.size === 0"
-          @click="selectWithDependencies"
-        >Select with dependencies</Button>
-      </template>
+    <!-- Informational notices: surfaced above the section list rather
+         than in a side panel so the user sees them in the same column
+         as the rows they describe. Phase-4 redesign removed the side
+         panel; these slot in at the top of the picker column. -->
+    <div
+      v-if="props.migratedEntityCount > 0"
+      class="wp-import-picker__notice"
+      data-test="import-picker-migration-note"
+    >
+      Migrated {{ props.migratedEntityCount }}
+      {{ props.migratedEntityCount === 1 ? "entity" : "entities" }}
+      from older schema.
+    </div>
+    <div
+      v-if="props.integrityWarnings.length > 0"
+      class="wp-import-picker__notice wp-import-picker__notice--warn"
+      data-test="import-picker-integrity-note"
+    >
+      {{ props.integrityWarnings.length }}
+      {{ props.integrityWarnings.length === 1 ? "entity has" : "entities have" }}
+      integrity warnings.
+    </div>
 
-      <div class="wp-import-picker__sections">
+    <div class="wp-import-picker__sections">
+      <PickerSection
+        v-for="bucket in BUCKETS"
+        :key="bucket.key"
+        :title="bucket.title"
+        :total-count="entitiesForBucket(bucket.key).length"
+        :selected-count="selectedInBucket(bucket.key)"
+        :default-open="false"
+        :kind="bucket.kindFallback"
+        :data-test="`import-picker-section-${bucket.key}`"
+        @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
+      >
+        <PickerRow
+          v-for="entity in entitiesForBucket(bucket.key)"
+          :key="`${bucket.key}:${entity.id}`"
+          :uuid="entity.id"
+          :name="entity.name ?? entity.id"
+          :kind="kindForEntity(entity, bucket)"
+          :category-name="lookupCategoryFromPayload(entity.category_id)?.name"
+          :category-color="lookupCategoryFromPayload(entity.category_id)?.color"
+          :show-id="true"
+          :checked="isSelected(entity.id)"
+          :status-badges="badgesForEntity(entity, bucket.key)"
+          :unselected-deps="unselectedDepsForEntity(entity)"
+          :missing-deps="missingDepsFor(entity)"
+          :data-test="`import-picker-row-${entity.id}`"
+          @update:checked="(v: boolean) => toggleRow(entity.id, v)"
+        />
         <div
-          v-if="props.migratedEntityCount > 0"
-          class="wp-import-picker__notice"
-          data-test="import-picker-migration-note"
+          v-if="entitiesForBucket(bucket.key).length === 0"
+          class="wp-import-picker__empty"
         >
-          Migrated {{ props.migratedEntityCount }}
-          {{ props.migratedEntityCount === 1 ? "entity" : "entities" }}
-          from older schema.
+          <em>No {{ bucket.title.toLowerCase() }} in payload.</em>
         </div>
-        <div
-          v-if="props.integrityWarnings.length > 0"
-          class="wp-import-picker__notice wp-import-picker__notice--warn"
-          data-test="import-picker-integrity-note"
-        >
-          {{ props.integrityWarnings.length }}
-          {{ props.integrityWarnings.length === 1 ? "entity has" : "entities have" }}
-          integrity warnings.
-        </div>
+      </PickerSection>
+    </div>
 
-        <PickerSection
-          v-for="bucket in BUCKETS"
-          :key="bucket.key"
-          :title="bucket.title"
-          :total-count="entitiesForBucket(bucket.key).length"
-          :selected-count="selectedInBucket(bucket.key)"
-          :default-open="false"
-          :kind="bucket.kindFallback"
-          :data-test="`import-picker-section-${bucket.key}`"
-          @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
-        >
-          <PickerRow
-            v-for="entity in entitiesForBucket(bucket.key)"
-            :key="`${bucket.key}:${entity.id}`"
-            :uuid="entity.id"
-            :name="entity.name ?? entity.id"
-            :kind="kindForEntity(entity, bucket)"
-            :category-name="lookupCategoryFromPayload(entity.category_id)?.name"
-            :category-color="lookupCategoryFromPayload(entity.category_id)?.color"
-            :show-id="true"
-            :checked="isSelected(entity.id)"
-            :status-badges="badgesForEntity(entity, bucket.key)"
-            :unselected-deps="unselectedDepsForEntity(entity)"
-            :missing-deps="missingDepsFor(entity)"
-            :data-test="`import-picker-row-${entity.id}`"
-            @update:checked="(v: boolean) => toggleRow(entity.id, v)"
-          />
-          <div
-            v-if="entitiesForBucket(bucket.key).length === 0"
-            class="wp-import-picker__empty"
-          >
-            <em>No {{ bucket.title.toLowerCase() }} in payload.</em>
-          </div>
-        </PickerSection>
-      </div>
-    </Card>
-
-    <div class="wp-import-picker__side">
-      <Card title="Selection">
-        <dl class="wp-import-picker__stats" data-test="import-picker-summary">
-          <dt>Bundles</dt>      <dd>{{ selectedInBucket("bundles") }}</dd>
-          <dt>Wildcards</dt>    <dd>{{ selectedInBucket("wildcards") }}</dd>
-          <dt>Fixed values</dt> <dd>{{ selectedInBucket("fixed_values") }}</dd>
-          <dt>Combines</dt>     <dd>{{ selectedInBucket("combines") }}</dd>
-          <dt>Derivations</dt>  <dd>{{ selectedInBucket("derivations") }}</dd>
-          <dt>Constraints</dt>  <dd>{{ selectedInBucket("constraints") }}</dd>
-          <dt>Categories</dt>   <dd>{{ selectedInBucket("categories") }}</dd>
-        </dl>
-        <div class="wp-import-picker__divider" />
-        <dl class="wp-import-picker__stats">
-          <dt>Selected</dt>
-          <dd data-test="import-picker-selected-count">
-            {{ selected.size }} of {{ totalEntityCount }}
-          </dd>
-        </dl>
-        <Button
-          variant="primary"
-          icon="pi-arrow-right"
-          class="wp-import-picker__continue"
-          :disabled="selected.size === 0"
-          data-test="import-picker-continue"
-          @click="emitContinue"
-        >Continue</Button>
-      </Card>
+    <div class="wp-import-picker__footer" data-test="import-picker-footer">
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="pi-share-alt"
+        data-test="import-picker-select-deps"
+        :disabled="selected.size === 0"
+        @click="selectWithDependencies"
+      >Select with dependencies</Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        data-test="import-picker-deselect-all"
+        :disabled="selected.size === 0"
+        @click="deselectAll"
+      >Deselect all</Button>
+      <div class="wp-import-picker__footer-spacer" />
+      <span
+        class="wp-import-picker__footer-counter"
+        data-test="import-picker-selected-count"
+      ><strong>{{ selected.size }}</strong> of {{ totalEntityCount }} selected</span>
+      <Button
+        variant="primary"
+        icon-right="pi-arrow-right"
+        :disabled="selected.size === 0"
+        data-test="import-picker-continue"
+        @click="emitContinue"
+      >Continue</Button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .wp-import-picker {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--wp-space-6);
-  align-items: start;
-}
-@media (max-width: 960px) {
-  .wp-import-picker { grid-template-columns: 1fr; }
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .wp-import-picker__sections {
-  padding: var(--wp-space-5);
-  max-height: 540px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .wp-import-picker__notice {
   padding: var(--wp-space-4) var(--wp-space-5);
-  margin-bottom: var(--wp-space-5);
+  margin-bottom: 10px;
   border-radius: var(--wp-radius-sm);
   background: color-mix(in oklab, var(--wp-info) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-info) 36%, transparent);
@@ -615,35 +595,28 @@ function emitContinue(): void {
   padding: var(--wp-space-3) var(--wp-space-5);
 }
 
-.wp-import-picker__side {
+.wp-import-picker__footer {
   display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-5);
-  position: sticky;
-  top: 0;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  margin-top: 10px;
 }
-
-.wp-import-picker__stats {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: var(--wp-space-3);
-  margin: 0;
+.wp-import-picker__footer-spacer {
+  flex: 1;
+}
+.wp-import-picker__footer-counter {
   font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+  font-feature-settings: "tnum";
+  font-family: var(--wp-font);
 }
-.wp-import-picker__stats dt { color: var(--wp-text-muted); }
-.wp-import-picker__stats dd {
-  margin: 0;
-  font-family: var(--wp-font-mono);
-  text-align: right;
-}
-
-.wp-import-picker__divider {
-  border-top: 1px solid var(--wp-border);
-  margin: var(--wp-space-5) 0;
-}
-
-.wp-import-picker__continue {
-  width: 100%;
-  margin-top: var(--wp-space-5);
+.wp-import-picker__footer-counter strong {
+  color: var(--wp-text);
+  font-weight: 600;
 }
 </style>
