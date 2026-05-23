@@ -152,6 +152,30 @@ describe("PickerSection", () => {
     expect(wrap.text()).toContain("child content");
   });
 
+  // ---------- Phase 6: body scroll cap ----------
+
+  it("body has the .wp-picker-section__body class (carries max-height + overflow-y from scoped CSS)", () => {
+    // Scoped CSS isn't applied in jsdom, so we can't read max-height via
+    // computed style. Instead, assert the class is present — the rule
+    // lives in PickerSection.vue's <style scoped> and is the single
+    // source of truth for the 420px cap + overflow-y: auto +
+    // overscroll-behavior: contain triple. Snapshot-style coverage
+    // ensures the class isn't renamed without a deliberate review.
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 1, selectedCount: 0, defaultOpen: true },
+      slots: { default: '<div class="row">x</div>' },
+    });
+    // `wrap.find(...)` returns a wrapper whose `.exists()` survives the
+    // type-narrowing that `.get(...)` applies. Hitting the body via
+    // find lets us assert presence + drill-down to the slotted row.
+    const body = wrap.find(".wp-picker-section__body");
+    expect(body.exists()).toBe(true);
+    // The body wraps the slotted rows directly — sanity-check that
+    // structure so a future refactor doesn't accidentally hoist rows
+    // outside the scroll cap.
+    expect(body.find(".row").exists()).toBe(true);
+  });
+
   // ---------- Phase 1: optional kind icon in header ----------
 
   it("renders a wildcard icon in the header when kind=wildcard", () => {

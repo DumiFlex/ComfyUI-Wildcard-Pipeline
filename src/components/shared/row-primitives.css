@@ -198,6 +198,7 @@
   text-align: center;
   line-height: 1;
   color: var(--wp-text3);
+  border-radius: var(--wp-radius-sm);
 }
 .wp-row-type-icon .pi { font-size: 11px; }
 

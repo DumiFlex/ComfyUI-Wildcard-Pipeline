@@ -169,6 +169,7 @@ function depIconClass(d: DepRef): string {
   <div
     class="wp-picker-row"
     :data-uuid="props.uuid"
+    :data-checked="props.checked ? 'true' : 'false'"
     :style="{ paddingLeft: `${props.indent * 16}px` }"
   >
     <!-- chevron-spacer column (kept empty; reserves grid space matching
@@ -303,11 +304,24 @@ function depIconClass(d: DepRef): string {
  * carry isolation duty (see CLAUDE.md). */
 @import "../../components/shared/row-primitives.css";
 
+/* Picker-surface icon scale override — shared base is 16x16 (right for
+ * ContextWidget rows); picker rows read better at 20x20 with a 12px
+ * glyph since they're the surface a user scans for "what kind is this"
+ * before clicking. Section headers (see PickerSection.vue) go a touch
+ * larger (22x22 / 13px) since the header is a bigger visual unit. */
+.wp-picker-row .wp-row-type-icon {
+  width: 20px;
+  height: 20px;
+}
+.wp-picker-row .wp-row-type-icon .pi {
+  font-size: 12px;
+}
+
 .wp-picker-row {
   display: grid;
   /* chev-spacer, checkbox, type-icon, name+id, cat-chip, status-badges, dep-chips */
   grid-template-columns: 14px 18px minmax(0, auto) minmax(0, 1fr) auto auto auto;
-  column-gap: 9px;
+  column-gap: 8px;
   align-items: center;
   padding: 5px 14px;
   font-size: var(--wp-text-sm);
@@ -316,7 +330,19 @@ function depIconClass(d: DepRef): string {
 }
 .wp-picker-row:last-child { border-bottom: none; }
 .wp-picker-row:hover {
-  background: color-mix(in oklab, var(--wp-bg-3) 35%, transparent);
+  background: color-mix(in oklab, var(--wp-bg-3) 65%, transparent);
+}
+
+/* Selected row — left accent stripe + tinted background. Tied to the
+ * `data-checked` attribute on the row root, mirrored from the
+ * `props.checked` boolean. Hover bumps the tint a touch so checked
+ * rows still register as hover targets. */
+.wp-picker-row[data-checked="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 5%, transparent);
+  box-shadow: inset 2px 0 0 var(--wp-accent-500);
+}
+.wp-picker-row[data-checked="true"]:hover {
+  background: color-mix(in oklab, var(--wp-accent-500) 9%, transparent);
 }
 
 .wp-picker-row__chev-spacer {

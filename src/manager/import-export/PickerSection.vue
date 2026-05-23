@@ -142,6 +142,16 @@ function onHeaderClick(evt: MouseEvent): void {
 <style scoped>
 @import "../../components/shared/row-primitives.css";
 
+/* Section-header icon scale override — the header is a larger visual
+ * unit than a row, so the kind glyph reads better at 22x22 / 13px. */
+.wp-picker-section__header .wp-row-type-icon {
+  width: 22px;
+  height: 22px;
+}
+.wp-picker-section__header .wp-row-type-icon .pi {
+  font-size: 13px;
+}
+
 .wp-picker-section {
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
@@ -164,6 +174,12 @@ function onHeaderClick(evt: MouseEvent): void {
 .wp-picker-section__header:focus-visible {
   outline: 2px solid var(--wp-accent-500);
   outline-offset: -2px;
+}
+/* Open-section header tint — subtle bg shift so expanded sections
+ * read differently from collapsed ones at a glance. Hover still
+ * outranks this (60% bg-3 wash) when the user is over the header. */
+.wp-picker-section[data-open="true"] .wp-picker-section__header {
+  background: color-mix(in oklab, var(--wp-bg-3) 40%, transparent);
 }
 .wp-picker-section__toggle {
   background: none;
@@ -205,18 +221,36 @@ function onHeaderClick(evt: MouseEvent): void {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 28%, transparent);
   color: var(--wp-accent-text);
   font-family: var(--wp-font);
   font-feature-settings: "tnum";
 }
 .wp-picker-section__sel-pill[data-empty="true"] {
   background: var(--wp-bg-3);
+  border-color: var(--wp-border);
   color: var(--wp-text-dim);
 }
 .wp-picker-section__body {
   border-top: 1px solid var(--wp-border);
   background: var(--wp-bg-1);
   padding-top: 4px;
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Scrollbar styling — match the global pattern in
+ * `manager/styles/tokens.css` (10px wide, transparent track, muted
+ * thumb that brightens on hover). Scoped to the section body so
+ * other surfaces keep using the global rule. */
+.wp-picker-section__body::-webkit-scrollbar { width: 10px; height: 10px; }
+.wp-picker-section__body::-webkit-scrollbar-track { background: transparent; }
+.wp-picker-section__body::-webkit-scrollbar-thumb {
+  background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08));
+  border-radius: 999px;
+}
+.wp-picker-section__body::-webkit-scrollbar-thumb:hover {
+  background: var(--wp-scrollbar-thumb-hover, rgba(255, 255, 255, 0.16));
 }
 </style>

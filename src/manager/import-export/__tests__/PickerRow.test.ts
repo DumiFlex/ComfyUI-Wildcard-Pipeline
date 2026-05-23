@@ -44,6 +44,22 @@ describe("PickerRow", () => {
     expect(wrap.get(".wp-picker-row").attributes("data-uuid")).toBe("abcd1234");
   });
 
+  // ---------- data-checked attribute (selected-row visual emphasis) ----------
+
+  it("sets data-checked=true on the row root when checked is true", () => {
+    const wrap = mount(PickerRow, {
+      props: { uuid: "u", name: "x", checked: true },
+    });
+    expect(wrap.get(".wp-picker-row").attributes("data-checked")).toBe("true");
+  });
+
+  it("sets data-checked=false on the row root when checked is false", () => {
+    const wrap = mount(PickerRow, {
+      props: { uuid: "u", name: "x", checked: false },
+    });
+    expect(wrap.get(".wp-picker-row").attributes("data-checked")).toBe("false");
+  });
+
   // ---------- Kind icon ----------
 
   it("renders the kind icon with the canonical PrimeIcons class for the kind", () => {
