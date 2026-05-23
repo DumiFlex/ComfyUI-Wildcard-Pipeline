@@ -924,4 +924,25 @@ describe("ConflictModal.vue", () => {
     expect($('[data-test="commit-btn"]').textContent).toContain("Import 0 items");
     wrap.unmount();
   });
+
+  it("Phase 12: unselected-dep per-item issue renders REQUIRES DEP badge with amber tint + helpful detail", () => {
+    const wrap = mountModal({
+      batchConflicts: [],
+      perItemIssues: [
+        {
+          kind: "unselected-dep",
+          entity: { id: "b0219910", name: "backdrop", kind: "wildcard" },
+          detail: { target: "c14e7527", target_name: "mood" },
+        },
+      ],
+    });
+    const row = $('[data-test="conflict-modal-item-b0219910"]');
+    const badge = row.querySelector(".wp-mod-badge");
+    expect(badge?.textContent?.trim()).toBe("REQUIRES DEP");
+    expect(badge?.className).toContain("wp-mod-badge--drift");
+    expect(row.textContent).toContain("mood");
+    expect(row.textContent).toContain("c14e7527");
+    expect(row.textContent).toContain("NOT in your selection");
+    wrap.unmount();
+  });
 });

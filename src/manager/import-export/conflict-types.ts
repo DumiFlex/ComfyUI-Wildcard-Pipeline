@@ -37,6 +37,7 @@ export type PerItemKind =
   | "broken-inner-ref"
   | "broken-uuid-ref"
   | "broken-constraint-ref"
+  | "unselected-dep"
   | "tier-3"
   | "lossy-migration"
   | "fingerprint-mismatch";

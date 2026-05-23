@@ -813,22 +813,24 @@ function entityNameOf(entity: Record<string, unknown>): string | undefined {
   return typeof n === "string" ? n : undefined;
 }
 
-/** Convert parse-time `IntegrityWarning`s + broken-inner-ref scan into
- *  per-item issues. Two sources:
+/** Convert parse-time `IntegrityWarning`s + dep scan into per-item issues.
+ *  Three sources:
  *
  *   1. `fingerprint-mismatch` from `integrityWarnings` (Task 21 parse).
- *   2. `broken-inner-ref` — for each selected entity, walk its outgoing
- *      dep edges via `buildDepGraph`. Any target absent from the payload
- *      becomes a per-item issue so the user must explicitly accept-or-skip
- *      before commit. Phase 10: we deliberately DO NOT treat receiver
- *      library presence as resolution — a payload ref points to "the
- *      entity I authored against", and the library might carry the same
- *      id with totally different content. The user needs to see the
- *      missing-dep warning either way.
+ *   2. `broken-inner-ref` — selected entity refs target absent from payload.
+ *      User must explicitly accept-or-skip. Library presence does NOT
+ *      resolve (Phase 10): payload ref means "the entity I authored
+ *      against"; same id in receiver library may carry different content.
+ *   3. `unselected-dep` (Phase 12) — selected entity refs target that is
+ *      present in payload but NOT in the user's selection. Without
+ *      explicit action the resulting library row carries a dangling ref
+ *      to a never-imported entity. Surfaced separately from
+ *      `broken-inner-ref` so the user can distinguish "you didn't pick
+ *      this" (fixable: select the dep) from "the export is missing it
+ *      entirely" (irreparable from the import side).
  *
- *  A single entity can produce BOTH a fingerprint-mismatch AND one or
- *  more broken-inner-ref issues; we keep them all (each describes a
- *  distinct problem and ConflictModal renders one row per issue). */
+ *  A single entity can produce multiple issues (different kinds, same id).
+ *  ConflictModal renders one row per issue. */
 function buildPerItemIssues(
   selected: SelectedEntity[],
   integrityWarnings: IntegrityWarning[],
@@ -854,21 +856,49 @@ function buildPerItemIssues(
       if (typeof row.id === "string" && row.id.length > 0) payloadIds.add(row.id);
     }
   }
+  // Look up display names for unselected-dep target labels — payload rows
+  // by id across all 7 buckets. Avoids the modal having to walk back to
+  // the parent payload for a single name lookup.
+  const payloadNameById = new Map<string, string>();
+  for (const k of ALL_KINDS) {
+    const arr = payload[BUCKET_FOR_KIND[k]];
+    for (const row of arr) {
+      const id = typeof row.id === "string" ? row.id : null;
+      const rawName = (row as { name?: unknown }).name;
+      if (id && typeof rawName === "string" && rawName.length > 0) {
+        payloadNameById.set(id, rawName);
+      }
+    }
+  }
   const graph = buildDepGraph(payload);
   for (const s of selected) {
     const edges = graph[s.entity.id] ?? [];
+    const name = entityNameOf(s.entity);
     for (const target of edges) {
-      if (payloadIds.has(target)) continue;
-      const name = entityNameOf(s.entity);
-      out.push({
-        kind: "broken-inner-ref",
-        entity: {
-          id: s.entity.id,
-          ...(name !== undefined ? { name } : {}),
-          kind: s.kind,
-        },
-        detail: { target },
-      });
+      if (!payloadIds.has(target)) {
+        out.push({
+          kind: "broken-inner-ref",
+          entity: {
+            id: s.entity.id,
+            ...(name !== undefined ? { name } : {}),
+            kind: s.kind,
+          },
+          detail: { target },
+        });
+      } else if (!pickedIds.has(target)) {
+        out.push({
+          kind: "unselected-dep",
+          entity: {
+            id: s.entity.id,
+            ...(name !== undefined ? { name } : {}),
+            kind: s.kind,
+          },
+          detail: {
+            target,
+            target_name: payloadNameById.get(target),
+          },
+        });
+      }
     }
   }
   return out;
@@ -990,7 +1020,20 @@ function partitionSelection(
       } else if (pd.kind === "replace") {
         decision = { kind: "replace" };
       } else if (pd.kind === "accept") {
-        decision = { kind: "add" };
+        // "Import anyway" semantics: when the row collides with the
+        // receiver library (conflict / exists-unknown / silent-skip)
+        // a plain `add` would crash on duplicate id server-side. The
+        // user said "I want this version in the library" → coerce to
+        // replace. Pure no-collision rows stay `add`.
+        if (
+          s.collision === "conflict"
+          || s.collision === "exists-unknown"
+          || s.collision === "silent-skip"
+        ) {
+          decision = { kind: "replace" };
+        } else {
+          decision = { kind: "add" };
+        }
       } else if (pd.kind === "rename") {
         // Two paths land here:
         //   1. Inline `<ImportAsNewRename>` confirm → pd carries both
@@ -1139,8 +1182,18 @@ async function onImportV2SelectionReady(ids: Set<string>): Promise<void> {
   const library = buildLibraryMap();
   const selected = buildSelectedEntities(state.payload, ids, library);
   pendingSelection.value = selected;
-  const bConflicts = buildBatchConflicts(selected);
   const issues = buildPerItemIssues(selected, state.integrityWarnings, state.payload);
+  // Phase 12: dedup. When a row carries any per-item issue, drop it from
+  // the batch list. The per-item row's Skip / Import as new / Import anyway
+  // covers the same decision space as the batch's Skip / Replace / Import
+  // as new for silent-skip / exists-unknown rows (Replace is a no-op on
+  // silent-skip and the broken-ref case warrants Skip-or-anyway thinking
+  // more than Replace anyway). Avoids forcing the user to make two
+  // decisions on the same id.
+  const issueIds = new Set(issues.map((i) => i.entity.id));
+  const bConflicts = buildBatchConflicts(selected).filter(
+    (c) => !issueIds.has(c.id),
+  );
   batchConflicts.value = bConflicts;
   perItemIssues.value = issues;
   if (bConflicts.length > 0 || issues.length > 0) {

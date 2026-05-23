@@ -168,6 +168,29 @@ async function feedPayloadAndContinue(
   await flushPromises();
 }
 
+/** Same as feedPayloadAndContinue but skips the picker's smart-default
+ *  by emitting selection-ready directly with the caller-chosen ids.
+ *  Lets a test target the orchestrator with a partial selection in
+ *  multi-entity payloads (where the auto-select-everything default
+ *  would hide the unselected-dep code path). */
+async function feedPayloadAndContinueWithIds(
+  wrap: ReturnType<typeof mountView>,
+  payload: Record<string, unknown>,
+  ids: Set<string>,
+): Promise<void> {
+  await wrap.find('[data-test="io-tab-import-v2"]').trigger("click");
+  await flushPromises();
+  await wrap.find('[data-test="import-paste-btn"]').trigger("click");
+  await flushPromises();
+  await wrap.find('[data-test="import-paste-textarea"]').setValue(JSON.stringify(payload));
+  await wrap.find('[data-test="import-paste-confirm"]').trigger("click");
+  await flushPromises();
+  const picker = wrap.findComponent(ImportPicker);
+  if (!picker.exists()) throw new Error("ImportPicker not mounted");
+  picker.vm.$emit("selection-ready", ids);
+  await flushPromises();
+}
+
 describe("ImportExport.vue — commit orchestrator", () => {
   it("no conflicts → direct commit with correct payload + success toast + state cleared", async () => {
     apiM.importExport.commit.mockResolvedValue({
@@ -370,6 +393,69 @@ describe("ImportExport.vue — commit orchestrator", () => {
     );
     expect(info).toBeTruthy();
     expect(wrap.find('[data-test="io-import-v2-stash"]').exists()).toBe(false);
+    wrap.unmount();
+  });
+
+  it("Phase 12: selected entity referencing an unselected payload entity emits unselected-dep", async () => {
+    // backdrop references @{c14e7527} (mood) via option text; mood is in
+    // the payload but the user only selects backdrop. Orchestrator must
+    // surface an unselected-dep per-item issue with target_name so the
+    // modal renders a helpful "References mood @{c14e7527}" detail.
+    apiM.modules.list.mockResolvedValue({ items: [], total: 0 });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinueWithIds(
+      wrap,
+      mkPayload({
+        wildcards: [
+          mkWildcardEntity("b0219910", [
+            { value: "blue @{c14e7527}", weight: 1 },
+          ]),
+          mkWildcardEntity("c14e7527"),
+        ],
+      }),
+      new Set(["b0219910"]),
+    );
+    const modal = wrap.findComponent(ConflictModal);
+    if (!modal.exists()) throw new Error("ConflictModal not mounted");
+    const issues = modal.props("perItemIssues") as PerItemIssue[];
+    const u = issues.find(
+      (i) => i.kind === "unselected-dep" && i.entity.id === "b0219910",
+    );
+    expect(u).toBeDefined();
+    expect((u?.detail as { target?: string }).target).toBe("c14e7527");
+    wrap.unmount();
+  });
+
+  it("Phase 12: row appearing in BOTH batch + per-item is deduped — per-item wins", async () => {
+    // Wildcard a1a1a1a1 has matching library content (silent-skip) AND
+    // references an unresolved id @{deadbeef} → would normally land in
+    // both batch (DUPLICATE) and per-item (MISSING DEP). Dedup must drop
+    // it from the batch list so the user only decides once.
+    const incoming = mkWildcardEntity("a1a1a1a1", [
+      { value: "@{deadbeef}", weight: 1 },
+    ]);
+    const { moduleFingerprint } = await import("../import-export/fingerprint");
+    const fp = moduleFingerprint({
+      type: "wildcard",
+      name: incoming.name,
+      description: incoming.description,
+      tags: incoming.tags,
+      payload_hash: incoming.payload_hash,
+    });
+    const libRow = {
+      ...mkModule({ id: "a1a1a1a1", type: "wildcard", name: incoming.name }),
+      snapshot_fingerprint: fp,
+    } as unknown as ModuleRow;
+    apiM.modules.list.mockResolvedValue({ items: [libRow], total: 1 });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinue(wrap, mkPayload({ wildcards: [incoming] }));
+    const modal = wrap.findComponent(ConflictModal);
+    const batch = modal.props("batchConflicts") as Array<{ id: string }>;
+    const issues = modal.props("perItemIssues") as PerItemIssue[];
+    expect(batch.find((c) => c.id === "a1a1a1a1")).toBeUndefined();
+    expect(issues.some((i) => i.entity.id === "a1a1a1a1")).toBe(true);
     wrap.unmount();
   });
 

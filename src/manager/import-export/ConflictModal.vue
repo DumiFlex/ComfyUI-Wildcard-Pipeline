@@ -471,9 +471,19 @@ function issueBadgeLabel(issue: PerItemIssue): string {
   if (issue.kind === "broken-inner-ref")     return "MISSING DEP";
   if (issue.kind === "broken-uuid-ref")      return "MISSING DEP";
   if (issue.kind === "broken-constraint-ref")return "MISSING DEP";
+  if (issue.kind === "unselected-dep")       return "REQUIRES DEP";
   if (issue.kind === "fingerprint-mismatch") return "FINGERPRINT";
   if (issue.kind === "lossy-migration")      return "LOSSY";
   return "ISSUE";
+}
+
+/** Badge variant slug per issue kind. `broken-inner-ref` / `*-uuid-ref` /
+ *  `*-constraint-ref` use red MISSING because the target truly cannot be
+ *  resolved post-import; `unselected-dep` uses amber DRIFT because the
+ *  user could still fix it by selecting the dep. */
+function issueBadgeVariant(issue: PerItemIssue): string {
+  if (issue.kind === "unselected-dep") return "drift";
+  return "missing";
 }
 
 /**
@@ -487,15 +497,27 @@ function issueBadgeLabel(issue: PerItemIssue): string {
 function issueDetailText(issue: PerItemIssue): string {
   const d = issue.detail;
   let targetId: string | undefined;
+  let targetName: string | undefined;
   if (d && typeof d === "object") {
     const t = (d as { target?: unknown }).target;
     if (typeof t === "string" && t.length > 0) targetId = t;
+    const tn = (d as { target_name?: unknown }).target_name;
+    if (typeof tn === "string" && tn.length > 0) targetName = tn;
   }
   if (issue.kind === "broken-inner-ref" || issue.kind === "broken-uuid-ref" || issue.kind === "broken-constraint-ref") {
     if (targetId) {
       return `References @{${targetId}} — not in payload, not in library. Importing will leave a dangling ref.`;
     }
     return "References an entity that is not in the payload or the library.";
+  }
+  if (issue.kind === "unselected-dep") {
+    if (targetId && targetName) {
+      return `References ${targetName} @{${targetId}} — present in the payload but NOT in your selection. Importing now leaves a dangling ref unless you also select the target.`;
+    }
+    if (targetId) {
+      return `References @{${targetId}} — present in the payload but NOT in your selection. Importing now leaves a dangling ref unless you also select the target.`;
+    }
+    return "References an entity present in the payload but not selected.";
   }
   if (issue.kind === "fingerprint-mismatch") {
     return "Payload-stamped fingerprint disagrees with the row content.";
@@ -878,7 +900,10 @@ const importItemCount = computed<number>(() => {
               <div class="wp-row-name" style="margin-bottom: 2px">
                 <span class="wp-picker-row__name">{{ issue.entity.name ?? issue.entity.id }}</span>
                 <span class="wp-id">{{ issue.entity.id.slice(0, 8) }}</span>
-                <span class="wp-mod-badge wp-mod-badge--missing">
+                <span
+                  class="wp-mod-badge"
+                  :class="`wp-mod-badge--${issueBadgeVariant(issue)}`"
+                >
                   {{ issueBadgeLabel(issue) }}
                 </span>
               </div>
