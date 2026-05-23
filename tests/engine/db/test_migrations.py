@@ -31,7 +31,7 @@ def test_migrate_records_version(tmp_path):
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
     # ``engine/db/migrations_sql``.
-    assert current_version(conn) == 7
+    assert current_version(conn) == 8
     conn.close()
 
 
@@ -247,5 +247,100 @@ def test_004_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 7
+    assert current_version(conn) == 8
     conn.close()
+
+
+def test_008_backfills_null_fingerprints(tmp_path):
+    """Migration 008 must hash every NULL-fingerprint row up to the
+    same value ModuleRepository.create() would produce for the same
+    content. Without this, exported-then-reimported legacy rows show
+    the amber EXISTING badge (exists-unknown) instead of silent-skip."""
+    db = tmp_path / "fp.db"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+
+    # Stop at 007 — that's the schema before 008 runs.
+    _migrate_up_to(conn, 7)
+    conn.execute(
+        "INSERT INTO modules(id, type, name, description, category_id, "
+        "tags, is_favorite, payload, snapshot_fingerprint, "
+        "version, created_at, updated_at) "
+        "VALUES ('aabbccdd', 'wildcard', 'color', 'palette', NULL, "
+        "'[\"warm\",\"primary\"]', 0, ?, NULL, "
+        "1, datetime('now'), datetime('now'));",
+        ('{"values":["red","blue"]}',),
+    )
+    # Row with an already-set fingerprint should stay untouched.
+    conn.execute(
+        "INSERT INTO modules(id, type, name, description, category_id, "
+        "tags, is_favorite, payload, snapshot_fingerprint, "
+        "version, created_at, updated_at) "
+        "VALUES ('11223344', 'wildcard', 'x', '', NULL, '[]', 0, '{}', "
+        "'cafebabe', 1, datetime('now'), datetime('now'));"
+    )
+    conn.commit()
+
+    migrate(conn)
+
+    from engine._fingerprint import module_fingerprint
+    from engine.modules.snapshot import payload_hash
+
+    row = conn.execute(
+        "SELECT snapshot_fingerprint FROM modules WHERE id = 'aabbccdd';"
+    ).fetchone()
+    expected = module_fingerprint({
+        "type": "wildcard",
+        "name": "color",
+        "description": "palette",
+        "tags": ["warm", "primary"],
+        "payload_hash": payload_hash({"values": ["red", "blue"]}),
+    })
+    assert row["snapshot_fingerprint"] == expected
+
+    untouched = conn.execute(
+        "SELECT snapshot_fingerprint FROM modules WHERE id = '11223344';"
+    ).fetchone()
+    assert untouched["snapshot_fingerprint"] == "cafebabe"
+    conn.close()
+
+
+def test_008_matches_repository_create_fingerprint(tmp_path):
+    """A row inserted pre-008 with NULL fingerprint should end up
+    matching the fingerprint a freshly-created row with identical
+    content gets via ``ModuleRepository.create``. This is the property
+    that turns ``exists-unknown`` into ``silent-skip`` on re-import."""
+    from engine.db.connection import get_connection
+    from engine.db.repositories import ModuleRepository
+
+    db = tmp_path / "match.db"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    _migrate_up_to(conn, 7)
+    conn.execute(
+        "INSERT INTO modules(id, type, name, description, category_id, "
+        "tags, is_favorite, payload, snapshot_fingerprint, "
+        "version, created_at, updated_at) "
+        "VALUES ('deadbeef', 'wildcard', 'mood', 'm', NULL, "
+        "'[\"a\",\"b\"]', 0, ?, NULL, "
+        "1, datetime('now'), datetime('now'));",
+        ('{"values":["hi"]}',),
+    )
+    conn.commit()
+    migrate(conn)
+    backfilled = conn.execute(
+        "SELECT snapshot_fingerprint FROM modules WHERE id='deadbeef';"
+    ).fetchone()["snapshot_fingerprint"]
+    conn.close()
+
+    fresh_db = tmp_path / "fresh.db"
+    fresh = get_connection(fresh_db)
+    migrate(fresh)
+    repo = ModuleRepository(fresh)
+    row = repo.create(
+        type="wildcard", name="mood", description="m",
+        category_id=None, tags=["a", "b"],
+        payload={"values": ["hi"]},
+    )
+    assert row["snapshot_fingerprint"] == backfilled
+    fresh.close()
