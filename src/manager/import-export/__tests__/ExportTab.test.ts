@@ -277,4 +277,102 @@ describe("ExportTab.vue", () => {
       summary: expect.stringMatching(/load|library/i),
     }));
   });
+
+  it("'Select with dependencies' button is disabled when nothing is selected", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    const btn = wrap.get('[data-test="export-select-deps"]');
+    expect(btn.attributes("disabled")).toBeDefined();
+  });
+
+  it("'Select with dependencies' expands selection via outgoing closure", async () => {
+    // Wildcard A's payload.options[0].value references @{bbbbbbbb}; selecting
+    // only A and clicking the button should pull in B through the dep-graph
+    // closure. Ids are 8-hex-char so they match the REF_REGEX exactly.
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+
+    // Select only wildcard A.
+    await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+
+    // Click the Select-with-deps button.
+    await wrap.get('[data-test="export-select-deps"]').trigger("click");
+    await flushPromises();
+
+    // B should now also be checked.
+    const rowB = wrap.get('[data-test="export-tab-row-wildcard-bbbbbbbb"] button[role="checkbox"]');
+    expect(rowB.attributes("aria-checked")).toBe("true");
+  });
+
+  it("'Select with dependencies' pulls in constraints whose source AND target are both selected", async () => {
+    // Constraint C carries source_wildcard_id = A and target_wildcard_id = B
+    // nested under its payload. Selecting A + B (but not C) and clicking
+    // should add C via constraintsBothSidesIn.
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: { options: [] },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+        mkModule({
+          id: "cccccccc",
+          type: "constraint",
+          name: "c1",
+          payload: {
+            source_wildcard_id: "aaaaaaaa",
+            target_wildcard_id: "bbbbbbbb",
+            matrix: {},
+            exceptions: [],
+          },
+        }),
+      ],
+      total: 3,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+
+    await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+    await wrap.get('[data-test="export-tab-row-wildcard-bbbbbbbb"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+
+    await wrap.get('[data-test="export-select-deps"]').trigger("click");
+    await flushPromises();
+
+    const rowC = wrap.get('[data-test="export-tab-row-constraint-cccccccc"] button[role="checkbox"]');
+    expect(rowC.attributes("aria-checked")).toBe("true");
+  });
 });

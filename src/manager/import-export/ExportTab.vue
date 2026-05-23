@@ -22,6 +22,8 @@ import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
+import { liveLibraryToRawPayload } from "./live-library-adapter";
+import { buildDepGraph, transitiveClosure, constraintsBothSidesIn } from "./dep-graph";
 
 const toast = useToast();
 
@@ -105,13 +107,6 @@ onMounted(loadLibrary);
 
 // ---------- Selection state ----------
 
-// TODO(task-13+): "Select with dependencies" button.
-// Walks outgoing closure via dep-graph.ts (transitiveClosure / constraintsBothSidesIn).
-// Deferred because those helpers expect RawPayload-shape input, while ExportTab
-// holds live ModuleRow[] / BundleRow[] / CategoryRow[]. Either:
-//   (a) build a RawPayload-equivalent from the loaded library before walking, or
-//   (b) overload the dep-graph helpers to accept live library rows.
-
 /**
  * Per-bucket selection. Keyed by BucketKey → Set<uuid>. One Record
  * keeps reactivity-tracked state in a single ref so the per-section
@@ -174,6 +169,47 @@ const totalSelected = computed<number>(() => {
   for (const b of BUCKETS) n += selection.value[b.key].size;
   return n;
 });
+
+// ---------- Select with dependencies ----------
+
+/**
+ * Apply a closure of entity ids back into per-bucket selection.
+ * Walks each bucket's rows and adds matching ids; ids not present in
+ * any bucket are silently dropped (defensive — stale ids from a
+ * future closure shouldn't crash).
+ */
+function applyClosureToSelection(closure: Set<string>): void {
+  const next: Record<BucketKey, Set<string>> = {
+    bundle:       new Set(selection.value.bundle),
+    wildcard:     new Set(selection.value.wildcard),
+    fixed_values: new Set(selection.value.fixed_values),
+    combine:      new Set(selection.value.combine),
+    derivation:   new Set(selection.value.derivation),
+    constraint:   new Set(selection.value.constraint),
+    category:     new Set(selection.value.category),
+  };
+  for (const b of BUCKETS) {
+    const ids = new Set(rowsForBucket(b.key).map((r) => r.id));
+    for (const id of closure) if (ids.has(id)) next[b.key].add(id);
+  }
+  selection.value = next;
+}
+
+/**
+ * Expand selection to include all transitively-referenced entities
+ * plus any constraints whose source AND target are both selected.
+ * Disabled when nothing is selected (no seed to walk from).
+ */
+function selectWithDependencies(): void {
+  if (totalSelected.value === 0) return;
+  const payload = liveLibraryToRawPayload(modules.value, bundles.value, categories.value);
+  const graph = buildDepGraph(payload);
+  const seed = new Set<string>();
+  for (const b of BUCKETS) for (const id of selection.value[b.key]) seed.add(id);
+  const closure = transitiveClosure(graph, seed);
+  for (const cid of constraintsBothSidesIn(payload, closure)) closure.add(cid);
+  applyClosureToSelection(closure);
+}
 
 // ---------- Export ----------
 
@@ -264,6 +300,14 @@ function clearAll() {
           :disabled="totalSelected === 0"
           @click="clearAll"
         >Clear all</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon="pi-share-alt"
+          data-test="export-select-deps"
+          :disabled="totalSelected === 0"
+          @click="selectWithDependencies"
+        >Select with dependencies</Button>
         <Button
           variant="ghost"
           size="sm"
