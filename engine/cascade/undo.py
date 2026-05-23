@@ -122,15 +122,21 @@ def _restore_module(conn: sqlite3.Connection, entity: dict[str, Any]) -> None:
     try:
         repo.get(eid)
         # Row exists — overwrite with snapshot values.
-        repo.update(
-            eid,
-            name=entity.get("name"),
-            description=entity.get("description"),
-            category_id=entity.get("category_id"),
-            tags=entity.get("tags") or [],
-            payload=entity.get("payload") or {},
-            is_favorite=entity.get("is_favorite", False),
-        )
+        # Build kwargs only for fields present + non-None in snapshot.
+        kwargs: dict[str, Any] = {}
+        if (name := entity.get("name")) is not None:
+            kwargs["name"] = name
+        if (description := entity.get("description")) is not None:
+            kwargs["description"] = description
+        if (category_id := entity.get("category_id")) is not None:
+            kwargs["category_id"] = category_id
+        if (tags := entity.get("tags")) is not None:
+            kwargs["tags"] = tags if tags else []
+        if (payload := entity.get("payload")) is not None:
+            kwargs["payload"] = payload if payload else {}
+        if (is_favorite := entity.get("is_favorite")) is not None:
+            kwargs["is_favorite"] = is_favorite
+        repo.update(eid, **kwargs)
     except ModuleNotFound:
         # Row was deleted — recreate at the original id.
         # ModuleRepository.create() accepts id= (8-hex validated).
@@ -152,16 +158,23 @@ def _restore_bundle(conn: sqlite3.Connection, entity: dict[str, Any]) -> None:
     try:
         repo.get(eid)
         # Row exists — overwrite.
-        repo.update(
-            eid,
-            name=entity.get("name"),
-            description=entity.get("description"),
-            color=entity.get("color"),
-            category_id=entity.get("category_id"),
-            tags=entity.get("tags") or [],
-            children=entity.get("children") or [],
-            is_favorite=entity.get("is_favorite", False),
-        )
+        # Build kwargs only for fields present + non-None in snapshot.
+        kwargs: dict[str, Any] = {}
+        if (name := entity.get("name")) is not None:
+            kwargs["name"] = name
+        if (description := entity.get("description")) is not None:
+            kwargs["description"] = description
+        if (color := entity.get("color")) is not None:
+            kwargs["color"] = color
+        if (category_id := entity.get("category_id")) is not None:
+            kwargs["category_id"] = category_id
+        if (tags := entity.get("tags")) is not None:
+            kwargs["tags"] = tags if tags else []
+        if (children := entity.get("children")) is not None:
+            kwargs["children"] = children if children else []
+        if (is_favorite := entity.get("is_favorite")) is not None:
+            kwargs["is_favorite"] = is_favorite
+        repo.update(eid, **kwargs)
     except BundleNotFound:
         # Row was deleted — recreate at the original id.
         # BundleRepository.create() accepts id= (8-hex validated).
@@ -189,13 +202,17 @@ def _restore_category(conn: sqlite3.Connection, entity: dict[str, Any]) -> None:
     try:
         repo.get(eid)
         # Row exists — update in place.
-        repo.update(
-            eid,
-            name=entity.get("name"),
-            color=entity.get("color"),
-            icon=entity.get("icon"),
-            sort_order=entity.get("sort_order", 0),
-        )
+        # Build kwargs only for fields present + non-None in snapshot.
+        kwargs: dict[str, Any] = {}
+        if (name := entity.get("name")) is not None:
+            kwargs["name"] = name
+        if (color := entity.get("color")) is not None:
+            kwargs["color"] = color
+        if (icon := entity.get("icon")) is not None:
+            kwargs["icon"] = icon
+        if (sort_order := entity.get("sort_order")) is not None:
+            kwargs["sort_order"] = sort_order
+        repo.update(eid, **kwargs)
     except CategoryNotFound:
         # Raw INSERT to preserve the original slug-based id.
         conn.execute(
