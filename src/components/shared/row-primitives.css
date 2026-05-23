@@ -229,6 +229,15 @@
   color: var(--wp-kind-constraint);
 }
 .wp-row-type-icon--bundle {
+  /* Bundles use --wp-bundle-default (indigo-500 dark / indigo-700 light)
+   * — same token BundlePickerModal + BundleHeader use, so the bundle
+   * identity reads as the same indigo across every surface. */
+  background: color-mix(in oklab, var(--wp-bundle-default) 18%, transparent);
+  color: var(--wp-bundle-default);
+}
+.wp-row-type-icon--category {
+  /* Categories are organizational metadata, not a module kind — use
+   * neutral muted to keep them distinct from the colored module kinds. */
   background: color-mix(in oklab, var(--wp-text-muted) 18%, transparent);
   color: var(--wp-text-muted);
 }

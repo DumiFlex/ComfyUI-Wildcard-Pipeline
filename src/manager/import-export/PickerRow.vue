@@ -70,7 +70,7 @@ const KIND_CLASS: Record<string, string> = {
   derivation:   "derivation",
   constraint:   "constraint",
   bundle:       "bundle",
-  category:     "bundle",
+  category:     "category",
 };
 
 interface Props {
