@@ -657,8 +657,15 @@ interface SelectedEntity {
   kind: EntityKind;
   /** Raw row from the payload. Always has `id`; other fields opaque. */
   entity: Record<string, unknown> & { id: string };
-  /** Collision state. Computed at orchestrator entry from `detectCollisions`. */
-  collision: "no-collision" | "silent-skip" | "conflict";
+  /**
+   * Collision state. Computed at orchestrator entry from `detectCollisions`.
+   * `exists-unknown` (library row present, fingerprint missing) is folded
+   * into the same partitioner branch as `conflict` so the user still
+   * gets a Skip / Replace / Rename decision before the server sees the
+   * id — but the picker's inline badge for these rows is EXISTING (amber)
+   * not MODIFIED (orange), matching what we can actually prove.
+   */
+  collision: "no-collision" | "silent-skip" | "conflict" | "exists-unknown";
 }
 
 const importV2State = ref<ImportV2State | null>(null);
@@ -783,14 +790,14 @@ function buildSelectedEntities(
     list.push(hit.entity as unknown as FingerprintModuleRow & { id: string });
     moduleEntitiesByKind[hit.kind] = list;
   }
-  const collisionByKind: Record<string, Record<string, "no-collision" | "silent-skip" | "conflict">> = {};
+  const collisionByKind: Record<string, Record<string, SelectedEntity["collision"]>> = {};
   for (const [kind, rows] of Object.entries(moduleEntitiesByKind)) {
     collisionByKind[kind] = detectCollisions(rows, library);
   }
   for (const id of selection) {
     const hit = idIndex.get(id);
     if (!hit) continue;
-    const collision = MODULE_KINDS.has(hit.kind)
+    const collision: SelectedEntity["collision"] = MODULE_KINDS.has(hit.kind)
       ? (collisionByKind[hit.kind]?.[id] ?? "no-collision")
       : "no-collision";
     result.push({ kind: hit.kind, entity: hit.entity, collision });
@@ -828,11 +835,17 @@ function buildPerItemIssues(
   return out;
 }
 
-/** Build `BatchConflict[]` from module-kind entities marked `"conflict"`. */
+/**
+ * Build `BatchConflict[]` from module-kind entities that need user
+ * resolution. `conflict` (fingerprint differs — definitely modified)
+ * AND `exists-unknown` (library row has no stored fingerprint so we
+ * cannot prove modification) both route through the modal so the
+ * commit can't silently overwrite or crash on a duplicate id.
+ */
 function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
   const out: BatchConflict[] = [];
   for (const s of selected) {
-    if (s.collision !== "conflict") continue;
+    if (s.collision !== "conflict" && s.collision !== "exists-unknown") continue;
     out.push({ kind: s.kind, id: s.entity.id, entity: s.entity });
   }
   return out;
@@ -944,7 +957,12 @@ function partitionSelection(
         `[import-commit] no decision recorded for per-item issue ${s.entity.id}; dropping`,
       );
       decision = null;
-    } else if (s.collision === "conflict") {
+    } else if (s.collision === "conflict" || s.collision === "exists-unknown") {
+      // `exists-unknown` (library row exists, no stored fingerprint) is
+      // treated identically to `conflict` at the partitioner — both
+      // require an explicit user decision to avoid an id-collision crash
+      // on the server. The picker shows a distinct EXISTING badge so
+      // the user sees the nuance up front.
       if (resolution.batchDefault === "replace") {
         decision = { kind: "replace" };
       } else if (resolution.batchDefault === "rename") {
@@ -1605,7 +1623,11 @@ watch(
       class="wp-io-import-v2-pane"
       data-test="io-import-v2-pane"
     >
-      <ImportTab @payload-ready="onImportV2PayloadReady" />
+      <ImportTab
+        :payload-loaded="importV2State !== null"
+        @payload-ready="onImportV2PayloadReady"
+        @replace-requested="clearImportV2"
+      />
       <ImportPicker
         v-if="importV2State"
         :key="importV2State.id"

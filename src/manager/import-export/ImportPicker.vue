@@ -284,22 +284,27 @@ const collisionStates = computed<Record<string, CollisionState>>(() => {
  * merged-or-created by name; see parse.ts:62) so they get no integrity
  * badge. Every other bucket runs through `verifyOne` and can carry one.
  *
- * Phase-2 collision-state → badge mapping:
+ * Phase-5 collision-state → badge mapping:
  *   - Module buckets:
- *     - `no-collision`  → NEW (green) — clean import, no decision needed.
- *     - `conflict`      → MODIFIED (orange) — uuid match, fingerprint diff.
- *     - `silent-skip`   → (no badge) — true duplicate, auto-excluded at
- *                         commit time; badging it would be misleading noise.
- *   - Bundles: id-presence check only — present in library → MODIFIED
- *     (bundle MOD detection runs separately downstream via
- *     bundle-fingerprint.ts; this is a presence-only heads-up).
+ *     - `no-collision`   → NEW (green) — clean import, no decision needed.
+ *     - `conflict`       → MODIFIED (orange) — uuid match, fingerprint diff.
+ *     - `exists-unknown` → EXISTING (drift / amber) — library row present
+ *                          but stored fingerprint absent (legacy row
+ *                          pre-fingerprint-backfill). Distinct from
+ *                          MODIFIED so users aren't misled.
+ *     - `silent-skip`    → (no badge) — true duplicate, auto-excluded at
+ *                          commit time; badging it would be misleading noise.
+ *   - Bundles: id-presence check only — present in library →
+ *     EXISTING (drift / amber). Bundle MOD detection runs separately
+ *     downstream via bundle-fingerprint.ts so the inline picker badge
+ *     never claims "MODIFIED" without proof.
  *   - Categories: never get a collision badge (name-merge semantics on
  *     server, no id collision possible).
  *
- * Order: `migrated` first → `new` / `mod` (collision) → `drift`
- * (integrity warning). Multiple badges allowed per row — e.g. a row
- * that was migrated AND also has a uuid collision stacks MIGRATED +
- * MODIFIED so the user sees both signals.
+ * Order: `migrated` first → `new` / `mod` / `drift` (collision) →
+ * `drift` (integrity warning). Multiple badges allowed per row — e.g.
+ * a row that was migrated AND also has a uuid collision stacks
+ * MIGRATED + MODIFIED so the user sees both signals.
  */
 function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): StatusBadge[] {
   const badges: StatusBadge[] = [];
@@ -311,7 +316,10 @@ function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): StatusBadge[
   }
   if (bucket === "bundles") {
     if (props.libraryRows?.has(entity.id) === true) {
-      badges.push({ variant: "mod", label: "MODIFIED" });
+      // Id-presence only — we never compute bundle fingerprints in this
+      // picker, so route through the same EXISTING badge as
+      // exists-unknown rather than overclaiming MODIFIED.
+      badges.push({ variant: "drift", label: "EXISTING" });
     }
     // Bundles never get a NEW badge here — id-presence semantics only;
     // the orchestrator's bundle MOD pass surfaces the actual state.
@@ -321,6 +329,8 @@ function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): StatusBadge[
       badges.push({ variant: "new", label: "NEW" });
     } else if (state === "conflict") {
       badges.push({ variant: "mod", label: "MODIFIED" });
+    } else if (state === "exists-unknown") {
+      badges.push({ variant: "drift", label: "EXISTING" });
     }
     // silent-skip intentionally produces no badge.
   }

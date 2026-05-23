@@ -178,4 +178,126 @@ describe("ImportTab.vue", () => {
     expect(note.exists()).toBe(true);
     expect(note.text()).toMatch(/migrated 2 entities/i);
   });
+
+  // ---------- Phase 5: compact loaded-state bar ----------
+
+  it("does NOT render the compact loaded bar before any parse", () => {
+    // Even with payloadLoaded=true, the bar requires lastSource !== null
+    // (i.e. a successful parse must have happened in this component
+    // instance). Cold mount with the prop true should still show the
+    // full UI.
+    const wrap = mount(ImportTab, {
+      props: { payloadLoaded: true },
+    });
+    expect(wrap.find("[data-test='import-tab-loaded']").exists()).toBe(false);
+    expect(wrap.find("[data-test='import-file-btn']").exists()).toBe(true);
+    expect(wrap.find("[data-test='import-paste-btn']").exists()).toBe(true);
+  });
+
+  it("renders the compact loaded bar after paste-parse when payloadLoaded=true", async () => {
+    const wrap = mount(ImportTab, {
+      props: { payloadLoaded: false },
+    });
+    // Drive a successful paste-parse to set lastSource = "paste".
+    await wrap.find("[data-test='import-paste-btn']").trigger("click");
+    await flushPromises();
+    await wrap.find("textarea").setValue(makeValidPayloadJson());
+    await wrap.find("[data-test='import-paste-confirm']").trigger("click");
+    await flushPromises();
+    // Parent flips payloadLoaded → true in response to payload-ready.
+    await wrap.setProps({ payloadLoaded: true });
+    await flushPromises();
+
+    const bar = wrap.find("[data-test='import-tab-loaded']");
+    expect(bar.exists()).toBe(true);
+    expect(bar.text()).toMatch(/loaded/i);
+    expect(bar.text()).toMatch(/from paste/i);
+    expect(bar.text()).toMatch(/0\s+entities/i); // empty buckets → 0 entities
+    // Full pick UI must be hidden now.
+    expect(wrap.find("[data-test='import-file-btn']").exists()).toBe(false);
+    expect(wrap.find("[data-test='import-paste-btn']").exists()).toBe(false);
+    // Replace button is the only action surface in compact mode.
+    expect(wrap.find("[data-test='import-tab-replace']").exists()).toBe(true);
+  });
+
+  it("compact bar labels source as 'From file' after a file-pick parse", async () => {
+    const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
+    const file = new File([makeValidPayloadJson()], "test.json", {
+      type: "application/json",
+    });
+    const input = wrap.find("[data-test='import-file-input']");
+    Object.defineProperty(input.element, "files", {
+      value: [file], configurable: true,
+    });
+    await input.trigger("change");
+    await flushPromises();
+    await wrap.setProps({ payloadLoaded: true });
+    await flushPromises();
+
+    const bar = wrap.find("[data-test='import-tab-loaded']");
+    expect(bar.exists()).toBe(true);
+    expect(bar.text()).toMatch(/from file/i);
+  });
+
+  it("compact bar entity count reflects the parsed payload size", async () => {
+    // Three wildcards in the payload → "3 entities".
+    const payload = JSON.stringify({
+      schema_version: 1,
+      bundles: [],
+      wildcards: [
+        { id: "w1", name: "a" },
+        { id: "w2", name: "b" },
+        { id: "w3", name: "c" },
+      ],
+      fixed_values: [],
+      combines: [],
+      derivations: [],
+      constraints: [],
+      categories: [],
+    });
+    const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
+    await wrap.find("[data-test='import-paste-btn']").trigger("click");
+    await flushPromises();
+    await wrap.find("textarea").setValue(payload);
+    await wrap.find("[data-test='import-paste-confirm']").trigger("click");
+    await flushPromises();
+    await wrap.setProps({ payloadLoaded: true });
+    await flushPromises();
+    const bar = wrap.find("[data-test='import-tab-loaded']");
+    expect(bar.text()).toMatch(/3\s+entities/i);
+  });
+
+  it("emits replace-requested when Replace file button is clicked in compact mode", async () => {
+    const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
+    await wrap.find("[data-test='import-paste-btn']").trigger("click");
+    await flushPromises();
+    await wrap.find("textarea").setValue(makeValidPayloadJson());
+    await wrap.find("[data-test='import-paste-confirm']").trigger("click");
+    await flushPromises();
+    await wrap.setProps({ payloadLoaded: true });
+    await flushPromises();
+    await wrap.find("[data-test='import-tab-replace']").trigger("click");
+    await flushPromises();
+    expect(wrap.emitted("replace-requested")).toBeTruthy();
+  });
+
+  it("returns to the full UI after Replace file → parent clears payloadLoaded", async () => {
+    const wrap = mount(ImportTab, { props: { payloadLoaded: false } });
+    await wrap.find("[data-test='import-paste-btn']").trigger("click");
+    await flushPromises();
+    await wrap.find("textarea").setValue(makeValidPayloadJson());
+    await wrap.find("[data-test='import-paste-confirm']").trigger("click");
+    await flushPromises();
+    await wrap.setProps({ payloadLoaded: true });
+    await flushPromises();
+    expect(wrap.find("[data-test='import-tab-loaded']").exists()).toBe(true);
+    // Replace click → parent receives event → parent flips prop back.
+    await wrap.find("[data-test='import-tab-replace']").trigger("click");
+    await wrap.setProps({ payloadLoaded: false });
+    await flushPromises();
+    // Full UI restored, compact bar gone.
+    expect(wrap.find("[data-test='import-tab-loaded']").exists()).toBe(false);
+    expect(wrap.find("[data-test='import-file-btn']").exists()).toBe(true);
+    expect(wrap.find("[data-test='import-paste-btn']").exists()).toBe(true);
+  });
 });

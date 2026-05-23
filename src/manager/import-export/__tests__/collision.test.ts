@@ -40,20 +40,35 @@ describe("detectCollisions", () => {
     expect(result["11111111"]).toBe("conflict");
   });
 
-  it("returns conflict when library has empty fingerprint (defensive)", () => {
+  it("returns exists-unknown when library has empty fingerprint (presence-only)", () => {
+    // Phase-5 distinguishes "library row present but no stored fingerprint"
+    // (legacy / bundle) from "library row present with a differing
+    // fingerprint" (true MODIFIED). Empty string → exists-unknown.
     const incoming = [modRow({ id: "11111111" })];
     const library = new Map<string, LibraryRow>([
       ["11111111", { snapshot_fingerprint: "" }],
     ]);
     const result = detectCollisions(incoming, library);
-    expect(result["11111111"]).toBe("conflict");
+    expect(result["11111111"]).toBe("exists-unknown");
   });
 
-  it("returns conflict when library row has no snapshot_fingerprint field at all", () => {
+  it("returns exists-unknown when library row has no snapshot_fingerprint field at all", () => {
     const incoming = [modRow({ id: "11111111" })];
     const library = new Map<string, LibraryRow>([["11111111", {}]]);
     const result = detectCollisions(incoming, library);
-    expect(result["11111111"]).toBe("conflict");
+    expect(result["11111111"]).toBe("exists-unknown");
+  });
+
+  it("returns exists-unknown when snapshot_fingerprint is explicitly undefined", () => {
+    // Same shape the picker emits for bundles (LibraryRow always built
+    // with `snapshot_fingerprint: typeof fp === 'string' ? fp : undefined`
+    // — see ImportExport.vue:buildLibraryMap).
+    const incoming = [modRow({ id: "11111111" })];
+    const library = new Map<string, LibraryRow>([
+      ["11111111", { snapshot_fingerprint: undefined }],
+    ]);
+    const result = detectCollisions(incoming, library);
+    expect(result["11111111"]).toBe("exists-unknown");
   });
 
   it("classifies multiple incoming modules independently", () => {

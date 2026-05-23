@@ -638,8 +638,10 @@ describe("ImportPicker.vue", () => {
     expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
   });
 
-  it("adds a MODIFIED badge for a bundle when libraryRows contains its id (presence-only check)", async () => {
-    // Bundles use id-presence (not fingerprint) for the inline badge.
+  it("adds an EXISTING badge for a bundle when libraryRows contains its id (presence-only check)", async () => {
+    // Phase-5: bundles use id-presence (not fingerprint) for the inline
+    // badge. Since we can't prove modification, the picker shows
+    // EXISTING (drift / amber) instead of overclaiming MODIFIED.
     const wrap = mountPicker({
       payload: makePayload({
         bundles: [{ id: "b1", name: "B1" }],
@@ -652,9 +654,38 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "bundles");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    const modBadge = badges.find((b) => b.label === "MODIFIED");
-    expect(modBadge).toBeDefined();
-    expect(modBadge!.variant).toBe("mod");
+    const existingBadge = badges.find((b) => b.label === "EXISTING");
+    expect(existingBadge).toBeDefined();
+    expect(existingBadge!.variant).toBe("drift");
+    // Defensive: should NOT carry the orange MODIFIED badge.
+    expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
+  });
+
+  it("adds an EXISTING badge for a module-bucket row when libraryRows has no stored fingerprint", async () => {
+    // Phase-5: library row exists (id match) but its snapshot_fingerprint
+    // is missing — usually a legacy row pre-dating the fingerprint
+    // backfill. Don't claim "MODIFIED"; surface EXISTING (drift / amber).
+    const incoming = mkModuleRow({
+      id: "w1", name: "a", type: "wildcard", payload_hash: "incoming-hash",
+    });
+    const wrap = mountPicker({
+      payload: makePayload({
+        wildcards: [incoming],
+      }),
+      libraryRows: new Map([
+        ["w1", { snapshot_fingerprint: undefined }],
+      ]),
+    });
+    await flushPromises();
+    await expandSection(wrap, "wildcards");
+    const row = wrap.findAllComponents(PickerRow)[0]!;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
+    const existingBadge = badges.find((b) => b.label === "EXISTING");
+    expect(existingBadge).toBeDefined();
+    expect(existingBadge!.variant).toBe("drift");
+    // Critical regression guard — must NOT be the orange MODIFIED badge.
+    expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
+    expect(badges.find((b) => b.label === "NEW")).toBeUndefined();
   });
 
   it("never adds a collision badge to a category row even when libraryRows has its id", async () => {

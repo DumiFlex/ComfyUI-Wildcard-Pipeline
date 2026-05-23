@@ -26,9 +26,26 @@
  * test side. The styling matches the Card-less, low-chrome look used
  * by the rest of the import pane.
  */
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { parsePayload, type IntegrityWarning } from "./parse";
 import type { RawPayload } from "./migrations";
+
+interface Props {
+  /**
+   * When `true`, ImportTab renders a compact one-line "loaded" bar
+   * (file source label + entity count + Replace file button) instead of
+   * the full file-pick + paste UI. Driven by the parent — set to true
+   * once `payload-ready` has fired and the picker is visible.
+   *
+   * Defaults to `false` for backward compatibility (legacy mounts that
+   * never set the prop keep showing the full UI forever).
+   */
+  payloadLoaded?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  payloadLoaded: false,
+});
 
 const emit = defineEmits<{
   (
@@ -37,6 +54,12 @@ const emit = defineEmits<{
     migratedCount: number,
     integrityWarnings: IntegrityWarning[],
   ): void;
+  /**
+   * Emitted from the compact-mode "Replace file…" button — the parent
+   * clears its picker state so ImportTab returns to the full UI on the
+   * next render (its own `payloadLoaded` prop flips back to false).
+   */
+  (e: "replace-requested"): void;
 }>();
 
 const pasteOpen = ref<boolean>(false);
@@ -45,13 +68,32 @@ const errorMsg = ref<string>("");
 const migrationNote = ref<string>("");
 const fileInput = ref<HTMLInputElement | null>(null);
 
+/**
+ * Tracks which entry path produced the last successful parse so the
+ * compact bar can label the source ("From file" / "From paste").
+ * Reset to `null` on every fresh entry so the bar never shows a stale
+ * source for a payload that the parent forgot to clear.
+ */
+const lastSource = ref<"file" | "paste" | null>(null);
+
+/**
+ * Total entity count of the last successfully-parsed payload. Mirrors
+ * the seven-bucket sum the picker shows, so the compact bar agrees with
+ * the picker header. Reset on every fresh entry.
+ */
+const lastEntityCount = ref<number>(0);
+
+const fileSourceLabel = computed<string>(() =>
+  lastSource.value === "paste" ? "From paste" : "From file",
+);
+
 async function onFilePick(ev: Event): Promise<void> {
   const target = ev.target as HTMLInputElement;
   const file = target.files?.[0];
   if (!file) return;
   try {
     const text = await file.text();
-    handleParse(text);
+    handleParse(text, "file");
   } catch (err) {
     errorMsg.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -74,14 +116,48 @@ function cancelPaste(): void {
 }
 
 function onPasteConfirm(): void {
-  handleParse(pasteText.value);
+  handleParse(pasteText.value, "paste");
 }
 
 function pickFile(): void {
   fileInput.value?.click();
 }
 
-function handleParse(raw: string): void {
+/**
+ * Triggered from the compact-bar "Replace file…" button. Wipes the
+ * local UI state (paste text/error/note) and notifies the parent so it
+ * can clear its picker state — the next render flips `payloadLoaded`
+ * back to false and the full pick UI returns.
+ */
+function onReplaceFile(): void {
+  pasteOpen.value = false;
+  pasteText.value = "";
+  errorMsg.value = "";
+  migrationNote.value = "";
+  lastSource.value = null;
+  lastEntityCount.value = 0;
+  emit("replace-requested");
+}
+
+/**
+ * Sum of all seven entity buckets on a freshly-parsed payload. Used to
+ * populate the compact-bar entity count so it agrees with the picker
+ * header. `RawPayload`'s buckets all default to empty arrays after
+ * migration so the iteration is safe even on minimal payloads.
+ */
+function payloadEntityCount(payload: RawPayload): number {
+  return (
+    payload.bundles.length
+    + payload.wildcards.length
+    + payload.fixed_values.length
+    + payload.combines.length
+    + payload.derivations.length
+    + payload.constraints.length
+    + payload.categories.length
+  );
+}
+
+function handleParse(raw: string, source: "file" | "paste"): void {
   const result = parsePayload(raw);
   if (!result.ok) {
     errorMsg.value = result.reason;
@@ -91,6 +167,8 @@ function handleParse(raw: string): void {
   errorMsg.value = "";
   pasteOpen.value = false;
   pasteText.value = "";
+  lastSource.value = source;
+  lastEntityCount.value = payloadEntityCount(result.payload);
 
   // The payload always lands as CURRENT_SCHEMA_VERSION after parse,
   // so `migratedEntityCount > 0` is the signal that some migration
@@ -110,84 +188,123 @@ function handleParse(raw: string): void {
 
 <template>
   <div class="wp-import-tab" data-test="import-tab-v2">
-    <p class="wp-import-tab__lead">
-      Import a Wildcard Pipeline export file or paste an export payload below.
-    </p>
-
-    <div class="wp-import-tab__entry">
-      <button
-        type="button"
-        class="wp-import-tab__btn wp-import-tab__btn--primary"
-        data-test="import-file-btn"
-        @click="pickFile"
-      >Pick file…</button>
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".json,application/json"
-        class="wp-import-tab__file-hidden"
-        aria-hidden="true"
-        tabindex="-1"
-        data-test="import-file-input"
-        @change="onFilePick"
-      />
-      <button
-        type="button"
-        class="wp-import-tab__btn"
-        data-test="import-paste-btn"
-        @click="openPaste"
-      >Paste JSON…</button>
-    </div>
-
-    <div
-      v-if="pasteOpen"
-      class="wp-import-tab__paste"
-      data-test="import-paste-pane"
-    >
-      <label
-        class="wp-import-tab__paste-label"
-        for="wp-import-tab-paste-area"
-      >
-        <span class="wp-import-tab__paste-label-text">
-          Paste an exported JSON payload
-        </span>
-        <textarea
-          id="wp-import-tab-paste-area"
-          v-model="pasteText"
-          class="wp-import-tab__textarea"
-          rows="10"
-          placeholder="{ &quot;schema_version&quot;: 1, &quot;bundles&quot;: [], … }"
-          data-test="import-paste-textarea"
+    <!-- Compact "loaded" bar: rendered when the parent flags the payload
+         as accepted AND we have a recorded source. Replaces the full
+         file-pick + paste UI so the picker can sit closer to the top.
+         Migration note still surfaces below so a v0→v1 conversion is
+         visible to the user. -->
+    <template v-if="props.payloadLoaded && lastSource !== null">
+      <div class="wp-import-tab__loaded" data-test="import-tab-loaded">
+        <i
+          class="pi pi-check-circle wp-import-tab__loaded-icon"
+          aria-hidden="true"
         />
-      </label>
-      <div class="wp-import-tab__paste-actions">
+        <span class="wp-import-tab__loaded-text">
+          Loaded
+          <span class="wp-import-tab__loaded-source">{{ fileSourceLabel }}</span>
+          <span class="wp-import-tab__loaded-sep">·</span>
+          <span class="wp-import-tab__loaded-count">
+            {{ lastEntityCount }}
+            {{ lastEntityCount === 1 ? "entity" : "entities" }}
+          </span>
+        </span>
         <button
           type="button"
-          class="wp-import-tab__btn"
-          data-test="import-paste-cancel"
-          @click="cancelPaste"
-        >Cancel</button>
+          class="wp-import-tab__btn wp-import-tab__btn--ghost"
+          data-test="import-tab-replace"
+          @click="onReplaceFile"
+        >Replace file…</button>
+      </div>
+      <div
+        v-if="migrationNote"
+        class="wp-import-tab__note"
+        data-test="import-tab-migration-note"
+      >{{ migrationNote }}</div>
+    </template>
+
+    <!-- Default (full) UI — pick / paste affordances, paste pane,
+         inline error / migration note. Used until the parent flips
+         `payloadLoaded` to true. -->
+    <template v-else>
+      <p class="wp-import-tab__lead">
+        Import a Wildcard Pipeline export file or paste an export payload below.
+      </p>
+
+      <div class="wp-import-tab__entry">
         <button
           type="button"
           class="wp-import-tab__btn wp-import-tab__btn--primary"
-          data-test="import-paste-confirm"
-          @click="onPasteConfirm"
-        >Parse</button>
+          data-test="import-file-btn"
+          @click="pickFile"
+        >Pick file…</button>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".json,application/json"
+          class="wp-import-tab__file-hidden"
+          aria-hidden="true"
+          tabindex="-1"
+          data-test="import-file-input"
+          @change="onFilePick"
+        />
+        <button
+          type="button"
+          class="wp-import-tab__btn"
+          data-test="import-paste-btn"
+          @click="openPaste"
+        >Paste JSON…</button>
       </div>
-    </div>
 
-    <div
-      v-if="errorMsg"
-      class="wp-import-tab__error"
-      role="alert"
-      data-test="import-tab-error"
-    >Invalid payload — {{ errorMsg }}</div>
+      <div
+        v-if="pasteOpen"
+        class="wp-import-tab__paste"
+        data-test="import-paste-pane"
+      >
+        <label
+          class="wp-import-tab__paste-label"
+          for="wp-import-tab-paste-area"
+        >
+          <span class="wp-import-tab__paste-label-text">
+            Paste an exported JSON payload
+          </span>
+          <textarea
+            id="wp-import-tab-paste-area"
+            v-model="pasteText"
+            class="wp-import-tab__textarea"
+            rows="10"
+            placeholder="{ &quot;schema_version&quot;: 1, &quot;bundles&quot;: [], … }"
+            data-test="import-paste-textarea"
+          />
+        </label>
+        <div class="wp-import-tab__paste-actions">
+          <button
+            type="button"
+            class="wp-import-tab__btn"
+            data-test="import-paste-cancel"
+            @click="cancelPaste"
+          >Cancel</button>
+          <button
+            type="button"
+            class="wp-import-tab__btn wp-import-tab__btn--primary"
+            data-test="import-paste-confirm"
+            @click="onPasteConfirm"
+          >Parse</button>
+        </div>
+      </div>
 
-    <div
-      v-if="migrationNote"
-      class="wp-import-tab__note"
-      data-test="import-tab-migration-note"
-    >{{ migrationNote }}</div>
+      <div
+        v-if="errorMsg"
+        class="wp-import-tab__error"
+        role="alert"
+        data-test="import-tab-error"
+      >Invalid payload — {{ errorMsg }}</div>
+
+      <div
+        v-if="migrationNote"
+        class="wp-import-tab__note"
+        data-test="import-tab-migration-note"
+      >{{ migrationNote }}</div>
+    </template>
   </div>
 </template>
 
@@ -244,6 +361,59 @@ function handleParse(raw: string): void {
 .wp-import-tab__btn--primary:hover {
   background: linear-gradient(180deg, var(--wp-accent-400), var(--wp-accent-500));
   border-color: var(--wp-accent-500);
+}
+/* Ghost variant — used by the compact-mode Replace file button. Lower
+ * visual weight than the primary so the loaded-state bar stays calm. */
+.wp-import-tab__btn--ghost {
+  background: transparent;
+  border-color: var(--wp-border);
+  color: var(--wp-text-muted);
+}
+.wp-import-tab__btn--ghost:hover {
+  background: var(--wp-bg-3);
+  color: var(--wp-text);
+  border-color: var(--wp-border-strong);
+}
+
+/* Compact "loaded" bar — single-row drop-in for the full pick UI once
+ * the parent flips `payloadLoaded` to true. Matches the same chrome as
+ * the rest of the import pane (wp-bg-2 fill, hairline border, radius)
+ * so it slots in without visual seam. */
+.wp-import-tab__loaded {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-5);
+  padding: var(--wp-space-4) var(--wp-space-6);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  font-size: var(--wp-text-sm);
+}
+.wp-import-tab__loaded-icon {
+  font-size: var(--wp-text-md);
+  color: var(--wp-success);
+  flex-shrink: 0;
+}
+.wp-import-tab__loaded-text {
+  flex: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--wp-space-3);
+  color: var(--wp-text);
+  min-width: 0;
+}
+.wp-import-tab__loaded-source {
+  color: var(--wp-text-muted);
+  font-weight: var(--wp-weight-medium);
+}
+.wp-import-tab__loaded-sep {
+  color: var(--wp-text-dim);
+}
+.wp-import-tab__loaded-count {
+  font-family: var(--wp-font-mono);
+  font-feature-settings: "tnum";
+  color: var(--wp-text-muted);
+  font-size: var(--wp-text-xs);
 }
 
 .wp-import-tab__file-hidden {

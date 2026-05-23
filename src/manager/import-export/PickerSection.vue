@@ -107,7 +107,7 @@ function onHeaderClick(evt: MouseEvent): void {
         :aria-label="open ? 'Collapse section' : 'Expand section'"
         tabindex="-1"
       >
-        {{ open ? "▼" : "▶" }}
+        <i class="pi pi-angle-right wp-picker-section__chevron-icon" aria-hidden="true" />
       </button>
       <Checkbox
         class="wp-picker-section__check"
@@ -171,12 +171,21 @@ function onHeaderClick(evt: MouseEvent): void {
   cursor: pointer;
   padding: 0 4px;
   color: var(--wp-text-dim);
-  font-family: var(--wp-font-mono);
-  font-size: 10px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .wp-picker-section__toggle:hover {
   color: var(--wp-text);
+}
+.wp-picker-section__chevron-icon {
+  font-size: 10px;
+  transition: transform 0.15s ease;
+  color: var(--wp-text-dim);
+}
+.wp-picker-section[data-open="true"] .wp-picker-section__chevron-icon {
+  transform: rotate(90deg);
 }
 .wp-picker-section__title {
   font-weight: 600;

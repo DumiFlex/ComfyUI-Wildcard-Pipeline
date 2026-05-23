@@ -91,7 +91,29 @@ describe("PickerSection", () => {
       slots: { default: "<div class='row'>x</div>" },
     });
     expect(wrap.find(".row").exists()).toBe(false);
-    expect(wrap.get(".wp-picker-section__toggle").text()).toBe("▶");
+    // Chevron is the pi-angle-right icon — CSS rotates it 90deg when
+    // the section root carries data-open="true". Collapsed → data-open
+    // is "false" so rotation is absent.
+    const section = wrap.get(".wp-picker-section");
+    expect(section.attributes("data-open")).toBe("false");
+    const chevron = wrap.get(".wp-picker-section__chevron-icon");
+    expect(chevron.attributes("class") ?? "").toMatch(/\bpi-angle-right\b/);
+  });
+
+  it("section root carries data-open attribute driving chevron rotation", async () => {
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 5, selectedCount: 0, defaultOpen: true },
+      slots: { default: "<div class='row'>x</div>" },
+    });
+    const section = wrap.get(".wp-picker-section");
+    expect(section.attributes("data-open")).toBe("true");
+    // Toggle button uses the chevron icon, NOT a literal ▼ / ▶ glyph.
+    const toggle = wrap.get(".wp-picker-section__toggle");
+    expect(toggle.text()).toBe("");
+    expect(toggle.find("i.pi.pi-angle-right").exists()).toBe(true);
+    // Collapse and re-check the data-open flips to "false".
+    await toggle.trigger("click");
+    expect(wrap.get(".wp-picker-section").attributes("data-open")).toBe("false");
   });
 
   it("section checkbox is indeterminate when selectedCount is between 0 and totalCount", () => {
