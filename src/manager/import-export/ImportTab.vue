@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Import tab — v2 entry surface.
+ * Import tab — entry surface.
  *
  * Two paths for getting an export payload into the importer:
  *   1. File pick — hidden `<input type="file">` triggered by a button.
@@ -187,7 +187,7 @@ function handleParse(raw: string, source: "file" | "paste"): void {
 </script>
 
 <template>
-  <div class="wp-import-tab" data-test="import-tab-v2">
+  <div class="wp-import-tab" data-test="import-tab">
     <!-- Compact "loaded" bar: rendered when the parent flags the payload
          as accepted AND we have a recorded source. Replaces the full
          file-pick + paste UI so the picker can sit closer to the top.

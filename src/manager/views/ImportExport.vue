@@ -1,17 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
-import Field from "../components/ui/Field.vue";
-import Icon, { ICON_SM } from "../components/ui/Icon.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
+import Icon from "../components/ui/Icon.vue";
 import { useToast } from "../composables/useToast";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
-import { catChipStyle } from "../utils/catChip";
 import { api, ApiError } from "../api/client";
-import type { BundleRow, CategoryRow, ImportBundle, ModuleRow } from "../api/types";
 import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
 import ImportPicker from "../import-export/ImportPicker.vue";
@@ -40,52 +33,35 @@ import type {
 import type { ModuleRow as FingerprintModuleRow } from "../import-export/fingerprint";
 import type { RawPayload } from "../import-export/migrations";
 import type { IntegrityWarning } from "../import-export/parse";
-import {
-  buildFilteredBundle,
-  bundleSizeBytes,
-  classifyBundle,
-  classifyCategory,
-  classifyModule,
-  formatBytes,
-  GROUPS,
-  groupForModule,
-  presetFavoritesOnly,
-  presetFull,
-  presetWildcardsOnly,
-  selectionCounts,
-  selectionKey,
-  type ConflictKind,
-  type ConflictResult,
-  type GroupKey,
-  type GroupMeta,
-} from "../utils/bundleSelection";
 import { newShortId } from "../utils/ids";
 
-type Mode = "export" | "export-v2" | "import" | "import-v2";
+type Mode = "export" | "import";
 
 const toast = useToast();
 
 const mode = ref<Mode>("export");
 
 // ---------- Source library state (fetched once on mount) ----------
+// Powers the collision detector + broken-ref walker. Categories are not
+// needed by the pipeline so we don't fetch them.
 
-const localModules = ref<ModuleRow[]>([]);
-const localCategories = ref<CategoryRow[]>([]);
-const localBundles = ref<BundleRow[]>([]);
+interface LibraryModule { id: string; snapshot_fingerprint?: string }
+interface LibraryBundle { id: string; snapshot_fingerprint?: string }
+
+const localModules = ref<LibraryModule[]>([]);
+const localBundles = ref<LibraryBundle[]>([]);
 
 const refreshing = ref(false);
 
 async function loadLibrary() {
   refreshing.value = true;
   try {
-    const [mods, cats, buns] = await Promise.all([
+    const [mods, buns] = await Promise.all([
       api.modules.list({ limit: 1000 }),
-      api.categories.list(),
       api.bundles.list({ limit: 1000 }),
     ]);
-    localModules.value = mods.items;
-    localCategories.value = cats.items;
-    localBundles.value = buns.items;
+    localModules.value = mods.items as unknown as LibraryModule[];
+    localBundles.value = buns.items as unknown as LibraryBundle[];
   } catch (e) {
     toast.push({
       severity: "error",
@@ -99,516 +75,11 @@ async function loadLibrary() {
 
 onMounted(loadLibrary);
 
-// ---------- Export tab state ----------
-
-const exportSelected = ref<Set<string>>(new Set());
-const exportSearch = ref("");
-const exportOpenGroups = ref<Set<GroupKey>>(new Set());
-
-// Initial seed: "Full library" once data lands.
-let didSeedExport = false;
-function seedExportIfReady() {
-  if (didSeedExport) return;
-  if (
-    localModules.value.length === 0
-    && localCategories.value.length === 0
-    && localBundles.value.length === 0
-  ) return;
-  exportSelected.value = presetFull(
-    localModules.value, localCategories.value, localBundles.value,
-  );
-  didSeedExport = true;
-}
-const seedWatcher = computed(() =>
-  localModules.value.length + localCategories.value.length + localBundles.value.length,
-);
-
-function modulesForGroup(g: GroupMeta, list: ModuleRow[]): ModuleRow[] {
-  if (g.type === null) return [];
-  return list.filter((m) => m.type === g.type);
-}
-
-function matchesSearch(name: string, id: string, q: string): boolean {
-  if (!q.trim()) return true;
-  const t = q.trim().toLowerCase();
-  return name.toLowerCase().includes(t) || id.toLowerCase().includes(t);
-}
-
-interface RowItem {
-  id: string;
-  name: string;
-  category_id?: string | null;
-  is_favorite?: boolean;
-  tags?: string[];
-}
-
-function rowsForGroup(g: GroupMeta, q: string): RowItem[] {
-  if (g.key === "category") {
-    return localCategories.value
-      .filter((c) => matchesSearch(c.name, c.id, q))
-      .map((c) => ({ id: c.id, name: c.name }));
-  }
-  if (g.key === "bundle") {
-    return localBundles.value
-      .filter((b) => matchesSearch(b.name, b.id, q))
-      .map((b) => ({
-        id: b.id, name: b.name,
-        category_id: b.category_id, is_favorite: b.is_favorite,
-        tags: b.tags,
-      }));
-  }
-  return modulesForGroup(g, localModules.value)
-    .filter((m) => matchesSearch(m.name, m.id, q))
-    .map((m) => ({
-      id: m.id, name: m.name,
-      category_id: m.category_id, is_favorite: m.is_favorite,
-      tags: m.tags,
-    }));
-}
-
-function exportRowKey(g: GroupMeta, id: string): string {
-  return selectionKey(g.key, id);
-}
-
-function isExportSelected(g: GroupMeta, id: string): boolean {
-  return exportSelected.value.has(exportRowKey(g, id));
-}
-
-function toggleExportRow(g: GroupMeta, id: string) {
-  const k = exportRowKey(g, id);
-  const next = new Set(exportSelected.value);
-  if (next.has(k)) next.delete(k); else next.add(k);
-  exportSelected.value = next;
-}
-
-function setGroupAll(g: GroupMeta, on: boolean, q: string) {
-  const next = new Set(exportSelected.value);
-  for (const row of rowsForGroup(g, q)) {
-    const k = exportRowKey(g, row.id);
-    if (on) next.add(k); else next.delete(k);
-  }
-  exportSelected.value = next;
-}
-
-function toggleGroupOpen(key: GroupKey) {
-  const next = new Set(exportOpenGroups.value);
-  if (next.has(key)) next.delete(key); else next.add(key);
-  exportOpenGroups.value = next;
-}
-
-function isGroupOpen(g: GroupMeta, q: string): boolean {
-  if (q.trim()) return true;
-  return exportOpenGroups.value.has(g.key);
-}
-
-interface GroupCheckState { all: boolean; some: boolean }
-
-function groupCheckState(g: GroupMeta, q: string): GroupCheckState {
-  const rows = rowsForGroup(g, q);
-  if (rows.length === 0) return { all: false, some: false };
-  const sel = rows.filter((r) => isExportSelected(g, r.id)).length;
-  return { all: sel === rows.length, some: sel > 0 && sel < rows.length };
-}
-
-const exportCounts = computed(() => selectionCounts(exportSelected.value));
-
-const filteredBundle = computed<ImportBundle>(() =>
-  buildFilteredBundle({
-    modules: localModules.value,
-    categories: localCategories.value,
-    bundles: localBundles.value,
-    selected: exportSelected.value,
-  }),
-);
-const bundleBytes = computed(() => bundleSizeBytes(filteredBundle.value));
-
-const categoryById = computed(() => {
-  const m = new Map<string, CategoryRow>();
-  for (const c of localCategories.value) m.set(c.id, c);
-  return m;
-});
-
-function presetApplyFull() {
-  exportSelected.value = presetFull(
-    localModules.value, localCategories.value, localBundles.value,
-  );
-}
-function presetApplyWildcards() {
-  exportSelected.value = presetWildcardsOnly(localModules.value);
-}
-function presetApplyFavorites() {
-  exportSelected.value = presetFavoritesOnly(localModules.value, localBundles.value);
-}
-
-function downloadBundle() {
-  const bundle = filteredBundle.value;
-  const bundleCount = bundle.bundles?.length ?? 0;
-  if (
-    bundle.modules.length === 0
-    && bundle.categories.length === 0
-    && bundleCount === 0
-  ) return;
-  const blob = new Blob([JSON.stringify(bundle, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  const d = new Date();
-  const yyyymmdd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  a.download = `wildcard-pipeline-${bundle.modules.length}-modules-${yyyymmdd}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  const parts = [
-    `${bundle.modules.length} modules`,
-    `${bundleCount} bundles`,
-    `${bundle.categories.length} categories`,
-  ];
-  toast.push({
-    severity: "success", summary: "Exported",
-    detail: parts.join(" · "),
-    life: 2500,
-  });
-}
-
-// ---------- Import tab state ----------
-
-const fileInputRef = ref<HTMLInputElement | null>(null);
-const dropActive = ref(false);
-const dropInvalid = ref(false);
-const parsing = ref(false);
-const parseError = ref<string | null>(null);
-const parsedBundle = ref<ImportBundle | null>(null);
-const parsedFileName = ref<string>("");
-const parsedFileSizeKb = ref<string>("");
-
-const importSelected = ref<Set<string>>(new Set());
-const importOpenGroups = ref<Set<GroupKey>>(new Set([
-  "wildcard", "fixed_values", "combine", "derivation", "constraint", "bundle", "category",
-]));
-
-type ConflictMode = "rename" | "overwrite" | "skip";
-const conflictMode = ref<ConflictMode>("rename");
-const conflictModeOptions = [
-  { value: "rename",    label: "Rename (keep both)" },
-  { value: "overwrite", label: "Overwrite existing" },
-  { value: "skip",      label: "Skip conflicting items" },
-];
-
-const importing = ref(false);
-
-const localModulesById = computed(() => {
-  const m = new Map<string, ModuleRow>();
-  for (const x of localModules.value) m.set(x.id, x);
-  return m;
-});
-const localCategoriesById = computed(() => {
-  const m = new Map<string, CategoryRow>();
-  for (const x of localCategories.value) m.set(x.id, x);
-  return m;
-});
-const localBundlesById = computed(() => {
-  const m = new Map<string, BundleRow>();
-  for (const x of localBundles.value) m.set(x.id, x);
-  return m;
-});
-
-interface ImportRow {
-  id: string;
-  name: string;
-  group: GroupKey;
-  conflict: ConflictResult;
-}
-
-const parsedRows = computed<ImportRow[]>(() => {
-  const b = parsedBundle.value;
-  if (!b) return [];
-  const out: ImportRow[] = [];
-  for (const m of b.modules ?? []) {
-    out.push({
-      id: m.id, name: m.name,
-      group: groupForModule(m.type),
-      conflict: classifyModule(m, localModulesById.value),
-    });
-  }
-  for (const bun of b.bundles ?? []) {
-    out.push({
-      id: bun.id, name: bun.name,
-      group: "bundle",
-      conflict: classifyBundle(bun, localBundlesById.value),
-    });
-  }
-  for (const c of b.categories ?? []) {
-    out.push({
-      id: c.id, name: c.name,
-      group: "category",
-      conflict: classifyCategory(c, localCategoriesById.value),
-    });
-  }
-  return out;
-});
-
-function parsedRowsForGroup(g: GroupMeta): ImportRow[] {
-  return parsedRows.value.filter((r) => r.group === g.key);
-}
-
-function importRowKey(group: GroupKey, id: string): string {
-  return selectionKey(group, id);
-}
-function isImportSelected(group: GroupKey, id: string): boolean {
-  return importSelected.value.has(importRowKey(group, id));
-}
-function toggleImportRow(group: GroupKey, id: string) {
-  const k = importRowKey(group, id);
-  const next = new Set(importSelected.value);
-  if (next.has(k)) next.delete(k); else next.add(k);
-  importSelected.value = next;
-}
-function setImportGroupAll(g: GroupMeta, on: boolean) {
-  const next = new Set(importSelected.value);
-  for (const r of parsedRowsForGroup(g)) {
-    const k = importRowKey(g.key, r.id);
-    if (on) next.add(k); else next.delete(k);
-  }
-  importSelected.value = next;
-}
-function importGroupCheckState(g: GroupMeta): GroupCheckState {
-  const rows = parsedRowsForGroup(g);
-  if (rows.length === 0) return { all: false, some: false };
-  const sel = rows.filter((r) => isImportSelected(g.key, r.id)).length;
-  return { all: sel === rows.length, some: sel > 0 && sel < rows.length };
-}
-function isImportGroupOpen(key: GroupKey): boolean {
-  return importOpenGroups.value.has(key);
-}
-function toggleImportGroupOpen(key: GroupKey) {
-  const next = new Set(importOpenGroups.value);
-  if (next.has(key)) next.delete(key); else next.add(key);
-  importOpenGroups.value = next;
-}
-
-function selectAllParsed() {
-  const next = new Set<string>();
-  for (const r of parsedRows.value) next.add(importRowKey(r.group, r.id));
-  importSelected.value = next;
-}
-function clearParsedSelection() {
-  importSelected.value = new Set();
-}
-
-const importCounts = computed(() => selectionCounts(importSelected.value));
-
-interface FinalActionTotals {
-  willCreate: number;
-  willUpdate: number;
-  willSkip: number;
-  conflictCount: number;
-}
-const finalActionTotals = computed<FinalActionTotals>(() => {
-  let willCreate = 0;
-  let willUpdate = 0;
-  let willSkip = 0;
-  let conflictCount = 0;
-  for (const r of parsedRows.value) {
-    const picked = isImportSelected(r.group, r.id);
-    const c: ConflictKind = r.conflict.kind;
-    if (c === "exists" || c === "modified") conflictCount += 1;
-    if (!picked) continue;
-    if (c === "new") {
-      willCreate += 1;
-    } else {
-      if (conflictMode.value === "skip") willSkip += 1;
-      else if (conflictMode.value === "overwrite") willUpdate += 1;
-      else willCreate += 1;
-    }
-  }
-  return { willCreate, willUpdate, willSkip, conflictCount };
-});
-
-function badgeClass(kind: ConflictKind): string {
-  if (kind === "new") return "wp-io-badge wp-io-badge--new";
-  if (kind === "modified") return "wp-io-badge wp-io-badge--mod";
-  return "wp-io-badge wp-io-badge--exists";
-}
-function badgeLabel(kind: ConflictKind): string {
-  if (kind === "new") return "new";
-  if (kind === "modified") return "modified";
-  return "exists";
-}
-
-/** Best-effort early-check that the dragged file is JSON-ish. The
- *  dataTransfer.items API exposes MIME type during dragover (but not
- *  the file name). Falls back to "valid" when the source doesn't
- *  announce a type so non-Chromium browsers don't reject everything. */
-function dragHasJsonFile(dt: DataTransfer | null): boolean {
-  if (!dt) return true;
-  for (const item of dt.items) {
-    if (item.kind !== "file") continue;
-    if (!item.type) return true; // unknown — let it through, validated post-drop
-    return /(^|\/)json$/i.test(item.type);
-  }
-  return true;
-}
-
-function onPickFile(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0];
-  if (f) handleFile(f);
-}
-function onDrop(e: DragEvent) {
-  e.preventDefault();
-  dropActive.value = false;
-  dropInvalid.value = false;
-  const f = e.dataTransfer?.files?.[0];
-  if (!f) return;
-  if (!/\.json$/i.test(f.name) && !/(^|\/)json$/i.test(f.type)) {
-    parseError.value = "Only .json bundles are supported.";
-    return;
-  }
-  handleFile(f);
-}
-function onDragOver(e: DragEvent) {
-  e.preventDefault();
-  dropActive.value = true;
-  dropInvalid.value = !dragHasJsonFile(e.dataTransfer);
-}
-function onDragLeave() {
-  dropActive.value = false;
-  dropInvalid.value = false;
-}
-
-async function handleFile(file: File) {
-  parseError.value = null;
-  parsedBundle.value = null;
-  importSelected.value = new Set();
-  parsedFileName.value = file.name;
-  parsedFileSizeKb.value = (file.size / 1024).toFixed(1);
-  parsing.value = true;
-  // Yield so the parsing UI paints before file.text() blocks the main
-  // thread on a multi-MB bundle. Both reads + JSON.parse can take a
-  // measurable fraction of a second on large libraries.
-  await new Promise((r) => setTimeout(r, 0));
-  try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-    if (!data || typeof data !== "object" || data.version !== 1) {
-      throw new Error("Not a valid wildcard-pipeline bundle (missing version: 1).");
-    }
-    const bundle: ImportBundle = {
-      version: 1,
-      exported_at: data.exported_at,
-      modules: Array.isArray(data.modules) ? data.modules : [],
-      categories: Array.isArray(data.categories) ? data.categories : [],
-      bundles: Array.isArray(data.bundles) ? data.bundles : [],
-    };
-    parsedBundle.value = bundle;
-    selectAllParsed();
-  } catch (err) {
-    parseError.value = err instanceof Error ? err.message : String(err);
-    parsedBundle.value = null;
-  } finally {
-    parsing.value = false;
-    if (fileInputRef.value) fileInputRef.value.value = "";
-  }
-}
-
-function clearImport() {
-  parsedBundle.value = null;
-  parsedFileName.value = "";
-  parsedFileSizeKb.value = "";
-  parseError.value = null;
-  importSelected.value = new Set();
-}
-
-async function runImport() {
-  const b = parsedBundle.value;
-  if (!b) return;
-
-  const pickedModules: ModuleRow[] = [];
-  const pickedCategories: CategoryRow[] = [];
-  const pickedBundles: BundleRow[] = [];
-
-  for (const r of parsedRows.value) {
-    if (!isImportSelected(r.group, r.id)) continue;
-    if (r.conflict.kind !== "new" && conflictMode.value === "skip") continue;
-    if (r.group === "category") {
-      const cat = b.categories.find((c) => c.id === r.id);
-      if (cat) pickedCategories.push(cat);
-    } else if (r.group === "bundle") {
-      const bun = (b.bundles ?? []).find((x) => x.id === r.id);
-      if (!bun) continue;
-      // Rename strategy: stamp a fresh id + "(imported)" suffix so the
-      // existing local bundle is left untouched. Overwrite mode is
-      // deferred — backend currently rejects ON CONFLICT and we don't
-      // ship an UPDATE path through /wp/api/import, so for now both
-      // rename and overwrite use the rename-keep-both behavior.
-      if (r.conflict.kind !== "new") {
-        pickedBundles.push({
-          ...bun,
-          id: `${bun.id}${shortRand().slice(0, 4)}`.slice(0, 8),
-          name: `${bun.name} (imported)`,
-        });
-      } else {
-        pickedBundles.push(bun);
-      }
-    } else {
-      const mod = b.modules.find((m) => m.id === r.id);
-      if (!mod) continue;
-      if (r.conflict.kind !== "new" && conflictMode.value === "rename") {
-        pickedModules.push({
-          ...mod,
-          id: `${mod.id}_imp${shortRand()}`,
-          name: `${mod.name} (imported)`,
-        });
-      } else if (r.conflict.kind !== "new" && conflictMode.value === "overwrite") {
-        pickedModules.push(mod);
-      } else {
-        pickedModules.push(mod);
-      }
-    }
-  }
-
-  const partial: ImportBundle = {
-    version: 1,
-    exported_at: b.exported_at,
-    modules: pickedModules,
-    categories: pickedCategories,
-    bundles: pickedBundles,
-  };
-
-  importing.value = true;
-  try {
-    const result = await api.importBundle(partial);
-    const parts = [`${result.modules_imported} modules`];
-    if (result.bundles_imported !== undefined) parts.push(`${result.bundles_imported} bundles`);
-    parts.push(`${result.categories_imported} categories`);
-    if (result.skipped.length) parts.push(`${result.skipped.length} skipped`);
-    toast.push({
-      severity: "success",
-      summary: "Imported",
-      detail: parts.join(" · "),
-      life: 4000,
-    });
-    clearImport();
-    await loadLibrary();
-  } catch (e) {
-    toast.push({
-      severity: "error", summary: "Import failed",
-      detail: String(e), life: 5000,
-    });
-  } finally {
-    importing.value = false;
-  }
-}
-
-function shortRand(): string {
-  return Math.random().toString(16).slice(2, 8);
-}
-
 function setMode(next: Mode) {
   mode.value = next;
 }
 
-// ---------- Import tab (v2 — 7-bucket parse + picker + commit) ----------
+// ---------- Import tab — 7-bucket parse + picker + commit ----------
 //
 // Pipeline:
 //   1. `ImportTab` parses a payload → emits `payload-ready`.
@@ -618,10 +89,7 @@ function setMode(next: Mode) {
 //          classifies each picked entity into no-collision / silent-skip
 //          / conflict against the live DB.
 //        - `integrityWarnings` (from parse) is converted into per-item
-//          `fingerprint-mismatch` issues. Tier-3 + broken-inner-ref are
-//          deferred per Item 4 spec (no production-grade detector yet).
-//      Silent-skip ids are dropped from the selection (true dup → no
-//      work for the server, no user-visible action).
+//          `fingerprint-mismatch` issues.
 //      If `batchConflicts.length + perItemIssues.length > 0`, the
 //      ConflictModal opens. Otherwise we skip straight to commit.
 //   4. On `commit-ready` (or directly when no modal opens) we build a
@@ -633,12 +101,8 @@ function setMode(next: Mode) {
 //      Wildcard / Constraint editors surface them inline. The success
 //      toast carries an Undo action that calls
 //      `/wp/api/import/undo` + clears the matching warnings.
-//
-// Strict TS: no `any`, no `as any`. Every payload row is typed as
-// `Record<string, unknown> & { id: string }`; field reads use narrow
-// `typeof` / property guards before treating fields as strings.
 
-interface ImportV2State {
+interface ImportState {
   /**
    * Stable per-payload id. Used as `:key` on <ImportPicker> so Vue
    * unmounts + remounts the picker on every payload swap — that resets
@@ -654,42 +118,21 @@ interface ImportV2State {
 
 /** Picked entity carrying enough context to route the partitioner. */
 interface SelectedEntity {
-  /** Server bucket the entity routes to. */
   kind: EntityKind;
-  /** Raw row from the payload. Always has `id`; other fields opaque. */
   entity: Record<string, unknown> & { id: string };
-  /**
-   * Collision state. Computed at orchestrator entry from `detectCollisions`.
-   * `exists-unknown` (library row present, fingerprint missing) is folded
-   * into the same partitioner branch as `conflict` so the user still
-   * gets a Skip / Replace / Rename decision before the server sees the
-   * id — but the picker's inline badge for these rows is EXISTING (amber)
-   * not MODIFIED (orange), matching what we can actually prove.
-   */
   collision: "no-collision" | "silent-skip" | "conflict" | "exists-unknown";
 }
 
-const importV2State = ref<ImportV2State | null>(null);
-const importV2Selection = ref<Set<string> | null>(null);
-const importV2Committing = ref(false);
+const importState = ref<ImportState | null>(null);
+const importSelection = ref<Set<string> | null>(null);
+const importCommitting = ref(false);
 const conflictsOpen = ref(false);
 const batchConflicts = ref<BatchConflict[]>([]);
 const perItemIssues = ref<PerItemIssue[]>([]);
-/** Snapshot of the selection-resolution scan, stashed when the modal
- *  opens so the commit-ready callback can build a `ResolvedSelection`
- *  without recomputing collisions against a possibly-stale library. */
 const pendingSelection = ref<SelectedEntity[]>([]);
 
 const resolveWarningsStore = useResolveWarnings();
 
-/**
- * Map from `EntityKind` discriminant to the corresponding bucket on
- * `RawPayload`. The 5 module kinds + bundle map to plural array names;
- * category → "categories". Used by `buildSelectedEntities` to walk
- * every picked id back to its source bucket. Type narrows to only the
- * array-typed fields of `RawPayload` (excludes `schema_version: number`)
- * so the row iterator is statically `Record<string, unknown>[]`.
- */
 type RawPayloadArrayKey = Exclude<keyof RawPayload, "schema_version">;
 const BUCKET_FOR_KIND: Record<EntityKind, RawPayloadArrayKey> = {
   bundle: "bundles",
@@ -712,66 +155,31 @@ const MODULE_KINDS: ReadonlySet<EntityKind> = new Set<EntityKind>([
   "wildcard", "fixed_values", "combine", "derivation", "constraint",
 ]);
 
-/**
- * Narrow `unknown` to `Record<string, unknown> & { id: string }`. The
- * picker filters its emit to ids that exist in the payload so this
- * guard succeeds in practice; defensive in case of stale state.
- */
 function hasStringId(row: Record<string, unknown>): row is Record<string, unknown> & { id: string } {
   return typeof row.id === "string" && row.id.length > 0;
 }
 
-/** Build a `LibraryRow` map keyed by id for the collision detector.
- *  Module + bundle rows both carry an optional `snapshot_fingerprint`
- *  on the wire (added by migration 006); we lift only that field. */
+/** Build a `LibraryRow` map keyed by id for the collision detector. */
 function buildLibraryMap(): Map<string, LibraryRow> {
   const m = new Map<string, LibraryRow>();
-  // Use unknown-cast through index signatures because ModuleRow / BundleRow
-  // do not statically expose snapshot_fingerprint (added post-API typing).
-  for (const row of localModules.value as unknown as Array<Record<string, unknown> & { id: string }>) {
-    const fp = row.snapshot_fingerprint;
-    m.set(row.id, { snapshot_fingerprint: typeof fp === "string" ? fp : undefined });
+  for (const row of localModules.value) {
+    m.set(row.id, { snapshot_fingerprint: row.snapshot_fingerprint });
   }
-  for (const row of localBundles.value as unknown as Array<Record<string, unknown> & { id: string }>) {
-    const fp = row.snapshot_fingerprint;
-    m.set(row.id, { snapshot_fingerprint: typeof fp === "string" ? fp : undefined });
+  for (const row of localBundles.value) {
+    m.set(row.id, { snapshot_fingerprint: row.snapshot_fingerprint });
   }
   return m;
 }
 
-/**
- * Reactive view of the same library map for `<ImportPicker>` to consume
- * via its `libraryRows` prop. Recomputes whenever the live library
- * reloads (after a successful import, after undo, on initial mount) so
- * the inline conflict badges in the picker reflect the current state of
- * the DB — not whatever was visible when the user first opened the
- * import payload.
- *
- * Bundles get a `LibraryRow` entry too (snapshot_fingerprint may be
- * undefined for them — that's fine, the picker only id-presence-checks
- * bundles for the inline badge).
- */
-const libraryRowsForPicker = computed<Map<string, LibraryRow>>(() => {
-  // Re-uses `buildLibraryMap` so module + bundle rows stay in lockstep
-  // with the commit-time partitioner; no risk of divergent badge logic.
-  return buildLibraryMap();
-});
+/** Reactive view for `<ImportPicker>` so inline badges reflect live DB. */
+const libraryRowsForPicker = computed<Map<string, LibraryRow>>(() => buildLibraryMap());
 
-/**
- * Walk every selected id back to its source bucket and collect
- * `SelectedEntity` records. Ids that point at no bucket (defensive —
- * picker filtered to valid ids) are silently dropped. Collision state
- * runs only for module kinds; bundles + categories are always
- * treated as `no-collision` because the partitioner has no replace
- * semantic for them in this version.
- */
 function buildSelectedEntities(
   payload: RawPayload,
   selection: Set<string>,
   library: Map<string, LibraryRow>,
 ): SelectedEntity[] {
   const result: SelectedEntity[] = [];
-  // Group payload entities by id for cheap lookup.
   type Hit = { kind: EntityKind; entity: Record<string, unknown> & { id: string } };
   const idIndex = new Map<string, Hit>();
   for (const kind of ALL_KINDS) {
@@ -781,7 +189,6 @@ function buildSelectedEntities(
       if (!idIndex.has(row.id)) idIndex.set(row.id, { kind, entity: row });
     }
   }
-  // Pre-compute collision states once per kind for the module buckets.
   const moduleEntitiesByKind: Record<string, Array<FingerprintModuleRow & { id: string }>> = {};
   for (const id of selection) {
     const hit = idIndex.get(id);
@@ -806,31 +213,11 @@ function buildSelectedEntities(
   return result;
 }
 
-/** Map a payload entity's optional `name` field (always `string` when
- *  present) onto the `PerItemIssue.entity.name` slot used by the modal. */
 function entityNameOf(entity: Record<string, unknown>): string | undefined {
   const n = entity.name;
   return typeof n === "string" ? n : undefined;
 }
 
-/** Convert parse-time `IntegrityWarning`s + dep scan into per-item issues.
- *  Three sources:
- *
- *   1. `fingerprint-mismatch` from `integrityWarnings` (Task 21 parse).
- *   2. `broken-inner-ref` — selected entity refs target absent from payload.
- *      User must explicitly accept-or-skip. Library presence does NOT
- *      resolve (Phase 10): payload ref means "the entity I authored
- *      against"; same id in receiver library may carry different content.
- *   3. `unselected-dep` (Phase 12) — selected entity refs target that is
- *      present in payload but NOT in the user's selection. Without
- *      explicit action the resulting library row carries a dangling ref
- *      to a never-imported entity. Surfaced separately from
- *      `broken-inner-ref` so the user can distinguish "you didn't pick
- *      this" (fixable: select the dep) from "the export is missing it
- *      entirely" (irreparable from the import side).
- *
- *  A single entity can produce multiple issues (different kinds, same id).
- *  ConflictModal renders one row per issue. */
 function buildPerItemIssues(
   selected: SelectedEntity[],
   integrityWarnings: IntegrityWarning[],
@@ -856,9 +243,6 @@ function buildPerItemIssues(
       if (typeof row.id === "string" && row.id.length > 0) payloadIds.add(row.id);
     }
   }
-  // Look up display names for unselected-dep target labels — payload rows
-  // by id across all 7 buckets. Avoids the modal having to walk back to
-  // the parent payload for a single name lookup.
   const payloadNameById = new Map<string, string>();
   for (const k of ALL_KINDS) {
     const arr = payload[BUCKET_FOR_KIND[k]];
@@ -871,11 +255,6 @@ function buildPerItemIssues(
     }
   }
   const graph = buildDepGraph(payload);
-  // Aggregate per (source, kind) so each entity gets at most one
-  // broken-inner-ref row and one unselected-dep row, each carrying a
-  // `targets` array. Avoids the noisy "one row per missing target"
-  // pattern that asked the user to skip/rename/accept the same row N
-  // times when it just had N references to resolve.
   type Bucket = { targets: Array<{ id: string; name?: string }> };
   const brokenBucket = new Map<string, Bucket>();
   const unselectedBucket = new Map<string, Bucket>();
@@ -913,9 +292,6 @@ function buildPerItemIssues(
         ...(name !== undefined ? { name } : {}),
         kind,
       },
-      // Preserve the legacy `target` slot for the first target so older
-      // assertions that read `detail.target` keep working alongside the
-      // new `targets` array.
       detail: {
         target: bucket.targets[0]!.id,
         targets: bucket.targets,
@@ -943,16 +319,6 @@ function buildPerItemIssues(
   return out;
 }
 
-/**
- * Build `BatchConflict[]` from module-kind entities that need user
- * visibility. Three states route through the modal:
- *   - `conflict`       — fingerprint differs → orange MODIFIED.
- *   - `exists-unknown` — library row, no stored fingerprint → amber EXISTING.
- *   - `silent-skip`    — exact-match duplicate → dim DUPLICATE. Default
- *                        action is still skip, but routing it through the
- *                        modal lets the user SEE the dedup happen + flip
- *                        to Replace / Import as new if they want.
- */
 function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
   const out: BatchConflict[] = [];
   for (const s of selected) {
@@ -971,20 +337,6 @@ function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
   return out;
 }
 
-/**
- * Build a `{kind: "rename"}` Decision for an entity, minting a fresh
- * client-side id and suffixing the display name with `" (imported)"`.
- *
- * Used by the batch default `rename` branch and by per-item override
- * rows where the user picked "Rename (keep both)" from the per-row
- * dropdown — neither path surfaces the inline `<ImportAsNewRename>` UI
- * so the orchestrator is responsible for the id mint + name suffix.
- *
- * Falls back to the entity id when `entity.name` is absent or not a
- * string — same display-fallback the modal uses for row labels. Mirrors
- * the existing legacy import flow (`runImport`, this same file) which
- * appends `" (imported)"` to renamed module + bundle names.
- */
 function mintRenameDecision(
   entity: Record<string, unknown> & { id: string },
 ): Decision {
@@ -993,40 +345,6 @@ function mintRenameDecision(
   return { kind: "rename", new_id: newShortId(), new_name: `${base} (imported)` };
 }
 
-/**
- * Convert the user's `{batchDefault, perItemDecisions}` resolution into a
- * `ResolvedSelection` shaped for `buildCommitPayload`. Decision precedence
- * matches the modal's contract: a `perItemDecisions[id]` entry — whether
- * sourced from a per-item issue row or a per-row batch override —
- * outranks `batchDefault`.
- *
- *   - `silent-skip` → never reaches the commit (excluded upstream).
- *   - `perItemDecisions[id]` present (per-item issue OR per-row override):
- *       * `skip`    → drop
- *       * `replace` → `{kind: "replace"}`
- *       * `accept`  → `{kind: "add"}` (proceed despite the warning)
- *       * `rename`  → `{kind: "rename", new_id, new_name}` when the
- *                     decision carries explicit `new_id` + `new_name`
- *                     (the inline `<ImportAsNewRename>` flow on a
- *                     per-item issue row). When either field is missing
- *                     (per-row batch override dropdown picked "rename"
- *                     without the inline UI) the orchestrator mints
- *                     them via `mintRenameDecision`.
- *   - `perItemDecisions[id]` absent AND id is a per-item issue: that
- *     means the modal emitted without a resolution for that row — log
- *     diagnostic + drop. Should not happen in normal UX (the Import
- *     button is disabled until every per-item issue is resolved).
- *   - Batch conflict (no per-item decision) → `batchDefault`:
- *       * `skip`    → drop
- *       * `replace` → `{kind: "replace"}`
- *       * `rename`  → `mintRenameDecision(entity)` — fresh id +
- *                     `" (imported)"` suffix per conflict entity.
- *   - Everything else → `{kind: "add"}`
- *
- * Categories are routed straight to `categories` with `{kind: "add"}`
- * (the `CategoryDecision` constraint downstream rejects anything else
- * at compile time).
- */
 function partitionSelection(
   selected: SelectedEntity[],
   resolution: {
@@ -1040,11 +358,6 @@ function partitionSelection(
     derivations: [], constraints: [], categories: [],
   };
   for (const s of selected) {
-    // Phase 10: silent-skip rows surface in the modal so the user sees
-    // they are deduped. Default action is still drop, but a per-row
-    // override ("Replace" / "Import as new") wins — fall through to the
-    // shared decision-resolution branch below so the override path is
-    // single-source-of-truth.
     if (s.collision === "silent-skip"
         && !resolution.perItemDecisions[s.entity.id]) {
       continue;
@@ -1052,18 +365,11 @@ function partitionSelection(
     let decision: Decision | null;
     const pd = resolution.perItemDecisions[s.entity.id];
     if (pd) {
-      // Decision present — applies regardless of whether this id is a
-      // per-item issue or a batch conflict with a per-row override.
       if (pd.kind === "skip") {
         decision = null;
       } else if (pd.kind === "replace") {
         decision = { kind: "replace" };
       } else if (pd.kind === "accept") {
-        // "Import anyway" semantics: when the row collides with the
-        // receiver library (conflict / exists-unknown / silent-skip)
-        // a plain `add` would crash on duplicate id server-side. The
-        // user said "I want this version in the library" → coerce to
-        // replace. Pure no-collision rows stay `add`.
         if (
           s.collision === "conflict"
           || s.collision === "exists-unknown"
@@ -1074,14 +380,6 @@ function partitionSelection(
           decision = { kind: "add" };
         }
       } else if (pd.kind === "rename") {
-        // Two paths land here:
-        //   1. Inline `<ImportAsNewRename>` confirm → pd carries both
-        //      `new_id` + `new_name` from the user-edited input. Use
-        //      verbatim.
-        //   2. Per-row batch override dropdown picked "rename" — pd
-        //      arrives as `{kind: "rename"}` with no extra fields, same
-        //      shape as the batch-default rename path. Mint here so the
-        //      override matches the batch-default semantic.
         if (pd.new_id && pd.new_name) {
           decision = { kind: "rename", new_id: pd.new_id, new_name: pd.new_name };
         } else {
@@ -1091,19 +389,11 @@ function partitionSelection(
         decision = null;
       }
     } else if (perItemIds.has(s.entity.id)) {
-      // Per-item issue without a recorded decision — the Import button
-      // gating in ConflictModal should prevent this, so surface as a
-      // diagnostic rather than silently dropping.
       console.warn(
         `[import-commit] no decision recorded for per-item issue ${s.entity.id}; dropping`,
       );
       decision = null;
     } else if (s.collision === "conflict" || s.collision === "exists-unknown") {
-      // `exists-unknown` (library row exists, no stored fingerprint) is
-      // treated identically to `conflict` at the partitioner — both
-      // require an explicit user decision to avoid an id-collision crash
-      // on the server. The picker shows a distinct EXISTING badge so
-      // the user sees the nuance up front.
       if (resolution.batchDefault === "replace") {
         decision = { kind: "replace" };
       } else if (resolution.batchDefault === "rename") {
@@ -1116,10 +406,6 @@ function partitionSelection(
     }
     if (!decision) continue;
     if (s.kind === "category") {
-      // Type narrowing — categories only support `add`. If we somehow
-      // end up here with replace/rename it's a programmer error (the
-      // earlier branches don't put categories into per-item or batch
-      // conflict buckets), so coerce to add and stash the warning.
       const decKind: "add" = "add";
       const entry: ResolvedCategoryEntity = { entity: s.entity, decision: { kind: decKind } };
       out.categories.push(entry);
@@ -1138,8 +424,6 @@ function partitionSelection(
   return out;
 }
 
-/** Convenience: return the wildcards + constraints from a CommitPayload
- *  routed into the shape `discoverBrokenRefsForImport` expects. */
 function extractWildcardsAndConstraints(payload: CommitPayload): {
   wildcards: ImportedWildcard[];
   constraints: ImportedConstraint[];
@@ -1176,9 +460,6 @@ function extractWildcardsAndConstraints(payload: CommitPayload): {
   return { wildcards, constraints };
 }
 
-/** Collect every id the commit payload will land in the library so the
- *  broken-ref walker can answer "is this referenced id present?". For
- *  renames the new id is the live-DB id post-commit. */
 function commitPayloadIds(payload: CommitPayload): Set<string> {
   const ids = new Set<string>();
   for (const a of payload.adds) {
@@ -1189,46 +470,28 @@ function commitPayloadIds(payload: CommitPayload): Set<string> {
   return ids;
 }
 
-function onImportV2PayloadReady(
+function onImportPayloadReady(
   payload: RawPayload,
   migratedCount: number,
   integrityWarnings: IntegrityWarning[],
 ): void {
-  // Fresh id per payload-ready call so the picker remounts (`:key` change).
-  // `Date.now().toString(36)` matches the codebase's existing id pattern
-  // (see useToast.ts:28, DerivationEditor.vue:134) and avoids depending on
-  // `crypto.randomUUID` — not used elsewhere in this project.
   const id = `imp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  importV2State.value = { id, payload, migratedCount, integrityWarnings };
-  // Reset any prior selection / modal state when a new payload lands.
-  importV2Selection.value = null;
+  importState.value = { id, payload, migratedCount, integrityWarnings };
+  importSelection.value = null;
   conflictsOpen.value = false;
   batchConflicts.value = [];
   perItemIssues.value = [];
   pendingSelection.value = [];
 }
 
-/**
- * Picker `selection-ready` handler — kicks off the commit pipeline.
- * Stashes the selection for diagnostic display, computes collisions
- * and per-item issues, and either opens the ConflictModal or commits
- * directly when no conflicts surface.
- */
-async function onImportV2SelectionReady(ids: Set<string>): Promise<void> {
-  const state = importV2State.value;
+async function onImportSelectionReady(ids: Set<string>): Promise<void> {
+  const state = importState.value;
   if (!state) return;
-  importV2Selection.value = ids;
+  importSelection.value = ids;
   const library = buildLibraryMap();
   const selected = buildSelectedEntities(state.payload, ids, library);
   pendingSelection.value = selected;
   const issues = buildPerItemIssues(selected, state.integrityWarnings, state.payload);
-  // Phase 12: dedup. When a row carries any per-item issue, drop it from
-  // the batch list. The per-item row's Skip / Import as new / Import anyway
-  // covers the same decision space as the batch's Skip / Replace / Import
-  // as new for silent-skip / exists-unknown rows (Replace is a no-op on
-  // silent-skip and the broken-ref case warrants Skip-or-anyway thinking
-  // more than Replace anyway). Avoids forcing the user to make two
-  // decisions on the same id.
   const issueIds = new Set(issues.map((i) => i.entity.id));
   const bConflicts = buildBatchConflicts(selected).filter(
     (c) => !issueIds.has(c.id),
@@ -1239,7 +502,6 @@ async function onImportV2SelectionReady(ids: Set<string>): Promise<void> {
     conflictsOpen.value = true;
     return;
   }
-  // Frictionless path — no conflicts at all → commit with all `add`s.
   await runCommit({ batchDefault: "skip", perItemDecisions: {} });
 }
 
@@ -1252,23 +514,14 @@ function onConflictCommitReady(resolution: {
 }
 
 function onConflictCancel(): void {
-  // Leave selection intact so the user can re-trigger after adjusting
-  // upstream state — just close the modal.
   conflictsOpen.value = false;
 }
 
-/**
- * Phase 13: user clicked "Include deps" on an unselected-dep per-item
- * issue. Close the modal, fold the target ids into the live selection,
- * and re-run the orchestrator pipeline. ConflictModal will reopen with
- * fresh batchConflicts + perItemIssues (or stay closed if everything
- * now resolves cleanly).
- */
 function onConflictIncludeDeps(targetIds: string[]): void {
   conflictsOpen.value = false;
-  const next = new Set<string>(importV2Selection.value);
+  const next = new Set<string>(importSelection.value);
   for (const id of targetIds) next.add(id);
-  void onImportV2SelectionReady(next);
+  void onImportSelectionReady(next);
 }
 
 async function runCommit(resolution: {
@@ -1280,11 +533,6 @@ async function runCommit(resolution: {
   const perItemIds = new Set(perItemIssues.value.map((p) => p.entity.id));
   const selection = partitionSelection(selected, resolution, perItemIds);
   const payload = buildCommitPayload(selection);
-  // Short-circuit if every selected entity resolved to a drop (e.g. the
-  // whole selection is silent-skip duplicates or batchDefault=skip with no
-  // per-item overrides). User intent ("import these") is already satisfied
-  // because the library matches — skip the no-op server round-trip and
-  // surface a non-success info toast so it's clear nothing was added.
   const totalOps = payload.adds.length + payload.replaces.length + payload.renames.length;
   if (totalOps === 0) {
     toast.push({
@@ -1293,33 +541,19 @@ async function runCommit(resolution: {
       detail: "All selected items are duplicates of existing library entries.",
       life: 4000,
     });
-    clearImportV2();
+    clearImport();
     return;
   }
-  importV2Committing.value = true;
+  importCommitting.value = true;
   try {
     const result = await api.importExport.commit(payload);
-    // Reload library before we compute broken refs so the just-committed
-    // ids land in the libraryIds set.
     await loadLibrary();
     const libraryIds = new Set<string>();
     for (const m of localModules.value) libraryIds.add(m.id);
     for (const b of localBundles.value) libraryIds.add(b.id);
-    // Belt-and-suspenders — also add ids from the payload itself in
-    // case the reload is still in-flight when the broken-ref walker
-    // runs (loadLibrary is awaited above; this just hardens against
-    // ordering edge cases).
     const committedIds = commitPayloadIds(payload);
     for (const id of committedIds) libraryIds.add(id);
     const { wildcards, constraints } = extractWildcardsAndConstraints(payload);
-    // Clear stale broken_ref_on_import warnings for any entity touched by
-    // this commit before pushing the fresh batch. Re-importing a wildcard
-    // (or replacing it) must wipe its prior broken-ref state so the fresh
-    // discovery pass decides what's still broken against the new library.
-    // `clearForModule` removes ALL warnings for that module_id — broader
-    // than filtering by type. Acceptable because `broken_ref_on_import`
-    // is currently the only producer pushing into the store; revisit if
-    // another source starts publishing per-module warnings.
     for (const id of committedIds) {
       resolveWarningsStore.clearForModule(id);
     }
@@ -1339,8 +573,8 @@ async function runCommit(resolution: {
       action: { label: "Undo", run: () => undoImport(undoId) },
       life: 8000,
     });
-    importV2State.value = null;
-    importV2Selection.value = null;
+    importState.value = null;
+    importSelection.value = null;
     pendingSelection.value = [];
     batchConflicts.value = [];
     perItemIssues.value = [];
@@ -1354,9 +588,8 @@ async function runCommit(resolution: {
       detail: message,
       life: 5000,
     });
-    // Preserve selection + state so the user can retry.
   } finally {
-    importV2Committing.value = false;
+    importCommitting.value = false;
   }
 }
 
@@ -1376,21 +609,14 @@ async function undoImport(undoEntryId: string): Promise<void> {
   }
 }
 
-function clearImportV2() {
-  importV2State.value = null;
-  importV2Selection.value = null;
+function clearImport() {
+  importState.value = null;
+  importSelection.value = null;
   conflictsOpen.value = false;
   batchConflicts.value = [];
   perItemIssues.value = [];
   pendingSelection.value = [];
 }
-
-// Run seed once mount loads data.
-watch(
-  () => seedWatcher.value,
-  () => seedExportIfReady(),
-  { immediate: true },
-);
 </script>
 
 <template>
@@ -1426,403 +652,65 @@ watch(
       </button>
       <button
         type="button" role="tab" class="wp-tab"
-        :data-active="mode === 'export-v2' ? 'true' : 'false'"
-        :aria-selected="mode === 'export-v2'"
-        data-test="io-tab-export-v2"
-        @click="setMode('export-v2')"
-      >
-        <Icon name="pi-download" /> Export (preview)
-      </button>
-      <button
-        type="button" role="tab" class="wp-tab"
         :data-active="mode === 'import' ? 'true' : 'false'"
         :aria-selected="mode === 'import'"
         data-test="io-tab-import"
         @click="setMode('import')"
       >
-        <Icon name="pi-upload" /> Import (legacy)
-      </button>
-      <button
-        type="button" role="tab" class="wp-tab"
-        :data-active="mode === 'import-v2' ? 'true' : 'false'"
-        :aria-selected="mode === 'import-v2'"
-        data-test="io-tab-import-v2"
-        @click="setMode('import-v2')"
-      >
-        <Icon name="pi-upload" /> Import (preview)
+        <Icon name="pi-upload" /> Import
       </button>
     </div>
 
-    <!-- Export tab (v2 — 7-bucket picker, POST /wp/api/export/build) -->
+    <!-- Export tab — 7-bucket picker, POST /wp/api/export/build -->
     <div
-      v-if="mode === 'export-v2'"
-      class="wp-io-export-v2-pane"
-      data-test="io-export-v2-pane"
+      v-if="mode === 'export'"
+      class="wp-io-export-pane"
+      data-test="io-export-pane"
     >
       <ExportTab />
     </div>
 
-    <!-- Export tab -->
-    <div v-if="mode === 'export'" class="wp-io-grid" data-test="io-export-pane">
-      <Card title="Pick what to export" :padding="false">
-        <template #actions>
-          <Button
-            variant="ghost" size="sm"
-            data-test="io-export-select-all"
-            @click="presetApplyFull"
-          >Select all</Button>
-          <Button
-            variant="ghost" size="sm"
-            data-test="io-export-select-none"
-            @click="exportSelected = new Set()"
-          >None</Button>
-        </template>
-
-        <div class="wp-io-toolbar">
-          <div class="wp-io-presets">
-            <Button
-              variant="ghost" size="sm" icon="pi-database"
-              data-test="io-preset-full"
-              @click="presetApplyFull"
-            >Full library</Button>
-            <Button
-              variant="ghost" size="sm" icon="pi-sparkles"
-              data-test="io-preset-wildcards"
-              @click="presetApplyWildcards"
-            >Wildcards only</Button>
-            <Button
-              variant="ghost" size="sm" icon="pi-star-fill"
-              data-test="io-preset-favorites"
-              @click="presetApplyFavorites"
-            >Favorites only</Button>
-          </div>
-          <Input
-            v-model="exportSearch"
-            icon="pi-search"
-            placeholder="Search modules to filter…"
-            aria-label="Search modules"
-            data-test="io-export-search"
-            class="wp-io-search"
-          />
-        </div>
-
-        <div class="wp-io-tree">
-          <div
-            v-for="g in GROUPS"
-            :key="g.key"
-            class="wp-io-group"
-            :data-test="`io-export-group-${g.key}`"
-          >
-            <div class="wp-io-group__head" @click="toggleGroupOpen(g.key)">
-              <span class="wp-io-group__check" @click.stop>
-                <Checkbox
-                  :model-value="groupCheckState(g, exportSearch).all"
-                  :data-test="`io-export-group-check-${g.key}`"
-                  :aria-label="`Select all ${g.label}`"
-                  @update:model-value="(v: boolean) => setGroupAll(g, v, exportSearch)"
-                />
-              </span>
-              <span
-                class="wp-io-group__icon"
-                :style="{ color: g.color, background: `color-mix(in oklab, ${g.color} 18%, transparent)` }"
-              >
-                <Icon :name="g.icon" />
-              </span>
-              <span class="wp-io-group__label">{{ g.label }}</span>
-              <span class="wp-io-group__count">
-                {{ rowsForGroup(g, exportSearch).filter((r) => isExportSelected(g, r.id)).length }}
-                /
-                {{ rowsForGroup(g, exportSearch).length }}
-              </span>
-              <span class="wp-spacer" />
-              <Icon
-                :name="isGroupOpen(g, exportSearch) ? 'pi-chevron-down' : 'pi-chevron-right'"
-                :size="ICON_SM"
-              />
-            </div>
-            <div v-if="isGroupOpen(g, exportSearch)" class="wp-io-group__body">
-              <div
-                v-for="row in rowsForGroup(g, exportSearch)"
-                :key="`${g.key}:${row.id}`"
-                class="wp-io-row"
-                :data-test="`io-export-row-${row.id}`"
-                @click="toggleExportRow(g, row.id)"
-              >
-                <Checkbox
-                  :model-value="isExportSelected(g, row.id)"
-                  @update:model-value="toggleExportRow(g, row.id)"
-                  @click.stop
-                />
-                <span class="wp-io-row__name">{{ row.name }}</span>
-                <span
-                  v-if="row.category_id && categoryById.get(row.category_id)"
-                  class="wp-cat-chip"
-                  :style="catChipStyle(categoryById.get(row.category_id)!.color)"
-                >{{ categoryById.get(row.category_id)?.name }}</span>
-                <span class="wp-id">{{ row.id }}</span>
-              </div>
-              <div
-                v-if="rowsForGroup(g, exportSearch).length === 0"
-                class="wp-io-row__empty wp-dim"
-              >No matches.</div>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div class="wp-io-side">
-        <Card title="Bundle summary">
-          <dl class="wp-io-stats" data-test="io-export-summary">
-            <dt>Wildcards</dt><dd>{{ exportCounts.wildcard }}</dd>
-            <dt>Fixed values</dt><dd>{{ exportCounts.fixed_values }}</dd>
-            <dt>Combines</dt><dd>{{ exportCounts.combine }}</dd>
-            <dt>Derivations</dt><dd>{{ exportCounts.derivation }}</dd>
-            <dt>Constraints</dt><dd>{{ exportCounts.constraint }}</dd>
-            <dt>Bundles</dt><dd>{{ exportCounts.bundle }}</dd>
-            <dt>Categories</dt><dd>{{ exportCounts.category }}</dd>
-          </dl>
-          <div class="wp-divider" />
-          <dl class="wp-io-stats">
-            <dt>Total selected</dt><dd>{{ exportCounts.total }}</dd>
-            <dt>Bundle version</dt><dd>1</dd>
-            <dt>Est. size</dt><dd data-test="io-export-size">{{ formatBytes(bundleBytes) }}</dd>
-          </dl>
-          <Button
-            variant="primary"
-            icon="pi-download"
-            class="wp-io-download"
-            :disabled="exportCounts.total === 0"
-            data-test="io-export-download"
-            @click="downloadBundle"
-          >Download bundle</Button>
-        </Card>
-      </div>
-    </div>
-
-    <!-- Import tab -->
-    <div v-else-if="mode === 'import'" class="wp-io-grid" data-test="io-import-pane">
-      <div class="wp-io-import-main">
-        <Card title="Source bundle">
-          <p class="wp-io-help wp-dim">
-            Drop a <code class="wp-mono">.json</code> bundle. You'll see its contents listed
-            before anything is merged — pick exactly what you want.
-          </p>
-          <input
-            ref="fileInputRef"
-            type="file"
-            accept="application/json,.json"
-            class="wp-io-file-hidden"
-            data-test="io-file-input"
-            aria-label="Bundle JSON file"
-            @change="onPickFile"
-          />
-          <div
-            class="wp-io-drop"
-            :data-active="dropActive ? 'true' : 'false'"
-            :data-invalid="dropInvalid ? 'true' : 'false'"
-            :data-parsing="parsing ? 'true' : 'false'"
-            :aria-busy="parsing || undefined"
-            data-test="io-dropzone"
-            @click="!parsing && fileInputRef?.click()"
-            @dragover="onDragOver"
-            @dragleave="onDragLeave"
-            @drop="onDrop"
-          >
-            <Icon
-              v-if="parsing"
-              name="spin pi-spinner"
-              :size="22"
-            />
-            <Icon
-              v-else-if="dropInvalid"
-              name="pi-times-circle"
-              :size="22"
-            />
-            <Icon
-              v-else
-              name="pi-cloud-upload"
-              :size="22"
-            />
-            <div class="wp-io-drop__title">
-              <template v-if="parsing">Parsing {{ parsedFileName }}…</template>
-              <template v-else-if="dropInvalid">Only .json files accepted</template>
-              <template v-else>{{ parsedFileName || "Drop a .json file or click to browse" }}</template>
-            </div>
-            <div class="wp-io-drop__hint wp-dim">
-              <template v-if="parsing">Reading {{ parsedFileSizeKb }} KB</template>
-              <template v-else-if="parsedFileName">{{ parsedFileSizeKb }} KB · click to replace</template>
-              <template v-else>Up to 10 MB</template>
-            </div>
-          </div>
-          <div v-if="parseError" class="wp-io-error" data-test="io-parse-error">
-            <Icon name="pi-exclamation-triangle" /> {{ parseError }}
-          </div>
-        </Card>
-
-        <Card v-if="parsedBundle" title="Pick what to import" :padding="false">
-          <template #actions>
-            <Button
-              variant="ghost" size="sm"
-              data-test="io-import-select-all"
-              @click="selectAllParsed"
-            >Select all</Button>
-            <Button
-              variant="ghost" size="sm"
-              data-test="io-import-select-none"
-              @click="clearParsedSelection"
-            >None</Button>
-          </template>
-          <div class="wp-io-tree">
-            <template v-for="g in GROUPS" :key="g.key">
-              <div
-                v-if="parsedRowsForGroup(g).length > 0"
-                class="wp-io-group"
-                :data-test="`io-import-group-${g.key}`"
-              >
-                <div class="wp-io-group__head" @click="toggleImportGroupOpen(g.key)">
-                  <span class="wp-io-group__check" @click.stop>
-                    <Checkbox
-                      :model-value="importGroupCheckState(g).all"
-                      :data-test="`io-import-group-check-${g.key}`"
-                      :aria-label="`Select all ${g.label}`"
-                      @update:model-value="(v: boolean) => setImportGroupAll(g, v)"
-                    />
-                  </span>
-                  <span
-                    class="wp-io-group__icon"
-                    :style="{ color: g.color, background: `color-mix(in oklab, ${g.color} 18%, transparent)` }"
-                  >
-                    <Icon :name="g.icon" />
-                  </span>
-                  <span class="wp-io-group__label">{{ g.label }}</span>
-                  <span class="wp-io-group__count">{{ parsedRowsForGroup(g).length }} in bundle</span>
-                  <span class="wp-spacer" />
-                  <Icon
-                    :name="isImportGroupOpen(g.key) ? 'pi-chevron-down' : 'pi-chevron-right'"
-                    :size="ICON_SM"
-                  />
-                </div>
-                <div v-if="isImportGroupOpen(g.key)" class="wp-io-group__body">
-                  <div
-                    v-for="row in parsedRowsForGroup(g)"
-                    :key="`${row.group}:${row.id}`"
-                    class="wp-io-row"
-                    :data-test="`io-import-row-${row.id}`"
-                    @click="toggleImportRow(row.group, row.id)"
-                  >
-                    <Checkbox
-                      :model-value="isImportSelected(row.group, row.id)"
-                      @update:model-value="toggleImportRow(row.group, row.id)"
-                      @click.stop
-                    />
-                    <span class="wp-io-row__name">{{ row.name }}</span>
-                    <span
-                      :class="badgeClass(row.conflict.kind)"
-                      :data-test="`io-import-badge-${row.id}`"
-                    >{{ badgeLabel(row.conflict.kind) }}</span>
-                    <span
-                      v-if="row.conflict.existingId"
-                      class="wp-id"
-                      :title="`Existing local id: ${row.conflict.existingId}`"
-                    >{{ row.conflict.existingId }}</span>
-                    <span v-else class="wp-id">{{ row.id }}</span>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </div>
-        </Card>
-      </div>
-
-      <div v-if="parsedBundle" class="wp-io-side">
-        <Card title="Import summary">
-          <dl class="wp-io-stats" data-test="io-import-summary">
-            <dt>In bundle</dt><dd>{{ parsedRows.length }}</dd>
-            <dt>Selected</dt><dd>{{ importCounts.total }}</dd>
-            <dt>Conflicts</dt>
-            <dd :class="finalActionTotals.conflictCount ? 'wp-io-warn' : ''">
-              {{ finalActionTotals.conflictCount }}
-            </dd>
-          </dl>
-          <div class="wp-divider" />
-
-          <Field label="On conflict">
-            <Select
-              v-model="conflictMode"
-              :options="conflictModeOptions"
-              aria-label="On conflict"
-              data-test="io-conflict-mode"
-            />
-          </Field>
-
-          <div class="wp-divider" />
-          <dl class="wp-io-stats">
-            <dt>Will create</dt><dd>{{ finalActionTotals.willCreate }}</dd>
-            <dt>Will update</dt><dd>{{ finalActionTotals.willUpdate }}</dd>
-            <dt>Will skip</dt><dd>{{ finalActionTotals.willSkip }}</dd>
-          </dl>
-
-          <div class="wp-io-actions">
-            <Button
-              variant="primary"
-              icon="pi-check"
-              :disabled="importCounts.total === 0 || importing"
-              :loading="importing"
-              data-test="io-import-submit"
-              @click="runImport"
-            >Import {{ importCounts.total }} selected</Button>
-            <Button
-              variant="ghost"
-              icon="pi-times"
-              data-test="io-import-cancel"
-              @click="clearImport"
-            >Cancel</Button>
-          </div>
-        </Card>
-      </div>
-    </div>
-
-    <!-- Import tab (v2 — 7-bucket parse + picker + commit orchestrator) -->
+    <!-- Import tab — 7-bucket parse + picker + commit orchestrator -->
     <div
-      v-else-if="mode === 'import-v2'"
-      class="wp-io-import-v2-pane"
-      data-test="io-import-v2-pane"
+      v-else-if="mode === 'import'"
+      class="wp-io-import-pane"
+      data-test="io-import-pane"
     >
       <ImportTab
-        :payload-loaded="importV2State !== null"
-        @payload-ready="onImportV2PayloadReady"
-        @replace-requested="clearImportV2"
+        :payload-loaded="importState !== null"
+        @payload-ready="onImportPayloadReady"
+        @replace-requested="clearImport"
       />
       <ImportPicker
-        v-if="importV2State"
-        :key="importV2State.id"
-        :payload="importV2State.payload"
-        :migrated-entity-count="importV2State.migratedCount"
-        :integrity-warnings="importV2State.integrityWarnings"
+        v-if="importState"
+        :key="importState.id"
+        :payload="importState.payload"
+        :migrated-entity-count="importState.migratedCount"
+        :integrity-warnings="importState.integrityWarnings"
         :library-rows="libraryRowsForPicker"
-        data-test="io-import-v2-picker"
-        @selection-ready="onImportV2SelectionReady"
+        data-test="io-import-picker"
+        @selection-ready="onImportSelectionReady"
       />
       <div
-        v-if="importV2Selection && !conflictsOpen"
-        class="wp-io-import-v2-stash"
-        data-test="io-import-v2-stash"
+        v-if="importSelection && !conflictsOpen"
+        class="wp-io-import-stash"
+        data-test="io-import-stash"
       >
-        <p class="wp-io-import-v2-stash__line">
-          <template v-if="importV2Committing">
-            Committing {{ importV2Selection.size }}
-            {{ importV2Selection.size === 1 ? "entity" : "entities" }}…
+        <p class="wp-io-import-stash__line">
+          <template v-if="importCommitting">
+            Committing {{ importSelection.size }}
+            {{ importSelection.size === 1 ? "entity" : "entities" }}…
           </template>
           <template v-else>
-            {{ importV2Selection.size }}
-            {{ importV2Selection.size === 1 ? "entity" : "entities" }} picked.
+            {{ importSelection.size }}
+            {{ importSelection.size === 1 ? "entity" : "entities" }} picked.
           </template>
         </p>
         <Button
           variant="ghost" size="sm" icon="pi-times"
-          data-test="io-import-v2-clear"
-          :disabled="importV2Committing"
-          @click="clearImportV2"
+          data-test="io-import-clear"
+          :disabled="importCommitting"
+          @click="clearImport"
         >Clear</Button>
       </div>
       <ConflictModal
@@ -1846,209 +734,12 @@ watch(
 
 .wp-io-tabs { gap: var(--wp-space-2); margin-bottom: var(--wp-space-2); }
 
-.wp-io-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--wp-space-6);
-  align-items: start;
-}
-@media (max-width: 960px) {
-  .wp-io-grid { grid-template-columns: 1fr; }
-}
-
-.wp-io-toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-5);
-  padding: var(--wp-space-5);
-  border-bottom: 1px solid var(--wp-border);
-}
-.wp-io-presets {
-  display: flex;
-  gap: var(--wp-space-3);
-  flex-wrap: wrap;
-}
-.wp-io-search { width: 100%; }
-
-.wp-io-tree { max-height: 540px; overflow-y: auto; }
-.wp-io-group { border-bottom: 1px solid var(--wp-border); }
-.wp-io-group:last-child { border-bottom: 0; }
-
-.wp-io-group__head {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-5);
-  padding: 9px var(--wp-space-5); /* audit-exempt: 9px vertical hairline keeps row compact */
-  background: var(--wp-bg-2);
-  cursor: pointer;
-  user-select: none;
-}
-.wp-io-group__head:hover { background: var(--wp-bg-3); }
-
-.wp-io-group__check { display: inline-flex; }
-.wp-io-group__icon {
-  width: 22px; height: 22px;
-  border-radius: var(--wp-radius-sm);
-  display: grid; place-items: center;
-  font-size: var(--wp-text-xs);
-}
-.wp-io-group__label { font-weight: 500; font-size: var(--wp-text-base); }
-.wp-io-group__count {
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-xs);
-  font-family: var(--wp-font-mono);
-}
-
-.wp-io-row {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-5);
-  padding: 7px var(--wp-space-5) 7px 36px; /* audit-exempt: 7px/36px match group-head vertical rhythm */
-  border-top: 1px solid var(--wp-border);
-  cursor: pointer;
-  font-size: var(--wp-text-sm);
-}
-.wp-io-row:hover { background: var(--wp-bg-2); }
-.wp-io-row__name { flex: 1; font-weight: 500; }
-.wp-io-row__empty {
-  padding: var(--wp-space-5) var(--wp-space-5) var(--wp-space-5) 36px; /* audit-exempt: 36px indent matches row indent */
-  font-size: var(--wp-text-sm);
-}
-
-.wp-io-side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-5);
-  position: sticky;
-  top: 0;
-}
-
-.wp-io-stats {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: var(--wp-space-3);
-  margin: 0;
-  font-size: var(--wp-text-sm);
-}
-.wp-io-stats dt { color: var(--wp-text-muted); }
-.wp-io-stats dd {
-  margin: 0;
-  font-family: var(--wp-font-mono);
-  text-align: right;
-}
-.wp-io-warn { color: var(--wp-warn); }
-.wp-io-download { width: 100%; margin-top: var(--wp-space-5); }
-
-.wp-io-import-main {
+.wp-io-import-pane {
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-6);
 }
-
-.wp-io-help {
-  font-size: var(--wp-text-sm);
-  margin: 0 0 var(--wp-space-4);
-}
-.wp-io-help code {
-  background: var(--wp-bg-3);
-  padding: 1px var(--wp-space-3);
-  border-radius: var(--wp-radius-sm);
-  font-size: var(--wp-text-sm);
-}
-
-.wp-io-file-hidden { display: none; }
-
-.wp-io-drop {
-  border: 1px dashed var(--wp-border-strong);
-  border-radius: var(--wp-radius-lg);
-  padding: var(--wp-space-7) var(--wp-space-6);
-  text-align: center;
-  cursor: pointer;
-  background: var(--wp-bg-2);
-  transition: background .15s, border-color .15s;
-  color: var(--wp-text-muted);
-}
-.wp-io-drop[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent);
-  border-color: var(--wp-accent-500);
-}
-.wp-io-drop[data-invalid="true"] {
-  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
-  border-color: var(--wp-danger);
-  color: var(--wp-danger);
-  cursor: not-allowed;
-}
-.wp-io-drop[data-parsing="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 6%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 40%, transparent);
-  border-style: solid;
-  cursor: progress;
-}
-.wp-io-drop__title {
-  font-size: var(--wp-text-base);
-  color: var(--wp-text);
-  margin-top: var(--wp-space-3);
-}
-.wp-io-drop__hint {
-  font-size: var(--wp-text-xs);
-  margin-top: var(--wp-space-2);
-}
-
-.wp-io-error {
-  margin-top: var(--wp-space-5);
-  padding: var(--wp-space-4) var(--wp-space-5);
-  border-radius: var(--wp-radius-sm);
-  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
-  color: var(--wp-danger);
-  font-size: var(--wp-text-sm);
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-}
-
-/* Pill chrome shared by the three import-conflict badges. Border + bg
- * triple matches the SPA `.wp-chip--*` family (token@14% bg + token@36%
- * border) so badges, chips, and ContextWidget mod-dots all encode hue
- * meaning the same way across the app. */
-.wp-io-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px var(--wp-space-4);
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  text-transform: lowercase;
-}
-.wp-io-badge--new {
-  background:   color-mix(in oklab, var(--wp-success) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-success) 36%, transparent);
-  color:        var(--wp-success);
-}
-.wp-io-badge--exists {
-  background:   color-mix(in oklab, var(--wp-warn) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn) 36%, transparent);
-  color:        var(--wp-warn);
-}
-.wp-io-badge--mod {
-  background:   color-mix(in oklab, var(--wp-status-modified) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-status-modified) 36%, transparent);
-  color:        var(--wp-status-modified);
-}
-
-.wp-io-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-3);
-  margin-top: var(--wp-space-5);
-}
-
-.wp-io-import-v2-pane {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-6);
-}
-.wp-io-import-v2-stash {
+.wp-io-import-stash {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2059,7 +750,7 @@ watch(
   border-radius: var(--wp-radius);
   font-size: var(--wp-text-sm);
 }
-.wp-io-import-v2-stash__line {
+.wp-io-import-stash__line {
   margin: 0;
   color: var(--wp-text-muted);
 }

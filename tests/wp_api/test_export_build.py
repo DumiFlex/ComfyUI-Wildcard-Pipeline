@@ -122,17 +122,3 @@ async def test_build_wrong_type_uuid_silently_filtered(wp_client):
     assert body["wildcards"] == []
 
 
-# ── Regression: legacy /wp/api/export still works ─────────────────────────
-
-
-async def test_legacy_export_endpoint_still_returns_legacy_shape(wp_client):
-    await _create_wildcard(wp_client, name="legacy")
-    resp = await wp_client.get("/wp/api/export")
-    assert resp.status == 200
-    body = await resp.json()
-    # Legacy shape: version + modules + categories + bundles.
-    assert body["version"] == 1
-    assert "modules" in body
-    assert "categories" in body
-    assert "bundles" in body
-    assert len(body["modules"]) == 1

@@ -264,26 +264,6 @@ export interface TestResponse {
   histogram: Record<string, number>;
 }
 
-export interface ImportBundle {
-  version: 1;
-  exported_at?: string;
-  modules: ModuleRow[];
-  categories: CategoryRow[];
-  /** Bundle library entries — optional for back-compat with pre-bundle
-   *  snapshots. Newer exports always include it (possibly empty). */
-  bundles?: BundleRow[];
-}
-
-export interface ImportResult {
-  modules_imported: number;
-  categories_imported: number;
-  /** Number of bundle library entries successfully imported. Optional
-   *  so older backends (that don't yet handle bundles) can still
-   *  return a valid result. */
-  bundles_imported?: number;
-  skipped: string[];
-}
-
 /**
  * Spec §2.4 — canonical snapshot entry. Mirrors the Python
  * `engine.modules.snapshot.SnapshotEntry` TypedDict. Stored:

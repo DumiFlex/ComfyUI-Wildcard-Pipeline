@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Import picker — v2 selection surface.
+ * Import picker — selection surface.
  *
  * Renders one PickerSection per bucket (7 total: bundles, wildcards,
  * fixed_values, combines, derivations, constraints, categories) over
@@ -469,7 +469,7 @@ function emitContinue(): void {
   // warning is noisy; the modal is the canonical resolution point.
   //
   // Belt-and-suspenders: even though the parent applies `:key` on
-  // `importV2State.id` to force a full remount across payload swaps
+  // `importState.id` to force a full remount across payload swaps
   // (which by itself resets `seeded` + `selected`), filter the emit
   // against the current payload's id set so a stale id can NEVER reach
   // the commit stage.

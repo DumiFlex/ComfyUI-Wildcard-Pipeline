@@ -3,7 +3,6 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   EmbedBundle,
-  ImportBundle, ImportResult,
   MatchRequest, MatchResponse,
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
   SnapshotShape, TestRequest, TestResponse,
@@ -159,26 +158,10 @@ export const api = {
       method: "POST", body: JSON.stringify(body),
     });
   },
-  exportBundle() {
-    return request<ImportBundle>("/wp/api/export", { method: "GET" });
-  },
   /**
-   * POST a bundle to /wp/api/import. The backend processes only what's in
-   * the payload, so a "partial" bundle (subset of modules / categories) is a
-   * valid input — the import-export UI relies on this to ship per-item
-   * selections without inventing a new endpoint.
-   */
-  importBundle(bundle: ImportBundle | Partial<ImportBundle> & { version: 1 }) {
-    return request<ImportResult>("/wp/api/import", {
-      method: "POST", body: JSON.stringify(bundle),
-    });
-  },
-  /**
-   * v2 import/export endpoints. Clustered into a nested namespace so the
-   * Task 14 `commit` + `undo` peers (and any later additions) sit next to
-   * `build` without polluting the top-level surface. The legacy
-   * `exportBundle()` / `importBundle()` pair above stays untouched until
-   * the v2 path fully supersedes it.
+   * Import/export endpoints. `build` assembles a 7-bucket export payload
+   * from picked UUIDs; `commit` lands an import via the picker → modal
+   * → orchestrator pipeline; `undo` reverses the most recent commit.
    */
   importExport: {
     /**

@@ -143,7 +143,7 @@ const emit = defineEmits<{
    * User clicked "Include dependencies" on an unselected-dep per-item
    * issue. Carries the target ids the parent should add to the live
    * selection + re-run the pipeline. Parent typically closes the modal,
-   * expands the selection, and re-runs `onImportV2SelectionReady` so
+   * expands the selection, and re-runs `onImportSelectionReady` so
    * the modal reopens (or doesn't, if nothing left to resolve).
    */
   (e: "include-deps", targetIds: string[]): void;

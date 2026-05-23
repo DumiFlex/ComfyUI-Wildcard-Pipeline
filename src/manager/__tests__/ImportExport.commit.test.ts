@@ -18,8 +18,6 @@ vi.mock("../api/client", () => {
       modules: { list: vi.fn() },
       categories: { list: vi.fn() },
       bundles: { list: vi.fn() },
-      exportBundle: vi.fn(),
-      importBundle: vi.fn(),
       importExport: {
         build: vi.fn(),
         commit: vi.fn(),
@@ -142,8 +140,8 @@ function mountView() {
 }
 
 /**
- * Drive the import-v2 pipeline up to `selection-ready`:
- *   1. Switch to import-v2 tab.
+ * Drive the import pipeline up to `selection-ready`:
+ *   1. Switch to import tab.
  *   2. Open paste pane + type a JSON payload + click Parse → fires
  *      ImportTab's `payload-ready`.
  *   3. Pick rows (defaults preselect when payload has exactly one entity).
@@ -155,7 +153,7 @@ async function feedPayloadAndContinue(
   wrap: ReturnType<typeof mountView>,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  await wrap.find('[data-test="io-tab-import-v2"]').trigger("click");
+  await wrap.find('[data-test="io-tab-import"]').trigger("click");
   await flushPromises();
   await wrap.find('[data-test="import-paste-btn"]').trigger("click");
   await flushPromises();
@@ -178,7 +176,7 @@ async function feedPayloadAndContinueWithIds(
   payload: Record<string, unknown>,
   ids: Set<string>,
 ): Promise<void> {
-  await wrap.find('[data-test="io-tab-import-v2"]').trigger("click");
+  await wrap.find('[data-test="io-tab-import"]').trigger("click");
   await flushPromises();
   await wrap.find('[data-test="import-paste-btn"]').trigger("click");
   await flushPromises();
@@ -218,7 +216,7 @@ describe("ImportExport.vue — commit orchestrator", () => {
     expect(succ).toBeTruthy();
     expect(succ?.action?.label).toBe("Undo");
     // State cleared — stash element no longer rendered.
-    expect(wrap.find('[data-test="io-import-v2-stash"]').exists()).toBe(false);
+    expect(wrap.find('[data-test="io-import-stash"]').exists()).toBe(false);
   });
 
   it("conflicts → ConflictModal opens, commit deferred until commit-ready", async () => {
@@ -322,7 +320,7 @@ describe("ImportExport.vue — commit orchestrator", () => {
     expect(err).toBeTruthy();
     expect(err?.detail).toContain("boom");
     // State preserved — picker / stash visible for retry.
-    expect(wrap.find('[data-test="io-import-v2-picker"]').exists()).toBe(true);
+    expect(wrap.find('[data-test="io-import-picker"]').exists()).toBe(true);
   });
 
   it("post-commit broken refs surface via warning store", async () => {
@@ -392,7 +390,7 @@ describe("ImportExport.vue — commit orchestrator", () => {
       (x) => x.severity === "info" && x.summary === "Nothing to import",
     );
     expect(info).toBeTruthy();
-    expect(wrap.find('[data-test="io-import-v2-stash"]').exists()).toBe(false);
+    expect(wrap.find('[data-test="io-import-stash"]').exists()).toBe(false);
     wrap.unmount();
   });
 
@@ -772,7 +770,7 @@ describe("ImportExport.vue — commit orchestrator", () => {
       // Get to picker mounted with the 2-entity payload (picker won't
       // auto-select multi-entity payloads — we drive selection-ready
       // directly to pick both ids in one go).
-      await wrap.find('[data-test="io-tab-import-v2"]').trigger("click");
+      await wrap.find('[data-test="io-tab-import"]').trigger("click");
       await flushPromises();
       await wrap.find('[data-test="import-paste-btn"]').trigger("click");
       await flushPromises();

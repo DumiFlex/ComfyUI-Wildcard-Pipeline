@@ -116,27 +116,12 @@ describe("api.categories", () => {
   });
 });
 
-describe("api.test + api.exportBundle + api.importBundle", () => {
+describe("api.test", () => {
   it("test endpoint forwards samples", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ results: [], histogram: {} }));
     await api.test({ type: "wildcard", payload: {}, instance: {}, samples: 3 });
     const init = fetchMock.mock.calls[0]![1] as RequestInit;
     expect(JSON.parse(init.body as string).samples).toBe(3);
-  });
-
-  it("exportBundle returns JSON", async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ version: 1, modules: [], categories: [] }));
-    const bundle = await api.exportBundle();
-    expect(bundle.version).toBe(1);
-  });
-
-  it("importBundle posts body", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ modules_imported: 1, categories_imported: 0, skipped: [] }),
-    );
-    await api.importBundle({ version: 1, modules: [], categories: [] });
-    const init = fetchMock.mock.calls[0]![1] as RequestInit;
-    expect(init.method).toBe("POST");
   });
 });
 

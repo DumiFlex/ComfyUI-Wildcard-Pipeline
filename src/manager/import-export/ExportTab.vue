@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Export tab — v2 picker UI.
+ * Export tab — picker UI.
  *
  * Loads the live library on mount, shows one PickerSection per bucket
  * (7 buckets: bundles, wildcards, fixed_values, combines, derivations,
@@ -570,7 +570,7 @@ function presetFavoritesOnly(): void {
 </script>
 
 <template>
-  <div class="wp-export-tab" data-test="export-tab-v2">
+  <div class="wp-export-tab" data-test="export-tab">
     <div
       class="wp-export-presets"
       role="group"
