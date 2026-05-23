@@ -43,6 +43,8 @@ import type { Badge } from "./PickerRow.vue";
 import type { RawPayload } from "./migrations";
 import type { IntegrityWarning } from "./parse";
 import { buildDepGraph, constraintsBothSidesIn, transitiveClosure } from "./dep-graph";
+import { detectCollisions, type CollisionState, type LibraryRow } from "./collision";
+import type { ModuleRow as FingerprintModuleRow } from "./fingerprint";
 
 /**
  * Minimal shape of an entity row in the payload, sufficient for the
@@ -54,12 +56,41 @@ interface PayloadEntity {
   name?: string;
   /** Set when the row passed through one or more migration steps. */
   migrated_from?: number;
+  /** Category cross-ref. Resolved against `props.payload.categories` for
+   *  the inline chip; null/undefined → no chip. */
+  category_id?: string | null;
+  /** Module type slug ("wildcard", "fixed_values", etc.). Present on
+   *  module-bucket entities. */
+  type?: string;
+}
+
+/**
+ * Subset of a payload category row needed for chip lookup. The picker
+ * only reads `id`, `name`, `color` — anything else (description, tags)
+ * is ignored.
+ */
+interface PayloadCategory {
+  id: string;
+  name?: string;
+  color?: string | null;
 }
 
 interface Props {
   payload: RawPayload;
   migratedEntityCount: number;
   integrityWarnings: IntegrityWarning[];
+  /**
+   * Optional receiver-library snapshot keyed by id. When set, the picker
+   * runs `detectCollisions` inline so each module-bucket row can carry
+   * an early conflict badge before the orchestrator's commit-time pass.
+   *
+   * Bundles + categories DO carry a `LibraryRow` entry in this map (the
+   * orchestrator builds it from `localBundles`), but only `id-presence`
+   * is consulted for the inline badge — bundle MOD detection runs
+   * separately downstream. When the prop is omitted entirely (unit tests
+   * mounting the picker in isolation), no collision badges are produced.
+   */
+  libraryRows?: Map<string, LibraryRow>;
 }
 
 const props = defineProps<Props>();
@@ -87,20 +118,68 @@ type BucketKey =
 interface BucketMeta {
   key: BucketKey;
   title: string;
+  /**
+   * Default `kind` slug for PickerRow's tinted icon when the bucket's
+   * entities don't carry their own `type` field (bundles, categories).
+   * Module buckets fall back to `entity.type` first; this default only
+   * kicks in for malformed payload rows missing a type.
+   */
+  kindFallback: string;
 }
 
 const BUCKETS: BucketMeta[] = [
-  { key: "bundles",      title: "Bundles" },
-  { key: "wildcards",    title: "Wildcards" },
-  { key: "fixed_values", title: "Fixed values" },
-  { key: "combines",     title: "Combines" },
-  { key: "derivations",  title: "Derivations" },
-  { key: "constraints",  title: "Constraints" },
-  { key: "categories",   title: "Categories" },
+  { key: "bundles",      title: "Bundles",      kindFallback: "bundle" },
+  { key: "wildcards",    title: "Wildcards",    kindFallback: "wildcard" },
+  { key: "fixed_values", title: "Fixed values", kindFallback: "fixed_values" },
+  { key: "combines",     title: "Combines",     kindFallback: "combine" },
+  { key: "derivations",  title: "Derivations",  kindFallback: "derivation" },
+  { key: "constraints",  title: "Constraints",  kindFallback: "constraint" },
+  { key: "categories",   title: "Categories",   kindFallback: "category" },
 ];
 
 function entitiesForBucket(bucket: BucketKey): PayloadEntity[] {
   return props.payload[bucket] as unknown as PayloadEntity[];
+}
+
+/**
+ * Resolve a `category_id` to `{name, color}` by scanning the payload's
+ * own `categories` bucket. Mirrors ExportTab's `lookupCategory` but
+ * reads from `props.payload.categories` (the migrated import payload's
+ * category list) instead of `categories.value` (the live receiver
+ * library). Returns `undefined` when the id is null/empty/unmatched so
+ * the caller can suppress the chip.
+ *
+ * The 7-bucket payload's category bucket is typed as
+ * `Array<Record<string, unknown>>` (see migrations.ts:44) — narrow each
+ * row via a defensive `id`-string check before reading.
+ */
+function lookupCategoryFromPayload(
+  categoryId: string | null | undefined,
+): { name: string; color?: string } | undefined {
+  if (!categoryId) return undefined;
+  const cats = props.payload.categories as unknown as PayloadCategory[];
+  const hit = cats.find((c) => c.id === categoryId);
+  if (!hit) return undefined;
+  return {
+    name: hit.name ?? hit.id,
+    color: typeof hit.color === "string" ? hit.color : undefined,
+  };
+}
+
+/**
+ * Derive the `kind` slug to pass to PickerRow for an entity. Module
+ * buckets prefer the entity's own `type` field (so a payload-claimed
+ * `derivation` row in the `wildcards` bucket — unlikely but possible —
+ * still gets its true icon). Bundle and category buckets always emit
+ * `"bundle"` / `"category"`. Falls back to the bucket's `kindFallback`
+ * for malformed module rows missing a type.
+ */
+function kindForEntity(entity: PayloadEntity, bucket: BucketMeta): string {
+  if (bucket.key === "bundles") return "bundle";
+  if (bucket.key === "categories") return "category";
+  return typeof entity.type === "string" && entity.type.length > 0
+    ? entity.type
+    : bucket.kindFallback;
 }
 
 const totalEntityCount = computed<number>(() =>
@@ -172,9 +251,49 @@ const warningIds = computed<Set<string>>(() => {
 });
 
 /**
+ * Run `detectCollisions` once per payload+library snapshot to produce a
+ * per-id collision state map across the FIVE module buckets. The result
+ * is an empty record when `libraryRows` is absent (unit tests or
+ * payloads loaded before the library finished loading).
+ *
+ * Bundles + categories are intentionally NOT fed to `detectCollisions`
+ * — bundles have their own MOD-detection flow downstream
+ * (bundle-fingerprint.ts) and categories merge by name. The picker
+ * surfaces a placeholder id-presence conflict for bundles separately
+ * in `badgesForEntity`; categories never get a conflict badge here.
+ */
+const collisionStates = computed<Record<string, CollisionState>>(() => {
+  if (!props.libraryRows) return {};
+  const incoming: Array<FingerprintModuleRow & { id: string }> = [];
+  const moduleBuckets: BucketKey[] = [
+    "wildcards", "fixed_values", "combines", "derivations", "constraints",
+  ];
+  for (const bk of moduleBuckets) {
+    const arr = props.payload[bk] as unknown as Array<
+      FingerprintModuleRow & { id: string }
+    >;
+    for (const row of arr) {
+      if (typeof row.id !== "string" || row.id.length === 0) continue;
+      incoming.push(row);
+    }
+  }
+  return detectCollisions(incoming, props.libraryRows);
+});
+
+/**
  * Categories don't carry `snapshot_fingerprint` (organizational metadata
  * merged-or-created by name; see parse.ts:62) so they get no integrity
  * badge. Every other bucket runs through `verifyOne` and can carry one.
+ *
+ * Inline conflict badge:
+ *   - Module buckets: surfaced when `collisionStates[id] === "conflict"`.
+ *     `silent-skip` is intentionally NOT badged — the entity will be
+ *     auto-excluded at commit time and a "duplicate" badge would be
+ *     misleading noise.
+ *   - Bundles: surfaced when `props.libraryRows.has(id)` is true. This
+ *     is a presence-only heads-up — the orchestrator's bundle MOD pass
+ *     runs the real classification later.
+ *   - Categories: never (name-merge, no id collision).
  */
 function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): Badge[] {
   const badges: Badge[] = [];
@@ -183,6 +302,15 @@ function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): Badge[] {
   }
   if (bucket !== "categories" && warningIds.value.has(entity.id)) {
     badges.push({ label: "integrity warning", kind: "warn" });
+  }
+  if (bucket === "bundles") {
+    if (props.libraryRows?.has(entity.id) === true) {
+      badges.push({ label: "conflict", kind: "warn" });
+    }
+  } else if (bucket !== "categories") {
+    if (collisionStates.value[entity.id] === "conflict") {
+      badges.push({ label: "conflict", kind: "warn" });
+    }
   }
   return badges;
 }
@@ -292,7 +420,7 @@ function emitContinue(): void {
           :title="bucket.title"
           :total-count="entitiesForBucket(bucket.key).length"
           :selected-count="selectedInBucket(bucket.key)"
-          :default-open="true"
+          :default-open="false"
           :data-test="`import-picker-section-${bucket.key}`"
           @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
         >
@@ -301,6 +429,10 @@ function emitContinue(): void {
             :key="`${bucket.key}:${entity.id}`"
             :uuid="entity.id"
             :name="entity.name ?? entity.id"
+            :kind="kindForEntity(entity, bucket)"
+            :category-name="lookupCategoryFromPayload(entity.category_id)?.name"
+            :category-color="lookupCategoryFromPayload(entity.category_id)?.color"
+            :show-id="true"
             :checked="isSelected(entity.id)"
             :badges="badgesForEntity(entity, bucket.key)"
             :dep-warnings="depWarningsForEntity(entity)"

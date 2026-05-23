@@ -731,6 +731,24 @@ function buildLibraryMap(): Map<string, LibraryRow> {
 }
 
 /**
+ * Reactive view of the same library map for `<ImportPicker>` to consume
+ * via its `libraryRows` prop. Recomputes whenever the live library
+ * reloads (after a successful import, after undo, on initial mount) so
+ * the inline conflict badges in the picker reflect the current state of
+ * the DB — not whatever was visible when the user first opened the
+ * import payload.
+ *
+ * Bundles get a `LibraryRow` entry too (snapshot_fingerprint may be
+ * undefined for them — that's fine, the picker only id-presence-checks
+ * bundles for the inline badge).
+ */
+const libraryRowsForPicker = computed<Map<string, LibraryRow>>(() => {
+  // Re-uses `buildLibraryMap` so module + bundle rows stay in lockstep
+  // with the commit-time partitioner; no risk of divergent badge logic.
+  return buildLibraryMap();
+});
+
+/**
  * Walk every selected id back to its source bucket and collect
  * `SelectedEntity` records. Ids that point at no bucket (defensive —
  * picker filtered to valid ids) are silently dropped. Collision state
@@ -1544,6 +1562,7 @@ watch(
         :payload="importV2State.payload"
         :migrated-entity-count="importV2State.migratedCount"
         :integrity-warnings="importV2State.integrityWarnings"
+        :library-rows="libraryRowsForPicker"
         data-test="io-import-v2-picker"
         @selection-ready="onImportV2SelectionReady"
       />
