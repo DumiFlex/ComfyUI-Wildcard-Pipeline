@@ -96,7 +96,7 @@ describe("PickerSection", () => {
     // is "false" so rotation is absent.
     const section = wrap.get(".wp-picker-section");
     expect(section.attributes("data-open")).toBe("false");
-    const chevron = wrap.get(".wp-picker-section__chevron-icon");
+    const chevron = wrap.get(".wp-picker-section__chevron");
     expect(chevron.attributes("class") ?? "").toMatch(/\bpi-angle-right\b/);
   });
 

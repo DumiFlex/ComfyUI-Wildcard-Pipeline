@@ -482,11 +482,11 @@ function presetFavoritesOnly(): void {
 <template>
   <div class="wp-export-tab" data-test="export-tab-v2">
     <div
-      class="wp-export-tab__presets"
+      class="wp-export-presets"
       role="group"
       aria-label="Quick selection presets"
     >
-      <span class="wp-export-tab__presets-label">QUICK SELECT</span>
+      <span class="wp-export-presets__label">Quick select</span>
       <button
         class="wp-preset-btn"
         data-test="preset-full"
@@ -544,11 +544,11 @@ function presetFavoritesOnly(): void {
       </PickerSection>
     </div>
 
-    <div class="wp-export-tab__footer" data-test="export-tab-footer">
+    <div class="wp-picker-footer" data-test="export-tab-footer">
       <Button
-        variant="ghost"
+        variant="secondary"
         size="sm"
-        icon="pi-share-alt"
+        icon="pi-sitemap"
         data-test="export-select-deps"
         :disabled="totalSelected === 0"
         @click="selectWithDependencies"
@@ -560,9 +560,9 @@ function presetFavoritesOnly(): void {
         :disabled="totalSelected === 0"
         @click="clearAll"
       >Deselect all</Button>
-      <div class="wp-export-tab__footer-spacer" />
+      <div class="wp-picker-footer__spacer" />
       <span
-        class="wp-export-tab__footer-counter"
+        class="wp-picker-footer__counter"
         data-test="export-tab-counter"
       ><strong>{{ totalSelected }}</strong> of {{ totalRowsCount }} selected</span>
       <Button
@@ -578,24 +578,27 @@ function presetFavoritesOnly(): void {
 </template>
 
 <style scoped>
+/* ExportTab — verbatim port from
+ * docs/superpowers/ui-prototypes/import-export-redesign.html
+ * lines 95-108 (presets) + 226-244 (footer). */
+
 .wp-export-tab {
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-.wp-export-tab__presets {
+.wp-export-presets {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
   padding: 9px 12px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   margin-bottom: 10px;
 }
-.wp-export-tab__presets-label {
+.wp-export-presets__label {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
   letter-spacing: 0.06em;
@@ -642,27 +645,25 @@ function presetFavoritesOnly(): void {
   padding: var(--wp-space-3) var(--wp-space-5);
 }
 
-.wp-export-tab__footer {
+.wp-picker-footer {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
   padding: 11px 14px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   margin-top: 10px;
 }
-.wp-export-tab__footer-spacer {
+.wp-picker-footer__spacer {
   flex: 1;
 }
-.wp-export-tab__footer-counter {
+.wp-picker-footer__counter {
   font-size: var(--wp-text-sm);
   color: var(--wp-text-muted);
   font-feature-settings: "tnum";
-  font-family: var(--wp-font);
 }
-.wp-export-tab__footer-counter strong {
+.wp-picker-footer__counter strong {
   color: var(--wp-text);
   font-weight: 600;
 }

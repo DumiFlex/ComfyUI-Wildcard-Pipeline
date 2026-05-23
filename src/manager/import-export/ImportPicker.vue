@@ -539,11 +539,11 @@ function emitContinue(): void {
       </PickerSection>
     </div>
 
-    <div class="wp-import-picker__footer" data-test="import-picker-footer">
+    <div class="wp-picker-footer" data-test="import-picker-footer">
       <Button
-        variant="ghost"
+        variant="secondary"
         size="sm"
-        icon="pi-share-alt"
+        icon="pi-sitemap"
         data-test="import-picker-select-deps"
         :disabled="selected.size === 0"
         @click="selectWithDependencies"
@@ -555,9 +555,9 @@ function emitContinue(): void {
         :disabled="selected.size === 0"
         @click="deselectAll"
       >Deselect all</Button>
-      <div class="wp-import-picker__footer-spacer" />
+      <div class="wp-picker-footer__spacer" />
       <span
-        class="wp-import-picker__footer-counter"
+        class="wp-picker-footer__counter"
         data-test="import-picker-selected-count"
       ><strong>{{ selected.size }}</strong> of {{ totalEntityCount }} selected</span>
       <Button
@@ -572,6 +572,10 @@ function emitContinue(): void {
 </template>
 
 <style scoped>
+/* ImportPicker — verbatim port from
+ * docs/superpowers/ui-prototypes/import-export-redesign.html §03 + §04
+ * (sections + footer mirror ExportTab). */
+
 .wp-import-picker {
   display: flex;
   flex-direction: column;
@@ -605,27 +609,25 @@ function emitContinue(): void {
   padding: var(--wp-space-3) var(--wp-space-5);
 }
 
-.wp-import-picker__footer {
+.wp-picker-footer {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
   padding: 11px 14px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   margin-top: 10px;
 }
-.wp-import-picker__footer-spacer {
+.wp-picker-footer__spacer {
   flex: 1;
 }
-.wp-import-picker__footer-counter {
+.wp-picker-footer__counter {
   font-size: var(--wp-text-sm);
   color: var(--wp-text-muted);
   font-feature-settings: "tnum";
-  font-family: var(--wp-font);
 }
-.wp-import-picker__footer-counter strong {
+.wp-picker-footer__counter strong {
   color: var(--wp-text);
   font-weight: 600;
 }

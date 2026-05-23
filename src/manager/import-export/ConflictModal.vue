@@ -401,6 +401,149 @@ function batchRowName(conflict: BatchConflict): string {
   if (typeof raw === "string" && raw.length > 0) return raw;
   return conflict.id;
 }
+
+// ---------- Visual helpers added for the prototype port (template-only) ----------
+
+/**
+ * Map an `EntityKind` (canonical 7-bucket discriminant) to the
+ * `.wp-row-type-icon--{slug}` tint class used by the shared row
+ * primitives. Mirrors PickerRow's KIND_CLASS — `fixed_values → fixed`,
+ * `category → category`, unknown kinds fall back to `bundle`.
+ */
+const KIND_CLASS: Record<string, string> = {
+  wildcard:     "wildcard",
+  fixed_values: "fixed",
+  combine:      "combine",
+  derivation:   "derivation",
+  constraint:   "constraint",
+  bundle:       "bundle",
+  category:     "category",
+};
+
+/** Canonical pi-icon class per kind — mirrors `kindIcon` from
+ *  `shared/kind-icons` plus a `category → folder` fallback for the
+ *  org-meta entity (categories don't appear in `kind-icons` since they
+ *  aren't a module subtype). */
+function iconForKind(kind: string): string {
+  if (kind === "wildcard")     return "pi pi-sparkles";
+  if (kind === "fixed_values") return "pi pi-tag";
+  if (kind === "combine")      return "pi pi-link";
+  if (kind === "derivation")   return "pi pi-arrow-right-arrow-left";
+  if (kind === "constraint")   return "pi pi-filter";
+  if (kind === "bundle")       return "pi pi-box";
+  if (kind === "category")     return "pi pi-folder";
+  return "pi pi-circle";
+}
+
+function overrideRowKindClass(conflict: BatchConflict): string {
+  return KIND_CLASS[conflict.kind] ?? "bundle";
+}
+function overrideRowIconClass(conflict: BatchConflict): string {
+  return iconForKind(conflict.kind);
+}
+
+/**
+ * Read the `kind` slug off a per-item issue's entity (its bucket).
+ * The issue's `entity` blob is a plain `Record<string, unknown>`, so
+ * narrow with a defensive `typeof` check before reading. Falls back
+ * to `bundle` for any malformed row (no kind crash on render).
+ */
+function entityKind(issue: PerItemIssue): string {
+  const raw = (issue.entity as { kind?: unknown; type?: unknown }).kind
+    ?? (issue.entity as { kind?: unknown; type?: unknown }).type;
+  return typeof raw === "string" && raw.length > 0 ? raw : "bundle";
+}
+
+function issueRowKindClass(issue: PerItemIssue): string {
+  return KIND_CLASS[entityKind(issue)] ?? "bundle";
+}
+function issueRowIconClass(issue: PerItemIssue): string {
+  return iconForKind(entityKind(issue));
+}
+
+/**
+ * Short uppercase badge label per per-item issue kind. The prototype
+ * shows "MISSING DEP" for broken-ref kinds (line 988); other kinds
+ * surface their semantically-closest taxonomy term so the row's badge
+ * still reads as an alert at a glance.
+ */
+function issueBadgeLabel(issue: PerItemIssue): string {
+  if (issue.kind === "broken-inner-ref")     return "MISSING DEP";
+  if (issue.kind === "broken-uuid-ref")      return "MISSING DEP";
+  if (issue.kind === "broken-constraint-ref")return "MISSING DEP";
+  if (issue.kind === "fingerprint-mismatch") return "FINGERPRINT";
+  if (issue.kind === "lossy-migration")      return "LOSSY";
+  return "ISSUE";
+}
+
+/**
+ * One-liner detail text under the row name. Mirrors the prototype's
+ * "References @{deadbeef} — not in payload, not in library. Importing
+ * will leave one dangling ref on this combine template." (line 990).
+ * Pulls the `target` id (if present) out of the issue's `detail` blob
+ * defensively so the modal degrades to a generic line on malformed
+ * payloads.
+ */
+function issueDetailText(issue: PerItemIssue): string {
+  const d = issue.detail;
+  let targetId: string | undefined;
+  if (d && typeof d === "object") {
+    const t = (d as { target?: unknown }).target;
+    if (typeof t === "string" && t.length > 0) targetId = t;
+  }
+  if (issue.kind === "broken-inner-ref" || issue.kind === "broken-uuid-ref" || issue.kind === "broken-constraint-ref") {
+    if (targetId) {
+      return `References @{${targetId}} — not in payload, not in library. Importing will leave a dangling ref.`;
+    }
+    return "References an entity that is not in the payload or the library.";
+  }
+  if (issue.kind === "fingerprint-mismatch") {
+    return "Payload-stamped fingerprint disagrees with the row content.";
+  }
+  if (issue.kind === "lossy-migration") {
+    return "Migration chain ran but dropped fields from the original payload.";
+  }
+  return "";
+}
+
+/** Count of per-item issues that are NOT tier-3 — used in the modal
+ *  title bar's `N missing dep` counter. */
+const perItemIssuesNonTier3Count = computed<number>(() => {
+  let n = 0;
+  for (const issue of props.perItemIssues) if (issue.kind !== "tier-3") n += 1;
+  return n;
+});
+
+/** Tier-3 issue count — used in the modal title bar's `N tier-3`
+ *  counter. */
+const perItemIssuesTier3Count = computed<number>(() => {
+  let n = 0;
+  for (const issue of props.perItemIssues) if (issue.kind === "tier-3") n += 1;
+  return n;
+});
+
+/**
+ * Item count for the primary import button label. Counts every batch
+ * conflict (minus the ones the user resolved to "skip") plus every
+ * per-item issue resolved to anything other than "skip". A coarse
+ * lower-bound on the rows that will actually land in the library; the
+ * orchestrator does the precise commit-time math.
+ */
+const importItemCount = computed<number>(() => {
+  let n = 0;
+  for (const c of props.batchConflicts) {
+    const dec = perItemDecisions.value[c.id];
+    if (dec && dec.kind === "skip") continue;
+    if (!dec && batchDefault.value === "skip") continue;
+    n += 1;
+  }
+  for (const issue of props.perItemIssues) {
+    const dec = perItemDecisions.value[issue.entity.id];
+    if (!dec) continue;
+    if (dec.kind !== "skip") n += 1;
+  }
+  return n;
+});
 </script>
 
 <template>
@@ -410,236 +553,290 @@ function batchRowName(conflict: BatchConflict): string {
     size="lg"
     @update:open="onModalUpdateOpen"
   >
-    <div class="wp-conflict-modal" data-test="conflict-modal">
-      <p class="wp-conflict-modal__summary" data-test="conflict-modal-summary">
-        {{ props.batchConflicts.length }}
-        {{ props.batchConflicts.length === 1 ? "batch conflict" : "batch conflicts" }},
-        {{ props.perItemIssues.length }}
-        {{ props.perItemIssues.length === 1 ? "per-item issue" : "per-item issues" }}.
-      </p>
-
-      <section
-        v-if="props.batchConflicts.length > 0"
-        class="wp-conflict-modal__section"
-        data-test="conflict-modal-batch-section"
+    <template #header>
+      <span
+        class="wp-modal-shell__title-counts"
+        data-test="conflict-modal-summary"
       >
-        <h4 class="wp-conflict-modal__section-title">Batch resolution</h4>
-        <p class="wp-conflict-modal__section-hint">
-          UUID collisions ({{ props.batchConflicts.length }})
-          — applied uniformly to all matching rows.
-        </p>
-        <div class="wp-conflict-modal__batch-row">
-          <span class="wp-conflict-modal__batch-label">Default action</span>
-          <div
-            class="wp-action-group"
-            role="radiogroup"
-            aria-label="Default action for batch conflicts"
-            data-test="batch-action-group"
-          >
-            <button
-              type="button"
-              class="wp-action-group__btn"
-              role="radio"
-              :aria-checked="batchDefault === 'skip' ? 'true' : 'false'"
-              :data-active="batchDefault === 'skip' ? 'true' : 'false'"
-              data-test="batch-action-skip"
-              @click="setBatchDefault('skip')"
+        {{ props.batchConflicts.length }} modified ·
+        {{ perItemIssuesNonTier3Count }} missing dep ·
+        {{ perItemIssuesTier3Count }} tier-3
+      </span>
+    </template>
+
+    <div class="wp-conflict-modal" data-test="conflict-modal">
+
+      <template v-if="props.batchConflicts.length > 0">
+        <div
+          class="wp-conflict-modal__section-title"
+          data-test="conflict-modal-batch-section"
+        >
+          Batch resolution
+          <span class="wp-conflict-modal__section-count">
+            {{ props.batchConflicts.length }} modified
+          </span>
+        </div>
+
+        <div class="wp-conflict-modal__batch-card">
+          <div class="wp-conflict-modal__batch-head">
+            <span class="wp-conflict-modal__batch-label">
+              Apply to all <strong>{{ props.batchConflicts.length }} modified</strong> rows:
+            </span>
+            <div
+              class="wp-action-group"
+              role="radiogroup"
+              aria-label="Default action for batch conflicts"
+              data-test="batch-action-group"
             >
-              <i class="pi pi-times" aria-hidden="true" /> Skip
-            </button>
-            <button
-              type="button"
-              class="wp-action-group__btn"
-              role="radio"
-              :aria-checked="batchDefault === 'replace' ? 'true' : 'false'"
-              :data-active="batchDefault === 'replace' ? 'true' : 'false'"
-              data-test="batch-action-replace"
-              @click="setBatchDefault('replace')"
-            >
-              <i class="pi pi-arrow-circle-down" aria-hidden="true" /> Replace
-            </button>
-            <button
-              type="button"
-              class="wp-action-group__btn"
-              role="radio"
-              :aria-checked="batchDefault === 'rename' ? 'true' : 'false'"
-              :data-active="batchDefault === 'rename' ? 'true' : 'false'"
-              data-test="batch-action-rename"
-              @click="setBatchDefault('rename')"
-            >
-              <i class="pi pi-plus" aria-hidden="true" /> Import as new
-            </button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                role="radio"
+                :aria-checked="batchDefault === 'skip' ? 'true' : 'false'"
+                :data-active="batchDefault === 'skip' ? 'true' : 'false'"
+                data-test="batch-action-skip"
+                @click="setBatchDefault('skip')"
+              >
+                <i class="pi pi-times" aria-hidden="true" /> Skip
+              </button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                role="radio"
+                :aria-checked="batchDefault === 'replace' ? 'true' : 'false'"
+                :data-active="batchDefault === 'replace' ? 'true' : 'false'"
+                data-test="batch-action-replace"
+                @click="setBatchDefault('replace')"
+              >
+                <i class="pi pi-arrow-circle-down" aria-hidden="true" /> Replace
+              </button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                role="radio"
+                :aria-checked="batchDefault === 'rename' ? 'true' : 'false'"
+                :data-active="batchDefault === 'rename' ? 'true' : 'false'"
+                data-test="batch-action-rename"
+                @click="setBatchDefault('rename')"
+              >
+                <i class="pi pi-plus" aria-hidden="true" /> Import as new
+              </button>
+            </div>
           </div>
           <button
             type="button"
-            class="wp-conflict-modal__btn wp-conflict-modal__batch-override-toggle"
+            class="wp-conflict-modal__override-toggle"
             :aria-expanded="batchExpanded ? 'true' : 'false'"
             aria-controls="wp-conflict-modal-batch-overrides"
             data-test="batch-override-toggle"
             @click="batchExpanded = !batchExpanded"
           >
+            <i
+              :class="batchExpanded ? 'pi pi-angle-down' : 'pi pi-angle-right'"
+              aria-hidden="true"
+            />
             {{ batchExpanded ? "Hide per-conflict overrides" : "Show per-conflict overrides" }}
           </button>
-        </div>
-        <ul
-          v-if="batchExpanded"
-          id="wp-conflict-modal-batch-overrides"
-          class="wp-conflict-modal__batch-override-list"
-          data-test="batch-override-list"
-        >
-          <li
-            v-for="conflict in props.batchConflicts"
-            :key="conflict.id"
-            class="wp-conflict-modal__batch-override-row"
-            :data-test="`batch-override-row-${conflict.id}`"
+          <div
+            v-if="batchExpanded"
+            id="wp-conflict-modal-batch-overrides"
+            class="wp-conflict-modal__override-list"
+            data-test="batch-override-list"
           >
-            <span class="wp-conflict-modal__batch-override-name">
-              {{ batchRowName(conflict) }}
-            </span>
             <div
-              class="wp-action-group wp-action-group--sm"
-              role="radiogroup"
-              :aria-label="`Override action for ${batchRowName(conflict)}`"
-              :data-test="`batch-override-group-${conflict.id}`"
+              v-for="conflict in props.batchConflicts"
+              :key="conflict.id"
+              class="wp-conflict-modal__override-row"
+              :data-test="`batch-override-row-${conflict.id}`"
             >
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                role="radio"
-                :aria-checked="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
-                :data-active="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
-                :data-test="`batch-override-${conflict.id}-default`"
-                @click="setBatchOverride(conflict.id, 'default')"
-              >Default</button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                role="radio"
-                :aria-checked="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
-                :data-active="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
-                :data-test="`batch-override-${conflict.id}-skip`"
-                @click="setBatchOverride(conflict.id, 'skip')"
-              >Skip</button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                role="radio"
-                :aria-checked="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
-                :data-active="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
-                :data-test="`batch-override-${conflict.id}-replace`"
-                @click="setBatchOverride(conflict.id, 'replace')"
-              >Replace</button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                role="radio"
-                :aria-checked="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
-                :data-active="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
-                :data-test="`batch-override-${conflict.id}-rename`"
-                @click="setBatchOverride(conflict.id, 'rename')"
-              >Import as new</button>
+              <span
+                class="wp-row-type-icon"
+                :class="`wp-row-type-icon--${overrideRowKindClass(conflict)}`"
+                aria-hidden="true"
+              >
+                <i :class="overrideRowIconClass(conflict)" />
+              </span>
+              <div class="wp-row-name">
+                <span class="wp-picker-row__name">{{ batchRowName(conflict) }}</span>
+                <span class="wp-id">{{ conflict.id.slice(0, 8) }}</span>
+                <span
+                  class="wp-mod-badge wp-mod-badge--mod"
+                  style="margin-left: auto"
+                >MODIFIED</span>
+              </div>
+              <span
+                class="wp-override-tag"
+                :class="batchOverrideFor(conflict.id) !== 'default'
+                  ? 'wp-override-tag--set' : ''"
+              >{{ batchOverrideFor(conflict.id) === 'default'
+                ? 'Use batch default'
+                : 'Override' }}</span>
+              <div
+                class="wp-action-group wp-action-group--sm"
+                role="radiogroup"
+                :aria-label="`Override action for ${batchRowName(conflict)}`"
+                :data-test="`batch-override-group-${conflict.id}`"
+              >
+                <button
+                  type="button"
+                  class="wp-action-group__btn"
+                  role="radio"
+                  :aria-checked="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
+                  :data-active="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
+                  :data-test="`batch-override-${conflict.id}-default`"
+                  @click="setBatchOverride(conflict.id, 'default')"
+                >Default</button>
+                <button
+                  type="button"
+                  class="wp-action-group__btn"
+                  role="radio"
+                  :aria-checked="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
+                  :data-active="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
+                  :data-test="`batch-override-${conflict.id}-skip`"
+                  @click="setBatchOverride(conflict.id, 'skip')"
+                >Skip</button>
+                <button
+                  type="button"
+                  class="wp-action-group__btn"
+                  role="radio"
+                  :aria-checked="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
+                  :data-active="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
+                  :data-test="`batch-override-${conflict.id}-replace`"
+                  @click="setBatchOverride(conflict.id, 'replace')"
+                >Replace</button>
+                <button
+                  type="button"
+                  class="wp-action-group__btn"
+                  role="radio"
+                  :aria-checked="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
+                  :data-active="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
+                  :data-test="`batch-override-${conflict.id}-rename`"
+                  @click="setBatchOverride(conflict.id, 'rename')"
+                >Import as new</button>
+              </div>
             </div>
-          </li>
-        </ul>
-      </section>
+          </div>
+        </div>
+      </template>
 
-      <section
-        v-if="props.perItemIssues.length > 0"
-        class="wp-conflict-modal__section"
-        data-test="conflict-modal-per-item-section"
-      >
-        <h4 class="wp-conflict-modal__section-title">Per-item issues</h4>
-        <ul class="wp-conflict-modal__items">
-          <li
-            v-for="issue in props.perItemIssues"
-            :key="issue.entity.id"
-            class="wp-conflict-modal__item"
-            :data-test="`conflict-modal-item-${issue.entity.id}`"
-          >
-            <template v-if="issue.kind === 'tier-3'">
+      <template v-if="props.perItemIssues.length > 0">
+        <div
+          class="wp-conflict-modal__section-title"
+          data-test="conflict-modal-per-item-section"
+        >
+          Per-item issues
+          <span class="wp-conflict-modal__section-count">
+            {{ props.perItemIssues.length }}
+            {{ props.perItemIssues.length === 1 ? "issue" : "issues" }}
+          </span>
+        </div>
+
+        <div
+          v-for="issue in props.perItemIssues"
+          :key="issue.entity.id"
+          class="wp-conflict-modal__item-row"
+          :class="{ 'wp-conflict-modal__item-row--tier3': issue.kind === 'tier-3' }"
+          :data-tier="issue.kind === 'tier-3' ? '3' : undefined"
+          :data-test="`conflict-modal-item-${issue.entity.id}`"
+        >
+          <template v-if="issue.kind === 'tier-3'">
+            <div class="wp-conflict-modal__tier3-body">
               <Tier3ChainViz
                 :bundle-name="issue.entity.name ?? issue.entity.id"
                 :chain="extractChain(issue)"
               />
-              <div
-                v-if="perItemDecisions[issue.entity.id]"
-                class="wp-conflict-modal__resolved"
-                :data-test="`resolved-${issue.entity.id}`"
-              >
-                <span aria-hidden="true">✓</span>
-                {{ labelForKind(perItemDecisions[issue.entity.id].kind) }}
-              </div>
-              <!-- Tier-3 is non-overridable per spec lock #9; only the
-                   Skip path is offered. Single-button group instead of
-                   a segmented control because there's nothing to switch
-                   between. The Tier3ChainViz above shows the *why*. -->
-              <div v-else class="wp-conflict-modal__actions">
-                <button
-                  type="button"
-                  class="wp-conflict-modal__btn"
-                  :data-test="`resolve-${issue.entity.id}-skip`"
-                  @click="resolveItem(issue.entity.id, 'skip')"
-                >Skip</button>
-              </div>
-            </template>
-            <template v-else>
-              <div class="wp-conflict-modal__item-meta">
-                <span class="wp-conflict-modal__row-name">
-                  {{ issue.entity.name ?? issue.entity.id }}
+            </div>
+            <div
+              v-if="perItemDecisions[issue.entity.id]"
+              class="wp-conflict-modal__resolved"
+              :data-test="`resolved-${issue.entity.id}`"
+            >
+              <span aria-hidden="true">✓</span>
+              {{ labelForKind(perItemDecisions[issue.entity.id].kind) }}
+            </div>
+            <!-- Tier-3 is non-overridable per spec lock #9; only the
+                 Skip path is offered. Single-button group instead of
+                 a segmented control because there's nothing to switch
+                 between. The Tier3ChainViz above shows the *why*. -->
+            <div v-else class="wp-action-group">
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                :data-test="`resolve-${issue.entity.id}-skip`"
+                @click="resolveItem(issue.entity.id, 'skip')"
+              ><i class="pi pi-times" aria-hidden="true" /> Skip</button>
+            </div>
+          </template>
+          <template v-else>
+            <span
+              class="wp-row-type-icon"
+              :class="`wp-row-type-icon--${issueRowKindClass(issue)}`"
+              aria-hidden="true"
+            >
+              <i :class="issueRowIconClass(issue)" />
+            </span>
+            <div>
+              <div class="wp-row-name" style="margin-bottom: 2px">
+                <span class="wp-picker-row__name">{{ issue.entity.name ?? issue.entity.id }}</span>
+                <span class="wp-id">{{ issue.entity.id.slice(0, 8) }}</span>
+                <span class="wp-mod-badge wp-mod-badge--missing">
+                  {{ issueBadgeLabel(issue) }}
                 </span>
-                <span class="wp-conflict-modal__row-kind">{{ issue.kind }}</span>
               </div>
-              <div
-                v-if="perItemDecisions[issue.entity.id]"
-                class="wp-conflict-modal__resolved"
-                :data-test="`resolved-${issue.entity.id}`"
-                :title="perItemDecisions[issue.entity.id].kind === 'rename'
-                  ? perItemDecisions[issue.entity.id].new_name
-                  : undefined"
-              >
-                <span aria-hidden="true">✓</span>
-                {{ labelForKind(perItemDecisions[issue.entity.id].kind) }}
+              <div class="wp-conflict-modal__item-detail">
+                {{ issueDetailText(issue) }}
               </div>
-              <ImportAsNewRename
-                v-else-if="renamingIds.has(issue.entity.id)"
-                :original-name="issue.entity.name ?? issue.entity.id"
-                @applied="(p) => onRenameApplied(issue.entity.id, p)"
-                @cancel="onRenameCancel(issue.entity.id)"
-              />
-              <!-- Non-tier-3 per-item issues get the 3-button segmented
-                   control. Note "Import anyway" keeps its distinct label
-                   (it's not a UUID-collision replace — could be a
-                   fingerprint mismatch, broken ref, etc.). -->
-              <div
-                v-else
-                class="wp-action-group"
-                role="radiogroup"
-                :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
-                :data-test="`resolve-group-${issue.entity.id}`"
-              >
-                <button
-                  type="button"
-                  class="wp-action-group__btn"
-                  :data-test="`resolve-${issue.entity.id}-skip`"
-                  @click="resolveItem(issue.entity.id, 'skip')"
-                ><i class="pi pi-times" aria-hidden="true" /> Skip</button>
-                <button
-                  type="button"
-                  class="wp-action-group__btn"
-                  :data-test="`resolve-${issue.entity.id}-rename`"
-                  @click="startRename(issue.entity.id)"
-                ><i class="pi pi-plus" aria-hidden="true" /> Import as new</button>
-                <button
-                  type="button"
-                  class="wp-action-group__btn"
-                  :data-test="`resolve-${issue.entity.id}-accept`"
-                  @click="resolveItem(issue.entity.id, 'accept')"
-                ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
-              </div>
-            </template>
-          </li>
-        </ul>
-      </section>
+            </div>
+            <div
+              v-if="perItemDecisions[issue.entity.id]"
+              class="wp-conflict-modal__resolved"
+              :data-test="`resolved-${issue.entity.id}`"
+              :title="perItemDecisions[issue.entity.id].kind === 'rename'
+                ? perItemDecisions[issue.entity.id].new_name
+                : undefined"
+            >
+              <span aria-hidden="true">✓</span>
+              {{ labelForKind(perItemDecisions[issue.entity.id].kind) }}
+            </div>
+            <ImportAsNewRename
+              v-else-if="renamingIds.has(issue.entity.id)"
+              :original-name="issue.entity.name ?? issue.entity.id"
+              @applied="(p) => onRenameApplied(issue.entity.id, p)"
+              @cancel="onRenameCancel(issue.entity.id)"
+            />
+            <!-- Non-tier-3 per-item issues get the 3-button segmented
+                 control. Note "Import anyway" keeps its distinct label
+                 (it's not a UUID-collision replace — could be a
+                 fingerprint mismatch, broken ref, etc.). -->
+            <div
+              v-else
+              class="wp-action-group"
+              role="radiogroup"
+              :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
+              :data-test="`resolve-group-${issue.entity.id}`"
+            >
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                :data-test="`resolve-${issue.entity.id}-skip`"
+                @click="resolveItem(issue.entity.id, 'skip')"
+              ><i class="pi pi-times" aria-hidden="true" /> Skip</button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                :data-test="`resolve-${issue.entity.id}-rename`"
+                @click="startRename(issue.entity.id)"
+              ><i class="pi pi-plus" aria-hidden="true" /> Import as new</button>
+              <button
+                type="button"
+                class="wp-action-group__btn"
+                :data-test="`resolve-${issue.entity.id}-accept`"
+                @click="resolveItem(issue.entity.id, 'accept')"
+              ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
 
     <template #footer>
@@ -648,101 +845,92 @@ function batchRowName(conflict: BatchConflict): string {
         class="wp-conflict-modal__unresolved"
         data-test="conflict-modal-unresolved"
       >{{ unresolvedCount }} unresolved</span>
-      <span v-else class="wp-conflict-modal__ready" data-test="conflict-modal-ready">
-        Ready to import
+      <span
+        v-else
+        class="wp-conflict-modal__ready"
+        data-test="conflict-modal-ready"
+      >
+        <i class="pi pi-check-circle" aria-hidden="true" />
+        All issues resolved
       </span>
       <span class="wp-conflict-modal__spacer" />
       <button
         type="button"
-        class="wp-conflict-modal__btn"
+        class="wp-btn wp-btn--ghost"
         data-test="cancel-btn"
         @click="onCancel"
       >Cancel</button>
       <button
         type="button"
-        class="wp-conflict-modal__btn wp-conflict-modal__btn--primary"
+        class="wp-btn wp-btn--primary"
         :disabled="unresolvedCount > 0"
         data-test="commit-btn"
         @click="onCommit"
-      >Import</button>
+      >Import {{ importItemCount }} items</button>
     </template>
   </Modal>
 </template>
 
 <style scoped>
+@import "../../components/shared/row-primitives.css";
+
+/* ConflictModal — verbatim port from
+ * docs/superpowers/ui-prototypes/import-export-redesign.html
+ * lines 246-318 (§05 modal shell + segmented control + override list +
+ * item rows). */
+
 .wp-conflict-modal {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-5);
   color: var(--wp-text);
 }
 
-.wp-conflict-modal__summary {
-  margin: 0;
+/* Title-row counts (right side of the modal header). Mirrors prototype
+ * line 254. */
+:deep(.wp-modal-shell__title-counts),
+.wp-modal-shell__title-counts {
+  margin-left: auto;
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
+  font-weight: 500;
+  font-family: var(--wp-font-mono);
 }
 
-.wp-conflict-modal__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-4);
-  padding: var(--wp-space-5);
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-}
-
+/* Section title — uppercase label + count chip. Prototype lines 261-267. */
 .wp-conflict-modal__section-title {
-  margin: 0;
-  font-size: var(--wp-text-md);
-  line-height: var(--wp-line-md);
-}
-
-.wp-conflict-modal__section-hint {
-  margin: 0;
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-}
-
-.wp-conflict-modal__batch-row {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--wp-text-dim);
+  margin: 18px 0 8px;
   display: flex;
   align-items: center;
-  gap: var(--wp-space-4);
+  gap: 8px;
 }
-
-.wp-conflict-modal__batch-label {
-  font-size: var(--wp-text-sm);
+.wp-conflict-modal__section-title:first-child { margin-top: 0; }
+.wp-conflict-modal__section-count {
+  background: var(--wp-bg-3);
   color: var(--wp-text-muted);
-  font-weight: var(--wp-weight-semibold);
+  font-family: var(--wp-font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 2px;
+  letter-spacing: 0;
 }
 
-/* ---- Segmented action-group (Phase 3) -----------------------------
- *
- * Replaces the dropdowns previously used for batch default, per-row
- * batch override, and the per-item issue button trio. Three sizes:
- *
- *   - default       — used for the batch default + per-item issue rows.
- *   - `--sm`        — used for the per-row override list (slightly
- *                     reduced padding so it nests inside the batch
- *                     section without dominating).
- *
- * `data-active="true"` on the chosen button paints the accent fill.
- * Keep the `border-right` chain working: last child drops the divider.
- */
+/* Action group — 3-button segmented control. Prototype lines 269-280. */
 .wp-action-group {
   display: inline-flex;
   border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius);
   overflow: hidden;
   background: var(--wp-bg-2);
-  flex: 0 0 auto;
 }
 .wp-action-group__btn {
   background: transparent;
   border: none;
   color: var(--wp-text-muted);
-  font-family: var(--wp-font-sans);
+  font-family: var(--wp-font);
   font-size: var(--wp-text-sm);
   font-weight: 500;
   padding: 5px 12px;
@@ -753,180 +941,209 @@ function batchRowName(conflict: BatchConflict): string {
   border-right: 1px solid var(--wp-border-strong);
 }
 .wp-action-group__btn:last-child { border-right: none; }
-.wp-action-group__btn:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-action-group__btn:focus-visible {
-  outline: none;
-  box-shadow: var(--wp-focus-ring);
-  /* Pull the ring inside the rounded group so it doesn't escape the
-     overflow:hidden clip — the focus ring stays visible because the
-     box-shadow ignores the parent's overflow. */
-  position: relative;
-  z-index: 1;
+.wp-action-group__btn:hover {
+  background: var(--wp-bg-3);
+  color: var(--wp-text);
 }
 .wp-action-group__btn[data-active="true"] {
   background: var(--wp-accent-600);
-  /* audit-exempt: white on accent fill ≥4.5:1 in both themes */
   color: #fff;
   font-weight: 600;
 }
 .wp-action-group__btn[data-active="true"]:hover { background: var(--wp-accent-500); }
 .wp-action-group__btn .pi { font-size: 10px; }
 
-.wp-action-group--sm .wp-action-group__btn {
-  padding: 4px 9px;
-  font-size: var(--wp-text-xs);
+/* Per-row override list scales the segmented control down to fit
+ * inside the row. Prototype lines 940/954/968 use
+ * `transform: scale(0.92); transform-origin: right center` inline. */
+.wp-action-group--sm {
+  transform: scale(0.92);
+  transform-origin: right center;
 }
 
-.wp-conflict-modal__batch-override-toggle {
-  /* Sits next to the batch default <select> in the same row; keep it
-     compact so it doesn't fight the dropdown for horizontal space.
-     `flex: 0 0 auto` cancels the parent's flex stretch that the select
-     uses via `flex: 1`. */
-  flex: 0 0 auto;
-  white-space: nowrap;
+/* Batch card — single rounded card containing the batch label + inline
+ * segmented control on one row, the override-toggle below, and the
+ * expanded override list further below. Prototype lines 282-292. */
+.wp-conflict-modal__batch-card {
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  padding: 12px 14px;
 }
-
-.wp-conflict-modal__batch-override-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-2);
-}
-
-.wp-conflict-modal__batch-override-row {
+.wp-conflict-modal__batch-head {
   display: flex;
   align-items: center;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-3) var(--wp-space-4);
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
+  gap: 10px;
+  margin-bottom: 10px;
 }
-
-.wp-conflict-modal__batch-override-name {
+.wp-conflict-modal__batch-label {
   flex: 1;
   font-size: var(--wp-text-sm);
-  font-weight: var(--wp-weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
+  color: var(--wp-text);
 }
-
-.wp-conflict-modal__items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-3);
+.wp-conflict-modal__batch-label strong {
+  color: var(--wp-text);
+  font-weight: 600;
 }
-
-.wp-conflict-modal__item {
-  display: flex;
+.wp-conflict-modal__override-toggle {
+  background: transparent;
+  border: 1px solid var(--wp-border-strong);
+  color: var(--wp-text-muted);
+  font-family: var(--wp-font);
+  font-size: var(--wp-text-xs);
+  padding: 4px 9px;
+  border-radius: var(--wp-radius-sm);
+  cursor: pointer;
+  display: inline-flex;
   align-items: center;
-  gap: var(--wp-space-4);
-  padding: var(--wp-space-4) var(--wp-space-5);
-  background: var(--wp-bg-2);
+  gap: 5px;
+  margin-top: 4px;
+}
+.wp-conflict-modal__override-toggle:hover {
+  color: var(--wp-text);
+  background: var(--wp-bg-4);
+}
+.wp-conflict-modal__override-toggle .pi { font-size: 9px; }
+
+/* Override list — one row per batch conflict. Prototype lines 294-304. */
+.wp-conflict-modal__override-list {
+  margin-top: 10px;
+  background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  overflow: hidden;
+}
+.wp-conflict-modal__override-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--wp-border) 50%, transparent);
+  font-size: var(--wp-text-sm);
+}
+.wp-conflict-modal__override-row:last-child { border-bottom: none; }
+
+/* Override-tag — small uppercase pill that says "Use batch default"
+ * (when no per-row override) or "Override" (set). Prototype lines 302-304. */
+.wp-override-tag {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--wp-text-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.wp-override-tag--set { color: var(--wp-accent-text); }
+
+/* Per-item issue rows — 3-col grid (icon + body + segmented control).
+ * Prototype lines 306-318. Tier-3 rows get a danger-tinted background. */
+.wp-conflict-modal__item-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 14px;
+  background: var(--wp-bg-3);
+  border-radius: var(--wp-radius);
+  margin-bottom: 6px;
+  font-size: var(--wp-text-sm);
+}
+.wp-conflict-modal__item-row[data-tier="3"] {
+  background: color-mix(in oklab, var(--wp-danger) 6%, var(--wp-bg-3));
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 22%, transparent);
+  /* Tier-3 row swaps the 3-col grid for a 2-col grid:
+   * full-width Tier3ChainViz body + a single Skip button on the right. */
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.wp-conflict-modal__tier3-body { min-width: 0; }
+.wp-conflict-modal__item-detail {
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.wp-conflict-modal__item-detail code {
+  font-family: var(--wp-font-mono);
+  background: color-mix(in oklab, var(--wp-bg-1) 80%, transparent);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 10px;
+}
+
+/* Override-row + item-row inherit the picker primitives — keep type-icon
+ * size consistent with PickerRow at 20x20 / 11px. */
+.wp-conflict-modal__override-row .wp-row-type-icon,
+.wp-conflict-modal__item-row .wp-row-type-icon {
+  width: 20px;
+  height: 20px;
   border-radius: var(--wp-radius-sm);
 }
-
-.wp-conflict-modal__item-meta {
-  flex: 1;
+.wp-conflict-modal__override-row .wp-row-type-icon .pi,
+.wp-conflict-modal__item-row .wp-row-type-icon .pi {
+  font-size: 11px;
+}
+.wp-conflict-modal__override-row .wp-row-name,
+.wp-conflict-modal__item-row .wp-row-name {
+  /* Explicit flex-direction: row to override the global
+   * `.wp-row-name { flex-direction: column }` from
+   * manager/styles/tokens.css:1002. */
   display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-2);
+  flex-direction: row;
+  align-items: baseline;
+  gap: 9px;
   min-width: 0;
 }
-
-.wp-conflict-modal__row-name {
-  font-weight: var(--wp-weight-medium);
+.wp-conflict-modal__override-row .wp-picker-row__name,
+.wp-conflict-modal__item-row .wp-picker-row__name {
+  font-weight: 500;
+  color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.wp-conflict-modal__row-kind {
-  font-size: var(--wp-text-xs);
-  color: var(--wp-warn);
+.wp-conflict-modal__override-row .wp-id,
+.wp-conflict-modal__item-row .wp-id {
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-dim);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.wp-conflict-modal__override-row .wp-mod-badge,
+.wp-conflict-modal__item-row .wp-mod-badge {
+  font-family: var(--wp-font);
+  font-weight: 700;
+  font-size: 9.5px;
+  line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: var(--wp-weight-semibold);
+  letter-spacing: 0.06em;
+  padding: 3px 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.wp-conflict-modal__actions {
-  display: flex;
-  gap: var(--wp-space-3);
-}
-
+/* Resolved-pill — the "✓ Skip" / "✓ Replace" indicator that replaces
+ * the segmented control once the user picks an action. */
 .wp-conflict-modal__resolved {
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
   font-style: italic;
 }
 
-.wp-conflict-modal__btn {
-  height: var(--wp-btn-h);
-  padding: 0 var(--wp-space-5);
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  font-family: inherit;
-  font-size: var(--wp-text-base);
-  font-weight: var(--wp-weight-medium);
-  cursor: pointer;
-  transition: background .12s, border-color .12s, color .12s;
-}
-.wp-conflict-modal__btn:hover:not(:disabled) {
-  background: var(--wp-bg-4);
-  border-color: var(--wp-border-strong);
-}
-.wp-conflict-modal__btn:focus-visible {
-  outline: none;
-  box-shadow: var(--wp-focus-ring);
-}
-.wp-conflict-modal__btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.wp-conflict-modal__btn--warn {
-  background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent);
-  color: var(--wp-warn);
-}
-.wp-conflict-modal__btn--warn:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--wp-warn) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn) 55%, transparent);
-}
-
-.wp-conflict-modal__btn--primary {
-  background: linear-gradient(180deg, var(--wp-accent-500), var(--wp-accent-600));
-  border-color: var(--wp-accent-600);
-  /* audit-exempt: white on accent gradient ≥4.5:1 across both themes */
-  color: #fff;
-}
-.wp-conflict-modal__btn--primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, var(--wp-accent-400), var(--wp-accent-500));
-  border-color: var(--wp-accent-500);
-}
-
+/* Footer state lines (left-aligned). */
 .wp-conflict-modal__unresolved {
   color: var(--wp-warn);
   font-size: var(--wp-text-sm);
-  font-weight: var(--wp-weight-semibold);
+  font-weight: 600;
 }
-
 .wp-conflict-modal__ready {
-  color: var(--wp-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wp-success);
   font-size: var(--wp-text-sm);
 }
-
-.wp-conflict-modal__spacer {
-  flex: 1;
-}
+.wp-conflict-modal__ready .pi { font-size: 11px; }
+.wp-conflict-modal__spacer { flex: 1; }
 </style>

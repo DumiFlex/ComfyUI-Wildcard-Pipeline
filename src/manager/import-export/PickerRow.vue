@@ -192,14 +192,14 @@ function depIconClass(d: DepRef): string {
       <i :class="iconClass" />
     </span>
 
-    <span class="wp-picker-row__name-cell">
+    <div class="wp-row-name">
       <span class="wp-picker-row__name">{{ name }}</span>
       <span
         v-if="props.showId"
         class="wp-id"
         data-test="picker-row-id"
       >{{ shortId }}</span>
-    </span>
+    </div>
 
     <span
       v-if="props.categoryName"
@@ -304,46 +304,41 @@ function depIconClass(d: DepRef): string {
  * carry isolation duty (see CLAUDE.md). */
 @import "../../components/shared/row-primitives.css";
 
-/* Picker-surface icon scale override — shared base is 16x16 (right for
- * ContextWidget rows); picker rows read better at 20x20 with a 12px
- * glyph since they're the surface a user scans for "what kind is this"
- * before clicking. Section headers (see PickerSection.vue) go a touch
- * larger (22x22 / 13px) since the header is a bigger visual unit. */
+/* PickerRow — verbatim port from
+ * docs/superpowers/ui-prototypes/import-export-redesign.html
+ * lines 143-224. */
+
+/* Picker-surface icon scale override — shared base is 16x16; prototype
+ * paints picker rows at 20x20 with an 11px glyph (lines 156-157). */
 .wp-picker-row .wp-row-type-icon {
   width: 20px;
   height: 20px;
+  border-radius: var(--wp-radius-sm);
 }
 .wp-picker-row .wp-row-type-icon .pi {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .wp-picker-row {
   display: grid;
   /* chev-spacer, checkbox, type-icon, name+id, cat-chip, status-badges, dep-chips */
   grid-template-columns: 14px 18px minmax(0, auto) minmax(0, 1fr) auto auto auto;
-  column-gap: 8px;
+  column-gap: 9px;
   align-items: center;
-  padding: 5px 14px;
-  font-size: var(--wp-text-sm);
-  color: var(--wp-text);
+  padding: 5px 14px 5px 32px;
   border-bottom: 1px solid color-mix(in oklab, var(--wp-border) 50%, transparent);
+  font-size: var(--wp-text-sm);
 }
 .wp-picker-row:last-child { border-bottom: none; }
 .wp-picker-row:hover {
-  background: color-mix(in oklab, var(--wp-bg-3) 65%, transparent);
+  background: color-mix(in oklab, var(--wp-bg-3) 35%, transparent);
 }
-
-/* Selected row — left accent stripe + tinted background. Tied to the
- * `data-checked` attribute on the row root, mirrored from the
- * `props.checked` boolean. Hover bumps the tint a touch so checked
- * rows still register as hover targets. */
-.wp-picker-row[data-checked="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 5%, transparent);
-  box-shadow: inset 2px 0 0 var(--wp-accent-500);
+.wp-picker-row[data-state="will-skip"] .wp-picker-row__name {
+  color: var(--wp-text-dim);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--wp-text-dim) 40%, transparent);
 }
-.wp-picker-row[data-checked="true"]:hover {
-  background: color-mix(in oklab, var(--wp-accent-500) 9%, transparent);
-}
+.wp-picker-row[data-state="will-skip"] { opacity: .7; }
 
 .wp-picker-row__chev-spacer {
   width: 14px;
@@ -354,8 +349,13 @@ function depIconClass(d: DepRef): string {
   display: inline-block;
 }
 
-.wp-picker-row__name-cell {
+.wp-row-name {
+  /* Explicit flex-direction: row to override the global
+   * `.wp-row-name { flex-direction: column }` from
+   * manager/styles/tokens.css:1002. The picker row's name + id pair
+   * sits horizontally on a shared baseline. */
   display: flex;
+  flex-direction: row;
   align-items: baseline;
   gap: 9px;
   min-width: 0;
@@ -366,6 +366,46 @@ function depIconClass(d: DepRef): string {
   letter-spacing: -0.005em;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Short id — mirrors prototype lines 171-173 (mono font, dim text, copy
+ * cursor). */
+.wp-id {
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+  color: var(--wp-text-dim);
+  letter-spacing: 0;
+  font-weight: 500;
+  cursor: copy;
+  flex-shrink: 0;
+}
+.wp-id:hover { color: var(--wp-text-muted); }
+
+/* Category chip — mirrors prototype lines 176-177. */
+.wp-cat-chip {
+  font-size: var(--wp-text-xs);
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid;
+  letter-spacing: .01em;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Status badges — mirrors prototype lines 180-187. Picker-row local
+ * override (slightly tighter than shared row-primitives baseline). */
+.wp-picker-row .wp-mod-badge {
+  font-family: var(--wp-font);
+  font-weight: 700;
+  font-size: 9.5px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
@@ -383,46 +423,45 @@ function depIconClass(d: DepRef): string {
 }
 
 /* Dep chip — amber (unselected deps) / red (truly missing).
- * Scoped to PickerRow for now since it's the only consumer; promote to
- * row-primitives.css if a second surface picks it up. */
+ * Verbatim from prototype lines 190-199. */
 .wp-dep-chip {
   background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
   color: var(--wp-warn);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: var(--wp-text-xs, 11px);
+  font-family: var(--wp-font);
+  font-size: var(--wp-text-xs);
   font-weight: 500;
   padding: 2px 8px 2px 6px;
-  border-radius: var(--wp-radius-sm, 4px);
+  border-radius: var(--wp-radius-sm);
   border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   white-space: nowrap;
-  line-height: 1.4;
-}
-.wp-dep-chip .pi { font-size: 9px; }
-.wp-dep-chip:hover {
-  background: color-mix(in oklab, var(--wp-warn) 24%, transparent);
 }
 .wp-dep-chip--missing {
   background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
   color: var(--wp-danger);
   border-color: color-mix(in oklab, var(--wp-danger) 32%, transparent);
 }
+.wp-dep-chip .pi { font-size: 9px; }
+.wp-dep-chip:hover {
+  background: color-mix(in oklab, var(--wp-warn) 24%, transparent);
+}
 .wp-dep-chip--missing:hover {
   background: color-mix(in oklab, var(--wp-danger) 22%, transparent);
 }
 
-/* Expanded dep list — spans full row width below the chip(s). */
+/* Expanded dep list — spans full row width below the chip(s).
+ * Verbatim from prototype lines 201-223. */
 .wp-row-dep-list {
   grid-column: 1 / -1;
   background: color-mix(in oklab, var(--wp-warn) 6%, transparent);
   border-top: 1px dashed color-mix(in oklab, var(--wp-warn) 28%, transparent);
   border-bottom: 1px dashed color-mix(in oklab, var(--wp-warn) 28%, transparent);
-  margin: 5px -14px -5px -14px;
+  margin: 5px -14px -5px -32px;
   padding: 9px 14px 9px 54px;
-  font-size: var(--wp-text-xs, 11px);
+  font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
 }
 .wp-row-dep-list--missing {
@@ -456,6 +495,23 @@ function depIconClass(d: DepRef): string {
   color: var(--wp-text-dim);
   font-family: var(--wp-font-mono);
   font-size: 10px;
+}
+.wp-row-dep-list__action {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
+  color: var(--wp-warn);
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--wp-radius-sm);
+  cursor: pointer;
+  font-family: var(--wp-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.wp-row-dep-list__action:hover {
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
 }
 .wp-row-dep-list__verdict {
   margin-left: auto;

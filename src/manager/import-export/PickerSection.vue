@@ -107,7 +107,7 @@ function onHeaderClick(evt: MouseEvent): void {
         :aria-label="open ? 'Collapse section' : 'Expand section'"
         tabindex="-1"
       >
-        <i class="pi pi-angle-right wp-picker-section__chevron-icon" aria-hidden="true" />
+        <i class="pi pi-angle-right wp-picker-section__chevron" aria-hidden="true" />
       </button>
       <Checkbox
         class="wp-picker-section__check"
@@ -128,6 +128,7 @@ function onHeaderClick(evt: MouseEvent): void {
       </span>
       <span class="wp-picker-section__title">{{ title }}</span>
       <span class="wp-picker-section__count">{{ totalCount }} items</span>
+      <span></span>
       <span
         class="wp-picker-section__sel-pill"
         :data-empty="selectedCount === 0 ? 'true' : 'false'"
@@ -142,15 +143,9 @@ function onHeaderClick(evt: MouseEvent): void {
 <style scoped>
 @import "../../components/shared/row-primitives.css";
 
-/* Section-header icon scale override — the header is a larger visual
- * unit than a row, so the kind glyph reads better at 22x22 / 13px. */
-.wp-picker-section__header .wp-row-type-icon {
-  width: 22px;
-  height: 22px;
-}
-.wp-picker-section__header .wp-row-type-icon .pi {
-  font-size: 13px;
-}
+/* PickerSection — verbatim port from
+ * docs/superpowers/ui-prototypes/import-export-redesign.html
+ * lines 113-127. */
 
 .wp-picker-section {
   background: var(--wp-bg-2);
@@ -161,7 +156,7 @@ function onHeaderClick(evt: MouseEvent): void {
 }
 .wp-picker-section__header {
   display: grid;
-  grid-template-columns: 14px 18px auto auto 1fr auto auto;
+  grid-template-columns: 14px 18px 20px 1fr auto auto auto;
   gap: 10px;
   align-items: center;
   padding: 9px 14px;
@@ -175,17 +170,11 @@ function onHeaderClick(evt: MouseEvent): void {
   outline: 2px solid var(--wp-accent-500);
   outline-offset: -2px;
 }
-/* Open-section header tint — subtle bg shift so expanded sections
- * read differently from collapsed ones at a glance. Hover still
- * outranks this (60% bg-3 wash) when the user is over the header. */
-.wp-picker-section[data-open="true"] .wp-picker-section__header {
-  background: color-mix(in oklab, var(--wp-bg-3) 40%, transparent);
-}
 .wp-picker-section__toggle {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0;
   color: var(--wp-text-dim);
   line-height: 1;
   display: inline-flex;
@@ -195,25 +184,22 @@ function onHeaderClick(evt: MouseEvent): void {
 .wp-picker-section__toggle:hover {
   color: var(--wp-text);
 }
-.wp-picker-section__chevron-icon {
+.wp-picker-section__chevron {
+  color: var(--wp-text-dim);
   font-size: 10px;
   transition: transform 0.15s ease;
-  color: var(--wp-text-dim);
 }
-.wp-picker-section[data-open="true"] .wp-picker-section__chevron-icon {
+.wp-picker-section[data-open="true"] .wp-picker-section__chevron {
   transform: rotate(90deg);
 }
 .wp-picker-section__title {
   font-weight: 600;
-  color: var(--wp-text);
-  font-family: var(--wp-font);
   font-size: var(--wp-text-md);
   letter-spacing: -0.005em;
 }
 .wp-picker-section__count {
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
-  font-family: var(--wp-font);
   font-feature-settings: "tnum";
 }
 .wp-picker-section__sel-pill {
@@ -221,21 +207,17 @@ function onHeaderClick(evt: MouseEvent): void {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 28%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-accent-text);
-  font-family: var(--wp-font);
   font-feature-settings: "tnum";
 }
 .wp-picker-section__sel-pill[data-empty="true"] {
   background: var(--wp-bg-3);
-  border-color: var(--wp-border);
   color: var(--wp-text-dim);
 }
 .wp-picker-section__body {
   border-top: 1px solid var(--wp-border);
   background: var(--wp-bg-1);
-  padding-top: 4px;
   max-height: 420px;
   overflow-y: auto;
   overscroll-behavior: contain;

@@ -141,12 +141,13 @@ describe("ExportTab.vue", () => {
     expect(wrap.find(".wp-export-tab__side").exists()).toBe(false);
   });
 
-  it("preset buttons have icons + an uppercase QUICK SELECT label without trailing colon", async () => {
+  it("preset buttons have icons + an uppercase Quick select label without trailing colon", async () => {
     const wrap = mount(ExportTab);
     await flushPromises();
-    // Label is "QUICK SELECT" (uppercase, no colon).
-    const label = wrap.get(".wp-export-tab__presets-label");
-    expect(label.text()).toBe("QUICK SELECT");
+    // Label text mirrors the prototype's "Quick select" (text-transform:
+    // uppercase in CSS paints it as "QUICK SELECT" on the rendered page).
+    const label = wrap.get(".wp-export-presets__label");
+    expect(label.text()).toBe("Quick select");
     expect(label.text()).not.toContain(":");
     // Each preset button carries its expected pi icon.
     expect(
