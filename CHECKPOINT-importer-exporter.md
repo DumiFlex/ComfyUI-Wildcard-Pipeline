@@ -1,12 +1,13 @@
 # Importer / Exporter — Implementation Checkpoint
 
 **Branch:** `feat/importer-exporter-v2` (off `main`)
-**Tip commit:** `3f892eb` (Item 3: Tier3ChainViz aria-expanded — all deferred follow-ups resolved)
+**Tip commit:** `f45fba9` (Phase 9: per-item issues + favorite star + dep warning)
 **Date checkpointed:** 2026-05-23
 **Spec:** `docs/superpowers/specs/2026-05-22-importer-exporter-design.md` (gitignored, per-contributor)
 **Plan:** `docs/superpowers/plans/2026-05-22-importer-exporter.md` (gitignored, per-contributor)
+**Prototype:** `docs/superpowers/ui-prototypes/import-export-redesign.html` (signed off 2026-05-23)
 
-## Status: 22 of 22 plan tasks complete ✅ + 4 of 4 deferred follow-ups resolved ✅
+## Status: 22 of 22 plan tasks complete ✅ + 4 of 4 deferred follow-ups resolved ✅ + 9 phases of UI redesign ✅ + migration 008 backfill ✅
 
 | # | Task | Status | Key commits |
 |---|------|--------|-------------|
@@ -81,6 +82,24 @@ All four originally-deferred items completed in a follow-up pass after the 22-ta
 - **Item 3 — Tier3ChainViz aria-expanded:** RESOLVED `3f892eb`. Vue 3.5 `useId()`-based stable id linking toggle button (`aria-expanded` + `aria-controls`) to chain body div (`id`).
 - **Item 4 — Commit orchestrator + warning store + broken-refs wire-in:** RESOLVED `d587e23` → `75ba12b` → `7d951c9` → `01ea73d` (4 commits). Built `useResolveWarnings` singleton composable, extended `RichTextInput`/`RichTextPreview` with `moduleId` prop merging prop + store warnings, replaced `onImportV2SelectionReady` placeholder with full pipeline: collision scan → ConflictModal (conditional) → `buildCommitPayload` → `api.importExport.commit` → library reload → `discoverBrokenRefsForImport` → store push → success toast with Undo action. Empty-payload short-circuit. Stale broken-ref clear per committed id. `console.warn` at silent-drop sites in `partitionSelection`.
 
+## UI redesign phases (2026-05-23)
+
+Prototype-driven port of the picker UI. All shipped on `feat/importer-exporter-v2`:
+
+| Phase | Topic | Tip commit |
+|---|---|---|
+| 1 | Shared `wp-mod-badge--new`, PickerRow primitives, PickerSection kind icon | `df73ecc` |
+| 2 | Consumers (ImportPicker + ExportTab) wired to new primitives | `c235936` |
+| 3 | ConflictModal relabel + 3-button segmented control | `c4a1f46` |
+| — | Indigo bundle + muted category tint | `f6f3d59` |
+| 4 | Page-level chrome verbatim port | `b1b6c36` |
+| 5 | Chevron icon + ImportTab collapse + NULL-fp badge | `8a9eeba` |
+| 6 | Icon corners + section scroll cap + style polish | `0bc92b1` |
+| 7 | Full verbatim prototype port (template + styles) | `9917cca` |
+| 8 | 5 QA-driven fixes (icon size, dep wiring, modal counts) | `4d10705` |
+| — | Migration 008 — backfill NULL fingerprints | `ecb6629` |
+| 9 | Per-item issues + favorite star + dep warning + missing-dep name fix | `f45fba9` |
+
 ## How to resume
 
 In a fresh session:
@@ -93,9 +112,9 @@ In a fresh session:
 
 ## Test suite status at checkpoint
 
-- Vitest: 2031 passed, 3 skipped (all pre-existing skips) — 2031 reflects post-deferred-items follow-up
+- Vitest: 2150 passed, 3 skipped (3 pre-existing skips). 9 phases + migration 008 + Phase 9 added ~120 cases.
 - Pre-deferred-items baseline (2026-05-22, all 22 plan tasks): 1989 passed
-- Pytest: ~509 passed (engine 323 + wp_api 206)
+- Pytest: 531 passed (engine + wp_api). Migration 008 added 2 cases.
 - Typecheck (`pnpm typecheck` via vue-tsc): clean
 - Pre-commit hooks (lint + typecheck + test + build + size + pytest): green on every commit landed on this branch
 - Bundle size: within budget (entry ≤ 30 KB, total ≤ 316 KB) — manager build holds the new picker/importer UI; extension entry untouched
