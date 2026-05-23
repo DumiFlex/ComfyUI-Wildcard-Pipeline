@@ -4,6 +4,8 @@ import Button from "../components/ui/Button.vue";
 import Icon from "../components/ui/Icon.vue";
 import { useToast } from "../composables/useToast";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
+import { useModuleStore } from "../stores/moduleStore";
+import { useBundleStore } from "../stores/bundleStore";
 import { api, ApiError } from "../api/client";
 import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
@@ -38,6 +40,8 @@ import { newShortId } from "../utils/ids";
 type Mode = "export" | "import";
 
 const toast = useToast();
+const moduleStore = useModuleStore();
+const bundleStore = useBundleStore();
 
 const mode = ref<Mode>("export");
 
@@ -547,7 +551,16 @@ async function runCommit(resolution: {
   importCommitting.value = true;
   try {
     const result = await api.importExport.commit(payload);
-    await loadLibrary();
+    // Refresh the local library snapshot (powers the broken-ref walker
+    // below) AND the global Pinia catalogs (sidebar count badges +
+    // Cmd+K palette + other views' module/bundle lists). Without the
+    // catalog refresh the sidebar's "Wildcards 18" stays stale until
+    // the next route change forces a re-fetch.
+    await Promise.all([
+      loadLibrary(),
+      moduleStore.fetchCatalog(),
+      bundleStore.fetchCatalog(),
+    ]);
     const libraryIds = new Set<string>();
     for (const m of localModules.value) libraryIds.add(m.id);
     for (const b of localBundles.value) libraryIds.add(b.id);
@@ -596,7 +609,11 @@ async function runCommit(resolution: {
 async function undoImport(undoEntryId: string): Promise<void> {
   try {
     await api.importExport.undo(undoEntryId);
-    await loadLibrary();
+    await Promise.all([
+      loadLibrary(),
+      moduleStore.fetchCatalog(),
+      bundleStore.fetchCatalog(),
+    ]);
     resolveWarningsStore.clearByType("broken_ref_on_import");
     toast.push({ severity: "info", summary: "Import undone", life: 4000 });
   } catch (err) {

@@ -215,6 +215,12 @@ describe("ImportExport.vue — commit orchestrator", () => {
     const succ = t.toasts.value.find((x) => x.severity === "success");
     expect(succ).toBeTruthy();
     expect(succ?.action?.label).toBe("Undo");
+    // Phase 15: orchestrator refreshes module + bundle catalogs so the
+    // sidebar's count badges update live (the stores power Wildcards/N
+    // etc. in AppSidebar). Two calls per route — once on mount when the
+    // module list is also loaded, once after commit. Assert ≥ 1.
+    expect(apiM.modules.list.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(apiM.bundles.list.mock.calls.length).toBeGreaterThanOrEqual(2);
     // State cleared — stash element no longer rendered.
     expect(wrap.find('[data-test="io-import-stash"]').exists()).toBe(false);
   });
