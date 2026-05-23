@@ -25,7 +25,7 @@ import type { DepRef } from "./PickerRow.vue";
 import ExportDepWarningModal from "./ExportDepWarningModal.vue";
 import type { ExportDepWarningRow } from "./ExportDepWarningModal.vue";
 import { liveLibraryToRawPayload } from "./live-library-adapter";
-import { buildDepGraph, transitiveClosure, constraintsBothSidesIn } from "./dep-graph";
+import { buildDepGraph, transitiveClosure } from "./dep-graph";
 
 const toast = useToast();
 
@@ -263,8 +263,12 @@ function applyClosureToSelection(closure: Set<string>): void {
 }
 
 /**
- * Expand selection to include all transitively-referenced entities
- * plus any constraints whose source AND target are both selected.
+ * Expand selection to include all transitively-referenced entities.
+ * Phase 11: constraints + derivations are accessories, not deps — they
+ * decorate relationships between wildcards but don't make the host
+ * wildcards work, so we no longer pull them in automatically. The user
+ * picks them deliberately when they want them shipped along.
+ *
  * Disabled when nothing is selected (no seed to walk from).
  */
 function selectWithDependencies(): void {
@@ -274,7 +278,6 @@ function selectWithDependencies(): void {
   const seed = new Set<string>();
   for (const b of BUCKETS) for (const id of selection.value[b.key]) seed.add(id);
   const closure = transitiveClosure(graph, seed);
-  for (const cid of constraintsBothSidesIn(payload, closure)) closure.add(cid);
   applyClosureToSelection(closure);
 }
 

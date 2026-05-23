@@ -21,8 +21,8 @@
  *
  * Actions:
  *   - "Select with dependencies" walks `transitiveClosure` over the
- *     cached dep-graph plus pulls in `constraintsBothSidesIn` so any
- *     constraints whose source AND target are now selected ride along.
+ *     cached dep-graph. Constraints + derivations are accessories
+ *     (Phase 11) and are NOT auto-pulled — user picks them deliberately.
  *   - "Deselect all" clears the selection in one click.
  *   - "Continue" emits `selection-ready` with the picked id set so the
  *     next stage (collision review / commit) can take over.
@@ -41,7 +41,7 @@ import PickerRow from "./PickerRow.vue";
 import type { StatusBadge, DepRef } from "./PickerRow.vue";
 import { CURRENT_SCHEMA_VERSION, type RawPayload } from "./migrations";
 import type { IntegrityWarning } from "./parse";
-import { buildDepGraph, constraintsBothSidesIn, transitiveClosure } from "./dep-graph";
+import { buildDepGraph, transitiveClosure } from "./dep-graph";
 import { detectCollisions, type CollisionState, type LibraryRow } from "./collision";
 import type { ModuleRow as FingerprintModuleRow } from "./fingerprint";
 
@@ -448,11 +448,11 @@ function missingDepsFor(entity: PayloadEntity): DepRef[] {
 
 function selectWithDependencies(): void {
   if (selected.value.size === 0) return;
-  const closure = transitiveClosure(depGraph.value, selected.value);
-  const constraints = constraintsBothSidesIn(props.payload, closure);
-  const next = new Set<string>(closure);
-  for (const cid of constraints) next.add(cid);
-  selected.value = next;
+  // Phase 11: outgoing-closure only. Constraints + derivations decorate
+  // wildcard relationships but don't gate the host wildcards' execution
+  // — they're accessories the user picks deliberately, not auto-pulled
+  // dependencies.
+  selected.value = transitiveClosure(depGraph.value, selected.value);
 }
 
 function deselectAll(): void {

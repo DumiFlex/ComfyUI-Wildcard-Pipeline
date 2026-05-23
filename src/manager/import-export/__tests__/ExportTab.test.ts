@@ -410,10 +410,10 @@ describe("ExportTab.vue", () => {
     expect(rowB.attributes("aria-checked")).toBe("true");
   });
 
-  it("'Select with dependencies' pulls in constraints whose source AND target are both selected", async () => {
-    // Constraint C carries source_wildcard_id = A and target_wildcard_id = B
-    // nested under its payload. Selecting A + B (but not C) and clicking
-    // should add C via constraintsBothSidesIn.
+  it("Phase 11: 'Select with dependencies' does NOT auto-pull constraints (accessories)", async () => {
+    // Constraint C links A and B. Selecting A + B then clicking
+    // Select-with-deps should NOT pull C in — constraints + derivations
+    // are accessories to the relationship, not gating dependencies.
     apiAny.modules.list.mockResolvedValue({
       items: [
         mkModule({
@@ -458,7 +458,7 @@ describe("ExportTab.vue", () => {
     await flushPromises();
 
     const rowC = wrap.get('[data-test="export-tab-row-constraint-cccccccc"] button[role="checkbox"]');
-    expect(rowC.attributes("aria-checked")).toBe("true");
+    expect(rowC.attributes("aria-checked")).toBe("false");
   });
 
   // ---------- Polish B: collapsed-by-default sections ----------
