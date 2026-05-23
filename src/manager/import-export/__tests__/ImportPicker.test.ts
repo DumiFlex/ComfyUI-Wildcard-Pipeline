@@ -169,15 +169,22 @@ describe("ImportPicker.vue", () => {
     });
     const wrap = mountPicker({ payload });
     await flushPromises();
-    // Select w1, leave deadbeef unselected. Dep warning should appear on w1's row.
+    // Select w1, leave deadbeef unselected. The collapsed chip surfaces
+    // immediately ("1 unresolved ref"); the full warning text only shows
+    // once the chip is expanded (Polish A: dep-warn disclosure).
     await wrap.get('[data-test="import-picker-row-w1"] button[role="checkbox"]').trigger("click");
     await flushPromises();
     const row1 = wrap.get('[data-test="import-picker-row-w1"]');
+    expect(row1.text()).toContain("1 unresolved ref");
+    await row1.get('[data-test="dep-warn-chip"]').trigger("click");
     expect(row1.text()).toContain("references @{deadbeef} not selected");
-    // Once we also select deadbeef, the warning is gone.
+    // Once we also select deadbeef, the warning is gone — chip disappears
+    // entirely (no chip rendered when depWarnings.length === 0).
     await wrap.get('[data-test="import-picker-row-deadbeef"] button[role="checkbox"]').trigger("click");
     await flushPromises();
-    expect(wrap.get('[data-test="import-picker-row-w1"]').text()).not.toContain("references @{deadbeef} not selected");
+    const row1After = wrap.get('[data-test="import-picker-row-w1"]');
+    expect(row1After.find('[data-test="dep-warn-chip"]').exists()).toBe(false);
+    expect(row1After.text()).not.toContain("references @{deadbeef} not selected");
   });
 
   it("Select with dependencies pulls in transitive refs from the selected seed", async () => {
