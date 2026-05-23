@@ -31,7 +31,7 @@ def test_migrate_records_version(tmp_path):
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
     # ``engine/db/migrations_sql``.
-    assert current_version(conn) == 8
+    assert current_version(conn) == 9
     conn.close()
 
 
@@ -71,6 +71,26 @@ def test_migrate_creates_import_undo_table_with_expected_columns(tmp_path):
     assert cols == {
         "id", "created_at", "imported_records",
         "replaced_snapshots", "rename_map",
+    }
+    conn.close()
+
+
+def test_migrate_creates_cascade_undo_table_with_expected_columns(tmp_path):
+    """Migration 009 adds the cascade_undo metadata table used by
+    cascade-edit transactions to persist BEFORE/AFTER snapshots for undo."""
+    conn = get_connection(tmp_path / "c_undo.db")
+    migrate(conn)
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table';"
+        ).fetchall()
+    }
+    assert "cascade_undo" in tables
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(cascade_undo);")}
+    assert cols == {
+        "id", "created_at", "target_kind", "target_id",
+        "action", "snapshot_before", "snapshot_after",
     }
     conn.close()
 
@@ -247,7 +267,7 @@ def test_004_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 8
+    assert current_version(conn) == 9
     conn.close()
 
 
