@@ -130,12 +130,58 @@ function modulesForBucket(b: BucketKey): ModuleRow[] {
 interface RowItem {
   id: string;
   name: string;
+  /** Entity kind, for PickerRow's tinted glyph. For modules this is the
+   *  module subtype; for bundles always `"bundle"`; for categories the
+   *  row IS a category so we surface `"category"` for icon consistency
+   *  even though we suppress the category chip on those rows. */
+  kind: string;
+  categoryName?: string;
+  categoryColor?: string;
+}
+
+/**
+ * Resolve a `category_id` against the loaded categories list and return
+ * `{name, color}` (color may be undefined if the user never picked one).
+ * Returns `undefined` when the id is null or unmatched — caller treats
+ * that as "no category chip on this row".
+ */
+function lookupCategory(
+  categoryId: string | null | undefined,
+): { name: string; color?: string } | undefined {
+  if (!categoryId) return undefined;
+  const cat = categories.value.find((c) => c.id === categoryId);
+  if (!cat) return undefined;
+  return { name: cat.name, color: cat.color ?? undefined };
 }
 
 function rowsForBucket(b: BucketKey): RowItem[] {
-  if (b === "bundle") return bundles.value.map((x) => ({ id: x.id, name: x.name }));
-  if (b === "category") return categories.value.map((x) => ({ id: x.id, name: x.name }));
-  return modulesForBucket(b).map((x) => ({ id: x.id, name: x.name }));
+  if (b === "bundle") {
+    return bundles.value.map((x) => {
+      const cat = lookupCategory(x.category_id);
+      return {
+        id: x.id,
+        name: x.name,
+        kind: "bundle",
+        categoryName: cat?.name,
+        categoryColor: cat?.color,
+      };
+    });
+  }
+  if (b === "category") {
+    // Categories ARE the category — surface kind for the icon but skip
+    // the category chip since it would duplicate the row name.
+    return categories.value.map((x) => ({ id: x.id, name: x.name, kind: "category" }));
+  }
+  return modulesForBucket(b).map((x) => {
+    const cat = lookupCategory(x.category_id);
+    return {
+      id: x.id,
+      name: x.name,
+      kind: x.type,
+      categoryName: cat?.name,
+      categoryColor: cat?.color,
+    };
+  });
 }
 
 function bucketTotalCount(b: BucketKey): number {
@@ -287,6 +333,62 @@ function clearAll() {
     category:     new Set(),
   };
 }
+
+// ---------- Quick filter presets ----------
+
+/**
+ * Select every entity across all 7 buckets. Equivalent to clicking the
+ * select-all checkbox in each section, but in one click. Does NOT walk
+ * the dep graph — the user already has everything, so closure is a
+ * no-op.
+ */
+function presetFullLibrary(): void {
+  selection.value = {
+    bundle:       new Set(bundles.value.map((b) => b.id)),
+    wildcard:     new Set(modulesForBucket("wildcard").map((m) => m.id)),
+    fixed_values: new Set(modulesForBucket("fixed_values").map((m) => m.id)),
+    combine:      new Set(modulesForBucket("combine").map((m) => m.id)),
+    derivation:   new Set(modulesForBucket("derivation").map((m) => m.id)),
+    constraint:   new Set(modulesForBucket("constraint").map((m) => m.id)),
+    category:     new Set(categories.value.map((c) => c.id)),
+  };
+}
+
+/**
+ * Clear everything and select only wildcard modules. Common quick path
+ * when the user wants to share just their prompt vocabulary without
+ * combines/derivations/constraints attached.
+ */
+function presetWildcardsOnly(): void {
+  selection.value = {
+    bundle:       new Set(),
+    wildcard:     new Set(modulesForBucket("wildcard").map((m) => m.id)),
+    fixed_values: new Set(),
+    combine:      new Set(),
+    derivation:   new Set(),
+    constraint:   new Set(),
+    category:     new Set(),
+  };
+}
+
+/**
+ * Clear everything then select all entities flagged `is_favorite`. Only
+ * modules and bundles carry the favorite bit — categories don't, so
+ * that bucket stays empty regardless.
+ */
+function presetFavoritesOnly(): void {
+  const favModules = modules.value.filter((m) => m.is_favorite);
+  const favBundles = bundles.value.filter((b) => b.is_favorite);
+  selection.value = {
+    bundle:       new Set(favBundles.map((b) => b.id)),
+    wildcard:     new Set(favModules.filter((m) => m.type === "wildcard").map((m) => m.id)),
+    fixed_values: new Set(favModules.filter((m) => m.type === "fixed_values").map((m) => m.id)),
+    combine:      new Set(favModules.filter((m) => m.type === "combine").map((m) => m.id)),
+    derivation:   new Set(favModules.filter((m) => m.type === "derivation").map((m) => m.id)),
+    constraint:   new Set(favModules.filter((m) => m.type === "constraint").map((m) => m.id)),
+    category:     new Set(),
+  };
+}
 </script>
 
 <template>
@@ -308,16 +410,33 @@ function clearAll() {
           :disabled="totalSelected === 0"
           @click="selectWithDependencies"
         >Select with dependencies</Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon="pi-refresh"
-          aria-label="Refresh library"
-          :disabled="loading"
-          data-test="export-tab-refresh"
-          @click="loadLibrary"
-        >Refresh</Button>
       </template>
+
+      <div
+        class="wp-export-tab__presets"
+        role="group"
+        aria-label="Quick selection presets"
+      >
+        <span class="wp-export-tab__presets-label">Quick select:</span>
+        <button
+          class="wp-export-tab__preset"
+          data-test="preset-full"
+          type="button"
+          @click="presetFullLibrary"
+        >Full library</button>
+        <button
+          class="wp-export-tab__preset"
+          data-test="preset-wildcards"
+          type="button"
+          @click="presetWildcardsOnly"
+        >Wildcards only</button>
+        <button
+          class="wp-export-tab__preset"
+          data-test="preset-favorites"
+          type="button"
+          @click="presetFavoritesOnly"
+        >Favorites only</button>
+      </div>
 
       <div class="wp-export-tab__sections">
         <PickerSection
@@ -326,7 +445,7 @@ function clearAll() {
           :title="bucket.title"
           :total-count="bucketTotalCount(bucket.key)"
           :selected-count="bucketSelectedCount(bucket.key)"
-          :default-open="true"
+          :default-open="false"
           :data-test="`export-tab-section-${bucket.key}`"
           @toggle-all="(v: boolean) => toggleAllInBucket(bucket.key, v)"
         >
@@ -335,6 +454,10 @@ function clearAll() {
             :key="`${bucket.key}:${row.id}`"
             :uuid="row.id"
             :name="row.name"
+            :kind="row.kind"
+            :category-name="row.categoryName"
+            :category-color="row.categoryColor"
+            :show-id="true"
             :checked="isRowSelected(bucket.key, row.id)"
             :badges="[]"
             :dep-warnings="[]"
@@ -389,6 +512,38 @@ function clearAll() {
 }
 @media (max-width: 960px) {
   .wp-export-tab { grid-template-columns: 1fr; }
+}
+.wp-export-tab__presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-4) var(--wp-space-5);
+  border-bottom: 1px solid var(--wp-border);
+}
+.wp-export-tab__presets-label {
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+  margin-right: var(--wp-space-2);
+}
+.wp-export-tab__preset {
+  font-size: var(--wp-text-sm);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--wp-border);
+  background: var(--wp-bg-2);
+  color: var(--wp-text);
+  cursor: pointer;
+  font-family: var(--wp-font-sans);
+  line-height: 1.4;
+}
+.wp-export-tab__preset:hover {
+  background: var(--wp-bg-3);
+  border-color: var(--wp-border-strong);
+}
+.wp-export-tab__preset:focus-visible {
+  outline: 2px solid var(--wp-accent-500);
+  outline-offset: 2px;
 }
 .wp-export-tab__sections {
   padding: var(--wp-space-5);

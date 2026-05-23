@@ -26,9 +26,26 @@ vi.mock("../../composables/useToast", () => {
 });
 
 import ExportTab from "../ExportTab.vue";
+import PickerRow from "../PickerRow.vue";
 import { api, ApiError } from "../../api/client";
 import * as toastModule from "../../composables/useToast";
 import type { ModuleRow, BundleRow, CategoryRow } from "../../api/types";
+
+/**
+ * Expand a collapsed PickerSection so its rows render. Sections are
+ * now collapsed by default; tests that interact with rows must open
+ * the relevant section first. The toggle is the bare `▶ / ▼` button
+ * inside the section header — clicking it flips `defaultOpen` state.
+ */
+async function expandSection(
+  wrap: ReturnType<typeof mount>,
+  bucketKey: string,
+): Promise<void> {
+  const section = wrap.get(`[data-test="export-tab-section-${bucketKey}"]`);
+  const toggle = section.get(".wp-picker-section__toggle");
+  await toggle.trigger("click");
+  await flushPromises();
+}
 
 const apiAny = api as unknown as {
   modules: { list: ReturnType<typeof vi.fn> };
@@ -131,6 +148,8 @@ describe("ExportTab.vue", () => {
   it("export button becomes enabled after a row is selected", async () => {
     const wrap = mount(ExportTab);
     await flushPromises();
+    // Sections collapsed by default — expand the wildcard one first.
+    await expandSection(wrap, "wildcard");
     // The wildcard row checkbox — Checkbox.vue renders <button role="checkbox">.
     const row = wrap.get('[data-test="export-tab-row-wildcard-w1"]');
     await row.get('button[role="checkbox"]').trigger("click");
@@ -158,6 +177,9 @@ describe("ExportTab.vue", () => {
     const section = wrap.get('[data-test="export-tab-section-wildcard"]');
     await section.get('button[role="checkbox"]').trigger("click");
     await flushPromises();
+    // Expand to see the rows we just selected (section-checkbox doesn't
+    // open the body — it only toggles selection state).
+    await expandSection(wrap, "wildcard");
 
     // After select-all, every row checkbox in the wildcard section is checked.
     const rowCheckboxes = section.findAll('.wp-picker-row button[role="checkbox"]');
@@ -170,6 +192,7 @@ describe("ExportTab.vue", () => {
   it("export POSTs a 7-bucket body matching the picked uuids", async () => {
     const wrap = mount(ExportTab);
     await flushPromises();
+    await expandSection(wrap, "wildcard");
 
     // Pick wildcard w1.
     await wrap.get('[data-test="export-tab-row-wildcard-w1"] button[role="checkbox"]').trigger("click");
@@ -215,6 +238,7 @@ describe("ExportTab.vue", () => {
     try {
       const wrap = mount(ExportTab);
       await flushPromises();
+      await expandSection(wrap, "wildcard");
       await wrap.get('[data-test="export-tab-row-wildcard-w1"] button[role="checkbox"]').trigger("click");
       await flushPromises();
       await wrap.get('[data-test="export-tab-submit"]').trigger("click");
@@ -242,6 +266,7 @@ describe("ExportTab.vue", () => {
     apiAny.importExport.build.mockRejectedValue(new ApiError(500, "boom"));
     const wrap = mount(ExportTab);
     await flushPromises();
+    await expandSection(wrap, "wildcard");
     await wrap.get('[data-test="export-tab-row-wildcard-w1"] button[role="checkbox"]').trigger("click");
     await flushPromises();
     await wrap.get('[data-test="export-tab-submit"]').trigger("click");
@@ -313,6 +338,7 @@ describe("ExportTab.vue", () => {
 
     const wrap = mount(ExportTab);
     await flushPromises();
+    await expandSection(wrap, "wildcard");
 
     // Select only wildcard A.
     await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
@@ -364,6 +390,8 @@ describe("ExportTab.vue", () => {
 
     const wrap = mount(ExportTab);
     await flushPromises();
+    await expandSection(wrap, "wildcard");
+    await expandSection(wrap, "constraint");
 
     await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
     await wrap.get('[data-test="export-tab-row-wildcard-bbbbbbbb"] button[role="checkbox"]').trigger("click");
@@ -374,5 +402,232 @@ describe("ExportTab.vue", () => {
 
     const rowC = wrap.get('[data-test="export-tab-row-constraint-cccccccc"] button[role="checkbox"]');
     expect(rowC.attributes("aria-checked")).toBe("true");
+  });
+
+  // ---------- Polish B: collapsed-by-default sections ----------
+
+  it("all 7 sections render collapsed by default", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    // Every section header is present.
+    for (const key of [
+      "bundle", "wildcard", "fixed_values",
+      "combine", "derivation", "constraint", "category",
+    ]) {
+      expect(wrap.find(`[data-test="export-tab-section-${key}"]`).exists()).toBe(true);
+    }
+    // No PickerRow renders because every section body is collapsed
+    // (the only fixture row is wildcard w1, which would render if the
+    // wildcard section were expanded).
+    expect(wrap.find('[data-test="export-tab-row-wildcard-w1"]').exists()).toBe(false);
+    // Each section body div lives under the section root only when open;
+    // assert the body wrapper is absent for every bucket.
+    const bodies = wrap.findAll(".wp-picker-section__body");
+    expect(bodies.length).toBe(0);
+  });
+
+  // ---------- Polish B: PickerRow receives enriched props ----------
+
+  it("PickerRow receives kind prop matching the module's type", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+
+    const row = wrap.get('[data-test="export-tab-row-wildcard-w1"]');
+    const pickerRow = row.findComponent(PickerRow);
+    expect(pickerRow.exists()).toBe(true);
+    expect(pickerRow.props("kind")).toBe("wildcard");
+  });
+
+  it("PickerRow receives showId=true so the short uuid renders", async () => {
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+
+    const pickerRow = wrap
+      .get('[data-test="export-tab-row-wildcard-w1"]')
+      .findComponent(PickerRow);
+    expect(pickerRow.props("showId")).toBe(true);
+    // And the rendered id element exists.
+    expect(wrap.find('[data-test="picker-row-id"]').exists()).toBe(true);
+  });
+
+  it("PickerRow receives category name + color when module has a category", async () => {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "w1",
+          type: "wildcard",
+          name: "$tagged",
+          category_id: "cat1",
+        }),
+      ],
+      total: 1,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({
+      items: [mkCategory({ id: "cat1", name: "Outfits", color: "#ff8800" })],
+    });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+
+    const pickerRow = wrap
+      .get('[data-test="export-tab-row-wildcard-w1"]')
+      .findComponent(PickerRow);
+    expect(pickerRow.props("categoryName")).toBe("Outfits");
+    expect(pickerRow.props("categoryColor")).toBe("#ff8800");
+  });
+
+  // ---------- Polish B: quick filter presets ----------
+
+  it("'Full library' preset selects every row across all 7 buckets", async () => {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({ id: "w1", type: "wildcard",     name: "$one" }),
+        mkModule({ id: "fv1", type: "fixed_values", name: "fv1" }),
+        mkModule({ id: "co1", type: "combine",      name: "co1" }),
+        mkModule({ id: "dr1", type: "derivation",   name: "dr1" }),
+        mkModule({ id: "cn1", type: "constraint",   name: "cn1" }),
+      ],
+      total: 5,
+    });
+    apiAny.bundles.list.mockResolvedValue({
+      items: [mkBundle({ id: "b1", name: "B1" })],
+      total: 1,
+    });
+    apiAny.categories.list.mockResolvedValue({
+      items: [mkCategory({ id: "cat1", name: "Cat1" })],
+    });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+
+    await wrap.get('[data-test="preset-full"]').trigger("click");
+    await flushPromises();
+
+    // The submit-button label embeds totalSelected — 5 modules + 1 bundle
+    // + 1 category = 7. Cheaper than expanding 7 sections to count
+    // individual checkboxes, and exercises the same computed.
+    const btn = wrap.get('[data-test="export-tab-submit"]');
+    expect(btn.text()).toContain("7");
+    expect(btn.attributes("disabled")).toBeUndefined();
+
+    // Spot-check a couple of buckets to prove rows are actually checked.
+    for (const key of ["wildcard", "bundle", "category", "constraint"]) {
+      await expandSection(wrap, key);
+    }
+    for (const sel of [
+      '[data-test="export-tab-row-wildcard-w1"]',
+      '[data-test="export-tab-row-bundle-b1"]',
+      '[data-test="export-tab-row-category-cat1"]',
+      '[data-test="export-tab-row-constraint-cn1"]',
+    ]) {
+      const cb = wrap.get(`${sel} button[role="checkbox"]`);
+      expect(cb.attributes("aria-checked")).toBe("true");
+    }
+  });
+
+  it("'Wildcards only' preset clears non-wildcard buckets and selects all wildcards", async () => {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({ id: "w1", type: "wildcard",     name: "$one" }),
+        mkModule({ id: "w2", type: "wildcard",     name: "$two" }),
+        mkModule({ id: "fv1", type: "fixed_values", name: "fv1" }),
+        mkModule({ id: "co1", type: "combine",      name: "co1" }),
+      ],
+      total: 4,
+    });
+    apiAny.bundles.list.mockResolvedValue({
+      items: [mkBundle({ id: "b1", name: "B1" })],
+      total: 1,
+    });
+    apiAny.categories.list.mockResolvedValue({
+      items: [mkCategory({ id: "cat1", name: "Cat1" })],
+    });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+
+    // Pre-select a bundle to prove the preset clears it.
+    await expandSection(wrap, "bundle");
+    await wrap.get('[data-test="export-tab-row-bundle-b1"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+
+    await wrap.get('[data-test="preset-wildcards"]').trigger("click");
+    await flushPromises();
+
+    // Total = 2 wildcards. Bundle/fixed/combine/category all empty.
+    const btn = wrap.get('[data-test="export-tab-submit"]');
+    expect(btn.text()).toContain("2");
+
+    // Bundle b1 should now be unchecked (preset cleared the pre-selection).
+    const bundleCb = wrap.get('[data-test="export-tab-row-bundle-b1"] button[role="checkbox"]');
+    expect(bundleCb.attributes("aria-checked")).toBe("false");
+
+    await expandSection(wrap, "wildcard");
+    for (const sel of [
+      '[data-test="export-tab-row-wildcard-w1"]',
+      '[data-test="export-tab-row-wildcard-w2"]',
+    ]) {
+      expect(wrap.get(`${sel} button[role="checkbox"]`).attributes("aria-checked")).toBe("true");
+    }
+  });
+
+  it("'Favorites only' preset selects only modules + bundles flagged is_favorite", async () => {
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({ id: "w1", type: "wildcard", name: "$fav",    is_favorite: true }),
+        mkModule({ id: "w2", type: "wildcard", name: "$nofav",  is_favorite: false }),
+        mkModule({ id: "co1", type: "combine", name: "co1",     is_favorite: true }),
+      ],
+      total: 3,
+    });
+    apiAny.bundles.list.mockResolvedValue({
+      items: [
+        mkBundle({ id: "b1", name: "B1", is_favorite: true }),
+        mkBundle({ id: "b2", name: "B2", is_favorite: false }),
+      ],
+      total: 2,
+    });
+    apiAny.categories.list.mockResolvedValue({
+      items: [mkCategory({ id: "cat1", name: "Cat1" })],
+    });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+
+    await wrap.get('[data-test="preset-favorites"]').trigger("click");
+    await flushPromises();
+
+    // 1 fav wildcard + 1 fav combine + 1 fav bundle = 3 selected.
+    const btn = wrap.get('[data-test="export-tab-submit"]');
+    expect(btn.text()).toContain("3");
+
+    await expandSection(wrap, "wildcard");
+    await expandSection(wrap, "combine");
+    await expandSection(wrap, "bundle");
+
+    expect(
+      wrap.get('[data-test="export-tab-row-wildcard-w1"] button[role="checkbox"]')
+        .attributes("aria-checked"),
+    ).toBe("true");
+    expect(
+      wrap.get('[data-test="export-tab-row-wildcard-w2"] button[role="checkbox"]')
+        .attributes("aria-checked"),
+    ).toBe("false");
+    expect(
+      wrap.get('[data-test="export-tab-row-combine-co1"] button[role="checkbox"]')
+        .attributes("aria-checked"),
+    ).toBe("true");
+    expect(
+      wrap.get('[data-test="export-tab-row-bundle-b1"] button[role="checkbox"]')
+        .attributes("aria-checked"),
+    ).toBe("true");
+    expect(
+      wrap.get('[data-test="export-tab-row-bundle-b2"] button[role="checkbox"]')
+        .attributes("aria-checked"),
+    ).toBe("false");
   });
 });
