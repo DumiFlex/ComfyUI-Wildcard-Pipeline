@@ -884,4 +884,44 @@ describe("ConflictModal.vue", () => {
     expect(badge2.className).toContain("wp-mod-badge--drift");
     wrap.unmount();
   });
+
+  it("Phase 10: silent-skip conflicts render the DUPLICATE badge + add 'N duplicate' to the title summary", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({
+          id: "w1",
+          entity: { id: "w1", name: "a" },
+          collisionState: "silent-skip",
+        }),
+        makeBatchConflict({
+          id: "w2",
+          entity: { id: "w2", name: "b" },
+          collisionState: "silent-skip",
+        }),
+      ],
+    });
+    const summary = $('[data-test="conflict-modal-summary"]');
+    expect(summary.textContent).toContain("2 duplicate");
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+    const badge1 = $('[data-test="batch-override-badge-w1"]');
+    expect(badge1.textContent?.trim()).toBe("DUPLICATE");
+    expect(badge1.className).toContain("wp-mod-badge--duplicate");
+    wrap.unmount();
+  });
+
+  it("Phase 10: silent-skip conflicts do NOT count toward the import button total by default", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({
+          id: "w1",
+          entity: { id: "w1", name: "a" },
+          collisionState: "silent-skip",
+        }),
+      ],
+    });
+    // batchDefault stays "skip" → silent-skip dropped → 0 to import.
+    expect($('[data-test="commit-btn"]').textContent).toContain("Import 0 items");
+    wrap.unmount();
+  });
 });

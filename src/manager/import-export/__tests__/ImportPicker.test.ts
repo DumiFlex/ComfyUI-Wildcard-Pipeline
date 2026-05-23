@@ -597,9 +597,9 @@ describe("ImportPicker.vue", () => {
     expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
   });
 
-  it("does NOT add a status badge for silent-skip (matching fingerprint)", async () => {
-    // Identical fingerprint on both sides → silent-skip → no inline badge
-    // (entity will be auto-excluded at commit-time anyway).
+  it("Phase 10: silent-skip rows surface a DUPLICATE badge", async () => {
+    // Identical fingerprint on both sides → silent-skip → dim DUPLICATE
+    // badge so the user sees these are exact dups already in the library.
     const incoming = mkModuleRow({
       id: "w1", name: "a", type: "wildcard",
       payload_hash: "same-hash",
@@ -617,7 +617,10 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
-    // Neither NEW nor MODIFIED — silent-skip emits nothing.
+    const dup = badges.find((b) => b.label === "DUPLICATE");
+    expect(dup).toBeTruthy();
+    expect(dup!.variant).toBe("duplicate");
+    // Not also NEW / MODIFIED — silent-skip is its own state.
     expect(badges.find((b) => b.label === "NEW")).toBeUndefined();
     expect(badges.find((b) => b.label === "MODIFIED")).toBeUndefined();
   });
@@ -781,9 +784,10 @@ describe("ImportPicker.vue", () => {
     expect(missing[0]!.name).toBe("unknown");
   });
 
-  it("treats a ref present in libraryRows as resolved (not missing)", async () => {
-    // Same ref pattern as above, but this time `deadbeef` exists in the
-    // receiver library — picker should NOT flag it as missing.
+  it("Phase 10: library presence does NOT resolve a payload ref", async () => {
+    // The library can carry the same id with different content; a
+    // payload ref points to "the entity I authored against", so library
+    // presence is irrelevant for the import-side missing-dep warning.
     const payload = makePayload({
       wildcards: [
         {
@@ -804,7 +808,8 @@ describe("ImportPicker.vue", () => {
       (r) => r.props("uuid") === "w1",
     );
     expect(row).toBeDefined();
-    expect(row!.props("missingDeps")).toEqual([]);
+    const missing = row!.props("missingDeps") as Array<{ id: string }>;
+    expect(missing.map((m) => m.id)).toEqual(["deadbeef"]);
   });
 
   // ---------- Phase 9: favorite star + dep warning confirm ----------
@@ -837,9 +842,11 @@ describe("ImportPicker.vue", () => {
     expect(row!.props("isFavorite")).toBe(false);
   });
 
-  it("calls window.confirm on Continue when selected row has unresolvable deps", async () => {
-    // Wildcard w1 references @{deadbeef} that is NOT in payload + NOT in
-    // library. Select w1 → continue triggers window.confirm.
+  it("Phase 10: Continue emits without any confirm — missing-dep visibility moved to ConflictModal", async () => {
+    // Wildcard w1 references @{deadbeef}, absent from payload. The
+    // picker still emits selection-ready straight away; the orchestrator's
+    // buildPerItemIssues turns the broken ref into a per-item issue and
+    // the ConflictModal opens with skip/import-anyway choices.
     const payload = makePayload({
       wildcards: [
         {
@@ -850,42 +857,13 @@ describe("ImportPicker.vue", () => {
         },
       ],
     });
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-    try {
-      const wrap = mountPicker({ payload, libraryRows: new Map() });
-      await flushPromises();
-      // Smart default selects w1 (only entity in payload).
-      const cont = wrap.get('[data-test="import-picker-continue"]');
-      expect(cont.attributes("disabled")).toBeUndefined();
-      await cont.trigger("click");
-      await flushPromises();
-      expect(confirmSpy).toHaveBeenCalledTimes(1);
-      expect(confirmSpy.mock.calls[0]?.[0]).toMatch(/missing from payload and library/i);
-      // Declined → no emit.
-      expect(wrap.emitted("selection-ready")).toBeFalsy();
-    } finally {
-      confirmSpy.mockRestore();
-    }
-  });
-
-  it("Continue proceeds + emits when user accepts dep warning", async () => {
-    const payload = makePayload({
-      wildcards: [
-        {
-          id: "w1",
-          name: "a",
-          options: [{ value: "ref @{deadbeef}", weight: 1 }],
-          tags: [],
-        },
-      ],
-    });
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, "confirm");
     try {
       const wrap = mountPicker({ payload, libraryRows: new Map() });
       await flushPromises();
       await wrap.get('[data-test="import-picker-continue"]').trigger("click");
       await flushPromises();
-      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(confirmSpy).not.toHaveBeenCalled();
       const events = wrap.emitted("selection-ready");
       expect(events).toBeTruthy();
       expect(events![0]![0]).toEqual(new Set(["w1"]));

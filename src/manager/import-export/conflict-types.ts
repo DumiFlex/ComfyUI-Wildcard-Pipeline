@@ -47,16 +47,20 @@ export type PerItemKind =
  * route the resolved entity to the correct server-side bucket. The
  * `entity` blob is the full payload row (passed through verbatim).
  *
- * `collisionState` (Phase 8) distinguishes the two flavors of
- * "needs decision":
+ * `collisionState` distinguishes the flavors of "needs visibility":
  *   - `"conflict"`       — uuid match + content drift (incoming
  *                          fingerprint differs from library's stored one).
  *                          Surfaces as the orange MODIFIED badge.
  *   - `"exists-unknown"` — library row present but `snapshot_fingerprint`
- *                          is NULL (legacy / pre-backfill). The user
- *                          must still decide skip/replace, but we cannot
- *                          claim "modified" without proof; the modal
- *                          renders the amber EXISTING badge instead.
+ *                          is NULL (legacy / pre-backfill). User must
+ *                          decide skip/replace, but we cannot claim
+ *                          "modified" without proof; modal renders the
+ *                          amber EXISTING badge.
+ *   - `"silent-skip"`    — uuid + content fingerprint both match exactly.
+ *                          Surfaces in the modal as a DUPLICATE badge so
+ *                          the user sees these aren't being imported by
+ *                          default (default action: skip) but can flip
+ *                          to Replace / Import as new to override.
  *
  * Optional for back-compat with code paths constructing conflicts
  * before Phase 8 — absent → modal falls back to the historical
@@ -66,7 +70,7 @@ export interface BatchConflict {
   kind: EntityKind;
   id: string;
   entity: Record<string, unknown>;
-  collisionState?: "conflict" | "exists-unknown";
+  collisionState?: "conflict" | "exists-unknown" | "silent-skip";
 }
 
 /**

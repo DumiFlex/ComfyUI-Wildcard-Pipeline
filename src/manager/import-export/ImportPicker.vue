@@ -334,8 +334,12 @@ function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): StatusBadge[
       badges.push({ variant: "mod", label: "MODIFIED" });
     } else if (state === "exists-unknown") {
       badges.push({ variant: "drift", label: "EXISTING" });
+    } else if (state === "silent-skip") {
+      // Phase 10: exact-match duplicates get their own dim badge so users
+      // see "yes, this row is already in your library" instead of
+      // wondering why nothing visually distinguishes them from NEW rows.
+      badges.push({ variant: "duplicate", label: "DUPLICATE" });
     }
-    // silent-skip intentionally produces no badge.
   }
   if (bucket !== "categories" && warningIds.value.has(entity.id)) {
     badges.push({ variant: "drift", label: "INTEGRITY" });
@@ -417,23 +421,21 @@ function unselectedDepsForEntity(entity: PayloadEntity): DepRef[] {
 
 /**
  * Build the "Missing N" dep-chip refs for an entity. Refs that target
- * entities NOT in the payload AND NOT in the receiver library —
- * truly unresolvable from the import side.
+ * entities absent from the import payload.
  *
- * Surfaces independently of selection state (an unselected row whose
- * refs are broken still warrants the warning — selecting it would
- * commit broken refs into the library).
+ * Phase 10: we deliberately DO NOT treat receiver-library presence as
+ * resolution. A payload ref points to "the entity I authored against";
+ * the library might carry the same id with totally different content,
+ * so library presence doesn't make the ref any less broken from the
+ * importer's perspective.
  */
 function missingDepsFor(entity: PayloadEntity): DepRef[] {
   const edges = depGraph.value[entity.id] ?? [];
   const refs: DepRef[] = [];
   for (const target of edges) {
-    if (payloadIds.value.has(target)) continue;          // resolves within payload
-    if (props.libraryRows?.has(target) === true) continue; // resolves against library
+    if (payloadIds.value.has(target)) continue;
     // Name is literal "unknown" so it never collides with the `@{id}`
-    // id-span that PickerRow renders separately. No type info — target
-    // absent from both sources; row renders the generic pi-circle glyph
-    // from PickerRow's depIconClass fallback.
+    // id-span PickerRow renders separately.
     refs.push({
       id: target,
       name: "unknown",
@@ -459,35 +461,24 @@ function deselectAll(): void {
 
 function emitContinue(): void {
   if (selected.value.size === 0) return;
-  // Warn the user when any selected row carries unresolvable deps
-  // (target absent from both payload AND receiver library). The user
-  // can still proceed; the broken-ref state will surface in the commit
-  // step's per-item resolution. Lookup goes through a single payload-wide
-  // id→entity map so the count is O(selected) instead of O(selected × buckets).
+  // Phase 10: no dep-warning confirm dialog on import. Missing-dep
+  // visibility is owned by the ConflictModal's per-item issues section
+  // (the orchestrator's `buildPerItemIssues` emits one broken-inner-ref
+  // per unresolved target on a selected row, which the modal renders
+  // with Skip / Import anyway actions). Two surfaces for the same
+  // warning is noisy; the modal is the canonical resolution point.
+  //
+  // Belt-and-suspenders: even though the parent applies `:key` on
+  // `importV2State.id` to force a full remount across payload swaps
+  // (which by itself resets `seeded` + `selected`), filter the emit
+  // against the current payload's id set so a stale id can NEVER reach
+  // the commit stage.
   const entityById = new Map<string, PayloadEntity>();
   for (const b of BUCKETS) {
     for (const e of entitiesForBucket(b.key)) {
       if (typeof e.id === "string" && e.id.length > 0) entityById.set(e.id, e);
     }
   }
-  let missingCount = 0;
-  for (const id of selected.value) {
-    const entity = entityById.get(id);
-    if (entity && missingDepsFor(entity).length > 0) missingCount += 1;
-  }
-  if (missingCount > 0) {
-    const proceed = window.confirm(
-      `${missingCount} selected ${missingCount === 1 ? "item has" : "items have"} dependencies missing from payload and library. Continue anyway?`,
-    );
-    if (!proceed) return;
-  }
-  // Belt-and-suspenders: even though the parent applies `:key` on
-  // `importV2State.id` to force a full remount across payload swaps
-  // (which by itself resets `seeded` + `selected`), filter the emit
-  // against the current payload's id set so a stale id can NEVER reach
-  // the commit stage. Without this, a regression in the parent's :key
-  // wiring would resurface the orphan-id bug. Reuse the entityById map
-  // built above so we don't walk every bucket twice in one click.
   const filtered = new Set<string>();
   for (const id of selected.value) {
     if (entityById.has(id)) filtered.add(id);

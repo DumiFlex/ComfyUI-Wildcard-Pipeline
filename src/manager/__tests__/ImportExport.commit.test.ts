@@ -332,13 +332,13 @@ describe("ImportExport.vue — commit orchestrator", () => {
     expect(brokenForC?.detail).toMatchObject({ target_id: "deadbeef" });
   });
 
-  it("all-silent-skip selection → info toast, commit NOT called, state cleared", async () => {
-    // Wildcard entity from the payload — same id + same content as the
-    // pre-seeded library row so the collision detector returns
-    // `silent-skip` (uuid + fingerprint both match).
+  it("Phase 10: silent-skip selection opens ConflictModal; default skip → 'Nothing to import' toast", async () => {
+    // Wildcard entity matches a pre-seeded library row content + id, so
+    // collision detector returns silent-skip. Phase 10 routes silent-skips
+    // through the modal (as DUPLICATE rows) so the user sees them; the
+    // default action is still drop, and choosing commit with no overrides
+    // → partitionSelection drops them all → totalOps=0 → info toast.
     const entity = mkWildcardEntity("eeeeeeee");
-    // Recompute the fingerprint the way `detectCollisions` does so the
-    // library snapshot_fingerprint matches the incoming entity's.
     const { moduleFingerprint } = await import("../import-export/fingerprint");
     const fp = moduleFingerprint({
       type: "wildcard",
@@ -347,9 +347,6 @@ describe("ImportExport.vue — commit orchestrator", () => {
       tags: entity.tags,
       payload_hash: entity.payload_hash,
     });
-    // Pre-seed library row with matching id + matching snapshot_fingerprint.
-    // snapshot_fingerprint is not in the static ModuleRow type (added
-    // post-typing); cast via unknown to attach it for the API mock.
     const libRow = {
       ...mkModule({ id: "eeeeeeee", type: "wildcard", name: entity.name }),
       snapshot_fingerprint: fp,
@@ -357,20 +354,23 @@ describe("ImportExport.vue — commit orchestrator", () => {
     apiM.modules.list.mockResolvedValue({ items: [libRow], total: 1 });
     const wrap = mountView();
     await flushPromises();
-    await feedPayloadAndContinue(wrap, mkPayload({
-      wildcards: [entity],
-    }));
-    // No conflicts + no per-item issues → orchestrator runs runCommit
-    // directly. Every entity is silent-skip → buckets all empty → short-
-    // circuit must trip BEFORE api.importExport.commit fires.
+    await feedPayloadAndContinue(wrap, mkPayload({ wildcards: [entity] }));
+    // Modal opens because the silent-skip is now visible.
+    const modalEl = document.body.querySelector('[data-test="conflict-modal"]');
+    expect(modalEl).not.toBeNull();
+    // Drive commit-ready with default (skip) + no overrides → orchestrator
+    // partitions everything to drop → "Nothing to import" toast.
+    const modal = wrap.findComponent(ConflictModal);
+    modal.vm.$emit("commit-ready", { batchDefault: "skip", perItemDecisions: {} });
+    await flushPromises();
     expect(apiM.importExport.commit).not.toHaveBeenCalled();
     const t = useToast();
     const info = t.toasts.value.find(
       (x) => x.severity === "info" && x.summary === "Nothing to import",
     );
     expect(info).toBeTruthy();
-    // State cleared — stash no longer rendered.
     expect(wrap.find('[data-test="io-import-v2-stash"]').exists()).toBe(false);
+    wrap.unmount();
   });
 
   it("stale broken-refs cleared on re-import of the same entity", async () => {

@@ -369,6 +369,14 @@
   color: var(--wp-info);
 }
 
+/* `--duplicate` variant: exact-match silent-skip rows. Dim text on a
+ * muted background — reads as "already in your library, nothing to do"
+ * without competing with MOD orange / EXISTING amber / NEW green. */
+.wp-mod-badge--duplicate {
+  background: var(--wp-bg-3);
+  color: var(--wp-text-dim);
+}
+
 /* Sibling-count badge — distinct from state badges (different
  * meaning: "this row N of M in the duplicate group"). Mono font +
  * non-uppercase so it reads as a count, not an alert. */

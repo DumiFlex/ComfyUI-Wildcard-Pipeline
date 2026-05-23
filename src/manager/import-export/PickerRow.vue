@@ -32,12 +32,12 @@ import { kindIcon } from "../../components/shared/kind-icons";
 import { catChipStyle } from "../utils/catChip";
 
 /**
- * Status-badge taxonomy — five variants paired 1:1 with
- * `.wp-mod-badge--{variant}` in `row-primitives.css`. NEW / MIGRATED
- * are the Phase-1 additions; MOD / DRIFT / MISSING were already shared.
+ * Status-badge taxonomy — six variants paired 1:1 with
+ * `.wp-mod-badge--{variant}` in `row-primitives.css`. `duplicate` is the
+ * Phase-10 addition for exact-match silent-skip rows.
  */
 export interface StatusBadge {
-  variant: "new" | "mod" | "drift" | "missing" | "migrated";
+  variant: "new" | "mod" | "drift" | "missing" | "migrated" | "duplicate";
   /** Display label (e.g. "NEW", "MODIFIED", "MIGRATED v0→1"). Rendered
    *  verbatim — caller controls casing. */
   label: string;

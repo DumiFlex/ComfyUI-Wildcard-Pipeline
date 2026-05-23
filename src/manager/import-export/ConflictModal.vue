@@ -520,6 +520,7 @@ const modifiedConflictCount = computed<number>(() => {
   let n = 0;
   for (const c of props.batchConflicts) {
     if (c.collisionState === "exists-unknown") continue;
+    if (c.collisionState === "silent-skip") continue;
     n += 1;
   }
   return n;
@@ -528,6 +529,13 @@ const existingConflictCount = computed<number>(() => {
   let n = 0;
   for (const c of props.batchConflicts) {
     if (c.collisionState === "exists-unknown") n += 1;
+  }
+  return n;
+});
+const duplicateConflictCount = computed<number>(() => {
+  let n = 0;
+  for (const c of props.batchConflicts) {
+    if (c.collisionState === "silent-skip") n += 1;
   }
   return n;
 });
@@ -542,11 +550,28 @@ const batchCountsLabel = computed<string>(() => {
   const parts: string[] = [];
   const m = modifiedConflictCount.value;
   const e = existingConflictCount.value;
-  if (m > 0 || (e === 0 && props.batchConflicts.length === 0)) {
+  const d = duplicateConflictCount.value;
+  if (m > 0 || (e === 0 && d === 0 && props.batchConflicts.length === 0)) {
     parts.push(`${m} modified`);
   }
   if (e > 0) parts.push(`${e} existing`);
+  if (d > 0) parts.push(`${d} duplicate`);
   return parts.join(" · ");
+});
+
+/** Singular noun describing the kind of batch row, used in the
+ *  "Apply to all N <noun> rows:" header line. When more than one
+ *  collisionState is present we lean on the generic "conflicting"
+ *  rather than spelling out every flavor. */
+const batchRowNoun = computed<string>(() => {
+  const m = modifiedConflictCount.value;
+  const e = existingConflictCount.value;
+  const d = duplicateConflictCount.value;
+  const flavorsPresent = [m > 0, e > 0, d > 0].filter(Boolean).length;
+  if (flavorsPresent !== 1) return "conflicting";
+  if (m > 0) return "modified";
+  if (e > 0) return "existing";
+  return "duplicate";
 });
 
 /**
@@ -557,9 +582,12 @@ const batchCountsLabel = computed<string>(() => {
  */
 function batchOverrideBadge(
   conflict: BatchConflict,
-): { variant: "mod" | "drift"; label: string } {
+): { variant: "mod" | "drift" | "duplicate"; label: string } {
   if (conflict.collisionState === "exists-unknown") {
     return { variant: "drift", label: "EXISTING" };
+  }
+  if (conflict.collisionState === "silent-skip") {
+    return { variant: "duplicate", label: "DUPLICATE" };
   }
   return { variant: "mod", label: "MODIFIED" };
 }
@@ -592,6 +620,15 @@ const importItemCount = computed<number>(() => {
   for (const c of props.batchConflicts) {
     const dec = perItemDecisions.value[c.id];
     if (dec && dec.kind === "skip") continue;
+    // silent-skip rows default to drop regardless of batchDefault — they
+    // only count toward the import total when an explicit per-row
+    // override (replace / rename) flips them on.
+    if (c.collisionState === "silent-skip") {
+      if (!dec) continue;
+      if (dec.kind === "skip") continue;
+      n += 1;
+      continue;
+    }
     if (!dec && batchDefault.value === "skip") continue;
     n += 1;
   }
@@ -640,11 +677,7 @@ const importItemCount = computed<number>(() => {
           <div class="wp-conflict-modal__batch-head">
             <span class="wp-conflict-modal__batch-label">
               Apply to all <strong>{{ props.batchConflicts.length }}</strong>
-              {{ existingConflictCount > 0 && modifiedConflictCount === 0
-                ? "existing"
-                : existingConflictCount > 0
-                  ? "modified + existing"
-                  : "modified" }} rows:
+              {{ batchRowNoun }} rows:
             </span>
             <div
               class="wp-action-group"

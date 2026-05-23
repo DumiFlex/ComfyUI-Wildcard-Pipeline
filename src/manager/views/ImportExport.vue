@@ -818,9 +818,13 @@ function entityNameOf(entity: Record<string, unknown>): string | undefined {
  *
  *   1. `fingerprint-mismatch` from `integrityWarnings` (Task 21 parse).
  *   2. `broken-inner-ref` — for each selected entity, walk its outgoing
- *      dep edges via `buildDepGraph`. Any target that is NOT in the
- *      payload AND NOT in `libraryRows` becomes one per-item issue so
- *      the user must explicitly accept-or-skip before commit.
+ *      dep edges via `buildDepGraph`. Any target absent from the payload
+ *      becomes a per-item issue so the user must explicitly accept-or-skip
+ *      before commit. Phase 10: we deliberately DO NOT treat receiver
+ *      library presence as resolution — a payload ref points to "the
+ *      entity I authored against", and the library might carry the same
+ *      id with totally different content. The user needs to see the
+ *      missing-dep warning either way.
  *
  *  A single entity can produce BOTH a fingerprint-mismatch AND one or
  *  more broken-inner-ref issues; we keep them all (each describes a
@@ -829,7 +833,6 @@ function buildPerItemIssues(
   selected: SelectedEntity[],
   integrityWarnings: IntegrityWarning[],
   payload: RawPayload,
-  libraryRows: Map<string, LibraryRow>,
 ): PerItemIssue[] {
   const pickedIds = new Set(selected.map((s) => s.entity.id));
   const out: PerItemIssue[] = [];
@@ -844,8 +847,6 @@ function buildPerItemIssues(
       detail: { reason: w.reason, field: w.field },
     });
   }
-  // Build payload-id set for the broken-ref pass — covers every entity
-  // in the payload across all 7 buckets (not just selected ones).
   const payloadIds = new Set<string>();
   for (const k of ALL_KINDS) {
     const arr = payload[BUCKET_FOR_KIND[k]];
@@ -857,11 +858,8 @@ function buildPerItemIssues(
   for (const s of selected) {
     const edges = graph[s.entity.id] ?? [];
     for (const target of edges) {
-      if (payloadIds.has(target)) continue;       // resolves within payload
-      if (libraryRows.has(target)) continue;      // resolves against receiver library
+      if (payloadIds.has(target)) continue;
       const name = entityNameOf(s.entity);
-      // Stash `kind` on the issue entity so ConflictModal's `entityKind()`
-      // picks up the correct type icon (it reads `kind` first, then `type`).
       out.push({
         kind: "broken-inner-ref",
         entity: {
@@ -878,24 +876,26 @@ function buildPerItemIssues(
 
 /**
  * Build `BatchConflict[]` from module-kind entities that need user
- * resolution. `conflict` (fingerprint differs — definitely modified)
- * AND `exists-unknown` (library row has no stored fingerprint so we
- * cannot prove modification) both route through the modal so the
- * commit can't silently overwrite or crash on a duplicate id.
+ * visibility. Three states route through the modal:
+ *   - `conflict`       — fingerprint differs → orange MODIFIED.
+ *   - `exists-unknown` — library row, no stored fingerprint → amber EXISTING.
+ *   - `silent-skip`    — exact-match duplicate → dim DUPLICATE. Default
+ *                        action is still skip, but routing it through the
+ *                        modal lets the user SEE the dedup happen + flip
+ *                        to Replace / Import as new if they want.
  */
 function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
   const out: BatchConflict[] = [];
   for (const s of selected) {
-    if (s.collision !== "conflict" && s.collision !== "exists-unknown") continue;
+    if (
+      s.collision !== "conflict"
+      && s.collision !== "exists-unknown"
+      && s.collision !== "silent-skip"
+    ) continue;
     out.push({
       kind: s.kind,
       id: s.entity.id,
       entity: s.entity,
-      // Phase 8: keep the original collision-state on the conflict so the
-      // modal can render distinct MODIFIED (orange, content-drift) vs
-      // EXISTING (amber, library row has no fingerprint to compare)
-      // badges + counts. Without this, every row read as "modified" even
-      // when the library was just missing a stored fingerprint.
       collisionState: s.collision,
     });
   }
@@ -971,7 +971,15 @@ function partitionSelection(
     derivations: [], constraints: [], categories: [],
   };
   for (const s of selected) {
-    if (s.collision === "silent-skip") continue;
+    // Phase 10: silent-skip rows surface in the modal so the user sees
+    // they are deduped. Default action is still drop, but a per-row
+    // override ("Replace" / "Import as new") wins — fall through to the
+    // shared decision-resolution branch below so the override path is
+    // single-source-of-truth.
+    if (s.collision === "silent-skip"
+        && !resolution.perItemDecisions[s.entity.id]) {
+      continue;
+    }
     let decision: Decision | null;
     const pd = resolution.perItemDecisions[s.entity.id];
     if (pd) {
@@ -1132,7 +1140,7 @@ async function onImportV2SelectionReady(ids: Set<string>): Promise<void> {
   const selected = buildSelectedEntities(state.payload, ids, library);
   pendingSelection.value = selected;
   const bConflicts = buildBatchConflicts(selected);
-  const issues = buildPerItemIssues(selected, state.integrityWarnings, state.payload, library);
+  const issues = buildPerItemIssues(selected, state.integrityWarnings, state.payload);
   batchConflicts.value = bConflicts;
   perItemIssues.value = issues;
   if (bConflicts.length > 0 || issues.length > 0) {

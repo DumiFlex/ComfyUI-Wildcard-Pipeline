@@ -22,6 +22,8 @@ import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
 import type { DepRef } from "./PickerRow.vue";
+import ExportDepWarningModal from "./ExportDepWarningModal.vue";
+import type { ExportDepWarningRow } from "./ExportDepWarningModal.vue";
 import { liveLibraryToRawPayload } from "./live-library-adapter";
 import { buildDepGraph, transitiveClosure, constraintsBothSidesIn } from "./dep-graph";
 
@@ -406,23 +408,43 @@ function downloadPayload(payload: unknown) {
   }
 }
 
-async function runExport() {
-  if (totalSelected.value === 0) return;
-  // Warn before export when any selected row has unselected deps inside
-  // the library. Bypass via `window.confirm` so the user can still ship
-  // an intentionally-pruned bundle (e.g. wildcards-only).
-  let depWarnCount = 0;
+/**
+ * Look up display name + kind for a selected id. Walks each bucket's
+ * `rowsForBucket` output once — fine here because we only call it for
+ * the (typically small) set of rows that have unsatisfied deps.
+ */
+function rowMetaFor(id: string): { name: string; kind: string } | undefined {
+  for (const b of BUCKETS) {
+    const row = rowsForBucket(b.key).find((r) => r.id === id);
+    if (row) return { name: row.name, kind: row.kind };
+  }
+  return undefined;
+}
+
+// ---------- Dep-warning modal state ----------
+
+const depWarningOpen = ref<boolean>(false);
+const depWarningRows = ref<ExportDepWarningRow[]>([]);
+
+function collectDepWarningRows(): ExportDepWarningRow[] {
+  const out: ExportDepWarningRow[] = [];
   for (const b of BUCKETS) {
     for (const id of selection.value[b.key]) {
-      if (unselectedDepsForId(id).length > 0) depWarnCount += 1;
+      const deps = unselectedDepsForId(id);
+      if (deps.length === 0) continue;
+      const meta = rowMetaFor(id);
+      out.push({
+        name: meta?.name ?? id,
+        id: id.slice(0, 8),
+        kind: meta?.kind,
+        missing: deps.map((d) => ({ name: d.name, id: d.id })),
+      });
     }
   }
-  if (depWarnCount > 0) {
-    const proceed = window.confirm(
-      `${depWarnCount} selected ${depWarnCount === 1 ? "item has" : "items have"} unresolved dependencies. Export anyway?`,
-    );
-    if (!proceed) return;
-  }
+  return out;
+}
+
+async function performExport(): Promise<void> {
   exporting.value = true;
   try {
     const payload = await api.importExport.build(buildRequest());
@@ -448,6 +470,31 @@ async function runExport() {
   } finally {
     exporting.value = false;
   }
+}
+
+async function runExport() {
+  if (totalSelected.value === 0) return;
+  const rows = collectDepWarningRows();
+  if (rows.length > 0) {
+    depWarningRows.value = rows;
+    depWarningOpen.value = true;
+    return;
+  }
+  await performExport();
+}
+
+function onDepWarningCancel(): void {
+  depWarningOpen.value = false;
+}
+
+function onDepWarningIncludeDeps(): void {
+  depWarningOpen.value = false;
+  selectWithDependencies();
+}
+
+async function onDepWarningExportAnyway(): Promise<void> {
+  depWarningOpen.value = false;
+  await performExport();
 }
 
 function clearAll() {
@@ -616,6 +663,15 @@ function presetFavoritesOnly(): void {
         @click="runExport"
       >Export</Button>
     </div>
+
+    <ExportDepWarningModal
+      :open="depWarningOpen"
+      :rows="depWarningRows"
+      @update:open="(v) => depWarningOpen = v"
+      @cancel="onDepWarningCancel"
+      @include-deps="onDepWarningIncludeDeps"
+      @export-anyway="onDepWarningExportAnyway"
+    />
   </div>
 </template>
 
