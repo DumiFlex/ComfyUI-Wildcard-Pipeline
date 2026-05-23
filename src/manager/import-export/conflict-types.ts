@@ -46,11 +46,27 @@ export type PerItemKind =
  * `EntityKind` from `./commit` so the same partitioner downstream can
  * route the resolved entity to the correct server-side bucket. The
  * `entity` blob is the full payload row (passed through verbatim).
+ *
+ * `collisionState` (Phase 8) distinguishes the two flavors of
+ * "needs decision":
+ *   - `"conflict"`       — uuid match + content drift (incoming
+ *                          fingerprint differs from library's stored one).
+ *                          Surfaces as the orange MODIFIED badge.
+ *   - `"exists-unknown"` — library row present but `snapshot_fingerprint`
+ *                          is NULL (legacy / pre-backfill). The user
+ *                          must still decide skip/replace, but we cannot
+ *                          claim "modified" without proof; the modal
+ *                          renders the amber EXISTING badge instead.
+ *
+ * Optional for back-compat with code paths constructing conflicts
+ * before Phase 8 — absent → modal falls back to the historical
+ * "modified" treatment.
  */
 export interface BatchConflict {
   kind: EntityKind;
   id: string;
   entity: Record<string, unknown>;
+  collisionState?: "conflict" | "exists-unknown";
 }
 
 /**

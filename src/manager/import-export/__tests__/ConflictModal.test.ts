@@ -769,4 +769,119 @@ describe("ConflictModal.vue", () => {
     expect(wrap.emitted("update:open")?.[0]).toEqual([false]);
     wrap.unmount();
   });
+
+  // ---------- Phase 8: modified / existing count split ----------
+
+  it("title summary shows 'N modified' when every batch conflict has collisionState=conflict", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({
+          id: "w1",
+          entity: { id: "w1", name: "a" },
+          collisionState: "conflict",
+        }),
+        makeBatchConflict({
+          id: "w2",
+          entity: { id: "w2", name: "b" },
+          collisionState: "conflict",
+        }),
+      ],
+    });
+    const summary = $('[data-test="conflict-modal-summary"]');
+    expect(summary.textContent).toContain("2 modified");
+    // No EXISTING segment when there are no exists-unknown rows.
+    expect(summary.textContent).not.toMatch(/\bexisting\b/);
+    wrap.unmount();
+  });
+
+  it("title summary shows 'N existing' when every batch conflict has collisionState=exists-unknown", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({
+          id: "w1",
+          entity: { id: "w1", name: "a" },
+          collisionState: "exists-unknown",
+        }),
+      ],
+    });
+    const summary = $('[data-test="conflict-modal-summary"]');
+    // Only existing count appears — 0 modified is suppressed.
+    expect(summary.textContent).toContain("1 existing");
+    expect(summary.textContent).not.toMatch(/\bmodified\b/);
+    wrap.unmount();
+  });
+
+  it("title summary shows BOTH 'N modified · M existing' when conflicts mix", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({
+          id: "w1",
+          entity: { id: "w1", name: "a" },
+          collisionState: "conflict",
+        }),
+        makeBatchConflict({
+          id: "w2",
+          entity: { id: "w2", name: "b" },
+          collisionState: "exists-unknown",
+        }),
+        makeBatchConflict({
+          id: "w3",
+          entity: { id: "w3", name: "c" },
+          collisionState: "exists-unknown",
+        }),
+      ],
+    });
+    const summary = $('[data-test="conflict-modal-summary"]');
+    expect(summary.textContent).toContain("1 modified");
+    expect(summary.textContent).toContain("2 existing");
+    wrap.unmount();
+  });
+
+  it("'Batch resolution' section chip shows the split label", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({
+          id: "w1",
+          entity: { id: "w1", name: "a" },
+          collisionState: "conflict",
+        }),
+        makeBatchConflict({
+          id: "w2",
+          entity: { id: "w2", name: "b" },
+          collisionState: "exists-unknown",
+        }),
+      ],
+    });
+    const chip = $('[data-test="conflict-modal-batch-count"]');
+    expect(chip.textContent).toContain("1 modified");
+    expect(chip.textContent).toContain("1 existing");
+    wrap.unmount();
+  });
+
+  it("override row badge renders MODIFIED for collisionState=conflict, EXISTING for exists-unknown", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({
+          id: "w1",
+          entity: { id: "w1", name: "a" },
+          collisionState: "conflict",
+        }),
+        makeBatchConflict({
+          id: "w2",
+          entity: { id: "w2", name: "b" },
+          collisionState: "exists-unknown",
+        }),
+      ],
+    });
+    // Expand the override list so the per-row badges mount.
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+    const badge1 = $('[data-test="batch-override-badge-w1"]');
+    expect(badge1.textContent?.trim()).toBe("MODIFIED");
+    expect(badge1.className).toContain("wp-mod-badge--mod");
+    const badge2 = $('[data-test="batch-override-badge-w2"]');
+    expect(badge2.textContent?.trim()).toBe("EXISTING");
+    expect(badge2.className).toContain("wp-mod-badge--drift");
+    wrap.unmount();
+  });
 });

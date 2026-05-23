@@ -818,4 +818,57 @@ describe("ExportTab.vue", () => {
       .findComponent(PickerRow);
     expect(rowA.props("unselectedDeps")).toEqual([]);
   });
+
+  // ---------- Phase 8: + select dep button wires through to bucket toggle ----------
+
+  it("PickerRow's select-dep emit adds the target id to the matching bucket selection", async () => {
+    // Wildcard A references @{bbbbbbbb}; select only A so the expanded
+    // dep list (which only renders for SELECTED rows) becomes visible
+    // and the +select buttons mount. Then emit select-dep with B's id
+    // from the PickerRow instance directly — exercising the parent's
+    // @select-dep handler, not the inner click.
+    apiAny.modules.list.mockResolvedValue({
+      items: [
+        mkModule({
+          id: "aaaaaaaa",
+          type: "wildcard",
+          name: "$a",
+          payload: {
+            options: [{ id: "o1", value: "uses @{bbbbbbbb}", weight: 1 }],
+          },
+        }),
+        mkModule({
+          id: "bbbbbbbb",
+          type: "wildcard",
+          name: "$b",
+          payload: { options: [] },
+        }),
+      ],
+      total: 2,
+    });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await expandSection(wrap, "wildcard");
+
+    // Pick A.
+    await wrap.get('[data-test="export-tab-row-wildcard-aaaaaaaa"] button[role="checkbox"]').trigger("click");
+    await flushPromises();
+
+    // B is not yet selected.
+    const rowBCb = wrap.get('[data-test="export-tab-row-wildcard-bbbbbbbb"] button[role="checkbox"]');
+    expect(rowBCb.attributes("aria-checked")).toBe("false");
+
+    // Fire select-dep on A's PickerRow with B's id; the parent should
+    // resolve the bucket and flip B to selected.
+    const rowA = wrap
+      .get('[data-test="export-tab-row-wildcard-aaaaaaaa"]')
+      .findComponent(PickerRow);
+    rowA.vm.$emit("select-dep", "bbbbbbbb");
+    await flushPromises();
+
+    expect(rowBCb.attributes("aria-checked")).toBe("true");
+  });
 });

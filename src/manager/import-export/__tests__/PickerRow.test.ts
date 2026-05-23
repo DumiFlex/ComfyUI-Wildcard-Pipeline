@@ -251,6 +251,46 @@ describe("PickerRow", () => {
     expect(chip.attributes("aria-expanded")).toBe("false");
   });
 
+  // ---------- + select dep button ----------
+
+  it("emits select-dep with the dep id when the + select button is clicked", async () => {
+    const wrap = mount(PickerRow, {
+      props: {
+        uuid: "u",
+        name: "x",
+        checked: true,
+        unselectedDeps: [
+          { id: "aabbccdd", name: "$camera_angle", type: "wildcard" },
+          { id: "eeff0011", name: "$lighting",     type: "wildcard" },
+        ],
+      },
+    });
+    // Expand the unselected-deps list so the per-row + select buttons mount.
+    await wrap.get('[data-test="dep-warn-chip"]').trigger("click");
+    const btn = wrap.get('[data-test="dep-warn-select-aabbccdd"]');
+    expect(btn.attributes("class") ?? "").toContain("wp-row-dep-list__action");
+    await btn.trigger("click");
+    expect(wrap.emitted("select-dep")?.[0]).toEqual(["aabbccdd"]);
+    // Clicking the OTHER row's button emits the right id, not the first.
+    await wrap.get('[data-test="dep-warn-select-eeff0011"]').trigger("click");
+    expect(wrap.emitted("select-dep")?.[1]).toEqual(["eeff0011"]);
+  });
+
+  it("does NOT render a + select button next to missing deps (unresolvable)", async () => {
+    const wrap = mount(PickerRow, {
+      props: {
+        uuid: "u",
+        name: "x",
+        checked: true,
+        missingDeps: [{ id: "deadbeef", name: "$ghost", type: "wildcard" }],
+      },
+    });
+    await wrap.get('[data-test="dep-missing-chip"]').trigger("click");
+    // Missing-dep list items render no select button — the dep is
+    // unresolvable from either side, so there is nothing to toggle on.
+    expect(wrap.find('[data-test="dep-warn-select-deadbeef"]').exists()).toBe(false);
+  });
+
   it("renders both unselected- and missing-dep chips side by side when both are non-empty", () => {
     const wrap = mount(PickerRow, {
       props: {

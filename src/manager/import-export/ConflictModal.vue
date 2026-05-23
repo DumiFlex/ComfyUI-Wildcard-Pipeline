@@ -506,6 +506,64 @@ function issueDetailText(issue: PerItemIssue): string {
   return "";
 }
 
+/**
+ * Phase 8 — split modified vs existing count in the modal chrome.
+ *
+ * `modified` rows have proven content drift (collisionState = "conflict").
+ * `existing` rows are library-present-but-no-stored-fingerprint
+ * (collisionState = "exists-unknown"); the user still must decide what
+ * to do, but the modal shouldn't label them MODIFIED since drift is
+ * unproven. Conflicts without a `collisionState` (older orchestrator
+ * paths) fall back to the historical "modified" bucket for safety.
+ */
+const modifiedConflictCount = computed<number>(() => {
+  let n = 0;
+  for (const c of props.batchConflicts) {
+    if (c.collisionState === "exists-unknown") continue;
+    n += 1;
+  }
+  return n;
+});
+const existingConflictCount = computed<number>(() => {
+  let n = 0;
+  for (const c of props.batchConflicts) {
+    if (c.collisionState === "exists-unknown") n += 1;
+  }
+  return n;
+});
+
+/**
+ * Title-bar "N modified · M existing · K missing dep · J tier-3" text
+ * builder. Suppresses the EXISTING segment entirely when there are none,
+ * so the historical "N modified · …" output for purely-conflict imports
+ * stays identical.
+ */
+const batchCountsLabel = computed<string>(() => {
+  const parts: string[] = [];
+  const m = modifiedConflictCount.value;
+  const e = existingConflictCount.value;
+  if (m > 0 || (e === 0 && props.batchConflicts.length === 0)) {
+    parts.push(`${m} modified`);
+  }
+  if (e > 0) parts.push(`${e} existing`);
+  return parts.join(" · ");
+});
+
+/**
+ * Per-row badge variant + label for a batch override row. Phase 8 split:
+ * conflict (proven drift) → orange MOD; exists-unknown (no library
+ * fingerprint) → amber DRIFT/EXISTING; unspecified → MOD fallback so
+ * pre-Phase-8 orchestrators still render a familiar badge.
+ */
+function batchOverrideBadge(
+  conflict: BatchConflict,
+): { variant: "mod" | "drift"; label: string } {
+  if (conflict.collisionState === "exists-unknown") {
+    return { variant: "drift", label: "EXISTING" };
+  }
+  return { variant: "mod", label: "MODIFIED" };
+}
+
 /** Count of per-item issues that are NOT tier-3 — used in the modal
  *  title bar's `N missing dep` counter. */
 const perItemIssuesNonTier3Count = computed<number>(() => {
@@ -558,7 +616,7 @@ const importItemCount = computed<number>(() => {
         class="wp-modal-shell__title-counts"
         data-test="conflict-modal-summary"
       >
-        {{ props.batchConflicts.length }} modified ·
+        {{ batchCountsLabel }} ·
         {{ perItemIssuesNonTier3Count }} missing dep ·
         {{ perItemIssuesTier3Count }} tier-3
       </span>
@@ -572,15 +630,21 @@ const importItemCount = computed<number>(() => {
           data-test="conflict-modal-batch-section"
         >
           Batch resolution
-          <span class="wp-conflict-modal__section-count">
-            {{ props.batchConflicts.length }} modified
-          </span>
+          <span
+            class="wp-conflict-modal__section-count"
+            data-test="conflict-modal-batch-count"
+          >{{ batchCountsLabel }}</span>
         </div>
 
         <div class="wp-conflict-modal__batch-card">
           <div class="wp-conflict-modal__batch-head">
             <span class="wp-conflict-modal__batch-label">
-              Apply to all <strong>{{ props.batchConflicts.length }} modified</strong> rows:
+              Apply to all <strong>{{ props.batchConflicts.length }}</strong>
+              {{ existingConflictCount > 0 && modifiedConflictCount === 0
+                ? "existing"
+                : existingConflictCount > 0
+                  ? "modified + existing"
+                  : "modified" }} rows:
             </span>
             <div
               class="wp-action-group"
@@ -660,9 +724,11 @@ const importItemCount = computed<number>(() => {
                 <span class="wp-picker-row__name">{{ batchRowName(conflict) }}</span>
                 <span class="wp-id">{{ conflict.id.slice(0, 8) }}</span>
                 <span
-                  class="wp-mod-badge wp-mod-badge--mod"
+                  class="wp-mod-badge"
+                  :class="`wp-mod-badge--${batchOverrideBadge(conflict).variant}`"
+                  :data-test="`batch-override-badge-${conflict.id}`"
                   style="margin-left: auto"
-                >MODIFIED</span>
+                >{{ batchOverrideBadge(conflict).label }}</span>
               </div>
               <span
                 class="wp-override-tag"

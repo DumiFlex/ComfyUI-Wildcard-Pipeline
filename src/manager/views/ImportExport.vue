@@ -846,7 +846,17 @@ function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
   const out: BatchConflict[] = [];
   for (const s of selected) {
     if (s.collision !== "conflict" && s.collision !== "exists-unknown") continue;
-    out.push({ kind: s.kind, id: s.entity.id, entity: s.entity });
+    out.push({
+      kind: s.kind,
+      id: s.entity.id,
+      entity: s.entity,
+      // Phase 8: keep the original collision-state on the conflict so the
+      // modal can render distinct MODIFIED (orange, content-drift) vs
+      // EXISTING (amber, library row has no fingerprint to compare)
+      // badges + counts. Without this, every row read as "modified" even
+      // when the library was just missing a stored fingerprint.
+      collisionState: s.collision,
+    });
   }
   return out;
 }

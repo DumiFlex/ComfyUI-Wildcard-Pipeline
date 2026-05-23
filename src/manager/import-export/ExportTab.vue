@@ -332,6 +332,23 @@ const allSelectedIds = computed<Set<string>>(() => {
  * the dep edges. Defensive skip avoids surfacing a stale-data warning
  * that the user can't act on from the export side.
  */
+/**
+ * Resolve which of the 7 buckets contains `id` and toggle that row on.
+ * Walks `rowsForBucket` for each bucket — O(rows) per click, only fires
+ * from the rare `+ select` interaction in the unselected-deps expander
+ * so the linear walk is fine. Returns silently if the id isn't found in
+ * any bucket (defensive against stale dep refs).
+ */
+function onSelectDep(id: string): void {
+  for (const b of BUCKETS) {
+    const rows = rowsForBucket(b.key);
+    if (rows.some((r) => r.id === id)) {
+      toggleRow(b.key, id, true);
+      return;
+    }
+  }
+}
+
 function unselectedDepsForId(id: string): DepRef[] {
   if (!allSelectedIds.value.has(id)) return [];
   const edges = depGraph.value[id] ?? [];
@@ -534,6 +551,7 @@ function presetFavoritesOnly(): void {
           :missing-deps="[]"
           :data-test="`export-tab-row-${bucket.key}-${row.id}`"
           @update:checked="(v: boolean) => toggleRow(bucket.key, row.id, v)"
+          @select-dep="(id: string) => onSelectDep(id)"
         />
         <div
           v-if="bucketTotalCount(bucket.key) === 0"

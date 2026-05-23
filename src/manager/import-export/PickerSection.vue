@@ -156,7 +156,7 @@ function onHeaderClick(evt: MouseEvent): void {
 }
 .wp-picker-section__header {
   display: grid;
-  grid-template-columns: 14px 18px 20px 1fr auto auto auto;
+  grid-template-columns: 14px 18px 26px 1fr auto auto auto;
   gap: 10px;
   align-items: center;
   padding: 9px 14px;
@@ -214,6 +214,19 @@ function onHeaderClick(evt: MouseEvent): void {
 .wp-picker-section__sel-pill[data-empty="true"] {
   background: var(--wp-bg-3);
   color: var(--wp-text-dim);
+}
+
+/* Section-header type-icon scale override — shared base is 16x16 and the
+ * picker-row variant is 20x20. The section header bar is ~38px tall,
+ * so the icon needs to read as a more substantial anchor against the
+ * title text — bump to 26x26 with a 15px inner glyph. Phase 8 QA fix:
+ * the previous 22px / 12px read weak. */
+.wp-picker-section__header .wp-row-type-icon {
+  width: 26px;
+  height: 26px;
+}
+.wp-picker-section__header .wp-row-type-icon .pi {
+  font-size: 15px;
 }
 .wp-picker-section__body {
   border-top: 1px solid var(--wp-border);

@@ -35,7 +35,21 @@ export function buildDepGraph(payload: RawPayload): DepGraph {
   for (const w of payload.wildcards) {
     const wid = (w as { id: string }).id;
     const edges = new Set<string>();
-    const options = (w as { options?: Array<{ value: string }> }).options ?? [];
+    // Two shapes coexist for wildcard rows:
+    //   1) Export-side (after `liveLibraryToRawPayload` flattens): `options`
+    //      lives at the top of the entity.
+    //   2) Import-side (raw payload from `parsePayload`): `options` is
+    //      nested under the entity's `payload` field — same shape the
+    //      server's `_row_to_module` returns.
+    //
+    // Read both, preferring the top-level form when both are present.
+    // Without the fallback, the Import side's "Requires N" amber chip
+    // never fires because every wildcard reports zero outgoing edges.
+    const topLevelOptions =
+      (w as { options?: Array<{ value: string }> }).options;
+    const nestedOptions =
+      (w as { payload?: { options?: Array<{ value: string }> } }).payload?.options;
+    const options = topLevelOptions ?? nestedOptions ?? [];
     for (const opt of options) {
       // Guard against malformed payloads where opt.value may be null,
       // undefined, or non-string. The cast above asserts `string` but does

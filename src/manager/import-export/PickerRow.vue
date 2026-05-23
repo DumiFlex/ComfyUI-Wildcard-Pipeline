@@ -109,7 +109,16 @@ const props = withDefaults(defineProps<Props>(), {
   missingDeps: () => [],
   indent: 0,
 });
-const emit = defineEmits<{ (e: "update:checked", v: boolean): void }>();
+const emit = defineEmits<{
+  (e: "update:checked", v: boolean): void;
+  /**
+   * User clicked the `+ select` action button next to an unselected
+   * dep entry — caller looks the id up in its bucket and toggles the
+   * row on. Missing-deps don't emit this (they're unresolvable, so
+   * there's no row to toggle).
+   */
+  (e: "select-dep", id: string): void;
+}>();
 
 // ---------- Kind icon ----------
 
@@ -154,11 +163,13 @@ function toggleMissing(): void {
   missingExpanded.value = !missingExpanded.value;
 }
 
-/** Resolve a dep's kind→tint class for the dep-list type icon. */
-function depKindClass(d: DepRef): string {
-  if (!d.type) return "bundle";
-  return KIND_CLASS[d.type] ?? "bundle";
-}
+/**
+ * Resolve a dep's kind → PrimeIcons class for the dep-list icon. The
+ * paired kind-tint class function was dropped in Phase 8 when the
+ * trailing kind-tint chip was replaced by a `+ select` action button —
+ * the dep icon now reads as a leading glyph + the row trails with the
+ * select affordance instead of a redundant kind tag.
+ */
 function depIconClass(d: DepRef): string {
   if (!d.type) return "pi pi-circle";
   return kindIcon(d.type);
@@ -266,10 +277,13 @@ function depIconClass(d: DepRef): string {
         <i :class="depIconClass(d)" aria-hidden="true" />
         <span class="wp-row-dep-list__name">{{ d.name }}</span>
         <span class="wp-row-dep-list__id">{{ d.id.slice(0, 8) }}</span>
-        <span
-          class="wp-row-dep-list__type"
-          :class="`wp-row-dep-list__type--${depKindClass(d)}`"
-        />
+        <button
+          type="button"
+          class="wp-row-dep-list__action"
+          :data-test="`dep-warn-select-${d.id}`"
+          :aria-label="`Select ${d.name}`"
+          @click="emit('select-dep', d.id)"
+        >+ select</button>
       </div>
     </div>
 

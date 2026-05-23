@@ -28,6 +28,50 @@ describe("buildDepGraph", () => {
     expect(graph["22222222"]).toEqual([]);
   });
 
+  it("also reads wildcard refs from nested payload.options (import-side shape)", () => {
+    // Import payloads carry options under `payload` (mirrors the server's
+    // _row_to_module shape). Without the nested-lookup fallback, the
+    // import-side picker's "Requires N" chip never fires because every
+    // wildcard reports zero outgoing edges. Phase 8 QA fix.
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "11111111",
+          name: "x",
+          type: "wildcard",
+          payload: { options: [{ value: "see @{22222222} now", weight: 1 }] },
+        },
+        {
+          id: "22222222",
+          name: "y",
+          type: "wildcard",
+          payload: { options: [] },
+        },
+      ],
+    });
+    const graph = buildDepGraph(payload);
+    expect(graph["11111111"]).toContain("22222222");
+    expect(graph["22222222"]).toEqual([]);
+  });
+
+  it("prefers top-level options over nested payload.options when both are present", () => {
+    // Defensive: a malformed entity that somehow carried BOTH shapes
+    // should not double-count; the explicit top-level form wins.
+    const payload = makePayload({
+      wildcards: [
+        {
+          id: "11111111",
+          name: "x",
+          options: [{ value: "see @{aaaaaaaa}", weight: 1 }],
+          payload: { options: [{ value: "see @{bbbbbbbb}", weight: 1 }] },
+        },
+      ],
+    });
+    const graph = buildDepGraph(payload);
+    expect(graph["11111111"]).toContain("aaaaaaaa");
+    expect(graph["11111111"]).not.toContain("bbbbbbbb");
+  });
+
   it("captures bundle children inner-bundle refs", () => {
     const payload = makePayload({
       bundles: [

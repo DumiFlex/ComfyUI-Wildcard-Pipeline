@@ -529,6 +529,7 @@ function emitContinue(): void {
           :missing-deps="missingDepsFor(entity)"
           :data-test="`import-picker-row-${entity.id}`"
           @update:checked="(v: boolean) => toggleRow(entity.id, v)"
+          @select-dep="(id: string) => toggleRow(id, true)"
         />
         <div
           v-if="entitiesForBucket(bucket.key).length === 0"
