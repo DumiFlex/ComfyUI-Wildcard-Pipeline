@@ -39,7 +39,7 @@ import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
-import type { Badge } from "./PickerRow.vue";
+import type { StatusBadge } from "./PickerRow.vue";
 import type { RawPayload } from "./migrations";
 import type { IntegrityWarning } from "./parse";
 import { buildDepGraph, constraintsBothSidesIn, transitiveClosure } from "./dep-graph";
@@ -294,43 +294,87 @@ const collisionStates = computed<Record<string, CollisionState>>(() => {
  *     is a presence-only heads-up — the orchestrator's bundle MOD pass
  *     runs the real classification later.
  *   - Categories: never (name-merge, no id collision).
+ *
+ * Phase-1 compat shim: emits the new `StatusBadge` shape directly.
+ * `migrated` → `migrated` variant (blue); integrity warning → `drift`
+ * (amber); conflict → `mod` (orange). Phase 2 will redesign this map
+ * end-to-end alongside the new NEW/MOD/DRIFT/MISSING/MIGRATED taxonomy
+ * surfaced by the orchestrator.
  */
-function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): Badge[] {
-  const badges: Badge[] = [];
+function badgesForEntity(entity: PayloadEntity, bucket: BucketKey): StatusBadge[] {
+  const badges: StatusBadge[] = [];
   if (typeof entity.migrated_from === "number") {
-    badges.push({ label: `migrated from v${entity.migrated_from}`, kind: "info" });
+    badges.push({
+      variant: "migrated",
+      label: `migrated from v${entity.migrated_from}`,
+    });
   }
   if (bucket !== "categories" && warningIds.value.has(entity.id)) {
-    badges.push({ label: "integrity warning", kind: "warn" });
+    badges.push({ variant: "drift", label: "integrity warning" });
   }
   if (bucket === "bundles") {
     if (props.libraryRows?.has(entity.id) === true) {
-      badges.push({ label: "conflict", kind: "warn" });
+      badges.push({ variant: "mod", label: "conflict" });
     }
   } else if (bucket !== "categories") {
     if (collisionStates.value[entity.id] === "conflict") {
-      badges.push({ label: "conflict", kind: "warn" });
+      badges.push({ variant: "mod", label: "conflict" });
     }
   }
   return badges;
 }
 
 /**
- * Dep warnings only fire when the row IS selected. The picker doesn't
- * surface "would reference X" for unselected rows — users get noise on
- * every row otherwise. Once selected, any outgoing ref to an UNSELECTED
- * id gets one warning line.
+ * Build a quick lookup `id → {name, type}` over every payload entity so
+ * the dep-list can show human-readable info instead of bare ids.
+ *
+ * Computed once per payload — not per row — to keep large imports
+ * responsive. Module buckets contribute `type` (wildcard / fixed_values /
+ * etc); bundles + categories slot in with their bucket-implied kind.
  */
-function depWarningsForEntity(entity: PayloadEntity): string[] {
-  if (!selected.value.has(entity.id)) return [];
-  const edges = depGraph.value[entity.id] ?? [];
-  const warns: string[] = [];
-  for (const target of edges) {
-    if (!selected.value.has(target)) {
-      warns.push(`references @{${target}} not selected`);
+const entityIndex = computed<Map<string, { name: string; type: string }>>(() => {
+  const m = new Map<string, { name: string; type: string }>();
+  for (const b of BUCKETS) {
+    const arr = entitiesForBucket(b.key);
+    for (const e of arr) {
+      if (typeof e.id !== "string" || e.id.length === 0) continue;
+      const name = typeof e.name === "string" && e.name.length > 0 ? e.name : e.id;
+      const type =
+        b.key === "bundles" ? "bundle"
+        : b.key === "categories" ? "category"
+        : (typeof e.type === "string" && e.type.length > 0 ? e.type : b.kindFallback);
+      m.set(e.id, { name, type });
     }
   }
-  return warns;
+  return m;
+});
+
+/**
+ * Build the "Requires N" dep-chip refs for a selected entity. Mirrors
+ * the legacy `depWarningsForEntity` behavior — only surface for rows
+ * already selected, and only for outgoing edges to UNSELECTED ids that
+ * ARE present in the payload (so the user can opt to include them).
+ *
+ * `missingDeps` (refs not in payload AND not in receiver library) will
+ * land in Phase 2 alongside a payload+library presence check. Phase 1
+ * keeps the picker amber-only — same scope as the legacy chip.
+ */
+function unselectedDepsForEntity(
+  entity: PayloadEntity,
+): Array<{ id: string; name: string; type?: string }> {
+  if (!selected.value.has(entity.id)) return [];
+  const edges = depGraph.value[entity.id] ?? [];
+  const refs: Array<{ id: string; name: string; type?: string }> = [];
+  for (const target of edges) {
+    if (selected.value.has(target)) continue;
+    const info = entityIndex.value.get(target);
+    refs.push({
+      id: target,
+      name: info?.name ?? target,
+      type: info?.type,
+    });
+  }
+  return refs;
 }
 
 // ---------- Footer actions ----------
@@ -434,8 +478,9 @@ function emitContinue(): void {
             :category-color="lookupCategoryFromPayload(entity.category_id)?.color"
             :show-id="true"
             :checked="isSelected(entity.id)"
-            :badges="badgesForEntity(entity, bucket.key)"
-            :dep-warnings="depWarningsForEntity(entity)"
+            :status-badges="badgesForEntity(entity, bucket.key)"
+            :unselected-deps="unselectedDepsForEntity(entity)"
+            :missing-deps="[]"
             :data-test="`import-picker-row-${entity.id}`"
             @update:checked="(v: boolean) => toggleRow(entity.id, v)"
           />

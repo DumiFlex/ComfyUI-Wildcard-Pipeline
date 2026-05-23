@@ -181,6 +181,8 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "wildcards");
     const row1 = wrap.get('[data-test="import-picker-row-w1"]');
     expect(row1.text()).toContain("migrated from v0");
+    // Shared `wp-mod-badge--migrated` primitive — blue/info tint.
+    expect(row1.find(".wp-mod-badge.wp-mod-badge--migrated").exists()).toBe(true);
     const row2 = wrap.get('[data-test="import-picker-row-w2"]');
     expect(row2.text()).not.toContain("migrated from v0");
   });
@@ -199,11 +201,13 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "wildcards");
     const row1 = wrap.get('[data-test="import-picker-row-w1"]');
     expect(row1.text()).toContain("integrity warning");
+    // Drift variant = amber for schema/integrity drift.
+    expect(row1.find(".wp-mod-badge.wp-mod-badge--drift").exists()).toBe(true);
     const row2 = wrap.get('[data-test="import-picker-row-w2"]');
     expect(row2.text()).not.toContain("integrity warning");
   });
 
-  it("shows a dep warning when a selected wildcard references an unselected id", async () => {
+  it("shows a Requires N chip when a selected wildcard references an unselected id", async () => {
     const payload = makePayload({
       wildcards: [
         {
@@ -218,22 +222,20 @@ describe("ImportPicker.vue", () => {
     const wrap = mountPicker({ payload });
     await flushPromises();
     await expandSection(wrap, "wildcards");
-    // Select w1, leave deadbeef unselected. The collapsed chip surfaces
-    // immediately ("1 unresolved ref"); the full warning text only shows
-    // once the chip is expanded (Polish A: dep-warn disclosure).
+    // Select w1, leave deadbeef unselected. Collapsed chip shows
+    // "Requires 1"; expanded list shows the target name.
     await wrap.get('[data-test="import-picker-row-w1"] button[role="checkbox"]').trigger("click");
     await flushPromises();
     const row1 = wrap.get('[data-test="import-picker-row-w1"]');
-    expect(row1.text()).toContain("1 unresolved ref");
+    expect(row1.text()).toContain("Requires 1");
     await row1.get('[data-test="dep-warn-chip"]').trigger("click");
-    expect(row1.text()).toContain("references @{deadbeef} not selected");
-    // Once we also select deadbeef, the warning is gone — chip disappears
-    // entirely (no chip rendered when depWarnings.length === 0).
+    expect(row1.text()).toContain("target");
+    // Once we also select deadbeef, the chip disappears entirely
+    // (no chip rendered when unselectedDeps.length === 0).
     await wrap.get('[data-test="import-picker-row-deadbeef"] button[role="checkbox"]').trigger("click");
     await flushPromises();
     const row1After = wrap.get('[data-test="import-picker-row-w1"]');
     expect(row1After.find('[data-test="dep-warn-chip"]').exists()).toBe(false);
-    expect(row1After.text()).not.toContain("references @{deadbeef} not selected");
   });
 
   it("Select with dependencies pulls in transitive refs from the selected seed", async () => {
@@ -533,10 +535,13 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
-    const badges = row.props("badges") as Array<{ label: string; kind: string }>;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
     const conflictBadge = badges.find((b) => b.label === "conflict");
     expect(conflictBadge).toBeDefined();
-    expect(conflictBadge!.kind).toBe("warn");
+    // Compat shim maps "conflict" → MOD variant; Phase 2 will retire this
+    // in favour of NEW vs MOD vs DRIFT classification done by the
+    // orchestrator.
+    expect(conflictBadge!.variant).toBe("mod");
   });
 
   it("does NOT add a conflict badge when libraryRows lacks the entity id", async () => {
@@ -549,7 +554,7 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
-    const badges = row.props("badges") as Array<{ label: string; kind: string }>;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
     expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
   });
 
@@ -572,7 +577,7 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
-    const badges = row.props("badges") as Array<{ label: string; kind: string }>;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
     expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
   });
 
@@ -587,7 +592,7 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "wildcards");
     const row = wrap.findAllComponents(PickerRow)[0]!;
-    const badges = row.props("badges") as Array<{ label: string; kind: string }>;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
     expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
   });
 
@@ -604,7 +609,7 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "bundles");
     const row = wrap.findAllComponents(PickerRow)[0]!;
-    const badges = row.props("badges") as Array<{ label: string; kind: string }>;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
     expect(badges.find((b) => b.label === "conflict")).toBeDefined();
   });
 
@@ -621,7 +626,7 @@ describe("ImportPicker.vue", () => {
     await flushPromises();
     await expandSection(wrap, "categories");
     const row = wrap.findAllComponents(PickerRow)[0]!;
-    const badges = row.props("badges") as Array<{ label: string; kind: string }>;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
     expect(badges.find((b) => b.label === "conflict")).toBeUndefined();
   });
 });

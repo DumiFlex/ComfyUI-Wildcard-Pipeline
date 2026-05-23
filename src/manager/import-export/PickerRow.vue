@@ -2,163 +2,166 @@
 /**
  * One entity row for a picker section (export picker, import picker).
  *
- * Pure presentational: receives the checked state + badge/warning data
- * from the parent, emits `update:checked` when the user toggles. No
- * knowledge of section/bucket logic — that's PickerSection's job.
+ * Pure presentational: receives the checked state + badge/dep data from
+ * the parent, emits `update:checked` when the user toggles. No knowledge
+ * of section/bucket logic — that's PickerSection's job.
+ *
+ * Phase-1 contract (canonical SPA primitives):
+ *   - `kind` slug picks the canonical PrimeIcons glyph (from
+ *     `shared/kind-icons`) + the matching `.wp-row-type-icon--{slug}`
+ *     tint variant in `shared/row-primitives.css`.
+ *   - `showId` opt-in renders the short 8-hex id via the global `.wp-id`
+ *     primitive (`manager/styles/tokens.css`).
+ *   - `categoryName` + `categoryColor` use the shared `.wp-cat-chip`
+ *     primitive (tokens.css) styled via `catChipStyle` from
+ *     `../utils/catChip`.
+ *   - `statusBadges` render through the shared `.wp-mod-badge` family
+ *     (row-primitives.css) — every consumer surface uses the same
+ *     letterform and palette, no Polish-A custom chip styling left.
+ *   - `unselectedDeps` / `missingDeps` collapse behind expandable
+ *     `.wp-dep-chip` (amber / red) — caller-specific layout still lives
+ *     in this file's scoped styles since the dep-list shape is unique
+ *     to the picker surface.
  *
  * `indent` lets a parent express nesting (e.g. a wildcard inside a
  * bundle row gets `indent=1`); each level adds 16px of left padding.
- *
- * Polish A enrichments (visual parity with legacy import/export UI):
- *   - `kind` prop renders a tinted PrimeIcons glyph between the
- *     checkbox and the name. `kindIcon()` + KIND_META tint map are
- *     shared with BundleChildRow.vue / BundleAddChildModal / the
- *     Context widget — one canonical map per project rule.
- *   - `showId` opt-in renders the short 8-hex id as a muted mono span
- *     next to the name (mirrors the legacy importer's UUID column).
- *   - `categoryName` + `categoryColor` render a subtle tinted pill so
- *     users see organizational metadata without expanding the row.
- *   - `depWarnings` collapse behind a single "⚠ N unresolved refs"
- *     chip with `aria-expanded` / `aria-controls` (WAI-ARIA disclosure
- *     pattern; same shape as Tier3ChainViz's "Why?" toggle). One row
- *     of warnings can balloon to a dozen on heavily-cross-referenced
- *     exports — keep the row compact until the user asks.
- *
- * All new props are optional with sensible defaults so existing
- * callers (ExportTab, ImportPicker, the seven Task-11 tests) keep
- * working without changes. Polish B/C dispatches will start passing
- * the enriched data through.
  */
 import { computed, ref, useId } from "vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
+import { catChipStyle } from "../utils/catChip";
 
-export interface Badge {
+/**
+ * Status-badge taxonomy — five variants paired 1:1 with
+ * `.wp-mod-badge--{variant}` in `row-primitives.css`. NEW / MIGRATED
+ * are the Phase-1 additions; MOD / DRIFT / MISSING were already shared.
+ */
+export interface StatusBadge {
+  variant: "new" | "mod" | "drift" | "missing" | "migrated";
+  /** Display label (e.g. "NEW", "MODIFIED", "MIGRATED v0→1"). Rendered
+   *  verbatim — caller controls casing. */
   label: string;
-  /**
-   * - `info`  — neutral chip (e.g. "migrated from v0")
-   * - `warn`  — amber chip (e.g. "fingerprint differs from library")
-   * - `error` — red chip (e.g. "uuid collision")
-   */
-  kind: "info" | "warn" | "error";
-}
-
-interface KindMeta {
-  label: string;
-  color: string;
 }
 
 /**
- * Mirrors `KIND_META` in `src/manager/components/BundleChildRow.vue`
- * (lines 45-52) exactly. Changing colors here means changing them
- * there — single source candidate but kept duplicated for now since
- * the two surfaces share no module yet. Bundle + category labels are
- * additions over BundleChildRow (which doesn't render categories) and
- * are needed for the legacy importer parity.
+ * One outgoing-dependency reference. Used by both
+ * `unselectedDeps` (export-side: ref present in payload but unselected)
+ * and `missingDeps` (import-side: ref absent from payload AND library).
  */
-const KIND_META: Record<string, KindMeta> = {
-  wildcard:     { label: "Wildcard",   color: "var(--wp-kind-wildcard, #34d399)" },
-  fixed_values: { label: "Fixed",      color: "var(--wp-kind-fixed, #22d3ee)" },
-  combine:      { label: "Combine",    color: "var(--wp-kind-combine, #fbbf24)" },
-  derivation:   { label: "Derivation", color: "var(--wp-kind-derivation, #a78bfa)" },
-  constraint:   { label: "Constraint", color: "var(--wp-kind-constraint, #f87171)" },
-  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default, #46566B)" },
-  category:     { label: "Category",   color: "var(--wp-text-dim, #8a8a9a)" },
+export interface DepRef {
+  /** Target entity id (8-hex short uuid in normal flows). */
+  id: string;
+  /** Display name. Falls back to `id` at the call site if unknown. */
+  name: string;
+  /** Optional entity kind for the dep-list type icon (e.g. "wildcard"). */
+  type?: string;
+}
+
+/**
+ * `kind` slug → `.wp-row-type-icon--{class}` modifier. Mirrors the
+ * prototype mapping (import-export-redesign.html:157–162). Module subtype
+ * `fixed_values` collapses to `fixed`; `category` reuses the `bundle`
+ * neutral tint since categories don't carry their own kind color.
+ */
+const KIND_CLASS: Record<string, string> = {
+  wildcard:     "wildcard",
+  fixed_values: "fixed",
+  combine:      "combine",
+  derivation:   "derivation",
+  constraint:   "constraint",
+  bundle:       "bundle",
+  category:     "bundle",
 };
 
 interface Props {
+  /** Entity id; consumer passes `entity.id`. */
   uuid: string;
   name: string;
   checked: boolean;
-  badges: Badge[];
-  /**
-   * Human-readable dep-graph warnings (e.g. "references @{aabbccdd}
-   * not selected"). Collapsed behind a chip when length > 0; the
-   * full list expands beneath the row on click.
-   */
-  depWarnings: string[];
-  /** 0..n indent levels. Each level adds 16px of left padding. */
-  indent?: number;
-  /**
-   * Entity type for icon + tint. One of: wildcard, fixed_values,
-   * combine, derivation, constraint, bundle, category. Optional —
-   * when absent, no icon renders.
-   */
+  /** Entity kind for the type-icon column. */
   kind?: string;
-  /** Optional category metadata. When set, renders a small color-tinted
-   *  chip with the category name. */
+  /** Optional category metadata for the `.wp-cat-chip` primitive. */
   categoryName?: string;
   categoryColor?: string;
-  /** Show the short 8-hex id inline next to the name (muted style).
-   *  Defaults to false so existing tests don't regress. */
+  /** Show the short 8-hex id inline (mono, muted) via `.wp-id`. */
   showId?: boolean;
+  /** Status badges — collision state / migration / etc. Multiple allowed.
+   *  Rendered in order, all use the shared `.wp-mod-badge` primitive. */
+  statusBadges?: StatusBadge[];
+  /** Outgoing refs NOT in the current selection (Export side).
+   *  Renders an amber "Requires N" chip that expands inline. */
+  unselectedDeps?: DepRef[];
+  /** Outgoing refs not in payload AND not in receiver library
+   *  (Import side). Renders a red "Missing N" chip that expands inline
+   *  with an "unresolvable" verdict. */
+  missingDeps?: DepRef[];
+  /** 0..n indent levels. Each level adds 16px of left padding. */
+  indent?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  indent: 0,
   kind: undefined,
   categoryName: undefined,
   categoryColor: undefined,
   showId: false,
+  statusBadges: () => [],
+  unselectedDeps: () => [],
+  missingDeps: () => [],
+  indent: 0,
 });
 const emit = defineEmits<{ (e: "update:checked", v: boolean): void }>();
 
 // ---------- Kind icon ----------
 
+/** Glyph class — `pi pi-sparkles` for wildcard, etc. */
 const iconClass = computed<string | null>(() =>
   props.kind ? kindIcon(props.kind) : null,
 );
 
-const kindMeta = computed<KindMeta | null>(() => {
+/** Modifier class slug for `.wp-row-type-icon--{slug}` tint. */
+const kindClass = computed<string | null>(() => {
   if (!props.kind) return null;
-  return (
-    KIND_META[props.kind] ?? {
-      label: props.kind.toUpperCase(),
-      color: "var(--wp-text-dim, #8a8a9a)",
-    }
-  );
+  return KIND_CLASS[props.kind] ?? "bundle";
 });
 
 // ---------- Short id ----------
 
 /**
- * The id passed in is the entity's full id (typically the 8-hex
- * short uuid produced by `engine/modules.py`, but defensive
- * `slice(0, 8)` handles the unlikely case of a longer caller-supplied
- * id — e.g. a legacy 36-char UUID — without breaking layout.
+ * Slice defensively in case a caller supplies a 36-char UUID instead of
+ * the canonical 8-hex short id.
  */
 const shortId = computed<string>(() => props.uuid.slice(0, 8));
 
-// ---------- Category chip tint ----------
+// ---------- Category chip style ----------
 
-/**
- * Mix the user-supplied category color with --wp-bg-3 so the chip
- * background stays readable against the row background regardless of
- * how saturated the chosen color is. Mirrors the `color-mix` pattern
- * used by `.wp-bchild[data-selected]` (BundleChildRow.vue:194).
- */
-const categoryChipStyle = computed<Record<string, string>>(() => {
-  const style: Record<string, string> = {};
-  if (props.categoryColor) {
-    style["--wp-cat-color"] = props.categoryColor;
-  }
-  return style;
-});
-
-// ---------- Dep warnings disclosure ----------
-
-const warnExpanded = ref<boolean>(false);
-/** Stable id for the warnings list so the chip's aria-controls
- *  can reference it. Vue 3.5+ `useId()` gives us one deterministic
- *  id per component instance — same pattern Tier3ChainViz uses. */
-const warnBodyId = useId();
-
-const warnChipLabel = computed<string>(
-  () => `${props.depWarnings.length} unresolved ref${props.depWarnings.length === 1 ? "" : "s"}`,
+const catChipInlineStyle = computed<Record<string, string>>(() =>
+  catChipStyle(props.categoryColor),
 );
 
-function toggleWarnExpanded(): void {
-  warnExpanded.value = !warnExpanded.value;
+// ---------- Dep chip disclosure ----------
+
+const unselectedExpanded = ref<boolean>(false);
+const missingExpanded = ref<boolean>(false);
+
+/** Stable ids for the disclosure list elements (aria-controls). */
+const unselectedListId = useId();
+const missingListId = useId();
+
+function toggleUnselected(): void {
+  unselectedExpanded.value = !unselectedExpanded.value;
+}
+function toggleMissing(): void {
+  missingExpanded.value = !missingExpanded.value;
+}
+
+/** Resolve a dep's kind→tint class for the dep-list type icon. */
+function depKindClass(d: DepRef): string {
+  if (!d.type) return "bundle";
+  return KIND_CLASS[d.type] ?? "bundle";
+}
+function depIconClass(d: DepRef): string {
+  if (!d.type) return "pi pi-circle";
+  return kindIcon(d.type);
 }
 </script>
 
@@ -168,161 +171,272 @@ function toggleWarnExpanded(): void {
     :data-uuid="props.uuid"
     :style="{ paddingLeft: `${props.indent * 16}px` }"
   >
+    <!-- chevron-spacer column (kept empty; reserves grid space matching
+         the prototype's 14px leading column). -->
+    <span class="wp-picker-row__chev-spacer" aria-hidden="true" />
+
     <Checkbox
       class="wp-picker-row__check"
       :model-value="checked"
       :aria-label="name"
       @update:model-value="(v: boolean) => emit('update:checked', v)"
     />
+
     <span
-      v-if="iconClass && kindMeta"
-      class="wp-picker-row__kindicon"
-      :style="{ '--wp-row-kind': kindMeta.color }"
-      :title="kindMeta.label"
+      v-if="iconClass && kindClass"
+      class="wp-row-type-icon"
+      :class="`wp-row-type-icon--${kindClass}`"
       aria-hidden="true"
     >
       <i :class="iconClass" />
     </span>
-    <span class="wp-picker-row__name">{{ name }}</span>
-    <span
-      v-if="props.showId"
-      class="wp-picker-row__id"
-      data-test="picker-row-id"
-    >{{ shortId }}</span>
+
+    <span class="wp-picker-row__name-cell">
+      <span class="wp-picker-row__name">{{ name }}</span>
+      <span
+        v-if="props.showId"
+        class="wp-id"
+        data-test="picker-row-id"
+      >{{ shortId }}</span>
+    </span>
+
     <span
       v-if="props.categoryName"
-      class="wp-picker-row__cat-chip"
-      :style="categoryChipStyle"
+      class="wp-cat-chip"
+      :style="catChipInlineStyle"
       data-test="picker-row-cat-chip"
     >{{ props.categoryName }}</span>
-    <span class="wp-picker-row__badges">
+    <span v-else class="wp-picker-row__col-spacer" aria-hidden="true" />
+
+    <span v-if="props.statusBadges.length > 0" class="wp-picker-row__badges">
       <span
-        v-for="b in badges"
+        v-for="b in props.statusBadges"
         :key="b.label"
-        class="wp-picker-row__badge"
-        :class="`wp-picker-row__badge--${b.kind}`"
+        class="wp-mod-badge"
+        :class="`wp-mod-badge--${b.variant}`"
       >{{ b.label }}</span>
     </span>
-    <button
-      v-if="depWarnings.length > 0"
-      type="button"
-      class="wp-picker-row__warn-chip"
-      :aria-expanded="warnExpanded ? 'true' : 'false'"
-      :aria-controls="warnBodyId"
-      data-test="dep-warn-chip"
-      @click="toggleWarnExpanded"
-    >
-      <span aria-hidden="true">⚠</span>
-      <span>{{ warnChipLabel }}</span>
-    </button>
-    <ul
-      v-if="depWarnings.length > 0 && warnExpanded"
-      :id="warnBodyId"
-      class="wp-picker-row__warns"
+    <span v-else class="wp-picker-row__col-spacer" aria-hidden="true" />
+
+    <span
+      v-if="props.unselectedDeps.length === 0 && props.missingDeps.length === 0"
+      class="wp-picker-row__col-spacer"
+      aria-hidden="true"
+    />
+    <span v-else class="wp-picker-row__dep-chips">
+      <button
+        v-if="props.unselectedDeps.length > 0"
+        type="button"
+        class="wp-dep-chip"
+        :aria-expanded="unselectedExpanded ? 'true' : 'false'"
+        :aria-controls="unselectedListId"
+        data-test="dep-warn-chip"
+        @click="toggleUnselected"
+      >
+        <i class="pi pi-arrow-right" aria-hidden="true" />
+        <span>Requires {{ props.unselectedDeps.length }}</span>
+      </button>
+      <button
+        v-if="props.missingDeps.length > 0"
+        type="button"
+        class="wp-dep-chip wp-dep-chip--missing"
+        :aria-expanded="missingExpanded ? 'true' : 'false'"
+        :aria-controls="missingListId"
+        data-test="dep-missing-chip"
+        @click="toggleMissing"
+      >
+        <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+        <span>Missing {{ props.missingDeps.length }}</span>
+      </button>
+    </span>
+
+    <div
+      v-if="props.unselectedDeps.length > 0 && unselectedExpanded"
+      :id="unselectedListId"
+      class="wp-row-dep-list"
       data-test="dep-warn-list"
     >
-      <li
-        v-for="(w, idx) in depWarnings"
-        :key="idx"
-        class="wp-picker-row__warn"
-      >⚠ {{ w }}</li>
-    </ul>
+      <div class="wp-row-dep-list__title">Requires · not selected</div>
+      <div
+        v-for="d in props.unselectedDeps"
+        :key="`u:${d.id}`"
+        class="wp-row-dep-list__item"
+      >
+        <i :class="depIconClass(d)" aria-hidden="true" />
+        <span class="wp-row-dep-list__name">{{ d.name }}</span>
+        <span class="wp-row-dep-list__id">{{ d.id.slice(0, 8) }}</span>
+        <span
+          class="wp-row-dep-list__type"
+          :class="`wp-row-dep-list__type--${depKindClass(d)}`"
+        />
+      </div>
+    </div>
+
+    <div
+      v-if="props.missingDeps.length > 0 && missingExpanded"
+      :id="missingListId"
+      class="wp-row-dep-list wp-row-dep-list--missing"
+      data-test="dep-missing-list"
+    >
+      <div
+        class="wp-row-dep-list__title wp-row-dep-list__title--missing"
+      >Missing · not in payload or library</div>
+      <div
+        v-for="d in props.missingDeps"
+        :key="`m:${d.id}`"
+        class="wp-row-dep-list__item"
+      >
+        <i :class="depIconClass(d)" aria-hidden="true" />
+        <span class="wp-row-dep-list__name">{{ d.name }}</span>
+        <span class="wp-row-dep-list__id">@{{ '{' }}{{ d.id.slice(0, 8) }}{{ '}' }}</span>
+        <span class="wp-row-dep-list__verdict">unresolvable</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* Pull in shared row primitives: .wp-row-type-icon + .wp-mod-badge live
+ * here. Vue's scoper safely runs PostCSS over the @import.
+ * Note: row-primitives.css is NOT wrapped in @layer wp-extension since
+ * Vue's scoped CSS parser can't handle the atrule — namespace prefixes
+ * carry isolation duty (see CLAUDE.md). */
+@import "../../components/shared/row-primitives.css";
+
 .wp-picker-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  /* chev-spacer, checkbox, type-icon, name+id, cat-chip, status-badges, dep-chips */
+  grid-template-columns: 14px 18px minmax(0, auto) minmax(0, 1fr) auto auto auto;
+  column-gap: 9px;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  font-size: 13px;
+  padding: 5px 14px;
+  font-size: var(--wp-text-sm);
   color: var(--wp-text);
+  border-bottom: 1px solid color-mix(in oklab, var(--wp-border) 50%, transparent);
 }
-.wp-picker-row__kindicon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 18px;
-  border-radius: var(--wp-radius-sm);
-  background: color-mix(in oklab, var(--wp-row-kind) 18%, var(--wp-bg-3));
-  color: var(--wp-row-kind);
-  font-size: 11px;
-  flex: 0 0 auto;
+.wp-picker-row:last-child { border-bottom: none; }
+.wp-picker-row:hover {
+  background: color-mix(in oklab, var(--wp-bg-3) 35%, transparent);
+}
+
+.wp-picker-row__chev-spacer {
+  width: 14px;
+  height: 1px;
+  display: inline-block;
+}
+.wp-picker-row__col-spacer {
+  display: inline-block;
+}
+
+.wp-picker-row__name-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
 }
 .wp-picker-row__name {
-  flex: 0 1 auto;
-  font-family: var(--wp-font-sans);
-}
-.wp-picker-row__id {
-  font-family: var(--wp-font-mono);
-  font-size: 11px;
-  color: var(--wp-text-dim);
-  letter-spacing: 0.02em;
-}
-.wp-picker-row__cat-chip {
-  font-size: 11px;
   font-weight: 500;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--wp-cat-color, var(--wp-text-dim)) 18%, var(--wp-bg-3));
-  color: var(--wp-cat-color, var(--wp-text-dim));
-  border: 1px solid color-mix(in oklab, var(--wp-cat-color, var(--wp-text-dim)) 36%, transparent);
-  line-height: 1.4;
+  color: var(--wp-text);
+  letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 .wp-picker-row__badges {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
 }
-.wp-picker-row__badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg3);
-  color: var(--wp-text2);
-  line-height: 1.4;
-}
-.wp-picker-row__badge--warn {
-  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
-  color: var(--wp-warn);
-}
-.wp-picker-row__badge--error {
-  background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
-  color: var(--wp-danger);
-}
-.wp-picker-row__warn-chip {
+
+.wp-picker-row__dep-chips {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+}
+
+/* Dep chip — amber (unselected deps) / red (truly missing).
+ * Scoped to PickerRow for now since it's the only consumer; promote to
+ * row-primitives.css if a second surface picks it up. */
+.wp-dep-chip {
   background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
   color: var(--wp-warn);
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 36%, transparent);
-  border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
+  font-family: var(--wp-font-sans, sans-serif);
+  font-size: var(--wp-text-xs, 11px);
+  font-weight: 500;
+  padding: 2px 8px 2px 6px;
+  border-radius: var(--wp-radius-sm, 4px);
+  border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  line-height: 1.4;
 }
-.wp-picker-row__warn-chip:hover {
+.wp-dep-chip .pi { font-size: 9px; }
+.wp-dep-chip:hover {
   background: color-mix(in oklab, var(--wp-warn) 24%, transparent);
 }
-.wp-picker-row__warns {
-  flex-basis: 100%;
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 24px; /* indent past the checkbox so warnings line up under name */
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.wp-dep-chip--missing {
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  color: var(--wp-danger);
+  border-color: color-mix(in oklab, var(--wp-danger) 32%, transparent);
 }
-.wp-picker-row__warn {
-  font-size: 11px;
+.wp-dep-chip--missing:hover {
+  background: color-mix(in oklab, var(--wp-danger) 22%, transparent);
+}
+
+/* Expanded dep list — spans full row width below the chip(s). */
+.wp-row-dep-list {
+  grid-column: 1 / -1;
+  background: color-mix(in oklab, var(--wp-warn) 6%, transparent);
+  border-top: 1px dashed color-mix(in oklab, var(--wp-warn) 28%, transparent);
+  border-bottom: 1px dashed color-mix(in oklab, var(--wp-warn) 28%, transparent);
+  margin: 5px -14px -5px -14px;
+  padding: 9px 14px 9px 54px;
+  font-size: var(--wp-text-xs, 11px);
+  color: var(--wp-text-muted);
+}
+.wp-row-dep-list--missing {
+  background: color-mix(in oklab, var(--wp-danger) 6%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger) 28%, transparent);
+}
+.wp-row-dep-list__title {
+  font-weight: 700;
   color: var(--wp-warn);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9.5px;
+}
+.wp-row-dep-list__title--missing { color: var(--wp-danger); }
+.wp-row-dep-list__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2.5px 0;
+}
+.wp-row-dep-list__item .pi {
+  font-size: 10px;
+  color: var(--wp-text-dim);
+}
+.wp-row-dep-list__name {
+  color: var(--wp-text);
+  font-weight: 500;
+}
+.wp-row-dep-list__id {
+  color: var(--wp-text-dim);
+  font-family: var(--wp-font-mono);
+  font-size: 10px;
+}
+.wp-row-dep-list__verdict {
+  margin-left: auto;
+  color: var(--wp-danger);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 </style>

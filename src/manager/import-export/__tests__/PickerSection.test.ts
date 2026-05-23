@@ -84,4 +84,33 @@ describe("PickerSection", () => {
     expect(wrap.find(".wp-picker-section__body .custom-child").exists()).toBe(true);
     expect(wrap.text()).toContain("child content");
   });
+
+  // ---------- Phase 1: optional kind icon in header ----------
+
+  it("renders a wildcard icon in the header when kind=wildcard", () => {
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 1, selectedCount: 0, kind: "wildcard" },
+    });
+    const icon = wrap.find('[data-test="picker-section-icon"]');
+    expect(icon.exists()).toBe(true);
+    // wp-row-type-icon--wildcard tint + canonical pi-sparkles glyph.
+    expect(icon.attributes("class") ?? "").toContain("wp-row-type-icon--wildcard");
+    expect(icon.find("i").attributes("class") ?? "").toMatch(/\bpi-sparkles\b/);
+  });
+
+  it("renders a folder icon in the header when kind=category (overrides default kindIcon)", () => {
+    const wrap = mount(PickerSection, {
+      props: { title: "Categories", totalCount: 1, selectedCount: 0, kind: "category" },
+    });
+    const icon = wrap.find('[data-test="picker-section-icon"]');
+    expect(icon.exists()).toBe(true);
+    expect(icon.find("i").attributes("class") ?? "").toMatch(/\bpi-folder\b/);
+  });
+
+  it("renders no header icon when kind is absent", () => {
+    const wrap = mount(PickerSection, {
+      props: { title: "Wildcards", totalCount: 1, selectedCount: 0 },
+    });
+    expect(wrap.find('[data-test="picker-section-icon"]').exists()).toBe(false);
+  });
 });

@@ -459,8 +459,9 @@ function presetFavoritesOnly(): void {
             :category-color="row.categoryColor"
             :show-id="true"
             :checked="isRowSelected(bucket.key, row.id)"
-            :badges="[]"
-            :dep-warnings="[]"
+            :status-badges="[]"
+            :unselected-deps="[]"
+            :missing-deps="[]"
             :data-test="`export-tab-row-${bucket.key}-${row.id}`"
             @update:checked="(v: boolean) => toggleRow(bucket.key, row.id, v)"
           />

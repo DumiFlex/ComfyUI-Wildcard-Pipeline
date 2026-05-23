@@ -201,6 +201,38 @@
 }
 .wp-row-type-icon .pi { font-size: 11px; }
 
+/* Optional self-tinted variants — used where the consumer prefers a
+ * single class slug ("wildcard"/"fixed"/"combine"/"derivation"/
+ * "constraint"/"bundle") over a parent `[data-kind]` selector chain.
+ * Background + foreground both pick up the matching `--wp-kind-*`
+ * token so the icon reads as the kind's family color. Picker rows
+ * in the import/export UI use these; ContextWidget rows still tint
+ * via the data-kind cascade. */
+.wp-row-type-icon--wildcard {
+  background: color-mix(in oklab, var(--wp-kind-wildcard) 18%, transparent);
+  color: var(--wp-kind-wildcard);
+}
+.wp-row-type-icon--fixed {
+  background: color-mix(in oklab, var(--wp-kind-fixed) 18%, transparent);
+  color: var(--wp-kind-fixed);
+}
+.wp-row-type-icon--combine {
+  background: color-mix(in oklab, var(--wp-kind-combine) 18%, transparent);
+  color: var(--wp-kind-combine);
+}
+.wp-row-type-icon--derivation {
+  background: color-mix(in oklab, var(--wp-kind-derivation) 18%, transparent);
+  color: var(--wp-kind-derivation);
+}
+.wp-row-type-icon--constraint {
+  background: color-mix(in oklab, var(--wp-kind-constraint) 18%, transparent);
+  color: var(--wp-kind-constraint);
+}
+.wp-row-type-icon--bundle {
+  background: color-mix(in oklab, var(--wp-text-muted) 18%, transparent);
+  color: var(--wp-text-muted);
+}
+
 /* ── Drag handle ─────────────────────────────────────────────────── */
 
 /* Visible 6-dot grip glyph used to signal "row is draggable". Sized
@@ -308,6 +340,23 @@
 .wp-mod-badge--missing {
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
   color: var(--wp-danger);
+}
+
+/* `--new` variant: incoming entity with no UUID collision (import side).
+ * Same uppercase letterform as MOD / DRIFT / MISSING; uses --wp-success
+ * (green) to read as "clean import, no decision needed". */
+.wp-mod-badge--new {
+  background: color-mix(in oklab, var(--wp-success) 18%, transparent);
+  color: var(--wp-success);
+}
+
+/* `--migrated` variant: entity passed through schema migration chain.
+ * Distinct from MOD/DRIFT — schema lift, not content drift. Uses
+ * --wp-info (blue) so it doesn't compete with MOD's orange when both
+ * apply to the same row. */
+.wp-mod-badge--migrated {
+  background: color-mix(in oklab, var(--wp-info) 18%, transparent);
+  color: var(--wp-info);
 }
 
 /* Sibling-count badge — distinct from state badges (different
