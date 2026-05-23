@@ -1,12 +1,12 @@
 # Importer / Exporter — Implementation Checkpoint
 
 **Branch:** `feat/importer-exporter-v2` (off `main`)
-**Tip commit:** `2cc388c` (Task 22: contract docs)
+**Tip commit:** `3f892eb` (Item 3: Tier3ChainViz aria-expanded — all deferred follow-ups resolved)
 **Date checkpointed:** 2026-05-23
 **Spec:** `docs/superpowers/specs/2026-05-22-importer-exporter-design.md` (gitignored, per-contributor)
 **Plan:** `docs/superpowers/plans/2026-05-22-importer-exporter.md` (gitignored, per-contributor)
 
-## Status: 22 of 22 plan tasks complete ✅
+## Status: 22 of 22 plan tasks complete ✅ + 4 of 4 deferred follow-ups resolved ✅
 
 | # | Task | Status | Key commits |
 |---|------|--------|-------------|
@@ -71,10 +71,15 @@
 
 - **Task 5 mutation hazard:** Python `migrate_payload` doesn't deep-copy normalized arrays. Future v1→v2 migrations that mutate list items in-place would corrupt caller's payload. Current v0→v1 uses dict-spread and is safe. Fix when adding any new migration that touches list items.
 - **Task 8 LibraryRow shape narrow:** only exposes `snapshot_fingerprint`. ImportPicker (Task 17) already consumes full payload entities; revisit if a future caller needs an intermediate LibraryRow type.
-- **Task 12 "Select with dependencies" deferred:** ExportTab doesn't build the dep-walk against the live library (which is `ModuleRow[]`/etc., not `RawPayload`). Either build a RawPayload-equivalent adapter or extend dep-graph helpers to accept live rows. TODO comment in `ExportTab.vue`.
-- **Task 18 per-item batch override:** ConflictModal supports a single batch default (skip/replace). Per-item override expansion within the batch list is additive — `perItemDecisions` map already accepts `replace`/`rename` decisions, so the UI can be extended without breaking the wire format.
-- **Task 19 chain-toggle a11y:** `Tier3ChainViz` toggle button missing `aria-expanded` + matching `aria-controls` on the chain body. Polish-grade follow-up.
-- **Task 21 commit orchestrator + warning store wire-in:** `broken-refs.ts` ships as a pure function. The actual post-commit handshake — invoking `api.importExport.commit(...)` after picker+conflict resolution, then feeding results through `discoverBrokenRefsForImport(...)` into a manager-level warning store consumed by `RichTextInput`/`RichTextPreview` — requires (1) building the commit orchestrator in ImportExport.vue (not yet wired), and (2) introducing a centralized `ResolveWarning` store (currently `RichTextInput` accepts warnings as props). Both are natural follow-ups, scoped beyond Task 21's primitive.
+
+## Post-feature follow-ups (RESOLVED 2026-05-23)
+
+All four originally-deferred items completed in a follow-up pass after the 22-task plan landed:
+
+- **Item 1 — "Select with dependencies" in ExportTab:** RESOLVED `9bf7e46`. Added `liveLibraryToRawPayload` adapter (`src/manager/import-export/live-library-adapter.ts`) that flattens wildcard `payload.options` to top-level so dep-graph helpers can walk live library rows. Button wired with `transitiveClosure` + `constraintsBothSidesIn` closure walk.
+- **Item 2 — ConflictModal per-item batch override:** RESOLVED `2b600eb`. Expandable per-row override list under the batch dropdown. `setBatchOverride(id, value)` writes/deletes from `perItemDecisions` (cleanly absent on "default", no sentinel). Existing emit shape unchanged.
+- **Item 3 — Tier3ChainViz aria-expanded:** RESOLVED `3f892eb`. Vue 3.5 `useId()`-based stable id linking toggle button (`aria-expanded` + `aria-controls`) to chain body div (`id`).
+- **Item 4 — Commit orchestrator + warning store + broken-refs wire-in:** RESOLVED `d587e23` → `75ba12b` → `7d951c9` → `01ea73d` (4 commits). Built `useResolveWarnings` singleton composable, extended `RichTextInput`/`RichTextPreview` with `moduleId` prop merging prop + store warnings, replaced `onImportV2SelectionReady` placeholder with full pipeline: collision scan → ConflictModal (conditional) → `buildCommitPayload` → `api.importExport.commit` → library reload → `discoverBrokenRefsForImport` → store push → success toast with Undo action. Empty-payload short-circuit. Stale broken-ref clear per committed id. `console.warn` at silent-drop sites in `partitionSelection`.
 
 ## How to resume
 
@@ -88,7 +93,8 @@ In a fresh session:
 
 ## Test suite status at checkpoint
 
-- Vitest: 1989 passed, 3 skipped (all pre-existing skips)
+- Vitest: 2031 passed, 3 skipped (all pre-existing skips) — 2031 reflects post-deferred-items follow-up
+- Pre-deferred-items baseline (2026-05-22, all 22 plan tasks): 1989 passed
 - Pytest: ~509 passed (engine 323 + wp_api 206)
 - Typecheck (`pnpm typecheck` via vue-tsc): clean
 - Pre-commit hooks (lint + typecheck + test + build + size + pytest): green on every commit landed on this branch
