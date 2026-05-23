@@ -242,6 +242,199 @@ describe("ConflictModal.vue", () => {
     wrap.unmount();
   });
 
+  // -------- Per-item batch override expandable list (Item 2) ------------
+
+  it("batch override list is collapsed by default + toggle label reads 'Show'", () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" } }),
+        makeBatchConflict({ id: "w2", entity: { id: "w2", name: "b" } }),
+      ],
+    });
+    // The toggle button is visible, but the list itself is not yet
+    // rendered (v-if).
+    const toggle = $('[data-test="batch-override-toggle"]');
+    expect(toggle.textContent ?? "").toMatch(/show/i);
+    expect(find('[data-test="batch-override-list"]')).toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    wrap.unmount();
+  });
+
+  it("clicking the toggle reveals one row per batch conflict", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+        makeBatchConflict({ id: "w2", entity: { id: "w2", name: "beta" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const list = $('[data-test="batch-override-list"]');
+    expect(list).not.toBeNull();
+    // Each row carries its own data-test handle so per-row state can
+    // be poked from tests without DOM ordering assumptions.
+    expect(find('[data-test="batch-override-row-w1"]')).not.toBeNull();
+    expect(find('[data-test="batch-override-row-w2"]')).not.toBeNull();
+    // Toggle label flips after expansion.
+    const toggle = $('[data-test="batch-override-toggle"]');
+    expect(toggle.textContent ?? "").toMatch(/hide/i);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    wrap.unmount();
+  });
+
+  it("per-row override dropdown defaults to 'default' for untouched rows", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
+    expect(select.value).toBe("default");
+    wrap.unmount();
+  });
+
+  it("picking 'skip' on a row writes {kind: 'skip'} to perItemDecisions", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
+    select.value = "skip";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+
+    const events = wrap.emitted("commit-ready");
+    expect(events).toBeTruthy();
+    const firstCall = events?.[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) return;
+    const payload = firstCall[0] as {
+      batchDefault: "skip" | "replace";
+      perItemDecisions: Record<string, { kind: string }>;
+    };
+    expect(payload.perItemDecisions.w1).toEqual({ kind: "skip" });
+    wrap.unmount();
+  });
+
+  it("picking 'replace' on a row writes {kind: 'replace'} to perItemDecisions", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
+    select.value = "replace";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+
+    const events = wrap.emitted("commit-ready");
+    expect(events).toBeTruthy();
+    const firstCall = events?.[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) return;
+    const payload = firstCall[0] as {
+      batchDefault: "skip" | "replace";
+      perItemDecisions: Record<string, { kind: string }>;
+    };
+    expect(payload.perItemDecisions.w1).toEqual({ kind: "replace" });
+    wrap.unmount();
+  });
+
+  it("picking 'default' after a non-default removes the entry from perItemDecisions", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+      ],
+    });
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
+    // First override → skip.
+    select.value = "skip";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+
+    // Then revert to default.
+    select.value = "default";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+
+    // Commit + assert the entry is GONE from perItemDecisions (not
+    // present as `{kind: "default"}` or any sentinel).
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+
+    const events = wrap.emitted("commit-ready");
+    expect(events).toBeTruthy();
+    const firstCall = events?.[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) return;
+    const payload = firstCall[0] as {
+      batchDefault: "skip" | "replace";
+      perItemDecisions: Record<string, { kind: string }>;
+    };
+    expect(payload.perItemDecisions.w1).toBeUndefined();
+    expect(Object.keys(payload.perItemDecisions)).toEqual([]);
+    wrap.unmount();
+  });
+
+  it("per-row override + batch default combine cleanly in the commit-ready emit", async () => {
+    // batchDefault = "skip", but row w1 overridden to "replace".
+    // Orchestrator at commit time resolves precedence (perItemDecisions
+    // wins for id w1); the modal just emits both pieces of state.
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "alpha" } }),
+        makeBatchConflict({ id: "w2", entity: { id: "w2", name: "beta" } }),
+      ],
+    });
+    // Batch default stays "skip" (initial state).
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+
+    const select = $('[data-test="batch-override-select-w1"]') as HTMLSelectElement;
+    select.value = "replace";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushPromises();
+
+    $('[data-test="commit-btn"]').click();
+    await flushPromises();
+
+    const events = wrap.emitted("commit-ready");
+    expect(events).toBeTruthy();
+    const firstCall = events?.[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) return;
+    const payload = firstCall[0] as {
+      batchDefault: "skip" | "replace";
+      perItemDecisions: Record<string, { kind: string }>;
+    };
+    expect(payload.batchDefault).toBe("skip");
+    expect(payload.perItemDecisions.w1).toEqual({ kind: "replace" });
+    // w2 was not touched, so it must NOT appear in perItemDecisions —
+    // the orchestrator should fall through to batchDefault for it.
+    expect(payload.perItemDecisions.w2).toBeUndefined();
+    wrap.unmount();
+  });
+
   // -------- Accessibility floor (Modal wrapper contract) -----------------
 
   it("renders the modal with role='dialog' and aria-modal='true'", () => {

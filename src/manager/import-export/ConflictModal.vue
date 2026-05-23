@@ -16,9 +16,12 @@
  *   - **Batch section** (only when `batchConflicts.length > 0`).
  *     UUID collisions where the live-DB row has different content. One
  *     dropdown sets the default action — skip or replace — applied
- *     uniformly. The detailed per-item override list for batch
- *     conflicts is intentionally omitted for this task; it lands in a
- *     follow-up if usage shows users need per-row override.
+ *     uniformly. An expandable per-row override list (collapsed by
+ *     default) lets the user override individual batch conflicts without
+ *     changing the batch default; overrides are written into
+ *     `perItemDecisions` alongside per-item-issue decisions, and the
+ *     orchestrator at commit time already prefers `perItemDecisions[id]`
+ *     over `batchDefault`.
  *
  *   - **Per-item section** (only when `perItemIssues.length > 0`).
  *     One row per issue with the entity name, the issue kind label,
@@ -119,6 +122,14 @@ const emit = defineEmits<{
 const batchDefault = ref<"skip" | "replace">("skip");
 
 const perItemDecisions = ref<Record<string, PerItemDecision>>({});
+
+/**
+ * Whether the per-conflict override list under the batch section is
+ * expanded. Collapsed by default — the typical user flips the batch
+ * dropdown and never opens this. Users who need to override individual
+ * rows opt in via the toggle button.
+ */
+const batchExpanded = ref<boolean>(false);
 
 /**
  * Number of per-item issues without a decision yet. Drives the disabled
@@ -274,6 +285,84 @@ function onBatchDefaultChange(ev: Event): void {
     batchDefault.value = v;
   }
 }
+
+/**
+ * Read the current per-row override for a batch conflict. Returns
+ * `"default"` when no override exists (i.e. the row will follow the
+ * batch dropdown's value at commit time). Returns `"skip"` or
+ * `"replace"` when the user has explicitly overridden this row.
+ *
+ * The "default" sentinel keeps the `<select>` bound state cleanly
+ * tri-valued — without it, a row with no entry in `perItemDecisions`
+ * would either render as "skip" (misleading: user hasn't chosen) or as
+ * blank (confusing in the dropdown). Mapping the absence-of-entry to a
+ * named option makes the intent explicit in the UI.
+ *
+ * Decisions with `kind` other than `skip`/`replace` (i.e. `rename` or
+ * `accept`, which the batch override flow does not surface) coerce to
+ * `"default"` so the override dropdown reflects "no batch-side
+ * override" without misrepresenting the underlying decision. This
+ * doesn't happen in practice today (the batch override path only
+ * writes skip/replace) but the type widens to those values, so the
+ * narrowing is defensive.
+ */
+function batchOverrideFor(id: string): "default" | "skip" | "replace" {
+  const d = perItemDecisions.value[id];
+  if (!d) return "default";
+  if (d.kind === "skip" || d.kind === "replace") return d.kind;
+  return "default";
+}
+
+/**
+ * Apply a per-row batch override decision keyed by entity id. Picking
+ * `"default"` deletes the entry from `perItemDecisions` so the batch
+ * dropdown's value applies at commit time (clean state — no lingering
+ * stub). Picking `"skip"` or `"replace"` writes the decision into the
+ * map, where it takes precedence over `batchDefault` for that id.
+ *
+ * Immutable replacement matches the `resolveItem` pattern so any
+ * downstream `computed` observing `perItemDecisions` reruns.
+ */
+function setBatchOverride(
+  id: string,
+  value: "default" | "skip" | "replace",
+): void {
+  if (value === "default") {
+    const next = { ...perItemDecisions.value };
+    delete next[id];
+    perItemDecisions.value = next;
+  } else {
+    perItemDecisions.value = {
+      ...perItemDecisions.value,
+      [id]: { kind: value },
+    };
+  }
+}
+
+/**
+ * Map the per-row override `<select>` change event to `setBatchOverride`.
+ * Same rationale as `onBatchDefaultChange` — explicit handler keeps the
+ * literal-string union strict without an `as` cast on the event target.
+ */
+function onBatchOverrideChange(id: string, ev: Event): void {
+  const target = ev.target as HTMLSelectElement | null;
+  if (!target) return;
+  const v = target.value;
+  if (v === "default" || v === "skip" || v === "replace") {
+    setBatchOverride(id, v);
+  }
+}
+
+/**
+ * Display name for a batch conflict row — prefer the entity's `name`
+ * field, fall back to the id. Mirrors the per-item issue display
+ * fallback in the template.
+ */
+function batchRowName(conflict: BatchConflict): string {
+  const raw = conflict.entity.name;
+  if (typeof raw === "string" && raw.length > 0) return raw;
+  return conflict.id;
+}
 </script>
 
 <template>
@@ -316,7 +405,45 @@ function onBatchDefaultChange(ev: Event): void {
             <option value="skip">Skip — keep live-DB version</option>
             <option value="replace">Replace — overwrite live-DB row</option>
           </select>
+          <button
+            type="button"
+            class="wp-conflict-modal__btn wp-conflict-modal__batch-override-toggle"
+            :aria-expanded="batchExpanded ? 'true' : 'false'"
+            aria-controls="wp-conflict-modal-batch-overrides"
+            data-test="batch-override-toggle"
+            @click="batchExpanded = !batchExpanded"
+          >
+            {{ batchExpanded ? "Hide per-conflict overrides" : "Show per-conflict overrides" }}
+          </button>
         </label>
+        <ul
+          v-if="batchExpanded"
+          id="wp-conflict-modal-batch-overrides"
+          class="wp-conflict-modal__batch-override-list"
+          data-test="batch-override-list"
+        >
+          <li
+            v-for="conflict in props.batchConflicts"
+            :key="conflict.id"
+            class="wp-conflict-modal__batch-override-row"
+            :data-test="`batch-override-row-${conflict.id}`"
+          >
+            <span class="wp-conflict-modal__batch-override-name">
+              {{ batchRowName(conflict) }}
+            </span>
+            <select
+              class="wp-conflict-modal__select wp-conflict-modal__batch-override-select"
+              :value="batchOverrideFor(conflict.id)"
+              :data-test="`batch-override-select-${conflict.id}`"
+              :aria-label="`Override action for ${batchRowName(conflict)}`"
+              @change="(ev) => onBatchOverrideChange(conflict.id, ev)"
+            >
+              <option value="default">Use batch default</option>
+              <option value="skip">Skip</option>
+              <option value="replace">Replace</option>
+            </select>
+          </li>
+        </ul>
       </section>
 
       <section
@@ -495,6 +622,52 @@ function onBatchDefaultChange(ev: Event): void {
   outline: none;
   border-color: var(--wp-accent-500);
   box-shadow: var(--wp-focus-ring);
+}
+
+.wp-conflict-modal__batch-override-toggle {
+  /* Sits next to the batch default <select> in the same row; keep it
+     compact so it doesn't fight the dropdown for horizontal space.
+     `flex: 0 0 auto` cancels the parent's flex stretch that the select
+     uses via `flex: 1`. */
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.wp-conflict-modal__batch-override-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+}
+
+.wp-conflict-modal__batch-override-row {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-3) var(--wp-space-4);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+}
+
+.wp-conflict-modal__batch-override-name {
+  flex: 1;
+  font-size: var(--wp-text-sm);
+  font-weight: var(--wp-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wp-conflict-modal__batch-override-select {
+  /* Override the parent `flex: 1` so the override dropdown stays
+     compact next to the entity name (the row already grants the name
+     `flex: 1`). */
+  flex: 0 0 auto;
+  min-width: 12ch;
 }
 
 .wp-conflict-modal__items {
