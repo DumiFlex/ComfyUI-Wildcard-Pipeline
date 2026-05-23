@@ -853,14 +853,30 @@ function partitionSelection(
     let decision: Decision | null;
     if (perItemIds.has(s.entity.id)) {
       const pd = resolution.perItemDecisions[s.entity.id];
-      if (!pd || pd.kind === "skip") {
+      if (!pd) {
+        // Missing decision for a per-item issue means the modal closed
+        // without resolving it — should not happen in normal UX since the
+        // Import button stays disabled until every per-item row has a
+        // decision. Log for diagnostics rather than silently dropping.
+        console.warn(
+          `[import-commit] no decision recorded for per-item issue ${s.entity.id}; dropping`,
+        );
+        decision = null;
+      } else if (pd.kind === "skip") {
         decision = null;
       } else if (pd.kind === "replace") {
         decision = { kind: "replace" };
       } else if (pd.kind === "accept") {
         decision = { kind: "add" };
-      } else if (pd.kind === "rename" && pd.new_id && pd.new_name) {
-        decision = { kind: "rename", new_id: pd.new_id, new_name: pd.new_name };
+      } else if (pd.kind === "rename") {
+        if (!pd.new_id || !pd.new_name) {
+          console.warn(
+            `[import-commit] rename decision for ${s.entity.id} missing new_id/new_name; dropping`,
+          );
+          decision = null;
+        } else {
+          decision = { kind: "rename", new_id: pd.new_id, new_name: pd.new_name };
+        }
       } else {
         decision = null;
       }
@@ -1013,6 +1029,22 @@ async function runCommit(resolution: {
   const perItemIds = new Set(perItemIssues.value.map((p) => p.entity.id));
   const selection = partitionSelection(selected, resolution, perItemIds);
   const payload = buildCommitPayload(selection);
+  // Short-circuit if every selected entity resolved to a drop (e.g. the
+  // whole selection is silent-skip duplicates or batchDefault=skip with no
+  // per-item overrides). User intent ("import these") is already satisfied
+  // because the library matches — skip the no-op server round-trip and
+  // surface a non-success info toast so it's clear nothing was added.
+  const totalOps = payload.adds.length + payload.replaces.length + payload.renames.length;
+  if (totalOps === 0) {
+    toast.push({
+      severity: "info",
+      summary: "Nothing to import",
+      detail: "All selected items are duplicates of existing library entries.",
+      life: 4000,
+    });
+    clearImportV2();
+    return;
+  }
   importV2Committing.value = true;
   try {
     const result = await api.importExport.commit(payload);
@@ -1026,8 +1058,20 @@ async function runCommit(resolution: {
     // case the reload is still in-flight when the broken-ref walker
     // runs (loadLibrary is awaited above; this just hardens against
     // ordering edge cases).
-    for (const id of commitPayloadIds(payload)) libraryIds.add(id);
+    const committedIds = commitPayloadIds(payload);
+    for (const id of committedIds) libraryIds.add(id);
     const { wildcards, constraints } = extractWildcardsAndConstraints(payload);
+    // Clear stale broken_ref_on_import warnings for any entity touched by
+    // this commit before pushing the fresh batch. Re-importing a wildcard
+    // (or replacing it) must wipe its prior broken-ref state so the fresh
+    // discovery pass decides what's still broken against the new library.
+    // `clearForModule` removes ALL warnings for that module_id — broader
+    // than filtering by type. Acceptable because `broken_ref_on_import`
+    // is currently the only producer pushing into the store; revisit if
+    // another source starts publishing per-module warnings.
+    for (const id of committedIds) {
+      resolveWarningsStore.clearForModule(id);
+    }
     const brokenWarnings = discoverBrokenRefsForImport(wildcards, constraints, libraryIds);
     if (brokenWarnings.length > 0) {
       resolveWarningsStore.push(brokenWarnings);

@@ -32,6 +32,8 @@ vi.mock("../api/client", () => {
 
 import { api } from "../api/client";
 import ImportExport from "../views/ImportExport.vue";
+import ConflictModal from "../import-export/ConflictModal.vue";
+import ImportPicker from "../import-export/ImportPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import { useToast } from "../composables/useToast";
 import type { ModuleRow } from "../api/types";
@@ -312,5 +314,160 @@ describe("ImportExport.vue — commit orchestrator", () => {
     );
     expect(brokenForC).toBeTruthy();
     expect(brokenForC?.detail).toMatchObject({ target_id: "deadbeef" });
+  });
+
+  it("all-silent-skip selection → info toast, commit NOT called, state cleared", async () => {
+    // Wildcard entity from the payload — same id + same content as the
+    // pre-seeded library row so the collision detector returns
+    // `silent-skip` (uuid + fingerprint both match).
+    const entity = mkWildcardEntity("eeeeeeee");
+    // Recompute the fingerprint the way `detectCollisions` does so the
+    // library snapshot_fingerprint matches the incoming entity's.
+    const { moduleFingerprint } = await import("../import-export/fingerprint");
+    const fp = moduleFingerprint({
+      type: "wildcard",
+      name: entity.name,
+      description: entity.description,
+      tags: entity.tags,
+      payload_hash: entity.payload_hash,
+    });
+    // Pre-seed library row with matching id + matching snapshot_fingerprint.
+    // snapshot_fingerprint is not in the static ModuleRow type (added
+    // post-typing); cast via unknown to attach it for the API mock.
+    const libRow = {
+      ...mkModule({ id: "eeeeeeee", type: "wildcard", name: entity.name }),
+      snapshot_fingerprint: fp,
+    } as unknown as ModuleRow;
+    apiM.modules.list.mockResolvedValue({ items: [libRow], total: 1 });
+    const wrap = mountView();
+    await flushPromises();
+    await feedPayloadAndContinue(wrap, mkPayload({
+      wildcards: [entity],
+    }));
+    // No conflicts + no per-item issues → orchestrator runs runCommit
+    // directly. Every entity is silent-skip → buckets all empty → short-
+    // circuit must trip BEFORE api.importExport.commit fires.
+    expect(apiM.importExport.commit).not.toHaveBeenCalled();
+    const t = useToast();
+    const info = t.toasts.value.find(
+      (x) => x.severity === "info" && x.summary === "Nothing to import",
+    );
+    expect(info).toBeTruthy();
+    // State cleared — stash no longer rendered.
+    expect(wrap.find('[data-test="io-import-v2-stash"]').exists()).toBe(false);
+  });
+
+  it("stale broken-refs cleared on re-import of the same entity", async () => {
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u", summary: { added: 1, replaced: 0, renamed: 0 },
+    });
+    const wrap = mountView();
+    await flushPromises();
+    // First import: wildcard with broken @{deadbeef} ref → broken-ref
+    // warning lands in the store keyed to module_id=ffffffff.
+    await feedPayloadAndContinue(wrap, mkPayload({
+      wildcards: [
+        mkWildcardEntity("ffffffff", [{ value: "blue @{deadbeef}", weight: 1 }]),
+      ],
+    }));
+    await flushPromises();
+    const store = useResolveWarnings();
+    const firstBatch = store.warnings.value.filter(
+      (w) => w.type === "broken_ref_on_import" && w.module_id === "ffffffff",
+    );
+    expect(firstBatch.length).toBe(1);
+    // Second import: same id, this time no broken refs. Library is still
+    // empty (modules.list mock returns []) so the second selection routes
+    // through the no-conflict path. The orchestrator's `clearForModule`
+    // pass must wipe the prior broken-ref BEFORE pushing the fresh
+    // (empty) batch, so the store ends with zero broken-refs for
+    // ffffffff after the second commit.
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u2", summary: { added: 1, replaced: 0, renamed: 0 },
+    });
+    await feedPayloadAndContinue(wrap, mkPayload({
+      wildcards: [mkWildcardEntity("ffffffff")],
+    }));
+    await flushPromises();
+    expect(apiM.importExport.commit).toHaveBeenCalledTimes(2);
+    const remaining = store.warnings.value.filter(
+      (w) => w.type === "broken_ref_on_import" && w.module_id === "ffffffff",
+    );
+    expect(remaining.length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("missing per-item decision → console.warn + entity dropped, commit proceeds for the rest", async () => {
+    // Build a payload with two wildcards. One carries a wrong
+    // snapshot_fingerprint → `parsePayload` emits an IntegrityWarning →
+    // per-item issue surfaces in the modal. The other entity has no
+    // stamp → routes through as a plain `add`. We emit `commit-ready`
+    // from ConflictModal with NO per-item decision so the orchestrator
+    // hits the missing-decision branch and `console.warn`s + drops the
+    // bad entity, while the good entity still commits.
+    apiM.importExport.commit.mockResolvedValue({
+      ok: true, undo_entry_id: "u", summary: { added: 1, replaced: 0, renamed: 0 },
+    });
+    const wrap = mountView();
+    await flushPromises();
+    // Stamp a wrong snapshot_fingerprint on the bad entity so verifyOne
+    // emits an IntegrityWarning.
+    const badEntity = {
+      ...mkWildcardEntity("12121212"),
+      snapshot_fingerprint: "deadbeefdeadbeef",
+    };
+    const goodEntity = mkWildcardEntity("34343434");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // Get to picker mounted with the 2-entity payload (picker won't
+      // auto-select multi-entity payloads — we drive selection-ready
+      // directly to pick both ids in one go).
+      await wrap.find('[data-test="io-tab-import-v2"]').trigger("click");
+      await flushPromises();
+      await wrap.find('[data-test="import-paste-btn"]').trigger("click");
+      await flushPromises();
+      await wrap.find('[data-test="import-paste-textarea"]')
+        .setValue(JSON.stringify(mkPayload({ wildcards: [badEntity, goodEntity] })));
+      await wrap.find('[data-test="import-paste-confirm"]').trigger("click");
+      await flushPromises();
+      // Drive the picker directly — picker doesn't auto-select multi-
+      // entity payloads, and clicking individual checkboxes here adds
+      // brittleness. The picker's emit contract is `selection-ready` →
+      // ids:Set<string>; emit it with both entity ids to mirror what a
+      // user clicking through would produce.
+      const picker = wrap.findComponent(ImportPicker);
+      if (!picker.exists()) throw new Error("ImportPicker not mounted");
+      picker.vm.$emit("selection-ready", new Set(["12121212", "34343434"]));
+      await flushPromises();
+      // The fingerprint mismatch produced a per-item issue → modal opens.
+      const modalCmp = wrap.findComponent(ConflictModal);
+      if (!modalCmp.exists()) {
+        throw new Error("ConflictModal not mounted after selection-ready");
+      }
+      // Emit `commit-ready` with NO per-item decision — exercises the
+      // missing-decision branch in `partitionSelection`.
+      modalCmp.vm.$emit("commit-ready", {
+        batchDefault: "skip",
+        perItemDecisions: {},
+      });
+      await flushPromises();
+      // Per-item decision missing for 12121212 → console.warn fired with
+      // the dropped id + "no decision" phrase.
+      const warnCalls = warnSpy.mock.calls.map((c) => String(c[0]));
+      const hit = warnCalls.find(
+        (m) => m.includes("12121212") && m.includes("no decision"),
+      );
+      expect(hit).toBeTruthy();
+      // Commit still happened for the good entity.
+      expect(apiM.importExport.commit).toHaveBeenCalledTimes(1);
+      const firstCall = apiM.importExport.commit.mock.calls[0];
+      if (!firstCall) throw new Error("commit was not called");
+      const payload = firstCall[0] as CommitPayload;
+      expect(payload.adds.length).toBe(1);
+      expect(payload.adds[0]?.entity.id).toBe("34343434");
+    } finally {
+      warnSpy.mockRestore();
+      wrap.unmount();
+    }
   });
 });
