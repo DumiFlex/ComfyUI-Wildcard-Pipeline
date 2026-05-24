@@ -389,18 +389,34 @@ function onSubcatRenameClick(subcat: string): void {
   subcatRenameOpen.value = true;
 }
 
+function _applySubcatRename(oldName: string, newName: string): void {
+  // Mirror the server-side `fix_subcat_rename` mutation on the local
+  // draft state so the pills + option dropdowns reflect the new name
+  // without a refetch. Touches top-level list AND singular per-option
+  // assignment — same two sites the engine fixer updates.
+  subCategories.value = subCategories.value.map((s) => (s === oldName ? newName : s));
+  for (const o of options.value) {
+    if (o.sub_category === oldName) o.sub_category = newName;
+  }
+}
+
 function onSubcatRenameConfirmed(result: {
   undo_entry_id: string;
+  new_name: string;
   broken_refs?: Array<{ kind: string; id: string; name: string }>;
 }): void {
   subcatRenameOpen.value = false;
   const oldSubcat = subcatRenameTarget.value;
+  const newSubcat = result.new_name;
+
+  // Sync local state with server mutation.
+  _applySubcatRename(oldSubcat, newSubcat);
 
   // Register undo handle and show toast with Undo action.
   const undoHandle = registerCascadeUndo(result.undo_entry_id, `Renamed sub-category "${oldSubcat}"`);
   toast.push({
     severity: "success",
-    summary: `Sub-category renamed`,
+    summary: `Sub-category renamed to "${newSubcat}"`,
     life: 5000,
     action: {
       label: "Undo",
@@ -409,6 +425,8 @@ function onSubcatRenameConfirmed(result: {
         if (!undoResult.ok) {
           toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
         } else {
+          // Reverse the local rename to match the restored server state.
+          _applySubcatRename(newSubcat, oldSubcat);
           toast.push({ severity: "info", summary: `Sub-category rename reversed`, life: 3000 });
         }
       },

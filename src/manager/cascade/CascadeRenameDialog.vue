@@ -12,7 +12,11 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { initialName: "" });
 
 const emit = defineEmits<{
-  (e: "confirmed", result: { undo_entry_id: string; broken_refs?: Array<{ kind: string; id: string; name: string }> }): void;
+  (e: "confirmed", result: {
+    undo_entry_id: string;
+    new_name: string;
+    broken_refs?: Array<{ kind: string; id: string; name: string }>;
+  }): void;
   (e: "cancelled"): void;
 }>();
 
@@ -71,6 +75,7 @@ async function onConfirm(): Promise<void> {
   if (result.ok) {
     emit("confirmed", {
       undo_entry_id: result.undo_entry_id,
+      new_name: newName.value,
       broken_refs: result.broken_refs,
     });
   } else {

@@ -134,12 +134,17 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
 
 async function onOutputVarRenameConfirmed(result: {
   undo_entry_id: string;
+  new_name: string;
   broken_refs?: Array<{ kind: string; id: string; name: string }>;
 }): Promise<void> {
   outputVarRenameOpen.value = false;
 
   // Register undo handle + show toast.
   const oldName = savedOutputVar.value;
+  // Sync the local baseline so subsequent edits compare against the renamed
+  // value, not the pre-rename one (otherwise the editor thinks the user
+  // re-renamed on the next save).
+  savedOutputVar.value = result.new_name;
   const undoHandle = registerCascadeUndo(result.undo_entry_id, `Renamed $${oldName}`);
   toast.push({
     severity: "success",
