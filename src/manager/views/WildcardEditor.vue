@@ -44,8 +44,12 @@ import type {
 } from "../api/types";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
+import { registerCascadeUndo } from "../cascade/undo-stack-integration";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
+import { useResolveWarnings } from "../composables/useResolveWarnings";
+import type { ResolveWarning } from "../utils/resolveTokens";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -56,6 +60,7 @@ const recent = useRecentStore();
 const { resolveReturnTo } = useReturnTo();
 const cascade = useCascadeStore();
 const cascadeApply = useCascadeApply();
+const resolveWarnings = useResolveWarnings();
 
 const cascadeDialogOpen = ref(false);
 const cascadeDialogProps = ref<{
@@ -64,6 +69,10 @@ const cascadeDialogProps = ref<{
   action: "delete" | "rename";
   extra?: Record<string, unknown>;
 } | null>(null);
+
+// Rename dialog for sub-category pills
+const subcatRenameOpen = ref(false);
+const subcatRenameTarget = ref<string>("");
 
 const name = ref("");
 const description = ref("");
@@ -341,6 +350,59 @@ function onCascadeDialogCancelled(): void {
   cascadeDialogOpen.value = false;
 }
 
+function onSubcatRenameClick(subcat: string): void {
+  // Only meaningful for saved wildcards — new items have no server entity.
+  if (!props.id) return;
+  subcatRenameTarget.value = subcat;
+  subcatRenameOpen.value = true;
+}
+
+function onSubcatRenameConfirmed(result: {
+  undo_entry_id: string;
+  broken_refs?: Array<{ kind: string; id: string; name: string }>;
+}): void {
+  subcatRenameOpen.value = false;
+  const oldSubcat = subcatRenameTarget.value;
+
+  // Register undo handle and show toast with Undo action.
+  const undoHandle = registerCascadeUndo(result.undo_entry_id, `Renamed sub-category "${oldSubcat}"`);
+  toast.push({
+    severity: "success",
+    summary: `Sub-category renamed`,
+    life: 5000,
+    action: {
+      label: "Undo",
+      run: async () => {
+        const undoResult = await undoHandle.undo();
+        if (!undoResult.ok) {
+          toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+        } else {
+          toast.push({ severity: "info", summary: `Sub-category rename reversed`, life: 3000 });
+        }
+      },
+    },
+  });
+
+  // Push any broken refs (user opted out of cascade) into the warnings store.
+  if (result.broken_refs?.length) {
+    const warnings: ResolveWarning[] = result.broken_refs.map((ref) => ({
+      type: "cascade_broken_ref",
+      severity: "warn" as const,
+      module_id: ref.id,
+      source_field: "rename-opt-out",
+      position: 0,
+      token_index: null,
+      detail: { rename_target_id: result.undo_entry_id, broken_ref_kind: ref.kind, broken_ref_name: ref.name },
+      message: `Ref to renamed sub-category may be broken (rename without cascade was selected)`,
+    }));
+    resolveWarnings.push(warnings);
+  }
+}
+
+function onSubcatRenameCancelled(): void {
+  subcatRenameOpen.value = false;
+}
+
 function addOption() {
   options.value.push({
     id: `opt_${Math.random().toString(16).slice(2, 8)}`,
@@ -542,13 +604,21 @@ defineExpose({ historyEntries, applyRestore, options });
           <Button icon="pi-plus" data-test="wc-sub-add" @click="addSub">Add</Button>
         </div>
         <div v-if="subCategories.length" class="sub-list">
-          <Chip
-            v-for="s in subCategories"
-            :key="s"
-            tone="accent"
-            removable
-            @remove="onSubcatDeleteClick(s)"
-          >{{ s }}<PillCountBadge :count="props.id ? cascade.subcatRefsTo(props.id, s).length : 0" /></Chip>
+          <span v-for="s in subCategories" :key="s" class="wp-subcat-chip-row">
+            <Chip
+              tone="accent"
+              removable
+              @remove="onSubcatDeleteClick(s)"
+            >{{ s }}<PillCountBadge :count="props.id ? cascade.subcatRefsTo(props.id, s).length : 0" /></Chip>
+            <button
+              v-if="props.id"
+              type="button"
+              class="wp-subcat-rename-btn"
+              :aria-label="`Rename sub-category ${s}`"
+              :data-test="`wc-sub-rename-${s}`"
+              @click="onSubcatRenameClick(s)"
+            >✎</button>
+          </span>
         </div>
         <span v-else class="wp-card__hint">No sub-categories yet.</span>
       </Card>
@@ -650,6 +720,19 @@ defineExpose({ historyEntries, applyRestore, options });
       @cancelled="onCascadeDialogCancelled"
     />
 
+    <!-- CascadeRenameDialog: opened by the pencil button on a sub-category
+         chip. Cascades the rename to any modules referencing this subcat. -->
+    <CascadeRenameDialog
+      v-if="props.id && subcatRenameTarget"
+      :open="subcatRenameOpen"
+      kind="subcategory"
+      :id="props.id"
+      :extra="{ subcat_name: subcatRenameTarget }"
+      :initial-name="subcatRenameTarget"
+      @confirmed="onSubcatRenameConfirmed"
+      @cancelled="onSubcatRenameCancelled"
+    />
+
     <!-- ConfirmDialog lives INSIDE EditorFrame so the template has a single
          root vnode. Multi-root templates break the parent RouterView's
          <Transition mode="out-in"> after this component unmounts — the
@@ -680,6 +763,27 @@ defineExpose({ historyEntries, applyRestore, options });
   display: flex;
   flex-wrap: wrap;
   gap: var(--wp-space-3);
+}
+.wp-subcat-chip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.wp-subcat-rename-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  color: var(--wp-text-dim);
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 3px;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+.wp-subcat-rename-btn:hover {
+  opacity: 1;
+  background: var(--wp-color-surface-2, #2a2a2a);
 }
 .wp-options-table {
   font-size: var(--wp-text-sm);

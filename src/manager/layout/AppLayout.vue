@@ -13,6 +13,7 @@ import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useCascadeStore } from "../cascade/cascade-store";
 
 const ui = useUiStore();
 const commandIndex = useCommandIndex();
@@ -20,6 +21,7 @@ const recent = useRecentStore();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const categoryStore = useCategoryStore();
+const cascadeStore = useCascadeStore();
 
 const paletteOpen = ref(false);
 const shortcutsOpen = ref(false);
@@ -75,11 +77,39 @@ onMounted(() => {
   // these stores; list views fetch lazily on mount but only after the
   // user navigates to them. AppLayout mounts once for the entire SPA
   // lifetime, so this is a one-time cost per app load.
-  // Fire-and-forget: errors silently swallowed — the lazy list-view
+  // After all three fetches complete, bootstrap the cascade reverse-dep
+  // index so PillCountBadges in editors show real counts immediately.
+  // Errors on individual fetches are swallowed — the lazy list-view
   // fetches still run on actual usage if a fetch fails here.
-  void moduleStore.fetchCatalog().catch(() => undefined);
-  void bundleStore.fetchCatalog().catch(() => undefined);
-  void categoryStore.fetchAll().catch(() => undefined);
+  Promise.all([
+    moduleStore.fetchCatalog().catch(() => undefined),
+    bundleStore.fetchCatalog().catch(() => undefined),
+    categoryStore.fetchAll().catch(() => undefined),
+  ]).then(() => {
+    const catalog = moduleStore.catalog;
+    cascadeStore.rebuild({
+      wildcards: catalog.filter((m) => m.type === "wildcard").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      fixed_values: catalog.filter((m) => m.type === "fixed_values").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      combines: catalog.filter((m) => m.type === "combine").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      derivations: catalog.filter((m) => m.type === "derivation").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      constraints: catalog.filter((m) => m.type === "constraint").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {},
+      })),
+      bundles: bundleStore.catalog.map((b) => ({
+        id: b.id, name: b.name,
+        children: (b.children ?? []) as Array<{ id: string; type: string }>,
+      })),
+      categories: categoryStore.items.map((c) => ({ id: c.id, name: c.name })),
+    });
+  }).catch(() => undefined);
 });
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>

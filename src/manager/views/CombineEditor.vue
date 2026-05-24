@@ -37,8 +37,12 @@ import { collectLibraryVarHints, type VarHint } from "../utils/library-suggestio
 import { appendSnapshot, readHistory } from "../utils/history";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
+import { registerCascadeUndo } from "../cascade/undo-stack-integration";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
+import { useResolveWarnings } from "../composables/useResolveWarnings";
+import type { ResolveWarning } from "../utils/resolveTokens";
 import type {
   CombinePayload,
   ModuleHistoryEntry,
@@ -53,8 +57,16 @@ const recent = useRecentStore();
 const { resolveReturnTo } = useReturnTo();
 const cascade = useCascadeStore();
 const cascadeApply = useCascadeApply();
+const resolveWarnings = useResolveWarnings();
 
 const cascadeDialogOpen = ref(false);
+
+// Rename dialog: opened when save detects outputVar changed on existing combine.
+const outputVarRenameOpen = ref(false);
+// The outputVar as it was last saved to the server (for rename detection).
+const savedOutputVar = ref<string>("");
+// Pending save args accumulated before the rename intercept.
+const pendingSavePayload = ref<{ payload: CombinePayload; historyNext: ModuleHistoryEntry[] } | null>(null);
 
 const cascadeRefs = computed(() => {
   if (!props.id) return [];
@@ -118,6 +130,86 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
     },
   });
   router.push(resolveReturnTo("/combines"));
+}
+
+async function onOutputVarRenameConfirmed(result: {
+  undo_entry_id: string;
+  broken_refs?: Array<{ kind: string; id: string; name: string }>;
+}): Promise<void> {
+  outputVarRenameOpen.value = false;
+
+  // Register undo handle + show toast.
+  const oldName = savedOutputVar.value;
+  const undoHandle = registerCascadeUndo(result.undo_entry_id, `Renamed $${oldName}`);
+  toast.push({
+    severity: "success",
+    summary: `Output variable renamed`,
+    life: 5000,
+    action: {
+      label: "Undo",
+      run: async () => {
+        const undoResult = await undoHandle.undo();
+        if (!undoResult.ok) {
+          toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+        } else {
+          toast.push({ severity: "info", summary: `Rename reversed`, life: 3000 });
+        }
+      },
+    },
+  });
+
+  // Push broken_refs if the user opted out of cascade.
+  if (result.broken_refs?.length) {
+    const warnings: ResolveWarning[] = result.broken_refs.map((ref) => ({
+      type: "cascade_broken_ref",
+      severity: "warn" as const,
+      module_id: ref.id,
+      source_field: "rename-opt-out",
+      position: 0,
+      token_index: null,
+      detail: { rename_target_id: result.undo_entry_id, broken_ref_kind: ref.kind, broken_ref_name: ref.name },
+      message: `Ref to renamed combine output_var may be broken (rename without cascade was selected)`,
+    }));
+    resolveWarnings.push(warnings);
+  }
+
+  // Proceed with the pending save now that the rename is committed server-side.
+  if (pendingSavePayload.value && props.id) {
+    const { payload, historyNext } = pendingSavePayload.value;
+    pendingSavePayload.value = null;
+    savedOutputVar.value = payload.output_var;
+    setSaveState("saving");
+    saving.value = true;
+    try {
+      await moduleStore.update(props.id, {
+        name: name.value,
+        description: description.value,
+        category_id: categoryId.value,
+        tags: tags.value,
+        payload: { ...(payload as unknown as Record<string, unknown>), history: historyNext },
+      });
+      historyEntries.value = historyNext;
+      recent.push({ id: props.id, kind: "combine", name: name.value });
+      draft.discard();
+      setSaveState("saved", 1500);
+      baseline.value = snapshot();
+      router.push(resolveReturnTo("/combines"));
+    } catch (e) {
+      saveError.value = e instanceof Error ? e.message : String(e);
+      setSaveState("error", 3000);
+      toast.push({ severity: "error", summary: "Save failed", detail: saveError.value, life: 4000 });
+    } finally {
+      saving.value = false;
+    }
+  }
+}
+
+function onOutputVarRenameCancelled(): void {
+  outputVarRenameOpen.value = false;
+  pendingSavePayload.value = null;
+  // User cancelled the rename dialog — restore saving state to idle.
+  saving.value = false;
+  setSaveState("idle");
 }
 
 const name = ref("");
@@ -257,6 +349,7 @@ onMounted(async () => {
       } else {
         outputVar.value = toIdentifier(row.name);
       }
+      savedOutputVar.value = outputVar.value;
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "combine", name: name.value });
     } catch {
@@ -312,6 +405,28 @@ async function save() {
     };
     const newPayload = payload as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
+      // Rename intercept: if the output_var changed, open CascadeRenameDialog
+      // so the user can cascade-update all downstream references before saving.
+      // The rename dialog calls cascade-apply on the server; after confirmed we
+      // proceed with the regular moduleStore.update below.
+      if (finalOutput !== savedOutputVar.value && savedOutputVar.value) {
+        const prev = await moduleStore.get(props.id);
+        const nextHistory = appendSnapshot(
+          {
+            name: prev.name,
+            description: prev.description,
+            category_id: prev.category_id,
+            tags: prev.tags,
+            payload: prev.payload as Record<string, unknown>,
+          },
+          prev.payload as Record<string, unknown>,
+        );
+        pendingSavePayload.value = { payload, historyNext: nextHistory };
+        setSaveState("idle");
+        saving.value = false;
+        outputVarRenameOpen.value = true;
+        return;
+      }
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(
         {
@@ -501,6 +616,18 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
+    />
+    <!-- CascadeRenameDialog: intercepts save when output_var changes on
+         an existing combine. Cascades the rename to all downstream refs. -->
+    <CascadeRenameDialog
+      v-if="isEdit && props.id && savedOutputVar"
+      :open="outputVarRenameOpen"
+      kind="combine_output_var"
+      :id="props.id"
+      :extra="{ old_name: savedOutputVar }"
+      :initial-name="outputVar"
+      @confirmed="onOutputVarRenameConfirmed"
+      @cancelled="onOutputVarRenameCancelled"
     />
     <!-- ConfirmDialog inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
