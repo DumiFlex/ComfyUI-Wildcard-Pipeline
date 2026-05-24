@@ -12,6 +12,7 @@ const [
   dbgMod,
   asmMod,
   injMod,
+  cleanerMod,
   graphEventsMod,
   ToastModule,
   graphMod,
@@ -27,6 +28,7 @@ const [
   import("./widgets/debug"),
   import("./widgets/assembler"),
   import("./widgets/injector"),
+  import("./widgets/cleaner"),
   import("./extension/graph-events"),
   import("./components/shared/Toast.vue"),
   import("./extension/graph"),
@@ -68,6 +70,7 @@ playgroundStoreMod.setComfyApp(app);
 type ContextCreateNode = Parameters<typeof ctxMod.create>[0];
 type DebugCreateNode = Parameters<typeof dbgMod.create>[0];
 type InjectorCreateNode = Parameters<typeof injMod.create>[0];
+type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
 type AssemblerHelperNode = Parameters<typeof asmMod.mountHelper>[0];
 
 interface NodeData { name: string }
@@ -157,6 +160,8 @@ app.registerExtension({
         dbgMod.create(node, inputName),
       WP_INJECTOR_ROWS: (node: InjectorCreateNode, inputName: string) =>
         injMod.create(node, inputName),
+      WP_CLEANER: (node: CleanerCreateNode, inputName: string) =>
+        cleanerMod.create(node, inputName),
     };
   },
 

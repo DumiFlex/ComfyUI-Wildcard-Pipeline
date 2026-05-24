@@ -19,10 +19,10 @@ from typing import Any
 from engine.cleaner.rules import RULE_REGISTRY
 from engine.cleaner.types import CleanerCtx, RuleId, RunReport
 
-INTENSITY_TO_RULES: dict[str, set[RuleId]] = {
-    "gentle": {"whitespace"},
-    "balanced": {"whitespace", "dedupe_exact", "wp_dedupe", "null_slot"},
-    "aggressive": {
+INTENSITY_TO_RULES: dict[str, list[RuleId]] = {
+    "gentle": ["whitespace"],
+    "balanced": ["whitespace", "dedupe_exact", "wp_dedupe", "null_slot"],
+    "aggressive": [
         "whitespace",
         "dedupe_exact",
         "wp_dedupe",
@@ -30,12 +30,12 @@ INTENSITY_TO_RULES: dict[str, set[RuleId]] = {
         "fuzzy_dedupe",
         "dangling_var",
         "reorder",
-    },
+    ],
 }
 
 
 def _effective_rules(intensity: str, overrides: dict[str, bool]) -> set[RuleId]:
-    base = set(INTENSITY_TO_RULES.get(intensity, INTENSITY_TO_RULES["balanced"]))
+    base: set[RuleId] = set(INTENSITY_TO_RULES.get(intensity, INTENSITY_TO_RULES["balanced"]))
     for rule_id, enabled in overrides.items():
         if enabled:
             base.add(rule_id)  # type: ignore[arg-type]
@@ -50,9 +50,8 @@ class PromptCleaner:
     def run(
         self,
         text: str,
-        *,
-        ctx: CleanerCtx | None = None,
         config: dict[str, Any] | None = None,
+        ctx: CleanerCtx | None = None,
     ) -> dict[str, Any]:
         cfg = config or {}
         mode = cfg.get("mode", "tags")

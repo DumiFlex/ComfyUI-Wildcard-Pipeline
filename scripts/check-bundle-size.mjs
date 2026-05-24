@@ -86,7 +86,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // ContextWidget's onDrop, plus the constraint pairing badge work
 // landing alongside on the same branch. Approved with the bundle of
 // bug fixes — see the polish-cleanup PR description.
-const TOTAL_LIMIT = 340 * 1024;     // 340 KB
+// 360 KB — bumped from 340 KB for the WP_PromptCleaner widget
+// (2026-05-25). Adds the CleanerWidget spectrum-dial SFC, the
+// BlocklistModal body-teleported editor, the cleaner mount glue
+// chunk, and shared types/intensity helpers. ~9 KB net gzip across
+// the lazy cleaner chunks; entry stays put. See
+// docs/superpowers/specs/2026-05-25-prompt-cleaner-node-design.md.
+const TOTAL_LIMIT = 360 * 1024;     // 360 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

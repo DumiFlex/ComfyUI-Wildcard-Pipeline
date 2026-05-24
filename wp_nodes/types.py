@@ -116,6 +116,47 @@ class DebugViewerInput:
             )
 
 
+@comfytype(io_type="WP_CLEANER")
+class CleanerWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_CLEANER"]``.
+
+    The widget payload is a JSON string holding the cleaner config:
+    ``{mode, intensity, rules_override, blocklist, preset_id?}``. The
+    cleaner node parses it at execute time via ``json.loads``.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,
+                None,
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
 @comfytype(io_type="WP_INJECTOR_ROWS")
 class InjectorRowsInput:
     """Widget-only custom type — frontend binds ``getCustomWidgets["WP_INJECTOR_ROWS"]``."""

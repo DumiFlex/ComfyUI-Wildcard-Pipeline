@@ -26,13 +26,20 @@ from wp_nodes.assembler_node import WPPromptAssembler
 from wp_nodes.context_node import WPContext
 from wp_nodes.debug_node import WPDebug
 from wp_nodes.injector_node import WPContextInjector
+from wp_nodes.prompt_cleaner import WPPromptCleaner
 
 
 class WildcardPipelineExtension(ComfyExtension):
     """Registers all WP nodes with ComfyUI."""
 
     async def get_node_list(self):
-        return [WPContext, WPPromptAssembler, WPDebug, WPContextInjector]
+        return [
+            WPContext,
+            WPPromptAssembler,
+            WPDebug,
+            WPContextInjector,
+            WPPromptCleaner,
+        ]
 
 
 async def comfy_entrypoint() -> WildcardPipelineExtension:
