@@ -347,3 +347,50 @@ export interface EmbedBundle {
   pickOrder: string[];
   walkOverflow: WalkOverflow[];
 }
+
+// ----- Cleaner preset types (mirrors engine/cleaner + wp_api/cleaner_presets) -----
+
+import type {
+  CleanerNodeConfig,
+  Intensity,
+  Mode,
+  BlocklistKind,
+  RuleId,
+} from "../../components/cleaner/types";
+
+/** Wire shape for a cleaner preset payload. Re-exports the canonical
+ *  cleaner config type so the SPA and the canvas widget agree on a
+ *  single source. */
+export type CleanerPresetPayload = CleanerNodeConfig;
+
+export interface CleanerPreset {
+  id: string;
+  name: string;
+  description: string;
+  category_id: string | null;
+  tags: string[];
+  is_favorite: boolean;
+  is_builtin: boolean;
+  payload: CleanerPresetPayload;
+  payload_hash: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CleanerPresetListResponse {
+  items: CleanerPreset[];
+}
+
+export interface CleanerPresetCreateInput {
+  name: string;
+  description?: string;
+  tags?: string[];
+  payload: CleanerPresetPayload;
+}
+
+export type CleanerPresetUpdateInput = Partial<CleanerPresetCreateInput>;
+
+// Re-export the cleaner enum types so consumers can import them from
+// the SPA api/types barrel without touching the component path.
+export type { Intensity, Mode, BlocklistKind, RuleId };

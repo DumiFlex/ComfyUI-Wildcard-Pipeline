@@ -45,6 +45,7 @@ const SECTIONS: NavSection[] = [
       { id: "derivations", label: "Derivations",  icon: "pi-arrow-right-arrow-left",       to: "/derivations"   },
       { id: "constraints", label: "Constraints",  icon: "pi-filter",    to: "/constraints"   },
       { id: "bundles",     label: "Bundles",      icon: "pi-box",        to: "/bundles"       },
+      { id: "cleaner",     label: "Cleaner Presets", icon: "pi-filter-fill", to: "/cleaner-presets" },
     ],
   },
   {
@@ -79,6 +80,7 @@ const activeId = computed<string>(() => {
     ["derivations", "derivations"],
     ["constraints", "constraints"],
     ["bundles", "bundles"],
+    ["cleaner-presets", "cleaner"],
     ["categories", "categories"],
     ["import-export", "io"],
     ["test", "test"],

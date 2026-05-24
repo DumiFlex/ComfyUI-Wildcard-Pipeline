@@ -2,6 +2,8 @@ import type { CommitOk, CommitPayload } from "../import-export/commit";
 import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
+  CleanerPreset, CleanerPresetCreateInput, CleanerPresetListResponse,
+  CleanerPresetUpdateInput,
   EmbedBundle,
   MatchRequest, MatchResponse,
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
@@ -151,6 +153,44 @@ export const api = {
     },
     delete(id: string) {
       return request<void>(`/wp/api/categories/${id}`, { method: "DELETE" });
+    },
+  },
+  cleanerPresets: {
+    list() {
+      return request<CleanerPresetListResponse>(
+        "/wp/api/cleaner-presets", { method: "GET" },
+      );
+    },
+    get(id: string) {
+      return request<CleanerPreset>(
+        `/wp/api/cleaner-presets/${id}`, { method: "GET" },
+      );
+    },
+    create(body: CleanerPresetCreateInput) {
+      return request<CleanerPreset>("/wp/api/cleaner-presets", {
+        method: "POST", body: JSON.stringify(body),
+      });
+    },
+    update(
+      id: string,
+      body: CleanerPresetUpdateInput,
+      options: { ifMatch?: number } = {},
+    ) {
+      return request<CleanerPreset>(`/wp/api/cleaner-presets/${id}`, {
+        method: "PUT",
+        headers: options.ifMatch !== undefined
+          ? { "If-Match": String(options.ifMatch) }
+          : undefined,
+        body: JSON.stringify(body),
+      });
+    },
+    delete(id: string) {
+      return request<void>(`/wp/api/cleaner-presets/${id}`, { method: "DELETE" });
+    },
+    hashes() {
+      return request<{ hashes: Record<string, string> }>(
+        "/wp/api/cleaner-presets/hashes", { method: "GET" },
+      );
     },
   },
   test(body: TestRequest) {

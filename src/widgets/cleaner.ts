@@ -52,9 +52,32 @@ export function create(node: CleanerHostNode, inputName: string) {
       function onUpdateBlocklist(next: { kind: "list" | "regex"; entries: string[] }): void {
         onUpdate({ ...config.value, blocklist: next });
       }
-      function onOpenSave(): void {
-        // Hooked up to PushToLibraryModal in Phase 6 Task 19.
-        console.warn("[wp_cleaner] save flow not yet wired");
+      async function onOpenSave(): Promise<void> {
+        const name = window.prompt("Save preset as…", "");
+        if (!name) return;
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        try {
+          const { useCleanerPresetStore } = await import("../manager/stores/cleanerPresetStore");
+          const { createPinia, setActivePinia, getActivePinia } = await import("pinia");
+          if (!getActivePinia()) setActivePinia(createPinia());
+          const store = useCleanerPresetStore();
+          const payload: CleanerNodeConfig = { ...config.value };
+          delete payload.preset_ref;
+          const row = await store.create({ name: trimmed, payload });
+          config.value = {
+            ...config.value,
+            preset_ref: {
+              id: row.id,
+              name: row.name,
+              payload_hash: row.payload_hash,
+            },
+          };
+          host.setValue(serializeWidgetJson(config.value));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          window.alert(`Save failed: ${msg}`);
+        }
       }
       return () => h("div", { class: "wp-cleaner-host" }, [
         h(CleanerWidget, {
