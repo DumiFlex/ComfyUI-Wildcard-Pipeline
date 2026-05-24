@@ -665,6 +665,18 @@ const pickRows = computed<PickRow[]>(() => {
 
 const traceCount = computed(() => traceRows.value.length);
 
+/** Pre-process warning message text so legacy engine warnings (which
+ *  emitted bare quoted uuids like `constraint 'e4b95847' never fired`)
+ *  still get chip-rendered. Newer engine code emits `@{uuid}` directly,
+ *  but cached snapshots + older Python processes that haven't restarted
+ *  yet would otherwise show raw short-uuid strings. Wraps any
+ *  apostrophe-quoted 8-hex token in `@{...}` so RichTextPreview parses
+ *  it as a ref. Cheap regex — runs once per message render. */
+function wrapBareUuids(text: string): string {
+  if (!text) return text;
+  return text.replace(/'([0-9a-fA-F]{8})'/g, "@{$1}");
+}
+
 /** Typed warnings list — coerce loose dicts into a known shape so
  *  rendering can pull severity / message reliably. Defaults severity
  *  to "warning" when the engine didn't tag one. Warning messages
@@ -677,7 +689,7 @@ const warningEntries = computed<WarningEntry[]>(() => {
       return { type: "unknown", messageText: String(w) };
     }
     const o = w as Record<string, unknown>;
-    const rawMsg = typeof o.message === "string" ? o.message : "";
+    const rawMsg = typeof o.message === "string" ? wrapBareUuids(o.message) : "";
     const rawBinding = typeof o.binding === "string" ? o.binding : "";
     return {
       type: typeof o.type === "string" ? o.type : "unknown",

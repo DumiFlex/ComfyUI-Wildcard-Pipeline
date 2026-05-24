@@ -603,6 +603,48 @@ describe("DebugViewer", () => {
     expect(pills[1].classes()).toContain("wp-dbg-trace-pill--skipped");
   });
 
+  it("Warnings tab wraps legacy quoted-uuid messages so the chip parser resolves them", async () => {
+    // Pre-2026-05-25 engine builds emitted constraint_never_applied
+    // messages as `constraint 'e4b95847' never fired — no downstream
+    // 'c0f09840' instance`. Newer builds emit `@{uuid}` directly, but
+    // cached snapshots + Python processes that haven't restarted yet
+    // still ship the apostrophe form. DebugViewer rewrites bare
+    // quoted 8-hex tokens to `@{uuid}` before handing the text to
+    // RichTextPreview so the user always sees chips.
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "e4b95847",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "11112222",
+          constraint_target: "c0f09840",
+        },
+        {
+          id: "c0f09840",
+          type: "wildcard",
+          status: "ok",
+          binding: "tgt",
+          writes: [{ variable: "tgt", value: "v" }],
+        },
+      ],
+      __wp_warnings__: [
+        {
+          type: "constraint_never_applied",
+          severity: "info",
+          module_id: "e4b95847",
+          message: "constraint 'e4b95847' never fired — no downstream 'c0f09840' instance",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[3].trigger("click");
+    const refChips = wrapper.findAll(".wp-dbg-warn-msg .wp-refchip");
+    // Two chips — `'e4b95847'` and `'c0f09840'` both wrapped.
+    expect(refChips.length).toBe(2);
+  });
+
   it("Constraint trace row keeps 'ok' status when no never_applied warning matches its module_id", async () => {
     const snap = JSON.stringify({
       __wp_trace__: [
