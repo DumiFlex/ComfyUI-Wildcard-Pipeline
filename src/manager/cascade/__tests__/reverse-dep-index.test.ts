@@ -135,6 +135,75 @@ describe("reverse-dep-index", () => {
     expect(optionRefsTo(idx, "opt_aaaa")).toHaveLength(0);
   });
 
+  it("matrix target-side subcat ref deduped per constraint", () => {
+    // Constraint with N source rows that all mention the same target
+    // subcat used to push N refs, double-counting the badge.
+    const dupLib: LibraryFixture = {
+      wildcards: [
+        { id: "11111111", name: "src", payload: { sub_categories: ["a", "b"], options: [] } },
+        { id: "22222222", name: "tgt", payload: { sub_categories: ["x", "y"], options: [] } },
+      ],
+      constraints: [
+        {
+          id: "cccccc11", name: "c",
+          payload: {
+            source_wildcard_id: "11111111", target_wildcard_id: "22222222",
+            matrix: {
+              a: { x: { mode: "allow" }, y: { mode: "block" } },
+              b: { x: { mode: "block" }, y: { mode: "allow" } },
+            },
+            exceptions: [],
+          },
+        },
+      ],
+      fixed_values: [], combines: [], derivations: [], bundles: [], categories: [],
+    };
+    const idx = buildIndex(dupLib);
+    // Each target subcat should be referenced ONCE per constraint even
+    // though both source rows mention it.
+    expect(subcatRefsTo(idx, "22222222", "x")).toHaveLength(1);
+    expect(subcatRefsTo(idx, "22222222", "y")).toHaveLength(1);
+    // Source side is naturally unique (one row per key).
+    expect(subcatRefsTo(idx, "11111111", "a")).toHaveLength(1);
+    expect(subcatRefsTo(idx, "11111111", "b")).toHaveLength(1);
+  });
+
+  it("applyDiff renames subcat keys atomically (live badge update)", () => {
+    const idx = buildIndex(lib);
+    expect(subcatRefsTo(idx, "11111111", "warm")).toHaveLength(2);
+    expect(subcatRefsTo(idx, "11111111", "hot")).toHaveLength(0);
+    applyDiff(idx, [
+      {
+        entity_id: "dddddd11",
+        rename_ref: { kind: "subcat", wildcard_id: "11111111", old: "warm", new: "hot" },
+      },
+    ]);
+    expect(subcatRefsTo(idx, "11111111", "warm")).toHaveLength(0);
+    expect(subcatRefsTo(idx, "11111111", "hot")).toHaveLength(2);
+  });
+
+  it("applyDiff renames combine var keys (toCombineVar + toFixedValueName)", () => {
+    const varLib: LibraryFixture = {
+      wildcards: [
+        {
+          id: "11111111", name: "w",
+          payload: { options: [{ id: "o1", value: "uses $mood", weight: 1 }] },
+        },
+      ],
+      combines: [
+        { id: "cccccc11", name: "c", payload: { template: "$mood + $tone" } },
+      ],
+      fixed_values: [], derivations: [], constraints: [], bundles: [], categories: [],
+    };
+    const idx = buildIndex(varLib);
+    expect(combineVarRefsTo(idx, "mood").length).toBeGreaterThan(0);
+    applyDiff(idx, [
+      { entity_id: "cccccc11", rename_ref: { kind: "var", old: "mood", new: "vibe" } },
+    ]);
+    expect(combineVarRefsTo(idx, "mood")).toHaveLength(0);
+    expect(combineVarRefsTo(idx, "vibe").length).toBeGreaterThan(0);
+  });
+
   it("category refs collected from category_id field", () => {
     const idxLib: LibraryFixture = {
       wildcards: [{ id: "11111111", name: "w", payload: { options: [] }, category_id: "cat1" }],

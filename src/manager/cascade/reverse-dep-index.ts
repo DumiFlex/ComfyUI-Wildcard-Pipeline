@@ -32,7 +32,7 @@ export interface DiffEntry {
   entity_id: string;
   removed?: boolean;
   remove_ref?: { kind: string; id?: string; wildcard_id?: string; name?: string; option_id?: string };
-  rename_ref?: { kind: string; old: string; new: string };
+  rename_ref?: { kind: string; old: string; new: string; wildcard_id?: string };
   /** Set by fix_option_delete: source wildcard's `entity_id` had this
    * option id removed from `payload.options[]`. */
   remove_option?: string;
@@ -249,6 +249,13 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
 
     const matrix = payload.matrix as Record<string, Record<string, unknown>>;
     if (matrix && typeof matrix === "object") {
+      // Target-side dedupe: the matrix is a 2D table — every source row
+      // potentially mentions every target subcat. Without this guard, a
+      // constraint with N source rows × M target columns produces M*N
+      // refs to each target subcat, which double-counts the badge.
+      // Track seen target keys for THIS constraint and push at most one
+      // ref per (constraint, target_subcat) pair.
+      const seenTargets = new Set<string>();
       for (const [sourceKey, targetMap] of Object.entries(matrix)) {
         if (targetMap && typeof targetMap === "object") {
           if (sourceId) {
@@ -262,15 +269,15 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
           }
 
           for (const targetKey of Object.keys(targetMap)) {
-            if (targetId) {
-              const targetSubcatRef: IncomingRef = {
-                from_kind: "constraint",
-                from_id: constraint.id,
-                from_name: constraint.name,
-                ref_path: `matrix_target:${targetKey}`,
-              };
-              pushRef(idx.toSubcat, `${targetId}:${targetKey}`, targetSubcatRef);
-            }
+            if (!targetId || seenTargets.has(targetKey)) continue;
+            seenTargets.add(targetKey);
+            const targetSubcatRef: IncomingRef = {
+              from_kind: "constraint",
+              from_id: constraint.id,
+              from_name: constraint.name,
+              ref_path: `matrix_target:${targetKey}`,
+            };
+            pushRef(idx.toSubcat, `${targetId}:${targetKey}`, targetSubcatRef);
           }
         }
       }
@@ -461,6 +468,37 @@ export function applyDiff(idx: ReverseDepIndex, diff: DiffEntry[]): void {
       // Source wildcard's own option removed — drop its toOptionId entry
       // entirely so any subsequent refsTo lookup returns empty.
       idx.toOptionId.delete(entry.remove_option);
+    } else if (entry.rename_ref) {
+      const renameRef = entry.rename_ref;
+      // Subcategory rename: move the keyed bucket
+      // `${wildcard_id}:${old}` → `${wildcard_id}:${new}` so the
+      // post-rename pill (which now renders for the NEW name) finds
+      // its refs without a full index rebuild. Multiple diff entries
+      // can target the same wildcard+subcat; the second pass is a
+      // no-op because the OLD key is already gone after the first.
+      if (renameRef.kind === "subcat" && renameRef.wildcard_id) {
+        const oldKey = `${renameRef.wildcard_id}:${renameRef.old}`;
+        const newKey = `${renameRef.wildcard_id}:${renameRef.new}`;
+        const refs = idx.toSubcat.get(oldKey);
+        if (refs) {
+          const merged = [...(idx.toSubcat.get(newKey) ?? []), ...refs];
+          idx.toSubcat.set(newKey, merged);
+          idx.toSubcat.delete(oldKey);
+        }
+      }
+      // Combine output_var rename: vars live in two maps because they
+      // could resolve to either a `$combine` ref or a `$fixed_value`
+      // ref. Move both — same idempotent pattern.
+      if (renameRef.kind === "var") {
+        for (const map of [idx.toCombineVar, idx.toFixedValueName]) {
+          const refs = map.get(renameRef.old);
+          if (refs) {
+            const merged = [...(map.get(renameRef.new) ?? []), ...refs];
+            map.set(renameRef.new, merged);
+            map.delete(renameRef.old);
+          }
+        }
+      }
     }
   }
 }
