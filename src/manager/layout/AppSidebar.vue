@@ -5,6 +5,7 @@ import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
+import { GITHUB_REPO, GITHUB_WIKI } from "../config/links";
 
 interface NavItem {
   id: string;
@@ -58,8 +59,8 @@ const SECTIONS: NavSection[] = [
     label: "Get Started",
     items: [
       { id: "community", label: "Community",     icon: "pi-globe",  to: "/community" },
-      { id: "_docs",     label: "Documentation", icon: "pi-book",   url: "https://github.com/DumiFlex/ComfyUI-WildcardPipeline/wiki" },
-      { id: "_source",   label: "View Source",   icon: "pi-github", url: "https://github.com/DumiFlex/ComfyUI-WildcardPipeline" },
+      { id: "_docs",     label: "Documentation", icon: "pi-book",   url: GITHUB_WIKI },
+      { id: "_source",   label: "View Source",   icon: "pi-github", url: GITHUB_REPO },
     ],
   },
 ];

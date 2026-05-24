@@ -1,16 +1,20 @@
 <script setup lang="ts">
 /**
- * Community — work-in-progress placeholder.
+ * Community — placeholder landing while the full discover / upload /
+ * profile flow bakes.
  *
- * The full discover / detail / upload / profile flow lives on the
- * `feat/community-tab` branch. Main ships only this stub so the
- * sidebar entry has somewhere to land while the feature bakes.
+ * Primary CTA: Discord invite. The discover/upload UI ships when
+ * `feat/community-tab` lands; until then, in-flight design feedback +
+ * Q&A happens on Discord.
+ *
+ * Both URLs live in `manager/config/links.ts` — the Discord invite
+ * rotates if the server resets invite settings, and the repo slug
+ * may change when we rename the public repo. Centralized so a swap
+ * is a one-line change.
  */
 import Card from "../components/ui/Card.vue";
 import Icon from "../components/ui/Icon.vue";
-
-const branchUrl =
-  "https://github.com/DumiFlex/ComfyUI-WildcardPipeline/tree/feat/community-tab";
+import { DISCORD_INVITE } from "../config/links";
 </script>
 
 <template>
@@ -22,23 +26,34 @@ const branchUrl =
       </div>
     </div>
 
-    <Card title="Work in progress">
+    <Card title="Join the conversation">
       <div class="wp-community-wip__body">
-        <Icon name="pi-clock" :size="22" /><!-- outlier: 22px empty-state placeholder icon -->
-        <div>
+        <div class="wp-community-wip__brand" aria-hidden="true">
+          <Icon name="pi-discord" :size="32" />
+        </div>
+        <div class="wp-community-wip__copy">
           <p class="wp-community-wip__lead">
-            Community hub is being designed. Not shipped on main yet.
+            The full Community hub is being designed. While it's in flight,
+            jump on Discord for help, feedback, and the work-in-progress feed.
           </p>
-          <p class="wp-dim wp-community-wip__hint">
-            Track the work-in-progress UI on the
+          <div class="wp-community-wip__actions">
             <a
-              class="wp-community-wip__link wp-mono"
-              :href="branchUrl"
+              class="wp-btn wp-btn--primary wp-btn--md"
+              :href="DISCORD_INVITE"
               target="_blank"
               rel="noopener"
-            ><Icon name="pi-github" /> feat/community-tab</a>
-            branch.
-          </p>
+            >
+              <Icon name="pi-discord" />
+              <span>Open Discord invite</span>
+              <Icon name="pi-external-link" />
+            </a>
+            <a
+              class="wp-community-wip__alt"
+              :href="DISCORD_INVITE"
+              target="_blank"
+              rel="noopener"
+            >{{ DISCORD_INVITE }}</a>
+          </div>
         </div>
       </div>
     </Card>
@@ -54,22 +69,49 @@ const branchUrl =
   gap: var(--wp-space-6);
   padding: var(--wp-space-2) 0;
 }
+.wp-community-wip__brand {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--wp-accent) 16%, transparent);
+  color: var(--wp-accent);
+}
+.wp-community-wip__copy {
+  flex: 1;
+  min-width: 0;
+}
 .wp-community-wip__lead {
-  margin: 0 0 var(--wp-space-3);
+  margin: 0 0 var(--wp-space-4);
   font-size: var(--wp-text-base);
-  font-weight: 500;
   color: var(--wp-text);
 }
-.wp-community-wip__hint {
-  margin: 0;
-  font-size: var(--wp-text-sm);
+.wp-community-wip__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+  align-items: flex-start;
 }
-.wp-community-wip__link {
-  color: var(--wp-accent-text);
+/* Anchor styled as primary button — reuses the same .wp-btn family
+ * styles applied by Button.vue. text-decoration:none kills the
+ * default anchor underline; everything else inherits from .wp-btn. */
+.wp-community-wip__actions .wp-btn {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: var(--wp-space-2);
 }
-.wp-community-wip__link:hover { color: var(--wp-text); }
+.wp-community-wip__alt {
+  font-family: var(--wp-font-mono);
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
+  text-decoration: none;
+}
+.wp-community-wip__alt:hover {
+  color: var(--wp-text);
+  text-decoration: underline;
+}
 </style>

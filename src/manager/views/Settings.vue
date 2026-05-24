@@ -11,10 +11,11 @@ import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Toggle from "../components/ui/Toggle.vue";
 import { useUiStore, type ThemeMode } from "../stores/uiStore";
+import { GITHUB_REPO } from "../config/links";
 
 const uiStore = useUiStore();
 
-const repoUrl = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline";
+const repoUrl = GITHUB_REPO;
 
 interface ThemeOption { value: ThemeMode; label: string; icon: string }
 const THEMES: ThemeOption[] = [
