@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -136,12 +137,13 @@ interface TraceEntry {
 
 interface WarningEntry {
   type?: string;
-  /** Binding label rendered before the message — also tokenized for
-   *  embedded `@{uuid}` refs (rare but possible). */
-  bindingSegments?: RefSegment[];
-  /** Message body as tokenized segments so embedded `@{uuid}` refs
-   *  render as colored chips instead of raw text inside the message. */
-  messageSegments?: RefSegment[];
+  /** Binding label rendered before the message — raw text passed to
+   *  RichTextPreview so embedded `@{uuid}` refs render as colored
+   *  chips. */
+  bindingText?: string;
+  /** Message body — raw text passed to RichTextPreview so embedded
+   *  `@{uuid}` refs render as colored chips. */
+  messageText?: string;
   severity?: "info" | "warning" | "error";
 }
 
@@ -239,6 +241,34 @@ const unresolvedUuids = computed<string[]>(() => {
     if (typeof t.error === "object" && t.error !== null && "message" in t.error) {
       scan((t.error as { message?: unknown }).message);
     }
+    // Constraint rows label themselves as `$src → $tgt` using the
+    // source / target wildcard uuids. If neither wildcard rolled on
+    // this run (no trace entry), the trace's id map can't resolve
+    // them — surface as candidates for the library lookup so the
+    // row reads `$style → $mood` instead of `$ae07018b → $c0f09840`.
+    if (typeof t.constraint_source === "string" && t.constraint_source) {
+      const u = t.constraint_source;
+      if (!idMap[u] && !libraryNameMap.value[u]) out.add(u);
+    }
+    if (typeof t.constraint_target === "string" && t.constraint_target) {
+      const u = t.constraint_target;
+      if (!idMap[u] && !libraryNameMap.value[u]) out.add(u);
+    }
+    // Trace entry's own module id — when writes is empty AND no
+    // binding is stamped (e.g. constraint module that registers a
+    // matrix but writes nothing, or any module the engine couldn't
+    // bind), the row label falls back to `$<short-uuid>`. Library
+    // fetch on the id gives us the var_binding so the row reads
+    // `$style` instead of `$ae07018b`.
+    if (typeof t.id === "string" && t.id && !idMap[t.id] && !libraryNameMap.value[t.id]) {
+      out.add(t.id);
+    }
+  }
+  // Also harvest the picks-map keys so a wildcard with no trace entry
+  // (e.g. ran inside a separate Context node visible only via merged
+  // ctx) still resolves to its var_binding for the picks tab label.
+  for (const pid of Object.keys(picks.value)) {
+    if (!idMap[pid] && !libraryNameMap.value[pid]) out.add(pid);
   }
   return [...out];
 });
@@ -362,6 +392,26 @@ function statusLabelOf(raw: string | undefined, hasError: boolean): string {
   if (raw === "skipped_unknown_type") return "skipped";
   return raw || "ok";
 }
+
+/** Set of constraint module ids that the engine emitted a
+ *  `constraint_never_applied` warning for — these registered into ctx
+ *  but no downstream wildcard instance ever consumed them. The trace
+ *  status for those rows still says `ok` because the constraint itself
+ *  RAN (the module's `resolve` succeeded); the warning is the only
+ *  signal of the no-op. Surfacing it inline as a "never fired" pill
+ *  so the user reads the no-op without needing to cross-reference
+ *  the Warnings tab. */
+const unfiredConstraintIds = computed<Set<string>>(() => {
+  const out = new Set<string>();
+  for (const w of warnings.value) {
+    if (!w || typeof w !== "object") continue;
+    const o = w as Record<string, unknown>;
+    if (o.type !== "constraint_never_applied") continue;
+    const mid = typeof o.module_id === "string" ? o.module_id : "";
+    if (mid) out.add(mid);
+  }
+  return out;
+});
 
 /** Map raw engine type to the kind-token alias used by
  *  `wp-kind-chip--<alias>` rules in theme.css. `fixed_values` is
@@ -521,9 +571,16 @@ const traceRows = computed<TraceRow[]>(() => {
       const tgtVar = idMap[t.constraint_target];
       const srcLabel = srcVar ? `$${srcVar}` : `$${t.constraint_source.slice(0, 8)}`;
       const tgtLabel = tgtVar ? `$${tgtVar}` : `$${t.constraint_target.slice(0, 8)}`;
+      // Constraint that registered but never claimed a downstream
+      // target instance — the engine emits a `constraint_never_applied`
+      // warning AT chain end. Swap the row's "ok" status to a
+      // "never fired" skipped pill so the no-op reads inline.
+      const neverFired = !isDisabled && id !== "" && unfiredConstraintIds.value.has(id);
       seq += 1;
       rows.push({
         ...baseRow,
+        status: neverFired ? "skipped" : baseRow.status,
+        statusLabel: neverFired ? "never fired" : baseRow.statusLabel,
         runOrder: seq,
         key: `${entryIdx}:${id || "constraint"}`,
         label: `${srcLabel} → ${tgtLabel}`,
@@ -552,10 +609,9 @@ interface PickRow {
   /** `$varname` for display, falls back to `$<short-uuid>` when the
    *  trace doesn't carry a variable name for this module. */
   label: string;
-  /** The picked option's `value` field as tokenized segments — text
-   *  fragments + `@uuid` ref chips. Template renders each segment
-   *  with its own styling so refs read as distinct entities. */
-  valueSegments: RefSegment[];
+  /** The picked option's `value` field as raw text. RichTextPreview
+   *  parses `@{uuid}` tokens into colored chips on render. */
+  valueText: string;
   /** Sub-category tag — shown as a small chip. Empty = no sub-cat. */
   subCategory: string;
   /** Raw uuid — kept around so power-users can still see which module
@@ -563,45 +619,25 @@ interface PickRow {
   rawId: string;
 }
 
-/** A `@{uuid}` reference broken into tokenized segments — plain text
- *  fragments around each ref, plus a `ref` segment per match that
- *  carries the resolved (or fallback) variable name. The template
- *  renders `text` as a normal span and `ref` as a colored chip so
- *  the reference reads as a distinct entity, not a plain string.
- *  Unresolved refs (no matching trace entry) keep the short-uuid
- *  form prefixed with `@` so the user knows it's a ref. */
-interface RefSegment {
-  kind: "text" | "ref" | "ref-unknown";
-  text: string;
-  /** Full uuid — present on `ref` / `ref-unknown` segments for
-   *  tooltips. */
-  uuid?: string;
-}
-
-function tokenizeRefs(text: string, idMap: Record<string, string>): RefSegment[] {
-  if (!text) return [];
-  const segments: RefSegment[] = [];
-  const re = /@\{([0-9a-f]{6,16})\}/gi;
-  let lastIdx = 0;
-  for (const m of text.matchAll(re)) {
-    const idx = m.index ?? 0;
-    if (idx > lastIdx) {
-      segments.push({ kind: "text", text: text.slice(lastIdx, idx) });
-    }
-    const uuid = m[1];
-    const varName = idMap[uuid];
-    if (varName) {
-      segments.push({ kind: "ref", text: `@${varName}`, uuid });
-    } else {
-      segments.push({ kind: "ref-unknown", text: `@${uuid.slice(0, 8)}`, uuid });
-    }
-    lastIdx = idx + m[0].length;
+/** `uuid → name` Map view of `effectiveIdMap` — RichTextPreview takes
+ *  a Map for its `uuidToName` prop. Built once per reactive tick so
+ *  every chip-rendering site (picks values, trace values, warnings)
+ *  shares the same lookup, and the library-fetch fallback flows
+ *  through automatically.
+ *
+ *  Note: RichTextPreview ALSO consults the global preview-resolver
+ *  cache as a deeper fallback (`@{uuid}` refs that aren't in the
+ *  trace's id map AND aren't in this widget's libraryNameMap still
+ *  resolve via the shared cache populated by other surfaces). The
+ *  net effect is that no surface in the app should render a raw
+ *  short-uuid for a known wildcard. */
+const uuidToNameMap = computed<Map<string, string>>(() => {
+  const m = new Map<string, string>();
+  for (const [uuid, name] of Object.entries(effectiveIdMap.value)) {
+    if (typeof name === "string" && name) m.set(uuid, name);
   }
-  if (lastIdx < text.length) {
-    segments.push({ kind: "text", text: text.slice(lastIdx) });
-  }
-  return segments;
-}
+  return m;
+});
 
 /** Picks tab — re-key raw `__wp_picks__[module_id]` map into a list of
  *  `$variable_name → value` rows. Splits the option dict's `value` /
@@ -623,7 +659,7 @@ const pickRows = computed<PickRow[]>(() => {
     } else {
       value = formatValue(opt);
     }
-    return { label, valueSegments: tokenizeRefs(value, idMap), subCategory, rawId };
+    return { label, valueText: value, subCategory, rawId };
   });
 });
 
@@ -636,18 +672,17 @@ const traceCount = computed(() => traceRows.value.length);
  *  → @{d9cb9f0f}`) get tokenized so embedded `@{uuid}` refs render
  *  as colored chips: `Cycle: @cycle_a → @cycle_b → @cycle_a`. */
 const warningEntries = computed<WarningEntry[]>(() => {
-  const idMap = effectiveIdMap.value;
   return warnings.value.map((w): WarningEntry => {
     if (!w || typeof w !== "object") {
-      return { type: "unknown", messageSegments: [{ kind: "text", text: String(w) }] };
+      return { type: "unknown", messageText: String(w) };
     }
     const o = w as Record<string, unknown>;
     const rawMsg = typeof o.message === "string" ? o.message : "";
     const rawBinding = typeof o.binding === "string" ? o.binding : "";
     return {
       type: typeof o.type === "string" ? o.type : "unknown",
-      bindingSegments: rawBinding ? tokenizeRefs(rawBinding, idMap) : undefined,
-      messageSegments: rawMsg ? tokenizeRefs(rawMsg, idMap) : undefined,
+      bindingText: rawBinding || undefined,
+      messageText: rawMsg || undefined,
       severity: (o.severity === "info" || o.severity === "warning" || o.severity === "error")
         ? o.severity
         : "warning",
@@ -792,8 +827,7 @@ const visiblePickRows = computed<PickRow[]>(() => {
   return pickRows.value.filter((r) => {
     if (pinnedKeys.value.has(r.rawId)) return true;
     if (matchesFilter(r.label)) return true;
-    const flat = r.valueSegments.map((s) => s.text).join("");
-    if (matchesFilter(flat)) return true;
+    if (matchesFilter(r.valueText)) return true;
     return matchesFilter(r.subCategory || "");
   });
 });
@@ -960,47 +994,6 @@ function openCtxMenu(
   };
 }
 
-/** Right-click on a `@{uuid}` ref chip — copies the referenced
- *  wildcard's uuid + resolved name, NOT the parent row's id. The
- *  chip's parent picks-row would otherwise be the ctxmenu target,
- *  which is misleading (the user pointed at the chip, not the
- *  containing row). Stops propagation so the row handler doesn't
- *  also fire. */
-function openRefChipMenu(ev: MouseEvent, uuid: string): void {
-  ev.stopPropagation();
-  const resolvedName = effectiveIdMap.value[uuid];
-  const items: ContextMenuItem[] = [
-    {
-      label: "Copy module id",
-      icon: "pi-id-card",
-      onSelect: () => { void clipboardWrite(uuid); },
-    },
-  ];
-  if (resolvedName) {
-    items.push({
-      label: `Copy $${resolvedName}`,
-      icon: "pi-dollar",
-      onSelect: () => { void clipboardWrite(`$${resolvedName}`); },
-    });
-    items.push({
-      label: `Copy @${resolvedName}`,
-      icon: "pi-at",
-      onSelect: () => { void clipboardWrite(`@${resolvedName}`); },
-    });
-  } else {
-    items.push({
-      label: "Copy @{uuid}",
-      icon: "pi-at",
-      onSelect: () => { void clipboardWrite(`@{${uuid}}`); },
-    });
-  }
-  ctxActiveKey.value = `ref:${uuid}`;
-  openCtxMenu(ev, items, {
-    icon: "pi-at",
-    label: resolvedName ? `Ref · @${resolvedName}` : `Ref · @${uuid.slice(0, 8)}`,
-  });
-}
-
 function openTraceRowMenu(ev: MouseEvent, row: TraceRow): void {
   const varName = row.label.replace(/^\$/, "");
   const isPinned = pinnedKeys.value.has(row.key);
@@ -1050,8 +1043,9 @@ function openTraceRowMenu(ev: MouseEvent, row: TraceRow): void {
 function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
   const varName = row.label.replace(/^\$/, "");
   const isPinned = pinnedKeys.value.has(row.rawId);
-  // Flatten the tokenized value back to a plain string for copy
-  const plainValue = row.valueSegments.map((s) => s.text).join("");
+  // Plain value text — RichTextPreview handles chip rendering but
+  // copy actions just need the raw string the engine emitted.
+  const plainValue = row.valueText;
   const items: ContextMenuItem[] = [
     {
       label: isPinned ? "Unpin row" : "Pin row",
@@ -1273,7 +1267,15 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
               ? `${row.value}\n\nClick to ${expandedTraceKeys.has(row.key) ? 'collapse' : 'expand'}`
               : (row.value || '')"
             @click.stop="isExpandableValue(row) && toggleTraceExpand(row.key)"
-          >{{ row.value || "—" }}</span>
+          >
+            <RichTextPreview
+              v-if="row.value"
+              :value="row.value"
+              :uuid-to-name="uuidToNameMap"
+              surface="wildcard"
+            />
+            <template v-else>—</template>
+          </span>
           <button
             v-if="row.seed"
             type="button"
@@ -1325,23 +1327,11 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
             {{ row.label }}
           </span>
           <span class="wp-dbg-pick-val">
-            <template v-for="(seg, i) in row.valueSegments" :key="i">
-              <span
-                v-if="seg.kind === 'ref'"
-                class="wp-dbg-ref"
-                :class="{ 'wp-dbg-ref--ctx-active': seg.uuid && ctxActiveKey === `ref:${seg.uuid}` }"
-                :title="`@{${seg.uuid}} — wildcard reference`"
-                @contextmenu="(ev) => seg.uuid && openRefChipMenu(ev, seg.uuid)"
-              >{{ seg.text }}</span>
-              <span
-                v-else-if="seg.kind === 'ref-unknown'"
-                class="wp-dbg-ref wp-dbg-ref--unknown"
-                :class="{ 'wp-dbg-ref--ctx-active': seg.uuid && ctxActiveKey === `ref:${seg.uuid}` }"
-                :title="`@{${seg.uuid}} — module not in trace`"
-                @contextmenu="(ev) => seg.uuid && openRefChipMenu(ev, seg.uuid)"
-              >{{ seg.text }}</span>
-              <template v-else>{{ seg.text }}</template>
-            </template>
+            <RichTextPreview
+              :value="row.valueText"
+              :uuid-to-name="uuidToNameMap"
+              surface="wildcard"
+            />
           </span>
           <span
             v-if="row.subCategory"
@@ -1368,43 +1358,19 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
         >
           <span class="wp-dbg-warn-dot" :class="`wp-dbg-warn-dot--${w.severity}`" aria-hidden="true"></span>
           <span class="wp-dbg-warn-type">{{ w.type }}</span>
-          <span v-if="w.bindingSegments?.length" class="wp-dbg-warn-binding">
-            <template v-for="(seg, i) in w.bindingSegments" :key="i">
-              <span
-                v-if="seg.kind === 'ref'"
-                class="wp-dbg-ref"
-                :class="{ 'wp-dbg-ref--ctx-active': seg.uuid && ctxActiveKey === `ref:${seg.uuid}` }"
-                :title="`@{${seg.uuid}} — wildcard reference`"
-                @contextmenu="(ev) => seg.uuid && openRefChipMenu(ev, seg.uuid)"
-              >{{ seg.text }}</span>
-              <span
-                v-else-if="seg.kind === 'ref-unknown'"
-                class="wp-dbg-ref wp-dbg-ref--unknown"
-                :class="{ 'wp-dbg-ref--ctx-active': seg.uuid && ctxActiveKey === `ref:${seg.uuid}` }"
-                :title="`@{${seg.uuid}} — module not in trace`"
-                @contextmenu="(ev) => seg.uuid && openRefChipMenu(ev, seg.uuid)"
-              >{{ seg.text }}</span>
-              <template v-else>${{ seg.text }}</template>
-            </template>
+          <span v-if="w.bindingText" class="wp-dbg-warn-binding">
+            <RichTextPreview
+              :value="`$${w.bindingText}`"
+              :uuid-to-name="uuidToNameMap"
+              surface="wildcard"
+            />
           </span>
-          <span v-if="w.messageSegments?.length" class="wp-dbg-warn-msg">
-            <template v-for="(seg, i) in w.messageSegments" :key="i">
-              <span
-                v-if="seg.kind === 'ref'"
-                class="wp-dbg-ref"
-                :class="{ 'wp-dbg-ref--ctx-active': seg.uuid && ctxActiveKey === `ref:${seg.uuid}` }"
-                :title="`@{${seg.uuid}} — wildcard reference`"
-                @contextmenu="(ev) => seg.uuid && openRefChipMenu(ev, seg.uuid)"
-              >{{ seg.text }}</span>
-              <span
-                v-else-if="seg.kind === 'ref-unknown'"
-                class="wp-dbg-ref wp-dbg-ref--unknown"
-                :class="{ 'wp-dbg-ref--ctx-active': seg.uuid && ctxActiveKey === `ref:${seg.uuid}` }"
-                :title="`@{${seg.uuid}} — module not in trace`"
-                @contextmenu="(ev) => seg.uuid && openRefChipMenu(ev, seg.uuid)"
-              >{{ seg.text }}</span>
-              <template v-else>{{ seg.text }}</template>
-            </template>
+          <span v-if="w.messageText" class="wp-dbg-warn-msg">
+            <RichTextPreview
+              :value="w.messageText"
+              :uuid-to-name="uuidToNameMap"
+              surface="wildcard"
+            />
           </span>
         </div>
       </div>

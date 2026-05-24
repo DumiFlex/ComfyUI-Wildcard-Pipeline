@@ -285,17 +285,18 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: refSnap } });
     await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
-    // The ref renders as a styled `@fabric` chip, not raw `@{$fabric}` text.
-    const refChips = wrapper.findAll(".wp-dbg-pick-val .wp-dbg-ref");
+    // The ref renders as a styled `@fabric` chip (RichTextPreview's
+    // shared `.wp-refchip` class), not raw `@{$fabric}` text.
+    const refChips = wrapper.findAll(".wp-dbg-pick-val .wp-refchip");
     expect(refChips.length).toBe(1);
-    expect(refChips[0].text()).toBe("@fabric");
-    expect(refChips[0].classes()).not.toContain("wp-dbg-ref--unknown");
+    expect(refChips[0].text()).toContain("@fabric");
+    expect(refChips[0].classes()).not.toContain("wp-refchip--unresolved");
     // Surrounding plain text still present in the cell.
     expect(wrapper.find(".wp-dbg-pick-val").text()).toContain("minimal interior with");
     expect(wrapper.find(".wp-dbg-pick-val").text()).toContain("accents");
   });
 
-  it("Picks tab unknown @{uuid} refs render with the unknown chip variant", async () => {
+  it("Picks tab unknown @{uuid} refs render with the unresolved chip variant", async () => {
     const orphanRefSnap = JSON.stringify({
       __wp_picks__: {
         m1: { value: "see @{deadbeef} stuff" },
@@ -311,11 +312,11 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: orphanRefSnap } });
     await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
-    const refChip = wrapper.find(".wp-dbg-pick-val .wp-dbg-ref");
+    const refChip = wrapper.find(".wp-dbg-pick-val .wp-refchip");
     expect(refChip.exists()).toBe(true);
-    expect(refChip.classes()).toContain("wp-dbg-ref--unknown");
-    // Unknown ref shows the short uuid prefixed with `@` (no `{}`).
-    expect(refChip.text()).toBe("@deadbeef");
+    expect(refChip.classes()).toContain("wp-refchip--unresolved");
+    // Unresolved ref shows the uuid in the chip body.
+    expect(refChip.text()).toContain("deadbeef");
   });
 
   it("Disabled module row shows declared $binding label, not short-uuid", async () => {
@@ -557,6 +558,81 @@ describe("DebugViewer", () => {
     expect(labels[labels.length - 1]).toContain("$color → $shape");
   });
 
+  it("Constraint trace row swaps status to 'never fired' when warning matches", async () => {
+    // Engine emits `constraint_never_applied` at chain end for any
+    // constraint module that registered but never claimed a downstream
+    // target instance. The trace status stays "ok" (the resolve call
+    // itself succeeded — the constraint just had nothing to apply to).
+    // DebugViewer surfaces the no-op inline by swapping the row's
+    // status pill to a "never fired" skipped pill so the user reads
+    // the warning at the constraint row instead of cross-referencing
+    // the Warnings tab.
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "src1",
+          type: "wildcard",
+          status: "ok",
+          binding: "color",
+          writes: [{ variable: "color", value: "red" }],
+        },
+        {
+          id: "k1",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "src1",
+          constraint_target: "tgt1",
+        },
+      ],
+      __wp_warnings__: [
+        {
+          type: "constraint_never_applied",
+          severity: "info",
+          module_id: "k1",
+          message: "constraint 'k1' never fired — no downstream 'tgt1' instance",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const pills = wrapper.findAll(".wp-dbg-trace-pill");
+    // First row is the wildcard (ok), second is the constraint
+    // (would be ok pre-fix, now reads as a skipped "never fired" pill).
+    expect(pills[1].text()).toBe("never fired");
+    expect(pills[1].classes()).toContain("wp-dbg-trace-pill--skipped");
+  });
+
+  it("Constraint trace row keeps 'ok' status when no never_applied warning matches its module_id", async () => {
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "k1",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "src1",
+          constraint_target: "tgt1",
+        },
+      ],
+      __wp_warnings__: [
+        // never_applied for a DIFFERENT constraint id — does NOT mark
+        // this row as never-fired.
+        {
+          type: "constraint_never_applied",
+          severity: "info",
+          module_id: "other-constraint-id",
+          message: "constraint 'other' never fired",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[1].trigger("click");
+    const pill = wrapper.find(".wp-dbg-trace-pill");
+    expect(pill.text()).toBe("ok");
+    expect(pill.classes()).toContain("wp-dbg-trace-pill--ok");
+  });
+
   it("Warnings tab renders @{uuid} refs in message as @varname chips", async () => {
     // Cycle-detected warnings include the cycle path as `Cycle:
     // @{a} → @{b} → @{a}` — refs render as styled `@cycle_a` chips
@@ -588,10 +664,14 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: cycleSnap } });
     await wrapper.findAll(".wp-dbg-tab")[3].trigger("click");
-    const refChips = wrapper.findAll(".wp-dbg-warn-msg .wp-dbg-ref");
-    // Three chips — cycle_a appears twice, cycle_b once.
+    const refChips = wrapper.findAll(".wp-dbg-warn-msg .wp-refchip");
+    // Three chips — cycle_a appears twice, cycle_b once. Chip text
+    // includes RichTextPreview's leading icon glyph, so assert
+    // substring rather than exact match.
     expect(refChips.length).toBe(3);
-    expect(refChips.map((c) => c.text())).toEqual(["@cycle_a", "@cycle_b", "@cycle_a"]);
+    expect(refChips[0].text()).toContain("@cycle_a");
+    expect(refChips[1].text()).toContain("@cycle_b");
+    expect(refChips[2].text()).toContain("@cycle_a");
     // Surrounding "Cycle:" + arrows still present.
     expect(wrapper.find(".wp-dbg-warn-msg").text()).toContain("Cycle:");
     expect(wrapper.find(".wp-dbg-warn-msg").text()).toContain("→");
@@ -623,10 +703,10 @@ describe("DebugViewer", () => {
     });
     const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
     await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
-    const refChip = wrapper.find(".wp-dbg-pick-val .wp-dbg-ref");
+    const refChip = wrapper.find(".wp-dbg-pick-val .wp-refchip");
     expect(refChip.exists()).toBe(true);
-    expect(refChip.text()).toBe("@fabric");
-    expect(refChip.classes()).not.toContain("wp-dbg-ref--unknown");
+    expect(refChip.text()).toContain("@fabric");
+    expect(refChip.classes()).not.toContain("wp-refchip--unresolved");
   });
 
   it("right-click on a trace row opens the shared ContextMenu with copy actions", async () => {
