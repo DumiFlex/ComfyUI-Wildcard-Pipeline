@@ -32,6 +32,8 @@ import { useRecentStore } from "../stores/recentStore";
 import { appendSnapshot, readHistory } from "../utils/history";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
+import { tokenizeRefString, resolveWildcardChip } from "../cascade/resolveChip";
+import type { LibraryFixture } from "../cascade/reverse-dep-index";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import PillCountBadge from "../cascade/PillCountBadge.vue";
 import type {
@@ -250,6 +252,43 @@ const targetSubCategories = computed<string[]>(() => {
   const payload = wc.payload as WildcardPayloadShape;
   return payload.sub_categories ?? [];
 });
+
+// Display labels resolve `@{uuid}` tokens in option-value strings to
+// `@wildcard_name` chips so the Exceptions table renders the picked
+// wildcards' names instead of raw 8-hex ids. Backend value stays the
+// raw string for compat with the runtime resolver. Issue #6 fix from
+// 2026-05-24 live QA.
+const wildcardLibFixture = computed<LibraryFixture>(() => ({
+  wildcards: moduleStore.catalog
+    .filter((m) => m.type === "wildcard")
+    .map((m) => ({ id: m.id, name: m.name, payload: m.payload })),
+  constraints: [],
+  fixed_values: [],
+  combines: [],
+  derivations: [],
+  bundles: [],
+  categories: [],
+}));
+
+function displayLabel(raw: string): string {
+  if (!raw) return raw;
+  const tokens = tokenizeRefString(raw);
+  let out = "";
+  for (const tok of tokens) {
+    if (tok.type === "text") {
+      out += tok.value;
+    } else {
+      const res = resolveWildcardChip(tok.uuid, wildcardLibFixture.value);
+      if (res.missing) {
+        out += `@?${tok.uuid}`;
+      } else {
+        out += `@${res.name}`;
+      }
+      if (tok.subcat) out += `:${tok.subcat}`;
+    }
+  }
+  return out;
+}
 
 // Per-option pickers used by the Exceptions editor below the matrix.
 // Exceptions DO operate at value granularity (override one specific
@@ -472,7 +511,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   showErrors.value ? validationErrors.value : [],
 );
 
-defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore });
+defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRestore, displayLabel });
 </script>
 
 <template>
@@ -631,7 +670,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
             <td>
               <Select
                 v-model="ex.source"
-                :options="sourceValues.map((v) => ({ label: v, value: v }))"
+                :options="sourceValues.map((v) => ({ label: displayLabel(v), value: v }))"
                 placeholder="Pick value"
                 aria-label="Exception source value"
               />
@@ -639,7 +678,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
             <td>
               <Select
                 v-model="ex.target"
-                :options="targetValues.map((v) => ({ label: v, value: v }))"
+                :options="targetValues.map((v) => ({ label: displayLabel(v), value: v }))"
                 placeholder="Pick value"
                 aria-label="Exception target value"
               />

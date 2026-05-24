@@ -156,6 +156,42 @@ describe("ConstraintEditor.vue", () => {
     );
   });
 
+  it("exception value labels resolve @{uuid} tokens to wildcard names", async () => {
+    // Source wildcard has an option whose value contains a nested @{uuid}
+    // ref to the target wildcard. Issue #6 from 2026-05-24 live QA: the
+    // exception dropdown's option label should resolve the @{uuid} to the
+    // referenced wildcard's name, not show the raw 8-hex id.
+    apiMod.list.mockResolvedValue({
+      items: [
+        makeWildcardRow("c0f09840", "Color", { values: ["blue"] }),
+        makeWildcardRow("deadbeef", "Source", {
+          values: ["i love @{c0f09840}", "plain"],
+        }),
+      ],
+      total: 2,
+    });
+    apiMod.get.mockResolvedValue({
+      id: "cn_a", type: "constraint", name: "C",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: {
+        source_wildcard_id: "deadbeef",
+        target_wildcard_id: "deadbeef",
+        matrix: {},
+        exceptions: [],
+      },
+      version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mount(ConstraintEditor, {
+      props: { id: "cn_a" },
+      global: { plugins: [makeRouter()] },
+    });
+    await flushPromises();
+    const vm = wrap.vm as unknown as { displayLabel: (s: string) => string };
+    expect(vm.displayLabel("i love @{c0f09840}")).toBe("i love @Color");
+    expect(vm.displayLabel("plain")).toBe("plain");
+    expect(vm.displayLabel("missing @{12345678}")).toBe("missing @?12345678");
+  });
+
   it("save without source/target shows warn and does not call api", async () => {
     const wrap = mount(ConstraintEditor, {
       global: { plugins: [makeRouter()] },
