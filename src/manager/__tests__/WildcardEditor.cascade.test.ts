@@ -118,4 +118,37 @@ describe("WildcardEditor cascade store integration", () => {
 
     expect(store.subcatRefsTo("11111111", "warm")).toHaveLength(0);
   });
+
+  it("optionRefsTo returns refs from constraint exceptions", () => {
+    const store = useCascadeStore();
+    store.rebuild({
+      wildcards: [
+        {
+          id: "11111111", name: "hair",
+          payload: { sub_categories: [], options: [
+            { id: "opt_aaaa", value: "buzz", sub_category: null },
+          ] },
+        },
+      ],
+      fixed_values: [], combines: [], derivations: [],
+      constraints: [
+        {
+          id: "cccccc11", name: "c",
+          payload: {
+            source_wildcard_id: "11111111",
+            target_wildcard_id: "11111111",
+            matrix: {},
+            exceptions: [{
+              source: "buzz", target: "buzz",
+              source_id: "opt_aaaa", target_id: "opt_aaaa",
+              mode: "reduce", factor: 0.5,
+            }],
+          },
+        },
+      ],
+      bundles: [], categories: [],
+    });
+    expect(store.optionRefsTo("opt_aaaa")).toHaveLength(1);
+    expect(store.optionRefsTo("opt_missing")).toHaveLength(0);
+  });
 });

@@ -319,11 +319,43 @@ async function onSubcatDeleteClick(subcat: string): Promise<void> {
 
 function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
   cascadeDialogOpen.value = false;
-  // Pull subcat name from the dialog props that were just used.
-  const subcat = (cascadeDialogProps.value?.extra?.subcat_name as string | undefined) ?? "";
-  if (subcat) removeSub(subcat);
+  const dialogProps = cascadeDialogProps.value;
+  if (!dialogProps) return;
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
+
+  if (dialogProps.kind === "option") {
+    const rowIdx = dialogProps.extra?._row_idx as number | undefined;
+    const optionId = dialogProps.id;
+    const snapshot = typeof rowIdx === "number" ? options.value[rowIdx] : undefined;
+    const optionLabel = snapshot?.value || optionId;
+    if (typeof rowIdx === "number") options.value.splice(rowIdx, 1);
+    toast.push({
+      severity: "success",
+      summary: `Option "${optionLabel}" deleted`,
+      detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+      life: 5000,
+      action: {
+        label: "Undo",
+        run: async () => {
+          const undoResult = await cascadeApply.undo(undoId);
+          if (!undoResult.ok) {
+            toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+          } else if (snapshot && typeof rowIdx === "number") {
+            // Splice the option back at its original index.
+            const insertAt = Math.min(rowIdx, options.value.length);
+            options.value.splice(insertAt, 0, snapshot);
+            toast.push({ severity: "info", summary: `Option "${optionLabel}" restored`, life: 3000 });
+          }
+        },
+      },
+    });
+    return;
+  }
+
+  // Default: sub-category delete path
+  const subcat = (dialogProps.extra?.subcat_name as string | undefined) ?? "";
+  if (subcat) removeSub(subcat);
   toast.push({
     severity: "success",
     summary: `Sub-category "${subcat}" deleted`,
@@ -403,14 +435,41 @@ function onSubcatRenameCancelled(): void {
   subcatRenameOpen.value = false;
 }
 
-function addOption() {
-  options.value.push({
-    id: `opt_${Math.random().toString(16).slice(2, 8)}`,
-    value: "",
-    weight: 1,
-  });
+function _newOptionId(): string {
+  // 8-hex matches the server-side backfill in `ModuleRepository._backfill_option_ids`.
+  // Two random ints concatenated to dodge the .slice(2, 8) yielding 6-7 chars.
+  const a = Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
+  const b = Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
+  return `${a}${b}`;
 }
-function removeOption(idx: number) { options.value.splice(idx, 1); }
+
+function addOption() {
+  options.value.push({ id: _newOptionId(), value: "", weight: 1 });
+}
+
+async function removeOption(idx: number): Promise<void> {
+  const opt = options.value[idx];
+  if (!opt) return;
+  // Unsaved wildcard or option without id → splice locally, no cascade.
+  if (!props.id || typeof opt.id !== "string" || !opt.id) {
+    options.value.splice(idx, 1);
+    return;
+  }
+  const refs = cascade.optionRefsTo(opt.id);
+  if (refs.length === 0) {
+    options.value.splice(idx, 1);
+    return;
+  }
+  // Refs present → open the confirm dialog. The dialog calls apply via
+  // useCascadeApply; on confirm we splice the option locally + show Undo.
+  cascadeDialogProps.value = {
+    kind: "option",
+    id: opt.id,
+    action: "delete",
+    extra: { wildcard_id: props.id, _row_idx: idx },
+  };
+  cascadeDialogOpen.value = true;
+}
 
 function applyRestore(entry: ModuleHistoryEntry): void {
   name.value = entry.name;
