@@ -50,7 +50,13 @@ function onInput(e: Event) {
 /** Step the numeric value by the configured `step` (default 1), clamped
  *  to min/max when provided. Bound to the up/down chevrons rendered next
  *  to numeric inputs — replaces native browser spin buttons (which are
- *  hidden via CSS) so the chevron style matches the ComfyUI widget. */
+ *  hidden via CSS) so the chevron style matches the ComfyUI widget.
+ *
+ *  The bumped value is rounded to the step's decimal precision so we
+ *  don't surface JS floating-point fuzz (e.g. `1 + 0.2 = 1.2000000000000002`)
+ *  into the input. Bug filed by Daisy: clicking the up chevron on an
+ *  option's weight=1 with step=0.1 produced `1,2000000000000002` (locale
+ *  comma decimal separator) which read as "20000" in the UI. */
 function bump(direction: 1 | -1) {
   if (props.disabled) return;
   const stepNum = Number(props.step ?? 1) || 1;
@@ -58,6 +64,15 @@ function bump(direction: 1 | -1) {
   let next = current + direction * stepNum;
   if (props.min !== undefined && next < Number(props.min)) next = Number(props.min);
   if (props.max !== undefined && next > Number(props.max)) next = Number(props.max);
+  // Round to the step's decimal precision. `step=0.1` → 1 decimal,
+  // `step=0.01` → 2 decimals, `step=1` → 0 decimals.
+  const stepStr = String(stepNum);
+  const dot = stepStr.indexOf(".");
+  const decimals = dot >= 0 ? stepStr.length - dot - 1 : 0;
+  if (decimals > 0) {
+    const factor = Math.pow(10, decimals);
+    next = Math.round(next * factor) / factor;
+  }
   emit("update:modelValue", next);
 }
 </script>

@@ -27,4 +27,29 @@ describe("Input.vue", () => {
     const wrap = mount(Input, { props: { modelValue: "" } });
     expect(wrap.get("input").attributes("aria-invalid")).toBeUndefined();
   });
+
+  it("numeric stepper rounds to step precision (no float fuzz)", async () => {
+    // Regression: clicking the up chevron on value=1 with step=0.1
+    // historically emitted 1.0000000000000002 (JS float math), which
+    // some locales rendered as "1,20000" in the input field.
+    const wrap = mount(Input, {
+      props: { modelValue: 1, type: "number", step: 0.1, min: 0.01 },
+    });
+    // Click the up chevron — the first .wp-input-number__btn in the
+    // stepper (rendered when type=number).
+    const upBtn = wrap.findAll(".wp-input-number__btn")[0];
+    expect(upBtn).toBeTruthy();
+    await upBtn.trigger("click");
+    const emitted = wrap.emitted("update:modelValue");
+    expect(emitted).toBeTruthy();
+    expect(emitted![0]).toEqual([1.1]);
+
+    // Verify chained bumps stay clean (no cumulative drift).
+    await wrap.setProps({ modelValue: 1.1 });
+    await upBtn.trigger("click");
+    expect(emitted![1]).toEqual([1.2]);
+    await wrap.setProps({ modelValue: 1.2 });
+    await upBtn.trigger("click");
+    expect(emitted![2]).toEqual([1.3]);
+  });
 });
