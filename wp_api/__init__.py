@@ -8,6 +8,7 @@ from aiohttp import web
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
 from wp_api import bundles as _bundles
+from wp_api import cascade as _cascade
 from wp_api import categories as _categories
 from wp_api import import_export as _import_export
 from wp_api import modules as _modules
@@ -39,6 +40,7 @@ def register_routes(app: web.Application) -> None:
     _categories.register(app.router)
     _test_runner.register(app.router)
     _import_export.register(app.router)
+    _cascade.register(app.router)
     _preview.register(app.router)
     # SPA fallback last — broad catch-all `/wp/{path:.*}` must not shadow
     # specific `/wp/api/...` routes. aiohttp resolves more-specific routes
