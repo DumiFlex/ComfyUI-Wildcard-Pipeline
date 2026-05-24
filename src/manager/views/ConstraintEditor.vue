@@ -300,10 +300,12 @@ function normalizeExceptions(raw: unknown): ConstraintException[] {
       const r = e as Record<string, unknown>;
       const source = typeof r.source === "string" ? r.source : "";
       const target = typeof r.target === "string" ? r.target : "";
+      const source_id = typeof r.source_id === "string" ? r.source_id : undefined;
+      const target_id = typeof r.target_id === "string" ? r.target_id : undefined;
       const mode = (typeof r.mode === "string" ? r.mode : "allow") as ConstraintMode;
       const factor =
         typeof r.factor === "number" ? r.factor : MODE_DEFAULT_FACTOR[mode] ?? 1;
-      return { source, target, mode, factor } as ConstraintException;
+      return { source, target, source_id, target_id, mode, factor } as ConstraintException;
     })
     .filter((x): x is ConstraintException => x !== null);
 }

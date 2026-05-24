@@ -93,10 +93,29 @@ export interface ConstraintCell {
 export type ConstraintMatrix = Record<string, Record<string, ConstraintCell>>;
 
 export interface ConstraintException {
+  /**
+   * Source option value string. Preserved for backend compatibility —
+   * the runtime constraint resolver keys instance-disable / override
+   * lookups by (source_value, target_value) pairs. New writes should
+   * keep this in sync with the current option value resolved from
+   * `source_id`.
+   */
   source: string;
   target: string;
+  /** Stable per-option id introduced by migration 010. Cascade
+   * indexing and chip rendering use these; `source` / `target`
+   * strings remain for runtime compat. May be empty on rows
+   * created before migration 010 ran. */
+  source_id?: string;
+  target_id?: string;
   mode: ConstraintMode;
   factor: number;
+}
+
+/** Exceptions migration 010 could not resolve. Surfaced as warn-tone
+ * chips in ConstraintEditor; user resolves manually. */
+export interface BrokenConstraintException extends ConstraintException {
+  reason: string;
 }
 
 export interface ConstraintPayload {
@@ -104,6 +123,7 @@ export interface ConstraintPayload {
   target_wildcard_id: string | null;
   matrix: ConstraintMatrix;
   exceptions: ConstraintException[];
+  broken_exceptions?: BrokenConstraintException[];
 }
 
 export interface ModuleRow {
