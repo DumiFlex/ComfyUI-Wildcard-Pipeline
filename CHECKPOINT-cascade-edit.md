@@ -1,91 +1,111 @@
-# Cascade-edit Indicators — COMPLETE
+# Cascade-edit Indicators — COMPLETE + Dependency Coverage Expansion
 
 **Branch:** `feat/cascade-edit-indicators` (off `main`)
-**Tip commit:** `f6f5e4f` (final review fixes)
+**Tip commit:** `9b5620e`
 **Date completed:** 2026-05-24
-**Spec:** `docs/superpowers/specs/2026-05-24-cascade-edit-indicators-design.md` (gitignored)
-**Plan:** `docs/superpowers/plans/2026-05-24-cascade-edit-indicators.md` (gitignored)
+**Specs:**
+- v1: `docs/superpowers/specs/2026-05-24-cascade-edit-indicators-design.md` (gitignored)
+- v2 expansion: `docs/superpowers/specs/2026-05-24-cascade-dependency-coverage-design.md` (gitignored)
+**Plans:**
+- v1: `docs/superpowers/plans/2026-05-24-cascade-edit-indicators.md` (gitignored)
+- v2 expansion: `docs/superpowers/plans/2026-05-24-cascade-dependency-coverage.md` (gitignored)
 **Contract doc:** `docs/help/cascade-edit-contract.md` (committed)
 
-## Status: 16 of 16 plan tasks complete ✅ + final review fixes applied ✅
+## Status
 
-| # | Task | Status | Key commits |
-|---|------|--------|-------------|
-| 1 | `cascade_undo` table migration | ✅ | `502f506` |
-| 2 | `engine/cascade/scan.py` — reverse-ref scan | ✅ | `d85ec02` |
-| 3 | `engine/cascade/fixers.py` — per-mutation cleanup | ✅ | `81e238d` → `9008826` |
-| 4 | `engine/cascade/undo.py` — snapshot + restore | ✅ | `2ad1de3` → `8125dea` |
-| 5 | `engine/cascade/orchestrator.py` — apply_cascade | ✅ | `43757fa` → `0600951` |
-| 6 | `wp_api/cascade.py` HTTP routes | ✅ | `747362a` |
-| 7 | `reverse-dep-index.ts` | ✅ | `5785911` |
-| 8 | `cascade-store.ts` Pinia store | ✅ | `c2d7403` |
-| 9 | `useCascadeApply.ts` + api methods | ✅ | `7dd387f` |
-| 10 | `CascadeConfirmDialog.vue` | ✅ | `25086ad` |
-| 11 | `PillCountBadge.vue` | ✅ | `ba2fa16` |
-| 12 | WildcardEditor sub-category pill wire | ✅ | `c584f2f` |
-| 13 + 14 | 6 editors entity-delete + CascadeRenameDialog | ✅ | `d09ae8f` (bundled) |
-| 15 | Undo-stack helper + editor rename wires + bootstrap | ✅ | `ce5ca18` |
-| 16 | Cross-language contract doc | ✅ | `d98346a` |
-| — | Final review fixes (type alignment + post-undo doc) | ✅ | `f6f5e4f` |
+- v1 (cascade-edit indicators): 16/16 plan tasks complete + final review fixes
+- v2 (dependency coverage): 22/22 plan tasks complete + 2 post-QA UX fixes
 
-## Final review summary
+## v2 expansion task table
 
-Cross-cutting review approved with 2 Important + 4 Minor issues. Important issues fixed in `f6f5e4f`:
-- TS `affected_entities` type aligned with Python server shape `{kind, id, name, ref_path}`.
-- Contract doc updated with Known v1 limitation: post-undo stale state requires user navigation to refresh.
+| # | Task | Status | Commit |
+|---|------|--------|--------|
+| 1 | Wildcard handler requires `option.id` | ✅ | `71a381d` |
+| 2 | ModuleRepository backfills option ids on create/update | ✅ | `1eb6d95` |
+| 3 | Migration 010 — option ids + constraint exception schema | ✅ | `a7c96ac` |
+| 4 | TypeScript ConstraintException gains `source_id` / `target_id` | ✅ | `dd73a87` |
+| 5-8 | Subcat rename/delete schema bug fix (real-shape tests) | ✅ | `6e841c2` |
+| 9 | Shared chip resolver (`resolveChip.ts`) | ✅ | `f46ee4a` |
+| 10 | ConstraintEditor exception labels resolve `@{uuid}` to wildcard names | ✅ | `75ef4da` |
+| 11-13 | `(option, delete)` scan + fixer + orchestrator + undo | ✅ | `92b6a15` |
+| 14-15 | `toOptionId` reverse-dep index + cascade-store method | ✅ | `4d461df` |
+| 16 | WildcardEditor option Remove routes through cascade | ✅ | `cfbbbe0` |
+| 17 | Wildcards list-row delete routes through cascade | ✅ | `c279292` |
+| 21 | Contract doc covers option-id + `(option, delete)` | ✅ | `f13608b` |
+| — | Rename dialog emits `new_name`; editors sync local state | ✅ | `1a8fe86` |
+| — | Re-anchor dirty baseline after cascade ops | ✅ | `e127624` |
+| 18-20 | Dialogs adopt Modal.vue + Button; PillCountBadge uses `--wp-warn` token | ✅ | `9b5620e` |
 
-Minor issues deferred to follow-up (non-blocking):
-- Duplicate undo dispatch paths (`registerCascadeUndo` vs `useCascadeApply.undo`) — consolidate later.
-- Dry-run fires with empty name on dialog open — benign roundtrip.
-- `_dispatch_restore` heuristic could grow brittle if a module type adds `children` field.
-- No end-to-end integration test covering apply→toast→undo cycle (per-layer coverage solid).
+## Live QA verification (chrome-devtools-mcp)
 
-## Key design decisions (locked)
+Subcategory rename on `mood` wildcard (id `c14e7527`):
+- Server: `payload.sub_categories` updated `positive` → `positive_qa` ✓
+- Server: every option's `sub_category` updated `positive` → `positive_qa` ✓
+- Server: referring constraints (`hair_x_mood`, `mood_x_color_subcats`) matrix keys updated ✓
+- UI: subcategory pill label updates ✓
+- UI: option sub-category dropdown labels update ✓
+- UI: no spurious "Unsaved" badge after cascade-driven mutations ✓
+- UI: Modal.vue chrome (`.wp-modal__head`, `.wp-modal__body`, `.wp-modal__foot`) wraps both dialogs ✓
+- UI: confirm dialog uses `.wp-btn--danger` for delete + `.wp-btn--primary` for rename ✓
 
-1. **Hybrid scan:** client-side reverse-dep index for inline badges (zero roundtrip), server-side dry-run for confirm-dialog accuracy.
-2. **Auto-fix cascade:** server mutates affected entities atomically. No broken refs after confirmed delete.
-3. **Single `POST /wp/api/cascade/apply`** endpoint with `dry_run` + `cascade_refs` flags.
-4. **Rename toggle** (default checked = cascade). Unchecked → server returns `broken_refs[]` → client pushes into `useResolveWarnings`.
-5. **5 (kind, action) pairs in v1:** wildcard-delete, subcategory-delete, subcategory-rename, combine_output_var-rename, category-delete.
-6. **Atomic transaction:** orchestrator wraps fixer + target-delete + undo-write in `with conn:`. Inner helpers do NOT commit.
-7. **`AffectedEntity` wire shape:** `{kind, id, name, ref_path}`. Distinct from client-side `IncomingRef` (used inside reverse-dep-index only).
-8. **Cascade store bootstrap:** `AppLayout.vue` `onMounted` calls `rebuild(libraryFixture)` after the 3 catalog fetches resolve.
+## Schema additions
 
-## Test suite status
+**Wildcard payload option:**
 
-- Cascade Python suite: 28/28 pass
-- Cascade TS suite: 37/37 pass (7 test files)
-- Full pytest: green
-- Full Vitest: 186 test files / 2157 tests pass + 3 skipped (pre-existing)
-- Typecheck: clean
-- Pre-commit hooks: green on every landed commit
-
-## Commits since fork from main
-
-```
-f6f5e4f fix(cascade): align affected_entities type with server shape + document post-undo stale-state limitation
-d98346a docs: cascade-edit cross-language contract reference
-ce5ca18 feat(cascade): undo handle + editor rename wires + bootstrap
-d09ae8f feat(cascade): wire entity delete through cascade flow in all editors
-c584f2f feat(cascade): wire subcategory pills to cascade flow in WildcardEditor
-ba2fa16 feat(cascade): pill count badge component
-25086ad feat(cascade): confirm dialog with dry-run-fetched impact list
-7dd387f feat(cascade): apply/undo composable + api client methods
-c2d7403 feat(cascade): pinia store wrapping reverse-dep index
-5785911 feat(cascade): reverse-dep index with diff-patch helpers
-747362a feat(wp_api): POST /wp/api/cascade/apply + /wp/api/cascade/undo endpoints
-0600951 fix(cascade): restore transaction boundary + propagate not-found + handle combine var rename opt-out
-43757fa feat(cascade): apply_cascade transactional orchestrator
-8125dea fix(cascade): filter None kwargs from restore repo.update calls
-2ad1de3 feat(cascade): undo persistence + atomic restore
-9008826 refactor(cascade): doc atomicity contract + drop dead symbols + diff-shape assertions
-81e238d feat(cascade): per-mutation cleanup fixers
-d85ec02 feat(cascade): reverse-ref scan for wildcard/subcat/combine-var/category
-502f506 feat(engine): cascade_undo table migration
-2973623 docs: cascade-edit checkpoint at 5 of 16 tasks
+```json
+{"id": "a1b2c3d4", "value": "buzz", "weight": 1, "sub_category": "short", "probability": 1.0}
 ```
 
-20 commits (16 feature + 4 fix/refactor + 1 checkpoint).
+**Constraint exception (additive — keeps legacy `source`/`target` for runtime resolver compat):**
+
+```json
+{"source": "buzz", "target": "serene", "source_id": "a1b2c3d4", "target_id": "e5f6g7h8", "mode": "reduce", "factor": 0.5}
+```
+
+**Constraint broken_exceptions[] (new):**
+
+```json
+{"source": "missing", "target": "serene", "reason": "source_value not found: 'missing'"}
+```
+
+## Locked design decisions
+
+1. **Cascade scope:** five v1 pairs + new `(option, delete)` v2 pair.
+2. **Stable identity:** per-option 8-hex `id` is backend-only — UI continues picking by value.
+3. **Schema additivity:** legacy `source`/`target` value strings preserved alongside new `source_id`/`target_id` because the runtime constraint resolver keys instance-disable lookups by `(source_value, target_value)`. Dropping legacy keys would break Tier-2 overrides.
+4. **Migration 010 orphan handling:** unmatched exceptions → `broken_exceptions[]` with `reason` field. Surfaced to user as warn chips; user resolves manually.
+5. **Chip resolver tolerance:** missing refs render as warn chips (with `?` glyph or muted styling) rather than getting stripped by fixers. UI does the heavy lifting; server data stays referentially loose.
+6. **Local-state sync contract:** every server-side cascade mutation paired with a local mirror handler + dirty-baseline re-anchor. Editor's "Unsaved" detection never lights up for cascade-driven changes.
+7. **Dialog chrome:** dialogs wrap shared `Modal.vue`; buttons via shared `Button.vue`; pill badge tone via `--wp-warn` to match `.wp-chip--warn` elsewhere.
+
+## Commits since fork from main (cascade v2 expansion)
+
+```
+9b5620e refactor(cascade): dialogs adopt Modal.vue + Button; PillCountBadge uses --wp-warn token
+e127624 fix(wildcards): re-anchor dirty baseline after cascade rename/delete operations
+1a8fe86 fix(cascade): rename dialog emits new_name; editors sync local state post-rename
+f13608b docs(cascade): contract doc covers option-id + (option, delete) cascade
+c279292 feat(wildcards): list-row delete routes through cascade for referenced rows
+cfbbbe0 feat(wildcards): option Remove routes through cascade flow
+4d461df feat(cascade): reverse-dep index + cascade store track option_id refs
+75ef4da feat(constraints): exception value labels resolve @{uuid} to wildcard names
+92b6a15 feat(cascade): (option, delete) scan + fixer + orchestrator dispatch + undo
+f46ee4a feat(cascade): shared chip resolver for @{uuid} + option_id refs
+6e841c2 fix(cascade): subcat rename/delete use real schema (singular sub_category + top-level list)
+dd73a87 feat(constraints): add source_id/target_id to ConstraintException type
+a7c96ac feat(migrations): 010 backfill option ids and migrate exception schema
+1eb6d95 feat(repo): backfill 8-hex ids for wildcard options on create/update
+71a381d feat(wildcards): require option.id (8-hex) in payload validation
+```
+
+15 commits on top of v1 tip `f6f5e4f`.
+
+## Followups (not landed on this branch)
+
+- Option-value rename auto-sync of constraint exception `source`/`target` strings (id-stable layer is in place; resolver still keys lookups by value). Defer until a user hits an option-value-edit divergence in practice.
+- Bulk option delete UX (multi-select). Single-row delete is the v2 surface.
+- Bundle rename / category rename cascades. Neither has a fixer yet.
+- AllItems.vue and ModuleListView bulk-delete need cascade routing (currently bypass).
 
 ## Next step
 
