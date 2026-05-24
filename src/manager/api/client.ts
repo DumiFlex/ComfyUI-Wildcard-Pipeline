@@ -159,6 +159,26 @@ export const api = {
     });
   },
   /**
+   * Cascade-apply endpoints. `cascade_apply` fires a dry-run or live
+   * mutation scan; `cascade_undo` reverses a previously committed cascade
+   * by its `undo_entry_id`.
+   *
+   * Unlike most endpoints these return `{ok: boolean, ...}` envelopes
+   * rather than throwing ApiError on logical failure, because the server
+   * may return `{ok: false, error: "..."}` with a 200 status code. The
+   * composable (`useCascadeApply`) performs ok-checking.
+   */
+  cascade_apply(body: Record<string, unknown>): Promise<{ ok: boolean; [key: string]: unknown }> {
+    return request<{ ok: boolean; [key: string]: unknown }>("/wp/api/cascade/apply", {
+      method: "POST", body: JSON.stringify(body),
+    });
+  },
+  cascade_undo(undo_entry_id: string): Promise<{ ok: boolean; error?: string }> {
+    return request<{ ok: boolean; error?: string }>("/wp/api/cascade/undo", {
+      method: "POST", body: JSON.stringify({ undo_entry_id }),
+    });
+  },
+  /**
    * Import/export endpoints. `build` assembles a 7-bucket export payload
    * from picked UUIDs; `commit` lands an import via the picker → modal
    * → orchestrator pipeline; `undo` reverses the most recent commit.
