@@ -1,0 +1,106 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+
+const mockComposable = {
+  dryRun: vi.fn(),
+  apply: vi.fn(),
+  undo: vi.fn(),
+};
+
+vi.mock("../useCascadeApply", () => ({
+  useCascadeApply: () => mockComposable,
+}));
+
+import CascadeConfirmDialog from "../CascadeConfirmDialog.vue";
+
+describe("CascadeConfirmDialog", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockComposable.dryRun.mockReset();
+    mockComposable.apply.mockReset();
+  });
+
+  it("loads dry-run on open + displays affected entities", async () => {
+    mockComposable.dryRun.mockResolvedValue({
+      ok: true, affected_count: 2,
+      affected_entities: [
+        { kind: "constraint", id: "c1", name: "constraint A" },
+        { kind: "constraint", id: "c2", name: "constraint B" },
+      ],
+    });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", action: "delete",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(document.body.textContent).toContain("constraint A");
+    expect(document.body.textContent).toContain("constraint B");
+    wrap.unmount();
+  });
+
+  it("emits confirmed with undo_entry_id on confirm click", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    mockComposable.apply.mockResolvedValue({
+      ok: true, undo_entry_id: "u1", affected_count: 0,
+      affected_entities: [], diff: [],
+    });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", action: "delete",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const btn = document.body.querySelector("[data-test='cascade-confirm']") as HTMLButtonElement;
+    btn.click();
+    await flushPromises();
+    expect(wrap.emitted("confirmed")).toBeTruthy();
+    const event = wrap.emitted("confirmed")![0] as Array<{ undo_entry_id: string }>;
+    expect(event[0].undo_entry_id).toBe("u1");
+    wrap.unmount();
+  });
+
+  it("emits cancelled on backdrop click", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", action: "delete",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const backdrop = document.body.querySelector(".wp-cascade-dialog__backdrop") as HTMLElement;
+    backdrop.click();
+    expect(wrap.emitted("cancelled")).toBeTruthy();
+    wrap.unmount();
+  });
+
+  it("surfaces apply error in dialog body", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    mockComposable.apply.mockResolvedValue({ ok: false, error: "boom" });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", action: "delete",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const btn = document.body.querySelector("[data-test='cascade-confirm']") as HTMLButtonElement;
+    btn.click();
+    await flushPromises();
+    expect(document.body.textContent).toMatch(/boom/i);
+    expect(wrap.emitted("confirmed")).toBeFalsy();
+    wrap.unmount();
+  });
+
+  it("button label adapts to action", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", action: "rename",
+                extra: { subcat_name: "warm" }, newName: "hot" },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(document.body.textContent).toContain("Rename");
+    wrap.unmount();
+  });
+});
