@@ -84,6 +84,17 @@ export const useModuleStore = defineStore("modules", () => {
     catalog.value = catalog.value.filter((i) => i.id !== id);
   }
 
+  /** Drop a row from the local store without hitting the API.
+   *
+   * Used after a cascade-apply that already deleted the row server-side
+   * (cascade flow owns the network call; this just keeps the in-memory
+   * list in sync). Calling `remove(id)` here would round-trip a second
+   * DELETE and 404. */
+  function removeLocal(id: string) {
+    items.value = items.value.filter((i) => i.id !== id);
+    catalog.value = catalog.value.filter((i) => i.id !== id);
+  }
+
   async function duplicate(id: string) {
     const copy = await api.modules.duplicate(id);
     items.value.unshift(copy);
@@ -105,7 +116,7 @@ export const useModuleStore = defineStore("modules", () => {
 
   return {
     items, catalog, loading, filter,
-    fetchAll, fetchCatalog, get, create, update, remove, duplicate, toggleFavorite,
+    fetchAll, fetchCatalog, get, create, update, remove, removeLocal, duplicate, toggleFavorite,
     wildcards, fixedValues,
   };
 });

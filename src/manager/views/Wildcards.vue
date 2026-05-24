@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
@@ -11,6 +11,9 @@ import RichTextPreview from "../components/RichTextPreview.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
+import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import { useCascadeStore } from "../cascade/cascade-store";
+import { useCascadeApply } from "../cascade/useCascadeApply";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -25,6 +28,18 @@ const router = useRouter();
 const store = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
+const cascade = useCascadeStore();
+const cascadeApply = useCascadeApply();
+
+// Cascade dialog state for list-row delete with downstream refs.
+const cascadeDialogOpen = ref(false);
+const cascadeDialogProps = ref<{
+  kind: string;
+  id: string;
+  action: "delete" | "rename";
+  extra?: Record<string, unknown>;
+} | null>(null);
+const pendingDeleteName = ref<string>("");
 
 const bulkAdapter = makeModuleStoreAdapter(store);
 const bulk = useBulkActions(bulkAdapter);
@@ -181,12 +196,62 @@ async function fav(row: ModuleRow) {
 }
 
 async function del(row: ModuleRow) {
-  try {
-    await store.remove(row.id);
-    toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
-  } catch (e) {
-    toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
+  // Check the reverse-dep index for any incoming references. If anything
+  // points at this wildcard (constraint, bundle child, nested `@{uuid}`
+  // from another wildcard, etc.) open the cascade dialog so the user
+  // sees the impact before confirming.
+  const refs = cascade.refsTo("wildcard", row.id);
+  if (refs.length === 0) {
+    try {
+      await store.remove(row.id);
+      toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
+    } catch (e) {
+      toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
+    }
+    return;
   }
+  pendingDeleteName.value = row.name;
+  cascadeDialogProps.value = {
+    kind: "wildcard",
+    id: row.id,
+    action: "delete",
+  };
+  cascadeDialogOpen.value = true;
+}
+
+function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
+  cascadeDialogOpen.value = false;
+  const wildcardName = pendingDeleteName.value;
+  const wildcardId = cascadeDialogProps.value?.id;
+  const undoId = result.undo_entry_id;
+  const count = result.affected_count;
+  if (wildcardId) {
+    // Server-side cascade already deleted the wildcard + cleaned refs.
+    // Drop from the local store so the list re-renders without it.
+    store.removeLocal(wildcardId);
+  }
+  toast.push({
+    severity: "success",
+    summary: `Wildcard "${wildcardName}" deleted`,
+    detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+    life: 5000,
+    action: {
+      label: "Undo",
+      run: async () => {
+        const undoResult = await cascadeApply.undo(undoId);
+        if (!undoResult.ok) {
+          toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+        } else {
+          await store.fetchCatalog();
+          toast.push({ severity: "info", summary: `Wildcard "${wildcardName}" restored`, life: 3000 });
+        }
+      },
+    },
+  });
+}
+
+function onCascadeDialogCancelled(): void {
+  cascadeDialogOpen.value = false;
 }
 
 function toggleTag(t: string, currentTags: string[] | undefined): string[] {
@@ -428,6 +493,13 @@ function isValid(row: ModuleRow): boolean {
       </div>
     </template>
   </ModuleListView>
+  <CascadeConfirmDialog
+    v-if="cascadeDialogProps"
+    :open="cascadeDialogOpen"
+    v-bind="cascadeDialogProps"
+    @confirmed="onCascadeDialogConfirmed"
+    @cancelled="onCascadeDialogCancelled"
+  />
 </template>
 
 <style scoped>
