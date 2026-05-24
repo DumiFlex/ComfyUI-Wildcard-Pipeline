@@ -182,13 +182,16 @@ class WildcardHandler(ModuleHandler):
             # overrides all key by id, so dupes make those features
             # nondeterministic.
             opt_id = opt.get("id")
-            if isinstance(opt_id, str):
-                if opt_id in seen_ids:
-                    raise ValueError(
-                        f"wildcard payload.options[{i}].id {opt_id!r} duplicates "
-                        f"an earlier option id"
-                    )
-                seen_ids.add(opt_id)
+            if not isinstance(opt_id, str) or not opt_id:
+                raise ValueError(
+                    f"wildcard payload.options[{i}].id must be a string"
+                )
+            if opt_id in seen_ids:
+                raise ValueError(
+                    f"wildcard payload.options[{i}].id {opt_id!r} duplicates "
+                    f"an earlier option id"
+                )
+            seen_ids.add(opt_id)
             value = opt.get("value", "")
             if not isinstance(value, str):
                 raise ValueError(
