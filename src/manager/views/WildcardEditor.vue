@@ -42,6 +42,10 @@ import type {
   WildcardOption,
   WildcardPayload,
 } from "../api/types";
+import { useCascadeStore } from "../cascade/cascade-store";
+import { useCascadeApply } from "../cascade/useCascadeApply";
+import PillCountBadge from "../cascade/PillCountBadge.vue";
+import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -50,6 +54,16 @@ const categoryStore = useCategoryStore();
 const toast = useToast();
 const recent = useRecentStore();
 const { resolveReturnTo } = useReturnTo();
+const cascade = useCascadeStore();
+const cascadeApply = useCascadeApply();
+
+const cascadeDialogOpen = ref(false);
+const cascadeDialogProps = ref<{
+  kind: string;
+  id: string;
+  action: "delete" | "rename";
+  extra?: Record<string, unknown>;
+} | null>(null);
 
 const name = ref("");
 const description = ref("");
@@ -236,6 +250,95 @@ function addSub() {
 function removeSub(s: string) {
   subCategories.value = subCategories.value.filter((x) => x !== s);
   for (const o of options.value) if (o.sub_category === s) o.sub_category = null;
+}
+
+async function onSubcatDeleteClick(subcat: string): Promise<void> {
+  // Only the cascade flow matters for saved wildcards (props.id).
+  // For new wildcards (no id yet) the subcat is local-only — delegate
+  // straight to the existing in-memory removeSub.
+  if (!props.id) {
+    removeSub(subcat);
+    return;
+  }
+  const refs = cascade.subcatRefsTo(props.id, subcat);
+  if (refs.length === 0) {
+    // Silent path: apply via cascade (server cleans any stale refs),
+    // then remove from local draft state + show Undo toast.
+    const result = await cascadeApply.apply({
+      kind: "subcategory",
+      id: props.id,
+      action: "delete",
+      extra: { subcat_name: subcat },
+    });
+    if (result.ok) {
+      removeSub(subcat);
+      const undoId = result.undo_entry_id;
+      toast.push({
+        severity: "success",
+        summary: `Sub-category "${subcat}" deleted`,
+        life: 5000,
+        action: {
+          label: "Undo",
+          run: async () => {
+            const undoResult = await cascadeApply.undo(undoId);
+            if (!undoResult.ok) {
+              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+            } else {
+              // Re-add the subcat to the local draft if undo succeeded.
+              if (!subCategories.value.includes(subcat)) {
+                subCategories.value.push(subcat);
+              }
+              toast.push({ severity: "info", summary: `Sub-category "${subcat}" restored`, life: 3000 });
+            }
+          },
+        },
+      });
+    } else {
+      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
+    }
+    return;
+  }
+  // Refs > 0 path: open the confirm dialog so the user sees the impact.
+  cascadeDialogProps.value = {
+    kind: "subcategory",
+    id: props.id,
+    action: "delete",
+    extra: { subcat_name: subcat },
+  };
+  cascadeDialogOpen.value = true;
+}
+
+function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
+  cascadeDialogOpen.value = false;
+  // Pull subcat name from the dialog props that were just used.
+  const subcat = (cascadeDialogProps.value?.extra?.subcat_name as string | undefined) ?? "";
+  if (subcat) removeSub(subcat);
+  const undoId = result.undo_entry_id;
+  const count = result.affected_count;
+  toast.push({
+    severity: "success",
+    summary: `Sub-category "${subcat}" deleted`,
+    detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+    life: 5000,
+    action: {
+      label: "Undo",
+      run: async () => {
+        const undoResult = await cascadeApply.undo(undoId);
+        if (!undoResult.ok) {
+          toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+        } else {
+          if (subcat && !subCategories.value.includes(subcat)) {
+            subCategories.value.push(subcat);
+          }
+          toast.push({ severity: "info", summary: `Sub-category "${subcat}" restored`, life: 3000 });
+        }
+      },
+    },
+  });
+}
+
+function onCascadeDialogCancelled(): void {
+  cascadeDialogOpen.value = false;
 }
 
 function addOption() {
@@ -444,8 +547,8 @@ defineExpose({ historyEntries, applyRestore, options });
             :key="s"
             tone="accent"
             removable
-            @remove="removeSub(s)"
-          >{{ s }}</Chip>
+            @remove="onSubcatDeleteClick(s)"
+          >{{ s }}<PillCountBadge :count="props.id ? cascade.subcatRefsTo(props.id, s).length : 0" /></Chip>
         </div>
         <span v-else class="wp-card__hint">No sub-categories yet.</span>
       </Card>
@@ -536,6 +639,16 @@ defineExpose({ historyEntries, applyRestore, options });
       </table>
     </Card>
     </div>
+
+    <!-- CascadeConfirmDialog: shown when a sub-category pill X-click has
+         downstream refs (refs > 0). Teleports to body internally. -->
+    <CascadeConfirmDialog
+      v-if="cascadeDialogProps"
+      :open="cascadeDialogOpen"
+      v-bind="cascadeDialogProps"
+      @confirmed="onCascadeDialogConfirmed"
+      @cancelled="onCascadeDialogCancelled"
+    />
 
     <!-- ConfirmDialog lives INSIDE EditorFrame so the template has a single
          root vnode. Multi-root templates break the parent RouterView's
