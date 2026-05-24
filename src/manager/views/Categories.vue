@@ -161,6 +161,13 @@ async function saveEdit() {
 </script>
 
 <template>
+  <!-- Single root vnode — multi-root templates desync the parent
+       `<Transition mode="out-in">` in AppLayout's RouterView, causing
+       destination views to never paint after navigating away from
+       this route. CascadeConfirmDialog teleports to body via its
+       internal Modal, so wrapping it here only affects vnode tracking.
+       Same trap Wildcards.vue documents. -->
+  <div class="wp-route-root">
   <div class="wp-page wp-page--fill">
     <div class="wp-page__header">
       <div class="wp-page__title-wrap">
@@ -317,9 +324,14 @@ async function saveEdit() {
     @confirmed="onCatCascadeDialogConfirmed"
     @cancelled="cascadeDialogRow = null"
   />
+  </div>
 </template>
 
 <style scoped>
+/* Single-root wrapper so the parent RouterView's Transition stays
+ * in sync. display:contents keeps the wrapper invisible to layout. */
+.wp-route-root { display: contents; }
+
 .wp-cat-newrow {
   display: flex;
   align-items: flex-end;
