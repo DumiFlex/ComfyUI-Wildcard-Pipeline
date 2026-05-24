@@ -60,10 +60,9 @@ When `dry_run: true`, the response is a scan-only result (no mutations, no undo 
   "affected_count": 0,
   "affected_entities": [
     {
-      "entity_id": "<8-hex>",
-      "from_kind": "wildcard",
-      "from_id": "<8-hex>",
-      "from_name": "<string>",
+      "kind": "wildcard",
+      "id": "<8-hex>",
+      "name": "<string>",
       "ref_path": "<string>"
     }
   ]
@@ -71,7 +70,20 @@ When `dry_run: true`, the response is a scan-only result (no mutations, no undo 
 ```
 
 - `affected_count`: integer, number of direct diff entries the fixer would produce.
-- `affected_entities`: array of `IncomingRef` objects (see reverse-dep index, §6) — entities that reference the target. Scan is read-only and safe to run outside a transaction.
+- `affected_entities`: array of `AffectedEntity` objects — entities that reference the target. Each entry describes one entity and the location where the reference exists (via `ref_path`). Scan is read-only and safe to run outside a transaction.
+
+**AffectedEntity shape:**
+
+```typescript
+interface AffectedEntity {
+  kind: string;           // "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle"
+  id: string;             // 8-hex UUID or slug
+  name: string;           // display name
+  ref_path: string;       // e.g. "options[0].value", "matrix.warm", "children[2]", "payload.template"
+}
+```
+
+**Note on terminology:** `AffectedEntity` is the wire shape returned by the server's scan. This is distinct from `IncomingRef` (see §7), which is used internally by the client's reverse-dep index builder to track references. Both carry the same semantic information but serve different purposes: `AffectedEntity` is for the confirm dialog, while `IncomingRef` is for the client-side index.
 
 ### 2.2 Cascade-on response
 
@@ -83,7 +95,12 @@ When `cascade_refs: true` and `action: "delete"` or `action: "rename"`, mutation
   "undo_entry_id": "<16-hex>",
   "affected_count": 3,
   "affected_entities": [
-    { "entity_id": "<8-hex>", "from_kind": "wildcard", ... }
+    {
+      "kind": "wildcard",
+      "id": "<8-hex>",
+      "name": "<string>",
+      "ref_path": "options[0].value"
+    }
   ],
   "diff": [
     {
@@ -111,7 +128,7 @@ When `cascade_refs: true` and `action: "delete"` or `action: "rename"`, mutation
 
 - `undo_entry_id`: 16-hex string, the primary key for the row written to `cascade_undo` table. Clients store this for later undo.
 - `affected_count`: number of diff entries (mutations applied by the fixer). `0` for subcategory/combine_output_var renames that produce no removals (only rewrite refs).
-- `affected_entities`: same as dry-run (informational; not used by the UI, but available for telemetry).
+- `affected_entities`: same as dry-run — array of `AffectedEntity` objects (informational; not used by the UI, but available for telemetry).
 - `diff`: array of `DiffEntry` objects describing mutations. Passed to the client's `useCascadeStore().applyDiff(diff)` for incremental index patching.
 
 **Diff entry shapes** (see §7 for full TypeScript type):
@@ -131,10 +148,9 @@ When `cascade_refs: false` and `action: "rename"`, only the target is mutated; r
   "affected_count": 0,
   "broken_refs": [
     {
-      "entity_id": "<8-hex>",
-      "from_kind": "wildcard",
-      "from_id": "<8-hex>",
-      "from_name": "<string>",
+      "kind": "wildcard",
+      "id": "<8-hex>",
+      "name": "<string>",
       "ref_path": "$old_name"
     }
   ]
@@ -142,7 +158,7 @@ When `cascade_refs: false` and `action: "rename"`, only the target is mutated; r
 ```
 
 - `affected_count`: always `0` (target rename only, no cascaded updates).
-- `broken_refs`: array of `IncomingRef` objects where each entity still holds a reference to the old name/identifier. Client code (see §11) pushes these into `useResolveWarnings` store with `type: "cascade_broken_ref"` to surface warnings in the UI.
+- `broken_refs`: array of `AffectedEntity` objects where each entity still holds a reference to the old name/identifier. Client code (see §11) pushes these into `useResolveWarnings` store with `type: "cascade_broken_ref"` to surface warnings in the UI.
 
 ### 2.4 Error response
 
@@ -206,6 +222,16 @@ Any failure returns 400 or 404:
 
 **Undo orchestrator:** `engine/cascade/undo.py:undo_cascade` (line 63).
 **Dispatcher:** `wp_api/cascade.py:cascade_undo` (line 49).
+
+---
+
+## 3.1 Known v1 limitation: post-undo stale state
+
+When the user triggers undo via a toast Undo button, `useCascadeApply.undo()` (and `registerCascadeUndo().undo()`) call `api.cascade_undo()` server-side and then mark the cascade store stale via `useCascadeStore().invalidate()`. The store does NOT automatically re-fetch library data — the in-memory module / bundle / category arrays and the reverse-dep index remain stale until the user navigates away from the current view and back, at which point `AppLayout.vue`'s `onMounted` rebuild fires again.
+
+**Practical impact:** badge counts shown on entity headers + sub-category pills may display pre-undo values for the rest of the session view. Editor field state is also not refreshed — the user may need to manually reload the current entity.
+
+**v2 improvement:** should add an undo-success hook that re-runs the `AppLayout` fetch + rebuild sequence so the UI reflects post-undo state without manual navigation.
 
 ---
 

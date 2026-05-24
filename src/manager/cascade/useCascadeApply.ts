@@ -18,6 +18,9 @@ import { api } from "../api/client";
 import { useCascadeStore } from "./cascade-store";
 import type { DiffEntry } from "./reverse-dep-index";
 
+/**
+ * Request to apply or dry-run a cascade-edit mutation.
+ */
 export interface CascadeApplyRequest {
   kind: string;
   id: string;
@@ -27,19 +30,36 @@ export interface CascadeApplyRequest {
   extra?: Record<string, unknown>;
 }
 
+/**
+ * Affected entity returned by the server during scan.
+ * Represents an entity that holds a reference to the target of the mutation.
+ *
+ * @property kind - Entity type ("wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle")
+ * @property id - Entity UUID or slug
+ * @property name - Display name
+ * @property ref_path - Human-readable breadcrumb showing where the reference lives,
+ *                      e.g. "options[0].value", "matrix.warm", "children[2]", "payload.template"
+ */
+export interface AffectedEntity {
+  kind: string;
+  id: string;
+  name: string;
+  ref_path: string;
+}
+
 export interface CascadeApplyOk {
   ok: true;
   undo_entry_id: string;
   affected_count: number;
-  affected_entities: Array<{ kind: string; id: string; name: string }>;
+  affected_entities: Array<{ kind: string; id: string; name: string; ref_path: string }>;
   diff?: DiffEntry[];
-  broken_refs?: Array<{ kind: string; id: string; name: string }>;
+  broken_refs?: Array<{ kind: string; id: string; name: string; ref_path: string }>;
 }
 
 export interface CascadeDryRunOk {
   ok: true;
   affected_count: number;
-  affected_entities: Array<{ kind: string; id: string; name: string }>;
+  affected_entities: Array<{ kind: string; id: string; name: string; ref_path: string }>;
 }
 
 export interface CascadeFail {
