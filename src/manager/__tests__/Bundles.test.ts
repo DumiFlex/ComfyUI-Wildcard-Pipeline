@@ -13,6 +13,12 @@ vi.mock("../api/client", () => ({
       delete: vi.fn(),
       favorite: vi.fn(),
     },
+    // moduleStore.fetchCatalog() runs in Bundles.vue onMounted to power
+    // the per-row validity check. Stub it so the test mount doesn't
+    // explode on `api.modules.list is undefined`.
+    modules: {
+      list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    },
     categories: { list: vi.fn().mockResolvedValue({ items: [] }) },
   },
   ApiError: class extends Error {

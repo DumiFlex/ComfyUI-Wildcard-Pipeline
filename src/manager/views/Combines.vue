@@ -7,6 +7,8 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import ValidityIcon from "../components/ValidityIcon.vue";
+import { validateModule } from "../utils/validateModule";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
@@ -274,6 +276,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
       <th style="width: 130px">Category</th>
       <th style="width: 140px">Output</th>
       <th style="width: 70px">Inputs</th>
+      <th style="width: 80px">Valid</th>
     </template>
 
     <template #columns="{ row }">
@@ -289,6 +292,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
       </td>
       <td><span class="wp-mono wp-row-expand__name">{{ outputVar(row) }}</span></td>
       <td><span class="wp-mono">{{ inputCount(row) }}</span></td>
+      <td><ValidityIcon :issues="validateModule(row, store.catalog)" /></td>
     </template>
 
     <template #actions="{ row }">

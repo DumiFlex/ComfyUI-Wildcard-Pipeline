@@ -27,6 +27,8 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeMixedKindAdapter, type AnyRow } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import ValidityIcon from "../components/ValidityIcon.vue";
+import { validateBundle, validateModule, type ValidationIssue } from "../utils/validateModule";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
@@ -236,6 +238,13 @@ async function fetchAll() {
 onMounted(async () => {
   await Promise.all([fetchAll(), categoryStore.fetchAll()]);
 });
+
+function issuesFor(row: LibraryRow): ValidationIssue[] {
+  if (row.kind === "bundle") {
+    return validateBundle(row.source as BundleRow, moduleStore.catalog);
+  }
+  return validateModule(row.source as ModuleRow, moduleStore.catalog);
+}
 
 function editRow(row: LibraryRow) {
   const returnTo = encodeURIComponent(route.fullPath);
@@ -488,6 +497,7 @@ function refresh() {
     <template #columns-head>
       <th style="width: 110px">Kind</th>
       <th style="width: 130px">Category</th>
+      <th style="width: 80px">Valid</th>
     </template>
 
     <template #columns="{ row }">
@@ -515,6 +525,7 @@ function refresh() {
         </span>
         <span v-else class="wp-dim">—</span>
       </td>
+      <td><ValidityIcon :issues="issuesFor(row)" /></td>
     </template>
 
     <template #actions="{ row }">

@@ -7,6 +7,8 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import ValidityIcon from "../components/ValidityIcon.vue";
+import { validateModule } from "../utils/validateModule";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
@@ -273,6 +275,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
     <template #columns-head>
       <th style="width: 130px">Category</th>
       <th style="width: 70px">Rules</th>
+      <th style="width: 80px">Valid</th>
     </template>
 
     <template #columns="{ row }">
@@ -287,6 +290,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-mono">{{ ruleCount(row) }}</span></td>
+      <td><ValidityIcon :issues="validateModule(row, store.catalog)" /></td>
     </template>
 
     <template #actions="{ row }">

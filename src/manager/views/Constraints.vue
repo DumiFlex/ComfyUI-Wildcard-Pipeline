@@ -7,12 +7,14 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import ValidityIcon from "../components/ValidityIcon.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import { validateModule } from "../utils/validateModule";
 import type {
   CategoryRow,
   ConstraintCell,
@@ -313,6 +315,7 @@ function formatFactor(f: number): string {
       <th style="width: 130px">Source</th>
       <th style="width: 130px">Target</th>
       <th style="width: 90px">Exceptions</th>
+      <th style="width: 80px">Valid</th>
     </template>
 
     <template #columns="{ row }">
@@ -329,6 +332,7 @@ function formatFactor(f: number): string {
       <td><span class="wp-cn-name">{{ lookupName(payloadOf(row).source_wildcard_id) }}</span></td>
       <td><span class="wp-cn-name">{{ lookupName(payloadOf(row).target_wildcard_id) }}</span></td>
       <td><span class="wp-mono">{{ exceptionCount(row) }}</span></td>
+      <td><ValidityIcon :issues="validateModule(row, store.catalog)" /></td>
     </template>
 
     <template #actions="{ row }">

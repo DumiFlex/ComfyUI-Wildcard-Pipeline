@@ -7,17 +7,21 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeBundleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import ValidityIcon from "../components/ValidityIcon.vue";
 import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useBundleStore } from "../stores/bundleStore";
+import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import { validateBundle } from "../utils/validateModule";
 import type { BundleRow, CategoryRow } from "../api/types";
 
 const route = useRoute();
 const router = useRouter();
 const store = useBundleStore();
+const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
 
@@ -53,7 +57,8 @@ const categoryOptions = computed(() => [
 ]);
 
 onMounted(async () => {
-  await Promise.all([fetch(), categoryStore.fetchAll()]);
+  // moduleStore.catalog feeds the per-row validity check (broken child refs).
+  await Promise.all([fetch(), categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
 });
 
 async function fetch() {
@@ -263,6 +268,7 @@ function frameColor(row: BundleRow): string {
       <th style="width: 130px">Category</th>
       <th style="width: 56px">Color</th>
       <th style="width: 80px">Modules</th>
+      <th style="width: 80px">Valid</th>
     </template>
 
     <template #columns="{ row }">
@@ -285,6 +291,7 @@ function frameColor(row: BundleRow): string {
         />
       </td>
       <td><span class="wp-mono">{{ childCount(row) }}</span></td>
+      <td><ValidityIcon :issues="validateBundle(row as unknown as BundleRow, moduleStore.catalog)" /></td>
     </template>
 
     <template #actions="{ row }">

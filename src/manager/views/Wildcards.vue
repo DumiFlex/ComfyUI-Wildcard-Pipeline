@@ -12,11 +12,13 @@ import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import ValidityIcon from "../components/ValidityIcon.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
+import { validateModule } from "../utils/validateModule";
 import type { ModuleRow, CategoryRow } from "../api/types";
 import {
   buildWildcardGraph,
@@ -273,8 +275,8 @@ function totalWeight(row: ModuleRow): number {
   return options(row).reduce((a, b) => a + (b.weight ?? 1), 0) || 1;
 }
 
-function isValid(row: ModuleRow): boolean {
-  return options(row).every((o) => !!o.value);
+function issuesFor(row: ModuleRow) {
+  return validateModule(row, store.catalog);
 }
 </script>
 
@@ -452,16 +454,7 @@ function isValid(row: ModuleRow): boolean {
         </template>
       </td>
       <td>
-        <i
-          v-if="isValid(row)"
-          class="pi pi-check-circle wp-icon--success"
-          title="Valid"
-        />
-        <i
-          v-else
-          class="pi pi-exclamation-triangle wp-icon--warn"
-          title="Empty option present"
-        />
+        <ValidityIcon :issues="issuesFor(row)" />
       </td>
     </template>
 
