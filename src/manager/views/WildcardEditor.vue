@@ -281,6 +281,7 @@ async function onSubcatDeleteClick(subcat: string): Promise<void> {
     });
     if (result.ok) {
       removeSub(subcat);
+      baseline.value = snapshot();
       const undoId = result.undo_entry_id;
       toast.push({
         severity: "success",
@@ -297,6 +298,7 @@ async function onSubcatDeleteClick(subcat: string): Promise<void> {
               if (!subCategories.value.includes(subcat)) {
                 subCategories.value.push(subcat);
               }
+              baseline.value = snapshot();
               toast.push({ severity: "info", summary: `Sub-category "${subcat}" restored`, life: 3000 });
             }
           },
@@ -327,9 +329,10 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
   if (dialogProps.kind === "option") {
     const rowIdx = dialogProps.extra?._row_idx as number | undefined;
     const optionId = dialogProps.id;
-    const snapshot = typeof rowIdx === "number" ? options.value[rowIdx] : undefined;
-    const optionLabel = snapshot?.value || optionId;
+    const optSnapshot = typeof rowIdx === "number" ? options.value[rowIdx] : undefined;
+    const optionLabel = optSnapshot?.value || optionId;
     if (typeof rowIdx === "number") options.value.splice(rowIdx, 1);
+    baseline.value = snapshot();
     toast.push({
       severity: "success",
       summary: `Option "${optionLabel}" deleted`,
@@ -341,10 +344,11 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
           const undoResult = await cascadeApply.undo(undoId);
           if (!undoResult.ok) {
             toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
-          } else if (snapshot && typeof rowIdx === "number") {
+          } else if (optSnapshot && typeof rowIdx === "number") {
             // Splice the option back at its original index.
             const insertAt = Math.min(rowIdx, options.value.length);
-            options.value.splice(insertAt, 0, snapshot);
+            options.value.splice(insertAt, 0, optSnapshot);
+            baseline.value = snapshot();
             toast.push({ severity: "info", summary: `Option "${optionLabel}" restored`, life: 3000 });
           }
         },
@@ -356,6 +360,7 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
   // Default: sub-category delete path
   const subcat = (dialogProps.extra?.subcat_name as string | undefined) ?? "";
   if (subcat) removeSub(subcat);
+  baseline.value = snapshot();
   toast.push({
     severity: "success",
     summary: `Sub-category "${subcat}" deleted`,
@@ -371,6 +376,7 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
           if (subcat && !subCategories.value.includes(subcat)) {
             subCategories.value.push(subcat);
           }
+          baseline.value = snapshot();
           toast.push({ severity: "info", summary: `Sub-category "${subcat}" restored`, life: 3000 });
         }
       },
@@ -409,8 +415,11 @@ function onSubcatRenameConfirmed(result: {
   const oldSubcat = subcatRenameTarget.value;
   const newSubcat = result.new_name;
 
-  // Sync local state with server mutation.
+  // Sync local state with server mutation, then re-anchor the dirty
+  // baseline so the "Unsaved" badge stays clean (cascade already
+  // persisted the rename server-side).
   _applySubcatRename(oldSubcat, newSubcat);
+  baseline.value = snapshot();
 
   // Register undo handle and show toast with Undo action.
   const undoHandle = registerCascadeUndo(result.undo_entry_id, `Renamed sub-category "${oldSubcat}"`);
@@ -427,6 +436,7 @@ function onSubcatRenameConfirmed(result: {
         } else {
           // Reverse the local rename to match the restored server state.
           _applySubcatRename(newSubcat, oldSubcat);
+          baseline.value = snapshot();
           toast.push({ severity: "info", summary: `Sub-category rename reversed`, life: 3000 });
         }
       },
