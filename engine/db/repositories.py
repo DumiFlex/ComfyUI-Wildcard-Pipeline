@@ -88,6 +88,32 @@ class ModuleRepository:
         """
         return secrets.token_hex(_ID_HEX_LEN // 2)
 
+    @staticmethod
+    def _backfill_option_ids(payload: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of *payload* with each option assigned a stable
+        8-hex `id` if missing. Wildcard payload only — caller checks type.
+
+        Option ids must be unique per-wildcard (validated in
+        WildcardHandler.validate_payload). Existing ids are preserved so
+        constraint exception refs stay intact across edits.
+
+        Payloads without an ``options`` key are returned unchanged. Adding
+        an empty ``options: []`` would shift the payload hash for legacy
+        rows that never declared an options field — see migration 008
+        fingerprint parity test.
+        """
+        if "options" not in payload:
+            return payload
+        new_payload = dict(payload)
+        new_opts: list[dict[str, Any]] = []
+        for opt in new_payload.get("options") or []:
+            new_opt = dict(opt)
+            if not isinstance(new_opt.get("id"), str) or not new_opt["id"]:
+                new_opt["id"] = secrets.token_hex(_ID_HEX_LEN // 2)
+            new_opts.append(new_opt)
+        new_payload["options"] = new_opts
+        return new_payload
+
     def create(
         self,
         *,
@@ -113,6 +139,8 @@ class ModuleRepository:
             raise ValueError(
                 f"unknown module type {type!r}; expected one of {sorted(_VALID_TYPES)}"
             )
+        if type == "wildcard":
+            payload = self._backfill_option_ids(payload)
         if id is None:
             mid = self._gen_id()
         else:
@@ -200,6 +228,13 @@ class ModuleRepository:
         is_favorite: bool | _Unset = _UNSET,
     ) -> dict[str, Any]:
         existing = self.get(module_id)
+        # Backfill missing option ids when caller writes a fresh wildcard payload.
+        if (
+            existing["type"] == "wildcard"
+            and not isinstance(payload, _Unset)
+            and isinstance(payload, dict)
+        ):
+            payload = self._backfill_option_ids(payload)
         new = {
             "name": existing["name"] if isinstance(name, _Unset) else name,
             "description": (

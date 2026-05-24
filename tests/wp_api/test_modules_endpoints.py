@@ -48,6 +48,10 @@ async def test_embed_bundle_returns_picks_only_no_transitive_walk(
         type="wildcard", name="outfit", description="",
         category_id=None, tags=[], payload=outfit_payload,
     )
+    # ModuleRepository.create backfills 8-hex option ids; compare against
+    # the persisted payload (which carries the assigned ids) rather than
+    # the input dict.
+    expected_payload = outfit["payload"]
 
     client = await aiohttp_client(app)
     resp = await client.post("/wp/api/modules/embed-bundle", json={
@@ -57,7 +61,7 @@ async def test_embed_bundle_returns_picks_only_no_transitive_walk(
     body = await resp.json()
     assert body["pickOrder"] == [outfit["id"]]
     assert len(body["modules"]) == 1
-    assert body["modules"][0] == outfit_payload
+    assert body["modules"][0] == expected_payload
     # color is referenced by outfit but NOT embedded — runtime resolves
     # it live from the library.
     assert set(body["snapshots"].keys()) == {outfit["id"]}

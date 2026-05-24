@@ -25,6 +25,68 @@ def test_create_assigns_id_and_timestamps(wp_db):
     assert row["payload"] == _new_payload()
 
 
+def test_create_wildcard_backfills_option_ids(wp_db):
+    """Wildcard options missing `id` get 8-hex backfilled before insert."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="t", description="",
+        category_id=None, tags=[],
+        payload={
+            "sub_categories": [],
+            "options": [
+                {"value": "buzz", "weight": 1, "sub_category": None, "probability": 1.0},
+                {"value": "crew", "weight": 1, "sub_category": None, "probability": 1.0},
+            ],
+        },
+    )
+    ids = [o["id"] for o in row["payload"]["options"]]
+    assert all(isinstance(i, str) and len(i) == 8 for i in ids)
+    assert ids[0] != ids[1]
+
+
+def test_create_wildcard_preserves_existing_option_ids(wp_db):
+    """If option already has id, leave it alone."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="t", description="",
+        category_id=None, tags=[],
+        payload={
+            "sub_categories": [],
+            "options": [
+                {
+                    "id": "deadbeef",
+                    "value": "x",
+                    "weight": 1,
+                    "sub_category": None,
+                    "probability": 1.0,
+                },
+            ],
+        },
+    )
+    assert row["payload"]["options"][0]["id"] == "deadbeef"
+
+
+def test_update_wildcard_backfills_missing_option_ids(wp_db):
+    """Updating a wildcard with options missing `id` backfills them."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="t", description="",
+        category_id=None, tags=[], payload={"sub_categories": [], "options": []},
+    )
+    repo.update(
+        row["id"],
+        payload={
+            "sub_categories": [],
+            "options": [
+                {"value": "x", "weight": 1, "sub_category": None, "probability": 1.0}
+            ],
+        },
+    )
+    updated = repo.get(row["id"])
+    assert "id" in updated["payload"]["options"][0]
+    assert len(updated["payload"]["options"][0]["id"]) == 8
+
+
 def test_get_returns_existing_row(wp_db):
     repo = ModuleRepository(wp_db)
     created = repo.create(
