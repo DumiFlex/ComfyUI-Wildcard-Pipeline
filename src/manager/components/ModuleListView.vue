@@ -1,7 +1,7 @@
 <script setup lang="ts" generic="T extends { id: string; name?: string; updated_at?: string; tags?: string[]; is_favorite?: boolean }">
 /**
  * ModuleListView — faithful 1:1 port of the prototype `ModuleListView` from
- * `docs/design-handoff/wildcardpipeline/project/screens/lists.jsx`.
+ * `docs/design-handoff/wildcard-pipeline/project/screens/lists.jsx`.
  *
  * Replaces the previous EntityListView (which wrapped PrimeVue DataTable). This
  * version uses raw `<table>` markup + the `ui/*` primitives so every list

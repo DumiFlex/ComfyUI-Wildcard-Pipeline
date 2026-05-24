@@ -16,7 +16,7 @@
  * Canonical GitHub repository slug. All derived URLs (wiki, branches,
  * issues, raw blobs) build off this so a future rename touches one
  * line. The repo is currently public; before public release the
- * private placeholder above was `ComfyUI-WildcardPipeline`.
+ * private placeholder was `ComfyUI-WildcardPipeline` (no dash).
  */
 export const GITHUB_REPO = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline";
 

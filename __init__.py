@@ -1,4 +1,4 @@
-"""ComfyUI-WildcardPipeline — modular procedural prompt generation."""
+"""ComfyUI-Wildcard-Pipeline — modular procedural prompt generation."""
 
 import os
 import sys

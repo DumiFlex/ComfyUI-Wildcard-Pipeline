@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Settings — port of `SettingsScreen` in
- * `docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx`.
+ * `docs/design-handoff/wildcard-pipeline/project/screens/utilities.jsx`.
  * About / Theme / Storage cards using the local ui/* primitives.
  */
 import Button from "../components/ui/Button.vue";

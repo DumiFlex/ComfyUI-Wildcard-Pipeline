@@ -24,7 +24,7 @@ export interface AboutPageBadge {
   icon: string;
 }
 
-const REPO = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline";
+const REPO = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline";
 const ICON_CLASS = "wp-about-badge-icon";
 let styleInjected = false;
 

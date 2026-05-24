@@ -4,7 +4,7 @@
  * Pure utilities that inspect a wildcard module's option values and surface
  * syntactic features used by the manager UI (nested `@{uuid}` ref targets,
  * inline `{a|b|c}` choice blocks). Mirrors the React reference at
- * `docs/design-handoff/wildcardpipeline/project/data.jsx` so list-screen
+ * `docs/design-handoff/wildcard-pipeline/project/data.jsx` so list-screen
  * rendering matches the prototype exactly.
  *
  * Graph is keyed by `mod.id` — post DB migration 004 the id IS the

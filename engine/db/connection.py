@@ -47,7 +47,7 @@ def _comfyui_user_dir_from_path() -> Path | None:
 
     Custom nodes live at ``<ComfyUI>/custom_nodes/<plugin>/`` by
     convention, so this file at
-    ``<ComfyUI>/custom_nodes/ComfyUI-WildcardPipeline/engine/db/connection.py``
+    ``<ComfyUI>/custom_nodes/ComfyUI-Wildcard-Pipeline/engine/db/connection.py``
     is exactly 4 parents away from the ComfyUI root.
 
     A presence check on ``<root>/main.py`` (ComfyUI's entrypoint) +

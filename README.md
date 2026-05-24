@@ -16,7 +16,7 @@ Clone into `ComfyUI/custom_nodes/`:
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/DumiFlex/ComfyUI-WildcardPipeline.git
+git clone https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline.git
 ```
 
 No Python dependencies required beyond ComfyUI itself.

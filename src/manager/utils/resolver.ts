@@ -4,8 +4,8 @@
  * on the cached module catalog returned by `/wp/api/modules?type=...`.
  *
  * Faithfully ported from the React reference at
- * `docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx`
- * (`TR_ENGINE`) and `docs/design-handoff/wildcardpipeline/project/data.jsx`
+ * `docs/design-handoff/wildcard-pipeline/project/screens/utilities.jsx`
+ * (`TR_ENGINE`) and `docs/design-handoff/wildcard-pipeline/project/data.jsx`
  * (`expandInline`, `resolveWildcard`, `resolveByVar`).
  *
  * `expandInlineChoices` delegates to `resolveTokens` (surface="wildcard") so

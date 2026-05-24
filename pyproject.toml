@@ -26,14 +26,14 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline"
-Repository = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline"
-Issues = "https://github.com/DumiFlex/ComfyUI-WildcardPipeline/issues"
+Homepage = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline"
+Repository = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline"
+Issues = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues"
 
 [tool.comfy]
 PublisherId = "dumiflex"
 DisplayName = "Wildcard Pipeline"
-Icon = ""
+Icon = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/js/images/favicon.svg"
 
 [tool.ruff]
 line-length = 100

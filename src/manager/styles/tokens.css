@@ -2,7 +2,7 @@
    Wildcard Pipeline — Design Tokens & Base
    PrimeVue 4 Aura-inspired, dark, brand-customized.
 
-   1:1 port of docs/design-handoff/wildcardpipeline/project/styles.css.
+   1:1 port of docs/design-handoff/wildcard-pipeline/project/styles.css.
    Keep selectors and rule order in sync with the prototype so future
    ports can diff cleanly.
    ========================================================= */
@@ -2755,7 +2755,7 @@ input, textarea, select { font: inherit; }
 }
 
 /* ---------- Module-kind palette (icon + bg pairs) ----------
-   Source: docs/design-handoff/wildcardpipeline/project/data.jsx KIND_META.
+   Source: docs/design-handoff/wildcard-pipeline/project/data.jsx KIND_META.
    Dark-theme values (bright, high-chroma) — all pass WCAG AA on dark surfaces.
    Light-theme overrides in .wp-theme-light below use darker shades so the
    same tokens pass AA on white/near-white surfaces and as chip text on 22% tint. */

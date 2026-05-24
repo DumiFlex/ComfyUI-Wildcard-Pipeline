@@ -3,7 +3,7 @@
  * Test Runner — kind-aware module dry-run.
  *
  * Faithful port of `TestRunnerScreen` from
- * `docs/design-handoff/wildcardpipeline/project/screens/utilities.jsx`.
+ * `docs/design-handoff/wildcard-pipeline/project/screens/utilities.jsx`.
  * Uses ui/* primitives only — no PrimeVue.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
