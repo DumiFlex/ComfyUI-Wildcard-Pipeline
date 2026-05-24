@@ -16,6 +16,7 @@ import {
   buildIndex,
   categoryRefsTo as _categoryRefsTo,
   combineVarRefsTo as _combineVarRefsTo,
+  optionRefsTo as _optionRefsTo,
   refsTo as _refsTo,
   subcatRefsTo as _subcatRefsTo,
   type DiffEntry,
@@ -61,6 +62,11 @@ export const useCascadeStore = defineStore("cascade", () => {
     return _categoryRefsTo(index.value, category_id);
   }
 
+  function optionRefsTo(option_id: string): IncomingRef[] {
+    if (!index.value) return [];
+    return _optionRefsTo(index.value, option_id);
+  }
+
   const isStale = computed<boolean>(() => stale.value);
 
   return {
@@ -72,5 +78,6 @@ export const useCascadeStore = defineStore("cascade", () => {
     subcatRefsTo,
     combineVarRefsTo,
     categoryRefsTo,
+    optionRefsTo,
   };
 });

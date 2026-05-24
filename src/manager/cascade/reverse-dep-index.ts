@@ -22,13 +22,20 @@ export interface ReverseDepIndex {
   toFixedValueName: Map<string, IncomingRef[]>;
   toCombineVar: Map<string, IncomingRef[]>;
   toCategory: Map<string, IncomingRef[]>;
+  /** Stable per-option id → refs from constraint exceptions. Lets the
+   * WildcardEditor surface a count badge on options that other entities
+   * reference, and route option deletes through the cascade flow. */
+  toOptionId: Map<string, IncomingRef[]>;
 }
 
 export interface DiffEntry {
   entity_id: string;
   removed?: boolean;
-  remove_ref?: { kind: string; id?: string; wildcard_id?: string; name?: string };
+  remove_ref?: { kind: string; id?: string; wildcard_id?: string; name?: string; option_id?: string };
   rename_ref?: { kind: string; old: string; new: string };
+  /** Set by fix_option_delete: source wildcard's `entity_id` had this
+   * option id removed from `payload.options[]`. */
+  remove_option?: string;
 }
 
 const REF_REGEX = /@\{([0-9a-f]{8})(?::([^}]*))?\}/g;
@@ -87,6 +94,7 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
     toFixedValueName: new Map(),
     toCombineVar: new Map(),
     toCategory: new Map(),
+    toOptionId: new Map(),
   };
 
   for (const wildcard of lib.wildcards) {
@@ -267,6 +275,38 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
         }
       }
     }
+
+    // Per-option-id refs from exception rows. Each exception axis points
+    // at one option by stable id; the WildcardEditor uses these counts to
+    // gate the option-Remove cascade flow.
+    const exceptions = (payload.exceptions as Array<Record<string, unknown>>) || [];
+    for (let exIdx = 0; exIdx < exceptions.length; exIdx++) {
+      const ex = exceptions[exIdx];
+      const exSource = ex.source_id;
+      const exTarget = ex.target_id;
+      if (typeof exSource === "string" && exSource.length > 0) {
+        const exRef: IncomingRef = {
+          from_kind: "constraint",
+          from_id: constraint.id,
+          from_name: constraint.name,
+          ref_path: `exceptions[${exIdx}].source_id`,
+        };
+        pushRef(idx.toOptionId, exSource, exRef);
+      }
+      if (
+        typeof exTarget === "string"
+        && exTarget.length > 0
+        && exTarget !== exSource
+      ) {
+        const exRef: IncomingRef = {
+          from_kind: "constraint",
+          from_id: constraint.id,
+          from_name: constraint.name,
+          ref_path: `exceptions[${exIdx}].target_id`,
+        };
+        pushRef(idx.toOptionId, exTarget, exRef);
+      }
+    }
   }
 
   for (const bundle of lib.bundles) {
@@ -306,6 +346,10 @@ export function combineVarRefsTo(idx: ReverseDepIndex, name: string): IncomingRe
 
 export function categoryRefsTo(idx: ReverseDepIndex, category_id: string): IncomingRef[] {
   return idx.toCategory.get(category_id) || [];
+}
+
+export function optionRefsTo(idx: ReverseDepIndex, option_id: string): IncomingRef[] {
+  return idx.toOptionId.get(option_id) || [];
 }
 
 export function applyDiff(idx: ReverseDepIndex, diff: DiffEntry[]): void {
@@ -366,6 +410,15 @@ export function applyDiff(idx: ReverseDepIndex, diff: DiffEntry[]): void {
           idx.toCategory.set(key, filtered);
         }
       });
+
+      idx.toOptionId.forEach((refs, key) => {
+        const filtered = refs.filter((r) => r.from_id !== entityId);
+        if (filtered.length === 0) {
+          idx.toOptionId.delete(key);
+        } else {
+          idx.toOptionId.set(key, filtered);
+        }
+      });
     } else if (entry.remove_ref) {
       const entityId = entry.entity_id;
       const removeRef = entry.remove_ref;
@@ -395,7 +448,19 @@ export function applyDiff(idx: ReverseDepIndex, diff: DiffEntry[]): void {
         } else {
           idx.toEntity.set(removeRef.id, filtered);
         }
+      } else if (removeRef.kind === "option" && removeRef.option_id) {
+        const refs = idx.toOptionId.get(removeRef.option_id) || [];
+        const filtered = refs.filter((r) => r.from_id !== entityId);
+        if (filtered.length === 0) {
+          idx.toOptionId.delete(removeRef.option_id);
+        } else {
+          idx.toOptionId.set(removeRef.option_id, filtered);
+        }
       }
+    } else if (entry.remove_option) {
+      // Source wildcard's own option removed — drop its toOptionId entry
+      // entirely so any subsequent refsTo lookup returns empty.
+      idx.toOptionId.delete(entry.remove_option);
     }
   }
 }

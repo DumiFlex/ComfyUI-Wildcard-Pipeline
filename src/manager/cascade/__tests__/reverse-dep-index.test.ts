@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyDiff, buildIndex, categoryRefsTo, combineVarRefsTo,
-  refsTo, subcatRefsTo,
+  optionRefsTo, refsTo, subcatRefsTo,
   type LibraryFixture,
 } from "../reverse-dep-index";
 
@@ -73,6 +73,66 @@ describe("reverse-dep-index", () => {
     expect(refsTo(idx, "wildcard", "11111111").length).toBeGreaterThan(0);
     applyDiff(idx, [{ entity_id: "22222222", removed: true }]);
     expect(refsTo(idx, "wildcard", "11111111").every((r) => r.from_id !== "22222222")).toBe(true);
+  });
+
+  it("indexes option_id refs from constraint exceptions", () => {
+    const exLib: LibraryFixture = {
+      wildcards: [{
+        id: "11111111", name: "hair",
+        payload: { sub_categories: [], options: [
+          { id: "opt_aaaa", value: "buzz", sub_category: null },
+        ] },
+      }],
+      constraints: [{
+        id: "ddddd111", name: "c",
+        payload: {
+          source_wildcard_id: "11111111",
+          target_wildcard_id: "11111111",
+          matrix: {},
+          exceptions: [{
+            source: "buzz", target: "buzz",
+            source_id: "opt_aaaa", target_id: "opt_aaaa",
+            mode: "reduce", factor: 0.5,
+          }],
+        },
+      }],
+      fixed_values: [], combines: [], derivations: [], bundles: [], categories: [],
+    };
+    const idx = buildIndex(exLib);
+    const refs = optionRefsTo(idx, "opt_aaaa");
+    expect(refs).toHaveLength(1);
+    expect(refs[0].from_kind).toBe("constraint");
+    expect(refs[0].from_id).toBe("ddddd111");
+    expect(refs[0].ref_path).toContain("source_id");
+  });
+
+  it("applyDiff drops option_id entry on remove_option", () => {
+    const exLib: LibraryFixture = {
+      wildcards: [{
+        id: "11111111", name: "hair",
+        payload: { sub_categories: [], options: [
+          { id: "opt_aaaa", value: "buzz", sub_category: null },
+        ] },
+      }],
+      constraints: [{
+        id: "ddddd111", name: "c",
+        payload: {
+          source_wildcard_id: "11111111",
+          target_wildcard_id: "11111111",
+          matrix: {},
+          exceptions: [{
+            source_id: "opt_aaaa", target_id: "opt_aaaa",
+            source: "buzz", target: "buzz",
+            mode: "reduce", factor: 0.5,
+          }],
+        },
+      }],
+      fixed_values: [], combines: [], derivations: [], bundles: [], categories: [],
+    };
+    const idx = buildIndex(exLib);
+    expect(optionRefsTo(idx, "opt_aaaa")).toHaveLength(1);
+    applyDiff(idx, [{ entity_id: "11111111", remove_option: "opt_aaaa" }]);
+    expect(optionRefsTo(idx, "opt_aaaa")).toHaveLength(0);
   });
 
   it("category refs collected from category_id field", () => {
