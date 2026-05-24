@@ -279,6 +279,13 @@ function isValid(row: ModuleRow): boolean {
 </script>
 
 <template>
+  <!-- Single root vnode — multi-root templates desync the parent
+       `<Transition mode="out-in">` in AppLayout's RouterView, causing
+       the destination view to never paint after navigating away.
+       Same trap WildcardEditor.vue documents. CascadeConfirmDialog
+       teleports to body internally, so wrapping it here only affects
+       vnode tracking. -->
+  <div class="wp-route-root">
   <ModuleListView
     title="Wildcards"
     subtitle="Wildcard modules pick one weighted option per resolution. Use $variable in prompts."
@@ -500,9 +507,18 @@ function isValid(row: ModuleRow): boolean {
     @confirmed="onCascadeDialogConfirmed"
     @cancelled="onCascadeDialogCancelled"
   />
+  </div>
 </template>
 
 <style scoped>
+/* Single-root wrapper so the parent RouterView's Transition stays
+ * in sync. display:contents keeps the wrapper invisible to layout,
+ * so ModuleListView's grid/flex behavior is unchanged. */
+.wp-route-root {
+  display: contents;
+}
+
+
 .wp-tags-row {
   display: flex;
   flex-wrap: wrap;
