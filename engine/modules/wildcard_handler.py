@@ -174,6 +174,7 @@ class WildcardHandler(ModuleHandler):
         if not isinstance(options, list):
             raise ValueError("wildcard payload.options must be a list")
         seen_ids: set[str] = set()
+        null_count = 0
         for i, opt in enumerate(options):
             if not isinstance(opt, dict):
                 raise ValueError(f"wildcard payload.options[{i}] must be an object")
@@ -193,10 +194,30 @@ class WildcardHandler(ModuleHandler):
                 )
             seen_ids.add(opt_id)
             value = opt.get("value", "")
-            if not isinstance(value, str):
-                raise ValueError(
-                    f"wildcard payload.options[{i}].value must be a string"
-                )
+            is_null = bool(opt.get("is_null"))
+            if is_null:
+                null_count += 1
+                # Null option contract: value must be empty string, no
+                # sub_category. The flag is the source of truth — see
+                # docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md.
+                if value != "":
+                    raise ValueError(
+                        f"wildcard payload.options[{i}] null option "
+                        f"{opt_id!r} must have empty value (got {value!r})"
+                    )
+                sub_null = opt.get("sub_category")
+                if sub_null is not None and sub_null != "":
+                    raise ValueError(
+                        f"wildcard payload.options[{i}] null option "
+                        f"{opt_id!r} must have no sub_category (got "
+                        f"{sub_null!r})"
+                    )
+            else:
+                if not isinstance(value, str) or value == "":
+                    raise ValueError(
+                        f"wildcard payload.options[{i}].value must be a "
+                        f"non-empty string (use is_null=True for the null option)"
+                    )
             weight = opt.get("weight", 1)
             if not isinstance(weight, (int, float)) or isinstance(weight, bool):
                 raise ValueError(
@@ -211,6 +232,11 @@ class WildcardHandler(ModuleHandler):
                 raise ValueError(
                     f"wildcard payload.options[{i}].sub_category must be a string"
                 )
+        if null_count > 1:
+            raise ValueError(
+                f"wildcard payload may have at most one null option "
+                f"(found {null_count})"
+            )
         binding = payload.get("var_binding")
         if binding is not None:
             if not isinstance(binding, str):
@@ -243,6 +269,14 @@ class WildcardHandler(ModuleHandler):
             if not isinstance(sc, str):
                 raise ValueError(
                     f"wildcard payload.sub_categories[{i}] must be a string"
+                )
+            # `null` is a reserved keyword in the nested-ref filter
+            # syntax — `@{uuid:warm,null}` opts the null option into
+            # the pool. Forbid sub_category names colliding with it.
+            if sc == "null":
+                raise ValueError(
+                    f"wildcard payload.sub_categories[{i}] 'null' is reserved "
+                    f"(used by the nested ref filter syntax)"
                 )
 
     @classmethod
@@ -284,13 +318,16 @@ class WildcardHandler(ModuleHandler):
         # `sub_category` is in the chosen list. Empty list / None = no
         # filter (all sub-categories eligible). Options with a `None`
         # / missing sub_category are excluded by an explicit filter
-        # (they're "unsorted" and the user opted into a curated set).
+        # (they're "unsorted" and the user opted into a curated set) —
+        # EXCEPT the null option (`is_null: True`), which is an
+        # orthogonal "no-output" slot and survives every category
+        # filter. See docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md.
         category_filter = instance.get("category_filter")
         if isinstance(category_filter, list) and category_filter:
             allowed_cats = set(category_filter)
             options = [
                 o for o in options
-                if o.get("sub_category") in allowed_cats
+                if o.get("is_null") or o.get("sub_category") in allowed_cats
             ]
 
         enabled = instance.get("enabled_options")
@@ -335,8 +372,16 @@ class WildcardHandler(ModuleHandler):
         if my_id:
             constraints = ctx.get("__wp_constraints__") if ctx is not None else None
             picks = ctx.get("__wp_picks__") if ctx is not None else None
+            # First-instance one-shot: pass the ctx-resident consumed
+            # set so the apply_constraints helper marks fired
+            # constraints + skips them on subsequent target instances.
+            consumed = (
+                ctx.setdefault("__wp_consumed_constraints__", set())
+                if isinstance(ctx, dict) else None
+            )
             options, any_constraint_applied = apply_constraints_for_target(
                 options, my_id, constraints, picks, ctx["__wp_warnings__"],
+                consumed=consumed,
             )
         if any_constraint_applied:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])

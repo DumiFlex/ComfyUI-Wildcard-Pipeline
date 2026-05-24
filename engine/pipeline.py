@@ -171,6 +171,10 @@ class PipelineEngine:
         ctx.setdefault("__wp_warnings__", [])
         ctx.setdefault("__wp_trace__", [])
         ctx.setdefault("__wp_internal_flags__", {})
+        # Tracks constraint module ids that have already fired against
+        # their first downstream target instance. See
+        # docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
+        ctx.setdefault("__wp_consumed_constraints__", set())
 
         for index, module in enumerate(modules):
             # Normalise id/type/enabled reads to work for both dicts and objects.
@@ -359,4 +363,40 @@ class PipelineEngine:
         # `strip_internals` would already filter it, but clearing it
         # is cheap and keeps post-run ctx introspection tidy).
         ctx.pop("__wp_current_module_id__", None)
+
+        # First-instance one-shot semantic: emit a soft (info) warning
+        # for every registered constraint whose target instance never
+        # came up during the chain. Surfaces in WP_Debug so the user
+        # sees "you put a constraint here but nothing downstream took
+        # it" — the chain still succeeds.
+        # See docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
+        constraints_bucket = ctx.get("__wp_constraints__") or []
+        consumed_set = ctx.get("__wp_consumed_constraints__") or set()
+        if isinstance(constraints_bucket, list):
+            for c in constraints_bucket:
+                if not isinstance(c, dict):
+                    continue
+                cid = c.get("__constraint_module_id__")
+                if not cid or cid in consumed_set:
+                    continue
+                warnings_bucket = ctx.setdefault("__wp_warnings__", [])
+                if isinstance(warnings_bucket, list):
+                    warnings_bucket.append({
+                        "type": "constraint_never_applied",
+                        "severity": "info",
+                        "module_id": cid,
+                        "source_field": "",
+                        "position": 0,
+                        "token_index": None,
+                        "detail": {
+                            "constraint_id": cid,
+                            "target_wildcard_id": c.get("target_wildcard_id", ""),
+                            "source_wildcard_id": c.get("source_wildcard_id", ""),
+                        },
+                        "message": (
+                            f"constraint {cid!r} never fired — no downstream "
+                            f"{c.get('target_wildcard_id', '')!r} instance"
+                        ),
+                    })
+
         return ctx

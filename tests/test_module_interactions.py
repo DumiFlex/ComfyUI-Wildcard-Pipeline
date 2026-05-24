@@ -561,12 +561,17 @@ class TestInlineSyntaxInValues:
 
 
 class TestConstraintComposition:
-    """Multiple constraints targeting the same wildcard compose
-    multiplicatively in registration order."""
+    """First-instance one-shot semantic (2026-05-24 redesign): each
+    constraint module fires on exactly one downstream target instance,
+    in chain order. Multiple constraints targeting the same wildcard
+    do NOT compose multiplicatively on a single target instance — the
+    first claims, the second waits for the next target instance."""
 
-    def test_two_constraints_compose_on_same_target(self):
-        """Two excludes on the same target both apply → both options
-        excluded → falls back to options[0] + emits excludes-all warning."""
+    def test_two_constraints_one_target_only_first_fires(self):
+        """Two excludes targeting the same wildcard + ONE target
+        instance: c1 fires on `tgt`, c2 is unconsumed → emits
+        `constraint_never_applied` warning at chain end. c1's exclude
+        of `punk` leaves `classic` available."""
         ctx = _run([
             _wildcard("src1", "hair", [{"id": "h1", "value": "long", "weight": 1}]),
             _wildcard("src2", "eyes", [{"id": "e1", "value": "blue", "weight": 1}]),
@@ -581,9 +586,11 @@ class TestConstraintComposition:
                 {"id": "s2", "value": "classic", "weight": 1},
             ]),
         ], seed=1)
-        warning_types = [w["type"] for w in ctx["__wp_warnings__"]]
-        # Both constraints applied → every option excluded → warning fires.
-        assert "constraint_excludes_all_options" in warning_types
+        # c1 alone fires on the single tgt instance → punk excluded →
+        # classic survives. No excludes-all (one option still has weight).
+        assert ctx["style"] == "classic"
+        # `constraint_never_applied` warning for c2 is covered separately
+        # in tests/test_constraint_first_instance.py (Task 5).
 
 
 # ─── Locked-seed reproducibility across a full chain ─────────────────

@@ -345,11 +345,25 @@ class ConstraintHandler(ModuleHandler):
                 )
             exceptions.append(dict(exc))
 
+        # Carry the owning constraint module's id into the registered
+        # bucket entry so `apply_constraints_for_target` can mark it
+        # consumed once its first downstream target instance fires
+        # (one-shot semantic per 2026-05-24 first-instance spec).
+        # The pipeline sets `__wp_current_module_id__` before each
+        # handler call; missing id (e.g. headless test paths) leaves
+        # the entry as None and the consumed-set treats it as never
+        # consumable — equivalent to the legacy multi-fire path.
+        module_id = None
+        try:
+            module_id = ctx.get("__wp_current_module_id__") if hasattr(ctx, "get") else None
+        except Exception:
+            module_id = None
         meta = {
             "source_wildcard_id": payload["source_wildcard_id"],
             "target_wildcard_id": payload["target_wildcard_id"],
             "matrix": matrix,
             "exceptions": exceptions,
+            "__constraint_module_id__": module_id,
         }
         _ctx_set_constraint(ctx, meta)
         return {}

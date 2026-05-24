@@ -53,32 +53,52 @@ def apply_constraints_for_target(
     constraints: list[dict[str, Any]] | None,
     picks: dict[str, dict[str, Any]] | None,
     warnings: list[dict[str, Any]],
+    *,
+    consumed: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Apply every constraint targeting ``target_uuid`` to ``options``.
+    """Apply the FIRST unconsumed constraint targeting ``target_uuid``.
 
-    Returns a tuple ``(adjusted_options, any_applied)``. ``any_applied``
-    is True if at least one constraint actually reweighted the pool —
-    callers use it to decide whether to run the "excludes-all" check.
+    Returns ``(adjusted_options, any_applied)``. ``any_applied`` is True
+    iff a constraint actually fired — callers use it to decide whether
+    to run the excludes-all check.
 
-    Constraints are applied in registration order so multiple
-    constraints on the same target compose multiplicatively (matches
-    pre-extraction behavior in wildcard_handler).
+    **One-shot semantic (2026-05-24 first-instance redesign).** Each
+    constraint module is a single ammo round: it fires on the first
+    downstream target wildcard instance, gets marked consumed via its
+    ``__constraint_module_id__`` key, and is skipped on subsequent
+    target instances. A second target instance later in the chain
+    claims the NEXT unconsumed constraint, not the same one again.
+
+    Constraints are walked in registration (chain) order so the first
+    unconsumed match wins. After applying, the function **breaks** out
+    of the loop — exactly one constraint application per call.
+
+    ``consumed`` is the ctx-resident ``__wp_consumed_constraints__``
+    set; the caller is expected to thread it from ctx. ``None`` is
+    accepted only by legacy test paths that pre-date the consume model.
 
     Each constraint warns + skips when its source wildcard hasn't been
     picked yet — caller code is responsible for ordering source
     wildcards before the target's roll. The warning gives the user a
     signal in WP_Debug instead of a silent no-op.
+
+    See docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
     """
     if not constraints or not isinstance(constraints, list):
         return options, False
     if not isinstance(picks, dict):
         picks = {}
+    if consumed is None:
+        consumed = set()
 
     any_applied = False
     for c in constraints:
         if not isinstance(c, dict):
             continue
         if c.get("target_wildcard_id") != target_uuid:
+            continue
+        cid = c.get("__constraint_module_id__")
+        if cid is not None and cid in consumed:
             continue
         src_id = c.get("source_wildcard_id")
         src_pick = picks.get(src_id) if isinstance(src_id, str) else None
@@ -100,6 +120,8 @@ def apply_constraints_for_target(
         options = _apply_constraint_to_options(
             options, c, src_pick, adjustment_warnings,
         )
+        if cid is not None:
+            consumed.add(cid)
         any_applied = True
         for w in adjustment_warnings:
             _push_constraint_warning(
@@ -112,6 +134,10 @@ def apply_constraints_for_target(
                     "target_wildcard_id": target_uuid,
                 },
             )
+        # Key change for first-instance semantic: one constraint per
+        # target-instance call. Subsequent target instances re-enter
+        # this function and pick up the NEXT unconsumed constraint.
+        break
 
     return options, any_applied
 

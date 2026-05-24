@@ -354,12 +354,34 @@ def _resolve_ref(
     # separate library entries. Empty post-filter pool → empty string
     # + warning so the user sees the unsatisfiable filter rather than
     # silently falling through to the unfiltered list.
+    #
+    # Null semantics (inverted 2026-05-25): the wildcard's `is_null`
+    # option is INCLUDED by default — alongside whatever sub-cats the
+    # filter lists. The reserved keyword `"null"` in the filter list
+    # EXCLUDES the null option from the pool. So:
+    #   `@{uuid}`              → all options (incl. null)
+    #   `@{uuid:warm}`         → warm options + null
+    #   `@{uuid:warm,null}`    → warm options, null excluded
+    #   `@{uuid:null}`         → all non-null options (filter-only-null
+    #                             = "exclude null, no sub-cat filter")
+    # Sub-category names called literally `"null"` are forbidden by
+    # WildcardHandler.validate_payload so the keyword can never clash
+    # with a real sub-cat.
     sub_filter = tok.meta.get("sub_categories")
     if isinstance(sub_filter, list) and sub_filter:
         allowed_subs = set(sub_filter)
+        exclude_null = "null" in allowed_subs
+        allowed_subs.discard("null")
         options = [
             o for o in options
-            if isinstance(o, dict) and o.get("sub_category") in allowed_subs
+            if isinstance(o, dict)
+            and (
+                (o.get("is_null") and not exclude_null)
+                or (
+                    not o.get("is_null")
+                    and (not allowed_subs or o.get("sub_category") in allowed_subs)
+                )
+            )
         ]
         if not options:
             _push_warning(
@@ -393,8 +415,15 @@ def _resolve_ref(
                 apply_constraints_for_target,
                 warn_excludes_all,
             )
+            # First-instance one-shot semantic: thread the consumed
+            # set so this nested-ref resolve path participates in the
+            # same one-shot bookkeeping as top-level wildcard rolls.
+            # See docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
+            get_consumed = getattr(ctx, "get_consumed_constraints", None)
+            consumed = get_consumed() if callable(get_consumed) else set()
             options, any_applied = apply_constraints_for_target(
                 options, uuid, constraints, get_picks(), ctx.warnings,
+                consumed=consumed,
             )
             if any_applied:
                 warn_excludes_all(options, uuid, ctx.warnings)

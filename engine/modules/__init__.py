@@ -31,6 +31,11 @@ class _RuntimeResolveContext:
     # bucket is empty/None.
     _constraints: list[dict[str, Any]] = field(default_factory=list)
     _picks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # First-instance consume bookkeeping (2026-05-24 spec). Threaded
+    # by reference so mutations inside apply_constraints_for_target
+    # propagate back to the pipeline's ctx bucket and to subsequent
+    # target-instance resolves later in the same chain.
+    _consumed: set[str] = field(default_factory=set)
 
     def get_var(self, name: str) -> str | None:
         if name in self._vars:
@@ -66,6 +71,14 @@ class _RuntimeResolveContext:
         source wildcard's pick when reweighting the target."""
         return self._picks
 
+    def get_consumed_constraints(self) -> set[str]:
+        """``ctx['__wp_consumed_constraints__']`` — set of constraint
+        module ids that have already fired against their first
+        downstream target instance. Threaded by reference so the
+        nested-ref resolver's mutation is observed by the pipeline + by
+        subsequent target-instance resolves later in the chain."""
+        return self._consumed
+
 
 def build_resolve_ctx(
     ctx: dict[str, Any],
@@ -80,6 +93,7 @@ def build_resolve_ctx(
     """
     constraints = ctx.get("__wp_constraints__")
     picks = ctx.get("__wp_picks__")
+    consumed = ctx.setdefault("__wp_consumed_constraints__", set())
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -96,6 +110,10 @@ def build_resolve_ctx(
         # support) — defaults handle that path.
         _constraints=constraints if isinstance(constraints, list) else [],
         _picks=picks if isinstance(picks, dict) else {},
+        # First-instance consume set — passed by reference so the
+        # nested-ref resolver's mutation sticks in ctx for subsequent
+        # target-instance resolves later in the chain.
+        _consumed=consumed if isinstance(consumed, set) else set(),
     )
 
 
