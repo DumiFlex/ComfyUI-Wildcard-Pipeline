@@ -156,11 +156,18 @@ def fix_subcat_delete(
         new_payload = copy.deepcopy(p)
 
         if t == "wildcard" and m["id"] == wildcard_id:
-            # Strip subcat from this wildcard's options
+            # Top-level declared list
+            declared = new_payload.get("sub_categories") or []
+            if subcat_name in declared:
+                new_payload["sub_categories"] = [
+                    s for s in declared if s != subcat_name
+                ]
+                changed = True
+            # Per-option singular assignment — null out options pointing at
+            # the deleted subcat (preserves the option, releases the link)
             for opt in new_payload.get("options") or []:
-                subcats = opt.get("sub_categories")
-                if isinstance(subcats, list) and subcat_name in subcats:
-                    opt["sub_categories"] = [s for s in subcats if s != subcat_name]
+                if opt.get("sub_category") == subcat_name:
+                    opt["sub_category"] = None
                     changed = True
 
         elif t == "constraint":
@@ -226,13 +233,17 @@ def fix_subcat_rename(
         new_payload = copy.deepcopy(p)
 
         if t == "wildcard" and m["id"] == wildcard_id:
-            # Rename in sub_categories lists
+            # Top-level declared sub_categories list
+            declared = new_payload.get("sub_categories") or []
+            if old_name in declared:
+                new_payload["sub_categories"] = [
+                    new_name if s == old_name else s for s in declared
+                ]
+                changed = True
+            # Per-option singular assignment (`opt.sub_category`, not plural)
             for opt in new_payload.get("options") or []:
-                subcats = opt.get("sub_categories")
-                if isinstance(subcats, list) and old_name in subcats:
-                    opt["sub_categories"] = [
-                        new_name if s == old_name else s for s in subcats
-                    ]
+                if opt.get("sub_category") == old_name:
+                    opt["sub_category"] = new_name
                     changed = True
 
         elif t == "constraint":

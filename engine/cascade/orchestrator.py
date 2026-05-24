@@ -48,19 +48,33 @@ def _rename_subcat_target_only(
     old_name: str,
     new_name: str,
 ) -> dict[str, Any] | None:
-    """Rename a subcat inside the source wildcard ONLY (no cascade to refs)."""
+    """Rename a subcat inside the source wildcard ONLY (no cascade to refs).
+
+    Touches both the top-level `payload.sub_categories` declared list and
+    each option's singular `sub_category` field. The plural-array shape
+    that the prior version operated on does not exist in real data — see
+    `engine/modules/wildcard_handler.py:206` for the actual schema.
+    """
     mod = ModuleRepository(conn)
     wc = mod.get(wildcard_id)
     snapshot = dict(wc)  # capture BEFORE
-    new_options = []
-    for opt in (wc.get("payload") or {}).get("options") or []:
-        new_opt = dict(opt)
-        new_opt["sub_categories"] = [
-            new_name if s == old_name else s
-            for s in (opt.get("sub_categories") or [])
+    payload = dict(wc.get("payload") or {})
+
+    declared = payload.get("sub_categories") or []
+    if old_name in declared:
+        payload["sub_categories"] = [
+            new_name if s == old_name else s for s in declared
         ]
+
+    new_options = []
+    for opt in payload.get("options") or []:
+        new_opt = dict(opt)
+        if new_opt.get("sub_category") == old_name:
+            new_opt["sub_category"] = new_name
         new_options.append(new_opt)
-    mod.update(wildcard_id, payload={**(wc.get("payload") or {}), "options": new_options})
+    payload["options"] = new_options
+
+    mod.update(wildcard_id, payload=payload)
     return snapshot
 
 

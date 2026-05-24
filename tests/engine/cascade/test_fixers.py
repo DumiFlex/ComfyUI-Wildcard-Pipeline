@@ -61,12 +61,15 @@ def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
         description="",
         category_id=None,
         tags=[],
-        payload={"options": [{
-            "id": "o",
-            "value": "v",
-            "weight": 1,
+        payload={
             "sub_categories": ["warm", "cool"],
-        }]},
+            "options": [{
+                "id": "o",
+                "value": "v",
+                "weight": 1,
+                "sub_category": "warm",
+            }],
+        },
     )
     other = mod.create(
         type="wildcard",
@@ -74,12 +77,15 @@ def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
         description="",
         category_id=None,
         tags=[],
-        payload={"options": [{
-            "id": "o2",
-            "value": "v",
-            "weight": 1,
+        payload={
             "sub_categories": ["a"],
-        }]},
+            "options": [{
+                "id": "o2",
+                "value": "v",
+                "weight": 1,
+                "sub_category": "a",
+            }],
+        },
     )
     c = mod.create(
         type="constraint",
@@ -104,7 +110,8 @@ def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
     assert "warm" not in c_after["payload"]["matrix"]
     assert "cool" in c_after["payload"]["matrix"]
     wc_after = mod.get(wc["id"])
-    assert wc_after["payload"]["options"][0]["sub_categories"] == ["cool"]
+    assert wc_after["payload"]["sub_categories"] == ["cool"]
+    assert wc_after["payload"]["options"][0]["sub_category"] is None
     # Verify diff shape: constraint + wildcard mutations
     assert any(
         d.get("entity_id") == c["id"]
@@ -126,12 +133,15 @@ def test_fix_subcat_delete_strips_text_refs(wp_db):
         description="",
         category_id=None,
         tags=[],
-        payload={"options": [{
-            "id": "o1",
-            "value": "red",
-            "weight": 1,
+        payload={
             "sub_categories": ["warm"],
-        }]},
+            "options": [{
+                "id": "o1",
+                "value": "red",
+                "weight": 1,
+                "sub_category": "warm",
+            }],
+        },
     )
     referrer = mod.create(
         type="wildcard",
@@ -171,12 +181,15 @@ def test_fix_subcat_rename_rewrites_matrix_keys_and_text_refs(wp_db):
         description="",
         category_id=None,
         tags=[],
-        payload={"options": [{
-            "id": "o",
-            "value": "v",
-            "weight": 1,
+        payload={
             "sub_categories": ["warm"],
-        }]},
+            "options": [{
+                "id": "o",
+                "value": "v",
+                "weight": 1,
+                "sub_category": "warm",
+            }],
+        },
     )
     referrer = mod.create(
         type="wildcard",
@@ -199,7 +212,8 @@ def test_fix_subcat_rename_rewrites_matrix_keys_and_text_refs(wp_db):
     touched, diff = fix_subcat_rename(wp_db, wc["id"], "warm", "hot")
 
     wc_after = mod.get(wc["id"])
-    assert wc_after["payload"]["options"][0]["sub_categories"] == ["hot"]
+    assert wc_after["payload"]["sub_categories"] == ["hot"]
+    assert wc_after["payload"]["options"][0]["sub_category"] == "hot"
     referrer_after = mod.get(referrer["id"])
     assert ":hot}" in referrer_after["payload"]["options"][0]["value"]
     assert ":warm}" not in referrer_after["payload"]["options"][0]["value"]
