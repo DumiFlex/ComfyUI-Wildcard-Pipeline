@@ -362,6 +362,19 @@ function rehydrateExceptionsFromIds(): boolean {
     const val = (o as { value?: string }).value;
     if (typeof oid === "string" && typeof val === "string") tgtById.set(oid, val);
   }
+  // Reverse lookup maps for auto-heal: value → id. Built only when at
+  // least one exception is missing its id (skip the work otherwise).
+  let srcByValue: Map<string, string> | undefined;
+  let tgtByValue: Map<string, string> | undefined;
+  function _byValue(opts: typeof srcOpts): Map<string, string> {
+    const m = new Map<string, string>();
+    for (const o of opts) {
+      const oid = (o as { id?: string }).id;
+      const val = (o as { value?: string }).value;
+      if (typeof oid === "string" && typeof val === "string") m.set(val, oid);
+    }
+    return m;
+  }
   for (const ex of exceptions.value) {
     if (ex.source_id) {
       const current = srcById.get(ex.source_id);
@@ -369,11 +382,28 @@ function rehydrateExceptionsFromIds(): boolean {
         ex.source = current;
         changed = true;
       }
+    } else if (ex.source) {
+      // Auto-heal: legacy exception created before id-tracking shipped.
+      // If the stored value still matches a current option, capture its
+      // id so future renames can rehydrate via the id path.
+      if (!srcByValue) srcByValue = _byValue(srcOpts);
+      const matched = srcByValue.get(ex.source);
+      if (matched) {
+        ex.source_id = matched;
+        changed = true;
+      }
     }
     if (ex.target_id) {
       const current = tgtById.get(ex.target_id);
       if (typeof current === "string" && current !== ex.target) {
         ex.target = current;
+        changed = true;
+      }
+    } else if (ex.target) {
+      if (!tgtByValue) tgtByValue = _byValue(tgtOpts);
+      const matched = tgtByValue.get(ex.target);
+      if (matched) {
+        ex.target_id = matched;
         changed = true;
       }
     }
