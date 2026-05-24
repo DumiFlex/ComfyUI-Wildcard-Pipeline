@@ -69,8 +69,12 @@ describe("CascadeConfirmDialog", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    const backdrop = document.body.querySelector(".wp-cascade-dialog__backdrop") as HTMLElement;
-    backdrop.click();
+    // Now wraps Modal.vue, which exposes `.wp-modal__backdrop` with
+    // `@mousedown.self` — clicking the backdrop dispatches mousedown
+    // (mouseup → click won't bubble through the self modifier).
+    const backdrop = document.body.querySelector(".wp-modal__backdrop") as HTMLElement;
+    backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushPromises();
     expect(wrap.emitted("cancelled")).toBeTruthy();
     wrap.unmount();
   });
@@ -101,6 +105,25 @@ describe("CascadeConfirmDialog", () => {
     });
     await flushPromises();
     expect(document.body.textContent).toContain("Rename");
+    wrap.unmount();
+  });
+
+  it("renders inside the shared Modal wrapper", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    const wrap = mount(CascadeConfirmDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", action: "delete",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    // Modal.vue contract: `.wp-modal__backdrop` wraps `.wp-modal`,
+    // header lives in `.wp-modal__head`, body slot in `.wp-modal__body`,
+    // footer slot in `.wp-modal__foot`. Asserting these classes locks
+    // the cascade dialog to the shared chrome.
+    expect(document.body.querySelector(".wp-modal")).toBeTruthy();
+    expect(document.body.querySelector(".wp-modal__head")?.textContent ?? "")
+      .toContain("Confirm delete");
+    expect(document.body.querySelector(".wp-modal__foot")).toBeTruthy();
     wrap.unmount();
   });
 });

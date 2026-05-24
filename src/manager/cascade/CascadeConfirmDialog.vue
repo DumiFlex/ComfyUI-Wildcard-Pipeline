@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+
+import Button from "../components/ui/Button.vue";
+import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 
 interface Props {
@@ -22,6 +25,16 @@ const m = useCascadeApply();
 const loading = ref(true);
 const affected = ref<Array<{ kind: string; id: string; name: string }>>([]);
 const error = ref<string>("");
+
+const title = computed(() =>
+  props.action === "delete" ? "Confirm delete" : "Confirm rename",
+);
+const confirmLabel = computed(() =>
+  props.action === "delete" ? "Delete + clean up" : "Rename + update refs",
+);
+const confirmVariant = computed<"danger" | "primary">(() =>
+  props.action === "delete" ? "danger" : "primary",
+);
 
 async function refreshDryRun(): Promise<void> {
   loading.value = true;
@@ -73,140 +86,103 @@ async function onConfirm(): Promise<void> {
     error.value = result.error ?? "Apply failed";
   }
 }
+
+function onCancel(): void {
+  emit("cancelled");
+}
+
+function onOpenUpdate(v: boolean): void {
+  if (!v) onCancel();
+}
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="open" class="wp-cascade-dialog__backdrop" @click="emit('cancelled')">
-      <div class="wp-cascade-dialog" @click.stop>
-        <header>
-          <h3>{{ action === "delete" ? "Confirm delete" : "Confirm rename" }}</h3>
-        </header>
-        <section v-if="loading">
-          <p>Scanning impact…</p>
-        </section>
-        <section v-else-if="error">
-          <p class="wp-cascade-dialog__error">⚠ {{ error }}</p>
-        </section>
-        <section v-else>
-          <p v-if="affected.length === 0">No downstream refs — safe to proceed.</p>
-          <p v-else>
-            This will also affect
-            {{ affected.length }}
-            {{ affected.length === 1 ? "entity" : "entities" }}:
-          </p>
-          <ul v-if="affected.length > 0">
-            <li v-for="a in affected" :key="a.id">
-              <span class="wp-kind-chip">{{ a.kind }}</span>
-              {{ a.name }}
-            </li>
-          </ul>
-        </section>
-        <footer>
-          <button @click="emit('cancelled')">Cancel</button>
-          <button
-            data-test="cascade-confirm"
-            :disabled="loading"
-            @click="onConfirm"
-          >
-            {{ action === "delete" ? "Delete + clean up" : "Rename + update refs" }}
-          </button>
-        </footer>
-      </div>
+  <Modal
+    :open="open"
+    :title="title"
+    size="sm"
+    @update:open="onOpenUpdate"
+  >
+    <div v-if="loading" class="wp-cascade-confirm__body">
+      <p>Scanning impact…</p>
     </div>
-  </Teleport>
+    <div v-else-if="error" class="wp-cascade-confirm__body">
+      <p class="wp-cascade-confirm__error">⚠ {{ error }}</p>
+    </div>
+    <div v-else class="wp-cascade-confirm__body">
+      <p v-if="affected.length === 0">No downstream refs — safe to proceed.</p>
+      <p v-else class="wp-cascade-confirm__intro">
+        This will also affect
+        <strong>{{ affected.length }}</strong>
+        {{ affected.length === 1 ? "entity" : "entities" }}:
+      </p>
+      <ul v-if="affected.length > 0" class="wp-cascade-confirm__list">
+        <li v-for="a in affected" :key="a.id">
+          <span class="wp-pill wp-pill--muted">{{ a.kind }}</span>
+          <span class="wp-cascade-confirm__name">{{ a.name }}</span>
+        </li>
+      </ul>
+    </div>
+    <template #footer>
+      <Button variant="ghost" size="sm" @click="onCancel">Cancel</Button>
+      <Button
+        :variant="confirmVariant"
+        size="sm"
+        :disabled="loading"
+        data-test="cascade-confirm"
+        @click="onConfirm"
+      >
+        {{ confirmLabel }}
+      </Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
 @layer wp-extension {
-  .wp-cascade-dialog__backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+  .wp-cascade-confirm__body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .wp-cascade-confirm__body p {
+    margin: 0;
+  }
+  .wp-cascade-confirm__intro strong {
+    font-weight: 600;
+  }
+  .wp-cascade-confirm__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .wp-cascade-confirm__list li {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 100;
+    gap: 8px;
+    font-size: 13px;
   }
-
-  .wp-cascade-dialog {
-    background: var(--wp-color-surface-1, #1a1a1a);
-    border: 1px solid var(--wp-color-border, #333);
-    border-radius: 8px;
-    min-width: 420px;
-    max-width: 600px;
-    padding: 0;
-  }
-
-  .wp-cascade-dialog header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--wp-color-border, #333);
-  }
-
-  .wp-cascade-dialog header h3 {
-    margin: 0;
-    font-size: 16px;
+  .wp-cascade-confirm__name {
     font-weight: 500;
   }
-
-  .wp-cascade-dialog section {
-    padding: 16px;
-  }
-
-  .wp-cascade-dialog section p {
-    margin: 0 0 8px 0;
-  }
-
-  .wp-cascade-dialog section ul {
-    margin: 0;
-    padding-left: 0;
-    list-style: none;
-  }
-
-  .wp-cascade-dialog section li {
-    padding: 4px 0;
-    font-size: 13px;
-  }
-
-  .wp-cascade-dialog footer {
-    padding: 12px 16px;
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    border-top: 1px solid var(--wp-color-border, #333);
-  }
-
-  .wp-cascade-dialog footer button {
-    padding: 6px 12px;
-    border: 1px solid var(--wp-color-border, #333);
-    border-radius: 4px;
-    background: var(--wp-color-surface-2, #2a2a2a);
-    color: inherit;
-    cursor: pointer;
-    font-size: 13px;
-  }
-
-  .wp-cascade-dialog footer button:hover:not(:disabled) {
-    background: var(--wp-color-surface-3, #3a3a3a);
-  }
-
-  .wp-cascade-dialog footer button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .wp-cascade-dialog__error {
+  .wp-cascade-confirm__error {
     color: var(--wp-color-error-fg, #ef4444);
-    margin: 0 !important;
   }
-
-  .wp-kind-chip {
-    background: var(--wp-color-surface-2, #2a2a2a);
-    padding: 1px 6px;
-    border-radius: 3px;
+  .wp-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 999px;
     font-size: 11px;
-    margin-right: 6px;
-    display: inline-block;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+  }
+  .wp-pill--muted {
+    background: var(--wp-color-surface-2, #2a2a2a);
+    color: var(--wp-color-text-secondary, #aaa);
   }
 }
 </style>
