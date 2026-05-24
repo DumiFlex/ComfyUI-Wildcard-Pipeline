@@ -393,9 +393,15 @@ class PipelineEngine:
                             "target_wildcard_id": c.get("target_wildcard_id", ""),
                             "source_wildcard_id": c.get("source_wildcard_id", ""),
                         },
+                        # Format ids as `@{uuid}` so the DebugViewer's
+                        # RichTextPreview parses + resolves them via
+                        # the library cache. Without the `@{}`
+                        # wrapper the raw uuids fell through as plain
+                        # text and the user saw `'e4b95847'` instead
+                        # of the constraint / wildcard's display name.
                         "message": (
-                            f"constraint {cid!r} never fired — no downstream "
-                            f"{c.get('target_wildcard_id', '')!r} instance"
+                            f"constraint @{{{cid}}} never fired — no downstream "
+                            f"@{{{c.get('target_wildcard_id', '')}}} instance"
                         ),
                     })
 
