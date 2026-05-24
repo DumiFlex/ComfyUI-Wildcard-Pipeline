@@ -372,6 +372,62 @@ def fix_combine_output_var_rename(
     return touched, diff
 
 
+def fix_option_delete(
+    conn: sqlite3.Connection,
+    wildcard_id: str,
+    option_id: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Remove option from source wildcard + scrub it from constraint exceptions.
+
+    Standard fixer contract: returns (touched_snapshots, diff). The
+    orchestrator's outer ``with conn:`` is the rollback boundary; this
+    function neither opens nor commits a transaction.
+
+    Matching is by stable ``option_id`` so a value-rename (which keeps
+    the id) does not silently delete the wrong option.
+    """
+    touched: list[dict[str, Any]] = []
+    diff: list[dict[str, Any]] = []
+    repo = ModuleRepository(conn)
+
+    # --- Source wildcard: remove option entry --------------------------
+    src = repo.get(wildcard_id)
+    new_payload = copy.deepcopy(src.get("payload") or {})
+    original_opts = list(new_payload.get("options") or [])
+    new_options = [o for o in original_opts if o.get("id") != option_id]
+    if len(new_options) == len(original_opts):
+        # Option already missing; nothing to do.
+        return touched, diff
+
+    touched.append(_deepcopy_row(src))
+    new_payload["options"] = new_options
+    repo.update(wildcard_id, payload=new_payload)
+    diff.append({"entity_id": wildcard_id, "remove_option": option_id})
+
+    # --- Constraints: drop exceptions referencing option_id ------------
+    for m in repo.list():
+        if m["type"] != "constraint":
+            continue
+        p = m.get("payload") or {}
+        exceptions = p.get("exceptions") or []
+        kept = [
+            e for e in exceptions
+            if e.get("source_id") != option_id and e.get("target_id") != option_id
+        ]
+        if len(kept) == len(exceptions):
+            continue
+        touched.append(_deepcopy_row(m))
+        new_p = copy.deepcopy(p)
+        new_p["exceptions"] = kept
+        repo.update(m["id"], payload=new_p)
+        diff.append({
+            "entity_id": m["id"],
+            "remove_ref": {"kind": "option", "option_id": option_id},
+        })
+
+    return touched, diff
+
+
 def fix_category_delete(
     conn: sqlite3.Connection,
     category_id: str,

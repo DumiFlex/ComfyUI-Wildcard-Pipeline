@@ -12,6 +12,7 @@ from typing import Any
 from engine.cascade.fixers import (
     fix_category_delete,
     fix_combine_output_var_rename,
+    fix_option_delete,
     fix_subcat_delete,
     fix_subcat_rename,
     fix_wildcard_delete,
@@ -194,6 +195,10 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
                 )
             elif key == ("category", "delete"):
                 touched_before, diff = fix_category_delete(conn, target_id)
+            elif key == ("option", "delete"):
+                touched_before, diff = fix_option_delete(
+                    conn, extra.get("wildcard_id", ""), target_id,
+                )
             else:
                 return {
                     "ok": False,

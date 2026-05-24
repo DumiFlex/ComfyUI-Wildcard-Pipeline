@@ -220,6 +220,29 @@ def _scan_combine_output_var(
     return out
 
 
+def _scan_option_delete(
+    conn: sqlite3.Connection,
+    option_id: str,
+) -> list[dict[str, Any]]:
+    """Find constraints whose exceptions reference *option_id* on either axis.
+
+    Walks every constraint's `exceptions[]`, matching either `source_id`
+    or `target_id` against the deleted option. Stops at the first hit per
+    constraint so the affected list lists each constraint at most once.
+    """
+    out: list[dict[str, Any]] = []
+    for m in _list_all_modules(conn):
+        if m["type"] != "constraint":
+            continue
+        p = m.get("payload") or {}
+        for idx, ex in enumerate(p.get("exceptions") or []):
+            if ex.get("source_id") == option_id or ex.get("target_id") == option_id:
+                axis = "source_id" if ex.get("source_id") == option_id else "target_id"
+                out.append(_ref_entry("constraint", m, f"exceptions[{idx}].{axis}"))
+                break
+    return out
+
+
 def _scan_category_delete(
     conn: sqlite3.Connection,
     category_id: str,
@@ -284,6 +307,9 @@ def scan_affected(
 
     if kind == "category" and action == "delete":
         return _scan_category_delete(conn, id)
+
+    if kind == "option" and action == "delete":
+        return _scan_option_delete(conn, id)
 
     # Unsupported (kind, action) pair — v1 stub, returns empty.
     return []
