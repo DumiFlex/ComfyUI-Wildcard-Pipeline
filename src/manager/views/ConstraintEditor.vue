@@ -331,6 +331,56 @@ function normalizeMatrix(raw: unknown): ConstraintMatrix {
   return out;
 }
 
+/**
+ * Refresh each exception's legacy `source` / `target` value-strings from
+ * the current option pointed at by `source_id` / `target_id`. Needed
+ * because the user may have renamed an option's value upstream — the id
+ * still resolves correctly, but the cached value string is stale, so
+ * the Select dropdown can't match it and falls back to "Pick value".
+ *
+ * Returns true if anything changed (so the baseline snapshot can rerun
+ * without flagging the editor as dirty).
+ */
+function rehydrateExceptionsFromIds(): boolean {
+  let changed = false;
+  const srcWc = sourceWildcard.value;
+  const tgtWc = targetWildcard.value;
+  if (!srcWc && !tgtWc) return false;
+  const srcOpts =
+    (srcWc?.payload as WildcardPayloadShape | undefined)?.options ?? [];
+  const tgtOpts =
+    (tgtWc?.payload as WildcardPayloadShape | undefined)?.options ?? [];
+  const srcById = new Map<string, string>();
+  for (const o of srcOpts) {
+    const oid = (o as { id?: string }).id;
+    const val = (o as { value?: string }).value;
+    if (typeof oid === "string" && typeof val === "string") srcById.set(oid, val);
+  }
+  const tgtById = new Map<string, string>();
+  for (const o of tgtOpts) {
+    const oid = (o as { id?: string }).id;
+    const val = (o as { value?: string }).value;
+    if (typeof oid === "string" && typeof val === "string") tgtById.set(oid, val);
+  }
+  for (const ex of exceptions.value) {
+    if (ex.source_id) {
+      const current = srcById.get(ex.source_id);
+      if (typeof current === "string" && current !== ex.source) {
+        ex.source = current;
+        changed = true;
+      }
+    }
+    if (ex.target_id) {
+      const current = tgtById.get(ex.target_id);
+      if (typeof current === "string" && current !== ex.target) {
+        ex.target = current;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
 function normalizeExceptions(raw: unknown): ConstraintException[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -363,6 +413,11 @@ onMounted(async () => {
       targetWildcardId.value = p.target_wildcard_id ?? null;
       matrix.value = normalizeMatrix(p.matrix);
       exceptions.value = normalizeExceptions(p.exceptions);
+      // Refresh exception value-strings from source_id / target_id in case
+      // an upstream wildcard's option value was renamed since this
+      // constraint was last opened. Re-anchor baseline below so this
+      // doesn't flag the editor as dirty.
+      rehydrateExceptionsFromIds();
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "constraint", name: name.value });
     } catch {
@@ -383,6 +438,39 @@ function addException() {
 function removeException(idx: number) {
   exceptions.value.splice(idx, 1);
 }
+
+/** Resolve a value-string to its current option `id` on a wildcard.
+ *
+ * Returns `undefined` if no match (lets the exception keep source_id
+ * empty rather than freezing a stale id). Used by the source/target
+ * dropdown handlers to keep id + value pair in sync on every pick. */
+function _lookupOptionIdByValue(
+  wildcard: ModuleRow | undefined,
+  value: string,
+): string | undefined {
+  if (!wildcard || !value) return undefined;
+  const opts = (wildcard.payload as WildcardPayloadShape | undefined)?.options ?? [];
+  for (const o of opts) {
+    if ((o as { value?: string }).value === value) {
+      return (o as { id?: string }).id;
+    }
+  }
+  return undefined;
+}
+
+function onExceptionSourcePick(idx: number, value: string) {
+  const ex = exceptions.value[idx];
+  if (!ex) return;
+  ex.source = value;
+  ex.source_id = _lookupOptionIdByValue(sourceWildcard.value, value);
+}
+
+function onExceptionTargetPick(idx: number, value: string) {
+  const ex = exceptions.value[idx];
+  if (!ex) return;
+  ex.target = value;
+  ex.target_id = _lookupOptionIdByValue(targetWildcard.value, value);
+}
 function setExceptionMode(idx: number, mode: ConstraintMode) {
   const ex = exceptions.value[idx];
   if (!ex) return;
@@ -400,6 +488,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   targetWildcardId.value = p.target_wildcard_id ?? null;
   matrix.value = normalizeMatrix(p.matrix);
   exceptions.value = normalizeExceptions(p.exceptions);
+  rehydrateExceptionsFromIds();
   toast.push({
     severity: "info",
     summary: "Version restored",
@@ -669,18 +758,20 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
           <tr v-for="(ex, idx) in exceptions" :key="idx">
             <td>
               <Select
-                v-model="ex.source"
+                :model-value="ex.source"
                 :options="sourceValues.map((v) => ({ label: displayLabel(v), value: v }))"
                 placeholder="Pick value"
                 aria-label="Exception source value"
+                @update:model-value="(v) => onExceptionSourcePick(idx, v as string)"
               />
             </td>
             <td>
               <Select
-                v-model="ex.target"
+                :model-value="ex.target"
                 :options="targetValues.map((v) => ({ label: displayLabel(v), value: v }))"
                 placeholder="Pick value"
                 aria-label="Exception target value"
+                @update:model-value="(v) => onExceptionTargetPick(idx, v as string)"
               />
             </td>
             <td>

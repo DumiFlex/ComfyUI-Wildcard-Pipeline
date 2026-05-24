@@ -192,6 +192,58 @@ describe("ConstraintEditor.vue", () => {
     expect(vm.displayLabel("missing @{12345678}")).toBe("missing @?12345678");
   });
 
+  it("exception source rehydrates from source_id when option value renamed upstream", async () => {
+    // Exception stores legacy `source = "old_value"` + `source_id = "opt_aaaa"`.
+    // The source wildcard's option `opt_aaaa` has since been renamed
+    // value-wise to "new_value". On load, the editor should refresh
+    // `source` to the current option value (resolved via id) so the
+    // dropdown's v-model matches a real option and renders the chip
+    // instead of "Pick value".
+    apiMod.list.mockResolvedValue({
+      items: [
+        {
+          id: "deadbeef", name: "Src", type: "wildcard",
+          description: "", category_id: null, tags: [], is_favorite: false,
+          payload: {
+            options: [
+              { id: "opt_aaaa", value: "new_value", weight: 1 },
+            ],
+            sub_categories: [],
+          },
+          payload_hash: "0".repeat(64), version: 1, created_at: "", updated_at: "",
+        },
+      ],
+      total: 1,
+    });
+    apiMod.get.mockResolvedValue({
+      id: "cn_a", type: "constraint", name: "C",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: {
+        source_wildcard_id: "deadbeef",
+        target_wildcard_id: "deadbeef",
+        matrix: {},
+        exceptions: [
+          {
+            source: "old_value", target: "new_value",
+            source_id: "opt_aaaa", target_id: "opt_aaaa",
+            mode: "allow", factor: 1,
+          },
+        ],
+      },
+      version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mount(ConstraintEditor, {
+      props: { id: "cn_a" },
+      global: { plugins: [makeRouter()] },
+    });
+    await flushPromises();
+    const vm = wrap.vm as unknown as {
+      exceptions: Array<{ source: string; source_id?: string; target: string }>;
+    };
+    expect(vm.exceptions[0].source).toBe("new_value");
+    expect(vm.exceptions[0].source_id).toBe("opt_aaaa");
+  });
+
   it("save without source/target shows warn and does not call api", async () => {
     const wrap = mount(ConstraintEditor, {
       global: { plugins: [makeRouter()] },
