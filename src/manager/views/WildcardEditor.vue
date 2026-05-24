@@ -697,14 +697,16 @@ defineExpose({ historyEntries, applyRestore, options });
               removable
               @remove="onSubcatDeleteClick(s)"
             >{{ s }}<PillCountBadge :count="props.id ? cascade.subcatRefsTo(props.id, s).length : 0" /></Chip>
-            <button
+            <Button
               v-if="props.id"
-              type="button"
-              class="wp-subcat-rename-btn"
+              variant="ghost"
+              size="sm"
+              icon="pi-pencil"
               :aria-label="`Rename sub-category ${s}`"
               :data-test="`wc-sub-rename-${s}`"
+              class="wp-subcat-rename-btn"
               @click="onSubcatRenameClick(s)"
-            >✎</button>
+            />
           </span>
         </div>
         <span v-else class="wp-card__hint">No sub-categories yet.</span>
@@ -856,21 +858,15 @@ defineExpose({ historyEntries, applyRestore, options });
   align-items: center;
   gap: 2px;
 }
-.wp-subcat-rename-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px 4px;
-  color: var(--wp-text-dim);
-  font-size: 13px;
-  line-height: 1;
-  border-radius: 3px;
-  opacity: 0.6;
-  transition: opacity 0.1s;
+/* Pencil rename button uses the shared <Button variant="ghost" size="sm">.
+ * Override sits at 0,0,1,1 to bump the at-rest opacity down so the
+ * affordance reads as secondary next to the primary remove chip. */
+.wp-subcat-chip-row .wp-subcat-rename-btn {
+  opacity: 0.65;
 }
-.wp-subcat-rename-btn:hover {
+.wp-subcat-chip-row .wp-subcat-rename-btn:hover,
+.wp-subcat-chip-row .wp-subcat-rename-btn:focus-visible {
   opacity: 1;
-  background: var(--wp-color-surface-2, #2a2a2a);
 }
 .wp-options-table {
   font-size: var(--wp-text-sm);

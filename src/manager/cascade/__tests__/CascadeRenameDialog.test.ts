@@ -21,6 +21,19 @@ describe("CascadeRenameDialog", () => {
     mockComposable.apply.mockReset();
   });
 
+  // Cascade toggle is now the shared Checkbox component:
+  // `<button role="checkbox" class="wp-check">` with `aria-checked`.
+  function findToggle(): HTMLButtonElement | null {
+    return document.body.querySelector("button.wp-check") as HTMLButtonElement | null;
+  }
+
+  // Name input — Input.vue defaults to type="text", so the underlying
+  // native input still matches. Scope to the body slot to avoid grabbing
+  // any other text inputs the modal might wrap later.
+  function findNameInput(): HTMLInputElement | null {
+    return document.body.querySelector(".wp-modal__body input.wp-input, .wp-modal__body input[type='text']") as HTMLInputElement | null;
+  }
+
   it("toggle defaults to checked when affected list non-empty", async () => {
     mockComposable.dryRun.mockResolvedValue({
       ok: true, affected_count: 2,
@@ -35,9 +48,9 @@ describe("CascadeRenameDialog", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    const cb = document.body.querySelector("input[type='checkbox']") as HTMLInputElement;
+    const cb = findToggle();
     expect(cb).toBeTruthy();
-    expect(cb.checked).toBe(true);
+    expect(cb!.getAttribute("aria-checked")).toBe("true");
     wrap.unmount();
   });
 
@@ -49,7 +62,7 @@ describe("CascadeRenameDialog", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    expect(document.body.querySelector("input[type='checkbox']")).toBeNull();
+    expect(findToggle()).toBeNull();
     wrap.unmount();
   });
 
@@ -76,16 +89,14 @@ describe("CascadeRenameDialog", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    // Uncheck the cascade toggle.
-    const cb = document.body.querySelector("input[type='checkbox']") as HTMLInputElement;
-    cb.click();
+    // Uncheck the cascade toggle (Checkbox component button).
+    findToggle()!.click();
     await flushPromises();
-    // Update name.
-    const input = document.body.querySelector("input[type='text']") as HTMLInputElement;
-    input.value = "hot";
-    input.dispatchEvent(new Event("input"));
+    // Update name via the native input inside Input.vue.
+    const input = findNameInput();
+    input!.value = "hot";
+    input!.dispatchEvent(new Event("input"));
     await flushPromises();
-    // Confirm.
     const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
     btn.click();
     await flushPromises();
@@ -113,9 +124,9 @@ describe("CascadeRenameDialog", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    const input = document.body.querySelector("input[type='text']") as HTMLInputElement;
-    input.value = "hot";
-    input.dispatchEvent(new Event("input"));
+    const input = findNameInput();
+    input!.value = "hot";
+    input!.dispatchEvent(new Event("input"));
     await flushPromises();
     const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
     btn.click();
@@ -136,8 +147,12 @@ describe("CascadeRenameDialog", () => {
       attachTo: document.body,
     });
     await flushPromises();
+    // Button.vue renders the disabled state via aria-disabled +
+    // pointer-events-none rather than the native `disabled` prop in
+    // every variant — check both.
     const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
+    const isDisabled = btn.disabled || btn.getAttribute("aria-disabled") === "true";
+    expect(isDisabled).toBe(true);
     wrap.unmount();
   });
 });

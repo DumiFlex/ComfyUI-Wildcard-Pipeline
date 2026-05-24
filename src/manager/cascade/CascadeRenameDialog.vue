@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 
 import { kindIcon } from "../../components/shared/kind-icons";
 import Button from "../components/ui/Button.vue";
+import Checkbox from "../components/ui/Checkbox.vue";
 import Input from "../components/ui/Input.vue";
 import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
@@ -132,14 +133,17 @@ function onOpenUpdate(v: boolean): void {
         <Input v-model="newName" type="text" aria-label="New name" />
       </label>
       <p v-if="error" class="wp-cascade-rename__error">⚠ {{ error }}</p>
-      <label v-if="affected.length > 0" class="wp-cascade-rename__toggle">
-        <input v-model="cascadeRefs" type="checkbox" />
-        <span>
+      <div v-if="affected.length > 0" class="wp-cascade-rename__toggle">
+        <Checkbox
+          v-model="cascadeRefs"
+          aria-label="Update refs to new name"
+        />
+        <span class="wp-cascade-rename__toggle-text" @click="cascadeRefs = !cascadeRefs">
           Update <strong>{{ affected.length }}</strong>
           {{ affected.length === 1 ? "ref" : "refs" }}
           to new name <span class="wp-cascade-rename__hint">(recommended)</span>
         </span>
-      </label>
+      </div>
       <template v-if="affected.length > 0">
         <span class="wp-cascade-rename__section">Affected</span>
         <ul class="wp-cascade-rename__list">
@@ -220,17 +224,18 @@ function onOpenUpdate(v: boolean): void {
 }
 .wp-cascade-rename__toggle {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   padding: 10px 12px;
   border-radius: 6px;
   border: 1px solid var(--wp-border, #38383f);
   background: var(--wp-bg2, var(--wp-color-surface-2, #25252a));
   font-size: 13px;
-  cursor: pointer;
 }
-.wp-cascade-rename__toggle input[type="checkbox"] {
-  margin-top: 3px;
+.wp-cascade-rename__toggle-text {
+  cursor: pointer;
+  user-select: none;
+  flex: 1;
 }
 .wp-cascade-rename__toggle strong {
   font-weight: 600;
