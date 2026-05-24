@@ -15,6 +15,7 @@ from engine.db.repositories import BundleNotFound, BundleRepository
 from engine.modules.dispatcher import get_handler
 from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import validate_body_size, validate_meta
+from wp_api.modules import _hydrate_constraint_exceptions
 
 _UPDATABLE_FIELDS = (
     "name", "description", "color", "category_id", "tags",
@@ -257,7 +258,7 @@ def _expand_bundle_children(
     return out
 
 
-def _validate_children_payloads(children: object) -> str | None:
+def _validate_children_payloads(children: object, conn=None) -> str | None:
     """Run ``handler.validate_payload`` against every child's payload.
 
     Bundles ship a frozen ``children`` array; without this guard the
@@ -266,6 +267,15 @@ def _validate_children_payloads(children: object) -> str | None:
     error string when any child is malformed, ``None`` when every
     payload passes. Children without a registered handler are skipped
     silently (mirrors the module-side behavior for unknown types).
+
+    When *conn* is provided, constraint children get the same exception
+    hydration as the modules endpoint runs — id-only exceptions (e.g.
+    ``{"source_id": "opt_4"}`` with no ``source`` string) get their
+    ``source_value`` / ``target_value`` filled in from the referenced
+    wildcard's option list before validation. Without this, bundle
+    save would surface ``constraint payload.exceptions[0].source must
+    be a non-empty string`` for the same legacy library rows that the
+    modules path already heals.
     """
     if children is None:
         return None
@@ -280,6 +290,8 @@ def _validate_children_payloads(children: object) -> str | None:
             # Children may legitimately omit `payload` for inline
             # entries; only validate when both fields are present.
             continue
+        if type_id == "constraint" and conn is not None:
+            _hydrate_constraint_exceptions(conn, payload)
         handler = get_handler(type_id)
         if handler is None:
             continue
@@ -372,12 +384,16 @@ async def create_bundle(request: web.Request) -> web.Response:
         return json_error(err, status=400)
 
     children_raw = body.get("children")
-    err = _validate_children_payloads(children_raw)
-    if err is not None:
-        return json_error(err, status=400)
 
     try:
         with db_session(request) as conn:
+            # Validation runs inside the session so constraint children
+            # can hydrate `source_value` / `target_value` strings from
+            # their referenced wildcard's option list before the per-
+            # kind validator runs — see `_validate_children_payloads`.
+            err = _validate_children_payloads(children_raw, conn)
+            if err is not None:
+                return json_error(err, status=400)
             repo = BundleRepository(conn)
             # Bundle references resolved against live repo state — must
             # happen inside the session so the check sees committed rows.
@@ -454,10 +470,6 @@ async def update_bundle(request: web.Request) -> web.Response:
     if err is not None:
         return json_error(err, status=400)
     patch = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}
-    if "children" in patch:
-        err = _validate_children_payloads(patch["children"])
-        if err is not None:
-            return json_error(err, status=400)
 
     expected_version_raw = request.headers.get("If-Match")
     expected_version: int | None = None
@@ -468,6 +480,14 @@ async def update_bundle(request: web.Request) -> web.Response:
             return json_error("If-Match must be an integer version", status=400)
 
     with db_session(request) as conn:
+        if "children" in patch:
+            # Hydration + validation inside the session so constraint
+            # children can fill `source_value` / `target_value` from
+            # the referenced wildcards' options before the per-kind
+            # validator runs (matches the create path).
+            err = _validate_children_payloads(patch["children"], conn)
+            if err is not None:
+                return json_error(err, status=400)
         repo = BundleRepository(conn)
         if expected_version is not None:
             try:

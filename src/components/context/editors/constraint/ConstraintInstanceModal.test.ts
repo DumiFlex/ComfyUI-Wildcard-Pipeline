@@ -176,4 +176,96 @@ describe("ConstraintInstanceModal", () => {
     expect(exSection.props("sourceValues").sort()).toEqual(["blue", "red"]);
     expect(exSection.props("targetValues").sort()).toEqual(["black", "green"]);
   });
+
+  it("library cache fills sub_categories / option list when source wildcard is cross-Context", async () => {
+    // User-reported regression: modal axis label rendered "SOURCE · source"
+    // (the fallback role label) and matrix axes inherited stale keys from
+    // the saved matrix when the referenced wildcard lived in another
+    // WP_Context. Pulling the wildcard's name + sub_categories + option
+    // list from the preview-resolver cache fills the gap.
+    const { _resetForTests, _setForTests } = await import(
+      "../../../../extension/preview-resolver"
+    );
+    _resetForTests();
+    _setForTests("wc_color", {
+      name: "color_library",
+      varBinding: "color",
+      subCategories: ["warm", "cool"],
+      optionValues: ["red", "azure", "ivory"],
+      optionsById: new Map([
+        ["opt_0", "red"],
+        ["opt_1", "azure"],
+      ]),
+      hasNullOption: false,
+    });
+    _setForTests("wc_fabric", {
+      name: "fabric_library",
+      varBinding: "fabric",
+      subCategories: ["soft", "stiff"],
+      optionValues: ["silk", "denim"],
+      hasNullOption: true,
+    });
+    const m = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        // Saved matrix carries a STALE key that's no longer in the live
+        // wildcard's sub_categories — must be filtered out.
+        matrix: { warm: { soft: { mode: "allow", factor: 1 } }, deleted: {} },
+        exceptions: [],
+      },
+    });
+    const w = mount(ConstraintInstanceModal, { props: { module: m, siblingModules: [] } });
+    const matrix = w.findComponent({ name: "MatrixSection" });
+    // Axis labels come from the cache (varBinding wins, then name).
+    expect(matrix.props("sourceName")).toBe("color");
+    expect(matrix.props("targetName")).toBe("fabric");
+    // Live sub_categories from cache override stale saved-matrix keys.
+    expect(matrix.props("sourceSubs")).toEqual(["warm", "cool"]);
+    expect(matrix.props("targetSubs")).toEqual(["soft", "stiff"]);
+    const exSection = w.findComponent({ name: "ExceptionsSection" });
+    expect(exSection.props("sourceValues")).toEqual(["red", "azure", "ivory"]);
+    expect(exSection.props("targetValues")).toEqual(["silk", "denim"]);
+    expect(exSection.props("targetHasNull")).toBe(true);
+    expect(exSection.props("sourceOptionsById").get("opt_0")).toBe("red");
+    _resetForTests();
+  });
+
+  it("siblings still win over the library cache (live edits beat snapshots)", async () => {
+    const { _resetForTests, _setForTests } = await import(
+      "../../../../extension/preview-resolver"
+    );
+    _resetForTests();
+    _setForTests("wc_color", {
+      name: "stale_name",
+      subCategories: ["stale_warm"],
+    });
+    const sibling: ModuleEntry = {
+      id: "wc_color",
+      type: "wildcard",
+      enabled: true,
+      meta: { name: "live_name" },
+      entries: [],
+      payload: {
+        var_binding: "color",
+        sub_categories: ["live_warm", "live_cool"],
+        options: [{ id: "o1", value: "red", weight: 1 }],
+      },
+    };
+    const m = makeModule({
+      payload: {
+        source_wildcard_id: "wc_color",
+        target_wildcard_id: "wc_fabric",
+        matrix: {},
+        exceptions: [],
+      },
+    });
+    const w = mount(ConstraintInstanceModal, {
+      props: { module: m, siblingModules: [sibling] },
+    });
+    const matrix = w.findComponent({ name: "MatrixSection" });
+    expect(matrix.props("sourceName")).toBe("live_name");
+    expect(matrix.props("sourceSubs")).toEqual(["live_warm", "live_cool"]);
+    _resetForTests();
+  });
 });

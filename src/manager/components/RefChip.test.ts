@@ -56,4 +56,22 @@ describe("RefChip", () => {
     await wrap.trigger("click");
     expect(wrap.emitted("click")).toBeFalsy();
   });
+
+  it("renders reserved `null` sub-cat keyword as `!null` to signal negation", () => {
+    // The reserved `"null"` token in a nested-ref filter EXCLUDES the
+    // wildcard's null option (2026-05-25 inverted semantic). Rendering
+    // it as `!null` lets the user read the negation at a glance instead
+    // of mistaking it for a sub-cat selection.
+    const wrap = mount(RefChip, {
+      props: {
+        kind: "ref", name: "color", uuid: "aabbccdd", resolved: true,
+        subCategories: ["warm", "null"],
+      },
+    });
+    const suffix = wrap.find(".wp-refchip__suffix");
+    expect(suffix.exists()).toBe(true);
+    expect(suffix.text()).toContain("warm");
+    expect(suffix.text()).toContain("!null");
+    expect(suffix.text()).not.toMatch(/[^!]null/);
+  });
 });

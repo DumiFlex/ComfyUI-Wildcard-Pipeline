@@ -12,6 +12,77 @@ from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import validate_body_size, validate_meta
 
 
+def _hydrate_constraint_exceptions(conn, payload: dict) -> None:
+    """Fill missing ``source`` / ``target`` value strings on a constraint
+    payload's exceptions from the referenced wildcards' option ids.
+
+    Older saves stored exceptions with only ``source_id`` / ``target_id``
+    (no string field), which the engine's ``validate_payload`` rejects
+    because the runtime resolver still keys instance-override lookups
+    by ``(source_value, target_value)`` pairs. Hydrating server-side
+    means clients can keep sending id-only exceptions without every
+    save endpoint duplicating the wildcard-option lookup.
+
+    Mutates *payload* in place. Skips exceptions that already have a
+    non-empty ``source``/``source_value`` (and same for target). Skips
+    silently if the referenced wildcard is missing or the option id no
+    longer exists — the engine validator will surface a clearer error
+    than a half-applied hydration would.
+    """
+    if not isinstance(payload, dict):
+        return
+    excs = payload.get("exceptions")
+    if not isinstance(excs, list) or not excs:
+        return
+    repo = ModuleRepository(conn)
+
+    def _opt_value(wid: object, oid: object) -> str | None:
+        if not isinstance(wid, str) or not isinstance(oid, str):
+            return None
+        try:
+            row = repo.get(wid)
+        except ModuleNotFound:
+            return None
+        if row.get("type") != "wildcard":
+            return None
+        for opt in (row.get("payload") or {}).get("options") or []:
+            if opt.get("id") == oid:
+                v = opt.get("value")
+                return v if isinstance(v, str) else None
+        return None
+
+    src_wid = payload.get("source_wildcard_id")
+    tgt_wid = payload.get("target_wildcard_id")
+    # Per-(wid, oid) cache so a constraint with N exceptions referencing
+    # the same option doesn't refetch the wildcard row N times.
+    cache: dict[tuple[str, str], str | None] = {}
+
+    def _lookup(wid: object, oid: object) -> str | None:
+        if not isinstance(wid, str) or not isinstance(oid, str):
+            return None
+        key = (wid, oid)
+        if key in cache:
+            return cache[key]
+        v = _opt_value(wid, oid)
+        cache[key] = v
+        return v
+
+    for exc in excs:
+        if not isinstance(exc, dict):
+            continue
+        # Skip exceptions that already carry a usable source/target.
+        # Mirror the engine's "legacy or tier-2" check so we only fill
+        # the field the validator would otherwise reject.
+        if not (exc.get("source") or exc.get("source_value")):
+            v = _lookup(src_wid, exc.get("source_id"))
+            if v:
+                exc["source_value"] = v
+        if not (exc.get("target") or exc.get("target_value")):
+            v = _lookup(tgt_wid, exc.get("target_id"))
+            if v:
+                exc["target_value"] = v
+
+
 def _validate_payload_for_type(type_id: str, payload: dict) -> str | None:
     """Run the registered ``validate_payload`` for this module type.
 
@@ -130,12 +201,13 @@ async def create_module(request: web.Request) -> web.Response:
     if err is not None:
         return json_error(err, status=400)
 
-    err = _validate_payload_for_type(body["type"], body["payload"])
-    if err is not None:
-        return json_error(err, status=400)
-
     try:
         with db_session(request) as conn:
+            if body["type"] == "constraint":
+                _hydrate_constraint_exceptions(conn, body["payload"])
+            err = _validate_payload_for_type(body["type"], body["payload"])
+            if err is not None:
+                return json_error(err, status=400)
             row = ModuleRepository(conn).create(
                 type=body["type"], name=body["name"],
                 description=body.get("description", ""),
@@ -184,12 +256,13 @@ async def import_from_workflow(request: web.Request) -> web.Response:
     if err is not None:
         return json_error(err, status=400)
 
-    err = _validate_payload_for_type(body["type"], body["payload"])
-    if err is not None:
-        return json_error(err, status=400)
-
     try:
         with db_session(request) as conn:
+            if body["type"] == "constraint":
+                _hydrate_constraint_exceptions(conn, body["payload"])
+            err = _validate_payload_for_type(body["type"], body["payload"])
+            if err is not None:
+                return json_error(err, status=400)
             repo = ModuleRepository(conn)
             try:
                 repo.get(body["id"])
@@ -278,6 +351,8 @@ async def update_module(request: web.Request) -> web.Response:
                 existing = ModuleRepository(conn).get(mid)
             except ModuleNotFound:
                 return json_error(f"module not found: {mid}", status=404)
+            if existing["type"] == "constraint":
+                _hydrate_constraint_exceptions(conn, kwargs["payload"])
         err = _validate_payload_for_type(existing["type"], kwargs["payload"])
         if err is not None:
             return json_error(err, status=400)

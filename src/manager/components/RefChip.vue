@@ -31,6 +31,14 @@ const emit = defineEmits<{
 const isRef = computed(() => props.kind === "ref");
 const isFiltered = computed(() => isRef.value && props.subCategories.length > 0);
 
+/** Render the sub-category suffix list. The reserved `"null"` keyword
+ *  means EXCLUDE the wildcard's null option (2026-05-25 inverted
+ *  semantic). Render it as `!null` so the negation reads at a glance
+ *  rather than looking like a sub-cat selection. */
+const subCategoriesLabel = computed(() =>
+  props.subCategories.map((s) => (s === "null" ? "!null" : s)).join(", "),
+);
+
 const label = computed(() => {
   if (!props.resolved) {
     // Unresolved → show the uuid (refs) or name (vars) so the user can debug.
@@ -66,7 +74,7 @@ function onClick(ev: MouseEvent): void {
     <span class="wp-refchip__icon" aria-hidden="true">{{ icon }}</span>
     <span class="wp-refchip__label">{{ label }}</span>
     <span v-if="isFiltered" class="wp-refchip__suffix">
-      ·&nbsp;{{ subCategories.join(", ") }}
+      ·&nbsp;{{ subCategoriesLabel }}
     </span>
   </span>
 </template>

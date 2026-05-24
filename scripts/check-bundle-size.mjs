@@ -31,7 +31,62 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // floating indicator SFC (BundleDropBar.vue), zoom-aware offsetTop
 // walker, and moving-range filter for bundle drags added ~1 KB net.
 // Bump approved alongside the feature land.
-const TOTAL_LIMIT = 316 * 1024;     // 316 KB
+// 321 KB — bumped from 316 KB for the bundle edit modal
+// (BundleInstanceModal + IdentitySection + RuntimeSection). Modal is
+// lazy-loaded so the entry chunk is unaffected; total grows ~5 KB
+// gzipped for the once-per-bundle edit surface (display name + frame
+// color + master Lock/Hide cascades + Save/Reset-to-library footer).
+// Mirrors the per-kind module modal shell users already know.
+// 323 KB — bumped from 321 KB to fit the HSV color popover inside
+// the bundle modal (shared HsvPicker.vue + hsv.ts moved to
+// `src/components/shared/` so SPA's ColorPicker / TweaksPanel and
+// the canvas bundle modal both drive one picker). Adds ~2 KB
+// gzipped in the lazy modal chunk; entry stays untouched.
+// 324 KB — bumped from 323 KB for the bundle-modal polish round:
+// SPA link in footer, popover Teleport + viewport-aware positioning,
+// always-on "clear color" affordance, stableStringify-based bundle
+// fingerprint that folds meta + instance overrides into the MOD
+// signal, and child-uid preservation on reset-to-library so the
+// outer bundle's MOD evaluates against its existing snapshot rather
+// than flipping to "modified" via spurious uid churn. ~0.5 KB net.
+// 325 KB — bumped from 324 KB for the bundle detach + master toggle
+// rework + true-duplicate-with-local-edits. Adds `setBundleInternal`
+// / `setBundleLock` helpers that delegate to inner-bundle masters
+// (skipping inner-owned rows + recursing into them) and the smart
+// OFF cascade, plus the per-instance deep-clone duplicate that
+// rewrites bundle_origin + parent_uid through a uid map. Net
+// growth ~0.2 KB gzip.
+// 327 KB — bumped from 325 KB for the rule matrix redesign. Replaces
+// the 4-state click-cycle + cog-anchored CellFactorPopover with a
+// click-driven CellRulePopover (4 labeled state buttons + numeric
+// factor input) plus a new collapsible MatrixLegend. Net growth
+// ~1.2 KB gzip across the lazy ContextWidget chunk; entry untouched.
+// 328 KB — bumped from 327 KB for the rule matrix polish pass: popover
+// now Teleports to body (escapes the cell's hover / clipping context),
+// adds a reset-to-library button + native-styled stepper input (mirror
+// of OptionRow's spinner), and the watcher narrows so factor typing
+// no longer select-all-clobbers each keystroke. ~0.4 KB net gzip in
+// the lazy ContextWidget chunk; entry stays put.
+// 330 KB — bumped from 328 KB for the null-wildcard-option feature
+// (2026-05-24). Adds `is_null` option flag + "+ Add null" button on
+// the wildcard editor, pi-ban chip rendering across canvas OptionRow
+// + ExceptionsSection + TestRunner + WildcardEditor, "Include null"
+// checkbox on the nested-ref sub-cat picker, new is_empty /
+// is_not_empty derivation operators + flipped "is empty" tick UI,
+// and engine-side validation + nested-ref filter keyword support.
+// ~0.7 KB net gzip across the lazy ContextWidget chunk; entry stays
+// put. See docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md.
+// 340 KB — bumped from 330 KB during the polish-cleanup cycle.
+// Absorbs the count-aware cross-node downstream scanner + per-instance
+// wildcard uuid collection (graph.ts), library-fallback RichTextPreview
+// wired into the preview-resolver cache (so constraint-modal exception
+// chips + the test-runner constraint table resolve `@{uuid}` against
+// the wildcard library, not just the local node), sync `consumedBy`
+// claim that fixes the cross-node MOVE-becomes-COPY race in
+// ContextWidget's onDrop, plus the constraint pairing badge work
+// landing alongside on the same branch. Approved with the bundle of
+// bug fixes — see the polish-cleanup PR description.
+const TOTAL_LIMIT = 340 * 1024;     // 340 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

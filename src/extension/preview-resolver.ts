@@ -31,6 +31,26 @@ export interface PreviewLookup {
    *  `$style` instead of `$ae07018b` even when the referenced wildcard
    *  isn't embedded in the same WP_Context node. */
   varBinding?: string;
+  /** Wildcard's declared `sub_categories`. Used by the constraint
+   *  modal's matrix axes so a cross-node target wildcard still shows
+   *  its current sub-cat list, not a stale union of the saved matrix
+   *  keys. Empty / undefined when the lookup isn't a wildcard. */
+  subCategories?: string[];
+  /** Per-option `value` strings on a wildcard, in declaration order.
+   *  Used by the constraint modal's extra-exception autocomplete so
+   *  cross-node sources still get the source wildcard's current
+   *  option list (renames / additions land without re-saving the
+   *  constraint). Empty / undefined when not a wildcard. */
+  optionValues?: string[];
+  /** `option.id → option.value` for the wildcard — fallback resolver
+   *  for legacy library exceptions that stored `source_id` only.
+   *  Lets ExceptionsSection render the value chip without an empty
+   *  string slot when the wildcard isn't a sibling. */
+  optionsById?: ReadonlyMap<string, string>;
+  /** True when the wildcard declares an `is_null` option (value === "").
+   *  Drives the pi-ban "null" chip on exception rows whose source /
+   *  target string is empty. */
+  hasNullOption?: boolean;
 }
 
 const cache = new Map<string, PreviewLookup>();
@@ -110,8 +130,9 @@ interface BundleSnapshot {
   name?: string;
   type?: string;
   payload?: {
-    options?: Array<{ value?: string }>;
+    options?: Array<{ id?: string; value?: string; is_null?: boolean }>;
     var_binding?: string;
+    sub_categories?: string[];
   };
 }
 
@@ -146,10 +167,27 @@ async function fetchBundle(uuids: string[]): Promise<void> {
       }
       const entry: PreviewLookup = { name: snap.name };
       if (snap.type === "wildcard") {
-        const v = snap.payload?.options?.[0]?.value;
+        const opts = snap.payload?.options ?? [];
+        const v = opts[0]?.value;
         if (typeof v === "string") entry.firstOption = v;
         const vb = snap.payload?.var_binding;
         if (typeof vb === "string" && vb.trim()) entry.varBinding = vb.trim();
+        // Constraint modal's matrix axes + extra-exception autocomplete
+        // need the live wildcard's sub_categories and option list when
+        // the referenced wildcard isn't loaded as a sibling module.
+        const subs = snap.payload?.sub_categories;
+        if (Array.isArray(subs)) entry.subCategories = subs.filter((s): s is string => typeof s === "string");
+        const values: string[] = [];
+        const byId = new Map<string, string>();
+        let hasNull = false;
+        for (const o of opts) {
+          if (typeof o?.value === "string") values.push(o.value);
+          if (typeof o?.id === "string" && typeof o?.value === "string") byId.set(o.id, o.value);
+          if (o?.is_null === true) hasNull = true;
+        }
+        if (values.length) entry.optionValues = values;
+        if (byId.size) entry.optionsById = byId;
+        if (hasNull) entry.hasNullOption = true;
       }
       cache.set(u, entry);
     }

@@ -53,3 +53,45 @@ export type DragPayload =
     };
 
 export const dragState = ref<DragPayload | null>(null);
+
+/** Pending cross-node module/bundle handoff that the source widget
+ *  hasn't yet cleaned up. Belt-and-suspenders for the source widget's
+ *  `dragend` listener — that handler is the primary cleanup path but
+ *  has been observed to miss intermittently when the drag originates
+ *  from a row whose ancestor (bundle frame, transition group) churns
+ *  the DOM during the same tick. Each entry tags the source widget
+ *  (`sourceNodeId`) and a `_uid` (modules) or `bundleUid` (bundles)
+ *  so the source widget can filter-and-remove on its next reactive
+ *  tick. Consumed entries are deleted immediately to avoid double
+ *  splices when both pathways fire.
+ *
+ *  Bundle handoff carries `sourceStartIdx`/`sourceEndIdx` instead of
+ *  a single uid so the source widget can splice the whole range it
+ *  no longer owns. */
+export interface PendingHandoff {
+  kind: "module" | "bundle";
+  sourceNodeId: number;
+  /** Per-instance row uid (module) — source filters its modules[] by this. */
+  uid?: string;
+  /** Bundle uid + range — source splices this exact slice. */
+  bundleUid?: string;
+  sourceStartIdx?: number;
+  sourceEndIdx?: number;
+}
+
+export const pendingHandoffs = ref<PendingHandoff[]>([]);
+
+export function queueHandoff(h: PendingHandoff): void {
+  pendingHandoffs.value = [...pendingHandoffs.value, h];
+}
+
+export function takeHandoffsFor(sourceNodeId: number): PendingHandoff[] {
+  const out: PendingHandoff[] = [];
+  const rest: PendingHandoff[] = [];
+  for (const h of pendingHandoffs.value) {
+    if (h.sourceNodeId === sourceNodeId) out.push(h);
+    else rest.push(h);
+  }
+  if (out.length > 0) pendingHandoffs.value = rest;
+  return out;
+}

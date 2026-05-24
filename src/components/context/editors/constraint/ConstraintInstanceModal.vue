@@ -16,11 +16,18 @@
  * `locked_seed` for this kind. Dropping the section is honest;
  * dimmed dead UI would lie.
  */
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import MatrixSection from "./sections/MatrixSection.vue";
 import ExceptionsSection from "./sections/ExceptionsSection.vue";
+// Library fallback for cross-Context constraints. When the referenced
+// source/target wildcard isn't a sibling in this WP_Context (lives in
+// another node, or library-only), pull its sub_categories + option
+// list from the preview-resolver cache so the matrix, axes labels,
+// exception chips, and autocomplete suggestions reflect the live
+// wildcard instead of the saved-matrix's frozen keys.
+import { cacheVersion, ensure, lookup } from "../../../../extension/preview-resolver";
 
 const props = withDefaults(
   defineProps<{
@@ -72,14 +79,35 @@ function findWildcard(id: string | null | undefined): WildcardPayload | null {
   return m ? ((m.payload ?? {}) as WildcardPayload) : null;
 }
 
+/** Sibling first, then preview-resolver cache. Returns the wildcard's
+ *  display name; falls back to varBinding for cross-Context refs that
+ *  have a `$var` name but no human title. Empty string when neither
+ *  source knows the uuid. */
 function wildcardName(id: string | null | undefined): string {
-  // Return meta.name when sibling wildcard is loaded in this Context;
-  // otherwise empty string. Caller falls back to "source"/"target"
-  // role labels — a truncated UUID (`…ae07018b`) communicates nothing
-  // useful to the user when the wildcard lives in another Context.
   const m = findWildcardModule(id);
-  return m?.meta?.name ?? "";
+  if (m?.meta?.name) return m.meta.name;
+  if (!id) return "";
+  void cacheVersion.value;
+  const hit = lookup(id);
+  return hit?.varBinding?.trim() || hit?.name?.trim() || "";
 }
+
+// Fire `ensure()` for any source/target uuid not loaded as a sibling
+// so the resolver kicks a fetch on modal open. Reactive cacheVersion
+// reads inside the computeds below catch the result.
+watch(
+  () => {
+    const pl = (props.module.payload ?? {}) as ConstraintPayload;
+    return [pl.source_wildcard_id, pl.target_wildcard_id] as const;
+  },
+  ([sid, tid]) => {
+    const missing: string[] = [];
+    if (typeof sid === "string" && sid && !findWildcardModule(sid)) missing.push(sid);
+    if (typeof tid === "string" && tid && !findWildcardModule(tid)) missing.push(tid);
+    if (missing.length) ensure(missing);
+  },
+  { immediate: true },
+);
 
 interface ConstraintPayload {
   source_wildcard_id?: string;
@@ -88,30 +116,60 @@ interface ConstraintPayload {
   exceptions?: Array<{ source_value?: string; target_value?: string; source?: string; target?: string }>;
 }
 
+/** Pull the wildcard's live sub_categories, preferring sibling module
+ *  (most fresh) over preview-resolver cache (cross-Context refs).
+ *  Returns null when neither knows the uuid — caller falls back to
+ *  matrix keys for that case so the user can still edit a stranded
+ *  constraint. */
+function liveSubCategories(id: string | null | undefined): string[] | null {
+  const m = findWildcard(id);
+  if (m?.sub_categories && m.sub_categories.length > 0) return m.sub_categories;
+  if (!id) return null;
+  void cacheVersion.value;
+  const hit = lookup(id);
+  if (hit?.subCategories && hit.subCategories.length > 0) return hit.subCategories;
+  return null;
+}
+
 /**
- * Matrix axes — prefer live sub_categories from the source/target
- * wildcards (most current), fall back to keys present in the payload
- * matrix when the wildcards aren't loaded in this Context. Otherwise
- * the modal renders an empty grid for any cross-Context constraint
- * even though the saved matrix data is still meaningful for editing.
+ * Matrix axes — prefer the wildcard's *current* sub_categories list.
+ * Falling back to saved-matrix keys for refs we know nothing about
+ * lets the user edit a stranded constraint; using saved-matrix keys
+ * for a known wildcard would surface stale rows/cols for sub-cats
+ * the user deleted upstream.
  */
 const sourceSubs = computed<string[]>(() => {
   const pl = (props.module.payload ?? {}) as ConstraintPayload;
-  const live = findWildcard(pl.source_wildcard_id)?.sub_categories;
-  if (live && live.length > 0) return live;
+  const live = liveSubCategories(pl.source_wildcard_id);
+  if (live) return live;
   return Object.keys(pl.matrix ?? {});
 });
 
 const targetSubs = computed<string[]>(() => {
   const pl = (props.module.payload ?? {}) as ConstraintPayload;
-  const live = findWildcard(pl.target_wildcard_id)?.sub_categories;
-  if (live && live.length > 0) return live;
+  const live = liveSubCategories(pl.target_wildcard_id);
+  if (live) return live;
   const set = new Set<string>();
   for (const row of Object.values(pl.matrix ?? {})) {
     for (const k of Object.keys(row ?? {})) set.add(k);
   }
   return Array.from(set);
 });
+
+/** Pull the wildcard's live option-value list, preferring sibling
+ *  module over preview-resolver cache. Returns null when neither
+ *  knows the uuid. */
+function liveOptionValues(id: string | null | undefined): string[] | null {
+  const live = (findWildcard(id)?.options ?? [])
+    .map((o) => o.value ?? "")
+    .filter(Boolean);
+  if (live.length > 0) return live;
+  if (!id) return null;
+  void cacheVersion.value;
+  const hit = lookup(id);
+  if (hit?.optionValues && hit.optionValues.length > 0) return hit.optionValues;
+  return null;
+}
 
 /**
  * Extra-exception autocomplete suggestions — prefer live wildcard
@@ -121,10 +179,8 @@ const targetSubs = computed<string[]>(() => {
  */
 const sourceValues = computed<string[]>(() => {
   const pl = (props.module.payload ?? {}) as ConstraintPayload;
-  const live = (findWildcard(pl.source_wildcard_id)?.options ?? [])
-    .map((o) => o.value ?? "")
-    .filter(Boolean);
-  if (live.length > 0) return live;
+  const live = liveOptionValues(pl.source_wildcard_id);
+  if (live) return live;
   const set = new Set<string>();
   for (const e of pl.exceptions ?? []) {
     const v = e.source_value ?? e.source ?? "";
@@ -135,10 +191,8 @@ const sourceValues = computed<string[]>(() => {
 
 const targetValues = computed<string[]>(() => {
   const pl = (props.module.payload ?? {}) as ConstraintPayload;
-  const live = (findWildcard(pl.target_wildcard_id)?.options ?? [])
-    .map((o) => o.value ?? "")
-    .filter(Boolean);
-  if (live.length > 0) return live;
+  const live = liveOptionValues(pl.target_wildcard_id);
+  if (live) return live;
   const set = new Set<string>();
   for (const e of pl.exceptions ?? []) {
     const v = e.target_value ?? e.target ?? "";
@@ -154,6 +208,66 @@ const sourceName = computed(() => {
 const targetName = computed(() => {
   const pl = (props.module.payload ?? {}) as ConstraintPayload;
   return wildcardName(pl.target_wildcard_id);
+});
+
+/** Tell the ExceptionsSection whether the source / target wildcard
+ *  carries a null option. Drives the pi-ban chip render on library
+ *  exception rows whose value is the empty string (null option key). */
+function liveHasNullOption(id: string | null | undefined): boolean {
+  const opts = findWildcard(id)?.options ?? [];
+  if (opts.some((o: unknown) => (o as { is_null?: boolean }).is_null === true)) return true;
+  if (!id) return false;
+  void cacheVersion.value;
+  return lookup(id)?.hasNullOption === true;
+}
+const sourceHasNull = computed<boolean>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return liveHasNullOption(pl.source_wildcard_id);
+});
+const targetHasNull = computed<boolean>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return liveHasNullOption(pl.target_wildcard_id);
+});
+
+/** Per-option id → value lookup for the source / target wildcards.
+ *  Used as a fallback by ExceptionsSection when a library exception
+ *  payload carries `source_id` / `target_id` but no `source` / `target`
+ *  string (e.g. legacy payloads where the rehydrate-from-ids step
+ *  never ran). Without this fallback the exception rows render as
+ *  blank chips. */
+function liveOptionsById(id: string | null | undefined): ReadonlyMap<string, string> {
+  const opts = findWildcard(id)?.options ?? [];
+  const m = new Map<string, string>();
+  for (const o of opts as Array<{ id?: string; value?: string }>) {
+    if (typeof o?.id === "string" && typeof o?.value === "string") {
+      m.set(o.id, o.value);
+    }
+  }
+  if (m.size > 0 || !id) return m;
+  void cacheVersion.value;
+  return lookup(id)?.optionsById ?? m;
+}
+const sourceOptionsById = computed<ReadonlyMap<string, string>>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return liveOptionsById(pl.source_wildcard_id);
+});
+const targetOptionsById = computed<ReadonlyMap<string, string>>(() => {
+  const pl = (props.module.payload ?? {}) as ConstraintPayload;
+  return liveOptionsById(pl.target_wildcard_id);
+});
+
+/** Wildcard uuid → display name map, threaded through to
+ *  `ExceptionsSection` so embedded `@{uuid}` nested-ref tokens inside
+ *  exception values render via `RichTextPreview` as the same purple ref
+ *  chip the value editor shows — instead of raw `@{c0f09840}` text. */
+const uuidToName = computed<ReadonlyMap<string, string>>(() => {
+  const m = new Map<string, string>();
+  for (const sib of props.siblingModules) {
+    if (sib.type !== "wildcard") continue;
+    const name = sib.meta?.name;
+    if (typeof name === "string" && name.length > 0) m.set(sib.id, name);
+  }
+  return m;
 });
 
 function onUpdate(patch: Partial<ModuleEntry>): void {
@@ -199,6 +313,11 @@ function onSpaClick(): void {
       :module="module"
       :source-values="sourceValues"
       :target-values="targetValues"
+      :source-has-null="sourceHasNull"
+      :target-has-null="targetHasNull"
+      :source-options-by-id="sourceOptionsById"
+      :target-options-by-id="targetOptionsById"
+      :uuid-to-name="uuidToName"
       @update="onUpdate"
     />
 

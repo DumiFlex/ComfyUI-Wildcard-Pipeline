@@ -984,7 +984,13 @@ export function collectDownstreamWildcardUuids(
   node: LiteNodeLike,
 ): string[] {
   const parents = buildSubgraphParents(rootGraph);
-  const out = new Set<string>();
+  // Per-instance, not deduped. The conflict scanner's count-aware
+  // `constraint_orphan_target` check needs the actual number of
+  // downstream target instances available to claim — two constraints
+  // targeting the same wildcard need two downstream slots. A Set would
+  // collapse N siblings to 1, falsely orphaning every constraint past
+  // the first when duplicates exist downstream.
+  const out: string[] = [];
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
   const queue: { graph: LiteGraphLike; node: LiteNodeLike }[] = [
     { graph: graphOf(node, rootGraph), node },
@@ -1013,14 +1019,14 @@ export function collectDownstreamWildcardUuids(
           const bundleEnabled = buildBundleEnabledMap(v.bundles);
           for (const m of v.modules) {
             if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
-            if (m.type === "wildcard") out.add(m.id);
+            if (m.type === "wildcard") out.push(m.id);
           }
         }
         queue.push({ graph: stepped.graph, node: stepped.node });
       }
     }
   }
-  return [...out];
+  return out;
 }
 
 /**
@@ -1098,6 +1104,57 @@ function downstreamStep(
     return { graph: target.subgraph, node: inner };
   }
   return { graph, node: target };
+}
+
+/**
+ * BFS downstream from `node` along PIPELINE_CONTEXT edges, returning every
+ * downstream WP_Context node in execution order. Walks through subgraph
+ * boundaries (same as {@link findDownstreamAssemblers}). Does NOT
+ * include `node` itself; the caller is responsible for splicing it in
+ * when assembling a full chain (so the caller controls where the
+ * "own" position sits relative to the downstream tail).
+ *
+ * The BFS visit order matches the engine's runtime visit order along
+ * each branch — a fan-out into multiple downstream Context nodes is
+ * flattened in BFS order (first link first). For the typical linear
+ * Context-chain this collapses to plain forward order.
+ *
+ * Skips mute/bypass nodes (mode 2 / 4) so the pairing scanner doesn't
+ * count a deliberately-disabled future Context's wildcards as claim
+ * targets.
+ */
+export function collectDownstreamContextNodes(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): LiteNodeLike[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const out: LiteNodeLike[] = [];
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const queue: { graph: LiteGraphLike; node: LiteNodeLike }[] = [
+    { graph: graphOf(node, rootGraph), node },
+  ];
+
+  while (queue.length) {
+    const cur = queue.shift();
+    if (!cur) break;
+    for (const o of cur.node.outputs ?? []) {
+      if (o.type !== "PIPELINE_CONTEXT") continue;
+      for (const linkId of o.links ?? []) {
+        const link = cur.graph.links[linkId];
+        if (!link) continue;
+        const stepped = downstreamStep(cur.graph, link, parents);
+        if (!stepped) continue;
+        const key = locator(stepped.graph, stepped.node);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
+          out.push(stepped.node);
+        }
+        queue.push({ graph: stepped.graph, node: stepped.node });
+      }
+    }
+  }
+  return out;
 }
 
 /**

@@ -2049,7 +2049,7 @@ describe("ContextWidget bundle MOD detection", () => {
         // any computation over the actual leaf → modified=true.
         initialJson: makeBundleJson({
           childHash: "h-leaf-1",
-          fingerprint: "00000000",  // stale baseline
+          fingerprint: "v2:00000000",  // version-current but won't match computed hash
         }),
         upstreamVars: [],
         onChange: () => {},
@@ -2078,7 +2078,7 @@ describe("ContextWidget bundle MOD detection", () => {
         start_idx: 0, end_idx: 0,
         enabled: true, collapsed: false,
         inserted_at_hash: "h-OLD", name: "Both", color: null,
-        snapshot_fingerprint: "00000000",  // mismatch
+        snapshot_fingerprint: "v2:00000000",  // version-current but won't match computed hash
       }],
     });
     // Stub the bundle-hashes store so libraryDrifted = true.

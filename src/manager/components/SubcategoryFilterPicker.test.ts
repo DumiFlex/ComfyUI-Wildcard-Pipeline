@@ -7,6 +7,7 @@ describe("SubcategoryFilterPicker", () => {
     subCategories: string[];
     initialSelection: string[];
     mode: "insert" | "edit";
+    hasNullOption: boolean;
   }> = {}) {
     return mount(SubcategoryFilterPicker, {
       props: {
@@ -73,5 +74,67 @@ describe("SubcategoryFilterPicker", () => {
   it("renders hint when wildcard has no sub-categories", () => {
     const wrap = mountIt({ subCategories: [] });
     expect(wrap.text()).toMatch(/no sub-categories/i);
+  });
+
+  describe("null option support (inverted semantic 2026-05-25)", () => {
+    // Reserved `"null"` keyword in the filter list EXCLUDES the
+    // wildcard's null option. Default (no keyword) keeps null in the
+    // pool alongside the listed sub-cats. Checkbox is "Exclude null".
+
+    it("renders 'Exclude null' checkbox when hasNullOption is true", () => {
+      const wrap = mountIt({ subCategories: ["warm"], hasNullOption: true });
+      expect(wrap.find('[data-test="subcat-exclude-null"]').exists()).toBe(true);
+      expect(wrap.text()).toMatch(/Exclude null/);
+    });
+
+    it("omits 'Exclude null' checkbox when hasNullOption is false", () => {
+      const wrap = mountIt({ subCategories: ["warm"], hasNullOption: false });
+      expect(wrap.find('[data-test="subcat-exclude-null"]').exists()).toBe(false);
+    });
+
+    it("emits 'null' in the applied list when checkbox is ticked (exclude null)", async () => {
+      const wrap = mountIt({ subCategories: ["warm"], hasNullOption: true });
+      const cb = wrap.find<HTMLInputElement>('[data-test="subcat-exclude-null"] input');
+      cb.element.checked = true;
+      await cb.trigger("change");
+      await wrap.find('[data-test="picker-apply"]').trigger("click");
+      const ev = wrap.emitted("apply") ?? [];
+      expect(ev[ev.length - 1][0]).toEqual(["null"]);
+    });
+
+    it("omits the keyword when the checkbox stays unchecked (default: include null)", async () => {
+      const wrap = mountIt({
+        subCategories: ["warm", "cool"],
+        hasNullOption: true,
+        initialSelection: ["warm"],
+      });
+      await wrap.find('[data-test="picker-apply"]').trigger("click");
+      const ev = wrap.emitted("apply") ?? [];
+      expect(ev[ev.length - 1][0]).toEqual(["warm"]);
+    });
+
+    it("checkbox starts ticked when initialSelection contains 'null'", () => {
+      const wrap = mountIt({
+        subCategories: ["warm"],
+        hasNullOption: true,
+        initialSelection: ["warm", "null"],
+      });
+      const cb = wrap.find<HTMLInputElement>('[data-test="subcat-exclude-null"] input');
+      expect(cb.element.checked).toBe(true);
+    });
+
+    it("applied list combines selected sub-cats with the null exclude keyword", async () => {
+      const wrap = mountIt({
+        subCategories: ["warm", "cool"],
+        hasNullOption: true,
+        initialSelection: ["warm"],
+      });
+      const cb = wrap.find<HTMLInputElement>('[data-test="subcat-exclude-null"] input');
+      cb.element.checked = true;
+      await cb.trigger("change");
+      await wrap.find('[data-test="picker-apply"]').trigger("click");
+      const ev = wrap.emitted("apply") ?? [];
+      expect(ev[ev.length - 1][0]).toEqual(["warm", "null"]);
+    });
   });
 });

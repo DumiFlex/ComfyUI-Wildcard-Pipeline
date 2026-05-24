@@ -225,3 +225,142 @@ async def test_bundle_update_rejects_invalid_child_payload(wp_client):
         ],
     })
     assert bad.status == 400, await bad.text()
+
+
+# ─── Constraint exception source_id hydration ─────────────────────────
+#
+# Regression: old library rows store exceptions with only source_id /
+# target_id (no source/source_value string). Engine validator rejects
+# because runtime needs the value string as override-lookup key. Server
+# must hydrate the missing string from the referenced wildcard's
+# options before validation — otherwise saving an unmodified row that
+# loaded with id-only exceptions returns
+# "constraint payload.exceptions[0].source must be a non-empty string".
+
+
+async def test_constraint_post_hydrates_source_target_from_option_ids(wp_client):
+    # Create two wildcards that the constraint can reference.
+    src = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_4", "value": "buzz cut", "weight": 1}],
+        "var_binding": "hair", "sub_categories": [],
+    }, name="qa_hydrate_src")
+    assert src.status == 201, await src.text()
+    src_id = (await src.json())["id"]
+
+    tgt = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_0", "value": "serene", "weight": 1}],
+        "var_binding": "mood", "sub_categories": [],
+    }, name="qa_hydrate_tgt")
+    assert tgt.status == 201, await tgt.text()
+    tgt_id = (await tgt.json())["id"]
+
+    # Constraint payload mirrors the user-reported broken shape: only
+    # source_id / target_id, no source string.
+    resp = await _create(wp_client, "constraint", {
+        "source_wildcard_id": src_id,
+        "target_wildcard_id": tgt_id,
+        "matrix": {},
+        "exceptions": [{
+            "source_id": "opt_4", "target_id": "opt_0",
+            "mode": "reduce", "factor": 0.3,
+        }],
+    }, name="qa_hydrate_constraint")
+    assert resp.status == 201, await resp.text()
+    row = await resp.json()
+    excs = row["payload"]["exceptions"]
+    assert excs[0]["source_value"] == "buzz cut"
+    assert excs[0]["target_value"] == "serene"
+    assert excs[0]["source_id"] == "opt_4"
+    assert excs[0]["target_id"] == "opt_0"
+
+
+async def test_constraint_put_hydrates_source_target_from_option_ids(wp_client):
+    src = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_4", "value": "buzz cut", "weight": 1}],
+        "var_binding": "hair", "sub_categories": [],
+    }, name="qa_hydrate_put_src")
+    src_id = (await src.json())["id"]
+    tgt = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_0", "value": "serene", "weight": 1}],
+        "var_binding": "mood", "sub_categories": [],
+    }, name="qa_hydrate_put_tgt")
+    tgt_id = (await tgt.json())["id"]
+    # Seed a constraint with a valid payload, then PUT an id-only one.
+    create = await _create(wp_client, "constraint", {
+        "source_wildcard_id": src_id, "target_wildcard_id": tgt_id,
+        "matrix": {}, "exceptions": [],
+    }, name="qa_hydrate_put")
+    cid = (await create.json())["id"]
+    put = await wp_client.put(f"/wp/api/modules/{cid}", json={
+        "payload": {
+            "source_wildcard_id": src_id,
+            "target_wildcard_id": tgt_id,
+            "matrix": {},
+            "exceptions": [{
+                "source_id": "opt_4", "target_id": "opt_0",
+                "mode": "boost", "factor": 1.5,
+            }],
+        },
+    })
+    assert put.status == 200, await put.text()
+    row = await put.json()
+    excs = row["payload"]["exceptions"]
+    assert excs[0]["source_value"] == "buzz cut"
+    assert excs[0]["target_value"] == "serene"
+
+
+async def test_constraint_hydrate_leaves_existing_source_alone(wp_client):
+    # If both source and source_id are present, hydration must not
+    # clobber the explicit string (the caller may have intentionally
+    # picked a different historical value).
+    src = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_4", "value": "buzz cut", "weight": 1}],
+        "var_binding": "hair", "sub_categories": [],
+    }, name="qa_hydrate_noclobber_src")
+    src_id = (await src.json())["id"]
+    tgt = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_0", "value": "serene", "weight": 1}],
+        "var_binding": "mood", "sub_categories": [],
+    }, name="qa_hydrate_noclobber_tgt")
+    tgt_id = (await tgt.json())["id"]
+    resp = await _create(wp_client, "constraint", {
+        "source_wildcard_id": src_id,
+        "target_wildcard_id": tgt_id,
+        "matrix": {},
+        "exceptions": [{
+            "source": "explicit", "target": "values",
+            "source_id": "opt_4", "target_id": "opt_0",
+            "mode": "boost", "factor": 1.2,
+        }],
+    }, name="qa_hydrate_noclobber")
+    assert resp.status == 201, await resp.text()
+    row = await resp.json()
+    exc = row["payload"]["exceptions"][0]
+    assert exc["source"] == "explicit"
+    assert exc["target"] == "values"
+    assert "source_value" not in exc
+
+
+async def test_constraint_hydrate_skips_unknown_option_id(wp_client):
+    # If source_id points at an option that no longer exists, hydration
+    # can't help — engine validator still rejects with its original
+    # error. Confirms we don't silently swallow malformed payloads.
+    src = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_4", "value": "buzz cut", "weight": 1}],
+        "var_binding": "hair", "sub_categories": [],
+    }, name="qa_hydrate_miss_src")
+    src_id = (await src.json())["id"]
+    tgt = await _create(wp_client, "wildcard", {
+        "options": [{"id": "opt_0", "value": "serene", "weight": 1}],
+        "var_binding": "mood", "sub_categories": [],
+    }, name="qa_hydrate_miss_tgt")
+    tgt_id = (await tgt.json())["id"]
+    resp = await _create(wp_client, "constraint", {
+        "source_wildcard_id": src_id, "target_wildcard_id": tgt_id,
+        "matrix": {},
+        "exceptions": [{
+            "source_id": "opt_99", "target_id": "opt_0",
+            "mode": "boost", "factor": 1.2,
+        }],
+    }, name="qa_hydrate_miss")
+    assert resp.status == 400, await resp.text()

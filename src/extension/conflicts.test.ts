@@ -354,7 +354,7 @@ describe("scanConflicts — constraint ordering", () => {
     expect(out).toContainEqual({
       moduleId: "c1",
       variable: "aaaa1111",
-      type: "constraint_source_after_self",
+      type: "constraint_orphan_source",
       severity: "warning",
     });
   });
@@ -392,7 +392,7 @@ describe("scanConflicts — constraint ordering", () => {
     expect(out).toContainEqual({
       moduleId: "c1",
       variable: "bbbb2222",
-      type: "constraint_target_before_self",
+      type: "constraint_orphan_target",
       severity: "warning",
     });
   });
@@ -410,7 +410,7 @@ describe("scanConflicts — constraint ordering", () => {
     expect(out).toContainEqual({
       moduleId: "c1",
       variable: "bbbb2222",
-      type: "constraint_target_in_upstream",
+      type: "constraint_orphan_target",
       severity: "warning",
     });
   });
@@ -450,12 +450,11 @@ describe("scanConflicts — constraint ordering", () => {
     expect(out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_"))).toBeUndefined();
   });
 
-  it("flags constraint_source_in_downstream when source lives downstream (BAD direction)", () => {
-    // Source downstream = picks AFTER this constraint runs, so its
-    // entry won't be in `__wp_picks__` when the target reads
-    // constraints. More specific signal than "missing" — the user
-    // wired the source to the wrong direction, and the tooltip can
-    // tell them so.
+  it("source-only-downstream is flagged as orphan (no upstream instance)", () => {
+    // Source only exists downstream → no upstream pick available when
+    // this constraint runs. Surfaces as `constraint_orphan_source`
+    // under the 2026-05-24 unified rule. (Previously: legacy
+    // `constraint_source_in_downstream` — dropped.)
     const value: ContextWidgetValue = {
       version: 1,
       modules: [
@@ -467,12 +466,27 @@ describe("scanConflicts — constraint ordering", () => {
     expect(out).toContainEqual({
       moduleId: "c1",
       variable: "ddddssss",
-      type: "constraint_source_in_downstream",
+      type: "constraint_orphan_source",
       severity: "warning",
     });
-    // Should NOT also fire "source missing" — the in_downstream variant
-    // supersedes it.
-    expect(out.find((c) => c.moduleId === "c1" && c.type === "constraint_source_missing")).toBeUndefined();
+  });
+
+  it("source upstream + ALSO downstream is NOT flagged (false-positive fix)", () => {
+    // Pre-2026-05-24 the scanner flagged `source_in_downstream`
+    // whenever the source ALSO appeared downstream — even if a valid
+    // upstream instance existed. New rule: only flag when NO upstream
+    // instance. Same source uuid in both directions is fine.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "ddddssss", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["ddddssss"], ["ddddssss"]);
+    expect(
+      out.find((c) => c.moduleId === "c1" && c.type === "constraint_orphan_source"),
+    ).toBeUndefined();
   });
 
   it("disabled constraints do not generate ordering warnings", () => {
@@ -499,7 +513,89 @@ describe("scanConflicts — constraint ordering", () => {
     const out = scanConflicts(value, [], []);
     const types = out.filter((c) => c.moduleId === "c1").map((c) => c.type);
     expect(types).toContain("constraint_source_missing");
-    expect(types).toContain("constraint_target_before_self");
+    expect(types).toContain("constraint_orphan_target");
+  });
+
+  it("two duplicated constraints both find their downstream slot when the target has TWO downstream instances", () => {
+    // Regression: pre-2026-05-24 the scanner collapsed the downstream
+    // count to 0/1 via a Set, so duplicating a constraint when the
+    // target wildcard also lived downstream cross-node twice still
+    // false-flagged the second constraint as `constraint_orphan_target`.
+    // collectDownstreamWildcardUuids now returns per-instance entries
+    // and scanConflicts counts them, matching the engine's one-shot
+    // first-instance semantics (each constraint claims one downstream
+    // target slot).
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "ddddeeee"),
+        constraint("c2", "aaaa1111", "ddddeeee"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee", "ddddeeee"]);
+    expect(out.find((c) => c.type === "constraint_orphan_target")).toBeUndefined();
+  });
+
+  it("two duplicated constraints with only ONE downstream target instance → second flags orphan", () => {
+    // Mirror of the case above: not enough downstream slots, so the
+    // second constraint correctly orphans (matches engine: only the
+    // first constraint would ever apply).
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "ddddeeee"),
+        constraint("c2", "aaaa1111", "ddddeeee"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee"]);
+    const orphans = out.filter((c) => c.type === "constraint_orphan_target");
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0].moduleId).toBe("c2");
+  });
+
+  it("constraint #1 claims local slot between itself and #2; #2 claims downstream — no orphan", () => {
+    // User-reported regression. Setup:
+    //   idx 0: c1                          local mood at idx 1 available
+    //   idx 1: wildcard mood               consumed by c1's claim
+    //   idx 2: c2                          no local mood after idx 2
+    //   downstream chain: one mood instance
+    //
+    // The pre-slot-allocator logic used a flat `claimedSoFar` counter:
+    // c1's claim incremented it to 1, and c2 saw available = local-after-
+    // self(0) + downstream(1) = 1, so claimedSoFar(1) >= available(1)
+    // false-orphaned c2. Slot allocator pairs c1 → idx 1, c2 → downstream
+    // instance, neither flags.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "ddddeeee"),
+        wildcard("ddddeeee", "mood"),
+        constraint("c2", "aaaa1111", "ddddeeee"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"], ["ddddeeee"]);
+    expect(out.find((c) => c.type === "constraint_orphan_target")).toBeUndefined();
+  });
+
+  it("constraint after its local target + no downstream — orphans", () => {
+    // The local mood instance sits at idx 0 (upstream of the constraint
+    // at idx 1) and there's no downstream chain. Engine resolves
+    // first-instance-AFTER the constraint, so this constraint has no
+    // claim available.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        wildcard("ddddeeee", "mood"),
+        constraint("c1", "aaaa1111", "ddddeeee"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out).toContainEqual({
+      moduleId: "c1",
+      variable: "ddddeeee",
+      type: "constraint_orphan_target",
+      severity: "warning",
+    });
   });
 });
 
@@ -565,7 +661,7 @@ describe("scanConflicts — constraint nested-reach classification", () => {
     };
     const out = scanConflicts(value, [], ["aaaa1111", "bbbb2222"], ["bbbb2222"]);
     expect(
-      out.find((c) => c.moduleId === "c1" && c.type === "constraint_target_in_upstream"),
+      out.find((c) => c.moduleId === "c1" && c.type === "constraint_orphan_target"),
     ).toBeUndefined();
   });
 
@@ -600,7 +696,7 @@ describe("scanConflicts — constraint nested-reach classification", () => {
     expect(out).toContainEqual({
       moduleId: "c1",
       variable: "bbbb2222",
-      type: "constraint_target_in_upstream",
+      type: "constraint_orphan_target",
       severity: "warning",
     });
   });
@@ -933,5 +1029,50 @@ describe("scanConflicts — nested bundle gate cascade", () => {
     const dupes = out.filter((c) => c.type === "duplicate_variable");
     expect(dupes).toHaveLength(1);
     expect(dupes[0]).toMatchObject({ variable: "style" });
+  });
+});
+
+describe("scanConflicts — first-instance orphan + count check (2026-05-24)", () => {
+  it("2 constraints + 1 downstream target → second is orphan", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+        constraint("c2", "aaaa1111", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    const orphans = out.filter((c) => c.type === "constraint_orphan_target");
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0].moduleId).toBe("c2");
+  });
+
+  it("2 constraints + 2 downstream targets → no orphan", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+        constraint("c2", "aaaa1111", "bbbb2222"),
+        wildcard("bbbb2222", "outfit"),
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"]);
+    expect(out.filter((c) => c.type === "constraint_orphan_target")).toHaveLength(0);
+  });
+
+  it("constraint with source ONLY downstream flags orphan_source", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+        wildcard("aaaa1111", "hair"),  // source AFTER constraint
+        wildcard("bbbb2222", "outfit"),
+      ],
+    };
+    const out = scanConflicts(value, []);
+    expect(out.find((c) => c.type === "constraint_orphan_source"))
+      .toMatchObject({ moduleId: "c1", variable: "aaaa1111" });
   });
 });

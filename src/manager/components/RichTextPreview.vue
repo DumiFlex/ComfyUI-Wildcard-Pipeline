@@ -21,16 +21,25 @@
 import { computed } from "vue";
 import RefChip from "./RefChip.vue";
 import { parse, type Atom } from "./atomicEditorModel";
+import { inlineTokenHtml } from "../../widgets/richTokenize";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
+// Library fallback: when a `@{uuid}` ref isn't in the caller-supplied
+// `uuidToName` map, consult the lazy preview-resolver cache. Without
+// it, constraint modal exceptions + test-runner cells render refs that
+// target wildcards living off-canvas (library-only, or in a different
+// Context node) as red `?` chips even though the user can open the
+// referenced wildcard from the SPA.
+import { cacheVersion, ensure, lookup } from "../../extension/preview-resolver";
 
 interface Props {
   /** New, preferred API. Mirrors RichTextInput's `modelValue`. */
   modelValue?: string;
   /** Legacy alias for `modelValue`. Existing callers use `:value="..."`. */
   value?: string;
-  /** Map from UUID to display name; used to render `@{uuid}` refs as human labels. */
-  uuidToName?: Map<string, string>;
+  /** Map from UUID to display name; used to render `@{uuid}` refs as human labels.
+   *  Accepts `ReadonlyMap` for caller convenience — we only read from it. */
+  uuidToName?: ReadonlyMap<string, string>;
   /** $var names known to the surrounding scope. Drives the var chip's resolved state. */
   varSuggestions?: string[];
   /** Surface gates ref styling: non-wildcard surfaces mark refs as "ignored". */
@@ -72,23 +81,66 @@ const emit = defineEmits<{
 // `modelValue` wins if both are passed (callers should pick one). Falls back
 // to the legacy `value` prop for existing call sites that haven't migrated.
 const sourceText = computed(() => props.modelValue ?? props.value ?? "");
-const atoms = computed<Atom[]>(() => parse(sourceText.value));
+// Parses the source text AND fires `ensure()` for any ref uuid not in
+// the caller-supplied `uuidToName` map. `ensure()` is idempotent and
+// bounded by the resolver's cache + in-flight + failure ledger, so
+// re-running on every reparse is cheap. Reactivity is wired via
+// `cacheVersion`: this computed reads it, so a fetch landing bumps the
+// version → atoms recompute → template re-renders with fresh `refName`.
+const atoms = computed<Atom[]>(() => {
+  void cacheVersion.value;
+  const list = parse(sourceText.value);
+  let missing: string[] | null = null;
+  for (const a of list) {
+    if (a.kind !== "ref") continue;
+    if (props.uuidToName.has(a.uuid)) continue;
+    if (lookup(a.uuid) !== undefined) continue;
+    (missing ??= []).push(a.uuid);
+  }
+  if (missing) ensure(missing);
+  return list;
+});
 const isWildcard = computed(() => props.surface === "wildcard");
+
+/** Resolve a ref uuid to its display name. Caller's `uuidToName` wins
+ *  (live local names beat library snapshots), then the lazy library
+ *  cache. Returns empty string when neither knows the uuid — chip
+ *  renders as unresolved. */
+function refName(uuid: string): string {
+  const local = props.uuidToName.get(uuid);
+  if (local) return local;
+  const hit = lookup(uuid);
+  return hit?.varBinding?.trim() || hit?.name?.trim() || "";
+}
 
 function atomIsResolved(atom: Atom): boolean {
   // Vars bind at runtime — a $name not in the static catalog may still
   // resolve via upstream context / derivation / runtime overrides. The
   // conflict scanner surfaces genuine missing-var advisories elsewhere.
   if (atom.kind === "var") return atom.name.length > 0;
-  if (atom.kind === "ref") return props.uuidToName.has(atom.uuid);
+  if (atom.kind === "ref") return refName(atom.uuid).length > 0;
   return true;
 }
 
 function onRefChipClick(atom: Atom): void {
   if (!props.clickableRefs) return;
   if (atom.kind !== "ref") return;
-  if (!props.uuidToName.has(atom.uuid)) return;
+  if (!atomIsResolved(atom)) return;
   emit("ref-click", atom.uuid);
+}
+
+/** Surface-aware HTML for a plain-text atom — mirrors RichTextInput so
+ *  inline syntax (`{a|b|c}`, `{2$$,$$…}`, `$$`, `@@`) gets the same
+ *  colored sub-spans as the live editor. Without this the preview rendered
+ *  brace blocks as plain text, breaking visual parity between the editor
+ *  rest state and any read-only surface (bundle pane, runtime widget). */
+function textHtml(text: string): string {
+  if (!text) return "";
+  const collapsed: ReadonlyArray<"var" | "ref"> =
+    props.surface === "wildcard" ? ["var"]
+    : props.surface === "fixed_values" ? ["var", "ref"]
+    : ["ref"];
+  return inlineTokenHtml(text, collapsed);
 }
 </script>
 
@@ -98,7 +150,7 @@ function onRefChipClick(atom: Atom): void {
       <RefChip
         v-if="atom.kind === 'ref'"
         :kind="'ref'"
-        :name="uuidToName.get(atom.uuid) ?? ''"
+        :name="refName(atom.uuid)"
         :uuid="atom.uuid"
         :sub-categories="atom.subCategories"
         :resolved="atomIsResolved(atom)"
@@ -117,7 +169,7 @@ function onRefChipClick(atom: Atom): void {
         :resolved="atomIsResolved(atom)"
         class="wp-rt-var"
       />
-      <span v-else class="wp-rt-text wp-rtp__text">{{ atom.text }}</span>
+      <span v-else class="wp-rt-text wp-rtp__text" v-html="textHtml(atom.text)"></span>
     </template>
     <span
       v-for="w in effectiveWarnings"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, provide } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, provide, defineAsyncComponent } from "vue";
 import {
   buildBundleEnabledMap,
   isModuleEffectivelyEnabled,
@@ -8,6 +8,7 @@ import {
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
+import type { PairingBadge } from "../../extension/constraint-pairs";
 import {
   getCollapseMode,
   getCollapsedByDefault,
@@ -31,7 +32,7 @@ import { reconcileBundleRanges } from "./bundles/drag";
 import { resolveDropZone, type DropZone } from "./bundles/drop-zone";
 import { applyDrop, type DropPayload } from "./bundles/drop";
 import { buildCrossNodeBundleInsertion } from "./bundles/cross-node-nested";
-import { computeBundleFingerprint, bundleSnapshotModified } from "./bundles/bundle-fingerprint";
+import { computeBundleFingerprint, bundleSnapshotModified, isFingerprintCurrent } from "./bundles/bundle-fingerprint";
 import BundleDropBar from "./bundles/BundleDropBar.vue";
 import {
   captureRects,
@@ -46,13 +47,21 @@ import {
 import { api } from "../../manager/api/client";
 import { emptyBundleInstance, type BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
+import ModalShell from "../shared/ModalShell.vue";
+// Lazy: bundle edit modal pulls in its own IdentitySection +
+// RuntimeSection + color-preset markup. Keeping it out of the
+// ContextWidget entry chunk preserves the size budget — the modal
+// only runs when the user clicks "Edit bundle…" in the ctxmenu.
+const BundleInstanceModal = defineAsyncComponent(
+  () => import("./editors/bundle/BundleInstanceModal.vue"),
+);
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import ContextMenu, {
   type ContextMenuEntry,
   type ContextMenuHeader,
   type ContextMenuItem,
 } from "../shared/ContextMenu.vue";
-import { dragState } from "./drag-store";
+import { dragState, queueHandoff, pendingHandoffs, takeHandoffsFor } from "./drag-store";
 import { nextBindingSuffix } from "./duplicates/binding-suffix";
 import { pushToast } from "../shared/toast-store";
 import { kindIcon } from "../shared/kind-icons";
@@ -71,7 +80,6 @@ import {
 } from "./drift-store";
 import {
   getBundleCollapsedByDefault,
-  getBundleMasterOffBehavior,
   getConfirmDestructiveBundle,
 } from "../../extension/settings";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
@@ -104,6 +112,14 @@ const props = withDefaults(defineProps<{
    *  constraint runs) and fire `constraint_source_in_downstream`
    *  when the source is in the wrong direction. */
   downstreamWildcardUuids?: string[];
+  /** Cross-node pairing badge map. Computed at the mount layer
+   *  (`widgets/context.ts`) by walking upstream + own + downstream
+   *  WP_Context modules into a flat chain. Keys are
+   *  `${nodeId}#${_uid}` so duplicate library instances + cross-node
+   *  rows don't collide. ModuleRow.vue looks up its own row's badge
+   *  via `pairingFor(module._uid)` in `moduleRowCtx`. Optional for
+   *  headless mounts that don't simulate a graph. */
+  pairings?: Map<string, PairingBadge>;
   /** Litegraph node mode: 0 ALWAYS, 2 NEVER (mute), 4 BYPASS.
    *  Used to dim the body when the host node is muted/bypassed so
    *  the runtime-skipped state is visually obvious. Other modes are
@@ -122,6 +138,7 @@ const props = withDefaults(defineProps<{
   nodeMode: 0,
   upstreamWildcardUuids: () => [],
   downstreamWildcardUuids: () => [],
+  pairings: () => new Map<string, PairingBadge>(),
 });
 
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -380,6 +397,29 @@ const ctxMenu = ref<{
 // double-clicked. Indexing into `value.modules` directly disambiguates.
 const editingIdx = ref<number | null>(null);
 
+/** Bundle edit modal — analogous to `editingIdx` but keyed on the
+ *  per-Context `_uid` of the bundle instance (bundles don't sit in
+ *  `value.modules`, they have their own list). `bundleDraft` is the
+ *  deep-cloned snapshot the user edits — cancel discards it, save
+ *  writes back into `value.bundles[i]`. `bundleLibraryDefaults`
+ *  caches the freshly-fetched library entry's name/color so the
+ *  IdentitySection can show per-field "reset to library default"
+ *  buttons. Null while the fetch is in flight or when the library
+ *  entry is missing (deleted upstream). */
+const editingBundleUid = ref<string | null>(null);
+const bundleDraft = ref<BundleInstance | null>(null);
+const bundleLibraryDefaults = ref<{ name: string; color: string | null } | null>(null);
+
+/** Live BundleInstance the modal is editing — resolved from
+ *  `editingBundleUid` against the latest `value.bundles` list so
+ *  cascading toggles fired during the modal session reflect into
+ *  the master `lockState` / `internalState` props immediately. */
+const editingBundleEntry = computed<BundleInstance | null>(() => {
+  const uid = editingBundleUid.value;
+  if (!uid) return null;
+  return (value.value.bundles ?? []).find((b) => b._uid === uid) ?? null;
+});
+
 /** Right-click "Push to library…" can fire on any row without first
  *  opening the edit modal. The modal holds a snapshot copy so the user
  *  can rename/retag without dirtying the workflow row. */
@@ -551,6 +591,67 @@ onBeforeUnmount(() => {
 
 watch(dragState, (v) => { if (v === null) clearDragHover(); });
 
+// Backup cleanup path for cross-node handoffs. Primary path: the
+// source row's `dragend` listener reads `dragState.consumedBy` and
+// splices the row out. That fires reliably under most conditions
+// but has been observed to miss when the row's containing bundle
+// frame re-renders during the same drag tick (constraint duplicates
+// inside the "final framing" bundle were the trigger). When the
+// target widget queues a handoff in its drop handler, this watch
+// fires on the source widget and removes the row by `_uid` —
+// idempotent with the dragend path because filtering a uid that's
+// already gone is a no-op.
+//
+// Idempotency note: both branches re-read the current bundle uid /
+// range from the live state rather than the (possibly stale) values
+// captured at drop time. The dragend handler runs the same lookup
+// for the same reason — it's the only way to avoid double-removal
+// when Vue's watch flush schedules this watcher between the target
+// queue write and the browser-dispatched dragend on the source.
+watch(pendingHandoffs, () => {
+  const mine = takeHandoffsFor(props.nodeId);
+  if (mine.length === 0) return;
+  let modules = value.value.modules;
+  let bundles = value.value.bundles ?? [];
+  let changed = false;
+  for (const h of mine) {
+    if (h.kind === "module" && h.uid) {
+      const before = modules.length;
+      modules = modules.filter((m) => m._uid !== h.uid);
+      if (modules.length !== before) changed = true;
+    } else if (h.kind === "bundle" && h.bundleUid) {
+      // Look up the bundle by uid in the LIVE state — sourceStartIdx
+      // / sourceEndIdx captured at drop time may be stale if a sibling
+      // op has shifted indices, or if dragend already ran.
+      const live = bundles.find((b) => b._uid === h.bundleUid);
+      if (!live) continue;
+      const start = live.start_idx;
+      const end = live.end_idx;
+      if (start < 0 || end < start || end >= modules.length) continue;
+      const movingBundleUids = new Set<string>([h.bundleUid]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const b of bundles) {
+          if (b.parent_uid && movingBundleUids.has(b.parent_uid) && !movingBundleUids.has(b._uid)) {
+            movingBundleUids.add(b._uid);
+            grew = true;
+          }
+        }
+      }
+      const removedCount = end - start + 1;
+      modules = [...modules.slice(0, start), ...modules.slice(end + 1)];
+      bundles = bundles
+        .filter((b) => !movingBundleUids.has(b._uid))
+        .map((b) => (b.start_idx > end
+          ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
+          : b));
+      changed = true;
+    }
+  }
+  if (changed) commitModules(modules, bundles);
+});
+
 // Initial parse runs through the recovery path so we can flag bad workflow
 // JSON instead of silently swallowing it. parseWidgetJson stays exported for
 // the debug/assembler widgets which don't need recovery semantics.
@@ -616,18 +717,21 @@ function ensureRowUids(modules: ModuleEntry[]): boolean {
   return mutated;
 }
 
-/** Stamp `snapshot_fingerprint` on any BundleInstance missing one.
- *  Backfill-on-load: workflows saved before MOD detection landed get a
- *  false-clean baseline computed from current state. Subsequent edits
- *  flip the bundle to modified correctly; existing bundles don't
- *  spuriously light up after the upgrade. */
+/** Stamp `snapshot_fingerprint` on any BundleInstance missing one OR
+ *  carrying a stale-version baseline. Backfill-on-load: workflows
+ *  saved before MOD detection landed get a false-clean baseline
+ *  computed from current state; bundles whose stored fingerprint
+ *  predates a format bump (see `FINGERPRINT_VERSION` in
+ *  `bundle-fingerprint.ts`) are silently rebaselined here so they
+ *  don't render with a permanent "modified" badge after the upgrade.
+ *  Subsequent edits flip the bundle to modified correctly. */
 function ensureBundleFingerprints(
   bundles: BundleInstance[],
   modules: ModuleEntry[],
 ): boolean {
   let mutated = false;
   for (const b of bundles) {
-    if (b.snapshot_fingerprint === undefined) {
+    if (!isFingerprintCurrent(b.snapshot_fingerprint)) {
       b.snapshot_fingerprint = computeBundleFingerprint(b, modules);
       mutated = true;
     }
@@ -1043,26 +1147,50 @@ async function detachBundle(uid: string): Promise<void> {
     await withLeaveAnimation(uid, scope, () => {});
   }
   const flipSnap = captureFlipSnapshot();
+  // Nested-bundle handling: inner BundleInstances (parent_uid ===
+  // target._uid) survive the detach. They're promoted to top-level
+  // (parent_uid → null) so the inner frame stays intact and grouped —
+  // the user only asked to remove THIS bundle's wrapper, not flatten
+  // the whole tree.
+  const innerBundles = bundles.filter((b) => b.parent_uid === target._uid);
+  const innerUids = new Set(innerBundles.map((b) => b._uid));
+  // When detaching an INNER bundle (one with a parent_uid), its
+  // direct children should remain inside the OUTER bundle, not
+  // escape to top-level. We re-tag their `bundle_origin` to the
+  // outer's `_uid` so the outer frame keeps owning them. When the
+  // target is itself top-level (parent_uid null/absent), the
+  // children simply lose their origin tag as before.
+  const parentUid = target.parent_uid ?? null;
   // Track which children we cleared `bundle_origin` on. Keyed by
   // per-instance _uid so the Undo path can find the same rows even
   // if they've moved since detach — full-snapshot restore breaks the
-  // moment a sibling op (another detach, a row move, a remove) lands
-  // between the detach and its Undo: the snapshot reflects that
-  // sibling's pre-state too and the user loses the sibling op's
-  // effect. Delta-undo only re-stamps these specific children, so
-  // each detach's Undo composes with any other op's Undo regardless
-  // of the click order.
+  // moment a sibling op lands between detach and Undo (snapshot
+  // reflects sibling's pre-state too and the user loses the sibling
+  // op's effect). Delta-undo only re-stamps these specific children
+  // so each detach's Undo composes regardless of click order.
   const detachedChildUids = new Set<string>();
   const nextModules = value.value.modules.map((m, idx) => {
     if (idx < target.start_idx || idx > target.end_idx) return m;
+    const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+    // Inner-bundle children of THIS bundle keep their `bundle_origin`
+    // so the inner frame still owns them after this bundle detaches.
+    if (origin && innerUids.has(origin)) return m;
     if (m._uid) detachedChildUids.add(m._uid);
-    // Strip bundle_origin from this child; spread so other fields
-    // survive untouched.
     const next = { ...m } as ModuleEntry & { bundle_origin?: string };
-    delete next.bundle_origin;
+    if (parentUid) {
+      // Re-tag to the surviving outer bundle so children stay
+      // grouped inside it. Detaching the inner just dissolves
+      // the inner frame — outer still wraps everything.
+      next.bundle_origin = parentUid;
+    } else {
+      // Top-level detach: children become free-floating siblings.
+      delete next.bundle_origin;
+    }
     return next;
   });
-  const remainingBundles = bundles.filter((b) => b._uid !== uid);
+  const remainingBundles = bundles
+    .filter((b) => b._uid !== uid)
+    .map((b) => (innerUids.has(b._uid) ? { ...b, parent_uid: null } : b));
   // Capture the BundleInstance as it was BEFORE the strip so Undo can
   // reinsert the original library_id, color, name, collapsed flag,
   // inserted_at_hash, etc. without re-fetching from the library API.
@@ -1088,24 +1216,117 @@ async function detachBundle(uid: string): Promise<void> {
         });
         const currentBundles = value.value.bundles ?? [];
         // Re-insert the BundleInstance only if it isn't already back
-        // (idempotent — guards against double-click Undo).
-        const nextBundlesArr = currentBundles.some((b) => b._uid === detachedBundle._uid)
+        // (idempotent — guards against double-click Undo) AND re-pin
+        // any inner bundles' parent_uid back to this outer's _uid.
+        // The detach promoted them to top-level (parent_uid → null);
+        // Undo restores the nesting.
+        const restoredBundles = currentBundles.some((b) => b._uid === detachedBundle._uid)
           ? currentBundles
           : [...currentBundles, detachedBundle];
+        const nextBundlesArr = restoredBundles.map((b) =>
+          innerUids.has(b._uid) ? { ...b, parent_uid: detachedBundle._uid } : b,
+        );
         commitModules(list, nextBundlesArr);
       },
     },
   });
 }
 
-/** Duplicate bundle — re-fetch the library entry + run insert
- *  again at the position right after the current bundle. Children
- *  share library ids with the existing instance (sibling pattern). */
-async function duplicateBundle(uid: string): Promise<void> {
+/** True duplicate — clones the bundle's CURRENT in-Context state
+ *  (including every local edit on children, the per-instance name
+ *  / color overrides, the collapsed flag, and any inner bundles)
+ *  and splices the clone immediately after the original.
+ *
+ *  Previously this delegated to `onPickBundle(target.library_id)`
+ *  which re-fetched the LIBRARY snapshot — useful as an "insert
+ *  again" affordance but not as a "duplicate". User-reported: if
+ *  you'd renamed, recolored, locked seeds, marked rows internal,
+ *  etc., none of that survived through the duplicate. The
+ *  semantically correct "duplicate" is `deepClone(target +
+ *  range)` with fresh `_uid`s + an updated bundle_origin /
+ *  parent_uid mapping.
+ *
+ *  Fresh `_uid`s for every cloned row and bundle so the clone
+ *  doesn't share identity with the original — drag, MOD, undo,
+ *  cascade-state aggregation all key off `_uid`.
+ */
+function duplicateBundle(uid: string): void {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
-  await onPickBundle(target.library_id);
+  const modules = value.value.modules;
+  // Slice the current child range (deep clone for safety — the
+  // engine + drift store both hold references to module objects).
+  const sliceClone = modules
+    .slice(target.start_idx, target.end_idx + 1)
+    .map((m) => JSON.parse(JSON.stringify(m)) as ModuleEntry & { bundle_origin?: string });
+  // Build uid maps: every outer + inner BundleInstance in scope
+  // gets a fresh `_uid`; the row clones rewrite `bundle_origin`
+  // through the map so the clone's row → bundle membership mirrors
+  // the original. Inner BundleInstances also rewrite `parent_uid`
+  // through the map.
+  const newOuterUid = newRowUid();
+  const innerBundles = bundles.filter((b) => b.parent_uid === target._uid);
+  const uidMap = new Map<string, string>();
+  uidMap.set(target._uid, newOuterUid);
+  for (const inner of innerBundles) uidMap.set(inner._uid, newRowUid());
+  // Update each cloned row's bundle_origin + give it a fresh _uid.
+  const insertStart = target.end_idx + 1;
+  const clonedRows = sliceClone.map((m) => {
+    const origin = m.bundle_origin;
+    return {
+      ...m,
+      _uid: newRowUid(),
+      bundle_origin: origin && uidMap.has(origin) ? uidMap.get(origin)! : newOuterUid,
+    } as ModuleEntry & { bundle_origin?: string };
+  });
+  // Splice the clone immediately after the original; shift every
+  // later bundle's index range by the clone length.
+  const cloneLen = clonedRows.length;
+  const before = modules.slice(0, insertStart);
+  const after = modules.slice(insertStart);
+  const nextModules = [...before, ...clonedRows, ...after];
+  // Build cloned BundleInstance for outer + each inner.
+  const clonedOuter: BundleInstance = {
+    ...target,
+    _uid: newOuterUid,
+    start_idx: insertStart,
+    end_idx: insertStart + cloneLen - 1,
+    parent_uid: null,
+    // Snapshot fingerprint deliberately UNSET — the clone may
+    // diverge from the original immediately. `ensureBundleFingerprints`
+    // backfills the clean baseline on the next commit so a fresh
+    // clone reads "not modified".
+    snapshot_fingerprint: undefined,
+  };
+  const clonedInners: BundleInstance[] = innerBundles.map((inner) => {
+    const newUid = uidMap.get(inner._uid)!;
+    // Inner index range shifts by the same `+insertStart - target.start_idx`
+    // offset every row in the clone did.
+    const shift = insertStart - target.start_idx;
+    return {
+      ...inner,
+      _uid: newUid,
+      parent_uid: newOuterUid,
+      start_idx: inner.start_idx + shift,
+      end_idx: inner.end_idx + shift,
+      snapshot_fingerprint: undefined,
+    };
+  });
+  // Shift every existing bundle whose start_idx is at or beyond
+  // the insertion point by the clone length so their ranges keep
+  // pointing at the right rows after the splice.
+  const nextBundles = bundles.map((b) => {
+    if (b.start_idx >= insertStart) {
+      return { ...b, start_idx: b.start_idx + cloneLen, end_idx: b.end_idx + cloneLen };
+    }
+    return b;
+  });
+  commitModules(nextModules, [...nextBundles, clonedOuter, ...clonedInners]);
+  pushToast(`Duplicated "${target.name || "bundle"}" with local edits`, {
+    severity: "success",
+    lifeMs: 4000,
+  });
 }
 
 /** Reset bundle to library snapshot — re-fetch the library entry
@@ -1166,14 +1387,24 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
     // inner-leaf whose origin already points at the fresh inner it
     // belongs to.
     const freshOuterUid = replacementInsertion.bundleInstance._uid;
-    const newChildren = replacementInsertion.modulesToSplice.map((c) => {
+    // Preserve existing child `_uid`s where the position carries over
+    // — buildBundleInsertion mints fresh uids by default, but reset
+    // semantically replaces the SAME row with its library snapshot.
+    // Keeping uids stable matters for nested bundles: the outer
+    // bundle's fingerprint walks every leaf uid in its index range,
+    // and a uid churn on reset would flip the outer to "modified"
+    // even when the reset was the only outstanding edit. Fresh uids
+    // only get minted for positions the new snapshot adds beyond the
+    // old child count (i.e. the library snapshot grew since insert).
+    const newChildren = replacementInsertion.modulesToSplice.map((c, i) => {
       const rec = c as Record<string, unknown>;
       const meta = (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" };
       const entries = (rec.entries as ModuleEntry["entries"] | undefined) ?? [];
       const origin = c.bundle_origin === freshOuterUid ? target._uid : c.bundle_origin;
+      const preservedUid = oldChildren[i]?._uid ?? c._uid;
       return {
         id: c.id,
-        _uid: c._uid,
+        _uid: preservedUid,
         type: c.type as ModuleEntry["type"],
         enabled: (rec.enabled as boolean | undefined) ?? true,
         collapsed: (rec.collapsed as boolean | undefined) ?? false,
@@ -1223,6 +1454,16 @@ async function resetBundleToLibrary(uid: string): Promise<void> {
     // reset registers as the new clean baseline. Without this, MOD
     // would stay true after reset (current state != stale fingerprint
     // from previous insert).
+    //
+    // NOTE: the PARENT bundle (when this one is nested) is deliberately
+    // NOT re-snapped here. Resetting a single inner bundle shouldn't
+    // baseline the outer's MOD state — if siblings of the inner are
+    // still locally edited, the outer correctly stays modified.
+    // Instead, child `_uid`s are preserved across the reset below
+    // (oldChildren[i]._uid reused for newChildren[i]) so the outer's
+    // existing fingerprint can be re-evaluated against the new state
+    // and clear itself iff the inner reset was the only outstanding
+    // edit.
     {
       const justReset = new Set<string>([
         target._uid,
@@ -1363,7 +1604,16 @@ async function saveBundleToLibrary(uid: string): Promise<void> {
     );
   }
   try {
+    // Save EVERYTHING the user can edit on this instance — name +
+    // color + children. The earlier `{ children }`-only payload kept
+    // the library entry's old display name and color even when the
+    // user had renamed / re-colored the instance via the canvas
+    // modal: clicking "Save to library" appeared to do nothing for
+    // those fields. Server overwrites library entry with whatever we
+    // PUT, so the instance's identity becomes the library identity.
     const updated = await api.bundles.update(target.library_id, {
+      name: target.name,
+      color: target.color ?? null,
       children: childrenOut,
     });
     // Refresh the BundleInstance's `inserted_at_hash` so a future
@@ -1476,6 +1726,13 @@ function openBundleContextMenu(ev: MouseEvent, uid: string): void {
   const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
   const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
   const items: ContextMenuEntry[] = [
+    {
+      label: "Edit bundle…",
+      icon: "pi-pencil",
+      subtitle: "Display name, color, lock + hide cascades",
+      onSelect: () => openBundleEditModal(uid),
+      divider: true,
+    },
     {
       label: target.collapsed ? "Expand bundle" : "Collapse bundle",
       icon: target.collapsed ? "pi-caret-down" : "pi-caret-right",
@@ -1600,6 +1857,17 @@ const conflictsByModule = computed(() => {
   for (const c of conflicts.value) (out[c.moduleId] ??= []).push(c);
   return out;
 });
+
+// Pairing badge lookup — reads from the cross-node `pairings` prop
+// composed at the mount layer. Keys are `${nodeId}#${_uid}` so we have
+// to prefix the local row's `_uid` with our own `nodeId` before
+// lookup. Falls back to `id` for legacy rows that haven't been backfilled
+// with a `_uid` yet (`ensureRowUids()` normally runs on load, but a
+// barebones test mount can skip it).
+function pairingFor(rowUid: string): PairingBadge | null {
+  const key = `${props.nodeId}#${rowUid}`;
+  return props.pairings?.get(key) ?? null;
+}
 
 function severityFor(id: string): "error" | "warning" | "info" | null {
   const list = conflictsByModule.value[id];
@@ -1980,89 +2248,220 @@ function bundleLockState(
   return "partial";
 }
 
-/** Cascade `instance.internal` across every child of a bundle.
- *  Click semantics: anything-other-than-all → set all on; all → clear
- *  all. Mirrors the per-card toggle pattern (toggleInternalOnCard)
- *  but applied to a range. The internal flag itself is dropped on
- *  toggle-off so persisted JSON stays minimal, matching the per-card
- *  fn's behaviour. */
-function toggleBundleInternal(uid: string): void {
-  const bundle = (value.value.bundles ?? []).find((b) => b._uid === uid);
+/** OFF resolution mode for nested master cascades.
+ *
+ *   - "preserve"  → only rows whose `master_internal_by` matches this
+ *                    bundle's `_uid` get cleared. Manual-internal rows
+ *                    survive. Inner masters reached via recursion ALSO
+ *                    run in preserve mode regardless of their own
+ *                    claims, so a parent's OFF doesn't accidentally
+ *                    sweep an inner bundle's manual rows.
+ *   - "cascade"   → every internal row this bundle owns (direct
+ *                    children) clears unconditionally. Triggered only
+ *                    when the entire scope is hand-marked (no master
+ *                    claim anywhere this bundle could see) and the
+ *                    user clicks the master button at "all" — they
+ *                    almost certainly meant "turn everything off".
+ *                    Inner masters receive the same "cascade" so
+ *                    inner-owned manual rows clear too. */
+type BundleOffMode = "preserve" | "cascade";
+
+/** Set `instance.internal` for every direct child of a bundle, then
+ *  recurse into inner bundles. See `BundleOffMode` for the OFF
+ *  decision matrix.
+ *
+ *  A bundle's master governs ONLY its direct children — rows owned
+ *  by an inner bundle are skipped + the recursive call propagates
+ *  the same on/off + mode downward. */
+function setBundleInternal(
+  uid: string,
+  targetOn: boolean,
+  forceMode?: BundleOffMode,
+): void {
+  const bundles = value.value.bundles ?? [];
+  const bundle = bundles.find((b) => b._uid === uid);
   if (!bundle) return;
-  const state = bundleInternalState(bundle);
-  if (state === null) return;
-  const turnOn = state !== "all";
-  // Applicability filter is hardcoded — constraint never gets internal,
-  // and the engine ignores the flag on kinds that don't produce a
-  // binding, so writing it would be dead data. The user-configurable
-  // axis is the master-OFF behaviour below.
-  const offBehavior = getBundleMasterOffBehavior();
-  const list = value.value.modules.map((m, i) => {
+  const innerBundles = bundles.filter((b) => b.parent_uid === bundle._uid);
+  const innerUids = new Set(innerBundles.map((b) => b._uid));
+  const modules = value.value.modules;
+  // OFF-mode decision (forceMode wins on recursive descent). Scan
+  // the entire scope for any `master_internal_by` tag — presence
+  // anywhere → preserve (some master claimed something, OFF
+  // should undo only that). Absence anywhere → cascade (all
+  // hand-marked, click OFF at "all" means "really clear all").
+  let mode: BundleOffMode = forceMode ?? "preserve";
+  if (!targetOn && !forceMode) {
+    let hasAnyClaim = false;
+    for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+      const m = modules[i];
+      if (!m || !isInternalable(m)) continue;
+      if (m.instance?._ui?.master_internal_by) {
+        hasAnyClaim = true;
+        break;
+      }
+    }
+    mode = hasAnyClaim ? "preserve" : "cascade";
+  }
+  // Track which inners this call should recurse into. Two rules:
+  //   ON  — recurse if the inner state was NOT "all" before this op
+  //         (we're flipping it from partial/none to all). Tag the
+  //         inner with `master_internal_chained_by = bundle._uid`
+  //         so its eventual OFF can find us. If inner was already
+  //         "all", skip — user/its own master got there independently,
+  //         we don't want to "own" inner's pre-existing state.
+  //   OFF — recurse only if inner.master_internal_chained_by ===
+  //         bundle._uid (we previously chained inner ON). Otherwise
+  //         leave inner alone (user-controlled). On recursion, clear
+  //         the chain tag.
+  type InnerOp = { inner: BundleInstance; chainTag: "set" | "clear" | null };
+  const innerOps: InnerOp[] = [];
+  for (const inner of innerBundles) {
+    if (targetOn) {
+      const innerState = bundleInternalState(inner);
+      if (innerState !== "all") {
+        innerOps.push({ inner, chainTag: "set" });
+      }
+    } else {
+      if (inner.master_internal_chained_by === bundle._uid) {
+        innerOps.push({ inner, chainTag: "clear" });
+      }
+    }
+  }
+  const list = modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
     if (!isInternalable(m)) return m;
+    const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+    if (origin && innerUids.has(origin)) return m;
     const inst = m.instance ?? {};
     const ui = inst._ui ?? {};
-    if (turnOn) {
-      // Already internal → leave it alone AND don't claim it via the
-      // master marker. The row was internal before this click; the
-      // user wants it to stay internal regardless of what the master
-      // does next. Skipping the marker means a later master OFF won't
-      // revert this row (in preserve-manual mode).
+    if (targetOn) {
       if (inst.internal) return m;
       return {
         ...m,
         instance: {
           ...inst,
           internal: true,
-          _ui: { ...ui, master_internal: true },
+          _ui: { ...ui, master_internal: true, master_internal_by: bundle._uid },
         },
       };
     } else {
-      // Master OFF behaviour:
-      //   - preserve-manual (default): clear ONLY rows carrying
-      //     `_ui.master_internal === true`. Manual-internal rows have
-      //     no marker and survive untouched.
-      //   - cascade-all: clear every internal row regardless of
-      //     marker. User explicitly opted into the destructive sweep
-      //     via the setting.
-      if (offBehavior === "preserve-manual" && !ui.master_internal) return m;
       if (!inst.internal) return m;
+      // Preserve mode → only clear rows THIS bundle owns. Cascade
+      // mode → clear everything in scope regardless of claim.
+      if (mode === "preserve" && ui.master_internal_by !== bundle._uid) return m;
       const { internal: _drop, ...restInst } = inst;
       void _drop;
-      const { master_internal: _drop2, ...restUi } = ui;
+      const { master_internal: _drop2, master_internal_by: _drop3, ...restUi } = ui;
       void _drop2;
-      return {
-        ...m,
-        instance: { ...restInst, _ui: restUi },
-      };
+      void _drop3;
+      return { ...m, instance: { ...restInst, _ui: restUi } };
     }
   });
-  commitModules(list);
+  // Apply chain-tag updates to inner BundleInstances alongside the
+  // module commit. Single commitModules call keeps modules + bundles
+  // in lock-step so a subsequent recursive call sees the new flags.
+  const tagsByUid = new Map<string, "set" | "clear">();
+  for (const op of innerOps) if (op.chainTag) tagsByUid.set(op.inner._uid, op.chainTag);
+  const nextBundles = bundles.map((b) => {
+    const tag = tagsByUid.get(b._uid);
+    if (!tag) return b;
+    if (tag === "set") return { ...b, master_internal_chained_by: bundle._uid };
+    const { master_internal_chained_by: _drop, ...rest } = b;
+    void _drop;
+    return rest as BundleInstance;
+  });
+  commitModules(list, nextBundles);
+  // Recurse into inner bundles selected above. Mode propagates so a
+  // preserving outer doesn't turn into a cascading inner.
+  for (const op of innerOps) {
+    setBundleInternal(op.inner._uid, targetOn, mode);
+  }
 }
 
-/** Cascade seed lock across every seed-lockable child of a bundle.
- *  Lock uses the same fallback chain as toggleLockOnCard: the
- *  per-instance last-used seed (`lastUsedSeedReader(_uid)`), the
- *  cold-start `_ui.last_locked_seed`, then 0. Non-lockable children
- *  are passed through untouched. */
-function toggleBundleLock(uid: string): void {
-  const bundle = (value.value.bundles ?? []).find((b) => b._uid === uid);
+/** Click handler: aggregation drives the on/off resolution. State
+ *  "all" → click OFF (sweep everything in scope); state "none" or
+ *  "partial" → click ON (claim every off row + propagate to inner
+ *  masters). User-initiated click also clears this bundle's own
+ *  `master_internal_chained_by` flag — taking direct action means
+ *  the bundle is no longer "owned" by an outer chain. Any future
+ *  outer OFF will leave it alone. */
+function toggleBundleInternal(uid: string): void {
+  const bundles = value.value.bundles ?? [];
+  const bundle = bundles.find((b) => b._uid === uid);
   if (!bundle) return;
-  const state = bundleLockState(bundle);
+  const state = bundleInternalState(bundle);
   if (state === null) return;
-  const turnOn = state !== "all";
-  // Applicability hardcoded — non-lockable kinds (constraint) can't
-  // surface a locked_seed and the engine ignores the field on them.
-  // Master-OFF behaviour mirrors toggleBundleInternal.
-  const offBehavior = getBundleMasterOffBehavior();
-  const list = value.value.modules.map((m, i) => {
+  if (bundle.master_internal_chained_by) {
+    const nextBundles = bundles.map((b) => {
+      if (b._uid !== uid) return b;
+      const { master_internal_chained_by: _drop, ...rest } = b;
+      void _drop;
+      return rest as BundleInstance;
+    });
+    value.value = { ...value.value, bundles: nextBundles };
+  }
+  setBundleInternal(uid, state !== "all");
+}
+
+/** Set seed-lock for every direct child of a bundle, recurse into
+ *  inner bundles. Mirrors `setBundleInternal` — see that fn for the
+ *  full design rationale (inner-bundle ownership, smart OFF,
+ *  cascade-via-recursion). Lock-specific bit: ON uses the
+ *  per-instance last-used seed via `lastUsedSeedReader`, then the
+ *  `_ui.last_locked_seed` memory, then 0. */
+function setBundleLock(
+  uid: string,
+  targetOn: boolean,
+  forceMode?: BundleOffMode,
+): void {
+  const bundles = value.value.bundles ?? [];
+  const bundle = bundles.find((b) => b._uid === uid);
+  if (!bundle) return;
+  const innerBundles = bundles.filter((b) => b.parent_uid === bundle._uid);
+  const innerUids = new Set(innerBundles.map((b) => b._uid));
+  const modules = value.value.modules;
+  // Same OFF-mode decision matrix as setBundleInternal — see
+  // `BundleOffMode` docs above for the full table. Pre-scan covers
+  // the ENTIRE scope (not just direct children) so an inner-owned
+  // claim correctly forces outer's OFF into preserve mode and
+  // saves any hand-locked rows in outer's direct scope.
+  let mode: BundleOffMode = forceMode ?? "preserve";
+  if (!targetOn && !forceMode) {
+    let hasAnyClaim = false;
+    for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
+      const m = modules[i];
+      if (!m || !isSeedLockable(m)) continue;
+      if (m.instance?._ui?.master_lock_by) {
+        hasAnyClaim = true;
+        break;
+      }
+    }
+    mode = hasAnyClaim ? "preserve" : "cascade";
+  }
+  // Inner chain decisions mirror setBundleInternal. See that fn's
+  // commentary for the full rationale.
+  type InnerOp = { inner: BundleInstance; chainTag: "set" | "clear" | null };
+  const innerOps: InnerOp[] = [];
+  for (const inner of innerBundles) {
+    if (targetOn) {
+      const innerState = bundleLockState(inner);
+      if (innerState !== "all") {
+        innerOps.push({ inner, chainTag: "set" });
+      }
+    } else {
+      if (inner.master_lock_chained_by === bundle._uid) {
+        innerOps.push({ inner, chainTag: "clear" });
+      }
+    }
+  }
+  const list = modules.map((m, i) => {
     if (i < bundle.start_idx || i > bundle.end_idx) return m;
     if (!isSeedLockable(m)) return m;
+    const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
+    if (origin && innerUids.has(origin)) return m;
     const inst = m.instance ?? {};
     const ui = inst._ui ?? {};
-    if (turnOn) {
-      // Already locked → don't claim via marker; the user's existing
-      // lock survives any future master OFF in preserve-manual mode.
+    if (targetOn) {
       if (typeof inst.locked_seed === "number") return m;
       let fallback: number;
       const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
@@ -2074,23 +2473,66 @@ function toggleBundleLock(uid: string): void {
         instance: {
           ...inst,
           locked_seed: fallback,
-          _ui: { ...ui, last_locked_seed: fallback, master_lock: true },
+          _ui: {
+            ...ui,
+            last_locked_seed: fallback,
+            master_lock: true,
+            master_lock_by: bundle._uid,
+          },
         },
       };
     } else {
-      // Same dual-mode as toggleBundleInternal. cascade-all sweeps
-      // every locked row; preserve-manual only un-locks marker rows.
-      if (offBehavior === "preserve-manual" && !ui.master_lock) return m;
       if (typeof inst.locked_seed !== "number") return m;
-      const { master_lock: _drop, ...restUi } = ui;
+      if (mode === "preserve" && ui.master_lock_by !== bundle._uid) return m;
+      const { master_lock: _drop, master_lock_by: _drop2, ...restUi } = ui;
       void _drop;
+      void _drop2;
+      // DROP the `locked_seed` key entirely — earlier we set it to
+      // `null`, which the engine treats identically to missing but
+      // the bundle fingerprint distinguishes (stableStringify emits
+      // `"locked_seed":null` vs no key at all).
+      const { locked_seed: _drop3, ...restInstClean } = inst;
+      void _drop3;
       return {
         ...m,
-        instance: { ...inst, locked_seed: null, _ui: restUi },
+        instance: { ...restInstClean, _ui: restUi },
       };
     }
   });
-  commitModules(list);
+  const tagsByUid = new Map<string, "set" | "clear">();
+  for (const op of innerOps) if (op.chainTag) tagsByUid.set(op.inner._uid, op.chainTag);
+  const nextBundles = bundles.map((b) => {
+    const tag = tagsByUid.get(b._uid);
+    if (!tag) return b;
+    if (tag === "set") return { ...b, master_lock_chained_by: bundle._uid };
+    const { master_lock_chained_by: _drop, ...rest } = b;
+    void _drop;
+    return rest as BundleInstance;
+  });
+  commitModules(list, nextBundles);
+  for (const op of innerOps) {
+    setBundleLock(op.inner._uid, targetOn, mode);
+  }
+}
+
+function toggleBundleLock(uid: string): void {
+  const bundles = value.value.bundles ?? [];
+  const bundle = bundles.find((b) => b._uid === uid);
+  if (!bundle) return;
+  const state = bundleLockState(bundle);
+  if (state === null) return;
+  // Direct user click clears this bundle's own chain tag — taking
+  // ownership decouples it from any outer chain.
+  if (bundle.master_lock_chained_by) {
+    const nextBundles = bundles.map((b) => {
+      if (b._uid !== uid) return b;
+      const { master_lock_chained_by: _drop, ...rest } = b;
+      void _drop;
+      return rest as BundleInstance;
+    });
+    value.value = { ...value.value, bundles: nextBundles };
+  }
+  setBundleLock(uid, state !== "all");
 }
 
 /** Non-empty array helper — null/undefined/empty all read as "no override". */
@@ -2244,7 +2686,14 @@ function toggleLockOnCard(idx: number) {
   const inst = m.instance ?? {};
   let nextInst: NonNullable<ModuleEntry["instance"]>;
   if (typeof inst.locked_seed === "number") {
-    nextInst = { ...inst, locked_seed: null };
+    // DROP `locked_seed` rather than setting `null` — bundle MOD
+    // fingerprint stableStringify distinguishes `null` from missing,
+    // and a bundle was lighting up "modified" on the first per-card
+    // unlock because the JSON shape changed even though the engine
+    // treats both states identically.
+    const { locked_seed: _drop, ...restInst } = inst;
+    void _drop;
+    nextInst = restInst;
   } else {
     let fallback: number;
     // Read by per-instance `_uid` — sibling rows share `m.id` (library
@@ -2264,10 +2713,12 @@ function toggleLockOnCard(idx: number) {
   }
   // Drop the bundle master_lock marker — the user is now hand-
   // managing this row's lock state, so a future master OFF on the
-  // bundle should leave it alone.
-  if (nextInst._ui && nextInst._ui.master_lock) {
-    const { master_lock: _drop, ...restUi } = nextInst._ui;
+  // bundle should leave it alone. Strips both legacy `master_lock`
+  // (boolean) and the per-bundle `master_lock_by` (uid) tag.
+  if (nextInst._ui && (nextInst._ui.master_lock || nextInst._ui.master_lock_by)) {
+    const { master_lock: _drop, master_lock_by: _drop2, ...restUi } = nextInst._ui;
     void _drop;
+    void _drop2;
     nextInst = { ...nextInst, _ui: restUi };
   }
   // Phase B: index-based mutation — sibling rows share `m.id`, so a
@@ -2284,13 +2735,15 @@ function toggleInternalOnCard(idx: number) {
   const m = value.value.modules[idx];
   if (!m) return;
   const inst = m.instance ?? {};
-  // Dropping the `master_internal` marker means the bundle master's
-  // OFF cascade won't revert this row — the user is now hand-managing
-  // it. Whether they're turning it on for the first time or off after
+  // Dropping the `master_internal` markers (legacy boolean + per-bundle
+  // `master_internal_by` uid tag) means the bundle master's OFF
+  // cascade won't revert this row — the user is now hand-managing it.
+  // Whether they're turning it on for the first time or off after
   // the master had set it, ownership transfers here.
   const ui = inst._ui ?? {};
-  const { master_internal: _dropMarker, ...restUi } = ui;
+  const { master_internal: _dropMarker, master_internal_by: _dropMarker2, ...restUi } = ui;
   void _dropMarker;
+  void _dropMarker2;
   const nextUi = restUi;
   let nextInst: NonNullable<ModuleEntry["instance"]>;
   if (inst.internal) {
@@ -3050,6 +3503,123 @@ function saveEditedModule(updated: ModuleEntry & { _originalId?: string }) {
   editingIdx.value = null;
 }
 
+/**
+ * Open the BundleInstanceModal for `uid`. Snapshots the live
+ * BundleInstance into `bundleDraft` so the user's typing in
+ * IdentitySection doesn't commit until Save. Kicks off a one-shot
+ * library fetch in parallel so the "reset to library default" per-
+ * field buttons can light up once the canonical name/color land.
+ *
+ * Lock / Hide master toggles deliberately bypass the draft — they
+ * cascade onto live children, so buffering them through the modal
+ * would diverge from the canvas state. Same handlers
+ * `BundleHeader` uses.
+ */
+function openBundleEditModal(uid: string): void {
+  const target = (value.value.bundles ?? []).find((b) => b._uid === uid);
+  if (!target) return;
+  editingBundleUid.value = uid;
+  bundleDraft.value = JSON.parse(JSON.stringify(target));
+  bundleLibraryDefaults.value = null;
+  // Fire-and-forget: when the fetch lands, IdentitySection's per-
+  // field reset surfaces. Modal stays usable in the interim — user
+  // can edit name/color even before the library entry resolves.
+  void (async () => {
+    try {
+      const entry = await api.bundles.get(target.library_id);
+      // Modal may have closed mid-fetch; bail if so.
+      if (editingBundleUid.value !== uid) return;
+      bundleLibraryDefaults.value = {
+        name: entry.name,
+        color: entry.color ?? null,
+      };
+    } catch {
+      // Library entry deleted / network error — leave defaults null
+      // so the per-field reset buttons stay hidden, but the user
+      // can still edit name/color directly. No toast: this isn't
+      // an error from the user's perspective.
+    }
+  })();
+}
+
+function onBundleEditUpdate(patch: Partial<BundleInstance>): void {
+  if (!bundleDraft.value) return;
+  bundleDraft.value = { ...bundleDraft.value, ...patch };
+}
+
+function saveBundleEdit(): void {
+  const uid = editingBundleUid.value;
+  const draft = bundleDraft.value;
+  if (!uid || !draft) {
+    editingBundleUid.value = null;
+    bundleDraft.value = null;
+    return;
+  }
+  const bundles = value.value.bundles ?? [];
+  const idx = bundles.findIndex((b) => b._uid === uid);
+  if (idx < 0) {
+    editingBundleUid.value = null;
+    bundleDraft.value = null;
+    return;
+  }
+  // Only identity fields flow through the draft — preserve every
+  // other field (range, hash, fingerprint, …) from the live bundle
+  // so cascading toggles that fired during the modal session aren't
+  // overwritten.
+  const live = bundles[idx];
+  const next: BundleInstance = {
+    ...live,
+    name: draft.name,
+    color: draft.color ?? null,
+  };
+  const nextBundles = [...bundles];
+  nextBundles[idx] = next;
+  value.value = { ...value.value, bundles: nextBundles };
+  editingBundleUid.value = null;
+  bundleDraft.value = null;
+  bundleLibraryDefaults.value = null;
+}
+
+function cancelBundleEdit(): void {
+  editingBundleUid.value = null;
+  bundleDraft.value = null;
+  bundleLibraryDefaults.value = null;
+}
+
+/** Wrap the existing ctx-level toggle so the modal's runtime
+ *  buttons trigger the same cascade as the BundleHeader / ctxmenu.
+ *  Live mutation — no draft involvement. */
+function onBundleEditToggleLock(): void {
+  const uid = editingBundleUid.value;
+  if (!uid) return;
+  toggleBundleLock(uid);
+}
+
+function onBundleEditToggleInternal(): void {
+  const uid = editingBundleUid.value;
+  if (!uid) return;
+  toggleBundleInternal(uid);
+}
+
+function onBundleEditSaveToLibrary(): void {
+  const uid = editingBundleUid.value;
+  if (!uid) return;
+  // Commit the draft FIRST so the user's pending name / color edits
+  // land on the live BundleInstance, then push that live state to
+  // the library. The earlier `cancelBundleEdit()`-then-save sequence
+  // discarded the draft, so any unsaved name / color edits never
+  // made it into the library payload.
+  saveBundleEdit();
+  void saveBundleToLibrary(uid);
+}
+
+function onBundleEditResetToLibrary(): void {
+  const uid = editingBundleUid.value;
+  if (!uid) return;
+  cancelBundleEdit();
+  void resetBundleToLibrary(uid);
+}
+
 function onCardKeydown(ev: KeyboardEvent, m: ModuleEntry, idx: number) {
   // Don't intercept keys when focus is inside an input/textarea inside the
   // card (none today, but defense in depth for future inline controls).
@@ -3314,49 +3884,78 @@ function onDragEnd() {
     const consumedByOther = ds.consumedBy != null && ds.consumedBy !== props.nodeId;
     if (consumedByOther) {
       if (ds.kind === "module") {
-        // Cross-node consumption — remove source by recorded sourceIdx.
-        // Reconcile bundle ranges on the sender side so any bundle
-        // beyond `srcIdx` shifts down by one and any bundle that
-        // owned the removed row drops it from its children.
-        const srcIdx = ds.sourceIdx;
+        // Cross-node consumption — filter by `_uid`, NOT by sourceIdx.
+        // The handoff queue watch may have already removed the row
+        // before this dragend fires (Vue's watch flush ordering vs
+        // browser-dispatched dragend isn't deterministic). Splicing
+        // at the recorded sourceIdx would then delete the row that
+        // shifted into that slot — observed as "drag deleted my
+        // target wildcard" when the constraint sat next to its
+        // target. Filtering by _uid is idempotent: if the row's
+        // already gone, the filter is a no-op. `m.id` is the library
+        // uuid shared by siblings, so it's only a fallback for
+        // pre-_uid migration entries.
+        const dragUid = ds.module._uid;
         const curBundles = value.value.bundles ?? [];
-        if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
-          const list = [...value.value.modules];
-          list.splice(srcIdx, 1);
-          commitModules(list, curBundles);
+        if (dragUid) {
+          const filtered = value.value.modules.filter((m) => m._uid !== dragUid);
+          if (filtered.length !== value.value.modules.length) {
+            commitModules(filtered, curBundles);
+          }
         } else {
-          // Fallback when sourceIdx was invalidated. Target the
-          // specific row by _uid — `m.id` is the library uuid shared
-          // by siblings, so filtering by it would erase every sibling
-          // sharing the dragged module's library entry. Library-id
-          // fallback only for pre-_uid migration entries.
-          const dragUid = ds.module._uid;
-          const filtered = dragUid
-            ? value.value.modules.filter((m) => m._uid !== dragUid)
-            : value.value.modules.filter((m) => m.id !== ds.module.id);
-          commitModules(filtered, curBundles);
-        }
-      } else if (ds.kind === "bundle") {
-        // Cross-node bundle drop — remove the bundle's range from source
-        // modules + drop the outer BundleInstance AND every inner under
-        // it. Without dropping inners, the source would keep orphaned
-        // BundleInstance objects whose start_idx/end_idx point at rows
-        // that were spliced out.
-        const before = value.value.modules.slice(0, ds.sourceStartIdx);
-        const after = value.value.modules.slice(ds.sourceEndIdx + 1);
-        const removedCount = ds.sourceEndIdx - ds.sourceStartIdx + 1;
-        const movingBundleUids = new Set<string>([ds.bundleUid]);
-        for (const b of value.value.bundles ?? []) {
-          if (b.parent_uid && movingBundleUids.has(b.parent_uid)) {
-            movingBundleUids.add(b._uid);
+          // No _uid — only happens for ancient saved workflows that
+          // predate the per-row uid stamping pass. Best-effort splice
+          // by sourceIdx, accepting the risk of removing the wrong
+          // row if anything shifted it.
+          const srcIdx = ds.sourceIdx;
+          if (srcIdx >= 0 && srcIdx < value.value.modules.length) {
+            const list = [...value.value.modules];
+            list.splice(srcIdx, 1);
+            commitModules(list, curBundles);
+          } else {
+            const filtered = value.value.modules.filter((m) => m.id !== ds.module.id);
+            commitModules(filtered, curBundles);
           }
         }
-        const remainingBundles = (value.value.bundles ?? [])
-          .filter((b) => !movingBundleUids.has(b._uid))
-          .map((b) => (b.start_idx > ds.sourceEndIdx
-            ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
-            : b));
-        commitModules([...before, ...after], remainingBundles);
+      } else if (ds.kind === "bundle") {
+        // Cross-node bundle drop — same idempotency story as the
+        // module path. Filter the bundle range by its bundleUid +
+        // descendants instead of relying on stored start_idx/end_idx
+        // that the handoff queue may have already invalidated.
+        const movingBundleUids = new Set<string>([ds.bundleUid]);
+        // First pass: collect every inner whose parent is in the set.
+        // Repeated until no new uids land — covers nested bundles
+        // even though the tier-2 cap means one inner level today.
+        const curBundles = value.value.bundles ?? [];
+        let grew = true;
+        while (grew) {
+          grew = false;
+          for (const b of curBundles) {
+            if (b.parent_uid && movingBundleUids.has(b.parent_uid) && !movingBundleUids.has(b._uid)) {
+              movingBundleUids.add(b._uid);
+              grew = true;
+            }
+          }
+        }
+        const bundleStillPresent = curBundles.some((b) => b._uid === ds.bundleUid);
+        if (!bundleStillPresent) {
+          // Handoff already cleaned up; nothing left to do.
+        } else {
+          const movingBundle = curBundles.find((b) => b._uid === ds.bundleUid);
+          if (movingBundle) {
+            const start = movingBundle.start_idx;
+            const end = movingBundle.end_idx;
+            const before = value.value.modules.slice(0, start);
+            const after = value.value.modules.slice(end + 1);
+            const removedCount = end - start + 1;
+            const remainingBundles = curBundles
+              .filter((b) => !movingBundleUids.has(b._uid))
+              .map((b) => (b.start_idx > end
+                ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
+                : b));
+            commitModules([...before, ...after], remainingBundles);
+          }
+        }
       }
     }
   }
@@ -3424,6 +4023,52 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   ev.stopPropagation();
   const ds = dragState.value;
   if (!ds) return;
+  // Sync claim BEFORE any `await`. Browsers fire `dragend` on the
+  // source element as soon as the drop handler returns its first
+  // Promise (the `await nextTick()` below), and the source widget's
+  // dragend reads `dragState.value.consumedBy` synchronously to decide
+  // whether to splice out the moved row. Without this claim, the
+  // source widget always reads `null` (we set consumedBy at the END
+  // of the cross-node paths, well past several awaits) and the
+  // cross-node MOVE silently becomes a COPY — the row stays in both
+  // places. Skip the claim when the cross-node module path would
+  // dedupe-reject; otherwise we'd tell the source to remove its row
+  // even though the target rejected the drop.
+  const isCrossNode = ds.sourceNodeId !== props.nodeId;
+  if (isCrossNode) {
+    if (ds.kind === "module") {
+      const willDedupeBlock = value.value.modules.some((m) => m.id === ds.module.id);
+      if (!willDedupeBlock) {
+        dragState.value = { ...ds, consumedBy: props.nodeId };
+        // Belt-and-suspenders: queue an explicit handoff for the
+        // source widget. dragend on the source is the primary cleanup
+        // path, but has been observed to miss intermittently for
+        // constraint rows whose containing bundle frame re-renders
+        // during the drag tick — the dragend bubbles before the row
+        // re-mounts, then the consumedBy read races with the source
+        // widget's reactive update. Queue ensures the source's
+        // post-drop watch removes the row even if dragend skipped it.
+        if (ds.module._uid) {
+          queueHandoff({
+            kind: "module",
+            sourceNodeId: ds.sourceNodeId,
+            uid: ds.module._uid,
+          });
+        }
+      }
+    } else if (ds.kind === "bundle") {
+      // Bundle cross-node drops always accept (no dedupe gate on the
+      // bundle branch); claim eagerly.
+      dragState.value = { ...ds, consumedBy: props.nodeId };
+      queueHandoff({
+        kind: "bundle",
+        sourceNodeId: ds.sourceNodeId,
+        bundleUid: ds.bundleUid,
+        sourceStartIdx: ds.sourceStartIdx,
+        sourceEndIdx: ds.sourceEndIdx,
+      });
+    }
+  }
   // Snapshot zone before clearing hover state. Null target idx + null
   // zone → slot at end of top-level (empty hero / sticky footer drop).
   const zone: DropZone =
@@ -3578,7 +4223,10 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
       ...freshInners.map((b) => b._uid),
       ...newChildren.map((c) => c._uid).filter((u): u is string => !!u),
     ]);
-    dragState.value = { ...ds, consumedBy: props.nodeId };
+    // consumedBy was claimed synchronously at the top of onDrop — see
+    // the comment there. Re-assigning here would resurrect dragState
+    // after the source widget's dragend cleared it, leaving a stale
+    // payload visible to dragOver handlers until the next dragstart.
     return;
   }
 
@@ -3619,7 +4267,8 @@ async function onDrop(ev: DragEvent, targetIdx: number | null) {
   await nextTick();
   playFlipSnapshot(flipSnap);
   pulseDrop(inserted._uid);
-  dragState.value = { ...ds, consumedBy: props.nodeId };
+  // consumedBy was claimed synchronously at the top of onDrop. See
+  // the comment there for why we don't reassign post-await.
 }
 
 /** Map the slot DropZone to `{insertIdx, stamp}` for the cross-node
@@ -3739,6 +4388,7 @@ const moduleRowCtx: ModuleRowCtx = {
   toggleCollapsed, toggleEnabled, removeModule,
   toggleLockOnCard, toggleInternalOnCard,
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
+  pairingFor,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 
@@ -3988,6 +4638,32 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       @save="saveEditedModule"
       @close="editingIdx = null"
     />
+
+    <!-- Bundle edit modal — sibling to ModuleEditModal, dispatched
+         independently because BundleInstance ≠ ModuleEntry. The live
+         bundle drives `lockState` / `internalState` (not the draft)
+         since those toggles cascade onto children, mirroring the
+         BundleHeader buttons. -->
+    <ModalShell :visible="bundleDraft !== null" @close="cancelBundleEdit">
+      <BundleInstanceModal
+        v-if="bundleDraft !== null && editingBundleEntry"
+        :bundle="bundleDraft"
+        :library-name="bundleLibraryDefaults?.name ?? ''"
+        :library-color="bundleLibraryDefaults?.color ?? null"
+        :library-drifted="isBundleLibraryDrifted(editingBundleEntry)"
+        :snapshot-modified="bundleSnapshotModified(editingBundleEntry, value.modules)"
+        :lock-state="bundleLockState(editingBundleEntry)"
+        :internal-state="bundleInternalState(editingBundleEntry)"
+        @update="onBundleEditUpdate"
+        @save="saveBundleEdit"
+        @cancel="cancelBundleEdit"
+        @toggle-lock="onBundleEditToggleLock"
+        @toggle-internal="onBundleEditToggleInternal"
+        @save-to-library="onBundleEditSaveToLibrary"
+        @reset-to-library="onBundleEditResetToLibrary"
+        @open-spa="cancelBundleEdit"
+      />
+    </ModalShell>
 
     <!-- Standalone push-to-library entry point — fires from the
          right-click menu without going through the edit modal first.
@@ -4294,13 +4970,18 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 }
 /* Header divider — snap off at start of collapse, snap on at END of expand.
  * Default rule (no collapsed class) waits MOTION_COLLAPSE_MS before snapping
- * border-bottom visible; collapsed rule snaps immediately to transparent. */
+ * border-bottom visible; collapsed rule snaps immediately to 0-width so
+ * the row consumes NO extra height. Previously the divider stayed at 1px
+ * with `border-bottom-color: transparent`, which made collapsed bundles
+ * render 1px taller than collapsed modules — the user spotted that the
+ * two row types didn't match in compact state. */
 .wp-bundle .wp-bundle-header {
-  transition: border-bottom-color 0s var(--wp-motion-collapse);
+  transition: border-bottom-color 0s var(--wp-motion-collapse), border-bottom-width 0s var(--wp-motion-collapse);
 }
 .wp-bundle--collapsed .wp-bundle-header {
+  border-bottom-width: 0;
   border-bottom-color: transparent;
-  transition: border-bottom-color 0s 0s;
+  transition: border-bottom-color 0s 0s, border-bottom-width 0s 0s;
 }
 /* Caret rotation tied to bundle collapsed state — replaces the previous
  * icon-class swap (pi-caret-down ↔ pi-caret-right). The BundleHeader
@@ -4544,12 +5225,21 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
   padding: var(--wp-pad-row);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* Gap applied directly to the collapse-row when visible (rule
+   * below). Flex `gap: 4px` would otherwise paint a 4px band
+   * BELOW the header even when `.wp-collapse-row[data-collapsed=
+   * "true"]` has 0 track height, pushing the header off the
+   * module's visual mid-line. Bundle had the matching 1px header
+   * border-bottom residual fixed in a separate rule below so
+   * collapsed bundles and collapsed modules now both render flush
+   * around their header. */
   /* `position: relative` is the anchor for the ::before / ::after
    * insertion-line pseudos used by the drop indicators below. */
   position: relative;
   transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover), transform var(--wp-motion-hover), box-shadow var(--wp-motion-hover);
 }
+.wp-module .wp-collapse-row { margin-top: 4px; }
+.wp-module .wp-collapse-row[data-collapsed="true"] { margin-top: 0; }
 /* Kind border-left color — driven by data-kind attribute (Task 8). */
 .wp-module[data-kind="combine"]      { border-left-color: var(--wp-kind-combine); }
 .wp-module[data-kind="derivation"]   { border-left-color: var(--wp-kind-derivation); }
@@ -4635,7 +5325,23 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 .wp-module--flash { animation: wp-row-flash var(--wp-motion-pulse) ease-out; }
 .wp-module--shake { animation: wp-row-shake var(--wp-motion-swap) ease-in-out; }
 
-.wp-module-header { display: flex; align-items: center; gap: 6px; }
+/* Module header — flex row with every control centered on the
+ * row's mid-line. Mirrors `.wp-bundle-header`'s typography stack
+ * (`font: 500 11px/1.4 sans`) so a standalone module row and a
+ * bundle header read with identical chrome — same baseline rules,
+ * same visual heft. `.wp-row-type-icon .pi { line-height: 1 }`
+ * keeps the PrimeIcons glyphs from inheriting the 1.4 line-box,
+ * which would overflow their fixed-size container on Windows + DPI
+ * != 1 and round the icon a hair above the action-button siblings. */
+.wp-module-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 11px/1.4 var(--wp-font-sans);
+  color: var(--wp-text);
+}
+.wp-module-header > * { align-self: center; }
+.wp-module-header .wp-row-type-icon .pi { line-height: 1; }
 
 /* Drag handle — grab cursor scoped here, full card stays draggable. */
 /* .wp-drag-handle base styles → src/components/shared/row-primitives.css */
@@ -4799,6 +5505,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
  * wp-card-toggle + wp-icon-btn / wp-delete pattern. */
 .wp-mod-actions {
   display: flex;
+  align-items: center;
   gap: 1px;
   flex-shrink: 0;
 }

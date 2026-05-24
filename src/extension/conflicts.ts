@@ -141,12 +141,19 @@ export type ConflictType =
   | "shadows_upstream"
   | "duplicate_variable"
   | "missing_template_variable"
-  | "constraint_source_after_self"
+  // Constraint rules (2026-05-24 first-instance redesign). Legacy rules
+  // `constraint_source_after_self`, `constraint_source_in_downstream`,
+  // `constraint_target_before_self`, `constraint_target_in_upstream`
+  // collapse into the two `orphan_*` types below. `_missing` rules stay
+  // for the "uuid not in any catalog" case which is independent of
+  // position.
   | "constraint_source_missing"
-  | "constraint_source_in_downstream"
-  | "constraint_target_before_self"
-  | "constraint_target_in_upstream"
   | "constraint_target_missing"
+  | "constraint_orphan_source"   // no source instance upstream
+  | "constraint_orphan_target"   // no available target instance downstream
+                                  // (count-aware: N constraints targeting
+                                  //  the same wildcard need N downstream
+                                  //  instances; later ones get this rule)
   | "injector_binding_missing";
 export type Severity = "info" | "warning" | "error";
 export interface Conflict {
@@ -169,12 +176,10 @@ export function labelFor(type: ConflictType): string {
   if (type === "shadows_upstream") return "overrides upstream";
   if (type === "duplicate_variable") return "duplicate";
   if (type === "missing_template_variable") return "missing";
-  if (type === "constraint_source_after_self") return "source after constraint";
   if (type === "constraint_source_missing") return "source missing";
-  if (type === "constraint_target_before_self") return "target before constraint";
-  if (type === "constraint_target_in_upstream") return "target already picked upstream";
   if (type === "constraint_target_missing") return "target missing";
-  if (type === "constraint_source_in_downstream") return "source in downstream";
+  if (type === "constraint_orphan_source") return "source missing — no upstream instance";
+  if (type === "constraint_orphan_target") return "target missing — no available instance downstream";
   if (type === "injector_binding_missing") return "no binding";
   return type;
 }
@@ -185,17 +190,15 @@ export function labelFor(type: ConflictType): string {
  *  full sentences live in the tooltip via `labelFor`. */
 export function shortConflictLabel(type: ConflictType): string {
   switch (type) {
-    case "shadows_upstream":                return "override";
-    case "duplicate_variable":              return "duplicate";
-    case "missing_template_variable":       return "missing var";
-    case "constraint_source_after_self":    return "src after";
-    case "constraint_source_missing":       return "src missing";
-    case "constraint_target_before_self":   return "tgt before";
-    case "constraint_target_in_upstream":   return "tgt upstream";
-    case "constraint_target_missing":       return "tgt missing";
-    case "constraint_source_in_downstream": return "src downstream";
-    case "injector_binding_missing":        return "no binding";
-    default:                                return "conflict";
+    case "shadows_upstream":            return "override";
+    case "duplicate_variable":          return "duplicate";
+    case "missing_template_variable":   return "missing var";
+    case "constraint_source_missing":   return "src missing";
+    case "constraint_target_missing":   return "tgt missing";
+    case "constraint_orphan_source":    return "no src upstream";
+    case "constraint_orphan_target":    return "no tgt downstream";
+    case "injector_binding_missing":    return "no binding";
+    default:                            return "conflict";
   }
 }
 
@@ -396,7 +399,15 @@ export function scanConflicts(
 ): Conflict[] {
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
-  const downstreamUuids = new Set(downstreamWildcardUuids);
+  // Per-uuid downstream instance count — distinct from a Set because
+  // the count-aware `constraint_orphan_target` check needs to know how
+  // many downstream slots a uuid offers. Two duplicated constraints
+  // targeting the same wildcard need two downstream instances; a Set
+  // would collapse to 1 and falsely orphan the second constraint.
+  const downstreamCounts = new Map<string, number>();
+  for (const u of downstreamWildcardUuids) {
+    downstreamCounts.set(u, (downstreamCounts.get(u) ?? 0) + 1);
+  }
   // Same-node wildcard index lookup. Used by the constraint ordering
   // checks: a constraint references its source/target by uuid, and we
   // need to know whether each uuid lives in this node (and at what
@@ -406,7 +417,14 @@ export function scanConflicts(
   // (it lives in this node, the user just toggled it off). The
   // resulting warning would push the user to fix a typo that isn't
   // there. Disabled vs enabled is a separate concern.
-  const localWildcardIndex = new Map<string, number>();
+  // Map uuid → ARRAY of chain positions. Pre-2026-05-24 this was a
+  // single-index Map<uuid, number>, but the first-instance count-aware
+  // orphan check needs to know how many local instances share a uuid
+  // (two `mood` wildcard slots in one node = two claimable targets).
+  // Keep `localWildcardIndex.get(uuid)?.[0]` for the legacy single-
+  // index reads — callers that don't care about duplicates get the
+  // earliest occurrence.
+  const localWildcardIndex = new Map<string, number[]>();
   // Per-position cumulative nested-reach: `localNestedReachAfter[i]`
   // is the set of uuids reachable via `@{}` from any wildcard at
   // index > i, transitively via this node's local catalog. Used by
@@ -416,7 +434,9 @@ export function scanConflicts(
   const localCatalog = new Map<string, ModuleEntry>();
   value.modules.forEach((m, i) => {
     if (m.type === "wildcard") {
-      localWildcardIndex.set(m.id, i);
+      const arr = localWildcardIndex.get(m.id);
+      if (arr) arr.push(i);
+      else localWildcardIndex.set(m.id, [i]);
       localCatalog.set(m.id, m);
     }
   });
@@ -432,6 +452,41 @@ export function scanConflicts(
   for (let i = value.modules.length - 1; i >= 0; i--) {
     for (const r of nestedRefsOf(value.modules[i])) seedsAccumulator.push(r);
     localNestedReachAfter[i] = walkLocalReach(seedsAccumulator, localCatalog);
+  }
+  // Per-target slot allocator (2026-05-24 first-instance spec).
+  // Each constraint at position i claims the FIRST unclaimed target
+  // instance reachable from i — a local wildcard at position > i, or
+  // (if no local slot left) a downstream Context instance. Modeling
+  // this as a counter was wrong: a constraint at position 4 with a
+  // local target at position 3 (BEFORE itself) cannot claim that
+  // local — it's upstream. The counter happily decremented anyway,
+  // falsely orphaning later constraints when an earlier one had
+  // already consumed the only downstream slot.
+  //
+  // `availableLocalSlots[tgtId]` is a *sorted* list of local indices
+  // where this target appears. `claimLocalSlot(tgtId, i)` removes and
+  // returns the smallest index > i; `remainingDownstream[tgtId]`
+  // tracks how many cross-node instances are still up for grabs.
+  const availableLocalSlots = new Map<string, number[]>();
+  for (const [uuid, indices] of localWildcardIndex) {
+    availableLocalSlots.set(uuid, [...indices].sort((a, b) => a - b));
+  }
+  const remainingDownstream = new Map<string, number>(downstreamCounts);
+  function claimSlot(tgtId: string, i: number): boolean {
+    const locals = availableLocalSlots.get(tgtId);
+    if (locals) {
+      const idx = locals.findIndex((slot) => slot > i);
+      if (idx !== -1) {
+        locals.splice(idx, 1);
+        return true;
+      }
+    }
+    const left = remainingDownstream.get(tgtId) ?? 0;
+    if (left > 0) {
+      remainingDownstream.set(tgtId, left - 1);
+      return true;
+    }
+    return false;
   }
   const written = new Set<string>();
   // Track the kind of the FIRST module to write each name in this
@@ -515,125 +570,104 @@ export function scanConflicts(
       }
     }
 
-    // 3. Constraint ordering & reference resolution. The runtime contract
-    //    is `source picks → constraint loads → target picks` against the
-    //    ctx. Ordering rules:
-    //      - source MUST run before this constraint (same-node-earlier
-    //        OR upstream chain). Otherwise the source's pick isn't yet
-    //        in `__wp_picks__` when the wildcard handler reads it.
-    //      - target MUST run after this constraint (same-node-later OR
-    //        downstream chain). Otherwise the target's pick already
-    //        happened and the matrix never reaches it.
-    //    Out-of-order references make the constraint a silent no-op at
-    //    runtime; the only signal would be the post-run
-    //    `unknown_constraint_source` warning. Static checks here flip
-    //    that into a card-level dot before the user even queues. The
-    //    `variable` field carries a short uuid prefix so the tooltip
-    //    points at the offending reference.
+    // 3. Constraint orphan + count check (2026-05-24 first-instance
+    //    redesign). Per the new one-shot semantic, each constraint
+    //    targets ONE downstream target instance — and source must have
+    //    picked upstream of the constraint position. Replaces the
+    //    legacy after_self / before_self / in_upstream / in_downstream
+    //    rules with two unified orphan checks:
+    //
+    //      - `constraint_orphan_source`  : no source wildcard instance
+    //        upstream of this constraint. Upstream = same-node at
+    //        index < i, OR an upstream Context node. A source that
+    //        ALSO appears downstream is fine — only flag when there's
+    //        no upstream instance at all.
+    //
+    //      - `constraint_orphan_target`  : no available target
+    //        wildcard instance downstream of this constraint. Count-
+    //        aware: each prior constraint targeting the same wildcard
+    //        consumes one downstream instance slot. If N constraints
+    //        targeting target X share fewer than N downstream X
+    //        instances, the later constraints get this rule. Available
+    //        instances include same-node at index > i, downstream
+    //        Context, AND nested-ref reachable via `@{X}` from any
+    //        wildcard at index > i (the engine resolver applies
+    //        constraints to nested refs too).
+    //
+    //      - `constraint_source_missing` / `constraint_target_missing`
+    //        : uuid not findable in catalog at all. Independent of
+    //        position. Surfaces typos / dangling refs.
     if (m.type === "constraint") {
       const cp = (m.payload ?? {}) as { source_wildcard_id?: string; target_wildcard_id?: string };
       const srcId = cp.source_wildcard_id;
       const tgtId = cp.target_wildcard_id;
+
       if (typeof srcId === "string" && srcId) {
-        // Source needs to have picked BEFORE this constraint runs.
-        // Good locations: same node at index < i, OR upstream Context.
-        // Bad locations: same node at index >= i (after_self),
-        // downstream Context (in_downstream), or unfindable (missing).
-        const localIdx = localWildcardIndex.get(srcId);
-        const inLocal = localIdx !== undefined;
+        const localIdxs = localWildcardIndex.get(srcId);
+        const inLocalBeforeSelf = (localIdxs ?? []).some((idx) => idx < i);
         const inUpstream = upstreamUuids.has(srcId);
-        const inDownstream = downstreamUuids.has(srcId);
-        if (inLocal && (localIdx as number) >= i) {
-          out.push({
-            moduleId: m._uid ?? m.id,
-            variable: srcId,
-            type: "constraint_source_after_self",
-            severity: "warning",
-          });
-        } else if (!inLocal && !inUpstream && inDownstream) {
-          // Source IS visible — just in the wrong direction. Surface
-          // a more specific signal than the catch-all "missing" so
-          // the user knows where to look.
-          out.push({
-            moduleId: m._uid ?? m.id,
-            variable: srcId,
-            type: "constraint_source_in_downstream",
-            severity: "warning",
-          });
-        } else if (!inLocal && !inUpstream && !inDownstream) {
-          out.push({
-            moduleId: m._uid ?? m.id,
-            variable: srcId,
-            type: "constraint_source_missing",
-            severity: "warning",
-          });
+        const inDownstream = (downstreamCounts.get(srcId) ?? 0) > 0;
+        const inLocal = localIdxs !== undefined && localIdxs.length > 0;
+        const hasUpstreamInstance = inLocalBeforeSelf || inUpstream;
+        if (!hasUpstreamInstance) {
+          if (!inLocal && !inUpstream && !inDownstream) {
+            out.push({
+              moduleId: m._uid ?? m.id,
+              variable: srcId,
+              type: "constraint_source_missing",
+              severity: "warning",
+            });
+          } else {
+            // Source exists somewhere but not upstream of this constraint
+            // → orphan. Includes same-node-at-or-after-self and
+            // downstream-only cases.
+            out.push({
+              moduleId: m._uid ?? m.id,
+              variable: srcId,
+              type: "constraint_orphan_source",
+              severity: "warning",
+            });
+          }
         }
       }
-      if (typeof tgtId === "string" && tgtId) {
-        // Target needs to pick AFTER this constraint runs. Good
-        // locations: same node at index > i, downstream Context, OR
-        // reachable via nested `@{}` from a wildcard at index > i
-        // (engine.syntax.resolve applies constraints to refs too —
-        // see engine/modules/_constraints.py).
-        // Bad locations:
-        //   - same node at index <= i (`target_before_self`)
-        //   - ONLY in upstream Context with no later instance
-        //     anywhere (`target_in_upstream` — the upstream pick is
-        //     already locked, and there's no downstream / later /
-        //     nested instance for the constraint to bind to)
-        //   - not findable anywhere (`target_missing`)
-        const localIdx = localWildcardIndex.get(tgtId);
-        const inLocalDirect = localIdx !== undefined;
-        const inLocalAfterSelf = inLocalDirect && (localIdx as number) > i;
-        const inLocalBeforeOrAtSelf = inLocalDirect && (localIdx as number) <= i;
-        const inUpstream = upstreamUuids.has(tgtId);
-        const inDownstream = downstreamUuids.has(tgtId);
-        // Nested-reach is computed PER constraint position: only nested
-        // refs from wildcards at index > i count, because nested refs
-        // from earlier wildcards already resolved before the constraint
-        // registered. `localNestedReachAfter[i + 1]` captures uuids
-        // reachable from positions strictly greater than i.
-        const inLocalNestedAfter = localNestedReachAfter[i + 1].has(tgtId);
-        // "Constraint can bind to SOMETHING that runs after registration"
-        const hasBindableInstance =
-          inLocalAfterSelf || inDownstream || inLocalNestedAfter;
 
-        if (inLocalBeforeOrAtSelf && !hasBindableInstance) {
-          // Only-flagged-instance is upstream of this constraint in the
-          // local chain. If we ALSO have a later instance somewhere,
-          // the constraint is useful — stay silent.
-          out.push({
-            moduleId: m._uid ?? m.id,
-            variable: tgtId,
-            type: "constraint_target_before_self",
-            severity: "warning",
-          });
-        } else if (inUpstream && !hasBindableInstance && !inLocalBeforeOrAtSelf) {
-          // Pre-fix this fired whenever target had an upstream
-          // instance. With multi-instance reasoning a target that's
-          // ALSO downstream / nested-after / local-after-self is
-          // bindable — only flag when upstream is the sole instance.
-          out.push({
-            moduleId: m._uid ?? m.id,
-            variable: tgtId,
-            type: "constraint_target_in_upstream",
-            severity: "warning",
-          });
-        } else if (
-          !inLocalDirect && !inUpstream && !inDownstream && !inLocalNestedAfter
-        ) {
-          // Not findable anywhere reachable. Nested-reach via @{} from
-          // any later chain wildcard counts as reachable — the engine
-          // resolver applies constraints to nested target refs too.
+      if (typeof tgtId === "string" && tgtId) {
+        // Count-aware target orphan check. Track per-target claim
+        // count across constraints in chain order. Each constraint at
+        // position i can claim the next unclaimed downstream instance.
+        // Available instance count = local-after-self count +
+        // downstream chain count + nested-reach count (each treated as
+        // one slot apiece — best-effort static analysis).
+        const localIdxs = localWildcardIndex.get(tgtId);
+        const inLocalDirect = localIdxs !== undefined && localIdxs.length > 0;
+        const inUpstream = upstreamUuids.has(tgtId);
+        const downstreamCount = downstreamCounts.get(tgtId) ?? 0;
+        const inDownstream = downstreamCount > 0;
+        const inLocalNestedAfter = localNestedReachAfter[i + 1].has(tgtId);
+
+        if (!inLocalDirect && !inUpstream && !inDownstream && !inLocalNestedAfter) {
           out.push({
             moduleId: m._uid ?? m.id,
             variable: tgtId,
             type: "constraint_target_missing",
             severity: "warning",
           });
+        } else {
+          // Slot allocation: first try a local instance at index > i,
+          // then a downstream cross-node instance. Falls back to
+          // nested-reach (best-effort — counts as one extra slot, not
+          // tracked per nested instance because static counting through
+          // `@{}` chains gets hairy fast).
+          const claimed = claimSlot(tgtId, i);
+          if (!claimed && !inLocalNestedAfter) {
+            out.push({
+              moduleId: m._uid ?? m.id,
+              variable: tgtId,
+              type: "constraint_orphan_target",
+              severity: "warning",
+            });
+          }
         }
-        // All other cases → constraint has at least one bindable
-        // instance; silent (good).
       }
     }
   }

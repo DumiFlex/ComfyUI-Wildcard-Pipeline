@@ -573,7 +573,13 @@ function pickKind(k: SelectorKind) {
       <div class="wp-hist">
         <div v-for="entry in result.entries" :key="entry.template" class="wp-hist__row">
           <div class="wp-hist__template">
+            <span v-if="entry.template === ''" class="wp-tr-null-chip">
+              <i class="pi pi-ban" aria-hidden="true" />
+              <span>null</span>
+              <span class="wp-tr-null-hint">(empty)</span>
+            </span>
             <RichTextPreview
+              v-else
               :value="entry.template"
               :uuid-to-name="uuidToName"
               clickable-refs
@@ -673,12 +679,29 @@ function pickKind(k: SelectorKind) {
                 v-for="sv in result.sourceValues"
                 :key="sv"
                 class="wp-tr-cn-table__sv wp-truncate"
-              >{{ sv }}</th>
+              >
+                <RichTextPreview
+                  :value="sv"
+                  :uuid-to-name="uuidToName"
+                  surface="wildcard"
+                />
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in result.rows" :key="row.value">
-              <td class="wp-mono">{{ row.value }}</td>
+              <td class="wp-mono">
+                <span v-if="row.value === ''" class="wp-tr-null-chip">
+                  <i class="pi pi-ban" aria-hidden="true" />
+                  <span>null</span>
+                </span>
+                <RichTextPreview
+                  v-else
+                  :value="row.value"
+                  :uuid-to-name="uuidToName"
+                  surface="wildcard"
+                />
+              </td>
               <td class="wp-mono wp-tr-cn-table__w wp-dim">{{ row.before }}</td>
               <td
                 v-for="cell in row.after"
@@ -931,7 +954,38 @@ function pickKind(k: SelectorKind) {
   display: flex; gap: var(--wp-space-6); margin-top: var(--wp-space-5);
   font-size: var(--wp-text-xs); color: var(--wp-text-muted);
 }
-.wp-tr-dot { color: var(--wp-text); }
+/* Legend dots — the `wp-icon--*` modifier classes paint per state.
+ * Without these scoped-CSS overrides, `.wp-tr-dot { color: var(--wp-text) }`
+ * (more specific because of the [data-v-hash] attr the scoper adds)
+ * would beat the unscoped `.wp-icon--success` rule in tokens.css and
+ * every dot would render white. Two-class selector keeps specificity
+ * inside this SFC. */
+.wp-tr-dot { color: var(--wp-text-muted, var(--wp-text)); }
+.wp-tr-dot.wp-icon--success { color: var(--wp-success); }
+.wp-tr-dot.wp-icon--warn    { color: var(--wp-warn); }
+
+/* Null-option chip — surfaces wildcard / constraint result rows where
+ * the value is the empty string (the null option rolled empty). */
+.wp-tr-null-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  background: color-mix(in srgb, var(--wp-text-muted) 12%, transparent);
+  border: 1px dashed var(--wp-border);
+  border-radius: 3px;
+  color: var(--wp-text-muted);
+  font-size: var(--wp-text-xs);
+  font-family: var(--wp-font-mono, monospace);
+}
+.wp-tr-null-chip .pi { font-size: 10px; }
+.wp-tr-null-hint {
+  margin-left: 6px;
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-xs);
+  font-style: italic;
+}
+.wp-tr-dot.wp-icon--danger  { color: var(--wp-danger); }
 
 .wp-tr-rule-trace { display: flex; flex-direction: column; gap: var(--wp-space-3); }
 .wp-tr-rule-row {
