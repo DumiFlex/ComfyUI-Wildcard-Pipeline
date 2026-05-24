@@ -1,0 +1,143 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+
+const mockComposable = {
+  dryRun: vi.fn(),
+  apply: vi.fn(),
+  undo: vi.fn(),
+};
+
+vi.mock("../useCascadeApply", () => ({
+  useCascadeApply: () => mockComposable,
+}));
+
+import CascadeRenameDialog from "../CascadeRenameDialog.vue";
+
+describe("CascadeRenameDialog", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockComposable.dryRun.mockReset();
+    mockComposable.apply.mockReset();
+  });
+
+  it("toggle defaults to checked when affected list non-empty", async () => {
+    mockComposable.dryRun.mockResolvedValue({
+      ok: true, affected_count: 2,
+      affected_entities: [
+        { kind: "constraint", id: "c1", name: "A" },
+        { kind: "constraint", id: "c2", name: "B" },
+      ],
+    });
+    const wrap = mount(CascadeRenameDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", initialName: "warm",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const cb = document.body.querySelector("input[type='checkbox']") as HTMLInputElement;
+    expect(cb).toBeTruthy();
+    expect(cb.checked).toBe(true);
+    wrap.unmount();
+  });
+
+  it("hides toggle when no affected refs", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    const wrap = mount(CascadeRenameDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", initialName: "warm",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(document.body.querySelector("input[type='checkbox']")).toBeNull();
+    wrap.unmount();
+  });
+
+  it("opt-out (toggle unchecked) emits confirmed with broken_refs", async () => {
+    mockComposable.dryRun.mockResolvedValue({
+      ok: true, affected_count: 2,
+      affected_entities: [
+        { kind: "constraint", id: "c1", name: "A" },
+        { kind: "constraint", id: "c2", name: "B" },
+      ],
+    });
+    mockComposable.apply.mockImplementation(async (req) => {
+      if (req.cascade_refs === false) {
+        return {
+          ok: true, undo_entry_id: "u2", affected_count: 0,
+          broken_refs: [{ kind: "constraint", id: "c1", name: "A" }],
+        };
+      }
+      return { ok: true, undo_entry_id: "u1", affected_count: 2, diff: [] };
+    });
+    const wrap = mount(CascadeRenameDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", initialName: "warm",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    // Uncheck the cascade toggle.
+    const cb = document.body.querySelector("input[type='checkbox']") as HTMLInputElement;
+    cb.click();
+    await flushPromises();
+    // Update name.
+    const input = document.body.querySelector("input[type='text']") as HTMLInputElement;
+    input.value = "hot";
+    input.dispatchEvent(new Event("input"));
+    await flushPromises();
+    // Confirm.
+    const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
+    btn.click();
+    await flushPromises();
+    const events = wrap.emitted("confirmed") ?? [];
+    expect(events).toHaveLength(1);
+    const result = events[0]![0] as { undo_entry_id: string; broken_refs?: Array<unknown> };
+    expect(result.undo_entry_id).toBe("u2");
+    expect(result.broken_refs).toHaveLength(1);
+    wrap.unmount();
+  });
+
+  it("cascade-on (toggle checked) emits confirmed without broken_refs", async () => {
+    mockComposable.dryRun.mockResolvedValue({
+      ok: true, affected_count: 1,
+      affected_entities: [{ kind: "constraint", id: "c1", name: "A" }],
+    });
+    mockComposable.apply.mockResolvedValue({
+      ok: true, undo_entry_id: "u1", affected_count: 1,
+      affected_entities: [{ kind: "constraint", id: "c1", name: "A" }],
+      diff: [],
+    });
+    const wrap = mount(CascadeRenameDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", initialName: "warm",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const input = document.body.querySelector("input[type='text']") as HTMLInputElement;
+    input.value = "hot";
+    input.dispatchEvent(new Event("input"));
+    await flushPromises();
+    const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
+    btn.click();
+    await flushPromises();
+    const events = wrap.emitted("confirmed") ?? [];
+    expect(events).toHaveLength(1);
+    const result = events[0]![0] as { undo_entry_id: string; broken_refs?: Array<unknown> };
+    expect(result.undo_entry_id).toBe("u1");
+    expect(result.broken_refs).toBeUndefined();
+    wrap.unmount();
+  });
+
+  it("rename button disabled when name empty", async () => {
+    mockComposable.dryRun.mockResolvedValue({ ok: true, affected_count: 0, affected_entities: [] });
+    const wrap = mount(CascadeRenameDialog, {
+      props: { open: true, kind: "subcategory", id: "11111111", initialName: "",
+                extra: { subcat_name: "warm" } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const btn = document.body.querySelector("[data-test='cascade-rename-confirm']") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    wrap.unmount();
+  });
+});

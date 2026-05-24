@@ -11,11 +11,19 @@ import { useModuleStore } from "../stores/moduleStore";
 import { ApiError } from "../api/client";
 import { useToast } from "../composables/useToast";
 import { catChipStyle } from "../utils/catChip";
+import { useCascadeStore } from "../cascade/cascade-store";
+import { useCascadeApply } from "../cascade/useCascadeApply";
+import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import type { CategoryRow } from "../api/types";
 
 const store = useCategoryStore();
 const moduleStore = useModuleStore();
 const toast = useToast();
+const cascade = useCascadeStore();
+const cascadeApply = useCascadeApply();
+
+/** Track which category row's cascade confirm dialog is open, if any. */
+const cascadeDialogRow = ref<CategoryRow | null>(null);
 
 const newName = ref("");
 const newColor = ref("#a78bfa");
@@ -63,10 +71,62 @@ async function add() {
 }
 
 async function remove(row: CategoryRow) {
-  try {
-    await store.remove(row.id);
-    toast.push({ severity: "success", summary: "Deleted", life: 2000 });
-  } catch (e) { reportError(e, "Delete failed"); }
+  const refs = cascade.categoryRefsTo(row.id);
+  if (refs.length === 0) {
+    const result = await cascadeApply.apply({
+      kind: "category", id: row.id, action: "delete",
+    });
+    if (result.ok) {
+      store.remove(row.id);
+      const undoId = result.undo_entry_id;
+      toast.push({
+        severity: "success",
+        summary: `"${row.name}" deleted`,
+        life: 5000,
+        action: {
+          label: "Undo",
+          run: async () => {
+            const undoResult = await cascadeApply.undo(undoId);
+            if (!undoResult.ok) {
+              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+            } else {
+              toast.push({ severity: "info", summary: `"${row.name}" restored`, life: 3000 });
+            }
+          },
+        },
+      });
+    } else {
+      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
+    }
+    return;
+  }
+  cascadeDialogRow.value = row;
+}
+
+function onCatCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
+  const row = cascadeDialogRow.value;
+  cascadeDialogRow.value = null;
+  if (!row) return;
+  store.remove(row.id);
+  const undoId = result.undo_entry_id;
+  const count = result.affected_count;
+  toast.push({
+    severity: "success",
+    summary: `"${row.name}" deleted`,
+    detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+    life: 5000,
+    action: {
+      label: "Undo",
+      run: async () => {
+        const undoResult = await cascadeApply.undo(undoId);
+        if (!undoResult.ok) {
+          toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+        } else {
+          toast.push({ severity: "info", summary: `"${row.name}" restored`, life: 3000 });
+        }
+      },
+    },
+  });
 }
 
 function startEdit(row: CategoryRow) {
@@ -246,6 +306,17 @@ async function saveEdit() {
       </table>
     </div>
   </div>
+
+  <!-- CascadeConfirmDialog for per-row category delete when refs > 0. -->
+  <CascadeConfirmDialog
+    v-if="cascadeDialogRow"
+    :open="cascadeDialogRow !== null"
+    kind="category"
+    :id="cascadeDialogRow.id"
+    action="delete"
+    @confirmed="onCatCascadeDialogConfirmed"
+    @cancelled="cascadeDialogRow = null"
+  />
 </template>
 
 <style scoped>

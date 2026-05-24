@@ -30,6 +30,10 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useRecentStore } from "../stores/recentStore";
 import { appendSnapshot, readHistory } from "../utils/history";
+import { useCascadeStore } from "../cascade/cascade-store";
+import { useCascadeApply } from "../cascade/useCascadeApply";
+import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import PillCountBadge from "../cascade/PillCountBadge.vue";
 import type {
   ConstraintCell,
   ConstraintException,
@@ -47,6 +51,74 @@ const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
 const recent = useRecentStore();
+const cascade = useCascadeStore();
+const cascadeApply = useCascadeApply();
+
+const cascadeDialogOpen = ref(false);
+
+const cascadeRefs = computed(() => {
+  if (!props.id) return [];
+  return cascade.refsTo("constraint", props.id);
+});
+
+async function onEntityDeleteClick(): Promise<void> {
+  if (!props.id) return;
+  if (cascadeRefs.value.length === 0) {
+    const result = await cascadeApply.apply({
+      kind: "constraint", id: props.id, action: "delete",
+    });
+    if (result.ok) {
+      moduleStore.remove(props.id);
+      const undoId = result.undo_entry_id;
+      toast.push({
+        severity: "success",
+        summary: `"${name.value}" deleted`,
+        life: 5000,
+        action: {
+          label: "Undo",
+          run: async () => {
+            const undoResult = await cascadeApply.undo(undoId);
+            if (!undoResult.ok) {
+              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+            } else {
+              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
+            }
+          },
+        },
+      });
+      router.push(resolveReturnTo("/constraints"));
+    } else {
+      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
+    }
+    return;
+  }
+  cascadeDialogOpen.value = true;
+}
+
+function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
+  cascadeDialogOpen.value = false;
+  moduleStore.remove(props.id!);
+  const undoId = result.undo_entry_id;
+  const count = result.affected_count;
+  toast.push({
+    severity: "success",
+    summary: `"${name.value}" deleted`,
+    detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+    life: 5000,
+    action: {
+      label: "Undo",
+      run: async () => {
+        const undoResult = await cascadeApply.undo(undoId);
+        if (!undoResult.ok) {
+          toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+        } else {
+          toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
+        }
+      },
+    },
+  });
+  router.push(resolveReturnTo("/constraints"));
+}
 
 interface WildcardOption { id: string; value: string; weight: number; sub_category?: string | null; }
 interface WildcardPayloadShape {
@@ -417,6 +489,20 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     @cancel="cancel"
     @restore="applyRestore"
   >
+    <template v-if="isEdit" #header-extra>
+      <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
+        used by <PillCountBadge :count="cascadeRefs.length" />
+      </span>
+    </template>
+    <template v-if="isEdit" #footer-left>
+      <Button
+        variant="ghost"
+        icon="pi-trash"
+        class="wp-btn--danger"
+        data-test="cn-delete-btn"
+        @click="onEntityDeleteClick"
+      >Delete</Button>
+    </template>
     <template #draft-banner>
       <DraftBanner
         :has-draft="draft.hasDraft.value"
@@ -590,6 +676,16 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
       </table>
     </Card>
     </div>
+    <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
+    <CascadeConfirmDialog
+      v-if="isEdit && props.id"
+      :open="cascadeDialogOpen"
+      kind="constraint"
+      :id="props.id"
+      action="delete"
+      @confirmed="onCascadeDialogConfirmed"
+      @cancelled="cascadeDialogOpen = false"
+    />
     <!-- ConfirmDialog inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
     <ConfirmDialog
@@ -606,6 +702,13 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
 </template>
 
 <style scoped>
+.wp-editor-used-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+}
 .cn-pair {
   display: grid;
   grid-template-columns: 1fr 24px 1fr;

@@ -15,6 +15,7 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
+import Button from "../components/ui/Button.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import Field from "../components/ui/Field.vue";
 import Chip from "../components/ui/Chip.vue";
@@ -34,6 +35,10 @@ import { toIdentifier, VALID_IDENTIFIER_RE } from "../utils/slug";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import { collectLibraryVarHints, type VarHint } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
+import { useCascadeStore } from "../cascade/cascade-store";
+import { useCascadeApply } from "../cascade/useCascadeApply";
+import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import PillCountBadge from "../cascade/PillCountBadge.vue";
 import type {
   CombinePayload,
   ModuleHistoryEntry,
@@ -46,6 +51,74 @@ const categoryStore = useCategoryStore();
 const toast = useToast();
 const recent = useRecentStore();
 const { resolveReturnTo } = useReturnTo();
+const cascade = useCascadeStore();
+const cascadeApply = useCascadeApply();
+
+const cascadeDialogOpen = ref(false);
+
+const cascadeRefs = computed(() => {
+  if (!props.id) return [];
+  return cascade.refsTo("combine", props.id);
+});
+
+async function onEntityDeleteClick(): Promise<void> {
+  if (!props.id) return;
+  if (cascadeRefs.value.length === 0) {
+    const result = await cascadeApply.apply({
+      kind: "combine", id: props.id, action: "delete",
+    });
+    if (result.ok) {
+      moduleStore.remove(props.id);
+      const undoId = result.undo_entry_id;
+      toast.push({
+        severity: "success",
+        summary: `"${name.value}" deleted`,
+        life: 5000,
+        action: {
+          label: "Undo",
+          run: async () => {
+            const undoResult = await cascadeApply.undo(undoId);
+            if (!undoResult.ok) {
+              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+            } else {
+              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
+            }
+          },
+        },
+      });
+      router.push(resolveReturnTo("/combines"));
+    } else {
+      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
+    }
+    return;
+  }
+  cascadeDialogOpen.value = true;
+}
+
+function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
+  cascadeDialogOpen.value = false;
+  moduleStore.remove(props.id!);
+  const undoId = result.undo_entry_id;
+  const count = result.affected_count;
+  toast.push({
+    severity: "success",
+    summary: `"${name.value}" deleted`,
+    detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+    life: 5000,
+    action: {
+      label: "Undo",
+      run: async () => {
+        const undoResult = await cascadeApply.undo(undoId);
+        if (!undoResult.ok) {
+          toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+        } else {
+          toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
+        }
+      },
+    },
+  });
+  router.push(resolveReturnTo("/combines"));
+}
 
 const name = ref("");
 const description = ref("");
@@ -327,6 +400,20 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         @discard="draft.discard"
       />
     </template>
+    <template v-if="isEdit" #header-extra>
+      <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
+        used by <PillCountBadge :count="cascadeRefs.length" />
+      </span>
+    </template>
+    <template v-if="isEdit" #footer-left>
+      <Button
+        variant="ghost"
+        icon="pi-trash"
+        class="wp-btn--danger"
+        data-test="cb-delete-btn"
+        @click="onEntityDeleteClick"
+      >Delete</Button>
+    </template>
     <IdentityCard
       :name="name"
       :description="description"
@@ -405,6 +492,16 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         </div>
       </div>
     </Card>
+    <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
+    <CascadeConfirmDialog
+      v-if="isEdit && props.id"
+      :open="cascadeDialogOpen"
+      kind="combine"
+      :id="props.id"
+      action="delete"
+      @confirmed="onCascadeDialogConfirmed"
+      @cancelled="cascadeDialogOpen = false"
+    />
     <!-- ConfirmDialog inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
     <ConfirmDialog
@@ -421,6 +518,13 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 </template>
 
 <style scoped>
+.wp-editor-used-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-muted);
+}
 .cb-grid {
   display: grid;
   grid-template-columns: 1fr 220px;
