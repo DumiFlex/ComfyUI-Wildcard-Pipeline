@@ -244,6 +244,7 @@ When the user triggers undo via a toast Undo button, `useCascadeApply.undo()` (a
 | `subcategory`         | `rename` | `fix_subcat_rename`                | Rewrites subcat name in source wildcard + constraint matrices + cross-wildcard refs.              |
 | `combine_output_var`  | `rename` | `fix_combine_output_var_rename`    | Renames combine's `output_var` + all `$old` refs in wildcards, derivations, other combines.       |
 | `category`            | `delete` | `fix_category_delete`              | Nulls out `category_id` on all modules referencing the category; deletes target category row.     |
+| `option`              | `delete` | `fix_option_delete`                | Removes option from source wildcard `payload.options[]`; drops every constraint exception that references the option by `source_id` / `target_id`. Requires `extra: {wildcard_id}`. |
 | Any other             | Any      | —                                  | Returns `{ok: False, error: "unsupported (kind, action) pair: (X, Y)"}`.                          |
 
 **Fixer implementations:** `engine/cascade/fixers.py` (lines 91–387).
@@ -525,6 +526,64 @@ Drift-prone invariants to watch during review:
 4. **Atomicity boundary is `with conn:` in orchestrator.** No nested transactions, no manual commits inside fixers, no `conn.commit()` in `write_undo_entry`.
 
 5. **Undo snapshots are complete entity rows.** The `snapshot_before` JSON array in `cascade_undo` must contain entire entity dicts (with all fields: id, type, name, payload, etc.) so restore can both update existing rows AND recreate deleted ones.
+
+---
+
+## 14. Stable per-option identity (added 2026-05-24)
+
+### Schema additions
+
+Wildcard payload now carries a stable 8-hex `id` field on every option:
+
+```json
+{
+  "options": [
+    {"id": "a1b2c3d4", "value": "buzz", "weight": 1, "sub_category": "short", "probability": 1.0}
+  ]
+}
+```
+
+* `ModuleRepository.create` and `update` backfill missing ids automatically (`engine/db/repositories.py:_backfill_option_ids`).
+* Migration `010_option_ids.py` backfilled every existing wildcard row at upgrade time.
+* `WildcardHandler.validate_payload` rejects payloads with missing or non-string `id` (`engine/modules/wildcard_handler.py`).
+
+Constraint exceptions carry both legacy value strings AND stable ids:
+
+```json
+{
+  "exceptions": [
+    {
+      "source": "buzz",
+      "target": "serene",
+      "source_id": "a1b2c3d4",
+      "target_id": "e5f6g7h8",
+      "mode": "reduce",
+      "factor": 0.5
+    }
+  ],
+  "broken_exceptions": [
+    {"source": "missing", "target": "serene", "reason": "source_value not found: 'missing'"}
+  ]
+}
+```
+
+* `source` / `target` value strings are retained — the runtime constraint resolver keys instance-disable / override lookups by encoded `(source_value, target_value)` pairs.
+* `source_id` / `target_id` are the cascade-stable refs. Reverse-dep index walks exception `source_id` / `target_id` into `toOptionId`.
+* `broken_exceptions[]` collects exceptions that migration 010 could not resolve (value not found, wildcard missing, ambiguous match). Surfaced as warn-tone chips in the constraint editor; user resolves manually.
+
+### Display: `@{uuid}` chip resolution
+
+Constraint exception dropdown labels resolve `@{uuid}` tokens in option-value strings to the referenced wildcard's name via the shared chip resolver (`src/manager/cascade/resolveChip.ts`):
+
+* `resolveWildcardChip(uuid, lib)` → `{name, missing: false}` or `{raw, missing: true}`.
+* `resolveOptionChip(wildcard_id, option_id, lib)` → same union.
+* `tokenizeRefString(s)` → `Array<{type: "text" | "ref", ...}>`.
+
+Missing refs render as warn-tone chips with `?` glyph + raw uuid; broken-ref-tolerant rendering means cascade fixers never need to strip dangling refs.
+
+### Reverse-dep index addition
+
+`ReverseDepIndex.toOptionId: Map<string, IncomingRef[]>` tracks constraint exception refs by stable option id. Used by `WildcardEditor.removeOption` to gate the cascade dialog: refs > 0 opens the modal; otherwise silent splice.
 
 6. **Index maps are keyed consistently.** `toEntity` uses entity id; `toSubcat` uses `"wildcard_id:subcat_name"` (colon-delimited); `toCombineVar` uses the variable name string. No variation across builds.
 
