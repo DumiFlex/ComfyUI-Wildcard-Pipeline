@@ -5,7 +5,12 @@
  */
 import { tokenizeRich, type RichToken } from "../../widgets/richTokenize";
 
-export type SurfaceKind = "wildcard" | "combine" | "derivation" | "assembler";
+export type SurfaceKind =
+  | "wildcard"
+  | "combine"
+  | "derivation"
+  | "assembler"
+  | "fixed_values";
 
 export interface ResolveModule {
   type: string;

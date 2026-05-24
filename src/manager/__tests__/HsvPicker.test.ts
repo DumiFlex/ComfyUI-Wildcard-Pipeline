@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import HsvPicker from "../components/HsvPicker.vue";
+import HsvPicker from "../../components/shared/HsvPicker.vue";
 
 describe("HsvPicker.vue", () => {
   it("renders SV square + hue strip", () => {

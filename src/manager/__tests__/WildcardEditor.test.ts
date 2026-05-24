@@ -247,3 +247,65 @@ describe("WildcardEditor.vue", () => {
   // Suppress unused helper warning.
   void findByText;
 });
+
+describe("WildcardEditor — null option", () => {
+  // Fresh-mount seeds 2 blank options so "before any null click" baseline
+  // is .length === 2. Tests assert relative changes from there.
+  const BASELINE = 2;
+
+  function mountFresh() {
+    return mount(WildcardEditor, {
+      global: { plugins: [makeRouter()] },
+    });
+  }
+
+  it('"+ Add null" inserts one is_null=true option at index 0', async () => {
+    const wrap = mountFresh();
+    await flushPromises();
+    await wrap.find('[data-test="wc-add-null"]').trigger("click");
+    const vm = wrap.vm as unknown as { options: { is_null?: boolean; value: string }[] };
+    expect(vm.options.length).toBe(BASELINE + 1);
+    expect(vm.options[0].is_null).toBe(true);
+    expect(vm.options[0].value).toBe("");
+    wrap.unmount();
+  });
+
+  it('"+ Add null" is no-op when a null option already exists', async () => {
+    const wrap = mountFresh();
+    await flushPromises();
+    await wrap.find('[data-test="wc-add-null"]').trigger("click");
+    await flushPromises();
+    const btn = wrap.find('[data-test="wc-add-null"]');
+    // Either the button is disabled or clicking it is a no-op.
+    await btn.trigger("click");
+    await flushPromises();
+    const vm = wrap.vm as unknown as { options: { is_null?: boolean }[] };
+    expect(vm.options.filter((o) => o.is_null).length).toBe(1);
+    wrap.unmount();
+  });
+
+  it("renders pi-ban chip on the null option row and hides the sub-cat select", async () => {
+    const wrap = mountFresh();
+    await flushPromises();
+    await wrap.find('[data-test="wc-add-null"]').trigger("click");
+    await flushPromises();
+    const row = wrap.find('[data-test="wc-opt-row-null"]');
+    expect(row.exists()).toBe(true);
+    expect(row.find(".pi-ban").exists()).toBe(true);
+    // Sub-cat select is hidden when the row is the null option.
+    expect(row.find('[data-test="wc-opt-subcat"]').exists()).toBe(false);
+    wrap.unmount();
+  });
+
+  it("after adding a normal option, null option stays at index 0", async () => {
+    const wrap = mountFresh();
+    await flushPromises();
+    await wrap.find('[data-test="wc-add-null"]').trigger("click");
+    await wrap.find('[data-test="wc-add-opt"]').trigger("click");
+    await flushPromises();
+    const vm = wrap.vm as unknown as { options: { is_null?: boolean }[] };
+    expect(vm.options[0].is_null).toBe(true);
+    expect(vm.options.slice(1).every((o) => !o.is_null)).toBe(true);
+    wrap.unmount();
+  });
+});

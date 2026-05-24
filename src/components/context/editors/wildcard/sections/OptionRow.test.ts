@@ -181,10 +181,18 @@ describe("OptionRow", () => {
     expect(ref.find(".opt__tok-label").text()).toBe("@subject_name");
   });
 
-  it("renders {a|b|c} brace block as a dp token (warn colour)", () => {
+  it("renders {a|b|c} brace block as a brace token (warn colour)", () => {
     const opt = { id: "o9", value: "color {a|b|c}", weight: 1, sub_category: "warm" };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
-    expect(w.find('[data-test="opt-name"] .opt__tok--dp').exists()).toBe(true);
+    expect(w.find('[data-test="opt-name"] .opt__tok--brace').exists()).toBe(true);
+  });
+
+  it("renders {N$$,$$a|b|c} multi-pick block as a multi token (distinct from brace)", () => {
+    const opt = { id: "o10", value: "{2$$,$$silver|gold|pearl}", weight: 1, sub_category: "warm" };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find('[data-test="opt-name"] .opt__tok--multi').exists()).toBe(true);
+    // Brace-class should NOT match — multi gets its own visual treatment.
+    expect(w.find('[data-test="opt-name"] .opt__tok--brace').exists()).toBe(false);
   });
 
   it("renders $varname as a var token", () => {
@@ -219,5 +227,34 @@ describe("OptionRow", () => {
     await w.find('[data-test="opt-weight-down"]').trigger("click");
     // 1.1 - 0.1 = 1.0 = library default → cleared
     expect(w.emitted("weight")?.[0]).toEqual(["o1", null]);
+  });
+
+  describe("null option row", () => {
+    const nullOpt = { id: "n1", value: "", weight: 1, is_null: true } as typeof baseOption & { is_null: boolean };
+
+    it("renders the pi-ban chip in place of tokens", () => {
+      const w = mount(OptionRow, {
+        props: { option: nullOpt, allOptions: [nullOpt], instance: {} },
+      });
+      expect(w.find(".opt__null-chip").exists()).toBe(true);
+      expect(w.find(".opt__null-chip .pi-ban").exists()).toBe(true);
+      // Label literal "null" inside the chip.
+      expect(w.find(".opt__null-chip").text()).toMatch(/null/i);
+    });
+
+    it("sub-category cell is empty", () => {
+      const w = mount(OptionRow, {
+        props: { option: nullOpt, allOptions: [nullOpt], instance: {} },
+      });
+      expect(w.find('[data-test="opt-cat"]').text()).toBe("");
+    });
+
+    it("weight + check still render", () => {
+      const w = mount(OptionRow, {
+        props: { option: nullOpt, allOptions: [nullOpt], instance: {} },
+      });
+      expect(w.find('[data-test="opt-weight"]').exists()).toBe(true);
+      expect(w.find('[data-test="opt-check"]').exists()).toBe(true);
+    });
   });
 });

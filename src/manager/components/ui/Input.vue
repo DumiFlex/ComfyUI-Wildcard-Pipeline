@@ -41,10 +41,39 @@ function onInput(e: Event) {
   const target = e.target as HTMLInputElement;
   // Coerce numeric inputs back to number for v-model parity.
   if (isNumber.value && target.value !== "") {
-    emit("update:modelValue", Number(target.value));
+    let n = Number(target.value);
+    if (Number.isFinite(n)) {
+      // Snap to 3 decimals on emit so float-fuzz tails (e.g. from a
+      // stray native step or paste of `1.2999999999999998`) don't leak
+      // into stored values. Doesn't clobber legit 2-decimal precision.
+      n = Math.round(n * 1000) / 1000;
+    }
+    emit("update:modelValue", n);
   } else {
     emit("update:modelValue", target.value);
   }
+}
+
+/** Route ArrowUp / ArrowDown on number inputs through `bump()` so the
+ *  step is applied with step-precision rounding. Native browser
+ *  arrow-stepping does the math in float64 and surfaces fuzz (e.g.
+ *  `1.4 - 0.1 = 1.2999999999999998`). Mouse wheel does the same. */
+function onKeydown(e: KeyboardEvent) {
+  if (!isNumber.value) return;
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    bump(1);
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    bump(-1);
+  }
+}
+function onWheel(e: WheelEvent) {
+  if (!isNumber.value) return;
+  const target = e.target as HTMLInputElement;
+  if (document.activeElement !== target) return; // only when focused
+  e.preventDefault();
+  bump(e.deltaY < 0 ? 1 : -1);
 }
 
 /** Step the numeric value by the configured `step` (default 1), clamped
@@ -95,6 +124,8 @@ function bump(direction: 1 | -1) {
       :max="max"
       :step="step"
       @input="onInput"
+      @keydown="onKeydown"
+      @wheel="onWheel"
       @blur="(e) => emit('blur', e)"
       @focus="(e) => emit('focus', e)"
     />

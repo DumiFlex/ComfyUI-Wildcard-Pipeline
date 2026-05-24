@@ -105,6 +105,21 @@
   margin: 0 1px;
 }
 
+/* Focused mode: brace/multi/weight sub-spans render INLINE inside the
+   editable text atom, so any visual width drift (bold weight, padding,
+   margin) breaks the character-by-character caret mapping the native
+   contenteditable host relies on. Strip the width-changing chrome
+   while editing — coloring + background alone still distinguish the
+   tokens without nudging glyphs off the monospace grid. Mirrors the
+   same trick used for chip chrome above. */
+.wp-rt--focused .wp-rt-dp-brace,
+.wp-rt--focused .wp-rt-dp-multi,
+.wp-rt--focused .wp-rt-dp-weight {
+  font-weight: inherit;
+  padding: 0;
+  margin: 0;
+}
+
 /* Read-only preview always renders chips at rest. Match the
    `wp-rt--rest` padding so previews look identical to a blurred
    input without depending on the parent class. */

@@ -121,8 +121,30 @@ function onWeightInput(ev: Event): void {
   }
   const n = Number(raw);
   if (Number.isFinite(n)) {
-    emitWeight(clampWeight(n));
+    // Snap to 3 decimals so fuzz tails (e.g. autofill / native step that
+    // beat our keydown intercept) don't leak into stored data, while
+    // still honouring legit 2-decimal precision a user might type.
+    const snapped = Math.round(n * 1000) / 1000;
+    emitWeight(clampWeight(snapped));
   }
+}
+
+/** Route ArrowUp / ArrowDown / wheel through `bumpWeight()` so the
+ *  step uses rounded math instead of the browser's native float step. */
+function onWeightKeydown(ev: KeyboardEvent): void {
+  if (ev.key === "ArrowUp") {
+    ev.preventDefault();
+    bumpWeight(1);
+  } else if (ev.key === "ArrowDown") {
+    ev.preventDefault();
+    bumpWeight(-1);
+  }
+}
+function onWeightWheel(ev: WheelEvent): void {
+  const target = ev.target as HTMLInputElement;
+  if (document.activeElement !== target) return;
+  ev.preventDefault();
+  bumpWeight(ev.deltaY < 0 ? 1 : -1);
 }
 
 const WEIGHT_STEP = 0.1;
@@ -179,8 +201,16 @@ function fmtPct(p: number): string {
               stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </span>
-    <span class="opt__name" data-test="opt-name">
-      <template v-for="(tok, idx) in tokens" :key="idx">
+    <span class="opt__name" data-test="opt-name" :class="{ 'opt__name--null': option.is_null }">
+      <span
+        v-if="option.is_null"
+        class="opt__null-chip"
+        aria-label="null option (resolves to empty)"
+      >
+        <i class="pi pi-ban" aria-hidden="true" />
+        <span>null</span>
+      </span>
+      <template v-else v-for="(tok, idx) in tokens" :key="idx">
         <span
           v-if="tok.kind === 'ref'"
           class="opt__tok opt__tok--ref"
@@ -202,8 +232,12 @@ function fmtPct(p: number): string {
           <span class="opt__tok-label">{{ tok.raw }}</span>
         </span>
         <span
-          v-else-if="tok.kind === 'dp-brace' || tok.kind === 'dp-multi'"
-          class="opt__tok opt__tok--dp"
+          v-else-if="tok.kind === 'dp-brace'"
+          class="opt__tok opt__tok--brace"
+        >{{ tok.raw }}</span>
+        <span
+          v-else-if="tok.kind === 'dp-multi'"
+          class="opt__tok opt__tok--multi"
         >{{ tok.raw }}</span>
         <span
           v-else-if="tok.kind === 'escape'"
@@ -229,6 +263,8 @@ function fmtPct(p: number): string {
         :disabled="!enabled"
         :aria-label="`Weight for ${option.value}`"
         @input="onWeightInput"
+        @keydown="onWeightKeydown"
+        @wheel="onWeightWheel"
       />
       <span class="opt__spin">
         <button
@@ -255,7 +291,7 @@ function fmtPct(p: number): string {
         </svg></button>
       </span>
     </span>
-    <span class="opt__cat" data-test="opt-cat">{{ option.sub_category ?? "" }}</span>
+    <span class="opt__cat" data-test="opt-cat">{{ option.is_null ? "" : (option.sub_category ?? "") }}</span>
   </div>
 </template>
 
@@ -313,6 +349,21 @@ function fmtPct(p: number): string {
   line-height: 1.55;
   word-break: break-word;
 }
+/* Null option chip — shown in place of the tokenised value when the
+ * option carries is_null=true. Visually distinct from the regular
+ * tokens so users see at a glance that this row resolves to nothing. */
+.opt__null-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
+  border: 1px dashed var(--wp-border-soft, var(--wp-border));
+  border-radius: 3px;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font: 10px var(--wp-font-mono);
+}
+.opt__null-chip .pi { font-size: 10px; }
 .opt--off .opt__name {
   color: var(--wp-text-dim, var(--wp-text3));
   text-decoration: line-through;
@@ -358,9 +409,21 @@ function fmtPct(p: number): string {
   border-color: color-mix(in srgb, #22c55e 50%, transparent);
   color: #86efac;
 }
-.opt__tok--dp {
+/* Plain `{a|b|c}` inline-choice block — warn-tone yellow (matches the
+ * SPA `wp-rt-dp-brace` palette in `manager/styles/rich-text.css`). */
+.opt__tok--brace {
   color: var(--wp-warn, #fcd34d);
   font-weight: 600;
+}
+/* `{N$$sep$$a|b|c}` multi-pick block — distinct teal/green tone so users
+ * can tell it apart from the plain brace block at a glance. Matches the
+ * SPA `wp-rt-dp-multi` palette (`--wp-rt-token-good`). */
+.opt__tok--multi {
+  color: var(--wp-rt-token-good, #4ad4c4);
+  background: var(--wp-rt-token-good-bg, color-mix(in srgb, #4ad4c4 14%, transparent));
+  border-radius: 3px;
+  padding: 0 3px;
+  font-weight: 500;
 }
 .opt__tok--escape {
   color: var(--wp-text-muted, var(--wp-text2));

@@ -432,6 +432,22 @@ export interface BundleInstance {
    *  from current state so subsequent edits flip the bundle modified
    *  correctly. */
   snapshot_fingerprint?: string;
+  /** UID of an ancestor bundle whose master-internal ON cascade
+   *  flipped THIS bundle's master internal state from not-all to
+   *  on. Set when an outer master ON propagates inward; cleared
+   *  when that outer's master OFF fires or when this bundle's own
+   *  master button is clicked directly (user takes ownership).
+   *
+   *  Purpose: distinguishes "outer chained me on" from "I was
+   *  already on (user manually set me)". Outer's OFF only
+   *  propagates to inner when this tag matches outer's `_uid`,
+   *  preserving inner master toggles the user set independently.
+   *  Optional / missing on legacy workflows + on bundles never
+   *  reached by a chain. */
+  master_internal_chained_by?: string | null;
+  /** Mirror of `master_internal_chained_by` for the seed-lock
+   *  master chain. Same lifecycle rules. */
+  master_lock_chained_by?: string | null;
 }
 
 /** Module kind discriminator — the five kinds the SPA library carries. */
@@ -681,10 +697,25 @@ export interface ModuleEntry {
        *  Belongs in `_ui` because it's a session/UX marker, not
        *  semantic engine state. */
       master_internal?: boolean;
+      /** UID of the BundleInstance that claimed this row via its master
+       *  internal toggle. Lets nested bundles avoid stomping on each
+       *  other's markers — an outer bundle's master OFF (in
+       *  preserve-manual mode) only clears rows whose
+       *  `master_internal_by` matches its own `_uid`. Rows claimed by
+       *  an inner bundle keep their internal state through an outer
+       *  OFF; the inner clears them via its own master toggle. Legacy
+       *  data carries only `master_internal: true` without this tag —
+       *  treated as "owned by unknown" so an outer OFF doesn't sweep
+       *  pre-tag-era markers either. */
+      master_internal_by?: string;
       /** Mirror of `master_internal` for the seed-lock master toggle.
        *  Same lifecycle: set by master ON for rows it locked, cleared
        *  by individual lock toggles or master OFF. */
       master_lock?: boolean;
+      /** Mirror of `master_internal_by` for the seed-lock master
+       *  toggle — owner-tag so nested bundles don't unlock each
+       *  other's rows. */
+      master_lock_by?: string;
     };
   };
 }

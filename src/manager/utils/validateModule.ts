@@ -18,6 +18,7 @@
  *     mean it (empty options array, empty matrix). Reads as amber.
  */
 import type { BundleRow, ModuleRow } from "../api/types";
+import { tokenizeRich, type RichToken } from "../../widgets/richTokenize";
 
 export type ValidationSeverity = "error" | "warn";
 
@@ -25,9 +26,6 @@ export interface ValidationIssue {
   severity: ValidationSeverity;
   message: string;
 }
-
-const REF_PATTERN = /@\{([0-9a-f]{8})(?::([^}]*))?\}/g;
-const VAR_PATTERN = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 
 type CatalogIndex = {
   /** All modules keyed by id - covers every kind so cross-kind refs
@@ -58,22 +56,43 @@ function buildCatalogIndex(catalog: readonly ModuleRow[]): CatalogIndex {
   return { byId, subcatsByWildcardId };
 }
 
-/** Extract every `@{uuid}` and `@{uuid:subcat}` ref from a string.
- *  Uses `matchAll` (returns an iterator of every match) which sidesteps
- *  the stateful `RegExp.lastIndex` dance of the imperative variant. */
+/** Tokenize and pull out semantic refs/vars. Routing through the
+ *  shared `tokenizeRich` lexer means inline brace syntax (`{a|b|c}`,
+ *  `{2$$, $$silver|gold|pearl}`) doesn't get mis-classified as a
+ *  `$silver` variable ref. Only top-level tokens are inspected; the
+ *  `$$` weight prefix inside a dp-multi block lives inside `meta`,
+ *  not as a stand-alone var token. */
+function tokensFor(text: string): RichToken[] {
+  try {
+    return tokenizeRich(text);
+  } catch {
+    return [];
+  }
+}
+
 function extractRefs(text: string): Array<{ uuid: string; subcat?: string }> {
   const out: Array<{ uuid: string; subcat?: string }> = [];
-  for (const m of text.matchAll(REF_PATTERN)) {
-    out.push({ uuid: m[1], subcat: m[2] || undefined });
+  for (const t of tokensFor(text)) {
+    if (t.kind === "ref" && t.meta?.uuid) {
+      const subs = t.meta.sub_categories;
+      if (Array.isArray(subs) && subs.length > 0) {
+        for (const sub of subs) {
+          out.push({ uuid: t.meta.uuid, subcat: sub });
+        }
+      } else {
+        out.push({ uuid: t.meta.uuid });
+      }
+    }
   }
   return out;
 }
 
-/** Extract `$varname` identifiers from a string. */
 function extractVars(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(VAR_PATTERN)) {
-    out.push(m[1]);
+  for (const t of tokensFor(text)) {
+    if (t.kind === "var" && t.meta?.name) {
+      out.push(t.meta.name);
+    }
   }
   return out;
 }
@@ -125,7 +144,11 @@ function validateWildcard(
     issues.push({ severity: "warn", message: "No options - resolves to empty string" });
   }
   for (const [i, o] of opts.entries()) {
-    const opt = o as { value?: unknown };
+    const opt = o as { value?: unknown; is_null?: unknown };
+    // Null option intentionally has value === "". Skip the empty-value
+    // warning for it — see
+    // docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md.
+    if (opt.is_null === true) continue;
     if (typeof opt.value !== "string" || opt.value.length === 0) {
       issues.push({ severity: "warn", message: `Option ${i + 1}: empty value` });
       continue;
@@ -185,28 +208,14 @@ function validateConstraint(row: ModuleRow, idx: CatalogIndex): ValidationIssue[
   } else if (idx.byId.get(tgt)!.type !== "wildcard") {
     issues.push({ severity: "error", message: "Target is not a wildcard" });
   }
-  if (typeof src === "string" && typeof tgt === "string" && p.matrix && typeof p.matrix === "object") {
-    const srcSubs = idx.subcatsByWildcardId.get(src) ?? new Set<string>();
-    const tgtSubs = idx.subcatsByWildcardId.get(tgt) ?? new Set<string>();
-    for (const [rowKey, rowVal] of Object.entries(p.matrix as Record<string, unknown>)) {
-      if (srcSubs.size > 0 && !srcSubs.has(rowKey)) {
-        issues.push({
-          severity: "warn",
-          message: `Matrix row "${rowKey}" - subcategory missing on source`,
-        });
-      }
-      if (rowVal && typeof rowVal === "object") {
-        for (const colKey of Object.keys(rowVal as Record<string, unknown>)) {
-          if (tgtSubs.size > 0 && !tgtSubs.has(colKey)) {
-            issues.push({
-              severity: "warn",
-              message: `Matrix col "${colKey}" - subcategory missing on target`,
-            });
-          }
-        }
-      }
-    }
-  }
+  // Orphan matrix row / column flags (sub-cat present in the matrix but
+  // gone from the linked wildcard) used to surface here. Removed: the
+  // ConstraintEditor's matrix UI only renders cells whose row+col are in
+  // the live sub-cat list, so the user has no way to find or edit an
+  // orphan entry. Flagging it produced a permanent VALID warning the
+  // user couldn't clear. Engine treats orphan cells as passthrough, so
+  // they're harmless until a save auto-prunes them. Keeping the
+  // `broken_exceptions` flag below — that path is actionable via re-edit.
   if (Array.isArray(p.broken_exceptions) && p.broken_exceptions.length > 0) {
     issues.push({
       severity: "warn",
@@ -341,24 +350,38 @@ export function validateModule(
 }
 
 /** Bundle validator - flags bundles whose `children[]` references
- *  no-longer-existing module ids. Bundles cross-reference modules
- *  by id only, so this is the entire validity surface. */
+ *  no-longer-existing module OR bundle ids. Bundles can nest other
+ *  bundles as children (`type: "bundle"`), so the caller must pass
+ *  the bundle list as the third arg; without it nested bundle
+ *  children read as "missing".
+ *
+ *  Discrimination is by `child.type`: `"bundle"` → look in `bundles`,
+ *  anything else → look in `catalog`. Missing child type defaults to
+ *  module lookup for backward compat with legacy rows. */
 export function validateBundle(
   row: BundleRow,
   catalog: readonly ModuleRow[],
+  bundles: readonly BundleRow[] = [],
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const byId = new Map(catalog.map((m) => [m.id, m]));
+  const modulesById = new Map(catalog.map((m) => [m.id, m]));
+  const bundlesById = new Map(bundles.map((b) => [b.id, b]));
   const children = Array.isArray(row.children) ? row.children : [];
   if (children.length === 0) {
     issues.push({ severity: "warn", message: "Bundle has no children" });
   }
   for (const [i, child] of children.entries()) {
-    const c = child as { id?: unknown };
-    if (typeof c.id !== "string" || !byId.has(c.id)) {
+    const c = child as { id?: unknown; type?: unknown };
+    if (typeof c.id !== "string") {
+      issues.push({ severity: "error", message: `Child ${i + 1}: target missing` });
+      continue;
+    }
+    const lookupMap = c.type === "bundle" ? bundlesById : modulesById;
+    if (!lookupMap.has(c.id)) {
+      const kindLabel = c.type === "bundle" ? "bundle" : "module";
       issues.push({
         severity: "error",
-        message: `Child ${i + 1}: target module missing`,
+        message: `Child ${i + 1}: target ${kindLabel} missing`,
       });
     }
   }

@@ -212,6 +212,92 @@ describe("applyConstraint", () => {
     expect(tux?.weight).toBe(3);
     expect(tux?._mode).toBe("boost");
   });
+
+  it("exception overrides a matrix EXCLUDE — allow exception keeps original weight", () => {
+    // Matrix says casual = exclude → weight 0. Exception says
+    // (rain, linen) = allow → exception wins, original weight survives.
+    const target = makeWildcard("Outfit", [
+      { value: "linen", weight: 2, sub_category: "casual" },
+    ], { id: "wc_target", sub_categories: ["casual"] });
+    const source = makeWildcard("Weather", [
+      { value: "rain", weight: 1, sub_category: "wet" },
+    ], { id: "wc_source", sub_categories: ["wet"] });
+    const cn: ConstraintPayload = {
+      source_wildcard_id: "wc_source",
+      target_wildcard_id: "wc_target",
+      matrix: { wet: { casual: { mode: "exclude", factor: 1 } } },
+      exceptions: [{ source: "rain", target: "linen", mode: "allow", factor: 1 }],
+    };
+    const out = applyConstraint(cn, "rain", [target, source]);
+    const linen = out.find((o) => o.value === "linen");
+    expect(linen?.weight).toBe(2);
+    expect(linen?._mode).toBe("allow");
+  });
+
+  it("exception overrides a matrix BOOST — reduce exception applies its own factor", () => {
+    const target = makeWildcard("Outfit", [
+      { value: "linen", weight: 2, sub_category: "casual" },
+    ], { id: "wc_target", sub_categories: ["casual"] });
+    const source = makeWildcard("Weather", [
+      { value: "rain", weight: 1, sub_category: "wet" },
+    ], { id: "wc_source", sub_categories: ["wet"] });
+    const cn: ConstraintPayload = {
+      source_wildcard_id: "wc_source",
+      target_wildcard_id: "wc_target",
+      // Matrix wants ×3; exception wants ×0.5 → exception wins.
+      matrix: { wet: { casual: { mode: "boost", factor: 3 } } },
+      exceptions: [{ source: "rain", target: "linen", mode: "reduce", factor: 0.5 }],
+    };
+    const out = applyConstraint(cn, "rain", [target, source]);
+    const linen = out.find((o) => o.value === "linen");
+    expect(linen?.weight).toBe(1); // 2 * 0.5
+    expect(linen?._mode).toBe("reduce");
+  });
+
+  it("exception with legacy `source_value` / `target_value` keys still wins over matrix", () => {
+    // Some library payloads store exceptions under the legacy
+    // `source_value` / `target_value` field names (engine accepts both).
+    // The SPA test runner must too — otherwise users see exceptions
+    // appearing to be ignored when they're actually applied at runtime.
+    const target = makeWildcard("Outfit", [
+      { value: "linen", weight: 2, sub_category: "casual" },
+    ], { id: "wc_target", sub_categories: ["casual"] });
+    const source = makeWildcard("Weather", [
+      { value: "rain", weight: 1, sub_category: "wet" },
+    ], { id: "wc_source", sub_categories: ["wet"] });
+    const cn: ConstraintPayload = {
+      source_wildcard_id: "wc_source",
+      target_wildcard_id: "wc_target",
+      matrix: { wet: { casual: { mode: "allow", factor: 1 } } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      exceptions: [{ source_value: "rain", target_value: "linen", mode: "exclude", factor: 1 } as any],
+    };
+    const out = applyConstraint(cn, "rain", [target, source]);
+    const linen = out.find((o) => o.value === "linen");
+    expect(linen?.weight).toBe(0);
+    expect(linen?._mode).toBe("exclude");
+  });
+
+  it("exception override only kicks in for the matching (source, target) pair", () => {
+    // Two options under the same sub_cat — matrix excludes both; only
+    // the specifically-exception'd one survives.
+    const target = makeWildcard("Outfit", [
+      { value: "linen", weight: 2, sub_category: "casual" },
+      { value: "denim", weight: 2, sub_category: "casual" },
+    ], { id: "wc_target", sub_categories: ["casual"] });
+    const source = makeWildcard("Weather", [
+      { value: "rain", weight: 1, sub_category: "wet" },
+    ], { id: "wc_source", sub_categories: ["wet"] });
+    const cn: ConstraintPayload = {
+      source_wildcard_id: "wc_source",
+      target_wildcard_id: "wc_target",
+      matrix: { wet: { casual: { mode: "exclude", factor: 1 } } },
+      exceptions: [{ source: "rain", target: "linen", mode: "allow", factor: 1 }],
+    };
+    const out = applyConstraint(cn, "rain", [target, source]);
+    expect(out.find((o) => o.value === "linen")?.weight).toBe(2);
+    expect(out.find((o) => o.value === "denim")?.weight).toBe(0);
+  });
 });
 
 describe("evalDerivation", () => {
@@ -262,6 +348,146 @@ describe("evalDerivation", () => {
     const ctx = { weather: "sun" };
     const trace = evalDerivation(payload, ctx);
     expect(trace[0].fired).toBe("skip");
+  });
+});
+
+describe("is_empty / is_not_empty operators", () => {
+  it("is_empty fires when the var is the empty string", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "is_empty", value: "" },
+            action: { target_var: "subject", mode: "replace", value: "bare" } },
+        ],
+      }],
+    };
+    const ctx = { color: "", subject: "girl" };
+    evalDerivation(payload, ctx);
+    expect(ctx.subject).toBe("bare");
+  });
+
+  it("is_empty does NOT fire when the var has content", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "is_empty", value: "" },
+            action: { target_var: "subject", mode: "replace", value: "bare" } },
+        ],
+      }],
+    };
+    const ctx = { color: "red", subject: "girl" };
+    evalDerivation(payload, ctx);
+    expect(ctx.subject).toBe("girl");
+  });
+
+  it("is_not_empty fires when the var has content", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "is_not_empty", value: "" },
+            action: { target_var: "subject", mode: "replace", value: "dressed" } },
+        ],
+      }],
+    };
+    const ctx = { color: "red", subject: "girl" };
+    evalDerivation(payload, ctx);
+    expect(ctx.subject).toBe("dressed");
+  });
+
+  it("is_not_empty does NOT fire when the var is empty", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "is_not_empty", value: "" },
+            action: { target_var: "subject", mode: "replace", value: "dressed" } },
+        ],
+      }],
+    };
+    const ctx = { color: "", subject: "girl" };
+    evalDerivation(payload, ctx);
+    expect(ctx.subject).toBe("girl");
+  });
+});
+
+describe("presence ops (exists / is_set / not_exists / is_unset)", () => {
+  it("exists fires when the var key is bound (any value, including empty)", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "exists", value: "" },
+            action: { target_var: "out", mode: "replace", value: "bound" } },
+        ],
+      }],
+    };
+    // Bound with non-empty value → fires.
+    let ctx: Record<string, string> = { color: "red" };
+    evalDerivation(payload, ctx);
+    expect(ctx.out).toBe("bound");
+
+    // Bound with empty string → still fires (null option rolled).
+    ctx = { color: "" };
+    evalDerivation(payload, ctx);
+    expect(ctx.out).toBe("bound");
+  });
+
+  it("exists does NOT fire when the key is absent", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "exists", value: "" },
+            action: { target_var: "out", mode: "replace", value: "bound" } },
+        ],
+      }],
+    };
+    const ctx: Record<string, string> = {};
+    evalDerivation(payload, ctx);
+    expect(ctx.out).toBeUndefined();
+  });
+
+  it("is_set fires only when key is bound AND value is non-empty", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "is_set", value: "" },
+            action: { target_var: "out", mode: "replace", value: "with-value" } },
+        ],
+      }],
+    };
+    let ctx: Record<string, string> = { color: "red" };
+    evalDerivation(payload, ctx);
+    expect(ctx.out).toBe("with-value");
+
+    // Bound but empty (null option) → DOES NOT fire.
+    ctx = { color: "" };
+    evalDerivation(payload, ctx);
+    expect(ctx.out).toBeUndefined();
+  });
+
+  it("not_exists fires only when the var key is absent", () => {
+    const payload: DerivationPayload = {
+      rules: [{
+        id: "r1",
+        branches: [
+          { condition: { var: "color", op: "not_exists", value: "" },
+            action: { target_var: "out", mode: "replace", value: "missing" } },
+        ],
+      }],
+    };
+    let ctx: Record<string, string> = {};
+    evalDerivation(payload, ctx);
+    expect(ctx.out).toBe("missing");
+
+    // Bound (even empty) → DOES NOT fire.
+    ctx = { color: "" };
+    evalDerivation(payload, ctx);
+    expect(ctx.out).toBeUndefined();
   });
 });
 

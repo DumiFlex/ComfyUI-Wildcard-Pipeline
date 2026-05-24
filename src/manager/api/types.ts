@@ -12,6 +12,15 @@ export interface WildcardOption {
   value: string;
   weight: number;
   sub_category?: string | null;
+  /** Exactly one option per wildcard may be flagged `is_null: true`.
+   * The null option carries `value: ""` and no `sub_category`. When
+   * picked, the wildcard resolves to the empty string — a
+   * probabilistic "no output" slot that bypasses the constraint matrix
+   * (which is keyed by sub_category) but can still be targeted by
+   * constraint exceptions (keyed by the empty-string value). Validated
+   * server-side in `engine/modules/wildcard_handler.py:validate_payload`.
+   * See `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
+  is_null?: boolean;
 }
 
 export interface WildcardPayload {
@@ -35,6 +44,9 @@ export interface CombinePayload {
  *  (`exists`/`not_exists`/`is_set`/`is_unset`) was added in the
  *  2026-05-09 cycle — `exists`/`not_exists` check key presence in
  *  ctx, `is_set`/`is_unset` additionally require non-empty value.
+ *  The 2026-05-24 cycle added `is_empty`/`is_not_empty` to support
+ *  the null wildcard option — `is_empty` fires when the var resolves
+ *  to "" (which a null-option pick produces).
  *  Mirrors `engine/modules/derivation_handler.py:_VALID_OPS`. */
 export type DerivationOp =
   | "equals"
@@ -44,7 +56,9 @@ export type DerivationOp =
   | "exists"
   | "not_exists"
   | "is_set"
-  | "is_unset";
+  | "is_unset"
+  | "is_empty"
+  | "is_not_empty";
 export type DerivationMode = "replace" | "append" | "prepend";
 
 export interface DerivationCondition {

@@ -319,3 +319,78 @@ export function mirrorHtmlWithIdx(tokens: RichToken[]): string {
   html += '<span class="wp-rt-tail">&#x200B;</span>';
   return html;
 }
+
+/**
+ * Render `text` as HTML with colored sub-spans for inline syntax tokens
+ * (`{a|b|c}`, `{2$$,$$a|b|c}`, `$$`, `@@`).
+ *
+ * Used by `RichTextInput`'s text-atom render path so brace blocks and
+ * escapes get the same visual chrome as the read-only preview while
+ * still living inside the editor's `wp-rt__text` host span. Output is
+ * HTML-escaped so v-html consumption stays safe.
+ *
+ * Caret invariant: every token contributes one `<span>` whose
+ * `textContent` exactly equals the token's `raw`. Sum across all
+ * sub-spans equals the original `text` — caret math that walks text
+ * node descendants stays correct.
+ *
+ * `text` tokens are wrapped in a `wp-rt-text` span (rather than emitted
+ * raw) so every position inside the atom has a stable element parent —
+ * matches how the read-only preview renders.
+ *
+ * `collapsedKind` lets callers neutralise a token kind that the host
+ * surface treats as literal text — e.g. wildcard option editors collapse
+ * `$var` back into text, so re-tokenising would otherwise re-color them
+ * as vars. Tokens matching `collapsedKind` render with the plain
+ * `wp-rt-text` class.
+ */
+export function inlineTokenHtml(
+  text: string,
+  collapsedKinds?: ReadonlyArray<"var" | "ref"> | "var" | "ref",
+): string {
+  if (!text) return "";
+  const tokens = tokenizeRich(text);
+  const collapsedSet = collapsedKinds == null
+    ? null
+    : new Set(typeof collapsedKinds === "string" ? [collapsedKinds] : collapsedKinds);
+  // Fast path: a single plain-text token → emit raw text so the host
+  // span's `firstChild` stays a text node (no DOM shape change versus
+  // pre-coloring). Keeps caret-math callers that walk `.firstChild`
+  // happy for the common case (un-decorated text atoms).
+  if (tokens.length === 1 && tokens[0].kind === "text") {
+    return escapeHtml(tokens[0].raw);
+  }
+  // Inline tokens stay editable (deliberate: brace blocks like
+  // `{a|b|c}` are user-edited inline, not atomic chips). We add bare
+  // ZWSP text nodes on the EDGES of sub-spans that would otherwise
+  // sit at the boundary of the host text span with no neighboring
+  // plain text — clicking visually past such a sub-span otherwise
+  // lands the caret at element offset 0/1 of `wp-rt__text` and the
+  // legacy fallback drops typing in front of the block.
+  // No ZWSP is emitted where a plain-text token already provides the
+  // caret landing — keeps `host.textContent` free of ZWSPs in the
+  // common case (`$$cost` → no padding between `$$` escape and
+  // `cost` text). Read paths strip ZWSPs (`readHostAsText` +
+  // `replace(ZWSP_RE, "")`) so any pad never reaches `modelValue`.
+  const isText = (idx: number): boolean => {
+    if (idx < 0 || idx >= tokens.length) return false;
+    const t = tokens[idx];
+    if (t.kind === "text") return true;
+    if (!collapsedSet) return false;
+    return t.kind === "var" || t.kind === "ref"
+      ? collapsedSet.has(t.kind)
+      : false;
+  };
+  let html = "";
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (isText(i)) {
+      html += escapeHtml(t.raw);
+    } else {
+      if (!isText(i - 1)) html += "&#x200B;";
+      html += `<span class="wp-rt-${t.kind}">${escapeHtml(t.raw)}</span>`;
+      if (!isText(i + 1)) html += "&#x200B;";
+    }
+  }
+  return html;
+}

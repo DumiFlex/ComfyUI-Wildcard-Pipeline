@@ -250,7 +250,8 @@ describe("ModuleEditModal — footer / save / cancel", () => {
 //   src/components/context/editors/constraint/sections/IdentitySection.test.ts
 //   src/components/context/editors/constraint/sections/MatrixSection.test.ts
 //   src/components/context/editors/constraint/sections/ExceptionsSection.test.ts
-//   src/components/context/editors/constraint/CellFactorPopover.test.ts
+//   src/components/context/editors/constraint/CellRulePopover.test.ts
+//   src/components/context/editors/constraint/MatrixLegend.test.ts
 //   src/components/context/editors/constraint/ConstraintInstanceModal.test.ts
 // Library-level matrix authoring (source/target picker, cell mode/factor
 // authoring, exceptions add/remove) stays in SPA — modal exposes only

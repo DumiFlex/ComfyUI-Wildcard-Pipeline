@@ -27,7 +27,12 @@ const apiCat = api.categories as unknown as Record<string, ReturnType<typeof vi.
 function makeWildcardRow(id: string, name: string, opts: {
   values?: string[];
   subs?: string[];
+  hasNull?: boolean;
 } = {}): ModuleRow {
+  const options = (opts.values ?? []).map((v, i) => ({ id: `o${i}`, value: v, weight: 1 }));
+  if (opts.hasNull) {
+    options.unshift({ id: "_null", value: "", weight: 1, is_null: true } as typeof options[number] & { is_null: boolean });
+  }
   return {
     id,
     name,
@@ -37,7 +42,7 @@ function makeWildcardRow(id: string, name: string, opts: {
     tags: [],
     is_favorite: false,
     payload: {
-      options: (opts.values ?? []).map((v, i) => ({ id: `o${i}`, value: v, weight: 1 })),
+      options,
       sub_categories: opts.subs ?? [],
     },
     payload_hash: "0".repeat(64),
@@ -104,7 +109,7 @@ describe("ConstraintEditor.vue", () => {
     });
     await flushPromises();
     expect(wrap.text()).toContain("Edit constraint");
-    const cell = wrap.find('button[data-test="cell-jeans-warm"]');
+    const cell = wrap.find('[data-test="cell-jeans-warm"]');
     expect(cell.exists()).toBe(true);
     expect(cell.attributes("data-mode")).toBe("boost");
   });
@@ -255,5 +260,44 @@ describe("ConstraintEditor.vue", () => {
     await saveBtn.trigger("click");
     await flushPromises();
     expect(apiMod.create).not.toHaveBeenCalled();
+  });
+
+  it("exception source/target dropdowns include the null sentinel when wildcard has a null option", async () => {
+    apiMod.list.mockResolvedValue({
+      items: [
+        makeWildcardRow("wc_src", "Hair", {
+          values: ["buzz cut", "long"], subs: ["short", "long"], hasNull: true,
+        }),
+        makeWildcardRow("wc_tgt", "Mood", {
+          values: ["serene", "tense"], subs: ["calm", "intense"],
+        }),
+      ],
+      total: 2,
+    });
+    apiMod.get.mockResolvedValue({
+      id: "cn_a", type: "constraint", name: "Hair x Mood",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: {
+        source_wildcard_id: "wc_src",
+        target_wildcard_id: "wc_tgt",
+        matrix: {} as Matrix,
+        exceptions: [],
+      },
+      version: 1, created_at: "", updated_at: "",
+    });
+    const wrap = mount(ConstraintEditor, {
+      props: { id: "cn_a" },
+      global: { plugins: [makeRouter()] },
+    });
+    await flushPromises();
+    await wrap.find('[data-test="add-exception"]').trigger("click");
+    await flushPromises();
+    // Find the source Select component and check its options prop.
+    const selects = wrap.findAllComponents({ name: "Select" });
+    const srcSelect = selects.find((s) => s.attributes("data-test") === "cn-ex-src-select")
+      ?? selects.find((s) => s.attributes("aria-label") === "Exception source value");
+    expect(srcSelect).toBeTruthy();
+    const opts = srcSelect!.props("options") as Array<{ label: string; value: string }>;
+    expect(opts.some((o) => o.value === "" && /null/i.test(o.label))).toBe(true);
   });
 });

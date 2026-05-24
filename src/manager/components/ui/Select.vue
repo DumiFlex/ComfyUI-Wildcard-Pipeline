@@ -209,10 +209,14 @@ function onKeydown(e: KeyboardEvent) {
       @click="toggle"
       @keydown="onKeydown"
     >
-      <!-- Selected label — optional color dot prefix. -->
+      <!-- Selected label — optional color dot prefix. Consumers can
+           override the label text rendering via the `#label` scoped
+           slot (e.g. to render `@{uuid}` ref chips instead of raw text). -->
       <span class="wp-select__label-wrap">
         <span v-if="selected?.dot" class="wp-select__dot" :style="{ background: selected.dot }" />
-        <span v-if="selected" class="wp-select__label-text">{{ selected.label }}</span>
+        <span v-if="selected" class="wp-select__label-text">
+          <slot name="label" :option="selected">{{ selected.label }}</slot>
+        </span>
         <span v-else class="wp-select__placeholder">{{ placeholder }}</span>
       </span>
       <button
@@ -252,7 +256,9 @@ function onKeydown(e: KeyboardEvent) {
           @focusin="active = i"
         >
           <span v-if="opt.dot" class="wp-select__dot" :style="{ background: opt.dot }" />
-          <span class="wp-select__option-label">{{ opt.label }}</span>
+          <span class="wp-select__option-label">
+            <slot name="option" :option="opt">{{ opt.label }}</slot>
+          </span>
           <span class="wp-spacer" />
           <Icon v-if="opt.value === modelValue" name="check" :size="ICON_SM" />
         </li>

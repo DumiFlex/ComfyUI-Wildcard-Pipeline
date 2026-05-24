@@ -15,6 +15,10 @@ export interface WildcardOption {
   id: string;
   weight?: number;
   sub_category?: string;
+  /** Marks the single optional "null option" per wildcard — picks
+   *  resolve to empty string. See spec
+   *  `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
+  is_null?: boolean;
 }
 
 export interface InstanceLike {
@@ -28,6 +32,11 @@ export function isEnabled(option: WildcardOption, instance: InstanceLike): boole
     return false;
   }
   if (Array.isArray(instance.category_filter) && instance.category_filter.length > 0) {
+    // Null option intentionally has no sub_category. Category filters
+    // are about narrowing the sub-cat-bearing pool — the null option is
+    // an orthogonal "no-output" slot and stays in the pool regardless.
+    // User can still toggle it off via `enabled_options` if desired.
+    if (option.is_null) return true;
     if (!option.sub_category) return false;
     if (!instance.category_filter.includes(option.sub_category)) return false;
   }

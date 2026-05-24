@@ -1,21 +1,24 @@
-// Constraint MatrixSection — sub_cat × sub_cat grid with 4-state cell
-// cycle (allow→exclude→boost→reduce→allow) on click. Cog icon visible
-// only on boost/reduce cells (factor matters there); click cog →
-// CellFactorPopover anchored to cell.
+// Constraint MatrixSection — sub_cat × sub_cat grid.
 //
-// "disabled" state was dropped — engine treats `mode: allow`, missing
-// matrix entry, AND `disabled_matrix_cells` membership all as runtime
-// passthrough. Three states for one effective behavior was redundant;
-// `allow` IS the neutral baseline. Engine still reads
-// disabled_matrix_cells for old workflows; UI just never writes it.
-//
-// Override marker: orange dashed border on cell when mode OR factor
-// differs from library.
+// Click any cell opens CellRulePopover (4 labeled state buttons +
+// numeric factor input). The old 4-state click-cycle and cog-anchored
+// factor popover are gone. `mode: "allow"` / `"disabled"` collapse to
+// `"neutral"` on read; touching a legacy-disabled cell strips its
+// `disabled_matrix_cells` entry.
 
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, type VueWrapper } from "@vue/test-utils";
 import MatrixSection from "./MatrixSection.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
+
+/** The popover is rendered in a `<Teleport to="body">` portal so it
+ *  lives outside the test wrapper's element subtree. `find()` on the
+ *  wrapper won't see it. Reaching it through `findComponent` returns
+ *  a wrapper rooted at the popover component, whose `find()` traverses
+ *  the teleported DOM correctly. */
+function popoverWrap(w: VueWrapper) {
+  return w.findComponent({ name: "CellRulePopover" });
+}
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -29,11 +32,11 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
       target_wildcard_id: "wc_fabric",
       matrix: {
         red: {
-          cotton: { mode: "allow", factor: 1.0 },
+          cotton: { mode: "neutral", factor: 1.0 },
           silk: { mode: "boost", factor: 2.0 },
         },
         blue: {
-          cotton: { mode: "allow", factor: 1.0 },
+          cotton: { mode: "neutral", factor: 1.0 },
           silk: { mode: "reduce", factor: 0.5 },
         },
       },
@@ -47,7 +50,11 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 const SOURCE_SUBS = ["red", "blue"];
 const TARGET_SUBS = ["cotton", "silk"];
 
-describe("constraint MatrixSection", () => {
+const RED_COTTON = JSON.stringify(["red", "cotton"]);
+const RED_SILK = JSON.stringify(["red", "silk"]);
+const BLUE_SILK = JSON.stringify(["blue", "silk"]);
+
+describe("constraint MatrixSection — layout", () => {
   it("renders cells for each src × tgt sub_category pair", () => {
     const w = mount(MatrixSection, {
       props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
@@ -58,192 +65,307 @@ describe("constraint MatrixSection", () => {
     expect(w.find('[data-test="mx-cell-blue-silk"]').exists()).toBe(true);
   });
 
-  it("clicking allow cell cycles to exclude (writes cell_mode_overrides)", async () => {
+  it("renders the source / target axis tags", () => {
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        sourceName: "color",
+        targetName: "fabric",
+      },
+    });
+    const src = w.find('[data-test="mx-axis-src"]');
+    const tgt = w.find('[data-test="mx-axis-tgt"]');
+    expect(src.exists()).toBe(true);
+    expect(tgt.exists()).toBe(true);
+    expect(src.text()).toMatch(/color/i);
+    expect(tgt.text()).toMatch(/fabric/i);
+  });
+
+  it("each cell carries its s-{state} class", () => {
     const w = mount(MatrixSection, {
       props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
     });
-    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[0][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.cell_mode_overrides).toEqual({ '["red","cotton"]': "exclude" });
+    expect(w.find('[data-test="mx-cell-red-cotton"]').classes()).toContain("s-neutral");
+    expect(w.find('[data-test="mx-cell-red-silk"]').classes()).toContain("s-boost");
+    expect(w.find('[data-test="mx-cell-blue-silk"]').classes()).toContain("s-reduce");
   });
+});
 
-  it("clicking boost cell cycles to reduce", async () => {
-    const w = mount(MatrixSection, {
-      props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
-    });
-    await w.find('[data-test="mx-cell-red-silk"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[0][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.cell_mode_overrides).toEqual({ '["red","silk"]': "reduce" });
-  });
-
-  it("clicking reduce cell cycles back to allow (4-state, drops override on lib match)", async () => {
-    // blue×silk has lib.mode = "reduce". Cycling: reduce → allow.
-    // Allow != lib.mode (reduce), so override is set to "allow".
-    const w = mount(MatrixSection, {
-      props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
-    });
-    await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[0][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.cell_mode_overrides).toEqual({ '["blue","silk"]': "allow" });
-    // No disabled_matrix_cells write — UI doesn't use that field anymore.
-    expect(patch.instance?.disabled_matrix_cells ?? null).toBeNull();
-  });
-
-  it("clicking allow cell with reduce lib drops override after full cycle", async () => {
-    // Lib mode = "reduce". User cycled through allow → exclude → boost
-    // → reduce already; the "reduce" override matches lib so it should
-    // be deleted.
+describe("constraint MatrixSection — override marker", () => {
+  it("renders override marker when mode differs from library", () => {
     const w = mount(MatrixSection, {
       props: {
         module: makeModule({
-          instance: { cell_mode_overrides: { '["blue","silk"]': "boost" } },
+          instance: { cell_mode_overrides: { [RED_COTTON]: "exclude" } },
         }),
         sourceSubs: SOURCE_SUBS,
         targetSubs: TARGET_SUBS,
       },
     });
-    await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[0][0] as Partial<ModuleEntry>;
-    // boost → reduce, reduce matches lib → drop override entirely.
-    expect(patch.instance?.cell_mode_overrides ?? null).toBeNull();
-  });
-
-  it("legacy disabled cell cycles forward to allow + clears disabled_matrix_cells entry", async () => {
-    // Forward-compat: workflows saved with disabled_matrix_cells should
-    // migrate cleanly when user clicks the cell. New cycle starts at
-    // "allow" (engine-equivalent to disabled = passthrough).
-    const w = mount(MatrixSection, {
-      props: {
-        module: makeModule({
-          instance: { disabled_matrix_cells: ['["red","cotton"]'] },
-        }),
-        sourceSubs: SOURCE_SUBS,
-        targetSubs: TARGET_SUBS,
-      },
-    });
-    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.disabled_matrix_cells ?? null).toBeNull();
-    // Cycle from "allow" baseline → "exclude" override.
-    expect(patch.instance?.cell_mode_overrides).toEqual({ '["red","cotton"]': "exclude" });
-  });
-
-  it("cycling preserves cell_factor_overrides across mode transitions", async () => {
-    // User set reduce ×0.3 override; clicking cycles reduce → allow.
-    // Factor override persists so a later cycle back to boost/reduce
-    // restores the user's tweak instead of resetting to library.
-    const w = mount(MatrixSection, {
-      props: {
-        module: makeModule({
-          instance: {
-            cell_mode_overrides: { '["blue","silk"]': "reduce" },
-            cell_factor_overrides: { '["blue","silk"]': 0.3 },
-          },
-        }),
-        sourceSubs: SOURCE_SUBS,
-        targetSubs: TARGET_SUBS,
-      },
-    });
-    await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[0][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.cell_factor_overrides).toEqual({ '["blue","silk"]': 0.3 });
-  });
-
-  it("renders override marker class when mode differs from library", () => {
-    const w = mount(MatrixSection, {
-      props: {
-        module: makeModule({
-          instance: { cell_mode_overrides: { '["red","cotton"]': "exclude" } },
-        }),
-        sourceSubs: SOURCE_SUBS,
-        targetSubs: TARGET_SUBS,
-      },
-    });
-    expect(w.find('[data-test="mx-cell-red-cotton"]').classes()).toContain("mx__cell--overridden");
+    const cell = w.find('[data-test="mx-cell-red-cotton"]');
+    expect(cell.classes()).toContain("mx-cell--mod");
+    expect(cell.classes()).toContain("s-exclude");
   });
 
   it("renders override marker when factor differs from library", () => {
     const w = mount(MatrixSection, {
       props: {
         module: makeModule({
-          instance: { cell_factor_overrides: { '["red","silk"]': 5.0 } },
+          instance: { cell_factor_overrides: { [RED_SILK]: 2.5 } },
         }),
         sourceSubs: SOURCE_SUBS,
         targetSubs: TARGET_SUBS,
       },
     });
-    expect(w.find('[data-test="mx-cell-red-silk"]').classes()).toContain("mx__cell--overridden");
+    const cell = w.find('[data-test="mx-cell-red-silk"]');
+    expect(cell.classes()).toContain("mx-cell--mod");
+    expect(cell.classes()).toContain("s-boost");
+    expect(cell.text()).toMatch(/×2\.5/);
   });
+});
 
-  it("cog button visible only on boost / reduce cells", () => {
+describe("constraint MatrixSection — popover", () => {
+  it("clicking a cell opens the rule popover", async () => {
     const w = mount(MatrixSection, {
       props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
     });
-    expect(w.find('[data-test="mx-cog-red-cotton"]').exists()).toBe(false); // allow
-    expect(w.find('[data-test="mx-cog-red-silk"]').exists()).toBe(true); // boost
-    expect(w.find('[data-test="mx-cog-blue-silk"]').exists()).toBe(true); // reduce
+    expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(false);
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(true);
+    expect(w.find('[data-test="mx-cell-red-cotton"]').classes()).toContain("open");
   });
 
-  it("clicking cog opens CellFactorPopover (no cell cycle)", async () => {
+  it("clicking the same cell twice closes the popover", async () => {
     const w = mount(MatrixSection, {
       props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
     });
-    await w.find('[data-test="mx-cog-red-silk"]').trigger("click");
-    expect(w.findComponent({ name: "CellFactorPopover" }).exists()).toBe(true);
-    // Cog click did NOT cycle the cell.
-    expect(w.emitted("update")).toBeFalsy();
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(false);
   });
 
-  it("empty cell (no library rule) cycles on click — implicit allow → exclude override", async () => {
-    // Sparse matrix: only red×cotton has a library rule. Empty cells
-    // start with effective mode "allow" (implicit), first click sets
-    // override to "exclude" (matching filled-cell cycle behavior).
-    const sparse = makeModule({
-      payload: {
-        source_wildcard_id: "wc_color",
-        target_wildcard_id: "wc_fabric",
-        matrix: { red: { cotton: { mode: "allow", factor: 1.0 } } },
-        exceptions: [],
-      },
-    });
+  it("opening a different cell moves the popover (one open at a time)", async () => {
     const w = mount(MatrixSection, {
-      props: { module: sparse, sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
+      props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
     });
-    const empty = w.find('[data-test="mx-cell-blue-silk"]');
-    expect(empty.classes()).toContain("mx__cell--empty");
-    expect(empty.attributes("role")).toBe("button");
-    expect(empty.attributes("tabindex")).toBe("0");
-    await empty.trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[0][0] as Partial<ModuleEntry>;
-    expect(patch.instance?.cell_mode_overrides).toEqual({ '["blue","silk"]': "exclude" });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
+    expect(w.find('[data-test="mx-cell-red-cotton"]').classes()).not.toContain("open");
+    expect(w.find('[data-test="mx-cell-blue-silk"]').classes()).toContain("open");
   });
 
-  it("empty cell cycling exclude → boost → reduce → allow drops override", async () => {
-    // Cycle covers all 4 states + lands back on "allow" which equals
-    // the implicit default for empty cells → override deleted.
-    const sparse = makeModule({
-      payload: {
-        source_wildcard_id: "wc_color",
-        target_wildcard_id: "wc_fabric",
-        matrix: { red: { cotton: { mode: "allow", factor: 1.0 } } },
-        exceptions: [],
-      },
-      instance: { cell_mode_overrides: { '["blue","silk"]': "reduce" } },
-    });
+  it("selecting boost from neutral writes the mode override + default factor 1.5", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
     const w = mount(MatrixSection, {
-      props: { module: sparse, sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    await popoverWrap(w).find("button.pop-btn.b-boost").trigger("click");
+    expect(updates.length).toBeGreaterThan(0);
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    expect(last.cell_mode_overrides).toEqual({ [RED_COTTON]: "boost" });
+    expect(last.cell_factor_overrides).toEqual({ [RED_COTTON]: 1.5 });
+  });
+
+  it("selecting reduce from neutral writes mode + default factor 0.5", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule(),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    await popoverWrap(w).find("button.pop-btn.b-reduce").trigger("click");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    expect(last.cell_mode_overrides).toEqual({ [RED_COTTON]: "reduce" });
+    expect(last.cell_factor_overrides).toEqual({ [RED_COTTON]: 0.5 });
+  });
+
+  it("selecting library-matching mode drops the mode override", async () => {
+    // Library says blue×silk = reduce. User had a boost+factor override;
+    // clicking REDUCE in the popover collapses the MODE back to library
+    // default (override dropped). The factor override is intentionally
+    // preserved — user-set numbers survive mode swaps within the
+    // boost/reduce family so they don't lose their tuned value.
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule({
+          instance: {
+            cell_mode_overrides: { [BLUE_SILK]: "boost" },
+            cell_factor_overrides: { [BLUE_SILK]: 3.0 },
+          },
+        }),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
     });
     await w.find('[data-test="mx-cell-blue-silk"]').trigger("click");
-    const updates = w.emitted("update")!;
-    const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
-    // reduce → allow, allow == implicit default → drop override.
-    expect(patch.instance?.cell_mode_overrides ?? null).toBeNull();
+    await popoverWrap(w).find("button.pop-btn.b-reduce").trigger("click");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    // reduce matches lib → mode override dropped.
+    expect(last.cell_mode_overrides ?? null).toBeNull();
+    // User-set factor preserved across the boost → reduce swap.
+    expect(last.cell_factor_overrides).toEqual({ [BLUE_SILK]: 3.0 });
+  });
+
+  it("selecting neutral on a boost cell with override drops both maps", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule({
+          instance: {
+            cell_mode_overrides: { [RED_COTTON]: "boost" },
+            cell_factor_overrides: { [RED_COTTON]: 1.8 },
+          },
+        }),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    await popoverWrap(w).find("button.pop-btn.b-neutral").trigger("click");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    // Lib mode is neutral → matches → drop mode override.
+    expect(last.cell_mode_overrides ?? null).toBeNull();
+    // Leaving boost → drop factor override too.
+    expect(last.cell_factor_overrides ?? null).toBeNull();
+  });
+
+  it("typing a factor in the popover writes cell_factor_overrides", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p) },
+    });
+    // red×silk is library-boost ×2.0; open the popover and type a new factor.
+    await w.find('[data-test="mx-cell-red-silk"]').trigger("click");
+    await popoverWrap(w).find(".pop-num__field").setValue("2.5");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    expect(last.cell_factor_overrides).toEqual({ [RED_SILK]: 2.5 });
+  });
+
+  it("Reset button drops both mode and factor overrides for the cell", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule({
+          instance: {
+            cell_mode_overrides: { [RED_COTTON]: "boost" },
+            cell_factor_overrides: { [RED_COTTON]: 2.4 },
+          },
+        }),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    expect(popoverWrap(w).find(".pop-reset").exists()).toBe(true);
+    await popoverWrap(w).find(".pop-reset").trigger("click");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    expect(last.cell_mode_overrides ?? null).toBeNull();
+    expect(last.cell_factor_overrides ?? null).toBeNull();
+  });
+
+  it("Reset button hidden when cell has no override", async () => {
+    const w = mount(MatrixSection, {
+      props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
+    });
+    // red×silk is library-boost, no instance override.
+    await w.find('[data-test="mx-cell-red-silk"]').trigger("click");
+    expect(popoverWrap(w).find(".pop-reset").exists()).toBe(false);
+  });
+
+  it("typing the library factor in the popover drops the override", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const w = mount(MatrixSection, {
+      props: {
+        module: makeModule({
+          instance: { cell_factor_overrides: { [RED_SILK]: 2.5 } },
+        }),
+        sourceSubs: SOURCE_SUBS,
+        targetSubs: TARGET_SUBS,
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    // Library factor on red×silk is 2.0; typing that exact value should clear.
+    await w.find('[data-test="mx-cell-red-silk"]').trigger("click");
+    await popoverWrap(w).find(".pop-num__field").setValue("2");
+    const last = updates[updates.length - 1].instance as Record<string, unknown>;
+    expect(last.cell_factor_overrides ?? null).toBeNull();
+  });
+});
+
+describe("constraint MatrixSection — legacy migration", () => {
+  it("touching a legacy-disabled cell clears its disabled_matrix_cells entry", async () => {
+    const updates: Array<Partial<ModuleEntry>> = [];
+    const key = JSON.stringify(["a", "b"]);
+    const module = makeModule({
+      payload: { matrix: { a: { b: { mode: "neutral", factor: 1 } } } },
+      instance: { disabled_matrix_cells: [key] },
+    });
+    const wrap = mount(MatrixSection, {
+      props: {
+        module,
+        sourceSubs: ["a"],
+        targetSubs: ["b"],
+        sourceName: "src",
+        targetName: "tgt",
+        "onUpdate": (p: Partial<ModuleEntry>) => updates.push(p),
+      },
+    });
+    // Open the popover.
+    await wrap.find('[data-test="mx-cell-a-b"]').trigger("click");
+    // Click EXCLUDE — this writes the override AND should strip the
+    // disabled-set entry for the same cell.
+    await popoverWrap(wrap).find("button.pop-btn.b-exclude").trigger("click");
+    expect(updates.length).toBeGreaterThan(0);
+    const lastInstance = (updates[updates.length - 1].instance ?? {}) as Record<string, unknown>;
+    const dset = lastInstance.disabled_matrix_cells;
+    expect(dset === null || (Array.isArray(dset) && !dset.includes(key))).toBe(true);
+    const modeMap = lastInstance.cell_mode_overrides as Record<string, string> | null;
+    expect(modeMap && modeMap[key]).toBe("exclude");
+  });
+
+  it("legacy `mode: 'allow'` library cells render as s-neutral", () => {
+    // Older workflows stored neutral cells as `mode: "allow"`; on read
+    // these fold to "neutral" so the UI shows one consistent baseline.
+    const legacy = makeModule({
+      payload: {
+        matrix: { red: { cotton: { mode: "allow" as unknown as "neutral", factor: 1 } } },
+      },
+    });
+    const w = mount(MatrixSection, {
+      props: { module: legacy, sourceSubs: ["red"], targetSubs: ["cotton"] },
+    });
+    expect(w.find('[data-test="mx-cell-red-cotton"]').classes()).toContain("s-neutral");
+  });
+});
+
+describe("constraint MatrixSection — keyboard", () => {
+  it("Escape closes the popover", async () => {
+    const w = mount(MatrixSection, {
+      props: { module: makeModule(), sourceSubs: SOURCE_SUBS, targetSubs: TARGET_SUBS },
+      attachTo: document.body,
+    });
+    await w.find('[data-test="mx-cell-red-cotton"]').trigger("click");
+    expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(true);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await w.vm.$nextTick();
+    expect(w.findComponent({ name: "CellRulePopover" }).exists()).toBe(false);
+    w.unmount();
   });
 });

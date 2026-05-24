@@ -16,7 +16,11 @@ import {
 } from "./derivation-ops";
 
 describe("derivation-ops registry", () => {
-  it("DERIVATION_OPS lists exactly the 8 ops in spec'd order", () => {
+  it("DERIVATION_OPS lists exactly the 10 ops in spec'd order", () => {
+    // 2026-05-24 added is_empty / is_not_empty for the null-wildcard
+    // option feature; the legacy presence quartet stays for back-compat
+    // reads. Authoring UI now only surfaces the 4 compare ops + the
+    // "is empty" tick that maps to is_empty / is_not_empty.
     expect(DERIVATION_OPS).toEqual([
       "equals",
       "not_equals",
@@ -26,6 +30,8 @@ describe("derivation-ops registry", () => {
       "not_exists",
       "is_set",
       "is_unset",
+      "is_empty",
+      "is_not_empty",
     ]);
   });
 
@@ -55,9 +61,12 @@ describe("derivation-ops registry", () => {
     expect(OP_PLACEHOLDERS.matches).toMatch(/[\^.*$]/); // regex-shaped
   });
 
-  it("VALUE_DISABLED_OPS contains exactly the 4 presence-check ops", () => {
+  it("VALUE_DISABLED_OPS contains the 4 presence ops + the 2 emptiness ops", () => {
     expect(VALUE_DISABLED_OPS).toEqual(
-      new Set<DerivationOp>(["exists", "not_exists", "is_set", "is_unset"]),
+      new Set<DerivationOp>([
+        "exists", "not_exists", "is_set", "is_unset",
+        "is_empty", "is_not_empty",
+      ]),
     );
   });
 

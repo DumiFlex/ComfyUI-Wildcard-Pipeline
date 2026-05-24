@@ -18,6 +18,7 @@ import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import VarAutocompleteInput from "../../../../../manager/components/VarAutocompleteInput.vue";
+import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
 
 type Mode = "allow" | "exclude" | "boost" | "reduce";
 
@@ -36,6 +37,8 @@ interface LibraryException {
   target_value?: string;
   source?: string;
   target?: string;
+  source_id?: string;
+  target_id?: string;
   mode: Mode;
   factor: number;
 }
@@ -47,20 +50,66 @@ interface ExtraException {
   factor: number;
 }
 
-function excSrc(exc: LibraryException | ExtraException): string {
+function excSrc(
+  exc: LibraryException | ExtraException,
+  sourceOptionsById?: ReadonlyMap<string, string>,
+): string {
   const v = exc as LibraryException;
-  return v.source_value ?? v.source ?? "";
+  // Tier-2 (`source_value`) wins → legacy (`source`) → id-resolved
+  // fallback. Some library payloads stored only the stable id without
+  // re-syncing the value string after an upstream option rename. The
+  // canvas modal passes an id→value map so we can recover the human
+  // value without surfacing an empty chip.
+  if (typeof v.source_value === "string" && v.source_value) return v.source_value;
+  if (typeof v.source === "string" && v.source) return v.source;
+  if (typeof v.source_id === "string" && sourceOptionsById) {
+    return sourceOptionsById.get(v.source_id) ?? "";
+  }
+  return "";
 }
-function excTgt(exc: LibraryException | ExtraException): string {
+function excTgt(
+  exc: LibraryException | ExtraException,
+  targetOptionsById?: ReadonlyMap<string, string>,
+): string {
   const v = exc as LibraryException;
-  return v.target_value ?? v.target ?? "";
+  if (typeof v.target_value === "string" && v.target_value) return v.target_value;
+  if (typeof v.target === "string" && v.target) return v.target;
+  if (typeof v.target_id === "string" && targetOptionsById) {
+    return targetOptionsById.get(v.target_id) ?? "";
+  }
+  return "";
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   module: ModuleEntry;
   sourceValues: readonly string[];
   targetValues: readonly string[];
-}>();
+  /** True when the source / target wildcard has an is_null option.
+   *  Drives the pi-ban chip render on library rows whose source/target
+   *  value is the empty string — without this flag the row would
+   *  display as blank text. The parent modal computes these by
+   *  inspecting the catalog payload. */
+  sourceHasNull?: boolean;
+  targetHasNull?: boolean;
+  /** Per-option id → value lookup used as a fallback when an
+   *  exception payload's `source` / `target` strings are missing but
+   *  `source_id` / `target_id` are present. Caller builds these from
+   *  the catalog payload of the source / target wildcards. */
+  sourceOptionsById?: ReadonlyMap<string, string>;
+  targetOptionsById?: ReadonlyMap<string, string>;
+  /** Wildcard uuid → display name. Used by `RichTextPreview` so
+   *  embedded `@{uuid}` nested-ref tokens inside exception values
+   *  render as the same purple ref chip the value editor shows — not
+   *  raw `@{c0f09840}` text. Built by the parent modal from the
+   *  Context's wildcard catalog. */
+  uuidToName?: ReadonlyMap<string, string>;
+}>(), {
+  sourceHasNull: false,
+  targetHasNull: false,
+  sourceOptionsById: () => new Map(),
+  targetOptionsById: () => new Map(),
+  uuidToName: () => new Map(),
+});
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
 const libraryExceptions = computed<LibraryException[]>(() => {
@@ -84,7 +133,7 @@ const extras = computed<ExtraException[]>(
 );
 
 function libKey(exc: LibraryException): string {
-  return encodeKey([excSrc(exc), excTgt(exc)]);
+  return encodeKey([excSrc(exc, props.sourceOptionsById), excTgt(exc, props.targetOptionsById)]);
 }
 
 function effectiveMode(exc: LibraryException): Mode {
@@ -134,8 +183,12 @@ function onLibModeCycle(exc: LibraryException): void {
 }
 
 function onLibFactorChange(exc: LibraryException, ev: Event): void {
-  const value = Number((ev.target as HTMLInputElement).value);
-  if (!Number.isFinite(value) || value < 0) return;
+  const raw = Number((ev.target as HTMLInputElement).value);
+  if (!Number.isFinite(raw) || raw < 0) return;
+  // Snap to 3 decimals so float-fuzz tails (from native arrow step,
+  // autofill, etc.) never leak into stored overrides. Honours legit
+  // 2-decimal precision a user might explicitly type.
+  const value = Math.round(raw * 1000) / 1000;
   const key = libKey(exc);
   const map = { ...factorOverrides.value };
   if (value === exc.factor) {
@@ -146,6 +199,30 @@ function onLibFactorChange(exc: LibraryException, ev: Event): void {
   emit("update", patchInstance(props.module, "exception_factor_overrides",
     Object.keys(map).length > 0 ? map : null,
   ));
+}
+
+/** Arrow-key / wheel handlers for both the library and extra factor
+ *  inputs — route through the rounded `bumpLibFactor` / `bumpExtraFactor`
+ *  helpers so native browser float-step doesn't surface fuzz. */
+function onLibFactorKeydown(exc: LibraryException, ev: KeyboardEvent): void {
+  if (ev.key === "ArrowUp") { ev.preventDefault(); bumpLibFactor(exc, 1); }
+  else if (ev.key === "ArrowDown") { ev.preventDefault(); bumpLibFactor(exc, -1); }
+}
+function onLibFactorWheel(exc: LibraryException, ev: WheelEvent): void {
+  const target = ev.target as HTMLInputElement;
+  if (document.activeElement !== target) return;
+  ev.preventDefault();
+  bumpLibFactor(exc, ev.deltaY < 0 ? 1 : -1);
+}
+function onExtraFactorKeydown(idx: number, ev: KeyboardEvent): void {
+  if (ev.key === "ArrowUp") { ev.preventDefault(); bumpExtraFactor(idx, 1); }
+  else if (ev.key === "ArrowDown") { ev.preventDefault(); bumpExtraFactor(idx, -1); }
+}
+function onExtraFactorWheel(idx: number, ev: WheelEvent): void {
+  const target = ev.target as HTMLInputElement;
+  if (document.activeElement !== target) return;
+  ev.preventDefault();
+  bumpExtraFactor(idx, ev.deltaY < 0 ? 1 : -1);
 }
 
 // ── Extras ─────────────────────────────────────────────────────────
@@ -208,15 +285,77 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   <section class="ex" data-test="ex-section">
     <div class="ex__label">Exceptions</div>
 
-    <div v-for="(exc, i) in libraryExceptions" :key="libKey(exc)" class="ex__row" :data-test="`ex-row-${i}`">
-      <input
-        type="checkbox"
+    <div
+      v-for="(exc, i) in libraryExceptions"
+      :key="libKey(exc)"
+      class="ex__row"
+      :class="{ 'ex__row--off': disabledKeys.has(libKey(exc)) }"
+      :data-test="`ex-row-${i}`"
+    >
+      <!-- Styled checkbox matching OptionRow's wildcard pattern — a
+           role-checkbox span with inline SVG tick. Replaces the bare
+           native input for visual parity with the wildcard / fixed-
+           values edit modals. -->
+      <span
+        class="ex__check"
+        :class="{ 'ex__check--on': !disabledKeys.has(libKey(exc)) }"
         :data-test="`ex-cb-${i}`"
+        role="checkbox"
+        :aria-checked="!disabledKeys.has(libKey(exc))"
+        tabindex="0"
         aria-label="Enable this exception"
-        :checked="!disabledKeys.has(libKey(exc))"
-        @change="(ev) => onLibCheckboxChange(exc, (ev.target as HTMLInputElement).checked)"
-      />
-      <span class="ex__pair">{{ excSrc(exc) }} → {{ excTgt(exc) }}</span>
+        @click="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
+        @keydown.space.prevent="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
+        @keydown.enter.prevent="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
+      >
+        <svg
+          v-if="!disabledKeys.has(libKey(exc))"
+          class="ex__check-tick"
+          width="8"
+          height="8"
+          viewBox="0 0 12 12"
+          aria-hidden="true"
+        >
+          <path d="M2.5 6.5 L5 9 L9.5 3.5"
+                fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </span>
+      <span class="ex__pair">
+        <span class="ex__src">
+          <span
+            v-if="excSrc(exc, props.sourceOptionsById) === '' && sourceHasNull"
+            class="ex__null-chip"
+            aria-label="null option (resolves to empty)"
+          >
+            <i class="pi pi-ban" aria-hidden="true" />
+            <span>null</span>
+          </span>
+          <RichTextPreview
+            v-else
+            :value="excSrc(exc, props.sourceOptionsById)"
+            :uuid-to-name="uuidToName"
+            surface="wildcard"
+          />
+        </span>
+        <span class="ex__arrow">→</span>
+        <span class="ex__tgt">
+          <span
+            v-if="excTgt(exc, props.targetOptionsById) === '' && targetHasNull"
+            class="ex__null-chip"
+            aria-label="null option (resolves to empty)"
+          >
+            <i class="pi pi-ban" aria-hidden="true" />
+            <span>null</span>
+          </span>
+          <RichTextPreview
+            v-else
+            :value="excTgt(exc, props.targetOptionsById)"
+            :uuid-to-name="uuidToName"
+            surface="wildcard"
+          />
+        </span>
+      </span>
       <button
         type="button"
         class="ex__mode-chip"
@@ -238,13 +377,15 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
           aria-label="Exception factor"
           :value="effectiveFactor(exc)"
           @change="(ev) => onLibFactorChange(exc, ev)"
+          @keydown="(ev) => onLibFactorKeydown(exc, ev as KeyboardEvent)"
+          @wheel="(ev) => onLibFactorWheel(exc, ev as WheelEvent)"
         />
         <span class="ex__spin">
           <button
             type="button"
             class="ex__spin-btn"
             tabindex="-1"
-            :aria-label="`Increase factor for ${excSrc(exc)} → ${excTgt(exc)}`"
+            :aria-label="`Increase factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
             @click="bumpLibFactor(exc, 1)"
           ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
             <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
@@ -253,7 +394,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
             type="button"
             class="ex__spin-btn"
             tabindex="-1"
-            :aria-label="`Decrease factor for ${excSrc(exc)} → ${excTgt(exc)}`"
+            :aria-label="`Decrease factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
             @click="bumpLibFactor(exc, -1)"
           ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
             <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
@@ -265,7 +406,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
     <div v-for="(exc, i) in extras" :key="`extra-${i}`" class="ex__row ex__row--extra" :data-test="`ex-extra-${i}`">
       <span class="ex__extra-badge" data-test="ex-extra-badge">extra</span>
       <VarAutocompleteInput
-        :model-value="excSrc(exc)"
+        :model-value="excSrc(exc, props.sourceOptionsById)"
         :suggestions="[...sourceValues]"
         :data-test="`ex-extra-src-${i}`"
         placeholder="source"
@@ -274,7 +415,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       />
       <span class="ex__arrow">→</span>
       <VarAutocompleteInput
-        :model-value="excTgt(exc)"
+        :model-value="excTgt(exc, props.targetOptionsById)"
         :suggestions="[...targetValues]"
         :data-test="`ex-extra-tgt-${i}`"
         placeholder="target"
@@ -299,7 +440,9 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
           class="ex__factor-input"
           aria-label="Extra factor"
           :value="exc.factor"
-          @change="(ev) => onExtraFieldChange(i, 'factor', Number((ev.target as HTMLInputElement).value) || 1)"
+          @change="(ev) => onExtraFieldChange(i, 'factor', Math.round((Number((ev.target as HTMLInputElement).value) || 1) * 1000) / 1000)"
+          @keydown="(ev) => onExtraFactorKeydown(i, ev as KeyboardEvent)"
+          @wheel="(ev) => onExtraFactorWheel(i, ev as WheelEvent)"
         />
         <span class="ex__spin">
           <button
@@ -367,8 +510,87 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   border-left: 2px solid var(--wp-status-modified, #fb923c);
   padding-left: 6px;
 }
-.ex__pair { flex: 1; }
+.ex__pair {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Source / target values use the matrix axis palette (purple source,
+ * cyan target) so users see the role at a glance — same visual cue
+ * the axis tags above the rule matrix use. */
+.ex__src {
+  color: #d8b4fe;
+  background: color-mix(in oklab, #c084fc 12%, transparent);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in oklab, #c084fc 30%, transparent);
+}
+.ex__tgt {
+  color: #67e8f9;
+  background: color-mix(in oklab, #22d3ee 12%, transparent);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in oklab, #22d3ee 30%, transparent);
+}
 .ex__arrow { color: var(--wp-text-dim, var(--wp-text3)); }
+
+/* Styled checkbox — mirror of OptionRow's `.opt__check` pattern so
+ * users see one consistent on/off control across wildcard / fixed-
+ * values / constraint edit modals. */
+.ex__check {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  background: var(--wp-bg);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ex__check-tick { display: block; }
+.ex__check--on {
+  background: var(--wp-accent);
+  border-color: var(--wp-accent);
+}
+
+/* Null-option chip — shown in the src/tgt cell when the exception
+ * targets the wildcard's null option (value === ""). Visually distinct
+ * from the regular src/tgt tinted spans so the special role reads
+ * at a glance. */
+.ex__null-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font-family: var(--wp-font-mono, monospace);
+}
+.ex__null-chip .pi { font-size: 10px; }
+
+/* Disabled exception — mirrors the wildcard OptionRow `.opt--off` and
+ * the fixed-values ValueRow `.row--off` treatment: dimmed src/tgt
+ * chips with strike-through, faded mode chip + factor input. The
+ * checkbox itself stays full-opacity so it remains the obvious
+ * re-enable affordance. */
+.ex__row--off .ex__src,
+.ex__row--off .ex__tgt {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.ex__row--off .ex__arrow {
+  opacity: 0.5;
+}
+.ex__row--off .ex__mode-chip {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.ex__row--off .ex__factor-wrap {
+  opacity: 0.5;
+}
 .ex__mode-chip {
   background: transparent;
   border: 1px solid var(--wp-border);
@@ -379,9 +601,13 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   border-radius: 3px;
   cursor: pointer;
 }
-.ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
+/* Mode chip palette mirrors the matrix legend: boost = green,
+ * reduce = orange/warn, exclude = red/danger. Allow uses the accent
+ * (purple-ish) because it's a "neutral pass-through" — visually distinct
+ * from boost's green so users don't confuse `allow ×1` with `boost ×1.5`. */
+.ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
 .ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
-.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
+.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
 .ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
 .ex__factor-wrap {
   display: inline-flex;
@@ -446,13 +672,30 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   color: var(--wp-status-modified, #fb923c);
 }
 .ex__trash {
-  background: transparent;
-  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--wp-border);
+  border-radius: 4px;
   color: var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
   font-size: 11px;
+  flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.ex__trash:hover { color: var(--wp-danger, #e05252); }
+.ex__trash:hover {
+  background: color-mix(in srgb, var(--wp-danger, #e05252) 18%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger, #e05252) 50%, transparent);
+  color: var(--wp-danger, #e05252);
+}
+.ex__trash:active {
+  background: color-mix(in srgb, var(--wp-danger, #e05252) 30%, transparent);
+}
+.ex__trash .pi { font-size: 11px; line-height: 1; }
 .ex__add-extra {
   display: inline-flex;
   align-items: center;

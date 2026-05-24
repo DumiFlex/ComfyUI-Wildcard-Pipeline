@@ -48,7 +48,7 @@ const KIND_META: Record<string, KindMeta> = {
   combine:      { label: "Combine",    color: "var(--wp-kind-combine, #fbbf24)" },
   derivation:   { label: "Derivation", color: "var(--wp-kind-derivation, #a78bfa)" },
   constraint:   { label: "Constraint", color: "var(--wp-kind-constraint, #f87171)" },
-  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default, #46566B)" },
+  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default, #6366f1)" },
 };
 
 const kind = computed(() => String(props.child.type ?? "module"));

@@ -241,7 +241,7 @@ onMounted(async () => {
 
 function issuesFor(row: LibraryRow): ValidationIssue[] {
   if (row.kind === "bundle") {
-    return validateBundle(row.source as BundleRow, moduleStore.catalog);
+    return validateBundle(row.source as BundleRow, moduleStore.catalog, bundleStore.items);
   }
   return validateModule(row.source as ModuleRow, moduleStore.catalog);
 }

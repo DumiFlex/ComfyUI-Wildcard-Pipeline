@@ -27,6 +27,8 @@ export const DERIVATION_OPS = [
   "not_exists",
   "is_set",
   "is_unset",
+  "is_empty",
+  "is_not_empty",
 ] as const;
 
 export type DerivationOp = (typeof DERIVATION_OPS)[number];
@@ -43,6 +45,8 @@ export const OP_LABELS: Record<DerivationOp, string> = {
   not_exists: "does not exist",
   is_set: "is set",
   is_unset: "is unset",
+  is_empty: "is empty",
+  is_not_empty: "is not empty",
 };
 
 /** Semantic tooltip text shown on hover of each option. Surfaced via
@@ -59,6 +63,8 @@ export const OP_TOOLTIPS: Record<DerivationOp, string> = {
   not_exists: "Variable key is absent from the runtime context",
   is_set: "Variable is present AND has a non-empty value",
   is_unset: "Variable is absent OR has an empty value",
+  is_empty: "Variable resolved to an empty string (including the null option of a wildcard)",
+  is_not_empty: "Variable resolved to a non-empty string",
 };
 
 /** Operator-specific placeholder for the condition-value input. Drives
@@ -74,6 +80,8 @@ export const OP_PLACEHOLDERS: Record<DerivationOp, string> = {
   not_exists: "no value needed",
   is_set: "no value needed",
   is_unset: "no value needed",
+  is_empty: "no value needed",
+  is_not_empty: "no value needed",
 };
 
 /** Ops where the condition-value input is purely informational —
@@ -88,4 +96,6 @@ export const VALUE_DISABLED_OPS: ReadonlySet<DerivationOp> = new Set<DerivationO
   "not_exists",
   "is_set",
   "is_unset",
+  "is_empty",
+  "is_not_empty",
 ]);

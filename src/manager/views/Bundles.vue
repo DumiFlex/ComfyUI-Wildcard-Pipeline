@@ -143,10 +143,13 @@ const KIND_ICON: Record<string, string> = {
 };
 
 /** Resolved frame color — same fallback rule the Context widget uses
- *  for unconfigured bundles. Keeps the swatch visible for default-color
- *  rows. */
+ *  for unconfigured bundles. Indigo (`#6366f1`) matches the
+ *  `--wp-bundle-default` token the canvas paints with when an
+ *  instance has no explicit color. Previously fell back to gray
+ *  (`#46566B`), so the list swatch and the canvas frame disagreed
+ *  for every bundle that hadn't picked an explicit color. */
 function frameColor(row: BundleRow): string {
-  return row.color && row.color.length ? row.color : "#46566B";
+  return row.color && row.color.length ? row.color : "#6366f1";
 }
 </script>
 
@@ -291,7 +294,7 @@ function frameColor(row: BundleRow): string {
         />
       </td>
       <td><span class="wp-mono">{{ childCount(row) }}</span></td>
-      <td><ValidityIcon :issues="validateBundle(row as unknown as BundleRow, moduleStore.catalog)" /></td>
+      <td><ValidityIcon :issues="validateBundle(row as unknown as BundleRow, moduleStore.catalog, store.items)" /></td>
     </template>
 
     <template #actions="{ row }">

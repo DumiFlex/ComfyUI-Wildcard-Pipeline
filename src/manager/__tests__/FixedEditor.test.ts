@@ -110,9 +110,14 @@ describe("FixedEditor.vue", () => {
     // Default editor has two blank rows — fill both with valid identifiers
     // so the save-time validator (unique non-empty names) passes.
     await wrap.find('[data-test="fv-row-0-name"]').setValue("focal_length");
-    await wrap.find('[data-test="fv-row-0-value"]').setValue("85mm");
     await wrap.find('[data-test="fv-row-1-name"]').setValue("aperture");
-    await wrap.find('[data-test="fv-row-1-value"]').setValue("f1.4");
+    // Value fields are RichTextInput components (contenteditable hosts).
+    // `wrap.find().setValue` only works on form inputs; emit the
+    // `update:modelValue` from the underlying component so the parent
+    // v-model picks it up.
+    const valueInputs = wrap.findAllComponents({ name: "RichTextInput" });
+    valueInputs[0].vm.$emit("update:modelValue", "85mm");
+    valueInputs[1].vm.$emit("update:modelValue", "f1.4");
     await flushPromises();
     const saveBtn = wrap.find('[data-test="save-btn"]');
     await saveBtn.trigger("click");

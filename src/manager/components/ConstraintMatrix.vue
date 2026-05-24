@@ -1,31 +1,48 @@
 <script setup lang="ts">
+/**
+ * ConstraintMatrix (SPA) — library-authoring grid for a constraint
+ * module. Visual / interaction model mirrors the canvas extension's
+ * `MatrixSection`:
+ *   - Purple `↓ SOURCE · <wildcard>` and cyan `→ TARGET · <wildcard>`
+ *     axis tags above the grid.
+ *   - Uniform cells (icon + factor for boost/reduce, dot for neutral,
+ *     × for exclude) — no compact / wide variants.
+ *   - Click cell → CellRulePopover (teleported to body) with four state
+ *     buttons, stepper factor input, reset, and outside-click / Escape
+ *     to close. State picks and factor edits keep the popover open.
+ *   - Collapsible MatrixLegend below the grid.
+ *
+ * Single popover lives in a body portal so it never picks up the cell's
+ * hover / clipping context — same fix the canvas grid applies.
+ */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import Button from "./ui/Button.vue";
-import Input from "./ui/Input.vue";
 import type {
   ConstraintCell,
   ConstraintMatrix,
   ConstraintMode,
 } from "../api/types";
+import CellRulePopover from "../../components/context/editors/constraint/CellRulePopover.vue";
+import MatrixLegend from "../../components/context/editors/constraint/MatrixLegend.vue";
+
+type RuleState = "neutral" | "exclude" | "boost" | "reduce";
 
 interface Props {
-  rows: string[]; // source values
-  cols: string[]; // target sub-categories
+  rows: string[];      // source sub-categories
+  cols: string[];      // target sub-categories
   modelValue: ConstraintMatrix;
+  sourceName?: string; // wildcard name shown in the source axis tag
+  targetName?: string; // wildcard name shown in the target axis tag
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  sourceName: "",
+  targetName: "",
+});
 const emit = defineEmits<{ "update:modelValue": [value: ConstraintMatrix] }>();
 
-const MODE_ORDER: Record<ConstraintMode, ConstraintMode> = {
-  allow: "exclude",
-  exclude: "boost",
-  boost: "reduce",
-  reduce: "allow",
-};
 const MODE_DEFAULT_FACTOR: Record<ConstraintMode, number> = {
   allow: 1,
   exclude: 0,
-  boost: 2,
+  boost: 1.5,
   reduce: 0.5,
 };
 const MODE_ICON: Record<ConstraintMode, string> = {
@@ -35,14 +52,26 @@ const MODE_ICON: Record<ConstraintMode, string> = {
   reduce: "↓",
 };
 const MODE_LABEL: Record<ConstraintMode, string> = {
-  allow: "Allow",
+  allow: "Neutral",
   exclude: "Exclude",
   boost: "Boost",
   reduce: "Reduce",
 };
 
+/** Storage uses "allow"; popover speaks "neutral". Translate at boundary. */
+function toState(mode: ConstraintMode): RuleState {
+  return mode === "allow" ? "neutral" : mode;
+}
+function toMode(state: RuleState): ConstraintMode {
+  return state === "neutral" ? "allow" : state;
+}
+
+function rawCellAt(row: string, col: string): ConstraintCell | null {
+  return props.modelValue?.[row]?.[col] ?? null;
+}
+
 function cellAt(row: string, col: string): ConstraintCell {
-  const raw = props.modelValue?.[row]?.[col];
+  const raw = rawCellAt(row, col);
   if (!raw) return { mode: "allow", factor: 1 };
   const mode = (raw.mode ?? "allow") as ConstraintMode;
   const factor =
@@ -76,405 +105,373 @@ function writeCell(row: string, col: string, cell: ConstraintCell) {
   emit("update:modelValue", next);
 }
 
-function cycleCell(row: string, col: string) {
-  const cur = cellAt(row, col);
-  const nextMode = MODE_ORDER[cur.mode];
-  writeCell(row, col, {
-    mode: nextMode,
-    factor: MODE_DEFAULT_FACTOR[nextMode],
-  });
-}
-
-function setCellFactor(row: string, col: string, factor: number) {
-  const cur = cellAt(row, col);
-  writeCell(row, col, { mode: cur.mode, factor });
-}
-
 function fmtFactor(f: number): string {
   if (!Number.isFinite(f)) return "1";
   if (f >= 10) return f.toFixed(0);
   return f.toFixed(2).replace(/\.?0+$/, "");
 }
 
-// ----- Tune popover state ------------------------------------------------
-interface TuneState {
+function cellAriaLabel(row: string, col: string): string {
+  const c = cellAt(row, col);
+  const factor = (c.mode === "boost" || c.mode === "reduce") ? ` ×${fmtFactor(c.factor)}` : "";
+  return `Rule: ${row} → ${col}, current state ${MODE_LABEL[c.mode]}${factor}. Click to edit.`;
+}
+
+// ── Popover state ───────────────────────────────────────────────
+interface PopoverPos {
   row: string;
   col: string;
   left: number;
   top: number;
 }
-const tune = ref<TuneState | null>(null);
+const popover = ref<PopoverPos | null>(null);
 
-function isOpenAt(row: string, col: string) {
-  return tune.value?.row === row && tune.value?.col === col;
+function isOpenAt(row: string, col: string): boolean {
+  return popover.value?.row === row && popover.value?.col === col;
 }
 
-function openTune(row: string, col: string, ev: MouseEvent) {
+function rectForCell(row: string, col: string): { left: number; top: number } | null {
+  const sel = `[data-test="cell-${cssEscape(row)}-${cssEscape(col)}"]`;
+  const el = document.querySelector<HTMLElement>(sel);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  const POP_W = 260;
+  const left = Math.min(
+    window.innerWidth - POP_W - 12,
+    Math.max(12, r.left + r.width / 2 - POP_W / 2),
+  );
+  const top = r.bottom + 8;
+  return { left, top };
+}
+function cssEscape(s: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(s);
+  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+}
+
+function openPopover(row: string, col: string, ev: MouseEvent): void {
   ev.stopPropagation();
   if (isOpenAt(row, col)) {
-    tune.value = null;
+    popover.value = null;
     return;
   }
-  const wrap = (ev.currentTarget as HTMLElement).closest(
-    ".wp-matrix-cell-wrap",
-  ) as HTMLElement | null;
-  const rect = wrap?.getBoundingClientRect();
-  const POP_W = 260;
-  const left = rect
-    ? Math.min(
-        window.innerWidth - POP_W - 12,
-        Math.max(12, rect.left + rect.width / 2 - POP_W / 2),
-      )
-    : 12;
-  const top = rect ? rect.bottom + 8 : 12;
-  tune.value = { row, col, left, top };
+  const pos = rectForCell(row, col) ?? { left: 12, top: 12 };
+  popover.value = { row, col, left: pos.left, top: pos.top };
 }
 
-function closeTune() {
-  tune.value = null;
+function closePopover(): void {
+  popover.value = null;
 }
 
-function onDocumentMousedown(ev: MouseEvent) {
-  if (!tune.value) return;
+function reanchorPopover(): void {
+  const cur = popover.value;
+  if (!cur) return;
+  const pos = rectForCell(cur.row, cur.col);
+  if (!pos) {
+    closePopover();
+    return;
+  }
+  popover.value = { ...cur, left: pos.left, top: pos.top };
+}
+
+const popoverCell = computed<ConstraintCell | null>(() => {
+  if (!popover.value) return null;
+  return cellAt(popover.value.row, popover.value.col);
+});
+
+// The SPA grid IS the library — there's nothing to reset *to*. The
+// canvas/extension surface uses the reset button to drop a per-instance
+// override and fall back to library; here, picking NEUTRAL already
+// clears the cell (sparse delete in `writeCell`). Same goes for the
+// dashed "modified" outline — every authored cell is library data,
+// nothing to mark as a divergence. Both UI affordances stay off.
+
+function onPopoverState(next: RuleState): void {
+  if (!popover.value) return;
+  const cur = cellAt(popover.value.row, popover.value.col);
+  const mode = toMode(next);
+  const factor =
+    mode === cur.mode ? cur.factor : MODE_DEFAULT_FACTOR[mode] ?? 1;
+  writeCell(popover.value.row, popover.value.col, { mode, factor });
+}
+
+function onPopoverFactor(value: number): void {
+  if (!popover.value) return;
+  if (!Number.isFinite(value) || value <= 0) return;
+  const cur = cellAt(popover.value.row, popover.value.col);
+  writeCell(popover.value.row, popover.value.col, { mode: cur.mode, factor: value });
+}
+
+function onDocumentMousedown(ev: MouseEvent): void {
+  if (!popover.value) return;
   const target = ev.target as HTMLElement | null;
   if (!target) return;
-  if (target.closest(".wp-tune-pop")) return;
-  if (target.closest(".wp-matrix-cell-wrap")) return;
-  closeTune();
+  if (target.closest(".pop")) return;             // inside the popover
+  if (target.closest(".wp-mx-cell")) return;      // a matrix cell
+  closePopover();
+}
+function onDocumentKeydown(ev: KeyboardEvent): void {
+  if (ev.key === "Escape" && popover.value) {
+    ev.preventDefault();
+    closePopover();
+  }
 }
 
 onMounted(() => {
   window.addEventListener("mousedown", onDocumentMousedown);
-  window.addEventListener("scroll", closeTune, true);
-  window.addEventListener("resize", closeTune);
+  window.addEventListener("keydown", onDocumentKeydown);
+  window.addEventListener("scroll", reanchorPopover, true);
+  window.addEventListener("resize", reanchorPopover);
 });
 onBeforeUnmount(() => {
   window.removeEventListener("mousedown", onDocumentMousedown);
-  window.removeEventListener("scroll", closeTune, true);
-  window.removeEventListener("resize", closeTune);
+  window.removeEventListener("keydown", onDocumentKeydown);
+  window.removeEventListener("scroll", reanchorPopover, true);
+  window.removeEventListener("resize", reanchorPopover);
 });
 
-const tuneCell = computed<ConstraintCell | null>(() => {
-  if (!tune.value) return null;
-  return cellAt(tune.value.row, tune.value.col);
-});
-
-const presets = computed(() => {
-  if (!tuneCell.value) return [];
-  return tuneCell.value.mode === "boost"
-    ? [1.5, 2, 3, 5]
-    : tuneCell.value.mode === "reduce"
-      ? [0.75, 0.5, 0.25, 0.1]
-      : [];
-});
-
-function applyPreset(p: number) {
-  if (!tune.value) return;
-  setCellFactor(tune.value.row, tune.value.col, p);
-}
-
-function onTuneInput(value: string | number) {
-  if (!tune.value) return;
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return;
-  setCellFactor(tune.value.row, tune.value.col, n);
-}
-
-defineExpose({ cellAt, cycleCell });
+defineExpose({ cellAt });
 </script>
 
 <template>
-  <div class="matrix-wrap">
-    <table class="wp-matrix" data-test="constraint-matrix">
-      <thead>
-        <tr>
-          <th class="wp-matrix__corner">
-            <span class="font-mono text-[10px] uppercase tracking-wide">source ↓</span>
-            <span class="font-mono text-[10px] uppercase tracking-wide">target →</span>
-          </th>
-          <th
-            v-for="col in cols"
-            :key="col"
-            class="wp-matrix__col-h"
-          >
-            {{ col }}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="row in rows" :key="row">
-          <td class="wp-matrix__row-h">{{ row }}</td>
-          <td v-for="col in cols" :key="col" class="wp-matrix__cell-td">
-            <div class="wp-matrix-cell-wrap">
-              <button
-                type="button"
-                class="wp-matrix-cell"
+  <section class="wp-mx" data-test="constraint-matrix">
+    <!-- Axis tags — same purple-source / cyan-target language the
+         canvas grid uses. Helps users keep "rows are source" vs
+         "columns are target" straight when wildcard names are short
+         or visually similar. -->
+    <div class="wp-mx-axes">
+      <span class="wp-mx-axis wp-mx-axis--src" data-test="mx-axis-src">
+        <span class="arrow" aria-hidden="true">↓</span>
+        <span>Source · {{ sourceName || "source" }}</span>
+      </span>
+      <span class="wp-mx-axis wp-mx-axis--tgt" data-test="mx-axis-tgt">
+        <span class="arrow" aria-hidden="true">→</span>
+        <span>Target · {{ targetName || "target" }}</span>
+      </span>
+    </div>
+
+    <div class="wp-mx-grid">
+      <table>
+        <thead>
+          <tr>
+            <th class="wp-mx-corner" data-test="mx-corner">
+              <span class="row-1">↓ source</span>
+              <span class="row-2">→ target</span>
+            </th>
+            <th
+              v-for="col in cols"
+              :key="col"
+              class="wp-mx-th-col"
+            >{{ col }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in rows" :key="row">
+            <th class="wp-mx-th-row">{{ row }}</th>
+            <td v-for="col in cols" :key="col" class="wp-mx-td">
+              <div
+                class="wp-mx-cell"
+                :class="[
+                  `s-${toState(cellAt(row, col).mode)}`,
+                  { open: isOpenAt(row, col) },
+                ]"
                 :data-mode="cellAt(row, col).mode"
                 :data-test="`cell-${row}-${col}`"
-                :aria-label="`Cell ${row} × ${col}: ${MODE_LABEL[cellAt(row, col).mode]}${cellAt(row, col).mode === 'boost' || cellAt(row, col).mode === 'reduce' ? ' ×' + fmtFactor(cellAt(row, col).factor) : ''}`"
-                @click="cycleCell(row, col)"
+                :aria-label="cellAriaLabel(row, col)"
+                role="button"
+                tabindex="0"
+                @click="openPopover(row, col, $event)"
+                @keydown.enter.prevent="openPopover(row, col, $event as unknown as MouseEvent)"
+                @keydown.space.prevent="openPopover(row, col, $event as unknown as MouseEvent)"
               >
-                <span class="wp-matrix-cell__icon">{{ MODE_ICON[cellAt(row, col).mode] }}</span>
+                <span class="glyph">{{ MODE_ICON[cellAt(row, col).mode] }}</span>
                 <span
                   v-if="cellAt(row, col).mode === 'boost' || cellAt(row, col).mode === 'reduce'"
-                  class="wp-matrix-cell__factor"
+                  class="factor"
                 >×{{ fmtFactor(cellAt(row, col).factor) }}</span>
-              </button>
-              <button
-                v-if="cellAt(row, col).mode === 'boost' || cellAt(row, col).mode === 'reduce'"
-                type="button"
-                class="wp-matrix-cell__tune"
-                :aria-label="`Tune factor for ${row} × ${col}`"
-                @click="openTune(row, col, $event)"
-              >
-                <i class="pi pi-cog" aria-hidden="true" />
-              </button>
-            </div>
-          </td>
-        </tr>
-        <tr v-if="rows.length === 0">
-          <td :colspan="cols.length + 1" class="wp-matrix__empty">
-            No source values yet — add options to the source wildcard first.
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <!-- Tune popover (absolute positioning so it escapes the table overflow ctx) -->
-    <div
-      v-if="tune && tuneCell && (tuneCell.mode === 'boost' || tuneCell.mode === 'reduce')"
-      class="wp-tune-pop"
-      data-test="tune-popover"
-      role="dialog"
-      :aria-label="`Tune ${tuneCell.mode} factor`"
-      :style="{ left: tune.left + 'px', top: tune.top + 'px' }"
-      @mousedown.stop
-    >
-      <div class="wp-tune-pop__head">
-        <span class="font-mono text-xs" :class="tuneCell.mode === 'boost' ? 'text-wp-success' : 'text-wp-warn'">
-          {{ MODE_LABEL[tuneCell.mode] }} factor
-        </span>
-        <span class="font-mono text-sm text-wp-text">×{{ fmtFactor(tuneCell.factor) }}</span>
-      </div>
-      <div class="wp-tune-pop__row">
-        <Input
-          :model-value="tuneCell.factor"
-          type="number"
-          aria-label="Factor value"
-          @update:model-value="onTuneInput"
-        />
-        <div class="wp-tune-pop__presets">
-          <button
-            v-for="p in presets"
-            :key="p"
-            type="button"
-            class="wp-chip-btn"
-            :data-active="Math.abs(tuneCell.factor - p) < 0.001"
-            :aria-label="`Preset factor ${p}`"
-            @click="applyPreset(p)"
-          >×{{ fmtFactor(p) }}</button>
-        </div>
-      </div>
-      <div class="wp-tune-pop__done">
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="Close tune popover"
-          @click="closeTune"
-        >Done</Button>
-      </div>
+              </div>
+            </td>
+          </tr>
+          <tr v-if="rows.length === 0">
+            <td :colspan="cols.length + 1" class="wp-mx-empty">
+              No source values yet — add options to the source wildcard first.
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-  </div>
+
+    <MatrixLegend />
+
+    <!-- Popover teleports to body so its hover state stays isolated
+         from the source cell + any table-level clipping. -->
+    <Teleport to="body">
+      <div
+        v-if="popover && popoverCell"
+        class="wp-mx-pop-anchor"
+        data-test="cell-rule-popover"
+        :style="{
+          position: 'fixed',
+          left: popover.left + 'px',
+          top: popover.top + 'px',
+          width: '260px',
+          zIndex: 9999,
+        }"
+        @mousedown.stop
+      >
+        <CellRulePopover
+          :state="toState(popoverCell.mode)"
+          :factor="popoverCell.factor"
+          :src-label="popover.row"
+          :tgt-label="popover.col"
+          :can-reset="false"
+          @update:state="onPopoverState"
+          @update:factor="onPopoverFactor"
+          @close="closePopover"
+        />
+      </div>
+    </Teleport>
+  </section>
 </template>
 
 <style scoped>
-.matrix-wrap {
-  position: relative;
-  overflow-x: auto;
+.wp-mx {
+  padding: 12px 16px;
+  background: var(--wp-bg-2, var(--wp-bg));
+  border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
-.wp-matrix {
-  border-collapse: separate;
-  border-spacing: 4px;
-  font-size: var(--wp-text-sm);
-}
-.wp-matrix__corner {
-  padding: 0 var(--wp-space-4);
-  text-align: left;
-  color: var(--wp-text-dim);
-  font-weight: 500;
-  font-size: var(--wp-text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--wp-bg-2);
+
+/* ── Axis tags ─────────────────────────────────────────────── */
+.wp-mx-axes {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+  font-family: var(--wp-font-sans, sans-serif);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
-.wp-matrix__col-h {
-  padding: 0 var(--wp-space-4);
-  color: var(--wp-text-muted);
-  font-weight: 500;
-  white-space: nowrap;
+.wp-mx-axis {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
 }
-.wp-matrix__row-h {
-  padding: 0 var(--wp-space-4);
-  color: var(--wp-text-muted);
-  white-space: nowrap;
-  text-align: left;
+.wp-mx-axis--src {
+  color: #d8b4fe;
+  background: color-mix(in oklab, #c084fc 14%, transparent);
+  border: 1px solid color-mix(in oklab, #c084fc 35%, transparent);
+}
+.wp-mx-axis--tgt {
+  color: #67e8f9;
+  background: color-mix(in oklab, #22d3ee 14%, transparent);
+  border: 1px solid color-mix(in oklab, #22d3ee 35%, transparent);
+}
+.wp-mx-axis .arrow { font: 14px var(--wp-font-mono, monospace); line-height: 1; }
+
+/* ── Grid frame ────────────────────────────────────────────── */
+.wp-mx-grid {
+  display: inline-block;
+  background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
+  border: 1px solid var(--wp-border);
+  border-radius: 6px;
+  padding: 6px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.wp-mx-grid table { border-collapse: separate; border-spacing: 4px; }
+.wp-mx-grid th,
+.wp-mx-grid td { padding: 0; vertical-align: middle; }
+
+.wp-mx-corner {
+  width: 96px;
   height: 32px;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--wp-bg-2);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: 9px;
+  color: var(--wp-text-dim, var(--wp-text-muted));
+  border-radius: 4px;
+  text-align: left;
+  padding: 0 8px !important;
+  background: rgba(255, 255, 255, 0.02);
 }
-.wp-matrix__cell-td { height: 32px; }
-.wp-matrix__empty {
+.wp-mx-corner .row-1 { display: block; color: #d8b4fe; line-height: 1.3; }
+.wp-mx-corner .row-2 { display: block; color: #67e8f9; line-height: 1.3; }
+
+.wp-mx-th-col {
+  width: 64px;
+  height: 28px;
+  font: 700 10px var(--wp-font-sans, sans-serif);
+  color: #67e8f9;
+  background: color-mix(in oklab, #22d3ee 10%, transparent);
+  border-radius: 4px;
+  text-align: center;
+}
+.wp-mx-th-row {
+  width: 96px;
+  height: 36px;
+  font: 700 10px var(--wp-font-sans, sans-serif);
+  color: #d8b4fe;
+  background: color-mix(in oklab, #c084fc 10%, transparent);
+  border-radius: 4px;
+  text-align: right;
+  padding: 0 12px !important;
+}
+.wp-mx-td { position: relative; }
+
+.wp-mx-empty {
   text-align: center;
   color: var(--wp-text-dim);
   padding: var(--wp-space-7) var(--wp-space-5);
   font-size: var(--wp-text-sm);
 }
-.wp-matrix-cell-wrap {
-  position: relative;
-  display: inline-block;
-}
-.wp-matrix-cell {
+
+/* ── Body cells ────────────────────────────────────────────── */
+.wp-mx-cell {
+  width: 64px;
+  height: 36px;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px; /* audit-exempt: 3px optical icon+text gap inside compact cell */
-  min-width: 56px;
-  height: 30px;
-  padding: 0 var(--wp-space-4);
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  border: 1px solid var(--wp-border);
+  gap: 4px;
   font-family: var(--wp-font-mono, monospace);
-  background: var(--wp-bg-3);
-  color: var(--wp-text-dim);
-  transition: background 0.12s, border-color 0.12s, transform 0.04s;
-}
-.wp-matrix-cell:hover { transform: translateY(-1px); }
-.wp-matrix-cell[data-mode="allow"] {
-  min-width: 36px;
-  padding: 0 var(--wp-space-3);
-}
-.wp-matrix-cell[data-mode="exclude"] {
-  min-width: 36px;
-  padding: 0 var(--wp-space-3);
-  background: rgba(239, 68, 68, 0.18);
-  background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
-  color: var(--wp-danger);
-  border-color: rgba(239, 68, 68, 0.40);
-  border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent);
-}
-.wp-matrix-cell[data-mode="boost"] {
-  background: rgba(34, 197, 94, 0.18);
-  background: color-mix(in oklab, var(--wp-success) 18%, transparent);
-  color: var(--wp-success);
-  border-color: rgba(34, 197, 94, 0.40);
-  border-color: color-mix(in oklab, var(--wp-success) 40%, transparent);
-}
-.wp-matrix-cell[data-mode="reduce"] {
-  background: rgba(245, 158, 11, 0.18);
-  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
-  color: var(--wp-warn);
-  border-color: rgba(245, 158, 11, 0.40);
-  border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent);
-}
-/* Status tokens flip to -700 shades in light mode; no raw hex needed */
-.wp-theme-light .wp-matrix-cell[data-mode="exclude"] { color: var(--wp-danger); }
-.wp-theme-light .wp-matrix-cell[data-mode="boost"]   { color: var(--wp-success); }
-.wp-theme-light .wp-matrix-cell[data-mode="reduce"]  { color: var(--wp-warn); }
-.wp-matrix-cell__icon {
-  font-size: var(--wp-text-md);
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1;
-}
-.wp-matrix-cell__factor {
-  font-family: var(--wp-font-mono, monospace);
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  opacity: 0.85;
-}
-.wp-matrix-cell__tune {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--wp-bg-1, var(--wp-bg));
-  border: 1px solid var(--wp-border-strong, var(--wp-border2));
-  color: var(--wp-text-muted);
+  border-radius: 4px;
   cursor: pointer;
-  padding: 0;
-  font-size: 9px; /* audit-exempt: micro tune button icon — below scale floor */
-  box-shadow: var(--wp-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.4));
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  user-select: none;
+  transition: transform 0.08s, box-shadow 0.1s, background 0.1s;
+  position: relative;
 }
-.wp-matrix-cell__tune:hover {
-  color: var(--wp-accent-text, var(--wp-accent));
-  border-color: var(--wp-accent-500, var(--wp-accent));
-  background: var(--wp-bg-2);
+.wp-mx-cell:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
-.wp-tune-pop {
-  position: fixed;
-  width: 260px;
-  z-index: 200;
-  background: var(--wp-bg-1, var(--wp-bg));
-  border: 1px solid var(--wp-border-strong, var(--wp-border2));
-  border-radius: var(--wp-radius-lg);
-  padding: var(--wp-space-5) var(--wp-space-5);
-  box-shadow: var(--wp-shadow-md, 0 12px 28px rgba(0, 0, 0, 0.35));
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-4);
+.wp-mx-cell.open {
+  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), 0 4px 12px rgba(0, 0, 0, 0.5);
 }
-.wp-tune-pop__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.wp-mx-cell.s-neutral {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--wp-text-dim, var(--wp-text-muted, #595c66));
+  border: 1px dashed rgba(255, 255, 255, 0.10);
 }
-.wp-tune-pop__row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--wp-space-4);
-  align-items: center;
+.wp-mx-cell.s-exclude {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent);
+  color: #fca5a5;
+  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent);
 }
-.wp-tune-pop__presets {
-  display: flex;
-  gap: var(--wp-space-2);
-  flex-wrap: wrap;
-  justify-content: flex-start;
+.wp-mx-cell.s-boost {
+  background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent);
+  color: #86efac;
+  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent);
 }
-.wp-chip-btn {
-  padding: 3px 7px; /* audit-exempt: 3px/7px compact chip for preset buttons */
-  border-radius: 999px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-2);
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-xs);
-  font-family: var(--wp-font-mono, monospace);
-  cursor: pointer;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+.wp-mx-cell.s-reduce {
+  background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent);
+  color: #fdba74;
+  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
 }
-.wp-chip-btn:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border-strong, var(--wp-border2));
-}
-.wp-chip-btn[data-active="true"] {
-  color: var(--wp-accent-text, var(--wp-accent));
-  border-color: var(--wp-accent-500, var(--wp-accent));
-  background: color-mix(in oklab, var(--wp-accent-500, var(--wp-accent)) 14%, transparent);
-}
-.text-wp-success { color: var(--wp-success); }
-.text-wp-warn { color: var(--wp-warn); }
-.wp-tune-pop__done { display: flex; justify-content: flex-end; }
+.glyph { font-size: 14px; line-height: 1; }
+.factor { font-size: 11px; font-weight: 700; }
 </style>

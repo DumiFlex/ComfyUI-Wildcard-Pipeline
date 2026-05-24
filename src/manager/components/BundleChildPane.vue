@@ -59,7 +59,7 @@ const KIND_COLOR: Record<string, string> = {
   combine:      "var(--wp-kind-combine, #fbbf24)",
   derivation:   "var(--wp-kind-derivation, #a78bfa)",
   constraint:   "var(--wp-kind-constraint, #f87171)",
-  bundle:       "var(--wp-bundle-default, #46566B)",
+  bundle:       "var(--wp-bundle-default, #6366f1)",
 };
 
 const kind = computed<string>(() => String(props.child?.type ?? ""));

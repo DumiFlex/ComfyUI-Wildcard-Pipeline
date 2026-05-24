@@ -19,6 +19,7 @@ import Button from "../components/ui/Button.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
+import RichTextPreview from "../components/RichTextPreview.vue";
 import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
@@ -270,6 +271,18 @@ const wildcardLibFixture = computed<LibraryFixture>(() => ({
   categories: [],
 }));
 
+/** uuid → display name map. Used by `RichTextPreview` so nested-ref
+ *  tokens inside option values + exceptions render as the same purple
+ *  ref chip the value editor shows — instead of raw `@{c0f09840}`. */
+const wildcardUuidToName = computed<ReadonlyMap<string, string>>(() => {
+  const m = new Map<string, string>();
+  for (const w of moduleStore.catalog) {
+    if (w.type !== "wildcard") continue;
+    if (typeof w.name === "string" && w.name.length > 0) m.set(w.id, w.name);
+  }
+  return m;
+});
+
 function displayLabel(raw: string): string {
   if (!raw) return raw;
   const tokens = tokenizeRefString(raw);
@@ -313,6 +326,39 @@ const targetValues = computed<string[]>(() => {
     .filter((v): v is string => typeof v === "string" && v.length > 0);
   return Array.from(new Set(values));
 });
+
+/** True when the source / target wildcard has a null option. Drives
+ *  the dropdown's "null" sentinel entry so users can author an
+ *  exception that explicitly targets the null option (stored with
+ *  source/target as empty string). */
+const sourceHasNull = computed<boolean>(() => {
+  const wc = sourceWildcard.value;
+  if (!wc) return false;
+  const opts = (wc.payload as WildcardPayloadShape).options ?? [];
+  return opts.some((o) => (o as { is_null?: boolean }).is_null === true);
+});
+const targetHasNull = computed<boolean>(() => {
+  const wc = targetWildcard.value;
+  if (!wc) return false;
+  const opts = (wc.payload as WildcardPayloadShape).options ?? [];
+  return opts.some((o) => (o as { is_null?: boolean }).is_null === true);
+});
+
+/** Sentinel label the dropdown's render layer swaps for a pi-ban chip.
+ *  The actual stored exception value remains "" so engine + simulator
+ *  exception-keying continues to work via the empty-string key. */
+const NULL_OPT_LABEL = "⌀ null";
+
+function exceptionSrcOptions() {
+  const base = sourceValues.value.map((v) => ({ label: displayLabel(v), value: v }));
+  if (sourceHasNull.value) base.unshift({ label: NULL_OPT_LABEL, value: "" });
+  return base;
+}
+function exceptionTgtOptions() {
+  const base = targetValues.value.map((v) => ({ label: displayLabel(v), value: v }));
+  if (targetHasNull.value) base.unshift({ label: NULL_OPT_LABEL, value: "" });
+  return base;
+}
 
 function normalizeMatrix(raw: unknown): ConstraintMatrix {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
@@ -733,7 +779,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
     <div id="editor-section-matrix">
     <Card title="Rule matrix">
       <template #actions>
-        <span class="wp-card__hint">Click cycles · cog tunes factor</span>
+        <span class="wp-card__hint">Click a cell to edit rule + factor</span>
       </template>
       <div
         v-if="!sourceWildcardId || !targetWildcardId"
@@ -757,6 +803,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         :rows="sourceSubCategories"
         :cols="targetSubCategories"
         :model-value="matrix"
+        :source-name="sourceWildcard?.name ?? ''"
+        :target-name="targetWildcard?.name ?? ''"
         data-test="matrix-grid"
         @update:model-value="onMatrixUpdate"
       />
@@ -789,20 +837,57 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
             <td>
               <Select
                 :model-value="ex.source"
-                :options="sourceValues.map((v) => ({ label: displayLabel(v), value: v }))"
+                :options="exceptionSrcOptions()"
                 placeholder="Pick value"
                 aria-label="Exception source value"
+                data-test="cn-ex-src-select"
                 @update:model-value="(v) => onExceptionSourcePick(idx, v as string)"
-              />
+              >
+                <!-- Trigger label + dropdown items render nested `@{uuid}`
+                     tokens via RichTextPreview. NULL_OPT_LABEL stays
+                     plain text — RichTextPreview leaves non-ref chars
+                     alone, so the ⌀ glyph + "null" word still come
+                     through unchanged. -->
+                <template #label="{ option }">
+                  <RichTextPreview
+                    :value="String(option.value) === '' ? option.label : String(option.value)"
+                    :uuid-to-name="wildcardUuidToName"
+                    surface="wildcard"
+                  />
+                </template>
+                <template #option="{ option }">
+                  <RichTextPreview
+                    :value="String(option.value) === '' ? option.label : String(option.value)"
+                    :uuid-to-name="wildcardUuidToName"
+                    surface="wildcard"
+                  />
+                </template>
+              </Select>
             </td>
             <td>
               <Select
                 :model-value="ex.target"
-                :options="targetValues.map((v) => ({ label: displayLabel(v), value: v }))"
+                :options="exceptionTgtOptions()"
                 placeholder="Pick value"
                 aria-label="Exception target value"
+                data-test="cn-ex-tgt-select"
                 @update:model-value="(v) => onExceptionTargetPick(idx, v as string)"
-              />
+              >
+                <template #label="{ option }">
+                  <RichTextPreview
+                    :value="String(option.value) === '' ? option.label : String(option.value)"
+                    :uuid-to-name="wildcardUuidToName"
+                    surface="wildcard"
+                  />
+                </template>
+                <template #option="{ option }">
+                  <RichTextPreview
+                    :value="String(option.value) === '' ? option.label : String(option.value)"
+                    :uuid-to-name="wildcardUuidToName"
+                    surface="wildcard"
+                  />
+                </template>
+              </Select>
             </td>
             <td>
               <Select

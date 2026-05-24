@@ -28,6 +28,7 @@ import {
   serialise,
   type Atom,
 } from "./atomicEditorModel";
+import { inlineTokenHtml } from "../../widgets/richTokenize";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
@@ -53,6 +54,11 @@ interface Props {
    *  step-2 picker so the user sees the correct sub-cat chips for the
    *  wildcard they picked. */
   uuidToSubCategories?: Map<string, string[]>;
+  /** Map from wildcard UUID → whether that wildcard has a null option.
+   *  Drives the "Include null" checkbox in the sub-cat picker — the
+   *  reserved keyword `"null"` in the filter list opts the null
+   *  option into the resolved pool (engine recognises this). */
+  uuidToHasNull?: Map<string, boolean>;
   ariaLabel?: string;
   disabled?: boolean;
 }
@@ -74,6 +80,7 @@ const props = withDefaults(defineProps<Props>(), {
   refSuggestions: () => [],
   uuidToName: () => new Map(),
   uuidToSubCategories: () => new Map(),
+  uuidToHasNull: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
 });
@@ -130,6 +137,7 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
 const pickerOpen = ref(false);
 const pickerSubCats = ref<string[]>([]);
 const pickerInitial = ref<string[]>([]);
+const pickerHasNull = ref<boolean>(false);
 const pickerMode = ref<"insert" | "edit">("insert");
 // The atom-index this picker is editing — null when inserting fresh.
 const pickerTargetAtomIndex = ref<number | null>(null);
@@ -137,6 +145,12 @@ const pickerTargetAtomIndex = ref<number | null>(null);
 // apply/skip handlers can build the right atom + put it in the right
 // place after the picker closes.
 const pendingInsert = ref<{ uuid: string } | null>(null);
+/** Caret + autocomplete-trigger offsets captured when the picker
+ *  opens. The picker steals focus from the contenteditable host, so by
+ *  the time the user clicks Apply / Skip, `currentCursorCharOffset()`
+ *  reads 0 and the chip lands at the start of the value. Capturing
+ *  here lets us restore the right slice positions in `insertRefAtCursor`. */
+const pendingInsertCaret = ref<{ caret: number; acStart: number } | null>(null);
 // Anchor coordinates for the picker popover — relative to the chip
 // being edited (click-to-edit flow) or the host element (insert
 // flow). Flips above the anchor if there's no room below.
@@ -200,22 +214,26 @@ function padAtoms(list: Atom[]): Atom[] {
 
 /** Parse with surface-aware atom filtering.
  *
- *  - "wildcard" surface: collapse `var` atoms back into plain text
- *    (wildcards don't use `$name` substitution at runtime — option
- *    text containing `$name` should display as literal text).
- *  - other surfaces: collapse `ref` atoms back into plain text
- *    (combine/derivation templates don't expand `@{uuid}` nested
- *    wildcards — only wildcards themselves do).
+ *  Which atom kinds collapse back to literal text varies by surface:
+ *
+ *    - "wildcard"     → vars collapse (`$name` literal, refs chipify)
+ *    - "fixed_values" → both collapse (vars + refs literal; only inline
+ *      syntax like `{a|b}` colors)
+ *    - other surfaces → refs collapse (`@{uuid}` literal, vars chipify)
  *
  *  Adjacent text atoms produced by the collapse are merged so the
  *  padAtoms invariant ("no adjacent text atoms") still holds. */
 function parseForSurface(text: string): Atom[] {
   const atoms = parse(text);
-  const collapseKind: "var" | "ref" =
-    props.surface === "wildcard" ? "var" : "ref";
+  const collapseSet: Set<"var" | "ref"> =
+    props.surface === "wildcard"
+      ? new Set(["var"])
+      : props.surface === "fixed_values"
+        ? new Set(["var", "ref"])
+        : new Set(["ref"]);
   const out: Atom[] = [];
   for (const a of atoms) {
-    if (a.kind === collapseKind) {
+    if ((a.kind === "var" || a.kind === "ref") && collapseSet.has(a.kind)) {
       // Re-serialise back to raw text and merge into adjacent text.
       const raw = a.kind === "var"
         ? "$" + a.name
@@ -242,6 +260,27 @@ function parseForSurface(text: string): Atom[] {
 
 const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 let lastEmittedValue = props.modelValue || "";
+
+/** Surface-aware text-atom HTML: tokenises the atom's raw text and
+ *  emits colored sub-spans for inline syntax (brace blocks, escapes,
+ *  unsettled `$name` / `@{uuid}`). The `collapsedKinds` argument
+ *  neutralises whichever kinds the surface treats as literal so users
+ *  don't see misleading var/ref styling on tokens the engine won't
+ *  expand. Empty atoms render a single ZWSP so the caret has a
+ *  landing position.
+ *
+ *  Surface → collapse:
+ *    wildcard     → vars literal (refs chipify)
+ *    fixed_values → both literal (only brace/multi/escape color)
+ *    others       → refs literal (vars chipify) */
+function textAtomHtml(text: string): string {
+  if (!text) return ZWSP;
+  const collapsed: ReadonlyArray<"var" | "ref"> =
+    props.surface === "wildcard" ? ["var"]
+    : props.surface === "fixed_values" ? ["var", "ref"]
+    : ["ref"];
+  return inlineTokenHtml(text, collapsed);
+}
 
 watch(() => props.modelValue, (next) => {
   if (next === lastEmittedValue) return;  // echo of our own emit — ignore
@@ -283,6 +322,7 @@ function onChipClick(idx: number, ev?: MouseEvent): void {
   if (!props.uuidToName.has(atom.uuid)) return;
   pickerSubCats.value = props.uuidToSubCategories.get(atom.uuid) ?? [];
   pickerInitial.value = atom.subCategories;
+  pickerHasNull.value = props.uuidToHasNull.get(atom.uuid) ?? false;
   pickerMode.value = "edit";
   pickerTargetAtomIndex.value = idx;
   pendingInsert.value = null;
@@ -445,14 +485,30 @@ function applyAutocomplete(label: string | undefined): void {
   if (!label) return;
   if (acTrigger.value === "@") {
     const subCats = props.uuidToSubCategories.get(label) ?? [];
-    if (subCats.length === 0) {
-      // No sub-categories declared — insert plain ref immediately.
+    const hasNull = props.uuidToHasNull.get(label) ?? false;
+    if (subCats.length === 0 && !hasNull) {
+      // No sub-categories declared AND no null option — insert plain
+      // ref immediately. (When the target has a null option we still
+      // open the picker so the user can opt the null option in.)
       insertRefAtCursor(label, []);
     } else {
-      // Open step-2 picker so the user can multi-select sub-categories.
+      // Open step-2 picker so the user can multi-select sub-categories
+      // and/or toggle the "Include null" checkbox.
+      //
+      // Snapshot the caret + acStart BEFORE opening the picker. The
+      // picker popover steals focus from the contenteditable host;
+      // by the time apply/skip fires, `currentCursorCharOffset()`
+      // reads 0 and the chip ends up at the start of the value with
+      // the user's typed trigger left behind. We restore both in
+      // `insertRefAtCursor` via `pendingInsertCaret`.
+      pendingInsertCaret.value = {
+        caret: currentCursorCharOffset(),
+        acStart: acStart.value,
+      };
       pendingInsert.value = { uuid: label };
       pickerSubCats.value = subCats;
       pickerInitial.value = [];
+      pickerHasNull.value = hasNull;
       pickerMode.value = "insert";
       pickerTargetAtomIndex.value = null;
       // Insert flow has no chip to anchor to yet — use the host's
@@ -502,34 +558,76 @@ function restoreCursorAtChar(targetChar: number): void {
       }
     }
   }
+  // Collect ALL text-node descendants of a wp-rt__text span in document
+  // order. Used to land the caret inside colored sub-spans (e.g.
+  // `<span class="wp-rt-dp-brace">{a|b|c}</span>`) without giving up
+  // the existing single-firstChild fast path.
+  const textDescendants = (root: Node): Text[] => {
+    const out: Text[] = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node: Node | null = walker.nextNode();
+    while (node) {
+      out.push(node as Text);
+      node = walker.nextNode();
+    }
+    return out;
+  };
+  const placeCaretInText = (
+    range: Range,
+    el: HTMLElement | Text,
+    visibleOffset: number,
+  ): void => {
+    // Plain text-node child of host (orphan typed text) — single node.
+    if (el.nodeType === Node.TEXT_NODE) {
+      const raw = el.textContent ?? "";
+      let pos = 0;
+      let visible = 0;
+      while (pos < raw.length && visible < visibleOffset) {
+        if (raw[pos] !== "​") visible++;
+        pos++;
+      }
+      while (pos < raw.length && raw[pos] === "​") pos++;
+      range.setStart(el, pos);
+      return;
+    }
+    // wp-rt__text element — descend into text-node descendants so the
+    // caret lands inside whichever colored sub-span owns the offset.
+    const nodes = textDescendants(el);
+    if (nodes.length === 0) {
+      range.setStart(el, 0);
+      return;
+    }
+    let want = visibleOffset;
+    for (const tn of nodes) {
+      const raw = tn.textContent ?? "";
+      let nodeVisible = 0;
+      for (let i = 0; i < raw.length; i++) {
+        if (raw[i] !== "​") nodeVisible++;
+      }
+      if (want <= nodeVisible) {
+        let pos = 0;
+        let visible = 0;
+        while (pos < raw.length && visible < want) {
+          if (raw[pos] !== "​") visible++;
+          pos++;
+        }
+        while (pos < raw.length && raw[pos] === "​") pos++;
+        range.setStart(tn, pos);
+        return;
+      }
+      want -= nodeVisible;
+    }
+    // Past the last text node — land at end of last node.
+    const last = nodes[nodes.length - 1];
+    range.setStart(last, (last.textContent ?? "").length);
+  };
+
   let acc = 0;
   const range = document.createRange();
   for (const m of meaningful) {
     if (acc + m.len >= targetChar) {
       if (m.kind === "text") {
-        const el = m.el as HTMLElement | Text;
-        const textNode = el.nodeType === Node.TEXT_NODE
-          ? (el as Text)
-          : ((el as HTMLElement).firstChild as Text | null);
-        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-          // Place caret at the visible offset, then bump past any leading
-          // ZWSP in this span so the caret sits in real content, not before
-          // a render-only space.
-          const raw = textNode.textContent ?? "";
-          const want = targetChar - acc;
-          let pos = 0;
-          let visible = 0;
-          while (pos < raw.length && visible < want) {
-            if (raw[pos] !== "​") visible++;
-            pos++;
-          }
-          // Skip past trailing ZWSPs that immediately follow the target
-          // position so the caret lands in actual text on the right side.
-          while (pos < raw.length && raw[pos] === "​") pos++;
-          range.setStart(textNode, pos);
-        } else {
-          range.setStart(m.el, 0);
-        }
+        placeCaretInText(range, m.el as HTMLElement | Text, targetChar - acc);
       } else {
         range.setStartAfter(m.el);
       }
@@ -546,12 +644,7 @@ function restoreCursorAtChar(targetChar: number): void {
   const last = meaningful[meaningful.length - 1];
   if (last) {
     if (last.kind === "text") {
-      const el = last.el as HTMLElement | Text;
-      const textNode = el.nodeType === Node.TEXT_NODE
-        ? (el as Text)
-        : ((el as HTMLElement).firstChild as Text | null);
-      if (textNode) range.setStart(textNode, (textNode.textContent ?? "").length);
-      else range.setStartAfter(last.el);
+      placeCaretInText(range, last.el as HTMLElement | Text, Number.POSITIVE_INFINITY);
     } else {
       range.setStartAfter(last.el);
     }
@@ -619,13 +712,37 @@ function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
       continue;
     }
     if (el.classList.contains("wp-rt__text")) {
-      const tn = el.firstChild;
-      if (tn === targetNode) {
-        return acc + charsBefore(tn.textContent ?? "", targetOffset);
-      }
+      // Anchor on the text span itself — `targetOffset` is the child index
+      // among the span's children. Sum visible-length contributions of
+      // every preceding child (which may be raw text nodes or colored
+      // sub-spans for brace/escape tokens).
       if (el === targetNode) {
-        const full = (el.textContent ?? "").replace(ZWSP_RE, "");
-        return acc + (targetOffset === 0 ? 0 : full.length);
+        let subAcc = 0;
+        const children = Array.from(el.childNodes);
+        const stop = Math.min(targetOffset, children.length);
+        for (let i = 0; i < stop; i++) {
+          subAcc += (children[i].textContent ?? "").replace(ZWSP_RE, "").length;
+        }
+        return acc + subAcc;
+      }
+      // Selection lands inside the span. Walk text-node descendants in
+      // document order until we hit the target — handles caret inside a
+      // colored sub-span (`<span class="wp-rt-dp-brace">{a|b|c}</span>`)
+      // as well as the legacy single-firstChild text-node case.
+      if (el.contains(targetNode)) {
+        let subAcc = 0;
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let tn: Node | null = walker.nextNode();
+        while (tn) {
+          if (tn === targetNode) {
+            return acc + subAcc + charsBefore(tn.textContent ?? "", targetOffset);
+          }
+          subAcc += (tn.textContent ?? "").replace(ZWSP_RE, "").length;
+          tn = walker.nextNode();
+        }
+        // Defensive — selection was inside the span but no matching text
+        // descendant found. Treat as end of span.
+        return acc + subAcc;
       }
       acc += childRawLen(child);
       continue;
@@ -702,8 +819,15 @@ function syncTextSpansToAtoms(): void {
     const idx = Number(span.getAttribute("data-atom-index"));
     const atom = atoms.value[idx];
     if (atom && atom.kind === "text") {
-      const want = atom.text || ZWSP;
-      if (span.textContent !== want) span.textContent = want;
+      // Compare on textContent (visible plain string) — the inline
+      // colour spans inside contribute the same characters, so when
+      // user-typed text already matches `atom.text` we can skip the
+      // innerHTML rewrite and preserve the live caret. When they
+      // diverge, force the colored DOM tree to match.
+      const wantText = atom.text || ZWSP;
+      if (span.textContent !== wantText) {
+        span.innerHTML = textAtomHtml(atom.text);
+      }
     }
   }
 }
@@ -713,10 +837,17 @@ function applyAtoms(next: Atom[]): void {
   void nextTick(() => syncTextSpansToAtoms());
 }
 
-function insertChipAtCaret(chipText: string): void {
+function insertChipAtCaret(
+  chipText: string,
+  caretOverride?: { caret: number; acStart: number },
+): void {
   // Operate in raw-text space — much simpler than atom-cursor surgery.
   const text = readHostAsText();
-  const caret = currentCursorCharOffset();
+  // Prefer the override (used by the picker apply / skip flow where
+  // the contenteditable lost focus to the popover). Falls back to the
+  // live caret + acStart for the inline autocomplete path.
+  const caret = caretOverride?.caret ?? currentCursorCharOffset();
+  const trigStart = caretOverride?.acStart ?? acStart.value;
   // Strip the typed trigger fragment (`@col`, `$per`) before inserting
   // the chip. `acStart` holds the raw-text offset of the trigger `@` /
   // `$`; the slice [acStart, caret] is the trigger + typed query text.
@@ -728,7 +859,7 @@ function insertChipAtCaret(chipText: string): void {
   // probed the latest text, AND the test-seam path where __apply runs
   // without ever calling the probe. Without this, the previously-typed
   // `$testo` would survive alongside the freshly-inserted chip.
-  let cutFrom = acStart.value >= 0 ? Math.min(acStart.value, caret) : caret;
+  let cutFrom = trigStart >= 0 ? Math.min(trigStart, caret) : caret;
   const cutChar = text[cutFrom];
   if (cutChar !== "$" && cutChar !== "@") {
     const head = text.slice(0, caret);
@@ -747,11 +878,15 @@ function insertChipAtCaret(chipText: string): void {
   void nextTick(() => restoreCursorAtChar(newCaret));
 }
 
-function insertRefAtCursor(uuid: string, subCategories: string[]): void {
+function insertRefAtCursor(
+  uuid: string,
+  subCategories: string[],
+  caretOverride?: { caret: number; acStart: number },
+): void {
   const chipText = subCategories.length > 0
     ? "@{" + uuid + ":" + subCategories.join(",") + "}"
     : "@{" + uuid + "}";
-  insertChipAtCaret(chipText);
+  insertChipAtCaret(chipText, caretOverride);
 }
 
 function insertVarAtCursor(name: string): void {
@@ -761,8 +896,13 @@ function insertVarAtCursor(name: string): void {
 // --- SubcategoryFilterPicker handlers ---
 function onPickerApply(subCats: string[]): void {
   if (pickerMode.value === "insert" && pendingInsert.value) {
-    insertRefAtCursor(pendingInsert.value.uuid, subCats);
+    insertRefAtCursor(
+      pendingInsert.value.uuid,
+      subCats,
+      pendingInsertCaret.value ?? undefined,
+    );
     pendingInsert.value = null;
+    pendingInsertCaret.value = null;
   } else if (pickerMode.value === "edit" && pickerTargetAtomIndex.value !== null) {
     const target = atoms.value[pickerTargetAtomIndex.value];
     if (target && target.kind === "ref") {
@@ -779,8 +919,13 @@ function onPickerApply(subCats: string[]): void {
 
 function onPickerSkip(): void {
   if (pickerMode.value === "insert" && pendingInsert.value) {
-    insertRefAtCursor(pendingInsert.value.uuid, []);
+    insertRefAtCursor(
+      pendingInsert.value.uuid,
+      [],
+      pendingInsertCaret.value ?? undefined,
+    );
     pendingInsert.value = null;
+    pendingInsertCaret.value = null;
   }
   pickerOpen.value = false;
 }
@@ -800,6 +945,7 @@ function cancelPicker(): void {
   // insert anything. Use Skip inside the picker to insert without
   // filter.
   pendingInsert.value = null;
+  pendingInsertCaret.value = null;
   pickerTargetAtomIndex.value = null;
   pickerOpen.value = false;
 }
@@ -965,11 +1111,17 @@ function settleAtomsFromHost(): void {
   const text = readHostAsText();
   const caret = currentCursorCharOffset();
   const parsed = parseForSurface(text);
-  // Skip if parse didn't produce more chips than we already have — avoids
-  // a re-render churn on every space when there's no `$`/`@` token to settle.
-  const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
-  const chipsNext = parsed.filter((a) => a.kind !== "text").length;
-  if (chipsNext <= chipsNow) return;
+  // Re-derive whenever the text content actually differs from what
+  // atoms currently model. Skipping on "chip count unchanged" left
+  // inline brace blocks (`{a|b|c}`, `{2$$,$$…}`) un-colored because
+  // closing the brace doesn't add a chip — but the tokenized output
+  // does change shape (`text` token → `dp-brace`/`dp-multi` token)
+  // and v-html needs the new atom.text to re-render the colored
+  // sub-span. Compare the user-typed text against the atoms' current
+  // serialised form so we still skip true no-ops (e.g. typing a space
+  // after a chip that was already settled).
+  const liveSerialised = serialise(atoms.value);
+  if (liveSerialised === text) return;
   applyAtoms(parsed);
   void nextTick(() => restoreCursorAtChar(caret));
 }
@@ -1029,17 +1181,20 @@ function reconcileOrphanTextNodes(): void {
       }
     }
     if (!target) continue;
-    const before = target.textContent ?? "";
-    target.textContent = appendMode ? before + text : text + before;
-    // If the caret was in this orphan, redirect into the target span.
-    if (caretRel && caretRel.node === orphan) {
-      const tn = target.firstChild;
-      if (tn && tn.nodeType === Node.TEXT_NODE) {
-        const newOff = appendMode ? before.length + caretRel.offset : caretRel.offset;
-        caretRel = { node: tn, offset: newOff };
-      }
+    // Move the orphan node into the target span instead of overwriting
+    // its textContent. Overwriting destroys colored sub-spans for inline
+    // syntax (`<span class="wp-rt-dp-brace">…</span>` etc.) that the
+    // textAtomHtml render produces. Keeping the orphan as a separate
+    // text-node child preserves coloring on the rest of the span; the
+    // orphan's text will be re-tokenized on the next applyAtoms cycle
+    // (settle delimiter, blur, programmatic op).
+    if (appendMode) {
+      target.appendChild(orphan);
+    } else {
+      target.insertBefore(orphan, target.firstChild ?? null);
     }
-    host.removeChild(orphan);
+    // caretRel.node === orphan stays valid — DOM only moved the node,
+    // it's still the same text-node identity at the same offset.
   }
   if (caretRel) {
     const range = document.createRange();
@@ -1070,15 +1225,16 @@ function onHostBeforeInput(ev: InputEvent): void {
   if (!sel || sel.rangeCount === 0) return;
   const range = sel.getRangeAt(0);
   const target = range.startContainer;
-  // If selection is already inside a wp-rt__text span (or its text
-  // node), nothing to do — browser will insert correctly.
-  if (target.nodeType === Node.TEXT_NODE) {
-    const parent = (target as Text).parentElement;
-    if (parent && parent.classList.contains("wp-rt__text")) return;
-  } else if (target.nodeType === Node.ELEMENT_NODE) {
-    const el = target as HTMLElement;
-    if (el.classList.contains("wp-rt__text")) return;
-  }
+  // If selection is already inside a wp-rt__text span (directly OR
+  // nested in a colored sub-span like wp-rt-dp-brace), nothing to do —
+  // browser will insert correctly and our caret math walks descendants.
+  const targetEl: HTMLElement | null =
+    target.nodeType === Node.TEXT_NODE
+      ? (target as Text).parentElement
+      : target.nodeType === Node.ELEMENT_NODE
+        ? (target as HTMLElement)
+        : null;
+  if (targetEl && targetEl.closest(".wp-rt__text")) return;
   // Otherwise, find a wp-rt__text span to redirect into. Pick the span
   // ADJACENT to the user's caret position — not the document-wide last
   // span. When the caret landed on a chip element (chip body), the
@@ -1093,9 +1249,21 @@ function onHostBeforeInput(ev: InputEvent): void {
     const spans = host.querySelectorAll(".wp-rt__text");
     if (spans.length === 0) return;
     const span = spans[spans.length - 1] as HTMLElement;
-    const tn = span.firstChild;
-    if (tn && tn.nodeType === Node.TEXT_NODE) {
-      newRange.setStart(tn, (tn.textContent ?? "").length);
+    // Walk to the LAST text-node descendant. With colored sub-spans
+    // (`<span class="wp-rt-dp-multi">…</span>`), `firstChild` is no
+    // longer guaranteed to be a text node, so the legacy fast path
+    // would land the caret at element offset 0 — the START of the
+    // span — and any text the user then typed appeared in front of
+    // the brace block instead of after it.
+    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+    let last: Text | null = null;
+    let n: Node | null = walker.nextNode();
+    while (n) {
+      last = n as Text;
+      n = walker.nextNode();
+    }
+    if (last) {
+      newRange.setStart(last, (last.textContent ?? "").length);
     } else {
       newRange.setStart(span, 0);
     }
@@ -1148,12 +1316,24 @@ function positionAfterTarget(
     if (sib.nodeType === Node.ELEMENT_NODE
         && (sib as HTMLElement).classList.contains("wp-rt__text")) {
       const span = sib as HTMLElement;
-      const tn = span.firstChild;
-      if (tn && tn.nodeType === Node.TEXT_NODE) {
-        // Place caret at the END of the span if we want to type AFTER
-        // the chip, START of the span if BEFORE.
-        const len = (tn.textContent ?? "").length;
-        range.setStart(tn, preferFollowing ? len : 0);
+      // Walk the first/last text-node descendant. With colored sub-
+      // spans inside `wp-rt__text`, `firstChild` may be an element
+      // (e.g. wp-rt-dp-brace) instead of a text node — placing the
+      // caret on the span element at offset 0 would drop typing in
+      // front of the colored block instead of next to the chip.
+      const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+      let first: Text | null = null;
+      let last: Text | null = null;
+      let n: Node | null = walker.nextNode();
+      while (n) {
+        if (!first) first = n as Text;
+        last = n as Text;
+        n = walker.nextNode();
+      }
+      if (preferFollowing && last) {
+        range.setStart(last, (last.textContent ?? "").length);
+      } else if (!preferFollowing && first) {
+        range.setStart(first, 0);
       } else {
         range.setStart(span, 0);
       }
@@ -1197,14 +1377,14 @@ function onHostPaste(ev: ClipboardEvent): void {
 
 function onHostBlur(): void {
   focused.value = false;
-  // Safety net: any leftover `$name` / `@{uuid}` text that didn't trigger
-  // a settle-by-delimiter during typing chips up here. Caret already gone,
-  // so no need to restore it — atoms re-render is enough.
+  // Safety net: any leftover `$name` / `@{uuid}` / `{a|b|c}` text that
+  // didn't trigger a settle-by-delimiter during typing chips up here.
+  // Caret already gone, so no need to restore it — atoms re-render is
+  // enough. Mirrors `settleAtomsFromHost`'s "live text differs from
+  // serialised atoms" check so a closed brace block re-colors on blur.
   const text = readHostAsText();
-  const parsed = parseForSurface(text);
-  const chipsNow = atoms.value.filter((a) => a.kind !== "text").length;
-  const chipsNext = parsed.filter((a) => a.kind !== "text").length;
-  if (chipsNext > chipsNow) applyAtoms(parsed);
+  if (serialise(atoms.value) === text) return;
+  applyAtoms(parseForSurface(text));
 }
 
 function onHostFocus(): void {
@@ -1220,20 +1400,30 @@ function onHostFocus(): void {
     if (!sel || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
     const sc = range.startContainer;
-    if (sc.nodeType === Node.TEXT_NODE) {
-      const parent = (sc as Text).parentElement;
-      if (parent && parent.classList.contains("wp-rt__text")) return;
-    } else if (sc.nodeType === Node.ELEMENT_NODE) {
-      const el = sc as HTMLElement;
-      if (el.classList.contains("wp-rt__text")) return;
-    }
+    // Caret already inside a wp-rt__text (directly or via colored
+    // sub-span) → leave it alone.
+    const scEl: HTMLElement | null =
+      sc.nodeType === Node.TEXT_NODE
+        ? (sc as Text).parentElement
+        : sc.nodeType === Node.ELEMENT_NODE
+          ? (sc as HTMLElement)
+          : null;
+    if (scEl && scEl.closest(".wp-rt__text")) return;
     const spans = host.querySelectorAll(".wp-rt__text");
     if (spans.length === 0) return;
     const span = spans[spans.length - 1] as HTMLElement;
     const r = document.createRange();
-    const tn = span.firstChild;
-    if (tn && tn.nodeType === Node.TEXT_NODE) {
-      r.setStart(tn, (tn.textContent ?? "").length);
+    // Walk to the last text-node descendant so the caret lands inside
+    // whichever sub-span owns the trailing position.
+    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+    let last: Text | null = null;
+    let n: Node | null = walker.nextNode();
+    while (n) {
+      last = n as Text;
+      n = walker.nextNode();
+    }
+    if (last) {
+      r.setStart(last, (last.textContent ?? "").length);
     } else {
       r.setStart(span, 0);
     }
@@ -1272,6 +1462,17 @@ function onHostKeydown(ev: KeyboardEvent): void {
       acOpen.value = false;
       return;
     }
+  }
+  // Single-line mode: swallow Enter. The contenteditable host would
+  // otherwise insert a `<br>` (or wrap typed text in a fresh `<div>`)
+  // and the surrounding `wp-rt__host--single` is `overflow-y: hidden`
+  // — the newline pushes existing content out of view, the caret jumps
+  // to an invisible second line, and the input looks empty until the
+  // user presses Backspace and the `<br>` collapses. Mirrors how
+  // native `<input>` ignores Enter.
+  if (ev.key === "Enter" && !props.multiline) {
+    ev.preventDefault();
+    return;
   }
   if (ev.key === "ArrowDown" && acOpen.value) {
     ev.preventDefault();
@@ -1465,7 +1666,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
         />
-        <span v-else :data-atom-index="idx" class="wp-rt__text">{{ atom.text || ZWSP }}</span>
+        <span
+          v-else
+          :data-atom-index="idx"
+          class="wp-rt__text"
+          v-html="textAtomHtml(atom.text)"
+        ></span>
       </template>
     </div>
 
@@ -1545,6 +1751,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :sub-categories="pickerSubCats"
           :initial-selection="pickerInitial"
           :mode="pickerMode"
+          :has-null-option="pickerHasNull"
           @apply="onPickerApply"
           @skip="onPickerSkip"
           @delete="onPickerDelete"

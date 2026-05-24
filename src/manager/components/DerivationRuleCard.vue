@@ -15,7 +15,6 @@ import type {
   DerivationRule,
 } from "../api/types";
 import {
-  DERIVATION_OPS,
   OP_LABELS,
   OP_TOOLTIPS,
   OP_PLACEHOLDERS,
@@ -47,17 +46,19 @@ const emit = defineEmits<{
   remove: [];
 }>();
 
-// Op dropdown lists 6 ops — the 4 compare ops plus the two presence-
-// base ops. `is_set`/`is_unset` are intentionally hidden from the
-// dropdown: they're surfaced via the "must have value" tick box next
-// to `exists`/`not_exists` instead. Engine still accepts all 8 ops;
-// the UI just remaps presence + tick → `is_set` / `is_unset` on save
-// (and reverse-maps on load via `displayedOp` below). User feedback
-// on 2026-05-10: "is set" reads as redundant when "exists" + tick
-// captures the same intent more cleanly.
-const VISIBLE_OPS = DERIVATION_OPS.filter(
-  (op) => op !== "is_set" && op !== "is_unset",
-);
+// Op dropdown lists the 6 visible base ops. Emptiness refinement
+// (`is_empty` / `is_set`) is surfaced via a segmented switch shown
+// only when `exists` is selected — three positions:
+//   • "any"       → bare `exists` (key in ctx, value irrelevant)
+//   • "is empty"  → `is_empty`  (key in ctx AND value === "")
+//   • "has value" → `is_set`    (key in ctx AND value !== "")
+// This three-state design lets users distinguish "did this wildcard
+// run?" from "did it run and resolve to the null option?" from "did
+// it run and produce a value?" — all three are useful conditions
+// when null wildcard options are in play.
+const VISIBLE_OPS: DerivationOp[] = [
+  "equals", "not_equals", "contains", "matches", "exists", "not_exists",
+];
 const OP_OPTIONS: Array<{ label: string; value: DerivationOp; title: string }> =
   VISIBLE_OPS.map((op) => ({
     label: OP_LABELS[op],
@@ -65,45 +66,48 @@ const OP_OPTIONS: Array<{ label: string; value: DerivationOp; title: string }> =
     title: OP_TOOLTIPS[op],
   }));
 
-/** UI-displayed base op for the dropdown: collapses `is_set` →
- *  `exists`, `is_unset` → `not_exists` so the dropdown only ever
- *  shows the 6 visible ops. The "must have value" tick state is
- *  derived from the saved op (see `requiresValue`). */
+/** UI-displayed base op for the dropdown. Collapses the refinement
+ *  variants of `exists` (is_set / is_empty) and `not_exists`
+ *  (is_unset / is_not_empty) onto their base presence op so the
+ *  dropdown stays at 6 options. The segmented switch captures the
+ *  refinement separately. */
 function displayedOp(op: DerivationOp): DerivationOp {
-  if (op === "is_set") return "exists";
-  if (op === "is_unset") return "not_exists";
+  if (op === "is_set" || op === "is_empty") return "exists";
+  if (op === "is_unset" || op === "is_not_empty") return "not_exists";
   return op;
 }
 
-/** Whether the saved op is the "must have value" variant of a
- *  presence-base op. Drives the tick checkbox state. */
-function requiresValue(op: DerivationOp): boolean {
-  return op === "is_set" || op === "is_unset";
+/** Three states for the value-emptiness refinement, surfaced as a
+ *  segmented switch when the displayed op is `exists`. */
+type EmptinessRefinement = "any" | "empty" | "value";
+
+function emptinessFor(op: DerivationOp): EmptinessRefinement {
+  if (op === "is_empty") return "empty";
+  if (op === "is_set" || op === "is_not_empty") return "value";
+  return "any";
 }
 
-/** Toggle the "must have value" tick — maps the displayed base op
- *  to its strict-value counterpart and back:
- *    exists       ↔ is_set
- *    not_exists   ↔ is_unset
- *  Engine sees the new op directly, so payload reflects intent. */
-function toggleRequiresValue(currentOp: DerivationOp): DerivationOp {
-  switch (currentOp) {
-    case "exists": return "is_set";
-    case "is_set": return "exists";
-    case "not_exists": return "is_unset";
-    case "is_unset": return "not_exists";
-    default: return currentOp; // Non-presence ops can't have the tick
+/** Compose the storage op from base + refinement. Inverse of
+ *  `displayedOp` + `emptinessFor`. */
+function composeOp(base: DerivationOp, refinement: EmptinessRefinement): DerivationOp {
+  if (base === "exists") {
+    if (refinement === "empty") return "is_empty";
+    if (refinement === "value") return "is_set";
+    return "exists";
   }
+  if (base === "not_exists") {
+    // not_exists refinement isn't surfaced in the UI — the var being
+    // absent dominates any value-emptiness question. Bare not_exists.
+    return "not_exists";
+  }
+  return base;
 }
 
-/** Whether the displayed base op is one that supports the "must have
- *  value" tick. Only `exists` qualifies — the tick asks "and the
- *  value is non-empty?", which is meaningless when the var doesn't
- *  exist in the first place (`not_exists`). `is_unset` is the engine-
- *  level variant of `not_exists`; we don't expose a tick for it
- *  either, so a saved `is_unset` rule round-trips as `not_exists` in
- *  the UI with no tick. Compare ops never get the tick. */
-function isPresenceOp(op: DerivationOp): boolean {
+/** True when the segmented switch should render. Refinement only
+ *  applies to `exists` (when the var IS in ctx, asking "is its value
+ *  empty or full?" is meaningful). Hidden for `not_exists` since the
+ *  var being absent means there's no value to refine over. */
+function supportsRefinement(op: DerivationOp): boolean {
   return displayedOp(op) === "exists";
 }
 
@@ -308,7 +312,7 @@ const branchCount = computed(() => rule.value.branches.length);
              vertical space of the prior stacked layout. -->
         <div
           class="dvr-grid"
-          :class="{ 'dvr-grid--has-tick': isPresenceOp(branch.condition.op) }"
+          :class="{ 'dvr-grid--has-tick': supportsRefinement(branch.condition.op) }"
         >
           <span class="dvr-label">When</span>
           <div
@@ -335,22 +339,41 @@ const branchCount = computed(() => rule.value.branches.length);
               :aria-label="`Condition operator for rule ${ruleNumber} branch ${bi + 1}`"
               @update:model-value="(v) => onConditionOp(bi, v as DerivationOp)"
             />
-            <label
-              v-if="isPresenceOp(branch.condition.op)"
-              class="dvr-tick"
-              :data-test="`cond-must-have-value-${index}-${bi}`"
-              :title="branch.condition.op === 'exists' || branch.condition.op === 'is_set'
-                ? 'Tick: variable must have a non-empty value (engine maps to is_set)'
-                : 'Tick: variable must be absent OR empty (engine maps to is_unset)'"
+            <div
+              v-if="supportsRefinement(branch.condition.op)"
+              class="dvr-refinement"
+              :data-test="`cond-refinement-${index}-${bi}`"
+              role="radiogroup"
+              aria-label="Variable value refinement"
             >
-              <input
-                type="checkbox"
-                :checked="requiresValue(branch.condition.op)"
-                :data-test="`cond-must-have-value-input-${index}-${bi}`"
-                @change="onConditionOp(bi, toggleRequiresValue(branch.condition.op))"
-              />
-              <span class="dvr-tick__label">must have value</span>
-            </label>
+              <button
+                type="button"
+                class="dvr-refinement__btn"
+                :class="{ 'dvr-refinement__btn--active': emptinessFor(branch.condition.op) === 'any' }"
+                :aria-pressed="emptinessFor(branch.condition.op) === 'any'"
+                :data-test="`cond-refinement-any-${index}-${bi}`"
+                title="Just check that the variable is set in the context (value irrelevant)"
+                @click="onConditionOp(bi, composeOp('exists', 'any'))"
+              >any</button>
+              <button
+                type="button"
+                class="dvr-refinement__btn"
+                :class="{ 'dvr-refinement__btn--active': emptinessFor(branch.condition.op) === 'empty' }"
+                :aria-pressed="emptinessFor(branch.condition.op) === 'empty'"
+                :data-test="`cond-refinement-empty-${index}-${bi}`"
+                title="Variable is set AND its value is empty (e.g. wildcard rolled the null option)"
+                @click="onConditionOp(bi, composeOp('exists', 'empty'))"
+              >∅ is empty</button>
+              <button
+                type="button"
+                class="dvr-refinement__btn"
+                :class="{ 'dvr-refinement__btn--active': emptinessFor(branch.condition.op) === 'value' }"
+                :aria-pressed="emptinessFor(branch.condition.op) === 'value'"
+                :data-test="`cond-refinement-value-${index}-${bi}`"
+                title="Variable is set AND its value is non-empty"
+                @click="onConditionOp(bi, composeOp('exists', 'value'))"
+              >✓ has value</button>
+            </div>
           </div>
         </div>
         <div class="dvr-value-row">
@@ -691,30 +714,44 @@ const branchCount = computed(() => rule.value.branches.length);
   position: relative;
   min-width: 0;
 }
-.dvr-tick {
+/* Segmented refinement switch — shown under the `exists` op only.
+ * Three positions (any / is empty / has value) compose into the
+ * stored op (exists / is_empty / is_set). */
+.dvr-refinement {
   position: absolute;
   top: calc(100% + var(--wp-space-2));
   right: 0;
   display: inline-flex;
-  align-items: center;
-  gap: 5px; /* audit-exempt: 5px optical icon+text gap inside compact tick */
-  font: 10px var(--wp-font-sans, sans-serif); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
+  gap: 0;
+  font: 9px var(--wp-font-sans, sans-serif);
+  white-space: nowrap;
+  z-index: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--wp-border, #2a2d35);
+  background: rgba(255, 255, 255, 0.02);
+}
+.dvr-refinement__btn {
+  padding: 2px 7px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--wp-border, #2a2d35);
   color: var(--wp-text-muted, #9ca3af);
   cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-  /* Sit above the VALUE row's input but visually under the op cell;
-   * z-index keeps the click target above the input border. */
-  z-index: 1;
+  font: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: background 0.12s, color 0.12s;
 }
-.dvr-tick input[type="checkbox"] {
-  margin: 0;
-  width: 14px;
-  height: 14px;
-  accent-color: var(--wp-accent, #6366f1);
-  cursor: pointer;
+.dvr-refinement__btn:last-child { border-right: 0; }
+.dvr-refinement__btn:hover {
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 12%, transparent);
+  color: var(--wp-text, #fff);
 }
-.dvr-tick__label { line-height: 1; }
+.dvr-refinement__btn--active {
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 30%, transparent);
+  color: var(--wp-text, #fff);
+}
 /* Reserve space for the tick under the op cell when it's rendered.
  * Without this, the absolute-positioned tick would overlap the
  * VALUE row beneath. Bumps the value-row's top margin only when the

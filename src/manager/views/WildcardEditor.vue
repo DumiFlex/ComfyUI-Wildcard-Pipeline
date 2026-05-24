@@ -203,6 +203,21 @@ const uuidToSubCategories = computed<Map<string, string[]>>(() => {
   return out;
 });
 
+/** Per-wildcard flag: true when the catalog row has an is_null option.
+ *  Forwarded to RichTextInput so the nested-ref sub-cat picker can
+ *  surface the "Include null" checkbox. */
+const uuidToHasNull = computed<Map<string, boolean>>(() => {
+  const out = new Map<string, boolean>();
+  for (const mod of moduleStore.catalog) {
+    if (mod.type !== "wildcard") continue;
+    const opts = (mod.payload as { options?: unknown[] } | undefined)?.options;
+    const has = Array.isArray(opts)
+      && opts.some((o) => (o as { is_null?: boolean } | null)?.is_null === true);
+    out.set(mod.id, has);
+  }
+  return out;
+});
+
 // Var-suggestions removed: wildcard option values don't support $name
 // substitution at runtime (only @{uuid} nested refs + {a|b|c} inline
 // choices). RichTextInput's surface="wildcard" gates the $-trigger
@@ -475,6 +490,43 @@ function addOption() {
   options.value.push({ id: _newOptionId(), value: "", weight: 1 });
 }
 
+/** Returns true when the options list already contains a null option. */
+const hasNullOption = computed<boolean>(
+  () => options.value.some((o) => o.is_null === true),
+);
+
+/** Add the single permitted null option to the wildcard. The null
+ *  option carries `value: ""`, no `sub_category`, and `is_null: true`;
+ *  when the wildcard rolls it the engine emits an empty string —
+ *  a probabilistic "no output" slot. Idempotent: no-op if one
+ *  already exists. New entries land at index 0 so the editor's natural
+ *  top-down read surfaces the special row first. */
+function addNullOption(): void {
+  if (hasNullOption.value) return;
+  options.value = [
+    {
+      id: _newOptionId(),
+      value: "",
+      weight: 1,
+      sub_category: null,
+      is_null: true,
+    },
+    ...options.value,
+  ];
+}
+
+/** Move the null option (if any) to index 0. Called from the save
+ *  path so serialised payloads always have null first regardless of
+ *  whatever drag-sort the user did mid-edit. */
+function hoistNullFirst<T extends { is_null?: boolean }>(list: T[]): T[] {
+  const idx = list.findIndex((o) => o.is_null === true);
+  if (idx <= 0) return list;
+  const out = [...list];
+  const [n] = out.splice(idx, 1);
+  out.unshift(n);
+  return out;
+}
+
 async function removeOption(idx: number): Promise<void> {
   const opt = options.value[idx];
   if (!opt) return;
@@ -533,8 +585,13 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
+    // Re-hoist any null option to index 0 before persisting. Drag-sort
+    // is allowed to land it anywhere during editing; the serialised
+    // payload always pins the null option first.
+    const sortedOptions = hoistNullFirst(options.value);
+    if (sortedOptions !== options.value) options.value = sortedOptions;
     const payload: WildcardPayload = {
-      options: options.value,
+      options: sortedOptions,
       sub_categories: subCategories.value,
       var_binding: finalBinding,
     };
@@ -620,6 +677,10 @@ const validationErrors = computed<EditorFieldError[]>(() => {
   } else {
     for (let i = 0; i < options.value.length; i++) {
       const o = options.value[i];
+      // Null option's `value` is intentionally empty — skip the
+      // non-empty-string check for it. See spec
+      // `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`.
+      if (o.is_null) continue;
       if (!o.value || !o.value.trim()) {
         out.push({ field: "editor-section-options", label: `Option #${i + 1}`, message: "Value cannot be empty" });
         break;
@@ -716,6 +777,14 @@ defineExpose({ historyEntries, applyRestore, options });
     <div id="editor-section-options">
     <Card :title="`Options (${options.length})`" :padding="false">
       <template #actions>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="pi-ban"
+          :disabled="hasNullOption"
+          data-test="wc-add-null"
+          @click="addNullOption"
+        >Add null</Button>
         <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" @click="addOption">
           Add option
         </Button>
@@ -731,7 +800,12 @@ defineExpose({ historyEntries, applyRestore, options });
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(o, i) in options" :key="o.id">
+          <tr
+            v-for="(o, i) in options"
+            :key="o.id"
+            :data-test="o.is_null ? 'wc-opt-row-null' : `wc-opt-row-${i}`"
+            :class="{ 'wc-opt-row--null': o.is_null }"
+          >
             <td>
               <Input
                 :model-value="o.weight"
@@ -752,23 +826,32 @@ defineExpose({ historyEntries, applyRestore, options });
               />
             </td>
             <td>
+              <span v-if="o.is_null" class="wc-null-chip" aria-label="null option (resolves to empty)">
+                <i class="pi pi-ban" aria-hidden="true" />
+                <span>null</span>
+              </span>
               <RichTextInput
+                v-else
                 v-model="o.value"
                 surface="wildcard"
                 :ref-suggestions="wcSuggestions"
                 :uuid-to-name="nameByUuid"
                 :uuid-to-sub-categories="uuidToSubCategories"
+                :uuid-to-has-null="uuidToHasNull"
                 placeholder="value (type @ for nested wildcards · {a|b|c} for inline choices)"
                 aria-label="Option value"
               />
             </td>
             <td>
+              <span v-if="o.is_null" class="wc-em-dash" aria-hidden="true">—</span>
               <Select
+                v-else
                 :model-value="o.sub_category ?? ''"
                 :options="subCategoryOptions"
                 placeholder="(none)"
                 clearable
                 aria-label="Sub-category for option"
+                data-test="wc-opt-subcat"
                 @update:model-value="(v) => (o.sub_category = (v as string) || null)"
               />
             </td>
@@ -901,5 +984,32 @@ defineExpose({ historyEntries, applyRestore, options });
   text-align: right;
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
+}
+
+/* Null option chip — used for the value-column placeholder on a row
+ * whose option carries is_null=true. Visually distinct from the
+ * RichTextInput pills used by normal option values so users see at a
+ * glance that this row will resolve to nothing. */
+.wc-null-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--wp-text-muted) 12%, transparent);
+  border: 1px dashed var(--wp-border);
+  border-radius: 4px;
+  color: var(--wp-text-muted);
+  font-family: var(--wp-font-mono, monospace);
+  font-size: var(--wp-text-sm);
+}
+.wc-null-chip .pi { font-size: 12px; }
+.wc-em-dash {
+  color: var(--wp-text-dim);
+  font-family: var(--wp-font-mono, monospace);
+  opacity: 0.55;
+  padding: 0 var(--wp-space-4);
+}
+.wc-opt-row--null {
+  background: rgba(255, 255, 255, 0.015);
 }
 </style>

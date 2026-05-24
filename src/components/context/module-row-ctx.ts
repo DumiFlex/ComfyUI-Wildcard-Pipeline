@@ -1,5 +1,6 @@
 import type { InjectionKey, Ref } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
+import type { PairingBadge } from "../../extension/constraint-pairs";
 
 // Shared helpers + reactive state ContextWidget provides for any
 // ModuleRow descendant to inject. Keeps ModuleRow.vue free of prop
@@ -36,6 +37,7 @@ export interface ModuleRowCtx {
   onDragEnd: () => void;
   openContextMenu: (ev: MouseEvent, m: ModuleEntry, idx: number) => void;
   onCardKeydown: (ev: KeyboardEvent, m: ModuleEntry, idx: number) => void;
+  pairingFor: (id: string) => PairingBadge | null;
 }
 
 export const ModuleRowCtxKey: InjectionKey<ModuleRowCtx> = Symbol("moduleRowCtx");

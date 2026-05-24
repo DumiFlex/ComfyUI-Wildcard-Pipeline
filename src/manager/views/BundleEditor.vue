@@ -122,13 +122,18 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
 const addModalOpen = ref(false);
 
 /** Default bundle frame color when user hasn't picked one. Mirrors the
- *  `--wp-bundle-default` token + ContextWidget fallback so the editor
- *  preview matches the canvas. */
-const DEFAULT_COLOR = "#46566B";
+ *  `--wp-bundle-default` token + ContextWidget fallback so the SPA
+ *  editor preview matches the canvas frame at rest. Previously
+ *  `#46566B` (slate gray) which diverged from the canvas indigo —
+ *  users saw gray in the SPA but indigo on the canvas, because the
+ *  canvas fell back to `--wp-bundle-default` (#6366f1) when the
+ *  stored color was null. Aligning both ends on indigo-500 keeps
+ *  "no color picked" looking identical across surfaces. */
+const DEFAULT_COLOR = "#6366f1";
 
 const COLOR_PRESETS = [
-  "#46566B", "#7c3aed", "#a78bfa", "#22d3ee", "#34d399",
-  "#fbbf24", "#f472b6", "#fb7185", "#ef4444", "#6366f1",
+  "#6366f1", "#7c3aed", "#a78bfa", "#22d3ee", "#34d399",
+  "#fbbf24", "#f472b6", "#fb7185", "#ef4444", "#46566B",
   "#10b981", "#f59e0b",
 ];
 

@@ -4,6 +4,10 @@
  * `h` in `[0, 360)`, `s` and `v` in `[0, 1]`. Hex strings are `#rrggbb`
  * lowercase. Functions are tolerant of out-of-range input — they clamp
  * rather than throw, which keeps the picker UI robust under fast drags.
+ *
+ * Lives in shared/ so both the manager-side ColorPicker / TweaksPanel
+ * AND the canvas-side bundle modal can drive the same HsvPicker
+ * without a cross-package import.
  */
 
 export interface Hsv {
@@ -76,9 +80,9 @@ export function rgbToHex(rgb: Rgb): string {
 }
 
 export function hexToRgb(hex: string): Rgb | null {
-  const m = HEX_PATTERN.exec(hex.trim());
-  if (!m) return null;
-  const v = m[1];
+  const matches = hex.trim().match(HEX_PATTERN);
+  if (!matches) return null;
+  const v = matches[1];
   return {
     r: parseInt(v.slice(0, 2), 16),
     g: parseInt(v.slice(2, 4), 16),

@@ -47,7 +47,7 @@ describe("constraint ExceptionsSection", () => {
     });
     // Default state: no disabled keys → checkbox renders checked.
     // Unchecking it tells the engine to disable this exception.
-    await w.find('[data-test="ex-cb-0"]').setValue(false);
+    await w.find('[data-test="ex-cb-0"]').trigger("click");
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.disabled_exception_keys).toEqual(['["red","black"]']);
@@ -63,10 +63,30 @@ describe("constraint ExceptionsSection", () => {
         targetValues: TARGET_VALUES,
       },
     });
-    await w.find('[data-test="ex-cb-0"]').setValue(true);
+    await w.find('[data-test="ex-cb-0"]').trigger("click");
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     expect(patch.instance?.disabled_exception_keys).toBeNull();
+  });
+
+  it("disabled rows render with the ex__row--off visual class", () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: makeModule({
+          instance: { disabled_exception_keys: ['["red","black"]'] },
+        }),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+      },
+    });
+    expect(w.find('[data-test="ex-row-0"]').classes()).toContain("ex__row--off");
+  });
+
+  it("enabled rows do NOT receive the disabled visual class", () => {
+    const w = mount(ExceptionsSection, {
+      props: { module: makeModule(), sourceValues: SOURCE_VALUES, targetValues: TARGET_VALUES },
+    });
+    expect(w.find('[data-test="ex-row-0"]').classes()).not.toContain("ex__row--off");
   });
 
   it("mode chip click cycles 4 modes (no disabled)", async () => {
@@ -213,7 +233,7 @@ describe("constraint ExceptionsSection", () => {
       },
     });
     // Inverted polarity: enabled-by-default means we uncheck to disable.
-    await w.find('[data-test="ex-cb-0"]').setValue(false);
+    await w.find('[data-test="ex-cb-0"]').trigger("click");
     const updates = w.emitted("update")!;
     const patch = updates[updates.length - 1][0] as Partial<ModuleEntry>;
     // Key uses legacy values via fallback chain.
@@ -235,5 +255,48 @@ describe("constraint ExceptionsSection", () => {
       },
     });
     expect(w.findAllComponents({ name: "VarAutocompleteInput" }).length).toBeGreaterThan(0);
+  });
+
+  it("library exception with source='' renders the pi-ban chip when sourceHasNull=true", () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            exceptions: [
+              { source: "", target: "black", mode: "exclude", factor: 1 },
+            ],
+          },
+        }),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+        sourceHasNull: true,
+        targetHasNull: false,
+      },
+    });
+    const row = w.find('[data-test="ex-row-0"]');
+    const src = row.find(".ex__src");
+    expect(src.find(".pi-ban").exists()).toBe(true);
+    expect(src.text()).toMatch(/null/i);
+  });
+
+  it("library exception renders raw text when has-null flag is false", () => {
+    const w = mount(ExceptionsSection, {
+      props: {
+        module: makeModule({
+          payload: {
+            exceptions: [
+              { source: "", target: "black", mode: "exclude", factor: 1 },
+            ],
+          },
+        }),
+        sourceValues: SOURCE_VALUES,
+        targetValues: TARGET_VALUES,
+        sourceHasNull: false,
+        targetHasNull: false,
+      },
+    });
+    const src = w.find('[data-test="ex-row-0"] .ex__src');
+    // No chip — empty text rendered as-is.
+    expect(src.find(".pi-ban").exists()).toBe(false);
   });
 });

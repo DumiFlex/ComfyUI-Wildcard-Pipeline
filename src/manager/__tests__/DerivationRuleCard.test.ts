@@ -143,19 +143,19 @@ describe("DerivationRuleCard.vue", () => {
     expect(prefixes[0].text()).toBe("$");
   });
 
-  it("op dropdown lists 6 visible ops (is_set/is_unset surfaced via tick mark)", () => {
-    // 2026-05-10 UX shift: dropdown only shows 4 compare ops + the 2
-    // presence-base ops. `is_set`/`is_unset` are hidden — the user
-    // surfaces them via a "must have value" tick checkbox shown next
-    // to `exists`/`not_exists`. Engine still accepts all 8 ops.
+  it("op dropdown lists 6 visible base ops (refinement surfaced via segmented switch)", () => {
+    // 2026-05-24 final design: dropdown shows 4 compare ops + 2 presence
+    // ops. When `exists` is selected an inline segmented switch appears
+    // with positions any / is empty / has value, mapping to ops
+    // exists / is_empty / is_set respectively. `not_exists` has no
+    // refinement (no value to check when key is absent).
     const wrap = mountCard(makeRule(), 0);
     const selectComp = wrap.find('[data-test="cond-op-0-0"]')
       .findComponent({ name: "Select" });
     const opts = selectComp.props("options") as Array<{ value: string }>;
     const values = opts.map((o) => o.value);
     expect(values).toEqual([
-      "equals", "not_equals", "contains", "matches",
-      "exists", "not_exists",
+      "equals", "not_equals", "contains", "matches", "exists", "not_exists",
     ]);
   });
 
@@ -179,10 +179,10 @@ describe("DerivationRuleCard.vue", () => {
     expect(valueInput.classes()).not.toContain("dvr-value-input--disabled");
   });
 
-  it("condition value input is disabled (grayed) when op = exists", () => {
+  it("condition value input is disabled (grayed) when op = is_empty", () => {
     const rule = makeRule({
       branches: [{
-        condition: { var: "x", op: "exists", value: "" },
+        condition: { var: "x", op: "is_empty", value: "" },
         action: { target_var: "out", mode: "replace", value: "v" },
       }],
     });
@@ -191,10 +191,10 @@ describe("DerivationRuleCard.vue", () => {
     expect(valueInput.classes()).toContain("dvr-value-input--disabled");
   });
 
-  it("condition value input is disabled when op = is_unset", () => {
+  it("condition value input is disabled when op = is_not_empty", () => {
     const rule = makeRule({
       branches: [{
-        condition: { var: "x", op: "is_unset", value: "" },
+        condition: { var: "x", op: "is_not_empty", value: "" },
         action: { target_var: "out", mode: "replace", value: "v" },
       }],
     });
@@ -228,14 +228,9 @@ describe("DerivationRuleCard.vue", () => {
     expect(hint.text()).toContain("{a|b|c}");
   });
 
-  // ── 2026-05-10 follow-up: tick mark replaces is_set/is_unset ops ──
+  // ── 2026-05-24 final design: segmented refinement under `exists` ──
 
-  it("'must have value' tick is hidden for compare ops", () => {
-    const wrap = mountCard(makeRule(), 0);  // op = "equals"
-    expect(wrap.find('[data-test="cond-must-have-value-0-0"]').exists()).toBe(false);
-  });
-
-  it("'must have value' tick renders for exists op (unchecked)", () => {
+  it("refinement switch renders when op = exists", () => {
     const rule = makeRule({
       branches: [{
         condition: { var: "x", op: "exists", value: "" },
@@ -243,62 +238,11 @@ describe("DerivationRuleCard.vue", () => {
       }],
     });
     const wrap = mountCard(rule, 0);
-    const tick = wrap.find<HTMLInputElement>(
-      '[data-test="cond-must-have-value-input-0-0"]',
-    );
-    expect(tick.exists()).toBe(true);
-    expect(tick.element.checked).toBe(false);
+    expect(wrap.find('[data-test="cond-refinement-0-0"]').exists()).toBe(true);
   });
 
-  it("'must have value' tick is checked when saved op is is_set", () => {
-    const rule = makeRule({
-      branches: [{
-        condition: { var: "x", op: "is_set", value: "" },
-        action: { target_var: "out", mode: "replace", value: "v" },
-      }],
-    });
-    const wrap = mountCard(rule, 0);
-    const tick = wrap.find<HTMLInputElement>(
-      '[data-test="cond-must-have-value-input-0-0"]',
-    );
-    expect(tick.element.checked).toBe(true);
-  });
-
-  it("dropdown displays 'exists' (not 'is_set') when saved op is is_set", () => {
-    const rule = makeRule({
-      branches: [{
-        condition: { var: "x", op: "is_set", value: "" },
-        action: { target_var: "out", mode: "replace", value: "v" },
-      }],
-    });
-    const wrap = mountCard(rule, 0);
-    // Select gets the displayed op — `is_set` collapses to `exists`.
-    const selectComp = wrap.find('[data-test="cond-op-0-0"]')
-      .findComponent({ name: "Select" });
-    expect(selectComp.props("modelValue")).toBe("exists");
-  });
-
-  it("toggling tick on (op=exists) emits op=is_set", async () => {
-    const rule = makeRule({
-      branches: [{
-        condition: { var: "x", op: "exists", value: "" },
-        action: { target_var: "out", mode: "replace", value: "v" },
-      }],
-    });
-    const wrap = mountCard(rule, 0);
-    await wrap.find('[data-test="cond-must-have-value-input-0-0"]').trigger("change");
-    const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events.length).toBe(1);
-    const next = events[0][0] as DerivationRule;
-    expect(next.branches[0].condition.op).toBe("is_set");
-  });
-
-  it("'must have value' tick is HIDDEN for not_exists / is_unset ops", () => {
-    // The tick asks 'and the value is non-empty?'. That's meaningless
-    // when the var doesn't exist (not_exists / is_unset). UI hides the
-    // tick for those ops; engine still accepts is_unset for back-compat
-    // but the user surface only ever shows it on `exists`.
-    for (const op of ["not_exists", "is_unset"] as const) {
+  it("refinement switch is hidden for compare ops + not_exists", () => {
+    for (const op of ["equals", "not_equals", "contains", "matches", "not_exists"] as const) {
       const rule = makeRule({
         branches: [{
           condition: { var: "x", op, value: "" },
@@ -306,8 +250,89 @@ describe("DerivationRuleCard.vue", () => {
         }],
       });
       const wrap = mountCard(rule, 0);
-      expect(wrap.find('[data-test="cond-must-have-value-0-0"]').exists()).toBe(false);
+      expect(wrap.find('[data-test="cond-refinement-0-0"]').exists()).toBe(false);
     }
+  });
+
+  it("'any' position is active when saved op is bare exists", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "exists", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    expect(wrap.find('[data-test="cond-refinement-any-0-0"]').classes())
+      .toContain("dvr-refinement__btn--active");
+  });
+
+  it("'is empty' position is active when saved op is is_empty", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "is_empty", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    const sel = wrap.find('[data-test="cond-op-0-0"]').findComponent({ name: "Select" });
+    // Dropdown shows bare `exists`; refinement captures the variant.
+    expect(sel.props("modelValue")).toBe("exists");
+    expect(wrap.find('[data-test="cond-refinement-empty-0-0"]').classes())
+      .toContain("dvr-refinement__btn--active");
+  });
+
+  it("'has value' position is active when saved op is is_set", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "is_set", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    expect(wrap.find('[data-test="cond-refinement-value-0-0"]').classes())
+      .toContain("dvr-refinement__btn--active");
+  });
+
+  it("clicking 'is empty' on a bare exists rule emits is_empty", async () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "exists", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    await wrap.find('[data-test="cond-refinement-empty-0-0"]').trigger("click");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const next = events[events.length - 1][0] as DerivationRule;
+    expect(next.branches[0].condition.op).toBe("is_empty");
+  });
+
+  it("clicking 'has value' on a bare exists rule emits is_set", async () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "exists", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    await wrap.find('[data-test="cond-refinement-value-0-0"]').trigger("click");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const next = events[events.length - 1][0] as DerivationRule;
+    expect(next.branches[0].condition.op).toBe("is_set");
+  });
+
+  it("clicking 'any' on an is_empty rule reverts to bare exists", async () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x", op: "is_empty", value: "" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    await wrap.find('[data-test="cond-refinement-any-0-0"]').trigger("click");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const next = events[events.length - 1][0] as DerivationRule;
+    expect(next.branches[0].condition.op).toBe("exists");
   });
 
   // ── 2026-05-10 follow-up: var autocomplete uses RichTextInput popover style ──

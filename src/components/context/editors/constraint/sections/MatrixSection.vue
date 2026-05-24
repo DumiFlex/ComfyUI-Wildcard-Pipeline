@@ -1,27 +1,28 @@
 <script setup lang="ts">
 /**
- * Constraint MatrixSection — sub_cat × sub_cat grid with cycle+cog
- * interaction per the 2026-05-10 v2 modal spec.
+ * Constraint MatrixSection — sub_cat × sub_cat grid.
  *
- * Cell click cycles: allow → exclude → boost → reduce → disabled → allow.
- * "disabled" state writes to `disabled_matrix_cells`; cycling away
- * removes the key. Mode/factor overrides are NOT cleared when disabling
- * — they persist and reapply when user cycles back.
+ * Click any cell → CellRulePopover shows the four state buttons
+ * (NEUTRAL / EXCLUDE / BOOST / REDUCE) + a factor input for
+ * boost / reduce. State changes commit immediately through
+ * `cell_mode_overrides`; factor edits commit through
+ * `cell_factor_overrides`. The legacy 5-state click-cycle and
+ * the separate cog-anchored factor popover are gone.
  *
- * Cog icon visible only on boost/reduce cells (factor matters there).
- * Click cog → CellFactorPopover anchored to cell. Popover writes to
- * `cell_factor_overrides`; ↺ reset deletes the key.
- *
- * Override marker (orange dashed border) appears when cell mode OR
- * factor differs from library value.
+ * Lossy-on-read: `mode: "disabled"` collapses into `"neutral"`.
+ * Lossy-on-write: any pre-existing `disabled_matrix_cells` entry for
+ * a cell the user touches is cleared. The engine already treats all
+ * three (`allow` / `disabled` / missing) as runtime passthrough,
+ * so the collapse is engine-equivalent.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
-import CellFactorPopover from "../CellFactorPopover.vue";
+import CellRulePopover from "../CellRulePopover.vue";
+import MatrixLegend from "../MatrixLegend.vue";
 
-type Mode = "allow" | "exclude" | "boost" | "reduce";
+type Mode = "neutral" | "exclude" | "boost" | "reduce";
 
 interface Cell { mode: Mode; factor: number }
 
@@ -30,9 +31,6 @@ const props = withDefaults(
     module: ModuleEntry;
     sourceSubs: readonly string[];
     targetSubs: readonly string[];
-    /** Display name of the source/target wildcards — shown in the
-     *  matrix corner so users know which wildcards the rules govern.
-     *  Falls back to "source"/"target" when not provided. */
     sourceName?: string;
     targetName?: string;
   }>(),
@@ -57,171 +55,192 @@ const cellFactorOverrides = computed<Record<string, number>>(
   () => (instance.value.cell_factor_overrides as Record<string, number> | null) ?? {},
 );
 
+/** Reads `payload.matrix[src][tgt]`. Returns null when no library rule. */
 function libCell(src: string, tgt: string): Cell | null {
   const cell = matrix.value[src]?.[tgt];
-  return cell ? { mode: cell.mode, factor: cell.factor } : null;
+  if (!cell) return null;
+  // Legacy "allow" / "disabled" both fold to neutral on read — the
+  // engine never distinguished them at runtime.
+  const rawMode = cell.mode as Mode | "allow" | "disabled";
+  const mode: Mode = (rawMode === "allow" || rawMode === "disabled") ? "neutral" : rawMode;
+  return { mode, factor: cell.factor ?? 1 };
 }
 
-/**
- * Effective mode for a cell. Override wins over lib (engine reads
- * override before payload). For cells with neither (empty + no
- * override), returns null — caller treats null as "implicit allow"
- * for cycling math but renders as empty visually.
- */
-function effectiveMode(src: string, tgt: string): Mode | "disabled" | null {
+/** Effective state for a cell. Override wins; otherwise library;
+ *  otherwise neutral. A legacy `disabled_matrix_cells` membership
+ *  also reads as neutral — the user will re-mark it via the
+ *  popover and any cell they touch gets its disabled entry stripped
+ *  by `commitMode()` below. */
+function effectiveState(src: string, tgt: string): Mode {
   const key = encodeKey([src, tgt]);
-  if (disabledCells.value.has(key)) return "disabled";
+  if (disabledCells.value.has(key)) return "neutral";
   const override = cellModeOverrides.value[key];
-  if (override) return override;
+  if (override === "neutral" || override === "exclude" || override === "boost" || override === "reduce") {
+    return override;
+  }
   const lib = libCell(src, tgt);
-  return lib ? lib.mode : null;
+  return lib ? lib.mode : "neutral";
 }
 
-/**
- * Effective factor — override wins over lib. For empty cells without
- * a factor override, returns 1 (engine's implicit identity factor)
- * so the boost/reduce display + popover have a sensible baseline.
- */
 function effectiveFactor(src: string, tgt: string): number {
   const key = encodeKey([src, tgt]);
-  const override = cellFactorOverrides.value[key];
-  if (override !== undefined) return override;
+  const o = cellFactorOverrides.value[key];
+  if (typeof o === "number" && Number.isFinite(o)) return o;
   const lib = libCell(src, tgt);
-  return lib ? lib.factor : 1;
+  return lib?.factor ?? 1;
 }
 
 function isOverridden(src: string, tgt: string): boolean {
   const key = encodeKey([src, tgt]);
-  return key in cellModeOverrides.value || key in cellFactorOverrides.value;
+  if (key in cellModeOverrides.value || key in cellFactorOverrides.value) return true;
+  // Legacy disabled-set entry also counts as an override for reset purposes
+  // — clicking Reset clears it alongside any current override maps.
+  return disabledCells.value.has(key);
 }
 
-function cellClass(src: string, tgt: string): string[] {
-  const classes = ["mx__cell"];
-  const lib = libCell(src, tgt);
-  const key = encodeKey([src, tgt]);
-  const hasOverride = key in cellModeOverrides.value
-    || key in cellFactorOverrides.value
-    || disabledCells.value.has(key);
-  // Empty + no override = truly neutral — gray it out.
-  if (!lib && !hasOverride) {
-    classes.push("mx__cell--empty");
-    return classes;
+function cellClasses(src: string, tgt: string): string[] {
+  const out = ["mx-cell", `s-${effectiveState(src, tgt)}`];
+  if (isOverridden(src, tgt)) out.push("mx-cell--mod");
+  const open = openPopover.value;
+  if (open && open.src === src && open.tgt === tgt) out.push("open");
+  return out;
+}
+
+function cellGlyph(src: string, tgt: string): string {
+  switch (effectiveState(src, tgt)) {
+    case "neutral": return "·";
+    case "exclude": return "×";
+    case "boost":   return "↑";
+    case "reduce":  return "↓";
   }
-  const mode = effectiveMode(src, tgt);
-  if (mode === "disabled") classes.push("mx__cell--disabled");
-  else if (mode) classes.push(`mx__cell--${mode}`);
-  if (isOverridden(src, tgt)) classes.push("mx__cell--overridden");
-  return classes;
 }
 
-/**
- * 4-state cycle. "disabled" was dropped on user feedback — engine
- * treats `mode: allow`, missing matrix entry, AND
- * `disabled_matrix_cells` membership all as runtime passthrough, so
- * three states for the same effective behavior was redundant. `allow`
- * IS the neutral baseline. Engine still reads
- * `disabled_matrix_cells` for backward compat with workflows saved
- * before this simplification — UI just never writes there now.
- */
-const CYCLE: Record<Mode, Mode> = {
-  allow: "exclude",
-  exclude: "boost",
-  boost: "reduce",
-  reduce: "allow",
-};
+function cellShowsFactor(src: string, tgt: string): boolean {
+  const s = effectiveState(src, tgt);
+  return s === "boost" || s === "reduce";
+}
+
+function cellFactorText(src: string, tgt: string): string {
+  const f = effectiveFactor(src, tgt);
+  return `×${f.toFixed(1)}`;
+}
+
+function cellAriaLabel(src: string, tgt: string): string {
+  const s = effectiveState(src, tgt);
+  const factor = (s === "boost" || s === "reduce") ? ` ×${effectiveFactor(src, tgt).toFixed(1)}` : "";
+  return `Rule: ${src} → ${tgt}, current state ${s}${factor}. Click to edit.`;
+}
+
+// ── Popover ────────────────────────────────────────────────────
+//
+// The popover lives in a `<Teleport to="body">` portal so it escapes
+// the cell's hover / clipping context entirely. Without teleport the
+// popover sits inside `.mx-cell`, which causes two problems:
+//   1. Hovering the popover triggers `.mx-cell:hover` on the source
+//      cell (transform + glow), making the popover feel like it lives
+//      "inside" the cell.
+//   2. The cells in the row below (which the popover visually overlaps)
+//      receive pointer events because they share a stacking context
+//      with the popover's parent — visible to the user as "I can hover
+//      cells behind the popover".
+// Tracking the cell rect lets us position-fixed the popover at the
+// right spot without parenting it inside the table.
+const openPopover = ref<{ src: string; tgt: string; left: number; top: number } | null>(null);
+
+function rectForCell(src: string, tgt: string): { left: number; top: number } {
+  const el = document.querySelector<HTMLElement>(
+    `[data-test="mx-cell-${cssEscape(src)}-${cssEscape(tgt)}"]`,
+  );
+  if (!el) return { left: 0, top: 0 };
+  const r = el.getBoundingClientRect();
+  const POP_W = 260;
+  const left = Math.min(
+    window.innerWidth - POP_W - 12,
+    Math.max(12, r.left + r.width / 2 - POP_W / 2),
+  );
+  const top = r.bottom + 8;
+  return { left, top };
+}
+
+/** Minimal CSS attribute-value escape so values containing dots or
+ *  quotes (sub-category names are user data) don't break the selector. */
+function cssEscape(s: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(s);
+  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+}
 
 function onCellClick(src: string, tgt: string): void {
-  const lib = libCell(src, tgt);
+  const open = openPopover.value;
+  if (open && open.src === src && open.tgt === tgt) {
+    openPopover.value = null;
+    return;
+  }
+  const pos = rectForCell(src, tgt);
+  openPopover.value = { src, tgt, left: pos.left, top: pos.top };
+}
+
+function closePopover(): void { openPopover.value = null; }
+
+/** Re-position on scroll / resize so the teleported popover tracks its
+ *  anchor cell. Closes on the same events if positioning fails. */
+function reanchorPopover(): void {
+  const cur = openPopover.value;
+  if (!cur) return;
+  const pos = rectForCell(cur.src, cur.tgt);
+  if (pos.left === 0 && pos.top === 0) {
+    closePopover();
+    return;
+  }
+  openPopover.value = { ...cur, left: pos.left, top: pos.top };
+}
+
+/** Write the override map, stripping the legacy disabled-set entry
+ *  for the same cell. Mode defaults: if `next` matches the library
+ *  state, drop the override entirely so the override map stays
+ *  minimal. */
+function commitMode(src: string, tgt: string, next: Mode): void {
   const key = encodeKey([src, tgt]);
-  // effectiveMode may return "disabled" for legacy workflows that
-  // saved that state. Treat it as the cycle's first real state for
-  // forward progress — clicking a legacy-disabled cell starts the
-  // cycle from "allow", which is consistent with engine behavior
-  // (disabled = passthrough = allow).
-  const raw = effectiveMode(src, tgt);
-  const current: Mode = raw === "disabled" || raw === null ? "allow" : raw;
-  const next = CYCLE[current];
-  // Implicit default for empty cells = "allow" (engine treats absent
-  // matrix cells as no constraint). Cycling onto the default drops
-  // the override so empty cells return to truly-neutral after one
-  // full cycle, mirroring filled-cell reset-on-cycle-back.
-  const defaultMode: Mode = lib ? lib.mode : "allow";
-
-  const inst: Record<string, unknown> = { ...(instance.value ?? {}) };
-
-  // Forward-compat cleanup: if this cell was in a legacy disabled set,
-  // remove it as part of moving into the new 4-state cycle.
-  if (raw === "disabled") {
-    const set = new Set(instance.value.disabled_matrix_cells ?? []);
-    set.delete(key);
-    inst.disabled_matrix_cells = set.size === 0 ? null : Array.from(set);
+  const lib = libCell(src, tgt);
+  const libMode: Mode = lib ? lib.mode : "neutral";
+  const modeMap = { ...cellModeOverrides.value };
+  if (next === libMode) delete modeMap[key];
+  else modeMap[key] = next;
+  const factorMap = { ...cellFactorOverrides.value };
+  // When leaving boost/reduce, drop the factor override too so the
+  // cell falls back fully to library / default.
+  if (next !== "boost" && next !== "reduce" && key in factorMap) {
+    delete factorMap[key];
   }
-
-  const map = { ...cellModeOverrides.value };
-  if (next === defaultMode) {
-    delete map[key];
-  } else {
-    map[key] = next;
+  // Default factor on entering boost/reduce from a state without one.
+  if ((next === "boost" || next === "reduce") && !(key in factorMap)) {
+    const libFactor = lib?.factor;
+    const isLibFactor = typeof libFactor === "number" && libFactor > 0;
+    if (!isLibFactor || (next === "boost" && libFactor < 1.1) || (next === "reduce" && libFactor > 0.9)) {
+      factorMap[key] = next === "boost" ? 1.5 : 0.5;
+    }
   }
-  inst.cell_mode_overrides = Object.keys(map).length > 0 ? map : null;
-
+  // Strip the legacy disabled set entry for this cell on every touch
+  // — silent migration; the engine treated both as passthrough.
+  const dset = new Set(instance.value.disabled_matrix_cells ?? []);
+  const dsetChanged = dset.delete(key);
+  const inst: Record<string, unknown> = {
+    ...(instance.value ?? {}),
+    cell_mode_overrides: Object.keys(modeMap).length > 0 ? modeMap : null,
+    cell_factor_overrides: Object.keys(factorMap).length > 0 ? factorMap : null,
+  };
+  if (dsetChanged) {
+    inst.disabled_matrix_cells = dset.size === 0 ? null : Array.from(dset);
+  }
   emit("update", { instance: inst as ModuleEntry["instance"] });
 }
 
-// ── Cog popover ────────────────────────────────────────────────────
-
-const popoverFor = ref<{ src: string; tgt: string } | null>(null);
-
-function isPopoverOpen(src: string, tgt: string): boolean {
-  return popoverFor.value?.src === src && popoverFor.value?.tgt === tgt;
-}
-
-function onCogClick(src: string, tgt: string, ev: Event): void {
-  ev.stopPropagation();
-  popoverFor.value = { src, tgt };
-}
-
-function closePopover(): void {
-  popoverFor.value = null;
-}
-
-// Outside-click + Escape close. Uses capture phase so we see the
-// event BEFORE Vue's @click.stop modifiers have a chance to swallow
-// it — relying on bubble-phase + stopPropagation produced false
-// negatives in cross-Context modal teleport scenarios. Explicit
-// `closest()` check excludes:
-//   - clicks inside the popover (input, ↺ reset, × close button)
-//   - clicks on the cog button that *opens* the popover
-// Anything else closes the popover.
-function onDocPointerDown(ev: MouseEvent): void {
-  if (popoverFor.value === null) return;
-  const target = ev.target as HTMLElement | null;
-  if (!target) return;
-  if (target.closest(".mx__popover")) return;
-  if (target.closest('[data-test^="mx-cog-"]')) return;
-  closePopover();
-}
-function onDocKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape" && popoverFor.value !== null) {
-    ev.preventDefault();
-    closePopover();
-  }
-}
-onMounted(() => {
-  document.addEventListener("mousedown", onDocPointerDown, true);
-  document.addEventListener("keydown", onDocKeydown);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener("mousedown", onDocPointerDown, true);
-  document.removeEventListener("keydown", onDocKeydown);
-});
-
-function onCommitFactor(src: string, tgt: string, factor: number): void {
-  const lib = libCell(src, tgt);
-  if (!lib) return;
+function commitFactor(src: string, tgt: string, factor: number): void {
+  if (!Number.isFinite(factor) || factor <= 0) return;
   const key = encodeKey([src, tgt]);
+  const lib = libCell(src, tgt);
+  const libFactor = lib?.factor;
   const map = { ...cellFactorOverrides.value };
-  if (factor === lib.factor) {
+  if (typeof libFactor === "number" && Math.abs(libFactor - factor) < 1e-9) {
     delete map[key];
   } else {
     map[key] = factor;
@@ -231,77 +250,137 @@ function onCommitFactor(src: string, tgt: string, factor: number): void {
   ));
 }
 
-function onResetFactor(src: string, tgt: string): void {
+/** Reset a cell to its library default — drops both mode and factor
+ *  overrides for that key. Also strips any legacy
+ *  `disabled_matrix_cells` entry for the same cell. */
+function resetCell(src: string, tgt: string): void {
   const key = encodeKey([src, tgt]);
-  const map = { ...cellFactorOverrides.value };
-  delete map[key];
-  emit("update", patchInstance(props.module, "cell_factor_overrides",
-    Object.keys(map).length > 0 ? map : null,
-  ));
+  const modeMap = { ...cellModeOverrides.value };
+  const factorMap = { ...cellFactorOverrides.value };
+  delete modeMap[key];
+  delete factorMap[key];
+  const dset = new Set(instance.value.disabled_matrix_cells ?? []);
+  const dsetChanged = dset.delete(key);
+  const inst: Record<string, unknown> = {
+    ...(instance.value ?? {}),
+    cell_mode_overrides: Object.keys(modeMap).length > 0 ? modeMap : null,
+    cell_factor_overrides: Object.keys(factorMap).length > 0 ? factorMap : null,
+  };
+  if (dsetChanged) {
+    inst.disabled_matrix_cells = dset.size === 0 ? null : Array.from(dset);
+  }
+  emit("update", { instance: inst as ModuleEntry["instance"] });
 }
+
+// ── Outside-click + Escape close ────────────────────────────────
+function onDocPointerDown(ev: MouseEvent): void {
+  if (openPopover.value === null) return;
+  const target = ev.target as HTMLElement | null;
+  if (!target) return;
+  if (target.closest(".pop")) return;
+  if (target.closest(".mx-cell")) return;
+  closePopover();
+}
+function onDocKeydown(ev: KeyboardEvent): void {
+  if (ev.key === "Escape" && openPopover.value !== null) {
+    ev.preventDefault();
+    closePopover();
+  }
+}
+onMounted(() => {
+  document.addEventListener("mousedown", onDocPointerDown, true);
+  document.addEventListener("keydown", onDocKeydown);
+  window.addEventListener("scroll", reanchorPopover, true);
+  window.addEventListener("resize", reanchorPopover);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("mousedown", onDocPointerDown, true);
+  document.removeEventListener("keydown", onDocKeydown);
+  window.removeEventListener("scroll", reanchorPopover, true);
+  window.removeEventListener("resize", reanchorPopover);
+});
 </script>
 
 <template>
   <section class="mx" data-test="mx-section">
     <div class="mx__label">Rule matrix</div>
-    <table class="mx__table">
-      <thead>
-        <tr>
-          <th class="mx__corner" data-test="mx-corner">
-            <span class="mx__corner-src">{{ sourceName || "source" }} ↓</span>
-            <span class="mx__corner-divider">/</span>
-            <span class="mx__corner-tgt">{{ targetName || "target" }} →</span>
-          </th>
-          <th v-for="t in targetSubs" :key="t" class="mx__th">{{ t }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="s in sourceSubs" :key="s">
-          <th class="mx__th mx__th--row">{{ s }}</th>
-          <td v-for="t in targetSubs" :key="`${s}-${t}`" class="mx__td">
-            <div
-              :class="cellClass(s, t)"
-              :data-test="`mx-cell-${s}-${t}`"
-              role="button"
-              tabindex="0"
-              @click="onCellClick(s, t)"
-              @keydown.enter.prevent="onCellClick(s, t)"
-              @keydown.space.prevent="onCellClick(s, t)"
-            >
-              <span class="mx__mode-label">{{ effectiveMode(s, t) }}</span>
-              <span
-                v-if="effectiveMode(s, t) === 'boost' || effectiveMode(s, t) === 'reduce'"
-                class="mx__factor"
-              >×{{ effectiveFactor(s, t) }}</span>
-              <button
-                v-if="effectiveMode(s, t) === 'boost' || effectiveMode(s, t) === 'reduce'"
-                type="button"
-                class="mx__cog"
-                :data-test="`mx-cog-${s}-${t}`"
-                aria-label="Edit factor"
-                @click="(ev) => onCogClick(s, t, ev)"
-              ><i class="pi pi-cog" aria-hidden="true" /></button>
+
+    <div class="mx-axes">
+      <span class="mx-axis mx-axis--src" data-test="mx-axis-src">
+        <span class="arrow" aria-hidden="true">↓</span>
+        <span>Source · {{ sourceName || "source" }}</span>
+      </span>
+      <span class="mx-axis mx-axis--tgt" data-test="mx-axis-tgt">
+        <span class="arrow" aria-hidden="true">→</span>
+        <span>Target · {{ targetName || "target" }}</span>
+      </span>
+    </div>
+
+    <div class="mx-grid">
+      <table>
+        <thead>
+          <tr>
+            <th class="mx-corner" data-test="mx-corner">
+              <span class="row-1">↓ source</span>
+              <span class="row-2">→ target</span>
+            </th>
+            <th v-for="t in targetSubs" :key="t" class="mx-th-col">{{ t }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="s in sourceSubs" :key="s">
+            <th class="mx-th-row">{{ s }}</th>
+            <td v-for="t in targetSubs" :key="`${s}-${t}`" class="mx-td">
               <div
-                v-if="isPopoverOpen(s, t)"
-                class="mx__popover"
-                @click.stop
-                @wheel.stop
-                @keydown.stop
+                :class="cellClasses(s, t)"
+                :data-test="`mx-cell-${s}-${t}`"
+                :aria-label="cellAriaLabel(s, t)"
+                role="button"
+                tabindex="0"
+                @click="onCellClick(s, t)"
+                @keydown.enter.prevent="onCellClick(s, t)"
+                @keydown.space.prevent="onCellClick(s, t)"
               >
-                <CellFactorPopover
-                  :library-factor="libCell(s, t)?.factor ?? 1"
-                  :override-factor="cellFactorOverrides[encodeKey([s, t])] ?? null"
-                  :label="`${s} → ${t}`"
-                  @commit="(f) => onCommitFactor(s, t, f)"
-                  @reset="() => onResetFactor(s, t)"
-                  @close="closePopover"
-                />
+                <span class="glyph">{{ cellGlyph(s, t) }}</span>
+                <span v-if="cellShowsFactor(s, t)" class="factor">{{ cellFactorText(s, t) }}</span>
               </div>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <MatrixLegend />
+
+    <!-- Popover lives in a body-level portal so its hover state stays
+         isolated from the source cell, the cells in the row below
+         (which it visually overlaps), and any table-level clipping. -->
+    <Teleport to="body">
+      <div
+        v-if="openPopover"
+        class="mx-pop-anchor"
+        :style="{
+          position: 'fixed',
+          left: openPopover.left + 'px',
+          top: openPopover.top + 'px',
+          width: '260px',
+          zIndex: 9999,
+        }"
+        @mousedown.stop
+      >
+        <CellRulePopover
+          :state="effectiveState(openPopover.src, openPopover.tgt)"
+          :factor="effectiveFactor(openPopover.src, openPopover.tgt)"
+          :src-label="openPopover.src"
+          :tgt-label="openPopover.tgt"
+          :can-reset="isOverridden(openPopover.src, openPopover.tgt)"
+          @update:state="(next) => commitMode(openPopover!.src, openPopover!.tgt, next)"
+          @update:factor="(f) => commitFactor(openPopover!.src, openPopover!.tgt, f)"
+          @reset="resetCell(openPopover!.src, openPopover!.tgt)"
+          @close="closePopover"
+        />
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -318,100 +397,130 @@ function onResetFactor(src: string, tgt: string): void {
   color: var(--wp-text-dim, var(--wp-text3));
   margin-bottom: 8px;
 }
-.mx__table {
-  border-collapse: collapse;
-  width: 100%;
-  font: 11px var(--wp-font-sans);
+
+/* ── Axis tags ─────────────────────────────────────────────── */
+.mx-axes {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+  font: 600 10px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
-.mx__th {
-  font: 600 10px var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
-  background: var(--wp-bg3);
-  padding: 4px 8px;
-  text-align: center;
-  border: 1px solid var(--wp-border);
+.mx-axis {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
 }
-.mx__th--row { text-align: right; }
-.mx__corner {
-  background: var(--wp-bg);
+.mx-axis--src {
+  color: #d8b4fe;
+  background: color-mix(in oklab, #c084fc 14%, transparent);
+  border: 1px solid color-mix(in oklab, #c084fc 35%, transparent);
+}
+.mx-axis--tgt {
+  color: #67e8f9;
+  background: color-mix(in oklab, #22d3ee 14%, transparent);
+  border: 1px solid color-mix(in oklab, #22d3ee 35%, transparent);
+}
+.mx-axis .arrow { font: 14px var(--wp-font-mono); line-height: 1; }
+
+/* ── Grid frame ────────────────────────────────────────────── */
+.mx-grid {
+  display: inline-block;
+  background: var(--wp-bg-deep, #0e1015);
   border: 1px solid var(--wp-border);
+  border-radius: 6px;
+  padding: 6px;
+}
+.mx-grid table { border-collapse: separate; border-spacing: 4px; }
+.mx-grid th,
+.mx-grid td { padding: 0; vertical-align: middle; }
+.mx-corner {
+  width: 96px;
+  height: 32px;
   font: 9px var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
-  text-transform: none;
-  letter-spacing: 0;
-  white-space: nowrap;
-  padding: 4px 8px;
+  border-radius: 4px;
   text-align: left;
+  padding: 0 8px !important;
+  background: rgba(255, 255, 255, 0.02);
 }
-.mx__corner-src { color: var(--wp-text-muted, var(--wp-text2)); font-weight: 600; }
-.mx__corner-tgt { color: var(--wp-text-muted, var(--wp-text2)); font-weight: 600; }
-.mx__corner-divider { margin: 0 4px; color: var(--wp-text-dim, var(--wp-text3)); }
-.mx__td { border: 1px solid var(--wp-border); padding: 0; position: relative; }
-.mx__cell {
-  display: flex; align-items: center; justify-content: center;
-  gap: 4px;
-  padding: 4px 6px;
-  cursor: pointer;
-  font: 600 9px var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  user-select: none;
-  min-height: 22px;
+.mx-corner .row-1 { display: block; color: #d8b4fe; line-height: 1.3; }
+.mx-corner .row-2 { display: block; color: #67e8f9; line-height: 1.3; }
+.mx-th-col {
+  width: 64px;
+  height: 28px;
+  font: 700 10px var(--wp-font-sans);
+  color: #67e8f9;
+  background: color-mix(in oklab, #22d3ee 10%, transparent);
+  border-radius: 4px;
+  text-align: center;
 }
-.mx__cell--allow { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
-.mx__cell--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
-.mx__cell--boost { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
-.mx__cell--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
-.mx__cell--disabled {
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(120, 120, 120, 0.18),
-    rgba(120, 120, 120, 0.18) 4px,
-    rgba(120, 120, 120, 0.06) 4px,
-    rgba(120, 120, 120, 0.06) 8px
-  );
-  color: var(--wp-text-dim, var(--wp-text3));
-  text-decoration: line-through;
+.mx-th-row {
+  width: 96px;
+  height: 36px;
+  font: 700 10px var(--wp-font-sans);
+  color: #d8b4fe;
+  background: color-mix(in oklab, #c084fc 10%, transparent);
+  border-radius: 4px;
+  text-align: right;
+  padding: 0 12px !important;
 }
-.mx__cell--overridden {
-  outline: 1px dashed var(--wp-status-modified, #fb923c);
-  outline-offset: -1px;
-}
-.mx__cell--empty { opacity: 0.4; }
-.mx__cell--empty:hover { opacity: 0.7; }
-.mx__factor { font-family: var(--wp-font-mono); font-weight: 400; text-transform: none; letter-spacing: 0; }
-.mx__cog {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 14px;
-  height: 14px;
+.mx-td { position: relative; }
+
+/* ── Body cells ────────────────────────────────────────────── */
+.mx-cell {
+  width: 64px;
+  height: 36px;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.25);
-  border: 0;
-  border-radius: 3px;
-  color: var(--wp-text, #fff);
+  gap: 4px;
+  font: 600 12px var(--wp-font-mono);
+  border-radius: 4px;
   cursor: pointer;
-  padding: 0;
-  font-size: 9px;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity var(--wp-motion-quick) ease;
+  user-select: none;
+  transition: transform 0.08s, box-shadow 0.1s, background 0.1s;
+  position: relative;
 }
-/* Reveal on cell hover so the corner stays clean when not in use,
-   but the affordance is one mouseover away. Keep visible while
-   hovering the cog itself or while its popover is open. */
-.mx__cell:hover .mx__cog,
-.mx__cog:hover,
-.mx__cog:focus-visible { opacity: 1; }
-.mx__cog:hover { background: var(--wp-accent); color: white; }
-.mx__popover {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 10;
-  margin-top: 4px;
+.mx-cell:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
+.mx-cell.open {
+  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+.mx-cell.s-neutral {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--wp-text-dim, #595c66);
+  border: 1px dashed rgba(255, 255, 255, 0.10);
+}
+.mx-cell.s-exclude {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent);
+  color: #fca5a5;
+  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent);
+}
+.mx-cell.s-boost {
+  background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent);
+  color: #86efac;
+  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent);
+}
+.mx-cell.s-reduce {
+  background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent);
+  color: #fdba74;
+  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
+}
+.mx-cell--mod {
+  outline: 1px dashed var(--wp-status-modified, #fb923c);
+  outline-offset: -1px;
+}
+.glyph { font-size: 14px; line-height: 1; }
+.factor { font-size: 11px; font-weight: 700; }
+
+/* Popover is teleported to body so positioning is handled by inline
+ * styles on the anchor wrapper. Nothing extra needed here. */
 </style>

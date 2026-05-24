@@ -15,6 +15,8 @@ import {
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
+import { collectCrossNodePairings } from "../extension/cross-node-pairings";
+import type { PairingBadge } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 
 /** Shallow-equal map comparator for `reactiveFromGraph` so the
@@ -25,6 +27,28 @@ function stringMapEqual(a: Record<string, string>, b: Record<string, string>): b
   const ak = Object.keys(a);
   if (ak.length !== Object.keys(b).length) return false;
   for (const k of ak) if (a[k] !== b[k]) return false;
+  return true;
+}
+
+/** Shallow-equal comparator for pairing-badge Map — re-renders only on
+ *  actual entry diff (gate prevents per-frame poll churn re-rendering
+ *  every ContextWidget when nothing's changed). */
+function pairingMapEqual(
+  a: Map<string, PairingBadge>,
+  b: Map<string, PairingBadge>,
+): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [k, av] of a) {
+    const bv = b.get(k);
+    if (!bv) return false;
+    if (
+      av.number !== bv.number ||
+      av.targetUuid !== bv.targetUuid ||
+      av.colorIndex !== bv.colorIndex ||
+      av.isOrphan !== bv.isOrphan
+    ) return false;
+  }
   return true;
 }
 
@@ -135,6 +159,25 @@ export function create(node: ContextNode, inputName: string) {
         stringArrayEqual,
       );
 
+      // Cross-node pairing badges. Flat map keyed by `${nodeId}#${_uid}`
+      // so duplicate library instances + cross-node rows don't collide.
+      // Polled via the same `reactiveFromGraph` machinery the other
+      // chain-derived props use so the badge updates on graph edits +
+      // workflow loads without manual wiring. The comparator does a
+      // shallow map equality check by entry — re-rendering only when a
+      // badge appears, disappears, or changes shape.
+      const pairingsRef = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectCrossNodePairings(rootGraph, node);
+        },
+        pairingMapEqual,
+      );
+
       // Per-name resolved snapshot — drives the combine modal's
       // live-preview pane so the user sees `red portrait` instead of
       // `$style portrait` while editing. Same walker the assembler
@@ -202,6 +245,7 @@ export function create(node: ContextNode, inputName: string) {
         localResolvedReader,
         upstreamWildcardUuids: upstreamUuids.value,
         downstreamWildcardUuids: downstreamUuids.value,
+        pairings: pairingsRef.value,
         nodeMode: nodeMode.value,
         lastUsedSeedReader,
         onChange: (json: string) => host.setValue(json),

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Input from "./ui/Input.vue";
-import HsvPicker from "./HsvPicker.vue";
+import HsvPicker from "../../components/shared/HsvPicker.vue";
 
 interface Props {
   modelValue: string;

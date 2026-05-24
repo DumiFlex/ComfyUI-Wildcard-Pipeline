@@ -111,6 +111,9 @@ describe("Bundles.vue", () => {
     const swatch = wrap.find(".wp-bundle-swatch");
     expect(swatch.exists()).toBe(true);
     // jsdom resolves rgb(...) for the inline-style background.
-    expect(swatch.attributes("style") ?? "").toMatch(/#46566B|rgb\(70,\s*86,\s*107\)/i);
+    // Indigo (#6366f1) — matches `--wp-bundle-default` so the list
+    // swatch reads identically to the canvas frame for default-color
+    // bundles.
+    expect(swatch.attributes("style") ?? "").toMatch(/#6366f1|rgb\(99,\s*102,\s*241\)/i);
   });
 });

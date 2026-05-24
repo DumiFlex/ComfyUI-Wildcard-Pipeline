@@ -111,6 +111,34 @@ describe("validateModule - constraints", () => {
   });
 });
 
+describe("validateModule - inline brace syntax", () => {
+  it("does not flag $ tokens inside {a|b|c} inline blocks as unbound vars", () => {
+    // `{leather|wool}` is an inline-choice block; nothing inside is a
+    // `$var` ref. Validator pre-fix incorrectly extracted `$silver`,
+    // `$gold`, `$pearl` from `{2$$, $$silver|gold|pearl}` and warned
+    // each as unbound.
+    const row = mkWildcard("aaaaaaaa", "outfit", {
+      sub_categories: [],
+      options: [
+        { id: "o1", value: "{leather|wool} jacket over", weight: 1 },
+        { id: "o2", value: "{2$$, $$silver|gold|pearl} jewelry", weight: 1 },
+      ],
+    });
+    const issues = validateModule(row, [row]);
+    const unboundVars = issues.filter((i) => /not bound/i.test(i.message));
+    expect(unboundVars).toEqual([]);
+  });
+
+  it("still flags top-level $var refs that are unbound", () => {
+    const row = mkWildcard("aaaaaaaa", "ref", {
+      sub_categories: [],
+      options: [{ id: "o1", value: "uses $ghost", weight: 1 }],
+    });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => /\$ghost/.test(i.message))).toBe(true);
+  });
+});
+
 describe("validateBundle", () => {
   it("flags bundle with no children as warn", () => {
     const b: BundleRow = {
@@ -121,6 +149,26 @@ describe("validateBundle", () => {
     };
     const issues = validateBundle(b, []);
     expect(issues.some((i) => i.severity === "warn")).toBe(true);
+  });
+
+  it("recognises nested bundle children when bundles map is passed", () => {
+    const inner: BundleRow = {
+      id: "innerbun", name: "inner",
+      description: "", category_id: null, tags: [], is_favorite: false, color: null,
+      children: [], payload_hash: "0".repeat(64),
+      version: 1, created_at: "", updated_at: "",
+    };
+    const outer: BundleRow = {
+      id: "outerbun", name: "outer",
+      description: "", category_id: null, tags: [], is_favorite: false, color: null,
+      children: [{ id: "innerbun", type: "bundle" }],
+      payload_hash: "0".repeat(64),
+      version: 1, created_at: "", updated_at: "",
+    };
+    // Without bundles arg: inner gets flagged as missing module.
+    expect(validateBundle(outer, []).some((i) => i.severity === "error")).toBe(true);
+    // With bundles arg: inner resolves.
+    expect(validateBundle(outer, [], [inner])).toEqual([]);
   });
 
   it("flags missing child module as error", () => {

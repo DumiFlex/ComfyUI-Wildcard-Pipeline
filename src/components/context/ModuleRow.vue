@@ -20,6 +20,7 @@ const {
   toggleCollapsed, toggleEnabled, removeModule,
   toggleLockOnCard, toggleInternalOnCard,
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
+  pairingFor,
 } = ctx;
 </script>
 
@@ -80,6 +81,18 @@ const {
       <span v-if="KIND_TITLE[module.type] || module.type"
         class="wp-kind-chip" :class="`wp-kind-chip--${kindChipModifier(module.type)}`">
         {{ KIND_TITLE[module.type] ?? module.type }}
+      </span>
+      <span v-if="pairingFor(module._uid ?? module.id)"
+        class="wp-pair-badge"
+        :class="[
+          `wp-pair-badge--c${pairingFor(module._uid ?? module.id)!.colorIndex}`,
+          pairingFor(module._uid ?? module.id)!.isOrphan ? 'wp-pair-badge--orphan' : null,
+        ]"
+        :title="pairingFor(module._uid ?? module.id)!.isOrphan
+          ? `Constraint pair #${pairingFor(module._uid ?? module.id)!.number} — target instance missing downstream`
+          : `Constraint pair #${pairingFor(module._uid ?? module.id)!.number} — target ${pairingFor(module._uid ?? module.id)!.targetUuid}`">
+        <span v-if="pairingFor(module._uid ?? module.id)!.isOrphan" class="wp-pair-badge__warn">!</span>
+        #{{ pairingFor(module._uid ?? module.id)!.number }}
       </span>
       <span class="wp-module-name" :title="module.meta.name || '(unnamed)'">
         {{ module.meta.name || "(unnamed)" }}

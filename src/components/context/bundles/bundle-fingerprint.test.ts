@@ -47,7 +47,7 @@ function bundle(
 describe("computeBundleFingerprint", () => {
   it("empty bundle (end<start) returns sentinel '0'", () => {
     const b = bundle(2, 1);
-    expect(computeBundleFingerprint(b, [])).toBe("0");
+    expect(computeBundleFingerprint(b, [])).toBe("v2:0");
   });
 
   it("deterministic — same input → same fingerprint", () => {
@@ -122,7 +122,7 @@ describe("computeBundleFingerprint", () => {
     const b = bundle(0, 1);
     // Range claims 2 modules but only 1 exists.
     const fp = computeBundleFingerprint(b, [mod("u1", "h1", "B")]);
-    expect(fp).toMatch(/^[0-9a-f]{8}$/);
+    expect(fp).toMatch(/^v2:[0-9a-f]{8}$/);
   });
 
   it("inner-bundle leaves carry their inner uid in origin — outer fingerprint sees the chain", () => {
@@ -146,7 +146,7 @@ describe("computeBundleFingerprint", () => {
   it("fingerprint is 8 hex characters", () => {
     const b = bundle(0, 0);
     const fp = computeBundleFingerprint(b, [mod("u1", "h1")]);
-    expect(fp).toMatch(/^[0-9a-f]{8}$/);
+    expect(fp).toMatch(/^v2:[0-9a-f]{8}$/);
   });
 });
 

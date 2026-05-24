@@ -17,7 +17,7 @@ import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import DraftBanner from "../components/DraftBanner.vue";
-import Textarea from "../components/ui/Textarea.vue";
+import RichTextInput from "../components/RichTextInput.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -425,12 +425,13 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
               >{{ rowErrors[idx] }}</p>
             </td>
             <td>
-              <Textarea
+              <RichTextInput
                 v-model="v.value"
+                surface="fixed_values"
+                multiline
                 :rows="2"
-                auto-resize
                 placeholder="value"
-                aria-label="Variable value"
+                :aria-label="`Variable value for row ${idx}`"
                 :data-test="`fv-row-${idx}-value`"
               />
             </td>

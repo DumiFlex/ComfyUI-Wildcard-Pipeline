@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tokenizeRich, mirrorHtmlWithIdx } from "../../widgets/richTokenize";
+import { tokenizeRich, mirrorHtmlWithIdx, inlineTokenHtml } from "../../widgets/richTokenize";
 
 describe("tokenizeRich", () => {
   it("returns empty array for empty input", () => {
@@ -135,5 +135,102 @@ describe("mirrorHtmlWithIdx", () => {
   it("appends a trailing wp-rt-tail span", () => {
     const html = mirrorHtmlWithIdx(tokenizeRich("hello"));
     expect(html).toContain('class="wp-rt-tail"');
+  });
+});
+
+describe("inlineTokenHtml", () => {
+  it("returns empty string for empty input", () => {
+    expect(inlineTokenHtml("")).toBe("");
+  });
+
+  it("emits raw text (no wrapper) for a single plain-text token", () => {
+    // Keeps `.firstChild` a text node for caret-math callers that rely on
+    // the legacy single-text-node shape.
+    expect(inlineTokenHtml("hello world")).toBe("hello world");
+  });
+
+  it("wraps a brace block in a dp-brace sub-span with ZWSP edge pads", () => {
+    const html = inlineTokenHtml("{a|b|c}");
+    // ZWSPs flank the sub-span because nothing else in the atom provides
+    // a caret landing position — clicking past the closing `}` otherwise
+    // leaves the caret on the host span itself at element offset 1.
+    expect(html).toBe('&#x200B;<span class="wp-rt-dp-brace">{a|b|c}</span>&#x200B;');
+  });
+
+  it("wraps a multi-pick block in a dp-multi sub-span with ZWSP edge pads", () => {
+    const html = inlineTokenHtml("{2$$,$$a|b|c}");
+    expect(html).toBe('&#x200B;<span class="wp-rt-dp-multi">{2$$,$$a|b|c}</span>&#x200B;');
+  });
+
+  it("wraps escapes ($$, @@) in escape sub-spans (no inner pads next to text)", () => {
+    const html = inlineTokenHtml("$$ and @@");
+    expect(html).toContain('<span class="wp-rt-escape">$$</span>');
+    expect(html).toContain('<span class="wp-rt-escape">@@</span>');
+    // Text segments stay un-wrapped so caret math walks single text nodes.
+    expect(html).toContain(" and ");
+    // The escape next to plain text " and " doesn't get an inner ZWSP —
+    // adjacent text already provides the caret landing.
+    expect(html).toBe('&#x200B;<span class="wp-rt-escape">$$</span> and <span class="wp-rt-escape">@@</span>&#x200B;');
+  });
+
+  it("escapes HTML special characters in raw text", () => {
+    const html = inlineTokenHtml("<x>&\"'");
+    expect(html).toContain("&lt;x&gt;");
+    expect(html).toContain("&amp;");
+    expect(html).toContain("&quot;");
+    expect(html).toContain("&#39;");
+    expect(html).not.toContain("<x>");
+  });
+
+  it("renders collapsed kind as plain text (wildcard surface: vars literal)", () => {
+    const html = inlineTokenHtml("hello $person", "var");
+    // $person re-tokenises as a var token but should fall through to
+    // literal text on the wildcard surface — chip-style coloring would
+    // mislead users about whether $name expands.
+    expect(html).toBe("hello $person");
+    expect(html).not.toContain("wp-rt-var");
+  });
+
+  it("renders non-collapsed var as colored sub-span (combine surface)", () => {
+    const html = inlineTokenHtml("hello $person", "ref");
+    expect(html).toContain('<span class="wp-rt-var">$person</span>');
+  });
+
+  it("mixes plain text and brace blocks correctly (no inner ZWSP pads)", () => {
+    const html = inlineTokenHtml("foo {a|b} bar");
+    // Plain text on both sides of the brace block provides caret
+    // landing on its own — no ZWSP pads needed.
+    expect(html).toBe('foo <span class="wp-rt-dp-brace">{a|b}</span> bar');
+  });
+
+  it("preserves text content sum across all sub-spans (caret invariant)", () => {
+    // Sum of textContent across wrapper + plain segments must equal the
+    // input after ZWSP edge pads are stripped — `readHostAsText` removes
+    // ZWSPs before they reach `modelValue` so the round-trip stays
+    // lossless. Caret math walks text-node descendants of the host span;
+    // any divergence here would mis-align selection-to-raw mapping.
+    const inputs = [
+      "{a|b|c}",
+      "{2$$,$$a|b|c}",
+      "$$ literal",
+      "@@ at",
+      "foo {x|y} bar",
+      "hello",
+      "",
+    ];
+    for (const text of inputs) {
+      const html = inlineTokenHtml(text);
+      // Naive textContent extraction — strip HTML tags, decode entities,
+      // then drop ZWSPs (browser strips them via readHostAsText path).
+      const stripped = html
+        .replace(/<[^>]+>/g, "")
+        .replace(/&#x200B;/g, "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+      expect(stripped).toBe(text);
+    }
   });
 });

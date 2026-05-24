@@ -3,7 +3,7 @@ import { computed } from "vue";
 import Button from "./ui/Button.vue";
 import Toggle from "./ui/Toggle.vue";
 import Icon from "./ui/Icon.vue";
-import HsvPicker from "./HsvPicker.vue";
+import HsvPicker from "../../components/shared/HsvPicker.vue";
 import {
   ACCENT_OPTIONS,
   DENSITY_OPTIONS,

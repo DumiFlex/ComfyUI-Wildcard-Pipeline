@@ -334,3 +334,59 @@
 .wp-kind-chip--derivation { background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent); color: var(--wp-kind-derivation); }
 .wp-kind-chip--constraint { background: color-mix(in oklab, var(--wp-kind-constraint) 22%, transparent); color: var(--wp-kind-constraint); }
 .wp-kind-chip--injector   { background: color-mix(in oklab, var(--wp-kind-injector)   22%, transparent); color: var(--wp-kind-injector);   }
+
+/* Pairing badge — appears when multiple constraints share a target
+ * wildcard. Each constraint module and its claimed downstream target
+ * instance get a matching `#N` pill in the per-target color (palette
+ * via djb2 hash of target uuid → --wp-var-1..8). Solo cases get no
+ * badge — only multi-constraint-per-target shows them.
+ *
+ * See `src/extension/constraint-pairs.ts` for the data layer + the
+ * 2026-05-24 first-instance design doc for the targeting semantic. */
+.wp-pair-badge {
+  font-family: var(--wp-font-sans, sans-serif);
+  font-weight: 700;
+  font-size: var(--wp-chip-font);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  padding: var(--wp-chip-pad);
+  border-radius: 2px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  /* Dark text on pastel palette colors — keeps contrast across all
+   * eight buckets without per-bucket overrides. */
+  color: #1a1a1a;
+}
+.wp-pair-badge--c1 { background: var(--wp-var-1); }
+.wp-pair-badge--c2 { background: var(--wp-var-2); }
+.wp-pair-badge--c3 { background: var(--wp-var-3); }
+.wp-pair-badge--c4 { background: var(--wp-var-4); }
+.wp-pair-badge--c5 { background: var(--wp-var-5); }
+.wp-pair-badge--c6 { background: var(--wp-var-6); }
+.wp-pair-badge--c7 { background: var(--wp-var-7); }
+.wp-pair-badge--c8 { background: var(--wp-var-8); }
+/* Orphan variant — constraint has no downstream target instance.
+ * Strip fill, use the colored ring + warn glyph so the broken pair is
+ * obvious without losing the per-target color cue. */
+.wp-pair-badge--orphan {
+  background: transparent;
+  border: 1px dashed currentColor;
+  /* currentColor inherits from the .wp-pair-badge--cN paint above —
+   * but that rule sets `color: #1a1a1a` on the base, overriding. Force
+   * the per-bucket color back on for orphans via a stronger selector. */
+}
+.wp-pair-badge--orphan.wp-pair-badge--c1 { color: var(--wp-var-1); background: transparent; }
+.wp-pair-badge--orphan.wp-pair-badge--c2 { color: var(--wp-var-2); background: transparent; }
+.wp-pair-badge--orphan.wp-pair-badge--c3 { color: var(--wp-var-3); background: transparent; }
+.wp-pair-badge--orphan.wp-pair-badge--c4 { color: var(--wp-var-4); background: transparent; }
+.wp-pair-badge--orphan.wp-pair-badge--c5 { color: var(--wp-var-5); background: transparent; }
+.wp-pair-badge--orphan.wp-pair-badge--c6 { color: var(--wp-var-6); background: transparent; }
+.wp-pair-badge--orphan.wp-pair-badge--c7 { color: var(--wp-var-7); background: transparent; }
+.wp-pair-badge--orphan.wp-pair-badge--c8 { color: var(--wp-var-8); background: transparent; }
+.wp-pair-badge__warn {
+  font-weight: 900;
+  font-size: 1.1em;
+  line-height: 1;
+}

@@ -248,9 +248,21 @@ export function applyConstraint(
       const cell = lookupCell(sSub, tSub);
       if (cell) { mode = cell.mode; factor = cell.factor; }
     }
-    const ex = (cn.exceptions ?? []).find(
-      (e) => e.source === sourceValue && e.target === opt.value,
-    );
+    // Exception lookup — engine accepts BOTH the canonical `source` /
+    // `target` fields and the legacy `source_value` / `target_value`
+    // shape (see engine/modules/_constraints.py + constraint_handler.py).
+    // Mirror the same fallback here so the SPA test runner doesn't
+    // silently miss exceptions stored under the legacy keys, which
+    // would make it look like the exception isn't taking priority when
+    // it actually is — at runtime.
+    const ex = (cn.exceptions ?? []).find((e) => {
+      const eRec = e as unknown as Record<string, unknown>;
+      const eSrc = typeof eRec.source === "string" ? eRec.source
+        : (typeof eRec.source_value === "string" ? eRec.source_value : "");
+      const eTgt = typeof eRec.target === "string" ? eRec.target
+        : (typeof eRec.target_value === "string" ? eRec.target_value : "");
+      return eSrc === sourceValue && eTgt === opt.value;
+    });
     if (ex) { mode = ex.mode; factor = ex.factor; }
     let w = Number(opt.weight) || 0;
     if (mode === "exclude") w = 0;
@@ -299,6 +311,22 @@ function evalCondition(
   if (cond.op === "matches") {
     try { return new RegExp(cond.value, "i").test(lhs); } catch { return false; }
   }
+  // Presence ops form a three-tier semantic:
+  //   exists      — key in ctx (any value, including empty)
+  //   is_empty    — key in ctx AND value === "" (null wildcard option)
+  //   is_set / is_not_empty
+  //               — key in ctx AND value !== ""
+  // not_exists / is_unset are the negation tier (key absent).
+  // The UI's segmented switch under `exists` composes the right op
+  // from a (base, refinement) pair; the engine just evaluates whatever
+  // op got saved.
+  if (cond.op === "exists")       return cond.var in ctx;
+  if (cond.op === "not_exists")   return !(cond.var in ctx);
+  if (cond.op === "is_empty")     return (cond.var in ctx) && (ctx[cond.var] ?? "") === "";
+  if (cond.op === "is_set" || cond.op === "is_not_empty") {
+    return (cond.var in ctx) && (ctx[cond.var] ?? "") !== "";
+  }
+  if (cond.op === "is_unset")     return !(cond.var in ctx) || (ctx[cond.var] ?? "") === "";
   return false;
 }
 
