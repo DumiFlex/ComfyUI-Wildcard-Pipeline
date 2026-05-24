@@ -60,6 +60,29 @@ function semverCompare(a: string, b: string): number {
   return aPre < bPre ? -1 : 1;
 }
 
+/** Update severity ranked by which semver segment changed. Drives the
+ *  topbar pill tone — major = amber warn, minor/patch = purple accent. */
+export type UpdateSeverity = "major" | "minor" | "patch";
+
+/**
+ * Classify the gap between two semver versions. Reads which position
+ * differs first — major bump beats minor beats patch. Prerelease tags
+ * collapse to patch (a `1.7.0-rc.2` over `1.7.0-rc.1` is not breaking).
+ *
+ * Returns null when versions are equal or `latest` isn't strictly newer
+ * (callers gate on `hasUpdate` first, so this is defensive).
+ */
+function classifyBump(current: string, latest: string): UpdateSeverity | null {
+  if (semverCompare(latest, current) <= 0) return null;
+  const [curBase] = current.split("-");
+  const [latBase] = latest.split("-");
+  const cur = curBase.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const lat = latBase.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  if ((lat[0] ?? 0) > (cur[0] ?? 0)) return "major";
+  if ((lat[1] ?? 0) > (cur[1] ?? 0)) return "minor";
+  return "patch";
+}
+
 /**
  * Parse the cached blob if it's still fresh. Returns null on cache
  * miss, parse failure, or TTL expiry - caller refetches on null.
@@ -127,14 +150,18 @@ export function useReleaseCheck(): {
   current: string;
   latestVersion: ReturnType<typeof ref<string | null>>;
   hasUpdate: ReturnType<typeof ref<boolean>>;
+  severity: ReturnType<typeof ref<UpdateSeverity | null>>;
 } {
   const current = __APP_VERSION__;
   const latestVersion = ref<string | null>(null);
   const hasUpdate = ref<boolean>(false);
+  const severity = ref<UpdateSeverity | null>(null);
 
   function applyLatest(v: string | null): void {
     latestVersion.value = v;
-    hasUpdate.value = v !== null && semverCompare(v, current) > 0;
+    const newer = v !== null && semverCompare(v, current) > 0;
+    hasUpdate.value = newer;
+    severity.value = newer && v ? classifyBump(current, v) : null;
   }
 
   onMounted(async () => {
@@ -150,5 +177,5 @@ export function useReleaseCheck(): {
     }
   });
 
-  return { current, latestVersion, hasUpdate };
+  return { current, latestVersion, hasUpdate, severity };
 }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 
-import { useReleaseCheck } from "../../composables/useReleaseCheck";
+import { useReleaseCheck, type UpdateSeverity } from "../../composables/useReleaseCheck";
 
 // __APP_VERSION__ is injected by vite at build time; vitest doesn't
 // apply the define plugin, so we wire it onto globalThis here.
@@ -15,10 +15,15 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+type CheckResult = ReturnType<typeof useReleaseCheck>;
+let lastResult: CheckResult | null = null;
+
 function host() {
+  lastResult = null;
   return defineComponent({
     setup() {
       const r = useReleaseCheck();
+      lastResult = r;
       return () => h("span", { "data-test": "version" }, r.current);
     },
   });
@@ -88,6 +93,43 @@ describe("useReleaseCheck", () => {
     await Promise.resolve();
     // No exception bubbled; no cache written.
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    wrap.unmount();
+  });
+
+  it.each<[string, UpdateSeverity]>([
+    ["2.0.0", "major"],
+    ["1.8.0", "minor"],
+    ["1.7.1", "patch"],
+  ])("classifies %s over 1.7.0 as %s", async (latest, expectedSeverity) => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ tag_name: `v${latest}` }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await nextTick();
+    await Promise.resolve();
+    await Promise.resolve();
+    await nextTick();
+    expect(lastResult).not.toBeNull();
+    expect(lastResult!.hasUpdate.value).toBe(true);
+    expect(lastResult!.severity.value).toBe(expectedSeverity);
+    wrap.unmount();
+  });
+
+  it("severity is null when no update available", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ tag_name: "v1.6.0" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const wrap = mount(host());
+    await nextTick();
+    await Promise.resolve();
+    await Promise.resolve();
+    await nextTick();
+    expect(lastResult!.hasUpdate.value).toBe(false);
+    expect(lastResult!.severity.value).toBeNull();
     wrap.unmount();
   });
 });

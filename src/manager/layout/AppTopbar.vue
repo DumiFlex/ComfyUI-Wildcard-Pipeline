@@ -15,14 +15,28 @@ const tweaks = useTweaksStore();
 // Version is injected at build time from package.json via vite's
 // `define` config (see vite.config.mts). The release check composable
 // hits GitHub once per 24h (cached in localStorage) and surfaces a
-// `hasUpdate` flag if the latest published tag is newer.
-const { current: version, latestVersion, hasUpdate } = useReleaseCheck();
-const updateTooltip = computed(() =>
+// `hasUpdate` flag + severity classification (major/minor/patch).
+const { current: version, latestVersion, hasUpdate, severity } = useReleaseCheck();
+
+// Pill tone follows severity: major bump → amber warn (read changelog
+// first), minor/patch → accent purple (safe to upgrade).
+const updatePillClass = computed(() =>
+  severity.value === "major" ? "wp-topbar__update-pill--warn" : "wp-topbar__update-pill--accent",
+);
+const updateTooltip = computed(() => {
+  if (!hasUpdate.value) return "";
+  const v = latestVersion.value;
+  if (severity.value === "major") return `v${v} — breaking changes, review release notes`;
+  if (severity.value === "minor") return `v${v} — new features available`;
+  return `v${v} — patch update available`;
+});
+const versionTooltip = computed(() =>
   hasUpdate.value
-    ? `Update available: v${latestVersion.value} (click to view on GitHub)`
-    : "",
+    ? `v${version} — update v${latestVersion.value} available on GitHub`
+    : `v${version} — open repository on GitHub`,
 );
 const releasesUrl = `${GITHUB_REPO}/releases/latest`;
+const repoUrl = GITHUB_REPO;
 const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
 
 /** Theme button icon — mirrors prototype (current state, not next). */
@@ -76,17 +90,31 @@ function openPalette(): void {
     <RouterLink to="/dashboard" class="wp-topbar__brand" data-test="topbar-brand">
       <img :src="logoSrc" alt="" />
       <span class="wp-topbar__brand-text">Wildcard Pipeline</span>
-      <span class="wp-topbar__version">v{{ version }}</span>
+      <!-- Version chip + optional update dot. Anchor (NOT a nested
+           RouterLink) so clicking it opens GitHub in a new tab instead
+           of routing to /dashboard. `click.stop` keeps the outer
+           RouterLink from firing first. -->
       <a
-        v-if="hasUpdate"
-        class="wp-topbar__update-dot"
+        class="wp-topbar__version"
+        :href="repoUrl"
+        :title="versionTooltip"
+        target="_blank"
+        rel="noopener"
+        data-test="topbar-version"
+        @click.stop
+      >v{{ version }}</a>
+      <a
+        v-if="hasUpdate && latestVersion"
+        class="wp-topbar__version wp-topbar__update-pill"
+        :class="updatePillClass"
         :href="releasesUrl"
         :title="updateTooltip"
         target="_blank"
         rel="noopener"
+        :data-severity="severity ?? undefined"
         data-test="topbar-update-indicator"
         @click.stop
-      ><span class="wp-sr-only">{{ updateTooltip }}</span></a>
+      ><span class="wp-topbar__update-arrow" aria-hidden="true">↑</span>v{{ latestVersion }}</a>
     </RouterLink>
 
     <div class="wp-topbar__spacer" />
@@ -199,25 +227,52 @@ function openPalette(): void {
 }
 .wp-topbar__palette-label { color: inherit; }
 
-/* Update-available accent dot next to the version. Renders only when
- * the release check finds a newer published tag on GitHub. Clicking
- * the dot opens the latest-release page in a new tab; click.stop on
- * the anchor keeps the dashboard nav (the outer RouterLink) from
- * firing first. */
-.wp-topbar__update-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--wp-accent, #8b5cf6);
-  margin-left: 6px;
-  position: relative;
-  top: -6px;
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--wp-accent, #8b5cf6) 28%, transparent);
-  transition: transform 120ms ease;
+/* Version chip is now an `<a>` so it can link to GitHub; kill the
+ * default anchor styling so it keeps the chip look from tokens.css. */
+a.wp-topbar__version {
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
-.wp-topbar__update-dot:hover {
-  transform: scale(1.25);
+a.wp-topbar__version:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-border-strong, var(--wp-text-dim));
+  background: color-mix(in oklab, var(--wp-bg-3) 60%, transparent);
+}
+
+/* Update-available pill next to the version chip. Renders only when
+ * the release check finds a newer published tag on GitHub. Matches
+ * the .wp-topbar__version chrome (same font/size/padding/radius) and
+ * adds a tonal tint based on severity:
+ *   - major bump → amber warn (breaking, review changelog first)
+ *   - minor/patch → accent purple (safe to upgrade)
+ * Clicking opens releases/latest in a new tab; click.stop on the
+ * anchor keeps the dashboard nav (outer RouterLink) from firing first. */
+a.wp-topbar__update-pill {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+a.wp-topbar__update-pill:hover {
+  filter: brightness(1.15);
+}
+.wp-topbar__update-arrow {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.wp-topbar__update-pill--accent {
+  color: var(--wp-accent, #8b5cf6);
+  background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 18%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent, #8b5cf6) 40%, transparent);
+}
+.wp-topbar__update-pill--warn {
+  color: var(--wp-warn, #f59e0b);
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
 }
 .wp-topbar__palette-hint .wp-kbd {
   /* Inherit the chip's font-size so it doesn't tower over the label. */
