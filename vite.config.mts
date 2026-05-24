@@ -2,7 +2,17 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 import { resolve } from "node:path";
-import { copyFileSync, existsSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+
+// Inject package.json `version` into the bundle as `__APP_VERSION__`.
+// AppTopbar.vue + any other surface that wants the current app version
+// reads this constant instead of duplicating the string. Source of
+// truth: package.json. Semantic-release writes back to that field on
+// every release, so the SPA's displayed version follows automatically.
+const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")) as {
+  version: string;
+};
+const APP_VERSION = pkg.version;
 
 // Two build targets controlled by --mode flag:
 //   pnpm build:extension → js/main.js  (ComfyUI web extension, critical-path bundle)
@@ -21,6 +31,7 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
     },
     // PostCSS config moved to `config/postcss.config.js` — Vite no
     // longer auto-discovers it from the project root, so point at it

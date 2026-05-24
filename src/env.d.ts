@@ -18,3 +18,10 @@ declare module "*.css";
 // by the caller (see extension/topbar.ts).
 declare module "/scripts/ui/components/button.js";
 declare module "/scripts/ui/components/buttonGroup.js";
+
+// Build-time constants. `vite.config.mts` injects these via
+// `define: { __APP_VERSION__: ... }` so AppTopbar.vue + the release
+// check composable can read the current package.json version without
+// importing the JSON file (which would pull the whole manifest into
+// the bundle).
+declare const __APP_VERSION__: string;

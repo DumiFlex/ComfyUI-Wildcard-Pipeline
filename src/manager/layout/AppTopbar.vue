@@ -2,15 +2,27 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
+import { GITHUB_REPO } from "../config/links";
+import { useBrowserHistory } from "../composables/useBrowserHistory";
+import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useUiStore } from "../stores/uiStore";
 import { useTweaksStore } from "../stores/tweaksStore";
-import { useBrowserHistory } from "../composables/useBrowserHistory";
 import { isMac } from "../utils/platform";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
 
-const version = "1.4.0-dev";
+// Version is injected at build time from package.json via vite's
+// `define` config (see vite.config.mts). The release check composable
+// hits GitHub once per 24h (cached in localStorage) and surfaces a
+// `hasUpdate` flag if the latest published tag is newer.
+const { current: version, latestVersion, hasUpdate } = useReleaseCheck();
+const updateTooltip = computed(() =>
+  hasUpdate.value
+    ? `Update available: v${latestVersion.value} (click to view on GitHub)`
+    : "",
+);
+const releasesUrl = `${GITHUB_REPO}/releases/latest`;
 const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
 
 /** Theme button icon — mirrors prototype (current state, not next). */
@@ -65,6 +77,16 @@ function openPalette(): void {
       <img :src="logoSrc" alt="" />
       <span class="wp-topbar__brand-text">Wildcard Pipeline</span>
       <span class="wp-topbar__version">v{{ version }}</span>
+      <a
+        v-if="hasUpdate"
+        class="wp-topbar__update-dot"
+        :href="releasesUrl"
+        :title="updateTooltip"
+        target="_blank"
+        rel="noopener"
+        data-test="topbar-update-indicator"
+        @click.stop
+      ><span class="wp-sr-only">{{ updateTooltip }}</span></a>
     </RouterLink>
 
     <div class="wp-topbar__spacer" />
@@ -176,6 +198,27 @@ function openPalette(): void {
   outline-offset: 2px;
 }
 .wp-topbar__palette-label { color: inherit; }
+
+/* Update-available accent dot next to the version. Renders only when
+ * the release check finds a newer published tag on GitHub. Clicking
+ * the dot opens the latest-release page in a new tab; click.stop on
+ * the anchor keeps the dashboard nav (the outer RouterLink) from
+ * firing first. */
+.wp-topbar__update-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--wp-accent, #8b5cf6);
+  margin-left: 6px;
+  position: relative;
+  top: -6px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--wp-accent, #8b5cf6) 28%, transparent);
+  transition: transform 120ms ease;
+}
+.wp-topbar__update-dot:hover {
+  transform: scale(1.25);
+}
 .wp-topbar__palette-hint .wp-kbd {
   /* Inherit the chip's font-size so it doesn't tower over the label. */
   padding: 1px 6px;

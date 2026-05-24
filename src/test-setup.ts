@@ -1,6 +1,13 @@
 // Stub the ComfyUI app module so widgets can import without a live ComfyUI.
 import { vi } from "vitest";
 
+// Vite injects `__APP_VERSION__` at build time via the `define` config
+// (see vite.config.mts). Vitest doesn't apply that define plugin, so
+// any source file that reads the constant blows up with a
+// ReferenceError in jsdom. Stub a sensible default - individual tests
+// that need a specific version override this on globalThis.
+(globalThis as unknown as { __APP_VERSION__?: string }).__APP_VERSION__ ??= "0.0.0-test";
+
 vi.mock("#comfyui/app", () => ({
   app: {
     graph: { _nodes: [], links: {}, getNodeById: () => null },
