@@ -53,7 +53,7 @@ def _fetch_payload(conn, mid):
 
 def test_migration_backfills_option_ids(conn):
     cur = conn.cursor()
-    cur.execute("DELETE FROM migrations WHERE version >= 10;")
+    cur.execute("DELETE FROM migrations WHERE version = 10;")
     _raw_insert_wildcard(conn, "aaaaaaaa", "a", [
         {"value": "buzz", "weight": 1, "sub_category": None, "probability": 1.0}
     ])
@@ -67,7 +67,7 @@ def test_migration_backfills_option_ids(conn):
 
 def test_migration_resolves_exception_strings_to_ids(conn):
     cur = conn.cursor()
-    cur.execute("DELETE FROM migrations WHERE version >= 10;")
+    cur.execute("DELETE FROM migrations WHERE version = 10;")
     _raw_insert_wildcard(conn, "aaaaaaaa", "src", [
         {"value": "buzz", "weight": 1, "sub_category": None, "probability": 1.0}
     ])
@@ -98,7 +98,7 @@ def test_migration_resolves_exception_strings_to_ids(conn):
 
 def test_migration_routes_unmatched_exception_to_broken_list(conn):
     cur = conn.cursor()
-    cur.execute("DELETE FROM migrations WHERE version >= 10;")
+    cur.execute("DELETE FROM migrations WHERE version = 10;")
     _raw_insert_wildcard(conn, "aaaaaaaa", "src", [
         {"value": "buzz", "weight": 1, "sub_category": None, "probability": 1.0}
     ])
@@ -119,7 +119,7 @@ def test_migration_routes_unmatched_exception_to_broken_list(conn):
 
 def test_migration_routes_ambiguous_match_to_broken_list(conn):
     cur = conn.cursor()
-    cur.execute("DELETE FROM migrations WHERE version >= 10;")
+    cur.execute("DELETE FROM migrations WHERE version = 10;")
     _raw_insert_wildcard(conn, "aaaaaaaa", "src", [
         {"value": "dup", "weight": 1, "sub_category": None, "probability": 1.0},
         {"value": "dup", "weight": 1, "sub_category": None, "probability": 1.0},
@@ -141,7 +141,7 @@ def test_migration_routes_ambiguous_match_to_broken_list(conn):
 def test_migration_preserves_already_migrated_exceptions(conn):
     """If an exception already has source_id/target_id, leave it alone."""
     cur = conn.cursor()
-    cur.execute("DELETE FROM migrations WHERE version >= 10;")
+    cur.execute("DELETE FROM migrations WHERE version = 10;")
     _raw_insert_wildcard(conn, "aaaaaaaa", "src", [
         {"id": "opt_aaaa", "value": "buzz", "weight": 1, "sub_category": None, "probability": 1.0}
     ])

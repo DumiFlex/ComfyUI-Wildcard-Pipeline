@@ -14,26 +14,17 @@ export type Intensity = "gentle" | "balanced" | "aggressive";
 export type Mode = "tags" | "text";
 export type BlocklistKind = "list" | "regex";
 
-/** Persisted on `node.properties.wp_cleaner_config` (widget JSON). */
+/** Persisted on the node's widget JSON. */
 export interface CleanerNodeConfig {
   mode: Mode;
   intensity: Intensity;
   /** Sparse — only rules diverging from the intensity default. */
   rules_override: Partial<Record<RuleId, boolean>>;
   blocklist: { kind: BlocklistKind; entries: string[] };
-  preset_ref?: { id: string; name: string; payload_hash: string };
 }
 
 export type RuleStats = Record<string, unknown>;
 export type RunReport = Partial<Record<RuleId, RuleStats>>;
-
-/** Slim preset descriptor passed into the CleanerWidget for the
- *  preset picker. Full row lives in the SPA store + DB. */
-export interface PresetOption {
-  id: string;
-  name: string;
-  is_builtin: boolean;
-}
 
 export function emptyCleanerConfig(): CleanerNodeConfig {
   return {

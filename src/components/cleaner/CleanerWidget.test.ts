@@ -26,15 +26,9 @@ describe("CleanerWidget", () => {
     expect(w.findAll('[data-test^="cleaner-rule-"]:not([data-test$="-stat"])')).toHaveLength(9);
   });
 
-  it("save button hidden in pristine state", () => {
-    const w = mount(CleanerWidget, { props: makeProps() });
-    expect(w.find('[data-test="cleaner-save"]').exists()).toBe(false);
-  });
-
-  it("CUSTOM badge + save button visible when modified", () => {
+  it("CUSTOM badge visible when modified", () => {
     const w = mount(CleanerWidget, { props: makeProps({ rules_override: { fuzzy_dedupe: true } }) });
     expect(w.find('[data-test="cleaner-custom-badge"]').exists()).toBe(true);
-    expect(w.find('[data-test="cleaner-save"]').exists()).toBe(true);
   });
 
   it("clicking an intensity emits update:modelValue with new intensity", async () => {
@@ -88,11 +82,4 @@ describe("CleanerWidget", () => {
     expect(w.emitted("open-blocklist")).toBeTruthy();
   });
 
-  it("clicking save emits open-save", async () => {
-    const w = mount(CleanerWidget, {
-      props: makeProps({ rules_override: { fuzzy_dedupe: true } }),
-    });
-    await w.find('[data-test="cleaner-save"]').trigger("click");
-    expect(w.emitted("open-save")).toBeTruthy();
-  });
 });
