@@ -97,7 +97,7 @@ export function create(node: CleanerHostNode, inputName: string) {
     // padding). ResizeObserver grows the host beyond this when CLIP bar
     // is rendered or fonts measure taller; the floor only prevents the
     // initial paint from clipping while the observer attaches.
-    minHeight: 380,
+    minHeight: 350,
     minWidth: 320,
     autoHeight: true,
     onValueRestored: (raw: string) => {
