@@ -9,8 +9,6 @@ function makeProps(overrides: Partial<CleanerNodeConfig> = {}, extra: object = {
     lastRunReport: null,
     wordCount: 0,
     charCount: 0,
-    clipTokenCount: null,
-    clipTokenLimit: 77,
     ...extra,
   };
 }
@@ -64,18 +62,6 @@ describe("CleanerWidget", () => {
     });
     expect(w.find('[data-test="cleaner-rule-whitespace-stat"]').text()).toContain("3");
     expect(w.find('[data-test="cleaner-rule-dedupe_exact-stat"]').text()).toContain("1");
-  });
-
-  it("renders CLIP token bar when clipTokenCount is provided", () => {
-    const w = mount(CleanerWidget, {
-      props: makeProps({}, { clipTokenCount: 58 }),
-    });
-    expect(w.find('[data-test="cleaner-clip-bar"]').exists()).toBe(true);
-  });
-
-  it("hides CLIP token bar when clipTokenCount is null", () => {
-    const w = mount(CleanerWidget, { props: makeProps() });
-    expect(w.find('[data-test="cleaner-clip-bar"]').exists()).toBe(false);
   });
 
   it("blocklist button shows entry count when populated", () => {

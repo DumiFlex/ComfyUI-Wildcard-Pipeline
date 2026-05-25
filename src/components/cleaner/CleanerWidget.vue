@@ -24,8 +24,6 @@ const props = withDefaults(defineProps<{
   lastRunReport: RunReport | null;
   wordCount: number;
   charCount: number;
-  clipTokenCount: number | null;
-  clipTokenLimit: number;
   /** Litegraph mode — 0=ALWAYS, 2=NEVER (mute), 4=BYPASS. Drives the
    *  dim overlay so muted/bypassed state matches litegraph's native
    *  title/border dim. */
@@ -51,11 +49,6 @@ const INTENSITIES: Intensity[] = ["gentle", "balanced", "aggressive"];
 
 const effective = computed(() => new Set(computeEffectiveRules(props.modelValue)));
 const pristine = computed(() => isPristine(props.modelValue));
-
-const clipFillPct = computed(() => {
-  if (props.clipTokenCount === null) return 0;
-  return Math.min(100, (props.clipTokenCount / props.clipTokenLimit) * 100);
-});
 
 /** Drop any override entry whose value matches the new intensity's
  *  default. Without this pruning, switching balanced → aggressive
@@ -152,18 +145,6 @@ function isOverridden(rid: RuleId): boolean {
       </div>
       <span class="wp-cleaner__counter">{{ wordCount }}w · {{ charCount }}c</span>
     </header>
-
-    <div v-if="clipTokenCount !== null" class="wp-cleaner__clip" data-test="cleaner-clip-bar">
-      <div class="wp-cleaner__clip-row">
-        <span class="wp-cleaner__section-label">CLIP TOKENS</span>
-        <span class="wp-cleaner__clip-count">
-          <b>{{ clipTokenCount }}</b> / {{ clipTokenLimit }}
-        </span>
-      </div>
-      <div class="wp-cleaner__clip-track">
-        <div class="wp-cleaner__clip-fill" :style="{ width: clipFillPct + '%' }" />
-      </div>
-    </div>
 
     <section class="wp-cleaner__section">
       <div class="wp-cleaner__section-head">
@@ -269,30 +250,6 @@ function isOverridden(rid: RuleId): boolean {
   font-size: 11px;
   color: var(--wp-text-dim, var(--wp-text3));
   font-variant-numeric: tabular-nums;
-}
-
-.wp-cleaner__clip {
-  padding: 8px 12px;
-  background: var(--wp-bg2, var(--wp-bg-2));
-  border-bottom: 1px solid var(--wp-border);
-}
-.wp-cleaner__clip-row { display: flex; justify-content: space-between; align-items: baseline; }
-.wp-cleaner__clip-count {
-  font-size: 11px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font-variant-numeric: tabular-nums;
-}
-.wp-cleaner__clip-count b { color: var(--wp-text); font-weight: 600; }
-.wp-cleaner__clip-track {
-  height: 4px;
-  background: var(--wp-bg);
-  border-radius: 2px;
-  margin-top: 6px;
-  overflow: hidden;
-}
-.wp-cleaner__clip-fill {
-  height: 100%; background: var(--wp-accent); border-radius: 2px;
-  transition: width 120ms ease;
 }
 
 .wp-cleaner__section { padding: 8px 12px; }

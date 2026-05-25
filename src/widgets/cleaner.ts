@@ -47,7 +47,6 @@ export function create(node: CleanerHostNode, inputName: string) {
   const lastRunReport = ref<RunReport | null>(null);
   const wordCount = ref(0);
   const charCount = ref(0);
-  const clipTokenCount = ref<number | null>(null);
   const blocklistOpen = ref(false);
 
   const wrapper: Component = {
@@ -74,8 +73,6 @@ export function create(node: CleanerHostNode, inputName: string) {
           lastRunReport: lastRunReport.value,
           wordCount: wordCount.value,
           charCount: charCount.value,
-          clipTokenCount: clipTokenCount.value,
-          clipTokenLimit: 77,
           nodeMode: nodeMode.value,
           "onUpdate:modelValue": onUpdate,
           "onOpen-blocklist": () => { blocklistOpen.value = true; },
@@ -93,11 +90,11 @@ export function create(node: CleanerHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     // Initial floor sized to fit the typical content footprint (header +
-    // intensity segment + rule rows + blocklist button). ResizeObserver
+    // intensity segment + 5 rule rows + blocklist button). ResizeObserver
     // grows the host above this when content asks for more, but
     // autoHeight stays OFF so the user's manual drag-taller persists
     // across workflow runs (default delta-check policy).
-    minHeight: 350,
+    minHeight: 260,
     minWidth: 320,
     onValueRestored: (raw: string) => {
       const restored = parseWidgetJsonWithRecovery<CleanerNodeConfig>(raw, emptyCleanerConfig());
