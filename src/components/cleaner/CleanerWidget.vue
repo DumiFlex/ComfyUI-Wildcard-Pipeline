@@ -83,12 +83,26 @@ function setIntensity(intensity: Intensity): void {
 }
 function setMode(mode: Mode): void { patch({ mode }); }
 
+/** Baseline = what the effective state would be if the override entry
+ *  for this rule didn't exist. Includes blocklist auto-enable (entries
+ *  non-empty). Used by toggleRule + isOverridden so the pip + click
+ *  semantics stay honest for rules with multiple "default" sources. */
+function ruleBaseline(rid: RuleId): boolean {
+  if (INTENSITY_TO_RULES[props.modelValue.intensity].includes(rid)) return true;
+  if (rid === "blocklist" && props.modelValue.blocklist.entries.length > 0) {
+    return true;
+  }
+  return false;
+}
+
 function toggleRule(rid: RuleId): void {
   const currentlyOn = effective.value.has(rid);
   const overrides = { ...props.modelValue.rules_override };
-  const intensityDefault = INTENSITY_TO_RULES[props.modelValue.intensity].includes(rid);
+  const baseline = ruleBaseline(rid);
   const nextOn = !currentlyOn;
-  if (nextOn === intensityDefault) {
+  // If the desired state matches baseline, drop the override (no-op
+  // entry would pollute pristine). Otherwise persist explicit override.
+  if (nextOn === baseline) {
     delete overrides[rid];
   } else {
     overrides[rid] = nextOn;
@@ -112,8 +126,7 @@ function isOverridden(rid: RuleId): boolean {
   if (!(rid in overrides)) return false;
   const overrideValue = overrides[rid];
   if (overrideValue === undefined) return false;
-  const intensityDefault = INTENSITY_TO_RULES[props.modelValue.intensity].includes(rid);
-  return overrideValue !== intensityDefault;
+  return overrideValue !== ruleBaseline(rid);
 }
 </script>
 
