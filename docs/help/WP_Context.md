@@ -1,41 +1,46 @@
 # WP Context
 
-Hold a list of named values you can use later in your prompt. Each value gets a name (like `style` or `subject`) and the value you want it to be (like `watercolor` or `a cat`). Then a **WP Prompt Assembler** can plug those values into your prompt wherever you write `$style` or `$subject`.
+The pipeline's module runner. Holds an ordered list of **modules** (wildcards, fixed values, combines, derivations, constraints) plus optional **bundles** that group related modules. Each queue, the engine executes every enabled module in order, building up a context of `$variable` bindings that downstream nodes consume.
 
-## Adding values
+## Inputs
 
-A **module** is one small group of values. Click the big purple **Add your first module** button, or **+ add module** if you already have some.
-
-Each module appears as a small card. Right-click the card and pick **Edit** to:
-
-- Give it a name (just a label so you remember what's inside, like "Character details")
-- Add as many `name = value` lines as you need
-- Paste a bunch of lines at once if you have them ready
-
-Press **Enter** on the value field to add another row quickly. **Ctrl+Enter** saves and closes.
-
-## What the icons on a card mean
-
-- **☰** Drag handle — drag a card to reorder, or drag onto another Context node to move it there
-- **▾ / ▸** Show or hide the values preview
-- **Toggle (checkbox)** — turn a module off without deleting it. Useful for trying variations.
-- **✕** Remove the module. Don't worry about misclicks — an **Undo** button appears for a few seconds.
-
-## Stacking multiple Contexts
-
-Connect another **WP Context** node into the **upstream** input. The upstream Context's values flow through. If both define the same name, this Context wins (it's the closer one to your prompt).
-
-This lets you build a library: "character" Context → "scene" Context → "style" Context → Prompt Assembler.
-
-## Conflict dots
-
-A card may show a small colored dot:
-
-- 🔵 **Blue (info)** — You're overriding something an upstream Context already provides. Usually that's exactly what you want.
-- 🟡 **Amber (warning)** — Two of your modules in this Context use the same name. One quietly overwrites the other; check that's intentional.
-
-Hover the dot to see exactly which variable.
+- **upstream** *(optional)* — chain another WP Context to inherit its bindings. Same-name bindings in this node override the upstream.
+- **seed** — drives every random pick this run (wildcards, weighted lookups). `control_after_generate` rotates per queue. Per-row seed locks override per-instance.
+- **modules** *(widget)* — the ordered module list. Picked from the library or created inline.
 
 ## Output
 
-Wire **context** out into a **WP Prompt Assembler** (or another **WP Context** to chain).
+- **context** — `PIPELINE_CONTEXT` payload carrying all bindings + run trace + warnings. Feed into WP Prompt Assembler, WP Prompt Cleaner, WP Debug, or chain another Context.
+
+## Module kinds
+
+| Kind | What it does |
+|---|---|
+| **wildcard** | Picks one option from a weighted list. Roll changes each queue. Supports sub-categories, nested `@{uuid}` refs, null slots. |
+| **fixed_values** | Assigns explicit `name = value` bindings — no randomness. Quick way to define static vars. |
+| **combine** | Template-fills `$vars` into a string and writes the result to a new binding. E.g. `$mood $subject` → `subject_phrase = "sleepy cat"`. |
+| **derivation** | IF/ELIF/ELSE conditional rules over the runtime context. E.g. *if `$mood == sleepy` then `$lighting = soft`*. |
+| **constraint** | Re-weights a target wildcard's options based on a source wildcard's pick. E.g. *if `$hair == bald` then exclude `$style == braided`*. First-instance: fires on the first matching target downstream, then consumed. |
+
+Bundles group modules that belong together (e.g. "final framing": all the wildcards + the combine that builds the final prompt). They're reusable across workflows.
+
+## How to use
+
+1. Click **+ Add module** to insert a row. Pick from the library, or create a Fixed Values entry inline.
+2. Order matters — modules run top-to-bottom. A combine that reads `$mood` must come after the wildcard that picks `$mood`.
+3. Wire the **context** output into a WP Prompt Assembler / WP Prompt Cleaner / WP Debug.
+
+Drag a row by its handle to reorder. Drag onto another Context node to move it. Toggle the checkbox to disable a row without deleting it.
+
+## Per-row indicators
+
+- **MODIFIED** badge — the row diverges from its library entry (instance overrides applied).
+- **MISSING VAR** badge — a combine/derivation references a `$var` no upstream module provides.
+- **Conflict dots** — blue = overriding an upstream binding (info), amber = sibling collision in this Context (warning).
+- **Bundle frame** — colored border grouping related modules. Click the bundle header to collapse / toggle the whole group.
+
+## Tips
+
+- Variables prefixed `__` are engine-internal and hidden from the assembler.
+- Right-click a row for Edit / Duplicate / Save-to-library / Open-in-SPA.
+- Run once with WP Debug downstream to see exactly what each module produced.
