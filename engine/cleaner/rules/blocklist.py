@@ -16,6 +16,20 @@ import re
 
 from engine.cleaner.types import RuleResult
 
+# Post-strip cleanup patterns for text mode. After removing a blocklist
+# match the surrounding `, .` artifacts need to collapse so the user
+# doesn't see "cfg, . avoid" where "cfg, steps. avoid" used to be.
+_TEXT_ORPHAN_PUNCT = re.compile(r"\s+[.,:;!?]+(?=\s|$)")
+_TEXT_DOUBLE_SPACE = re.compile(r"\s{2,}")
+_TEXT_STRAY_EDGES = re.compile(r"^[\s.,:;!?]+|[\s.,:;!?]+$")
+
+
+def _cleanup_text(s: str) -> str:
+    out = _TEXT_ORPHAN_PUNCT.sub("", s)
+    out = _TEXT_DOUBLE_SPACE.sub(" ", out)
+    out = _TEXT_STRAY_EDGES.sub("", out)
+    return out
+
 
 def apply(text: str, mode: str, config: dict) -> RuleResult:
     blocklist = (config or {}).get("blocklist") or {}
@@ -49,12 +63,16 @@ def _apply_list(text: str, mode: str, entries: list[str]) -> RuleResult:
         out = ", ".join(kept)
     else:
         out = text
+        any_changed = False
         for entry in norm_entries:
             pattern = re.compile(rf"\b{re.escape(entry)}\b", re.IGNORECASE)
             new = pattern.sub("", out)
             if new != out:
                 dropped.append(entry)
+                any_changed = True
             out = new
+        if any_changed:
+            out = _cleanup_text(out)
     return {"text": out, "stats": {"dropped": dropped, "errors": []}}
 
 
@@ -81,9 +99,13 @@ def _apply_regex(text: str, mode: str, entries: list[str]) -> RuleResult:
                 kept.append(tag)
         out = ", ".join(kept)
     else:
+        any_changed = False
         for source, pattern in compiled:
             new = pattern.sub("", out)
             if new != out:
                 dropped.append(source)
+                any_changed = True
             out = new
+        if any_changed:
+            out = _cleanup_text(out)
     return {"text": out, "stats": {"dropped": dropped, "errors": errors}}

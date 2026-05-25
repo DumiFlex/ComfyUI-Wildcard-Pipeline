@@ -27,7 +27,8 @@ def test_list_text_mode_substring():
         mode="text",
         config={"blocklist": {"kind": "list", "entries": ["cat"]}},
     )
-    assert result["text"] == "a  sat near catcher"
+    # Post-strip cleanup collapses the double-space artifact.
+    assert result["text"] == "a sat near catcher"
 
 
 def test_list_empty_entries_no_op():
@@ -66,7 +67,17 @@ def test_regex_text_mode_strips_matches():
         mode="text",
         config={"blocklist": {"kind": "regex", "entries": [r"water\S+"]}},
     )
-    assert result["text"] == "see  and stuff"
+    assert result["text"] == "see and stuff"
+
+
+def test_text_mode_strips_adjacent_punctuation_after_match():
+    """`cfg, steps. avoid` minus `steps` should not leave orphan `. ` ."""
+    result = apply(
+        "cfg, steps. avoid",
+        mode="text",
+        config={"blocklist": {"kind": "list", "entries": ["steps"]}},
+    )
+    assert result["text"] == "cfg, avoid"
 
 
 def test_missing_blocklist_config_no_op():

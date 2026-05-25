@@ -93,13 +93,12 @@ export function create(node: CleanerHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     // Initial floor sized to fit the typical content footprint (header +
-    // intensity segment + 8 rule rows + blocklist button + footer
-    // padding). ResizeObserver grows the host beyond this when CLIP bar
-    // is rendered or fonts measure taller; the floor only prevents the
-    // initial paint from clipping while the observer attaches.
+    // intensity segment + rule rows + blocklist button). ResizeObserver
+    // grows the host above this when content asks for more, but
+    // autoHeight stays OFF so the user's manual drag-taller persists
+    // across workflow runs (default delta-check policy).
     minHeight: 350,
     minWidth: 320,
-    autoHeight: true,
     onValueRestored: (raw: string) => {
       const restored = parseWidgetJsonWithRecovery<CleanerNodeConfig>(raw, emptyCleanerConfig());
       config.value = restored.value;
@@ -133,7 +132,9 @@ export function create(node: CleanerHostNode, inputName: string) {
     if (typeof w === "number") wordCount.value = w;
     const c = pickFirst(out, "wp_cleaner_char_count");
     if (typeof c === "number") charCount.value = c;
-    host.requestRelayout();
+    // Don't requestRelayout — that would override the user's manual
+    // height drag. The ResizeObserver still bumps minHeight if content
+    // ever needs more room.
   }
   const apiObj = (app as unknown as { api?: {
     addEventListener: (n: string, fn: (e: Event) => void) => void;
