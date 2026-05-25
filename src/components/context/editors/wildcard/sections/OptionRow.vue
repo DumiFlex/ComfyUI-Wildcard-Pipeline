@@ -400,14 +400,14 @@ function fmtPct(p: number): string {
   opacity: 0.9;
 }
 .opt__tok--ref {
-  background: color-mix(in srgb, #a855f7 15%, transparent);
-  border-color: color-mix(in srgb, #a855f7 50%, transparent);
-  color: #d8b4fe;
+  background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 50%, transparent);
+  color: var(--wp-kind-wildcard);
 }
 .opt__tok--var {
-  background: color-mix(in srgb, #22c55e 15%, transparent);
-  border-color: color-mix(in srgb, #22c55e 50%, transparent);
-  color: #86efac;
+  background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent);
+  color: var(--wp-success);
 }
 /* Plain `{a|b|c}` inline-choice block — warn-tone yellow (matches the
  * SPA `wp-rt-dp-brace` palette in `manager/styles/rich-text.css`). */

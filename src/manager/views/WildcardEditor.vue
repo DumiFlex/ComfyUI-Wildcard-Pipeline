@@ -1010,6 +1010,6 @@ defineExpose({ historyEntries, applyRestore, options });
   padding: 0 var(--wp-space-4);
 }
 .wc-opt-row--null {
-  background: rgba(255, 255, 255, 0.015);
+  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
 }
 </style>

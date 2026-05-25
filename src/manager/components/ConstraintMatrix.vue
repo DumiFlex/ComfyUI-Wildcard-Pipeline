@@ -360,14 +360,14 @@ defineExpose({ cellAt });
   border-radius: 4px;
 }
 .wp-mx-axis--src {
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 14%, transparent);
-  border: 1px solid color-mix(in oklab, #c084fc 35%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-source) 35%, transparent);
 }
 .wp-mx-axis--tgt {
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 14%, transparent);
-  border: 1px solid color-mix(in oklab, #22d3ee 35%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 35%, transparent);
 }
 .wp-mx-axis .arrow { font: 14px var(--wp-font-mono, monospace); line-height: 1; }
 
