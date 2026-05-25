@@ -118,7 +118,10 @@
    * distinct from accent purple and injector blue, high enough chroma
    * to read on the in-graph canvas surface. Per-bundle color overrides
    * this via inline style on the BundleFrame component. */
-  --wp-bundle-default:   #6366f1;
+  /* Bundles wrap modules — slate signals "container/structure" vs the
+   * kind palette which signals "module type". User can still override
+   * per-bundle via the color picker. Light override below. */
+  --wp-bundle-default:   #64748b;  /* slate-500 */
 
   --wp-radius-lg: 12px;
   /* Three shadow scales used across surfaces:
@@ -255,6 +258,9 @@
   /* Accent text adjusted for contrast on near-white surfaces. */
   --wp-accent-text:        #6d28d9;
   --wp-accent-text-strong: #5b21b6;
+
+  /* Bundle default — slate-700 for AA contrast on light bg. */
+  --wp-bundle-default:     #334155;  /* slate-700 — 9.18:1 on white */
 
   /* Status + semantic colors nudged darker for legibility on light. */
   --wp-status-modified: #c2410c;

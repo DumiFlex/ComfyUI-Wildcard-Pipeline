@@ -290,9 +290,10 @@
   /* Overlay — lighter scrim so light bg beneath still registers as dimmed */
   --wp-overlay-bg: rgba(15, 15, 30, 0.35);
 
-  /* Bundle default — indigo-700 for WCAG-AA contrast on near-white surfaces.
-   * Mirrors dark theme's indigo-500 family; passes ~7.2:1 on white. */
-  --wp-bundle-default: #4338ca;
+  /* Bundle default — slate-700 for AA contrast on near-white.
+   * Slate signals "container/structural" vs the kind palette which
+   * signals "module type". Passes ~9.2:1 on white. */
+  --wp-bundle-default: #334155;
 
   /* Ref pill — deeper magenta for light surfaces */
   --wp-kind-ref:    #86198f;            /* fuchsia-800 5.03:1 on white */
@@ -2890,12 +2891,11 @@ html.wp-dark {
   --wp-accent2:     var(--wp-accent-400);
   --wp-accent-glow: rgba(139, 92, 246, 0.15);
 
-  /* Bundle default color — used by bundle kind icon/badge when no user color is set.
-   * Indigo-500 (#6366f1) — distinct from accent purple (#8b5cf6) and injector
-   * blue (#60a5fa), high enough chroma to read clearly on dark + light surfaces.
-   * Earlier slate-blue (#46566B) was too desaturated and disappeared into
-   * borders/text-muted on both themes. */
-  --wp-bundle-default: #6366f1;         /* indigo-500 — light override → #4338ca (indigo-700) */
+  /* Bundle default color — used by bundle kind icon/badge when no user
+   * color is set. Slate signals "container/structural" vs the kind
+   * palette which signals "module type". Distinct from accent purple
+   * + every kind color; works on dark + light surfaces. */
+  --wp-bundle-default: #64748b;         /* slate-500 — light override → #334155 (slate-700) */
 
   /* Module-kind aliases (legacy single-color tokens) */
   --wp-violet:    var(--wp-kind-wildcard);
