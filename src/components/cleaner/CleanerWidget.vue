@@ -37,7 +37,16 @@ const emit = defineEmits<{
   "open-blocklist": [];
 }>();
 
-const ALL_RULES: { id: RuleId; label: string; statKey: string; tooltip: string }[] = [
+const ALL_RULES: {
+  id: RuleId;
+  label: string;
+  statKey: string;
+  tooltip: string;
+  /** Rules that only operate on comma-split tags. When the widget is
+   *  in text mode these are visually disabled — clicking is a no-op
+   *  and the row dims. */
+  tagsOnly?: boolean;
+}[] = [
   {
     id: "whitespace",
     label: "whitespace",
@@ -55,12 +64,14 @@ const ALL_RULES: { id: RuleId; label: string; statKey: string; tooltip: string }
     label: "tag dedupe",
     statKey: "dropped",
     tooltip: "Drop later occurrences of an identical tag (case-insensitive, leftmost wins). Tags mode only.",
+    tagsOnly: true,
   },
   {
     id: "fuzzy_dedupe",
     label: "fuzzy dedupe",
     statKey: "dropped",
     tooltip: "Drop near-duplicate tags via Levenshtein similarity ≥0.9 (e.g. 'pixie cut' / 'pixie cuts'). Tags mode only.",
+    tagsOnly: true,
   },
   {
     id: "blocklist",
@@ -129,7 +140,13 @@ function ruleBaseline(rid: RuleId): boolean {
   return false;
 }
 
+function isRuleDisabled(rid: RuleId): boolean {
+  const meta = ALL_RULES.find((r) => r.id === rid);
+  return !!meta?.tagsOnly && props.modelValue.mode === "text";
+}
+
 function toggleRule(rid: RuleId): void {
+  if (isRuleDisabled(rid)) return;
   const currentlyOn = effective.value.has(rid);
   const overrides = { ...props.modelValue.rules_override };
   const baseline = ruleBaseline(rid);
@@ -216,10 +233,12 @@ function isOverridden(rid: RuleId): boolean {
           :key="rule.id"
           :data-test="`cleaner-rule-${rule.id}`"
           :class="['wp-cleaner__rule', {
-            'is-on': effective.has(rule.id),
-            'is-overridden': isOverridden(rule.id),
+            'is-on': effective.has(rule.id) && !isRuleDisabled(rule.id),
+            'is-overridden': isOverridden(rule.id) && !isRuleDisabled(rule.id),
+            'is-disabled': isRuleDisabled(rule.id),
           }]"
-          :title="rule.tooltip"
+          :title="isRuleDisabled(rule.id) ? `${rule.tooltip} (disabled in text mode)` : rule.tooltip"
+          :disabled="isRuleDisabled(rule.id)"
           @click="toggleRule(rule.id)"
         >
           <span class="wp-cleaner__rule-dot" />
@@ -363,7 +382,12 @@ function isOverridden(rid: RuleId): boolean {
   text-align: left;
   border-radius: 3px;
 }
-.wp-cleaner__rule:hover { background: var(--wp-bg2, var(--wp-bg-2)); color: var(--wp-text); }
+.wp-cleaner__rule:hover:not(.is-disabled) { background: var(--wp-bg2, var(--wp-bg-2)); color: var(--wp-text); }
+.wp-cleaner__rule.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.wp-cleaner__rule.is-disabled .wp-cleaner__rule-dot { background: var(--wp-border, #444); }
 .wp-cleaner__rule-dot {
   width: 8px; height: 8px;
   border-radius: 50%;

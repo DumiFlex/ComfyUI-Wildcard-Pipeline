@@ -1,51 +1,26 @@
 # WP Context Injector
 
-Lifts arbitrary ComfyUI outputs into named `$variable` bindings on the
-PipelineContext. Sits as a sibling of `WP Context` — its rows come from
-graph wires instead of a library picker.
+Lifts arbitrary ComfyUI outputs into named `$variable` bindings on the PipelineContext. Use when you want a value from a non-WP node (LoRA loader, prompt picker, CLIP text) available as `$var` downstream.
 
-## Usage
+## Inputs
 
-1. Add the node from `wildcard-pipeline → WP Context Injector`.
-2. Wire any node output (STRING / INT / FLOAT / BOOLEAN / *) onto the
-   trailing **+ new input** socket. A new row appears in the widget.
-3. Type a binding name (e.g. `seed_phrase`). Names must match
-   `^[a-zA-Z][a-zA-Z0-9_]*$` and may not start with `_`.
-4. Use the binding in any downstream WP combine template, wildcard ref,
-   or assembler.
+- **upstream** *(optional)* — chain another WP Context / Injector.
+- **slot_0 … slot_9** — wire any ComfyUI output here. Each connected slot becomes a row.
 
-## Per-row controls
+## Output
 
-- **Enabled checkbox** (left edge) — when off, the binding skips ctx
-  write that run.
-- **Internal flag** (`pi-globe` button) — when active, binding still
-  writes to ctx but the assembler chip strip hides it.
-- **Trash button** (`pi-trash`) — removes the row + severs the wire.
+- **context** — `PIPELINE_CONTEXT` carrying the injected bindings on top of any upstream values.
 
-## Disconnected rows
+## How to use
 
-If a wire is severed, the row persists with a dashed warn border + `no
-link` badge. The conflict scanner emits an
-`injector_input_disconnected` warning. Reconnect a wire or trash the
-row to clear.
+1. Drag wires from external nodes into the slot sockets.
+2. Each connected slot adds a row. Type the variable name (e.g. `style`).
+3. Optionally tick **internal** to hide it from the assembled prompt while keeping it readable by Combine / Derivation rules.
+4. Optionally write a template (`"I love $input_0"`) — the slot's raw value substitutes `$<slot_name>` before being written to ctx.
 
-## Differences from WP Context
+## Tips
 
-- No library tracking — injector rows aren't saved to / loaded from the
-  module library.
-- No drift detection — there's no "library version" to drift from.
-- No SPA editor — bindings are graph-only.
-
-## Limits
-
-Currently capped at **10 input sockets** per injector node. V3
-Autogrow preallocates the slot list at schema time, so all 10 sockets
-show even when unconnected. If you need more, chain a second injector
-node downstream (each one passes its `context` output forward).
-
-## Notes
-
-Non-primitive values (CONDITIONING / LATENT / IMAGE tensors) get
-stringified via Python `str()` at write time. The result is
-predictable but visually noisy (e.g. `<Tensor [1,3,512,512]>`); typical
-use is to filter inputs to actual primitives.
+- Rows reorder freely — engine reads by `slot_name`, not position.
+- Names must match `^[a-zA-Z][a-zA-Z0-9_]*$`.
+- Capped at 10 sockets. Chain a second injector if you need more.
+- Non-primitive values (LATENT/IMAGE/etc.) stringify via Python `str()` — typically used for STRING/INT/FLOAT only.
