@@ -37,13 +37,49 @@ const emit = defineEmits<{
   "open-blocklist": [];
 }>();
 
-const ALL_RULES: { id: RuleId; label: string; statKey: string }[] = [
-  { id: "whitespace",    label: "whitespace",   statKey: "fixed" },
-  { id: "punctuation",   label: "punctuation",  statKey: "stripped" },
-  { id: "dedupe_exact",  label: "tag dedupe",   statKey: "dropped" },
-  { id: "fuzzy_dedupe",  label: "fuzzy dedupe", statKey: "dropped" },
-  { id: "blocklist",     label: "blocklist",    statKey: "dropped" },
+const ALL_RULES: { id: RuleId; label: string; statKey: string; tooltip: string }[] = [
+  {
+    id: "whitespace",
+    label: "whitespace",
+    statKey: "fixed",
+    tooltip: "Collapse runs of spaces, trim outer whitespace, collapse double commas, drop leading/trailing commas, normalize comma-space.",
+  },
+  {
+    id: "punctuation",
+    label: "punctuation",
+    statKey: "stripped",
+    tooltip: "Drop tags that are only punctuation (e.g. lone '.'). Strip leading/trailing punctuation from each tag (tags mode) or from the whole string (text mode).",
+  },
+  {
+    id: "dedupe_exact",
+    label: "tag dedupe",
+    statKey: "dropped",
+    tooltip: "Drop later occurrences of an identical tag (case-insensitive, leftmost wins). Tags mode only.",
+  },
+  {
+    id: "fuzzy_dedupe",
+    label: "fuzzy dedupe",
+    statKey: "dropped",
+    tooltip: "Drop near-duplicate tags via Levenshtein similarity ≥0.9 (e.g. 'pixie cut' / 'pixie cuts'). Tags mode only.",
+  },
+  {
+    id: "blocklist",
+    label: "blocklist",
+    statKey: "dropped",
+    tooltip: "Drop tags containing any blocklist entry (word-boundary, case-insensitive). Click the Blocklist… button below to edit entries + switch list/regex mode.",
+  },
 ];
+
+const MODE_TOOLTIPS = {
+  tags: "Tags mode: split input on commas. Most rules operate on each tag.",
+  text: "Text mode: treat the whole prompt as prose. Tag-only rules (dedupe, fuzzy) no-op.",
+};
+
+const INTENSITY_TOOLTIPS = {
+  gentle: "Gentle: whitespace cleanup only.",
+  balanced: "Balanced: whitespace + punctuation + exact tag dedupe.",
+  aggressive: "Aggressive: all rules including fuzzy dedupe.",
+};
 
 const INTENSITIES: Intensity[] = ["gentle", "balanced", "aggressive"];
 
@@ -135,15 +171,20 @@ function isOverridden(rid: RuleId): boolean {
         <button
           data-test="cleaner-mode-tags"
           :class="['wp-cleaner__mode-btn', { 'is-active': modelValue.mode === 'tags' }]"
+          :title="MODE_TOOLTIPS.tags"
           @click="setMode('tags')"
         >tags</button>
         <button
           data-test="cleaner-mode-text"
           :class="['wp-cleaner__mode-btn', { 'is-active': modelValue.mode === 'text' }]"
+          :title="MODE_TOOLTIPS.text"
           @click="setMode('text')"
         >text</button>
       </div>
-      <span class="wp-cleaner__counter">{{ wordCount }}w · {{ charCount }}c</span>
+      <span
+        class="wp-cleaner__counter"
+        :title="`${wordCount} words · ${charCount} characters in the cleaned output`"
+      >{{ wordCount }}w · {{ charCount }}c</span>
     </header>
 
     <section class="wp-cleaner__section">
@@ -152,6 +193,7 @@ function isOverridden(rid: RuleId): boolean {
         <span
           :class="['wp-cleaner__badge', { 'is-hidden': pristine }]"
           data-test="cleaner-custom-badge"
+          title="One or more rules diverge from the selected intensity's defaults. Click an intensity again to reset."
         >CUSTOM</span>
       </div>
       <div class="wp-cleaner__seg">
@@ -160,6 +202,7 @@ function isOverridden(rid: RuleId): boolean {
           :key="lvl"
           :data-test="`cleaner-intensity-${lvl}`"
           :class="['wp-cleaner__seg-btn', { 'is-active': modelValue.intensity === lvl }]"
+          :title="INTENSITY_TOOLTIPS[lvl]"
           @click="setIntensity(lvl)"
         >{{ lvl }}</button>
       </div>
@@ -176,6 +219,7 @@ function isOverridden(rid: RuleId): boolean {
             'is-on': effective.has(rule.id),
             'is-overridden': isOverridden(rule.id),
           }]"
+          :title="rule.tooltip"
           @click="toggleRule(rule.id)"
         >
           <span class="wp-cleaner__rule-dot" />
@@ -202,6 +246,7 @@ function isOverridden(rid: RuleId): boolean {
         :class="['wp-cleaner__blocklist-btn', {
           'has-entries': modelValue.blocklist.entries.length > 0,
         }]"
+        title="Edit the blocklist (drops tags containing these entries). Supports plain list mode (comma- or newline-separated) or regex mode (one regex per line)."
         @click="emit('open-blocklist')"
       >
         Blocklist…
