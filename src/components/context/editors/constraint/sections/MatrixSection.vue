@@ -489,29 +489,31 @@ onBeforeUnmount(() => {
 }
 .mx-cell:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wp-text) 22%, transparent),
+              0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd),
+              0 4px 12px color-mix(in srgb, var(--wp-text) 25%, transparent);
 }
 .mx-cell.s-neutral {
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
   color: var(--wp-text-dim, #595c66);
-  border: 1px dashed rgba(255, 255, 255, 0.10);
+  border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
 }
 .mx-cell.s-exclude {
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent);
-  color: #fca5a5;
+  color: var(--wp-danger);
   border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent);
 }
 .mx-cell.s-boost {
   background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent);
-  color: #86efac;
+  color: var(--wp-success);
   border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent);
 }
 .mx-cell.s-reduce {
   background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent);
-  color: #fdba74;
+  color: var(--wp-warn);
   border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
 }
 .mx-cell--mod {

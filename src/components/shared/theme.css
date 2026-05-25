@@ -148,6 +148,8 @@
    * button reuse this to mirror the SPA `.wp-io-badge--exists` semantic
    * ("library has a newer version, you can overwrite the embedded one"). */
   --wp-warn: #f59e0b;
+  --wp-success: #22c55e;
+  --wp-info: #3b82f6;
   /* Status — `modified` mirrors SPA `--wp-status-modified` (orange).
    * Used by the ContextWidget modified-dot so it visually pairs 1:1 with
    * SPA `.wp-io-badge--mod` ("user diff from upstream"). */
@@ -246,13 +248,24 @@
   --wp-accent-text:        #6d28d9;
   --wp-accent-text-strong: #5b21b6;
 
-  /* Status colors nudged darker for legibility on light surfaces. */
+  /* Status + semantic colors nudged darker for legibility on light. */
   --wp-status-modified: #c2410c;
   --wp-warn:           #b45309;
+  --wp-success:        #15803d;
+  --wp-info:           #1d4ed8;
   --wp-danger:   #b91c1c;
   --wp-green:    #15803d;
+  --wp-green-bg: rgba(21, 128, 61, 0.10);
   --wp-red:      #b91c1c;
+  --wp-red-bg:   rgba(185, 28, 28, 0.10);
   --wp-amber:    #b45309;
+  --wp-amber-bg: rgba(180, 83, 9, 0.10);
+  --wp-violet:   #6d28d9;
+  --wp-violet-bg: rgba(109, 40, 217, 0.10);
+  --wp-teal:     #0f766e;   /* teal-700 — chip 5.41:1 on white */
+  --wp-teal-bg:  rgba(15, 118, 110, 0.10);
+  --wp-rose:     #be185d;   /* rose-700 */
+  --wp-rose-bg:  rgba(190, 24, 93, 0.10);
 
   --wp-canvas-bg:   #d8d8d8;
   --wp-node-bg:     #cacaca;

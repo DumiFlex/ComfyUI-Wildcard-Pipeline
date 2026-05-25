@@ -729,7 +729,7 @@ const branchCount = computed(() => rule.value.branches.length);
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid var(--wp-border, #2a2d35);
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
 }
 .dvr-refinement__btn {
   padding: 2px 7px;

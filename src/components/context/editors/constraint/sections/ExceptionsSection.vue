@@ -678,7 +678,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   width: 22px;
   height: 22px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--wp-text) 3%, transparent);
   border: 1px solid var(--wp-border);
   border-radius: 4px;
   color: var(--wp-text-dim, var(--wp-text3));
