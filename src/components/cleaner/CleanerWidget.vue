@@ -43,10 +43,7 @@ const ALL_RULES: { id: RuleId; label: string; statKey: string }[] = [
   { id: "whitespace",    label: "whitespace",   statKey: "fixed" },
   { id: "punctuation",   label: "punctuation",  statKey: "stripped" },
   { id: "dedupe_exact",  label: "tag dedupe",   statKey: "dropped" },
-  { id: "wp_dedupe",     label: "WP-dedupe",    statKey: "dropped" },
-  { id: "null_slot",     label: "null-slot",    statKey: "stripped" },
   { id: "fuzzy_dedupe",  label: "fuzzy dedupe", statKey: "dropped" },
-  { id: "dangling_var",  label: "dangling-var", statKey: "stripped" },
   { id: "blocklist",     label: "blocklist",    statKey: "dropped" },
 ];
 

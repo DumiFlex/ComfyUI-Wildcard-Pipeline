@@ -17,25 +17,16 @@ from __future__ import annotations
 from typing import Any
 
 from engine.cleaner.rules import RULE_REGISTRY
-from engine.cleaner.types import CleanerCtx, RuleId, RunReport
+from engine.cleaner.types import RuleId, RunReport
 
 INTENSITY_TO_RULES: dict[str, list[RuleId]] = {
     "gentle": ["whitespace"],
-    "balanced": [
-        "whitespace",
-        "punctuation",
-        "dedupe_exact",
-        "wp_dedupe",
-        "null_slot",
-    ],
+    "balanced": ["whitespace", "punctuation", "dedupe_exact"],
     "aggressive": [
         "whitespace",
         "punctuation",
         "dedupe_exact",
-        "wp_dedupe",
-        "null_slot",
         "fuzzy_dedupe",
-        "dangling_var",
     ],
 }
 
@@ -57,14 +48,14 @@ class PromptCleaner:
         self,
         text: str,
         config: dict[str, Any] | None = None,
-        ctx: CleanerCtx | None = None,
     ) -> dict[str, Any]:
         cfg = config or {}
         mode = cfg.get("mode", "tags")
         intensity = cfg.get("intensity", "balanced")
         overrides: dict[str, bool] = dict(cfg.get("rules_override") or {})
 
-        # Blocklist auto-enables when entries are present (overridable).
+        # Blocklist auto-enables when entries are present unless the user
+        # explicitly turned it off via override.
         blocklist_cfg = cfg.get("blocklist") or {}
         if blocklist_cfg.get("entries") and "blocklist" not in overrides:
             overrides["blocklist"] = True
@@ -75,7 +66,7 @@ class PromptCleaner:
         for rule_id, fn in RULE_REGISTRY:
             if rule_id not in active:
                 continue
-            result = fn(out, mode, ctx, cfg)
+            result = fn(out, mode, cfg)
             out = result["text"]
             report[rule_id] = result["stats"]
         return {"text": out, "report": report}

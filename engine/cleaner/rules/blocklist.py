@@ -1,11 +1,12 @@
 """Blocklist filter — drop tags matching a user-supplied list or regex set.
 
 Two modes (chosen via config.blocklist.kind):
-  - "list":  case-insensitive exact tag match (tags mode) or
-             word-boundary substring match (text mode)
+  - "list":  case-insensitive word-boundary substring match within each
+             tag (tags mode) or whole-string (text mode). Drops the
+             whole matching tag.
   - "regex": each entry compiled separately; bad patterns are caught
-             and reported in stats.errors so a single bad regex
-             doesn't kill the cleaner.
+             and reported in stats.errors so a single bad regex doesn't
+             kill the cleaner.
 
 The widget's blocklist modal owns mode selection + entry editing.
 """
@@ -13,10 +14,10 @@ from __future__ import annotations
 
 import re
 
-from engine.cleaner.types import CleanerCtx, RuleResult
+from engine.cleaner.types import RuleResult
 
 
-def apply(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleResult:
+def apply(text: str, mode: str, config: dict) -> RuleResult:
     blocklist = (config or {}).get("blocklist") or {}
     kind = blocklist.get("kind", "list")
     entries = blocklist.get("entries") or []
@@ -32,12 +33,6 @@ def _apply_list(text: str, mode: str, entries: list[str]) -> RuleResult:
     norm_entries = [e for e in entries if isinstance(e, str) and e]
     dropped: list[str] = []
     if mode == "tags":
-        # Tag-level match: drop the WHOLE tag if any entry is found as
-        # a word-boundary substring within it. Lets "steps" drop the
-        # tag "steps . avoid:" (rough text-like input) while still
-        # protecting "cat" from accidentally hitting "catcher" via the
-        # \b boundary. Falls back to exact casefold equality when the
-        # entry has no \w chars (e.g. punctuation-only entry).
         tags = [t.strip() for t in text.split(",") if t.strip()]
         kept: list[str] = []
         compiled: list[tuple[str, re.Pattern[str]]] = []

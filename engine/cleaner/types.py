@@ -1,40 +1,22 @@
 """Shared types for the cleaner pipeline.
 
-`CleanerCtx` is a minimal dataclass — the node layer fills it from
-PIPELINE_CONTEXT so engine code never imports comfy_api. Rules that
-don't read ctx (whitespace, dedupe_exact, fuzzy_dedupe, blocklist)
-should still accept the parameter for a uniform signature.
+All rules are string-only — no upstream PIPELINE_CONTEXT dependency.
+The cleaner operates purely on the prompt string + the user's widget
+config (mode, intensity, rule overrides, blocklist).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
 RuleId = Literal[
     "whitespace",
     "punctuation",
     "dedupe_exact",
-    "wp_dedupe",
-    "null_slot",
     "fuzzy_dedupe",
-    "dangling_var",
     "blocklist",
 ]
 
 Mode = Literal["tags", "text"]
-
-
-@dataclass
-class CleanerCtx:
-    """Snapshot of WP chain state the cleaner needs.
-
-    Populated at the node boundary from `PIPELINE_CONTEXT`. WP-aware
-    rules read these fields; non-WP rules ignore the dataclass.
-    """
-
-    picks: dict[str, dict[str, Any]] = field(default_factory=dict)
-    constraints: list[dict[str, Any]] = field(default_factory=list)
-    warnings: list[dict[str, Any]] = field(default_factory=list)
 
 
 class RuleResult(TypedDict):

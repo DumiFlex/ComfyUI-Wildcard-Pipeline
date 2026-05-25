@@ -3,10 +3,7 @@ export type RuleId =
   | "whitespace"
   | "punctuation"
   | "dedupe_exact"
-  | "wp_dedupe"
-  | "null_slot"
   | "fuzzy_dedupe"
-  | "dangling_var"
   | "blocklist";
 
 export type Intensity = "gentle" | "balanced" | "aggressive";

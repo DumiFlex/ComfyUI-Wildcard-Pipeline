@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import re
 
-from engine.cleaner.types import CleanerCtx, RuleResult
+from engine.cleaner.types import RuleResult
 
 _WS_RUN = re.compile(r"[ \t]+")
 _COMMA_RUN = re.compile(r",[ \t,]*,")
 
 
-def apply(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleResult:
+def apply(text: str, mode: str, config: dict) -> RuleResult:
     fixed = 0
     out = text
 

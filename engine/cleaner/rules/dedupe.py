@@ -1,17 +1,14 @@
-"""Dedupe family — three independently-toggleable rules.
+"""Dedupe family — exact + fuzzy.
 
-- `apply_exact`     — drop later occurrences of an identical tag
-                       (tags mode only). Leftmost wins. Case-insensitive
-                       comparison; preserved case in the kept token.
-- `apply_wp`        — drop tags matching a WP wildcard pick already
-                       injected upstream (needs CleanerCtx).
-- `apply_fuzzy`     — drop near-duplicates via Levenshtein ratio.
-                       Threshold hardcoded at 0.9 — documented in
-                       the spec, not user-tunable in v1.
+- `apply_exact` — drop later occurrences of an identical tag (tags
+                  mode only). Leftmost wins. Case-insensitive comparison;
+                  preserved case in the kept token.
+- `apply_fuzzy` — drop near-duplicates via Levenshtein ratio. Threshold
+                  hardcoded at 0.9. Tags mode only.
 """
 from __future__ import annotations
 
-from engine.cleaner.types import CleanerCtx, RuleResult
+from engine.cleaner.types import RuleResult
 
 _FUZZY_THRESHOLD = 0.9
 
@@ -24,7 +21,7 @@ def _join_tags(tags: list[str]) -> str:
     return ", ".join(tags)
 
 
-def apply_exact(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleResult:
+def apply_exact(text: str, mode: str, config: dict) -> RuleResult:
     if mode != "tags":
         return {"text": text, "stats": {"dropped": []}}
     tags = _split_tags(text)
@@ -41,35 +38,7 @@ def apply_exact(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> R
     return {"text": _join_tags(kept), "stats": {"dropped": dropped}}
 
 
-def apply_wp(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleResult:
-    if ctx is None:
-        return {"text": text, "stats": {}}
-    pick_values: set[str] = set()
-    for pick in ctx.picks.values():
-        v = pick.get("value")
-        if isinstance(v, str) and v:
-            pick_values.add(v.casefold())
-    if not pick_values:
-        return {"text": text, "stats": {"dropped": []}}
-    if mode != "tags":
-        return {"text": text, "stats": {"dropped": []}}
-    tags = _split_tags(text)
-    kept: list[str] = []
-    dropped: list[str] = []
-    matched_once: set[str] = set()
-    for tag in tags:
-        key = tag.casefold()
-        if key in pick_values and key not in matched_once:
-            matched_once.add(key)
-            dropped.append(tag)
-        else:
-            kept.append(tag)
-    return {"text": _join_tags(kept), "stats": {"dropped": dropped}}
-
-
 def _levenshtein_ratio(a: str, b: str) -> float:
-    """Vanilla Levenshtein ratio. Pure-Python fallback when rapidfuzz
-    isn't installed. Ratio = 1 - distance / max(len(a), len(b))."""
     if a == b:
         return 1.0
     if not a or not b:
@@ -96,7 +65,7 @@ except ImportError:
     _ratio = _levenshtein_ratio
 
 
-def apply_fuzzy(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleResult:
+def apply_fuzzy(text: str, mode: str, config: dict) -> RuleResult:
     if mode != "tags":
         return {"text": text, "stats": {"dropped": []}}
     tags = _split_tags(text)
