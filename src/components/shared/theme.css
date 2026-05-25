@@ -99,6 +99,14 @@
   --wp-kind-derivation:  #fbbf24;
   --wp-kind-constraint:  #f472b6;
   --wp-kind-fixed:       #22d3ee;
+
+  /* Constraint matrix source/target axis colors. Kept distinct from
+   * kind colors so the dual-axis matrix legend reads cleanly regardless
+   * of the wildcards' library types. Light overrides further below. */
+  --wp-constraint-source:      #c084fc;  /* purple-400 */
+  --wp-constraint-source-text: #d8b4fe;  /* purple-300 */
+  --wp-constraint-target:      #22d3ee;  /* cyan-400  */
+  --wp-constraint-target-text: #67e8f9;  /* cyan-300  */
   /* Injector — variables wired in from arbitrary upstream node
    * outputs (not part of the wildcard / fixed / combine / etc
    * module family). Slate-blue chosen to read as "external input"
@@ -277,7 +285,14 @@
   --wp-kind-combine:     #065f46;  /* emerald-800 — chip 5.37:1 on white */
   --wp-kind-derivation:  #92400e;  /* amber-800   — chip 4.99:1 on white */
   --wp-kind-constraint:  #9d174d;  /* pink-800    — chip 5.29:1 on white */
-  --wp-kind-fixed:       #155e75;  /* cyan-800    — chip 5.15:1 on white */
+  /* Fixed moved off cyan-800 — too close to combine emerald-800 on light bg. */
+  --wp-kind-fixed:       #1d4ed8;  /* blue-700    — chip 6.61:1 on white */
+
+  /* Constraint source/target — darker shades for legibility on light. */
+  --wp-constraint-source:      #7c3aed;  /* violet-600  — chip 6.16:1 on white */
+  --wp-constraint-source-text: #6d28d9;
+  --wp-constraint-target:      #0891b2;  /* cyan-600    — chip 4.97:1 on white */
+  --wp-constraint-target-text: #155e75;
 }
 
 /* Variable color palette — hash output (var-1..var-8) paints chips +
@@ -287,7 +302,7 @@
  * Hues chosen for contrast on `--wp-bg` (dark) AND `--wp-bg-2` (light)
  * surfaces. Pulled from a deliberate rainbow; light theme keeps the
  * same hues since saturation reads on both backgrounds. */
-:root, .wp-theme-dark, .wp-theme-light {
+:root, .wp-theme-dark {
   --wp-var-1: #93c5fd;  /* sky blue */
   --wp-var-2: #fcd34d;  /* amber */
   --wp-var-3: #86efac;  /* mint */
@@ -296,6 +311,19 @@
   --wp-var-6: #c4b5fd;  /* lavender */
   --wp-var-7: #67e8f9;  /* cyan */
   --wp-var-8: #fda4af;  /* coral */
+}
+
+/* Light theme — bump every var hue to its *-700 family for AA contrast
+ * on near-white page surfaces. Same hues, deeper shades. */
+.wp-theme-light {
+  --wp-var-1: #0369a1;  /* sky-700      4.84:1 on white */
+  --wp-var-2: #b45309;  /* amber-700    4.85:1 on white */
+  --wp-var-3: #047857;  /* emerald-700  4.91:1 on white */
+  --wp-var-4: #be185d;  /* rose-700     5.78:1 on white */
+  --wp-var-5: #c2410c;  /* orange-700   4.93:1 on white */
+  --wp-var-6: #6d28d9;  /* violet-700   4.91:1 on white */
+  --wp-var-7: #0e7490;  /* cyan-700     5.24:1 on white */
+  --wp-var-8: #b91c1c;  /* red-700      6.74:1 on white */
 }
 
 .var-1 { color: var(--wp-var-1); }

@@ -321,14 +321,40 @@
 html.wp-theme-light {
   --wp-kind-wildcard:        #6d28d9;                       /* violet-700  — chip 4.91:1 on white */
   --wp-kind-wildcard-bg:     rgba(109, 40, 217, 0.12);
-  --wp-kind-fixed:           #155e75;                       /* cyan-800    — chip 5.15:1 on white */
-  --wp-kind-fixed-bg:        rgba(21, 94, 117, 0.12);
+  /* Fixed moved off cyan-800 — too close to combine emerald-800 in light. */
+  --wp-kind-fixed:           #1d4ed8;                       /* blue-700    — chip 6.61:1 on white */
+  --wp-kind-fixed-bg:        rgba(29, 78, 216, 0.12);
   --wp-kind-combine:         #065f46;                       /* emerald-800 — chip 5.37:1 on white */
   --wp-kind-combine-bg:      rgba(6, 95, 70, 0.12);
   --wp-kind-derivation:      #92400e;                       /* amber-800   — chip 4.99:1 on white */
   --wp-kind-derivation-bg:   rgba(146, 64, 14, 0.12);
   --wp-kind-constraint:      #9d174d;                       /* pink-800    — chip 5.29:1 on white */
   --wp-kind-constraint-bg:   rgba(157, 23, 77, 0.12);
+
+  /* Constraint matrix source/target — darker shades for light bg. */
+  --wp-constraint-source:      #7c3aed;                      /* violet-600 — 6.16:1 on white */
+  --wp-constraint-source-text: #6d28d9;
+  --wp-constraint-target:      #0891b2;                      /* cyan-600   — 4.97:1 on white */
+  --wp-constraint-target-text: #155e75;
+
+  /* Variable hash colors — dark pastel defaults fail on near-white;
+   * shift to *-700 family for AA contrast on the light page surface. */
+  --wp-var-1: #0369a1;  /* sky-700      4.84:1 on white */
+  --wp-var-2: #b45309;  /* amber-700    4.85:1 on white */
+  --wp-var-3: #047857;  /* emerald-700  4.91:1 on white */
+  --wp-var-4: #be185d;  /* rose-700     5.78:1 on white */
+  --wp-var-5: #c2410c;  /* orange-700   4.93:1 on white */
+  --wp-var-6: #6d28d9;  /* violet-700   4.91:1 on white */
+  --wp-var-7: #0e7490;  /* cyan-700     5.24:1 on white */
+  --wp-var-8: #b91c1c;  /* red-700      6.74:1 on white */
+}
+
+/* Constraint source/target — dark-theme defaults at :root above. */
+:root {
+  --wp-constraint-source:      #c084fc;                      /* purple-400 */
+  --wp-constraint-source-text: #d8b4fe;                      /* purple-300 */
+  --wp-constraint-target:      #22d3ee;                      /* cyan-400   */
+  --wp-constraint-target-text: #67e8f9;                      /* cyan-300   */
 }
 
 .wp-theme-light {

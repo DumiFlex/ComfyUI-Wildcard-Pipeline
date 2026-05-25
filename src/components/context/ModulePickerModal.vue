@@ -993,7 +993,9 @@ onBeforeUnmount(detachCaptureListeners);
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(35, 35, 35, 0.85);
+  /* Theme-aware wash so the brand gradient stays subtle in both
+   * palettes — dark bg in dark mode, near-white in light mode. */
+  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
   pointer-events: none;
 }
 .wp-picker__head > * { position: relative; z-index: 1; }

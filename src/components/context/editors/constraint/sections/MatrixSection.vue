@@ -416,14 +416,14 @@ onBeforeUnmount(() => {
   border-radius: 4px;
 }
 .mx-axis--src {
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 14%, transparent);
-  border: 1px solid color-mix(in oklab, #c084fc 35%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-source) 35%, transparent);
 }
 .mx-axis--tgt {
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 14%, transparent);
-  border: 1px solid color-mix(in oklab, #22d3ee 35%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 35%, transparent);
 }
 .mx-axis .arrow { font: 14px var(--wp-font-mono); line-height: 1; }
 
@@ -446,16 +446,16 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   text-align: left;
   padding: 0 8px !important;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
 }
-.mx-corner .row-1 { display: block; color: #d8b4fe; line-height: 1.3; }
-.mx-corner .row-2 { display: block; color: #67e8f9; line-height: 1.3; }
+.mx-corner .row-1 { display: block; color: var(--wp-constraint-source-text); line-height: 1.3; }
+.mx-corner .row-2 { display: block; color: var(--wp-constraint-target-text); line-height: 1.3; }
 .mx-th-col {
   width: 64px;
   height: 28px;
   font: 700 10px var(--wp-font-sans);
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 10%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 10%, transparent);
   border-radius: 4px;
   text-align: center;
 }
@@ -463,8 +463,8 @@ onBeforeUnmount(() => {
   width: 96px;
   height: 36px;
   font: 700 10px var(--wp-font-sans);
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 10%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 10%, transparent);
   border-radius: 4px;
   text-align: right;
   padding: 0 12px !important;
