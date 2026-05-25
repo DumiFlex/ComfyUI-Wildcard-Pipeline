@@ -32,6 +32,20 @@ Drops duplicate tags, strips orphan punctuation, filters blocklisted words. Oper
 
 Blocklist auto-enables when its entries are non-empty.
 
+## Blocklist
+
+Click **Blocklist…** to open the editor. Two modes:
+
+- **list** — comma- or newline-separated plain words. Each entry matches as a case-insensitive word-boundary substring. `cat` drops `black cat` but not `catcher`.
+- **regex** — one regex per line, compiled with `IGNORECASE`. Bad patterns are skipped (reported in run stats), so one typo won't kill the rule.
+
+What gets dropped:
+
+- **tags mode** — the whole comma-separated tag containing the match. Blocklist `steps` on `cfg, steps . avoid:` drops the entire `steps . avoid:` tag → `cfg`.
+- **text mode** — only the matched word is removed; adjacent orphan punctuation/space is scrubbed. Blocklist `steps` on `cfg, steps. avoid` → `cfg, avoid`.
+
+Toggling the rule off via its row in RULES overrides the auto-enable, even with entries present. Toggling it on with no entries does nothing (no patterns to match).
+
 ## Tips
 
 - Hover any control for an inline tooltip.
