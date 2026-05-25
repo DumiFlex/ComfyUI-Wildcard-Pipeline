@@ -14,7 +14,7 @@
  * without inventing new tokens.
  */
 import { computed, ref } from "vue";
-import { computeEffectiveRules, isPristine } from "./intensity";
+import { INTENSITY_TO_RULES, computeEffectiveRules, isPristine } from "./intensity";
 import type {
   CleanerNodeConfig,
   Intensity,
@@ -71,24 +71,52 @@ const presetLabel = computed(() => {
   return props.modelValue.intensity;
 });
 
-function patch(next: Partial<CleanerNodeConfig>): void {
-  emit("update:modelValue", { ...props.modelValue, ...next });
+/** Drop any override entry whose value matches the new intensity's
+ *  default. Without this pruning, switching balanced → aggressive
+ *  leaves stale overrides that contradict the user's intent
+ *  (fuzzy_dedupe: true is meaningful under balanced, redundant under
+ *  aggressive — and pristine + isOverridden read it as "modified"). */
+function pruneStaleOverrides(
+  overrides: Partial<Record<RuleId, boolean>>,
+  intensity: Intensity,
+): Partial<Record<RuleId, boolean>> {
+  const defaults = new Set(INTENSITY_TO_RULES[intensity]);
+  const next: Partial<Record<RuleId, boolean>> = {};
+  for (const [rid, on] of Object.entries(overrides) as [RuleId, boolean][]) {
+    if (on !== defaults.has(rid)) next[rid] = on;
+  }
+  return next;
 }
-function setIntensity(intensity: Intensity): void { patch({ intensity }); }
+
+/** Any edit other than picking a preset diverges from the loaded
+ *  preset — clear preset_ref so the footer label falls back to the
+ *  intensity name and the save button surfaces again. */
+function patch(next: Partial<CleanerNodeConfig>): void {
+  const merged: CleanerNodeConfig = { ...props.modelValue, ...next };
+  delete merged.preset_ref;
+  emit("update:modelValue", merged);
+}
+
+function setIntensity(intensity: Intensity): void {
+  patch({
+    intensity,
+    rules_override: pruneStaleOverrides(props.modelValue.rules_override, intensity),
+  });
+}
 function setMode(mode: Mode): void { patch({ mode }); }
 
 function toggleRule(rid: RuleId): void {
   const currentlyOn = effective.value.has(rid);
   const overrides = { ...props.modelValue.rules_override };
-  const intensityDefault = computeEffectiveRules({
-    ...props.modelValue,
-    rules_override: {},
-    blocklist: { kind: "list", entries: [] },
-  }).includes(rid);
-  if (currentlyOn === intensityDefault) {
-    overrides[rid] = !currentlyOn;
-  } else {
+  const intensityDefault = INTENSITY_TO_RULES[props.modelValue.intensity].includes(rid);
+  // Click toggles the rule. If the new state matches the intensity
+  // default, drop the override key (so pristine + isOverridden stay
+  // honest). Otherwise, write the explicit override.
+  const nextOn = !currentlyOn;
+  if (nextOn === intensityDefault) {
     delete overrides[rid];
+  } else {
+    overrides[rid] = nextOn;
   }
   patch({ rules_override: overrides });
 }
@@ -103,8 +131,18 @@ function ruleStat(rid: RuleId): string {
   if (Array.isArray(value)) return String(value.length);
   return "—";
 }
+
+/** A rule counts as overridden only when its override value flips the
+ *  intensity default. Override key present but matching the default
+ *  is a no-op — must NOT show the pip (avoids the "sometimes stuck on"
+ *  visual after intensity switches). */
 function isOverridden(rid: RuleId): boolean {
-  return rid in props.modelValue.rules_override;
+  const overrides = props.modelValue.rules_override;
+  if (!(rid in overrides)) return false;
+  const overrideValue = overrides[rid];
+  if (overrideValue === undefined) return false;
+  const intensityDefault = INTENSITY_TO_RULES[props.modelValue.intensity].includes(rid);
+  return overrideValue !== intensityDefault;
 }
 function onLoadPreset(presetId: string): void {
   presetMenuOpen.value = false;
@@ -179,7 +217,14 @@ function onLoadPreset(presetId: string): void {
           @click="toggleRule(rule.id)"
         >
           <span class="wp-cleaner__rule-dot" />
-          <span class="wp-cleaner__rule-label">{{ rule.label }}</span>
+          <span class="wp-cleaner__rule-label">
+            {{ rule.label }}
+            <span
+              v-if="isOverridden(rule.id)"
+              class="wp-cleaner__rule-pip"
+              aria-label="modified"
+            />
+          </span>
           <span
             v-if="effective.has(rule.id)"
             :data-test="`cleaner-rule-${rule.id}-stat`"
@@ -399,13 +444,18 @@ function onLoadPreset(presetId: string): void {
 }
 .wp-cleaner__rule.is-on { color: var(--wp-text); }
 .wp-cleaner__rule.is-on .wp-cleaner__rule-dot { background: var(--wp-accent); }
-.wp-cleaner__rule.is-overridden .wp-cleaner__rule-dot::after {
-  content: "";
-  position: absolute;
-  top: -2px; right: -2px;
-  width: 4px; height: 4px;
+.wp-cleaner__rule-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wp-cleaner__rule-pip {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
   background: var(--wp-amber, var(--wp-warn, #fbbf24));
   border-radius: 50%;
+  flex: 0 0 auto;
 }
 .wp-cleaner__rule-stat {
   font-size: 10px;
