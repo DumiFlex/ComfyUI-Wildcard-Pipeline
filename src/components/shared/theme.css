@@ -150,6 +150,14 @@
   --wp-warn: #f59e0b;
   --wp-success: #22c55e;
   --wp-info: #3b82f6;
+
+  /* Rich-text inline-token colors — multi-pick chip + weighted-pick chip.
+   * Match SPA tokens.css so the same {N$$sep$$a|b|c} highlight reads
+   * identically on canvas + SPA. Light overrides below. */
+  --wp-rt-token-good:    #34d399;
+  --wp-rt-token-good-bg: color-mix(in oklab, #10b981 12%, transparent);
+  --wp-rt-token-mut:     #fb923c;
+  --wp-rt-token-mut-bg:  color-mix(in oklab, #f97316 12%, transparent);
   /* Status — `modified` mirrors SPA `--wp-status-modified` (orange).
    * Used by the ContextWidget modified-dot so it visually pairs 1:1 with
    * SPA `.wp-io-badge--mod` ("user diff from upstream"). */
@@ -254,6 +262,11 @@
   --wp-success:        #15803d;
   --wp-info:           #1d4ed8;
   --wp-danger:   #b91c1c;
+  /* Rich-text inline-token colors — darker shades for light bg. */
+  --wp-rt-token-good:    #166534;  /* green-800   4.80:1 on white */
+  --wp-rt-token-good-bg: color-mix(in oklab, #166534 12%, transparent);
+  --wp-rt-token-mut:     #9a3412;  /* orange-800  5.19:1 on white */
+  --wp-rt-token-mut-bg:  color-mix(in oklab, #9a3412 12%, transparent);
   --wp-green:    #15803d;
   --wp-green-bg: rgba(21, 128, 61, 0.10);
   --wp-red:      #b91c1c;
