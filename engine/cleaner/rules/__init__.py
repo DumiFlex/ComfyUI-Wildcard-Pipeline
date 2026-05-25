@@ -15,6 +15,7 @@ from engine.cleaner.rules import (
     dangling_var,
     dedupe,
     null_slot,
+    punctuation,
     reorder,
     whitespace,
 )
@@ -24,6 +25,7 @@ ApplyFn = Callable[[str, str, object, dict], RuleResult]
 
 RULE_REGISTRY: list[tuple[RuleId, ApplyFn]] = [
     ("whitespace", whitespace.apply),
+    ("punctuation", punctuation.apply),
     ("dedupe_exact", dedupe.apply_exact),
     ("wp_dedupe", dedupe.apply_wp),
     ("null_slot", null_slot.apply),

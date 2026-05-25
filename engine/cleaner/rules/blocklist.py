@@ -29,22 +29,32 @@ def apply(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleRes
 
 
 def _apply_list(text: str, mode: str, entries: list[str]) -> RuleResult:
-    norm_entries = {e.casefold() for e in entries if isinstance(e, str)}
+    norm_entries = [e for e in entries if isinstance(e, str) and e]
     dropped: list[str] = []
     if mode == "tags":
+        # Tag-level match: drop the WHOLE tag if any entry is found as
+        # a word-boundary substring within it. Lets "steps" drop the
+        # tag "steps . avoid:" (rough text-like input) while still
+        # protecting "cat" from accidentally hitting "catcher" via the
+        # \b boundary. Falls back to exact casefold equality when the
+        # entry has no \w chars (e.g. punctuation-only entry).
         tags = [t.strip() for t in text.split(",") if t.strip()]
         kept: list[str] = []
+        compiled: list[tuple[str, re.Pattern[str]]] = []
+        for entry in norm_entries:
+            try:
+                compiled.append((entry, re.compile(rf"\b{re.escape(entry)}\b", re.IGNORECASE)))
+            except re.error:
+                continue
         for tag in tags:
-            if tag.casefold() in norm_entries:
+            if any(p.search(tag) or tag.casefold() == src.casefold() for src, p in compiled):
                 dropped.append(tag)
             else:
                 kept.append(tag)
         out = ", ".join(kept)
     else:
         out = text
-        for entry in entries:
-            if not isinstance(entry, str) or not entry:
-                continue
+        for entry in norm_entries:
             pattern = re.compile(rf"\b{re.escape(entry)}\b", re.IGNORECASE)
             new = pattern.sub("", out)
             if new != out:

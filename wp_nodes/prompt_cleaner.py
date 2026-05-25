@@ -21,6 +21,7 @@ from typing import Any
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine.cleaner.pipeline import PromptCleaner
+from engine.cleaner.tokenize import count_chars, count_words
 from engine.cleaner.types import CleanerCtx
 from wp_nodes.types import CleanerWidgetInput, ContextPayload, PipelineContext
 
@@ -89,4 +90,14 @@ class WPPromptCleaner(io.ComfyNode):
         cfg = _parse_config(cleaner)
         ctx = _build_cleaner_ctx(context)
         result = PromptCleaner().run(prompt, cfg, ctx)
-        return io.NodeOutput(result["text"])
+        text = result["text"]
+        # UI payload — the widget's `executed` listener reads these to
+        # populate word/char count + the per-rule stats panel. Each
+        # value is wrapped in a single-element list per ComfyUI's UI
+        # payload convention.
+        ui_payload = {
+            "wp_cleaner_report": [result["report"]],
+            "wp_cleaner_word_count": [count_words(text)],
+            "wp_cleaner_char_count": [count_chars(text)],
+        }
+        return io.NodeOutput(text, ui=ui_payload)

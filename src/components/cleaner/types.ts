@@ -1,6 +1,7 @@
 /** Canonical rule ids. Must stay in sync with engine/cleaner/types.py:RuleId. */
 export type RuleId =
   | "whitespace"
+  | "punctuation"
   | "dedupe_exact"
   | "wp_dedupe"
   | "null_slot"
@@ -25,6 +26,14 @@ export interface CleanerNodeConfig {
 
 export type RuleStats = Record<string, unknown>;
 export type RunReport = Partial<Record<RuleId, RuleStats>>;
+
+/** Slim preset descriptor passed into the CleanerWidget for the
+ *  preset picker. Full row lives in the SPA store + DB. */
+export interface PresetOption {
+  id: string;
+  name: string;
+  is_builtin: boolean;
+}
 
 export function emptyCleanerConfig(): CleanerNodeConfig {
   return {

@@ -21,9 +21,16 @@ from engine.cleaner.types import CleanerCtx, RuleId, RunReport
 
 INTENSITY_TO_RULES: dict[str, list[RuleId]] = {
     "gentle": ["whitespace"],
-    "balanced": ["whitespace", "dedupe_exact", "wp_dedupe", "null_slot"],
+    "balanced": [
+        "whitespace",
+        "punctuation",
+        "dedupe_exact",
+        "wp_dedupe",
+        "null_slot",
+    ],
     "aggressive": [
         "whitespace",
+        "punctuation",
         "dedupe_exact",
         "wp_dedupe",
         "null_slot",

@@ -5,9 +5,16 @@ import type { CleanerNodeConfig, Intensity, RuleId } from "./types";
 
 export const INTENSITY_TO_RULES: Record<Intensity, RuleId[]> = {
   gentle: ["whitespace"],
-  balanced: ["whitespace", "dedupe_exact", "wp_dedupe", "null_slot"],
+  balanced: [
+    "whitespace",
+    "punctuation",
+    "dedupe_exact",
+    "wp_dedupe",
+    "null_slot",
+  ],
   aggressive: [
     "whitespace",
+    "punctuation",
     "dedupe_exact",
     "wp_dedupe",
     "null_slot",
@@ -20,6 +27,7 @@ export const INTENSITY_TO_RULES: Record<Intensity, RuleId[]> = {
 /** Same canonical order as engine/cleaner/rules/__init__.py:RULE_REGISTRY. */
 const REGISTRY_ORDER: RuleId[] = [
   "whitespace",
+  "punctuation",
   "dedupe_exact",
   "wp_dedupe",
   "null_slot",

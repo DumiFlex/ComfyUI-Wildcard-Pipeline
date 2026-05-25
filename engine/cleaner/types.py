@@ -12,6 +12,7 @@ from typing import Any, Literal, TypedDict
 
 RuleId = Literal[
     "whitespace",
+    "punctuation",
     "dedupe_exact",
     "wp_dedupe",
     "null_slot",

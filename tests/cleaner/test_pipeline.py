@@ -22,7 +22,7 @@ def test_balanced_runs_4_default_rules():
     )
     assert out["text"] == "foo, bar"
     assert set(out["report"].keys()) == {
-        "whitespace", "dedupe_exact", "wp_dedupe", "null_slot",
+        "whitespace", "punctuation", "dedupe_exact", "wp_dedupe", "null_slot",
     }
 
 

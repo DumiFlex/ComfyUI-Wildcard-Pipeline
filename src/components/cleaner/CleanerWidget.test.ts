@@ -23,7 +23,7 @@ describe("CleanerWidget", () => {
     expect(w.find('[data-test="cleaner-intensity-gentle"]').exists()).toBe(true);
     expect(w.find('[data-test="cleaner-intensity-balanced"]').exists()).toBe(true);
     expect(w.find('[data-test="cleaner-intensity-aggressive"]').exists()).toBe(true);
-    expect(w.findAll('[data-test^="cleaner-rule-"]:not([data-test$="-stat"])')).toHaveLength(8);
+    expect(w.findAll('[data-test^="cleaner-rule-"]:not([data-test$="-stat"])')).toHaveLength(9);
   });
 
   it("save button hidden in pristine state", () => {

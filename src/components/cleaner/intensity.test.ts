@@ -6,14 +6,14 @@ describe("intensity helpers", () => {
   it("INTENSITY_TO_RULES mirrors the Python pipeline", () => {
     expect(INTENSITY_TO_RULES.gentle).toEqual(["whitespace"]);
     expect(INTENSITY_TO_RULES.balanced).toEqual([
-      "whitespace", "dedupe_exact", "wp_dedupe", "null_slot",
+      "whitespace", "punctuation", "dedupe_exact", "wp_dedupe", "null_slot",
     ]);
-    expect(INTENSITY_TO_RULES.aggressive).toHaveLength(7);
+    expect(INTENSITY_TO_RULES.aggressive).toHaveLength(8);
   });
 
   it("computeEffectiveRules returns intensity rules when no overrides", () => {
     expect(computeEffectiveRules(emptyCleanerConfig())).toEqual([
-      "whitespace", "dedupe_exact", "wp_dedupe", "null_slot",
+      "whitespace", "punctuation", "dedupe_exact", "wp_dedupe", "null_slot",
     ]);
   });
 
@@ -61,5 +61,6 @@ describe("intensity helpers", () => {
       rules_override: { reorder: true, dedupe_exact: true },
     };
     expect(computeEffectiveRules(cfg)).toEqual(["whitespace", "dedupe_exact", "reorder"]);
+    // (punctuation off in gentle, dedupe_exact added via override, reorder added via override)
   });
 });
