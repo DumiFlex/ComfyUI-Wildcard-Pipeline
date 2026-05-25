@@ -92,10 +92,12 @@ export function create(node: CleanerHostNode, inputName: string) {
 
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
-    // Floor low so autoHeight follows content. The ResizeObserver grows
-    // the host to fit; without a tight floor the node would sit at a
-    // fixed 320px regardless of how much content is visible.
-    minHeight: 80,
+    // Initial floor sized to fit the typical content footprint (header +
+    // intensity segment + 8 rule rows + blocklist button + footer
+    // padding). ResizeObserver grows the host beyond this when CLIP bar
+    // is rendered or fonts measure taller; the floor only prevents the
+    // initial paint from clipping while the observer attaches.
+    minHeight: 380,
     minWidth: 320,
     autoHeight: true,
     onValueRestored: (raw: string) => {
