@@ -54,10 +54,16 @@ export function computeEffectiveRules(config: CleanerNodeConfig): RuleId[] {
   return REGISTRY_ORDER.filter((rid) => base.has(rid));
 }
 
-/** True when config exactly matches the selected intensity (no overrides,
- *  empty blocklist). Drives the "save button hidden" pristine state. */
+/** True when no rule override diverges from the intensity baseline.
+ *  Blocklist entries on their own do NOT count as "modification" —
+ *  they're data, not a toggle. The CUSTOM badge appears only when the
+ *  user explicitly flipped a rule away from its baseline. */
 export function isPristine(config: CleanerNodeConfig): boolean {
-  const hasOverride = Object.keys(config.rules_override).length > 0;
-  const hasBlocklist = config.blocklist.entries.length > 0;
-  return !hasOverride && !hasBlocklist;
+  const defaults = new Set(INTENSITY_TO_RULES[config.intensity]);
+  const hasEntries = config.blocklist.entries.length > 0;
+  for (const [rid, on] of Object.entries(config.rules_override) as Array<[RuleId, boolean]>) {
+    const baseline = defaults.has(rid) || (rid === "blocklist" && hasEntries);
+    if (on !== baseline) return false;
+  }
+  return true;
 }

@@ -19,14 +19,20 @@ import type {
   RunReport,
 } from "./types";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: CleanerNodeConfig;
   lastRunReport: RunReport | null;
   wordCount: number;
   charCount: number;
   clipTokenCount: number | null;
   clipTokenLimit: number;
-}>();
+  /** Litegraph mode — 0=ALWAYS, 2=NEVER (mute), 4=BYPASS. Drives the
+   *  dim overlay so muted/bypassed state matches litegraph's native
+   *  title/border dim. */
+  nodeMode?: number;
+}>(), { nodeMode: 0 });
+
+const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
 const emit = defineEmits<{
   "update:modelValue": [next: CleanerNodeConfig];
@@ -64,9 +70,11 @@ function pruneStaleOverrides(
   intensity: Intensity,
 ): Partial<Record<RuleId, boolean>> {
   const defaults = new Set(INTENSITY_TO_RULES[intensity]);
+  const hasEntries = props.modelValue.blocklist.entries.length > 0;
   const next: Partial<Record<RuleId, boolean>> = {};
   for (const [rid, on] of Object.entries(overrides) as [RuleId, boolean][]) {
-    if (on !== defaults.has(rid)) next[rid] = on;
+    const baseline = defaults.has(rid) || (rid === "blocklist" && hasEntries);
+    if (on !== baseline) next[rid] = on;
   }
   return next;
 }
@@ -131,7 +139,7 @@ function isOverridden(rid: RuleId): boolean {
 </script>
 
 <template>
-  <div class="wp-cleaner">
+  <div :class="['wp-cleaner', { 'wp-cleaner--skipped': isSkipped }]">
     <header class="wp-cleaner__head">
       <div class="wp-cleaner__mode" role="tablist">
         <button
@@ -164,8 +172,7 @@ function isOverridden(rid: RuleId): boolean {
       <div class="wp-cleaner__section-head">
         <span class="wp-cleaner__section-label">INTENSITY</span>
         <span
-          v-if="!pristine"
-          class="wp-cleaner__badge"
+          :class="['wp-cleaner__badge', { 'is-hidden': pristine }]"
           data-test="cleaner-custom-badge"
         >CUSTOM</span>
       </div>
@@ -236,6 +243,9 @@ function isOverridden(rid: RuleId): boolean {
   border-radius: var(--wp-radius, 6px);
   font-size: 12px;
 }
+/* Match litegraph's native dim on muted (mode=2) + bypassed (mode=4) —
+   parity with WP_Context / WP_Debug / WP_Injector widgets. */
+.wp-cleaner--skipped { opacity: 0.45; }
 
 .wp-cleaner__head {
   padding: 8px 12px;
@@ -308,6 +318,11 @@ function isOverridden(rid: RuleId): boolean {
   color: var(--wp-amber, var(--wp-warn));
   border: 1px solid color-mix(in srgb, var(--wp-amber, var(--wp-warn)) 40%, transparent);
   border-radius: var(--wp-radius-sm, 4px);
+}
+/* Reserve vertical space whether the badge is visible or not so the
+ * widget host doesn't trigger an autosize bounce on intensity edits. */
+.wp-cleaner__badge.is-hidden {
+  visibility: hidden;
 }
 
 .wp-cleaner__seg {

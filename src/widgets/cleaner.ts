@@ -6,6 +6,7 @@ import {
   serializeWidgetJson,
   type MountTargetNode,
 } from "./_shared";
+import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyCleanerConfig,
   type CleanerNodeConfig,
@@ -21,6 +22,7 @@ const BlocklistModal = defineAsyncComponent(
 
 interface CleanerHostNode extends MountTargetNode {
   id?: string | number;
+  mode?: number;
 }
 
 /**
@@ -50,6 +52,15 @@ export function create(node: CleanerHostNode, inputName: string) {
 
   const wrapper: Component = {
     setup() {
+      // Litegraph mode tracker — drives the muted/bypassed dim overlay.
+      // 0=ALWAYS, 2=NEVER (mute), 4=BYPASS. Same pattern WP_Context /
+      // WP_Debug / WP_Injector use; reads via reactiveFromGraph so
+      // the widget repaints on mode changes without manual wiring.
+      const nodeMode = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => node.mode ?? 0,
+        Object.is,
+      );
       function onUpdate(next: CleanerNodeConfig): void {
         config.value = next;
         host.setValue(serializeWidgetJson(next));
@@ -65,6 +76,7 @@ export function create(node: CleanerHostNode, inputName: string) {
           charCount: charCount.value,
           clipTokenCount: clipTokenCount.value,
           clipTokenLimit: 77,
+          nodeMode: nodeMode.value,
           "onUpdate:modelValue": onUpdate,
           "onOpen-blocklist": () => { blocklistOpen.value = true; },
         }),

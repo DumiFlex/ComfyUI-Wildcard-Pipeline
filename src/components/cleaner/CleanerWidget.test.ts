@@ -26,9 +26,18 @@ describe("CleanerWidget", () => {
     expect(w.findAll('[data-test^="cleaner-rule-"]:not([data-test$="-stat"])')).toHaveLength(8);
   });
 
-  it("CUSTOM badge visible when modified", () => {
+  it("CUSTOM badge marked visible when modified", () => {
     const w = mount(CleanerWidget, { props: makeProps({ rules_override: { fuzzy_dedupe: true } }) });
-    expect(w.find('[data-test="cleaner-custom-badge"]').exists()).toBe(true);
+    const badge = w.find('[data-test="cleaner-custom-badge"]');
+    expect(badge.exists()).toBe(true);
+    expect(badge.classes()).not.toContain("is-hidden");
+  });
+
+  it("CUSTOM badge marked hidden in pristine state", () => {
+    const w = mount(CleanerWidget, { props: makeProps() });
+    const badge = w.find('[data-test="cleaner-custom-badge"]');
+    expect(badge.exists()).toBe(true);
+    expect(badge.classes()).toContain("is-hidden");
   });
 
   it("clicking an intensity emits update:modelValue with new intensity", async () => {

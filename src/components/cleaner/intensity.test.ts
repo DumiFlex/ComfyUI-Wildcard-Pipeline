@@ -47,11 +47,29 @@ describe("intensity helpers", () => {
     expect(isPristine({ ...emptyCleanerConfig(), rules_override: { fuzzy_dedupe: true } })).toBe(false);
   });
 
-  it("isPristine false when blocklist has entries", () => {
+  it("isPristine still true when blocklist has entries but no overrides", () => {
+    // Blocklist entries are data, not a "modification" of the intensity preset.
     expect(isPristine({
       ...emptyCleanerConfig(),
       blocklist: { kind: "list", entries: ["x"] },
+    })).toBe(true);
+  });
+
+  it("isPristine false when blocklist has entries AND override flips it off", () => {
+    expect(isPristine({
+      ...emptyCleanerConfig(),
+      blocklist: { kind: "list", entries: ["x"] },
+      rules_override: { blocklist: false },
     })).toBe(false);
+  });
+
+  it("isPristine true when blocklist override matches entries baseline", () => {
+    // override=true with entries present matches the auto-enable baseline.
+    expect(isPristine({
+      ...emptyCleanerConfig(),
+      blocklist: { kind: "list", entries: ["x"] },
+      rules_override: { blocklist: true },
+    })).toBe(true);
   });
 
   it("rules sorted by registry order regardless of toggle order", () => {
