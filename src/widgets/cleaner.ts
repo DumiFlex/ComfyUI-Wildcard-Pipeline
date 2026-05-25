@@ -92,7 +92,10 @@ export function create(node: CleanerHostNode, inputName: string) {
 
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
-    minHeight: 320,
+    // Floor low so autoHeight follows content. The ResizeObserver grows
+    // the host to fit; without a tight floor the node would sit at a
+    // fixed 320px regardless of how much content is visible.
+    minHeight: 80,
     minWidth: 320,
     autoHeight: true,
     onValueRestored: (raw: string) => {
