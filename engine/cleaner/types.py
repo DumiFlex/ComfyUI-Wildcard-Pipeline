@@ -19,7 +19,6 @@ RuleId = Literal[
     "fuzzy_dedupe",
     "dangling_var",
     "blocklist",
-    "reorder",
 ]
 
 Mode = Literal["tags", "text"]

@@ -33,7 +33,6 @@ def test_aggressive_runs_all_non_blocklist_rules():
         config={"mode": "tags", "intensity": "aggressive"},
     )
     assert "fuzzy_dedupe" in out["report"]
-    assert "reorder" in out["report"]
     assert "dangling_var" in out["report"]
     assert "blocklist" not in out["report"]
 
@@ -58,10 +57,10 @@ def test_rules_override_turns_rule_on():
         config={
             "mode": "tags",
             "intensity": "gentle",
-            "rules_override": {"reorder": True},
+            "rules_override": {"fuzzy_dedupe": True},
         },
     )
-    assert "reorder" in out["report"]
+    assert "fuzzy_dedupe" in out["report"]
 
 
 def test_blocklist_auto_enables_when_entries_present():

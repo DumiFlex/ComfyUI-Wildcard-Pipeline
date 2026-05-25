@@ -20,7 +20,6 @@ export const INTENSITY_TO_RULES: Record<Intensity, RuleId[]> = {
     "null_slot",
     "fuzzy_dedupe",
     "dangling_var",
-    "reorder",
   ],
 };
 
@@ -34,7 +33,6 @@ const REGISTRY_ORDER: RuleId[] = [
   "fuzzy_dedupe",
   "dangling_var",
   "blocklist",
-  "reorder",
 ];
 
 /** Final ordered rule list for a given config. Mirrors the Python

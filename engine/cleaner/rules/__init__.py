@@ -16,7 +16,6 @@ from engine.cleaner.rules import (
     dedupe,
     null_slot,
     punctuation,
-    reorder,
     whitespace,
 )
 from engine.cleaner.types import RuleId, RuleResult
@@ -32,7 +31,6 @@ RULE_REGISTRY: list[tuple[RuleId, ApplyFn]] = [
     ("fuzzy_dedupe", dedupe.apply_fuzzy),
     ("dangling_var", dangling_var.apply),
     ("blocklist", blocklist.apply),
-    ("reorder", reorder.apply),
 ]
 
 

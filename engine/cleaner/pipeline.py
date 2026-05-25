@@ -36,7 +36,6 @@ INTENSITY_TO_RULES: dict[str, list[RuleId]] = {
         "null_slot",
         "fuzzy_dedupe",
         "dangling_var",
-        "reorder",
     ],
 }
 

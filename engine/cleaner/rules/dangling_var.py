@@ -27,6 +27,29 @@ def _unbound_names(ctx: CleanerCtx) -> set[str]:
     return out
 
 
+_STRAY_BEFORE_COMMA = re.compile(r"\s+,")
+_DOUBLE_COMMA = re.compile(r",\s*,+")
+_LEADING_PUNCT_RUN = re.compile(r"^[,\s]+")
+_TRAILING_PUNCT_RUN = re.compile(r"[,\s]+$")
+_DOUBLE_SPACE = re.compile(r"  +")
+
+
+def _cleanup_stray(text: str) -> str:
+    """Scrub stray comma/space artifacts left behind by var strips.
+
+    A var sitting alone in a comma-separated list (`a, $var, b`)
+    leaves `a, , b` after the substitution. Collapse those into the
+    surrounding context so the cleaner-output isn't littered with the
+    user-invisible scar of the removed token.
+    """
+    out = _DOUBLE_COMMA.sub(",", text)
+    out = _STRAY_BEFORE_COMMA.sub(",", out)
+    out = _DOUBLE_SPACE.sub(" ", out)
+    out = _LEADING_PUNCT_RUN.sub("", out)
+    out = _TRAILING_PUNCT_RUN.sub("", out)
+    return out
+
+
 def apply(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleResult:
     if ctx is None:
         return {"text": text, "stats": {}}
@@ -41,4 +64,6 @@ def apply(text: str, mode: str, ctx: CleanerCtx | None, config: dict) -> RuleRes
         if new != out:
             stripped.append(f"${name}")
         out = new
+    if stripped:
+        out = _cleanup_stray(out)
     return {"text": out, "stats": {"stripped": stripped}}

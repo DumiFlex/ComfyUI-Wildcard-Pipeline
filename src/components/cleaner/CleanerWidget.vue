@@ -42,7 +42,6 @@ const ALL_RULES: { id: RuleId; label: string; statKey: string }[] = [
   { id: "fuzzy_dedupe",  label: "fuzzy dedupe", statKey: "dropped" },
   { id: "dangling_var",  label: "dangling-var", statKey: "stripped" },
   { id: "blocklist",     label: "blocklist",    statKey: "dropped" },
-  { id: "reorder",       label: "reorder",      statKey: "reordered" },
 ];
 
 const INTENSITIES: Intensity[] = ["gentle", "balanced", "aggressive"];

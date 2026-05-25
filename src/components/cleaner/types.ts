@@ -7,8 +7,7 @@ export type RuleId =
   | "null_slot"
   | "fuzzy_dedupe"
   | "dangling_var"
-  | "blocklist"
-  | "reorder";
+  | "blocklist";
 
 export type Intensity = "gentle" | "balanced" | "aggressive";
 export type Mode = "tags" | "text";

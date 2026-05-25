@@ -8,7 +8,7 @@ describe("intensity helpers", () => {
     expect(INTENSITY_TO_RULES.balanced).toEqual([
       "whitespace", "punctuation", "dedupe_exact", "wp_dedupe", "null_slot",
     ]);
-    expect(INTENSITY_TO_RULES.aggressive).toHaveLength(8);
+    expect(INTENSITY_TO_RULES.aggressive).toHaveLength(7);
   });
 
   it("computeEffectiveRules returns intensity rules when no overrides", () => {
@@ -58,9 +58,10 @@ describe("intensity helpers", () => {
     const cfg: CleanerNodeConfig = {
       ...emptyCleanerConfig(),
       intensity: "gentle",
-      rules_override: { reorder: true, dedupe_exact: true },
+      rules_override: { fuzzy_dedupe: true, dedupe_exact: true },
     };
-    expect(computeEffectiveRules(cfg)).toEqual(["whitespace", "dedupe_exact", "reorder"]);
-    // (punctuation off in gentle, dedupe_exact added via override, reorder added via override)
+    expect(computeEffectiveRules(cfg)).toEqual([
+      "whitespace", "dedupe_exact", "fuzzy_dedupe",
+    ]);
   });
 });

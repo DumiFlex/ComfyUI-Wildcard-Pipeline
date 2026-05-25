@@ -20,7 +20,9 @@ def _ctx_with_unbound(*names: str) -> CleanerCtx:
 def test_strips_unbound_var():
     ctx = _ctx_with_unbound("artist")
     result = apply("portrait by $artist, sunset", mode="text", ctx=ctx, config={})
-    assert result["text"] == "portrait by , sunset"
+    # After stripping `$artist`, the stray ` , ` artifact is scrubbed
+    # so the user-output isn't littered with the now-orphaned comma.
+    assert result["text"] == "portrait by, sunset"
     assert result["stats"]["stripped"] == ["$artist"]
 
 
@@ -28,7 +30,8 @@ def test_leaves_bound_var_alone():
     """Vars NOT in warnings list are bound — leave them."""
     ctx = _ctx_with_unbound("artist")
     result = apply("$style by $artist", mode="text", ctx=ctx, config={})
-    assert result["text"] == "$style by "
+    # Trailing whitespace post-strip is scrubbed.
+    assert result["text"] == "$style by"
     assert result["stats"]["stripped"] == ["$artist"]
 
 
