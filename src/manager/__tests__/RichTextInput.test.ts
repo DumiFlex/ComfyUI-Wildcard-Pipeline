@@ -271,12 +271,12 @@ describe("RichTextInput.vue", () => {
     await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
       .__applyAutocompleteForTest("aabbccdd");
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd}");
+    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd#outfit}");
     expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
     wrap.unmount();
   });
 
-  it("subcat picker Apply with selection inserts @{uuid:warm} chip", async () => {
+  it("subcat picker Apply with selection inserts @{uuid#name:warm} chip", async () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "",
@@ -297,12 +297,12 @@ describe("RichTextInput.vue", () => {
     (document.querySelector('[data-test="picker-apply"]') as HTMLElement).click();
     await flushPromises();
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd:warm}");
+    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd#color:warm}");
     expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
     wrap.unmount();
   });
 
-  it("subcat picker Skip inserts plain @{uuid} chip", async () => {
+  it("subcat picker Skip inserts plain @{uuid#name} chip", async () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "",
@@ -320,7 +320,7 @@ describe("RichTextInput.vue", () => {
     (document.querySelector('[data-test="picker-skip"]') as HTMLElement).click();
     await flushPromises();
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd}");
+    expect(events[events.length - 1]?.[0]).toBe("@{aabbccdd#color}");
     wrap.unmount();
   });
 
@@ -486,7 +486,7 @@ describe("RichTextInput.vue", () => {
     (document.querySelector('[data-test="picker-apply"]') as HTMLElement).click();
     await flushPromises();
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("hi @{aabbccdd:warm,cool} foo");
+    expect(events[events.length - 1]?.[0]).toBe("hi @{aabbccdd#color:warm,cool} foo");
     wrap.unmount();
   });
 
@@ -578,7 +578,7 @@ describe("RichTextInput.vue", () => {
     await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
       .__applyAutocompleteForTest("aabbccdd");
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("alpha @{aabbccdd} beta");
+    expect(events[events.length - 1]?.[0]).toBe("alpha @{aabbccdd#color} beta");
     wrap.unmount();
   });
 

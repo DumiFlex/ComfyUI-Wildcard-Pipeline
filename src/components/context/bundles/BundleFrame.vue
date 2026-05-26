@@ -67,6 +67,7 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
       :child-count="children.length"
       :drifted-count="ctx.bundleChildDriftCount(bundle)"
       :library-drifted="ctx.isBundleLibraryDrifted(bundle)"
+      :library-missing="ctx.isBundleMissingFromLibrary(bundle)"
       :internal-state="ctx.bundleInternalState(bundle)"
       :lock-state="ctx.bundleLockState(bundle)"
       :snapshot-modified="ctx.isBundleSnapshotModified(bundle)"

@@ -17,7 +17,7 @@ from engine.db.repositories import (
 )
 
 
-def test_fix_wildcard_delete_strips_constraints_and_bundle_refs(wp_db):
+def test_fix_wildcard_delete_strips_constraints_but_preserves_bundle_snapshots(wp_db):
     mod = ModuleRepository(wp_db)
     wc = mod.create(type="wildcard", name="x", description="", category_id=None, tags=[],
                     payload={"options": []})
@@ -32,25 +32,21 @@ def test_fix_wildcard_delete_strips_constraints_and_bundle_refs(wp_db):
 
     touched, diff = fix_wildcard_delete(wp_db, wc["id"])
 
-    # Constraint referencing wc must be deleted.
+    # Constraint referencing wc must be deleted (id-only ref, no fallback).
     with pytest.raises(ModuleNotFound):
         mod.get(c["id"])
-    # Bundle should now have only `other` as a child.
+    # Bundle children are frozen snapshots — wc's entry stays intact
+    # even though the source library row is gone. The bundle keeps
+    # resolving with the captured payload.
     bundle_after = BundleRepository(wp_db).get(b["id"])
-    assert {ch["id"] for ch in bundle_after["children"]} == {other["id"]}
-    # Touched + diff non-empty.
+    assert {ch["id"] for ch in bundle_after["children"]} == {wc["id"], other["id"]}
+    # Only the constraint shows up in touched + diff; bundle untouched.
     assert any(t["id"] == c["id"] for t in touched)
-    assert any(t["id"] == b["id"] for t in touched)
-    assert len(diff) >= 2
-    # Verify diff shape: constraint removal + bundle ref removal
+    assert not any(t["id"] == b["id"] for t in touched)
     assert any(
         d.get("entity_id") == c["id"] and d.get("removed") is True for d in diff
     )
-    assert any(
-        d.get("entity_id") == b["id"]
-        and d.get("remove_ref", {}).get("kind") == "wildcard"
-        for d in diff
-    )
+    assert not any(d.get("entity_id") == b["id"] for d in diff)
 
 
 def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):

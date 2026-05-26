@@ -416,14 +416,14 @@ onBeforeUnmount(() => {
   border-radius: 4px;
 }
 .mx-axis--src {
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 14%, transparent);
-  border: 1px solid color-mix(in oklab, #c084fc 35%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-source) 35%, transparent);
 }
 .mx-axis--tgt {
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 14%, transparent);
-  border: 1px solid color-mix(in oklab, #22d3ee 35%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 35%, transparent);
 }
 .mx-axis .arrow { font: 14px var(--wp-font-mono); line-height: 1; }
 
@@ -446,16 +446,16 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   text-align: left;
   padding: 0 8px !important;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
 }
-.mx-corner .row-1 { display: block; color: #d8b4fe; line-height: 1.3; }
-.mx-corner .row-2 { display: block; color: #67e8f9; line-height: 1.3; }
+.mx-corner .row-1 { display: block; color: var(--wp-constraint-source-text); line-height: 1.3; }
+.mx-corner .row-2 { display: block; color: var(--wp-constraint-target-text); line-height: 1.3; }
 .mx-th-col {
   width: 64px;
   height: 28px;
   font: 700 10px var(--wp-font-sans);
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 10%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 10%, transparent);
   border-radius: 4px;
   text-align: center;
 }
@@ -463,8 +463,8 @@ onBeforeUnmount(() => {
   width: 96px;
   height: 36px;
   font: 700 10px var(--wp-font-sans);
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 10%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 10%, transparent);
   border-radius: 4px;
   text-align: right;
   padding: 0 12px !important;
@@ -489,29 +489,31 @@ onBeforeUnmount(() => {
 }
 .mx-cell:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wp-text) 22%, transparent),
+              0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd),
+              0 4px 12px color-mix(in srgb, var(--wp-text) 25%, transparent);
 }
 .mx-cell.s-neutral {
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
   color: var(--wp-text-dim, #595c66);
-  border: 1px dashed rgba(255, 255, 255, 0.10);
+  border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
 }
 .mx-cell.s-exclude {
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent);
-  color: #fca5a5;
+  color: var(--wp-danger);
   border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent);
 }
 .mx-cell.s-boost {
   background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent);
-  color: #86efac;
+  color: var(--wp-success);
   border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent);
 }
 .mx-cell.s-reduce {
   background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent);
-  color: #fdba74;
+  color: var(--wp-warn);
   border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
 }
 .mx-cell--mod {

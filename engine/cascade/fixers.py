@@ -65,11 +65,18 @@ def _rewrite_subcat_ref_in_string(
     old_subcat: str,
     new_subcat: str,
 ) -> str:
-    """Replace ``@{wildcard_id:old_subcat}`` → ``@{wildcard_id:new_subcat}``."""
+    """Replace ``@{wildcard_id[#name]:old_subcat}`` →
+    ``@{wildcard_id[#name]:new_subcat}``. Preserves any optional
+    ``#name`` segment so a subcat rename doesn't strip the wildcard's
+    cached display name from refs."""
     pattern = re.compile(
-        r"@\{" + re.escape(wildcard_id) + r":" + re.escape(old_subcat) + r"\}"
+        r"@\{" + re.escape(wildcard_id)
+        + r"(#[^#:}@{]*)?:" + re.escape(old_subcat) + r"\}"
     )
-    return pattern.sub(f"@{{{wildcard_id}:{new_subcat}}}", s)
+    def repl(m: re.Match[str]) -> str:
+        name_seg = m.group(1) or ""
+        return f"@{{{wildcard_id}{name_seg}:{new_subcat}}}"
+    return pattern.sub(repl, s)
 
 
 def _strip_subcat_ref_in_string(
@@ -77,11 +84,37 @@ def _strip_subcat_ref_in_string(
     wildcard_id: str,
     subcat_name: str,
 ) -> str:
-    """Remove ``@{wildcard_id:subcat_name}`` occurrences from *s*."""
+    """Remove ``@{wildcard_id[#name]:subcat_name}`` occurrences from
+    *s*. Matches with or without the optional ``#name`` segment."""
     pattern = re.compile(
-        r"@\{" + re.escape(wildcard_id) + r":" + re.escape(subcat_name) + r"\}"
+        r"@\{" + re.escape(wildcard_id)
+        + r"(?:#[^#:}@{]*)?:" + re.escape(subcat_name) + r"\}"
     )
     return pattern.sub("", s)
+
+
+def _rewrite_ref_name_in_string(
+    s: str,
+    wildcard_id: str,
+    new_name: str,
+) -> str:
+    """Rewrite every ``@{wildcard_id...}`` ref in *s* so its ``#name``
+    segment matches *new_name*. Bare-uuid refs gain the segment;
+    refs that already carry an old name get it replaced. Subcat
+    suffix is preserved.
+
+    Empty *new_name* drops the segment entirely (canonical bare-uuid
+    form), which lets the same fixer handle "name was cleared" later
+    without a separate code path."""
+    pattern = re.compile(
+        r"@\{" + re.escape(wildcard_id)
+        + r"(?:#[^#:}@{]*)?(:[^}]*)?\}"
+    )
+    name_seg = f"#{new_name}" if new_name else ""
+    def repl(m: re.Match[str]) -> str:
+        sub_seg = m.group(1) or ""
+        return f"@{{{wildcard_id}{name_seg}{sub_seg}}}"
+    return pattern.sub(repl, s)
 
 
 # ---------------------------------------------------------------------------
@@ -92,10 +125,20 @@ def fix_wildcard_delete(
     conn: sqlite3.Connection,
     wildcard_id: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Strip all references to *wildcard_id* from constraints and bundles.
+    """Strip all references to *wildcard_id* from constraints.
 
-    * Constraints whose source or target is *wildcard_id* are deleted.
-    * Bundle ``children[]`` lists have the wildcard entry removed.
+    * Constraints whose source or target is *wildcard_id* are deleted —
+      they reference the wildcard by id only, with no fallback shape.
+
+    Bundles are intentionally NOT touched. Bundle children are full
+    frozen snapshots: the wildcard's payload, options, and meta were
+    deep-copied into ``bundle.children[i]`` at insert time, so the
+    bundle keeps working even when the source library row is deleted.
+    Removing the snapshot would destroy data the user explicitly
+    captured for offline / portable use. The MISSING badge on the
+    referenced workflow rows still fires (drift-store sees the id is
+    gone) — that's the honest signal; stripping the snapshot would be
+    over-eager housekeeping.
 
     The fixer does NOT delete the wildcard row itself; the orchestrator
     owns that mutation.
@@ -104,7 +147,6 @@ def fix_wildcard_delete(
     diff: list[dict[str, Any]] = []
 
     mod_repo = ModuleRepository(conn)
-    bundle_repo = BundleRepository(conn)
 
     # --- Constraints --------------------------------------------------------
     for m in mod_repo.list():
@@ -116,18 +158,6 @@ def fix_wildcard_delete(
             touched.append(_deepcopy_row(m))
             mod_repo.delete(m["id"])
             diff.append({"entity_id": m["id"], "removed": True})
-
-    # --- Bundles ------------------------------------------------------------
-    for b in bundle_repo.list():
-        children = b.get("children") or []
-        new_children = [ch for ch in children if ch.get("id") != wildcard_id]
-        if len(new_children) != len(children):
-            touched.append(_deepcopy_row(b))
-            bundle_repo.update(b["id"], children=new_children)
-            diff.append({
-                "entity_id": b["id"],
-                "remove_ref": {"kind": "wildcard", "id": wildcard_id},
-            })
 
     return touched, diff
 
@@ -284,6 +314,156 @@ def fix_subcat_rename(
                     "old": old_name,
                     "new": new_name,
                 },
+            })
+
+    return touched, diff
+
+
+def fix_wildcard_rename_name(
+    conn: sqlite3.Connection,
+    wildcard_id: str,
+    new_name: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Rewrite every ``@{wildcard_id...}`` ref so its ``#name`` segment
+    matches *new_name*. Walks the same surfaces ``fix_wildcard_delete``
+    + ``fix_subcat_rename`` cover for ref strings:
+
+    * Other wildcards' option values.
+    * Derivation rules' action string values (the only surface besides
+      wildcards where ``@{}`` text refs are resolved).
+
+    Combine templates, fixed-values, and constraint payloads don't hold
+    ``@{}`` text refs (constraints reference by id only via
+    ``source_wildcard_id`` / ``target_wildcard_id``), so they're
+    skipped. Bundle children carry frozen module snapshots whose option
+    values may contain refs; we walk those too so a save propagates
+    into bundle copies.
+
+    Skips the renamed wildcard itself — its own name lives on the row,
+    not in its own option values.
+    """
+    touched: list[dict[str, Any]] = []
+    diff: list[dict[str, Any]] = []
+
+    mod_repo = ModuleRepository(conn)
+    bundle_repo = BundleRepository(conn)
+
+    for m in mod_repo.list():
+        if m["id"] == wildcard_id:
+            continue
+        t = m["type"]
+        p = m.get("payload") or {}
+        new_payload = copy.deepcopy(p)
+        changed = False
+
+        if t == "wildcard":
+            for opt in new_payload.get("options") or []:
+                v = opt.get("value")
+                if isinstance(v, str):
+                    new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
+                    if new_v != v:
+                        opt["value"] = new_v
+                        changed = True
+
+        elif t == "derivation":
+            for rule in new_payload.get("rules") or []:
+                for branch in rule.get("branches") or []:
+                    for action in branch.get("actions") or []:
+                        if not isinstance(action, dict):
+                            continue
+                        for k, v in list(action.items()):
+                            if isinstance(v, str):
+                                new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
+                                if new_v != v:
+                                    action[k] = new_v
+                                    changed = True
+
+        if changed:
+            touched.append(_deepcopy_row(m))
+            mod_repo.update(m["id"], payload=new_payload)
+            diff.append({
+                "entity_id": m["id"],
+                "rename_ref": {
+                    "kind": "wildcard_name",
+                    "wildcard_id": wildcard_id,
+                    "new": new_name,
+                },
+            })
+
+    # Bundle child snapshots — walk frozen module copies and rewrite
+    # ref strings in their option values. Children may reference the
+    # renamed wildcard via @{uuid} in their stored snapshots.
+    for b in bundle_repo.list():
+        children = b.get("children") or []
+        new_children = copy.deepcopy(children)
+        bundle_changed = False
+        for ch in new_children:
+            if not isinstance(ch, dict):
+                continue
+            if ch.get("type") != "wildcard":
+                continue
+            if ch.get("id") == wildcard_id:
+                # The renamed wildcard's own snapshot in this bundle —
+                # update the cached `name` field instead of refs.
+                if ch.get("name") != new_name:
+                    ch["name"] = new_name
+                    bundle_changed = True
+                continue
+            payload = ch.get("payload") or {}
+            for opt in payload.get("options") or []:
+                v = opt.get("value")
+                if isinstance(v, str):
+                    new_v = _rewrite_ref_name_in_string(v, wildcard_id, new_name)
+                    if new_v != v:
+                        opt["value"] = new_v
+                        bundle_changed = True
+        if bundle_changed:
+            touched.append(_deepcopy_row(b))
+            bundle_repo.update(b["id"], children=new_children)
+            diff.append({
+                "entity_id": b["id"],
+                "rename_ref": {
+                    "kind": "wildcard_name",
+                    "wildcard_id": wildcard_id,
+                    "new": new_name,
+                },
+            })
+
+    return touched, diff
+
+
+def fix_bundle_delete(
+    conn: sqlite3.Connection,
+    bundle_id: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Strip every ``{type: "bundle", id: bundle_id}`` ref from other
+    bundles' ``children[]`` lists. Mirrors `fix_wildcard_delete` for
+    bundles — when a bundle is removed, parent bundles holding it as
+    a tier-2 ref are cleaned so they don't ship `_missing_ref` on
+    their next GET expansion.
+
+    The fixer does NOT delete the bundle row itself; the orchestrator
+    owns that mutation. Skips self-reference (tier-2 cap forbids it,
+    defensive).
+    """
+    touched: list[dict[str, Any]] = []
+    diff: list[dict[str, Any]] = []
+    bundle_repo = BundleRepository(conn)
+
+    for b in bundle_repo.list():
+        if b["id"] == bundle_id:
+            continue
+        children = b.get("children") or []
+        new_children = [
+            ch for ch in children
+            if not (ch.get("type") == "bundle" and ch.get("id") == bundle_id)
+        ]
+        if len(new_children) != len(children):
+            touched.append(_deepcopy_row(b))
+            bundle_repo.update(b["id"], children=new_children)
+            diff.append({
+                "entity_id": b["id"],
+                "remove_ref": {"kind": "bundle", "id": bundle_id},
             })
 
     return touched, diff

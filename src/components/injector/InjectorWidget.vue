@@ -861,6 +861,6 @@ defineExpose({ addRow, removeRow });
   padding: 12px;
   color: var(--wp-text-dim, var(--wp-text3));
   font: italic 11px var(--wp-font-sans);
-  background: rgba(255, 255, 255, 0.015);
+  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
 }
 </style>

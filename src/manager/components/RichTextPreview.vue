@@ -102,15 +102,23 @@ const atoms = computed<Atom[]>(() => {
 });
 const isWildcard = computed(() => props.surface === "wildcard");
 
-/** Resolve a ref uuid to its display name. Caller's `uuidToName` wins
- *  (live local names beat library snapshots), then the lazy library
- *  cache. Returns empty string when neither knows the uuid — chip
- *  renders as unresolved. */
-function refName(uuid: string): string {
+/** Resolve a ref uuid to its display name. Priority chain:
+ *  1. Caller's `uuidToName` (live local names — beat library snapshots).
+ *  2. Lazy library lookup cache.
+ *  3. Cached `#name` from the parsed ref token (atom.name).
+ *  Empty string when nothing resolves — chip renders as unresolved.
+ *
+ *  `cachedName` is passed in so an atom whose target was deleted from
+ *  the library still surfaces the friendly label captured at insert
+ *  time, mirroring the RichTextInput + canvas OptionRow grammar. */
+function refName(uuid: string, cachedName?: string): string {
   const local = props.uuidToName.get(uuid);
   if (local) return local;
   const hit = lookup(uuid);
-  return hit?.varBinding?.trim() || hit?.name?.trim() || "";
+  const live = hit?.varBinding?.trim() || hit?.name?.trim();
+  if (live) return live;
+  if (cachedName && cachedName.trim()) return cachedName.trim();
+  return "";
 }
 
 function atomIsResolved(atom: Atom): boolean {
@@ -118,7 +126,15 @@ function atomIsResolved(atom: Atom): boolean {
   // resolve via upstream context / derivation / runtime overrides. The
   // conflict scanner surfaces genuine missing-var advisories elsewhere.
   if (atom.kind === "var") return atom.name.length > 0;
-  if (atom.kind === "ref") return refName(atom.uuid).length > 0;
+  if (atom.kind === "ref") {
+    // Resolution checks the LIVE chain only (uuidToName + library
+    // lookup). Cached `#name` is display fallback, not a resolution
+    // signal — a ref pointing at a deleted library entry should still
+    // render unresolved (red chip) even when the cached label survives.
+    if (props.uuidToName.get(atom.uuid)) return true;
+    const hit = lookup(atom.uuid);
+    return !!(hit?.varBinding?.trim() || hit?.name?.trim());
+  }
   return true;
 }
 
@@ -150,7 +166,7 @@ function textHtml(text: string): string {
       <RefChip
         v-if="atom.kind === 'ref'"
         :kind="'ref'"
-        :name="refName(atom.uuid)"
+        :name="refName(atom.uuid, atom.name)"
         :uuid="atom.uuid"
         :sub-categories="atom.subCategories"
         :resolved="atomIsResolved(atom)"

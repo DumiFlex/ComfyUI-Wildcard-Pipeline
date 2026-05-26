@@ -15,8 +15,8 @@ import {
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
-import { collectCrossNodePairings } from "../extension/cross-node-pairings";
-import type { PairingBadge } from "../extension/constraint-pairs";
+import { collectCrossNodePairingsFull } from "../extension/cross-node-pairings";
+import type { PairingBadge, RowPairings } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 
 /** Shallow-equal map comparator for `reactiveFromGraph` so the
@@ -30,24 +30,51 @@ function stringMapEqual(a: Record<string, string>, b: Record<string, string>): b
   return true;
 }
 
-/** Shallow-equal comparator for pairing-badge Map — re-renders only on
- *  actual entry diff (gate prevents per-frame poll churn re-rendering
- *  every ContextWidget when nothing's changed). */
+function pairingBadgeEqual(a: PairingBadge, b: PairingBadge): boolean {
+  if (
+    a.number !== b.number ||
+    a.targetUuid !== b.targetUuid ||
+    a.colorIndex !== b.colorIndex ||
+    a.isOrphan !== b.isOrphan
+  ) return false;
+  const av = a.via;
+  const bv = b.via;
+  if (!av && !bv) return true;
+  if (!av || !bv) return false;
+  if (av.carrierRowKey !== bv.carrierRowKey) return false;
+  if (av.optionIds.length !== bv.optionIds.length) return false;
+  for (let i = 0; i < av.optionIds.length; i++) {
+    if (av.optionIds[i] !== bv.optionIds[i]) return false;
+  }
+  return true;
+}
+
+/** Shallow-equal comparator for the row-pairings Map. Re-renders only
+ *  when an entry's `direct` badge OR any `viaInbound` badge actually
+ *  changes — gate prevents per-frame poll churn re-rendering every
+ *  ContextWidget when nothing's changed. */
 function pairingMapEqual(
-  a: Map<string, PairingBadge>,
-  b: Map<string, PairingBadge>,
+  a: Map<string, RowPairings>,
+  b: Map<string, RowPairings>,
 ): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
   for (const [k, av] of a) {
     const bv = b.get(k);
     if (!bv) return false;
-    if (
-      av.number !== bv.number ||
-      av.targetUuid !== bv.targetUuid ||
-      av.colorIndex !== bv.colorIndex ||
-      av.isOrphan !== bv.isOrphan
-    ) return false;
+    // direct
+    if (av.direct === null && bv.direct === null) {
+      /* both null — equal */
+    } else if (av.direct === null || bv.direct === null) {
+      return false;
+    } else if (!pairingBadgeEqual(av.direct, bv.direct)) {
+      return false;
+    }
+    // viaInbound
+    if (av.viaInbound.length !== bv.viaInbound.length) return false;
+    for (let i = 0; i < av.viaInbound.length; i++) {
+      if (!pairingBadgeEqual(av.viaInbound[i], bv.viaInbound[i])) return false;
+    }
   }
   return true;
 }
@@ -173,7 +200,7 @@ export function create(node: ContextNode, inputName: string) {
             (node as unknown as { graph?: LiteGraphLike }).graph
             ?? (app.graph as unknown as LiteGraphLike);
           const rootGraph = findRootGraph(startGraph);
-          return collectCrossNodePairings(rootGraph, node);
+          return collectCrossNodePairingsFull(rootGraph, node);
         },
         pairingMapEqual,
       );

@@ -258,19 +258,23 @@ function onReset(): void {
   padding: 8px 6px;
   border: 1px solid var(--wp-border, #2a2d35);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
   cursor: pointer;
   font: 600 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, #8a8d99);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.pop-btn:hover { color: var(--wp-text, #fff); border-color: var(--wp-border-strong, #4a4d55); }
+.pop-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
 .pop-btn .b-glyph { font: 13px var(--wp-font-mono, monospace); line-height: 1; }
-.pop-btn.b-neutral.active { background: rgba(255, 255, 255, 0.10); color: var(--wp-text, #fff); border-color: rgba(255, 255, 255, 0.4); }
-.pop-btn.b-exclude.active { background: color-mix(in srgb, var(--wp-danger, #ef4444) 35%, transparent); color: var(--wp-text, #fff); border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 70%, transparent); }
-.pop-btn.b-boost.active   { background: color-mix(in srgb, var(--wp-success, #22c55e) 35%, transparent); color: var(--wp-text, #fff); border-color: color-mix(in srgb, var(--wp-success, #22c55e) 70%, transparent); }
-.pop-btn.b-reduce.active  { background: color-mix(in srgb, var(--wp-warn, #f97316) 35%, transparent); color: var(--wp-text, #fff); border-color: color-mix(in srgb, var(--wp-warn, #f97316) 70%, transparent); }
+.pop-btn.b-neutral.active {
+  background: color-mix(in srgb, var(--wp-text) 10%, transparent);
+  color: var(--wp-text);
+  border-color: color-mix(in srgb, var(--wp-text) 40%, transparent);
+}
+.pop-btn.b-exclude.active { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: var(--wp-danger); border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent); }
+.pop-btn.b-boost.active   { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: var(--wp-success); border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent); }
+.pop-btn.b-reduce.active  { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: var(--wp-warn); border-color: color-mix(in srgb, var(--wp-warn, #f97316) 50%, transparent); }
 
 /* ── Factor input — wrap + stacked stepper, mirrors OptionRow's
  * `opt__weight-wrap + opt__spin` pattern so users see one consistent

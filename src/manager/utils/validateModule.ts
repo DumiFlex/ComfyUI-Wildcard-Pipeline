@@ -70,17 +70,20 @@ function tokensFor(text: string): RichToken[] {
   }
 }
 
-function extractRefs(text: string): Array<{ uuid: string; subcat?: string }> {
-  const out: Array<{ uuid: string; subcat?: string }> = [];
+function extractRefs(text: string): Array<{ uuid: string; subcat?: string; name?: string }> {
+  const out: Array<{ uuid: string; subcat?: string; name?: string }> = [];
   for (const t of tokensFor(text)) {
     if (t.kind === "ref" && t.meta?.uuid) {
       const subs = t.meta.sub_categories;
+      const cachedName = typeof t.meta.name === "string" && t.meta.name.length > 0
+        ? t.meta.name
+        : undefined;
       if (Array.isArray(subs) && subs.length > 0) {
         for (const sub of subs) {
-          out.push({ uuid: t.meta.uuid, subcat: sub });
+          out.push({ uuid: t.meta.uuid, subcat: sub, name: cachedName });
         }
       } else {
-        out.push({ uuid: t.meta.uuid });
+        out.push({ uuid: t.meta.uuid, name: cachedName });
       }
     }
   }
@@ -156,9 +159,14 @@ function validateWildcard(
     for (const ref of extractRefs(opt.value)) {
       const target = idx.byId.get(ref.uuid);
       if (!target) {
+        // Format priority: cached `#name` renders as `@name` (no
+        // braces — reads like a normal var-style ref); fallback to
+        // uuid renders as `@{uuid}` so the user can still copy/paste
+        // the bare identifier when the name was never cached.
+        const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
         issues.push({
           severity: "error",
-          message: `Option ${i + 1}: missing ref @{${ref.uuid}}`,
+          message: `Option ${i + 1}: missing ref ${label}`,
         });
         continue;
       }
@@ -243,7 +251,8 @@ function validateCombine(
   if (typeof p.template === "string") {
     for (const ref of extractRefs(p.template)) {
       if (!idx.byId.has(ref.uuid)) {
-        issues.push({ severity: "error", message: `Template ref @{${ref.uuid}} missing` });
+        const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
+        issues.push({ severity: "error", message: `Template ref ${label} missing` });
       }
     }
     for (const v of extractVars(p.template)) {
@@ -289,9 +298,10 @@ function validateDerivation(
       if (typeof condValue === "string") {
         for (const ref of extractRefs(condValue)) {
           if (!idx.byId.has(ref.uuid)) {
+            const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
             issues.push({
               severity: "error",
-              message: `Rule ${ri + 1} branch ${bi + 1}: condition ref @{${ref.uuid}} missing`,
+              message: `Rule ${ri + 1} branch ${bi + 1}: condition ref ${label} missing`,
             });
           }
         }
@@ -300,9 +310,10 @@ function validateDerivation(
       if (typeof actionValue === "string") {
         for (const ref of extractRefs(actionValue)) {
           if (!idx.byId.has(ref.uuid)) {
+            const label = ref.name ? `@${ref.name}` : `@{${ref.uuid}}`;
             issues.push({
               severity: "error",
-              message: `Rule ${ri + 1} branch ${bi + 1}: action ref @{${ref.uuid}} missing`,
+              message: `Rule ${ri + 1} branch ${bi + 1}: action ref ${label} missing`,
             });
           }
         }

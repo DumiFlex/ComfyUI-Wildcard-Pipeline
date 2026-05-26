@@ -99,6 +99,14 @@
   --wp-kind-derivation:  #fbbf24;
   --wp-kind-constraint:  #f472b6;
   --wp-kind-fixed:       #22d3ee;
+
+  /* Constraint matrix source/target axis colors. Kept distinct from
+   * kind colors so the dual-axis matrix legend reads cleanly regardless
+   * of the wildcards' library types. Light overrides further below. */
+  --wp-constraint-source:      #c084fc;  /* purple-400 */
+  --wp-constraint-source-text: #d8b4fe;  /* purple-300 */
+  --wp-constraint-target:      #22d3ee;  /* cyan-400  */
+  --wp-constraint-target-text: #67e8f9;  /* cyan-300  */
   /* Injector — variables wired in from arbitrary upstream node
    * outputs (not part of the wildcard / fixed / combine / etc
    * module family). Slate-blue chosen to read as "external input"
@@ -110,7 +118,10 @@
    * distinct from accent purple and injector blue, high enough chroma
    * to read on the in-graph canvas surface. Per-bundle color overrides
    * this via inline style on the BundleFrame component. */
-  --wp-bundle-default:   #6366f1;
+  /* Bundles wrap modules — slate signals "container/structure" vs the
+   * kind palette which signals "module type". User can still override
+   * per-bundle via the color picker. Light override below. */
+  --wp-bundle-default:   #64748b;  /* slate-500 */
 
   --wp-radius-lg: 12px;
   /* Three shadow scales used across surfaces:
@@ -140,6 +151,16 @@
    * button reuse this to mirror the SPA `.wp-io-badge--exists` semantic
    * ("library has a newer version, you can overwrite the embedded one"). */
   --wp-warn: #f59e0b;
+  --wp-success: #22c55e;
+  --wp-info: #3b82f6;
+
+  /* Rich-text inline-token colors — multi-pick chip + weighted-pick chip.
+   * Match SPA tokens.css so the same {N$$sep$$a|b|c} highlight reads
+   * identically on canvas + SPA. Light overrides below. */
+  --wp-rt-token-good:    #34d399;
+  --wp-rt-token-good-bg: color-mix(in oklab, #10b981 12%, transparent);
+  --wp-rt-token-mut:     #fb923c;
+  --wp-rt-token-mut-bg:  color-mix(in oklab, #f97316 12%, transparent);
   /* Status — `modified` mirrors SPA `--wp-status-modified` (orange).
    * Used by the ContextWidget modified-dot so it visually pairs 1:1 with
    * SPA `.wp-io-badge--mod` ("user diff from upstream"). */
@@ -238,13 +259,32 @@
   --wp-accent-text:        #6d28d9;
   --wp-accent-text-strong: #5b21b6;
 
-  /* Status colors nudged darker for legibility on light surfaces. */
+  /* Bundle default — slate-700 for AA contrast on light bg. */
+  --wp-bundle-default:     #334155;  /* slate-700 — 9.18:1 on white */
+
+  /* Status + semantic colors nudged darker for legibility on light. */
   --wp-status-modified: #c2410c;
   --wp-warn:           #b45309;
+  --wp-success:        #15803d;
+  --wp-info:           #1d4ed8;
   --wp-danger:   #b91c1c;
+  /* Rich-text inline-token colors — darker shades for light bg. */
+  --wp-rt-token-good:    #166534;  /* green-800   4.80:1 on white */
+  --wp-rt-token-good-bg: color-mix(in oklab, #166534 12%, transparent);
+  --wp-rt-token-mut:     #9a3412;  /* orange-800  5.19:1 on white */
+  --wp-rt-token-mut-bg:  color-mix(in oklab, #9a3412 12%, transparent);
   --wp-green:    #15803d;
+  --wp-green-bg: rgba(21, 128, 61, 0.10);
   --wp-red:      #b91c1c;
+  --wp-red-bg:   rgba(185, 28, 28, 0.10);
   --wp-amber:    #b45309;
+  --wp-amber-bg: rgba(180, 83, 9, 0.10);
+  --wp-violet:   #6d28d9;
+  --wp-violet-bg: rgba(109, 40, 217, 0.10);
+  --wp-teal:     #0f766e;   /* teal-700 — chip 5.41:1 on white */
+  --wp-teal-bg:  rgba(15, 118, 110, 0.10);
+  --wp-rose:     #be185d;   /* rose-700 */
+  --wp-rose-bg:  rgba(190, 24, 93, 0.10);
 
   --wp-canvas-bg:   #d8d8d8;
   --wp-node-bg:     #cacaca;
@@ -277,7 +317,14 @@
   --wp-kind-combine:     #065f46;  /* emerald-800 — chip 5.37:1 on white */
   --wp-kind-derivation:  #92400e;  /* amber-800   — chip 4.99:1 on white */
   --wp-kind-constraint:  #9d174d;  /* pink-800    — chip 5.29:1 on white */
-  --wp-kind-fixed:       #155e75;  /* cyan-800    — chip 5.15:1 on white */
+  /* Fixed moved off cyan-800 — too close to combine emerald-800 on light bg. */
+  --wp-kind-fixed:       #1d4ed8;  /* blue-700    — chip 6.61:1 on white */
+
+  /* Constraint source/target — darker shades for legibility on light. */
+  --wp-constraint-source:      #7c3aed;  /* violet-600  — chip 6.16:1 on white */
+  --wp-constraint-source-text: #6d28d9;
+  --wp-constraint-target:      #0891b2;  /* cyan-600    — chip 4.97:1 on white */
+  --wp-constraint-target-text: #155e75;
 }
 
 /* Variable color palette — hash output (var-1..var-8) paints chips +
@@ -287,7 +334,7 @@
  * Hues chosen for contrast on `--wp-bg` (dark) AND `--wp-bg-2` (light)
  * surfaces. Pulled from a deliberate rainbow; light theme keeps the
  * same hues since saturation reads on both backgrounds. */
-:root, .wp-theme-dark, .wp-theme-light {
+:root, .wp-theme-dark {
   --wp-var-1: #93c5fd;  /* sky blue */
   --wp-var-2: #fcd34d;  /* amber */
   --wp-var-3: #86efac;  /* mint */
@@ -296,6 +343,19 @@
   --wp-var-6: #c4b5fd;  /* lavender */
   --wp-var-7: #67e8f9;  /* cyan */
   --wp-var-8: #fda4af;  /* coral */
+}
+
+/* Light theme — bump every var hue to its *-700 family for AA contrast
+ * on near-white page surfaces. Same hues, deeper shades. */
+.wp-theme-light {
+  --wp-var-1: #0369a1;  /* sky-700      4.84:1 on white */
+  --wp-var-2: #b45309;  /* amber-700    4.85:1 on white */
+  --wp-var-3: #047857;  /* emerald-700  4.91:1 on white */
+  --wp-var-4: #be185d;  /* rose-700     5.78:1 on white */
+  --wp-var-5: #c2410c;  /* orange-700   4.93:1 on white */
+  --wp-var-6: #6d28d9;  /* violet-700   4.91:1 on white */
+  --wp-var-7: #0e7490;  /* cyan-700     5.24:1 on white */
+  --wp-var-8: #b91c1c;  /* red-700      6.74:1 on white */
 }
 
 .var-1 { color: var(--wp-var-1); }
@@ -389,4 +449,34 @@
   font-weight: 900;
   font-size: 1.1em;
   line-height: 1;
+}
+/* Sender-side via glyph — the `↪` rendered after `#N` on a constraint
+ * row whose target is reached via a nested ref rather than a direct
+ * downstream target instance. Lighter weight + slight downshift in
+ * size so the number stays primary. */
+.wp-pair-badge__via-glyph {
+  font-weight: 600;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+/* Carrier-side via chip — collapsed `↪×N` indicator on a wildcard
+ * whose nested @{} refs route one or more constraints to their targets.
+ * Solid fill like a direct pair badge so the chip reads as "this row
+ * participates in the pair" rather than the dashed-outline orphan look.
+ * The leading `↪×N` glyph + dim multi-color variant (when constraints
+ * routed through here target DIFFERENT uuids) carry the
+ * "passes through" semantic on their own. */
+.wp-pair-badge--via-carrier {
+  /* Inherits base wp-pair-badge palette + dark text. Per-bucket
+   * background already applied via the .wp-pair-badge--cN sibling
+   * class — no further per-bucket overrides needed for the solid
+   * single-color case. */
+}
+/* Multi-color variant — applied when the collapsed chip aggregates
+ * pairs targeting MORE THAN ONE uuid (different colorIndexes). Falls
+ * back to a neutral surface so no single target's color "claims" the
+ * chip. */
+.wp-pair-badge--via-multi {
+  background: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-bg, #0e1015);
 }

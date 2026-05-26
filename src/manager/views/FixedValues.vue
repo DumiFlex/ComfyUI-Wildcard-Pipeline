@@ -16,6 +16,8 @@ import { useModuleStore } from "../stores/moduleStore";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
 import type { ModuleRow, CategoryRow } from "../api/types";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 
 const route = useRoute();
 const router = useRouter();
@@ -110,7 +112,9 @@ async function fav(row: ModuleRow) {
   catch (e) { toast.push({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 }); }
 }
 
-async function del(row: ModuleRow) {
+const delConfirm = useDeleteConfirm<ModuleRow>();
+function del(row: ModuleRow) { delConfirm.ask(row); }
+async function performDelete(row: ModuleRow) {
   try {
     await store.remove(row.id);
     toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
@@ -134,6 +138,9 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
 </script>
 
 <template>
+  <!-- Single root vnode — AppLayout's <Transition mode="out-in"> needs
+       one root or it never paints the destination view. -->
+  <div class="wp-route-root">
   <ModuleListView
     title="Fixed Values"
     subtitle="Fixed-value modules emit one or more named string variables, set explicitly."
@@ -292,9 +299,21 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
       </div>
     </template>
   </ModuleListView>
+
+  <ConfirmDialog
+    :visible="delConfirm.visible.value"
+    :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
+    body="This permanently removes the library entry."
+    confirm-label="Delete"
+    variant="danger"
+    @confirm="delConfirm.confirm(performDelete)"
+    @cancel="delConfirm.cancel"
+  />
+  </div>
 </template>
 
 <style scoped>
+.wp-route-root { display: contents; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {

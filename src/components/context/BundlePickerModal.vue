@@ -369,7 +369,8 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(35, 35, 35, 0.85);
+  /* Theme-aware wash so the brand gradient reads correctly in both palettes. */
+  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
   pointer-events: none;
 }
 .wp-bp__head > * { position: relative; z-index: 1; }

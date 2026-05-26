@@ -1,7 +1,19 @@
 import { tokenizeRich } from "../../widgets/richTokenize";
 
 export interface TextAtom { kind: "text"; text: string }
-export interface RefAtom { kind: "ref"; uuid: string; subCategories: string[] }
+/** RefAtom — `@{uuid[#name][:subcat,subcat...]}` token.
+ *
+ * `name` is the cached display label captured at chip-insert time
+ * (or parsed from an existing token's `#name` segment). Resolver
+ * matches on uuid only; the field is preserved so a broken ref still
+ * tells the user what the wildcard was last called. Empty/missing
+ * means the token round-trips as bare-uuid form. */
+export interface RefAtom {
+  kind: "ref";
+  uuid: string;
+  subCategories: string[];
+  name?: string;
+}
 export interface VarAtom { kind: "var"; name: string }
 export type Atom = TextAtom | RefAtom | VarAtom;
 
@@ -19,13 +31,18 @@ export function parse(text: string): Atom[] {
   for (const tok of tokens) {
     if (tok.kind === "ref") {
       flush();
-      const uuid = (tok.meta as { uuid?: string } | undefined)?.uuid ?? "";
-      const subRaw = (tok.meta as { sub_categories?: string[] } | undefined)?.sub_categories;
-      out.push({
+      const meta = tok.meta as { uuid?: string; name?: string; sub_categories?: string[] } | undefined;
+      const uuid = meta?.uuid ?? "";
+      const subRaw = meta?.sub_categories;
+      const refAtom: RefAtom = {
         kind: "ref",
         uuid,
         subCategories: Array.isArray(subRaw) ? subRaw : [],
-      });
+      };
+      if (typeof meta?.name === "string" && meta.name.length > 0) {
+        refAtom.name = meta.name;
+      }
+      out.push(refAtom);
     } else if (tok.kind === "var") {
       flush();
       const name = (tok.meta as { name?: string } | undefined)?.name ?? "";
@@ -46,6 +63,7 @@ export function serialise(atoms: Atom[]): string {
     else if (a.kind === "var") out += "$" + a.name;
     else if (a.kind === "ref") {
       out += "@{" + a.uuid;
+      if (a.name && a.name.length > 0) out += "#" + a.name;
       if (a.subCategories.length > 0) out += ":" + a.subCategories.join(",");
       out += "}";
     }

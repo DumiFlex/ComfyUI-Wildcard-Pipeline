@@ -220,7 +220,11 @@ const libraryFetched = ref<Set<string>>(new Set());
 const unresolvedUuids = computed<string[]>(() => {
   const idMap = moduleIdToVar.value;
   const out = new Set<string>();
-  const re = /@\{([0-9a-f]{6,16})\}/gi;
+  // Match the canonical `@{uuid[#name][:subcat]}` form. 6-16 hex range
+  // is legacy tolerance from pre-uuid-unification builds — preserved to
+  // keep older debug traces parseable. Inner segments are non-capturing;
+  // only the uuid drives the unresolved set.
+  const re = /@\{([0-9a-f]{6,16})(?:#[^#:}@{]*)?(?::[^}]*)?\}/gi;
   function scan(text: unknown): void {
     if (typeof text !== "string") return;
     for (const m of text.matchAll(re)) {

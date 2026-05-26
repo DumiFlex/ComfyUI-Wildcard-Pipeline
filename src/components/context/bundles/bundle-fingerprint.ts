@@ -6,7 +6,7 @@
  *
  *   - Insert from library (`onPickBundle`)
  *   - Cross-node receive (cross-node bundle drop)
- *   - Save to library (`saveBundleToLibrary`)
+ *   - Save to library (`onBundlePushSaved`, modal-driven)
  *   - Reset to library (`resetBundleToLibrary`)
  *   - Backfill on initial workflow load (false-clean baseline)
  *

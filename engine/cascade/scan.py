@@ -17,13 +17,14 @@ import re
 import sqlite3
 from typing import Any
 
-from engine.db.repositories import (
-    BundleRepository,
-    ModuleRepository,
-)
+from engine.db.repositories import ModuleRepository
 
-# ``@{8hex}`` and optional ``:subcat`` suffix — same pattern as dep-graph.ts
-_REF_REGEX = re.compile(r"@\{([0-9a-f]{8})(?::([^}]*))?\}")
+# ``@{8hex}``, ``@{8hex#name}``, ``@{8hex:subcat}``, or
+# ``@{8hex#name:subcat}`` — uuid + optional cached display name +
+# optional subcat filter. Mirrors `engine/syntax/tokenize.py:_REF_RE`
+# and the TS twin in `src/manager/cascade/dep-graph.ts`. Name segment
+# is informational; this scanner only ever reads the captured uuid.
+_REF_REGEX = re.compile(r"@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}")
 # ``$varname`` — leading-letter identifier
 _VAR_REGEX = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 
@@ -32,11 +33,6 @@ def _list_all_modules(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Return all module rows (no filter). ``ModuleRepository.list()``
     accepts all-optional kwargs, so bare call returns everything."""
     return ModuleRepository(conn).list()
-
-
-def _list_all_bundles(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Return all bundle rows."""
-    return BundleRepository(conn).list()
 
 
 def _ref_entry(kind: str, row: dict[str, Any], ref_path: str) -> dict[str, Any]:
@@ -70,7 +66,7 @@ def _scan_wildcard_delete(conn: sqlite3.Connection, wildcard_id: str) -> list[di
                 v = opt.get("value")
                 if not isinstance(v, str):
                     continue
-                if any(uid == wildcard_id for uid, _sub in _REF_REGEX.findall(v)):
+                if any(uid == wildcard_id for uid, _name, _sub in _REF_REGEX.findall(v)):
                     out.append(_ref_entry("wildcard", m, f"options[{idx}].value"))
                     break
             continue
@@ -89,7 +85,7 @@ def _scan_wildcard_delete(conn: sqlite3.Connection, wildcard_id: str) -> list[di
                             continue
                         for v in action.values():
                             if isinstance(v, str) and any(
-                                uid == wildcard_id for uid, _ in _REF_REGEX.findall(v)
+                                uid == wildcard_id for uid, _name, _sub in _REF_REGEX.findall(v)
                             ):
                                 out.append(_ref_entry(
                                     "derivation", m,
@@ -101,12 +97,14 @@ def _scan_wildcard_delete(conn: sqlite3.Connection, wildcard_id: str) -> list[di
                             break
             continue
 
-    # Bundles: children list may include this wildcard by id
-    for b in _list_all_bundles(conn):
-        for ci, child in enumerate(b.get("children") or []):
-            if child.get("id") == wildcard_id:
-                out.append(_ref_entry("bundle", b, f"children[{ci}]"))
-                break
+    # Bundles intentionally excluded from the wildcard-delete impact
+    # set. Bundle children are full frozen snapshots, not live refs —
+    # the bundle keeps resolving identically even after the source
+    # wildcard's library row is deleted. Surfacing the bundle in the
+    # cascade confirm dialog would imply the snapshot is going to be
+    # mutated (and the matching fixer in `fix_wildcard_delete` used to
+    # strip the child entry, which destroyed the captured snapshot).
+    # See `fix_wildcard_delete` for the matching no-op rationale.
 
     return out
 
@@ -151,7 +149,7 @@ def _scan_subcat(
                 v = opt.get("value")
                 if not isinstance(v, str):
                     continue
-                for uid, sub in _REF_REGEX.findall(v):
+                for uid, _name, sub in _REF_REGEX.findall(v):
                     if uid == wildcard_id and sub == subcat_name:
                         out.append(_ref_entry("wildcard", m, f"options[{idx}].value"))
                         break
@@ -217,6 +215,32 @@ def _scan_combine_output_var(
                 out.append(_ref_entry("combine", m, "payload.template"))
             continue
 
+    return out
+
+
+def _scan_bundle_delete(
+    conn: sqlite3.Connection,
+    bundle_id: str,
+) -> list[dict[str, Any]]:
+    """Find every bundle whose ``children[]`` includes *bundle_id* as a
+    tier-2 reference. Mirrors `_scan_wildcard_delete` for bundles —
+    when a bundle is deleted, parent bundles holding it as a ref need
+    to either drop that entry (cascade-on) or accept a broken ref
+    (cascade-off; server stamps `_missing_ref` on next GET).
+
+    Self-reference (bundle in its own children) is filtered — bundles
+    can't reference themselves per the tier-2 cap, but defensive.
+    """
+    from engine.db.repositories import BundleRepository
+    out: list[dict[str, Any]] = []
+    bundle_repo = BundleRepository(conn)
+    for b in bundle_repo.list():
+        if b["id"] == bundle_id:
+            continue
+        for ci, child in enumerate(b.get("children") or []):
+            if child.get("type") == "bundle" and child.get("id") == bundle_id:
+                out.append(_ref_entry("bundle", b, f"children[{ci}]"))
+                break
     return out
 
 
@@ -307,6 +331,9 @@ def scan_affected(
 
     if kind == "category" and action == "delete":
         return _scan_category_delete(conn, id)
+
+    if kind == "bundle" and action == "delete":
+        return _scan_bundle_delete(conn, id)
 
     if kind == "option" and action == "delete":
         return _scan_option_delete(conn, id)

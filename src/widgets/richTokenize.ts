@@ -219,15 +219,17 @@ export function tokenizeRich(text: string): RichToken[] {
     // surgically (e.g. `@{color:warm}` vs `@{color:cool}` referencing
     // the same `color` wildcard). Empty filter → no filter.
     if (ch === "@") {
-      const refMatch = text.slice(i).match(/^@\{([0-9a-f]{8})(?::([^}]*))?\}/);
+      // Groups: 1=uuid, 2=optional `#name` cache, 3=optional subcat filter.
+      const refMatch = text.slice(i).match(/^@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/);
       if (refMatch) {
         flushText(i);
-        const filterRaw = refMatch[2];
+        const filterRaw = refMatch[3];
         const subCategories =
           typeof filterRaw === "string"
             ? filterRaw.split(",").map((s) => s.trim()).filter(Boolean)
             : [];
-        const meta: { uuid: string; sub_categories?: string[] } = { uuid: refMatch[1] };
+        const meta: { uuid: string; name?: string; sub_categories?: string[] } = { uuid: refMatch[1] };
+        if (refMatch[2]) meta.name = refMatch[2];
         if (subCategories.length > 0) meta.sub_categories = subCategories;
         out.push({
           kind: "ref",

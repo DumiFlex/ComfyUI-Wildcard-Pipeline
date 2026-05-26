@@ -17,7 +17,9 @@ export type RefToken =
   | { type: "text"; value: string }
   | { type: "ref"; uuid: string; subcat: string | undefined };
 
-const REF_PATTERN = /@\{([0-9a-f]{8})(?::([^}]*))?\}/g;
+// Groups: 1=uuid, 2=cached display name (display-only — consumers
+// ignore it), 3=optional subcat list.
+const REF_PATTERN = /@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/g;
 
 export function resolveWildcardChip(uuid: string, lib: LibraryFixture): ChipResolution {
   const wc = lib.wildcards.find((w) => w.id === uuid);
@@ -51,7 +53,7 @@ export function tokenizeRefString(s: string): RefToken[] {
     if (m.index > cursor) {
       out.push({ type: "text", value: s.slice(cursor, m.index) });
     }
-    out.push({ type: "ref", uuid: m[1], subcat: m[2] });
+    out.push({ type: "ref", uuid: m[1], subcat: m[3] });
     cursor = m.index + m[0].length;
   }
   if (cursor < s.length) out.push({ type: "text", value: s.slice(cursor) });

@@ -41,7 +41,10 @@ const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/y;
 // Optional `:subcat[,subcat]` per-call sub-category filter — empty
 // filter is equivalent to no filter, sub-categories are stripped of
 // whitespace + comma-separated.
-const REF_RE = /@\{([0-9a-f]{8})(?::([^}]*))?\}/y;
+// Groups: 1=uuid, 2=optional cached display name, 3=optional subcat
+// filter. Consumers below only use m[1] (uuid) — name + subcat are
+// preserved verbatim in m[0] for display.
+const REF_RE = /@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/y;
 const DP_MULTI_RE = /\{(\d+)\$\$([^$]*)\$\$([^}]*)\}/y;
 const DP_BRACE_RE = /\{([^{}]*\|[^{}]*)\}/y;
 

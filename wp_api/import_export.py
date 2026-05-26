@@ -6,7 +6,11 @@ from aiohttp import web
 from engine.exporter import build_export_payload
 from engine.importer import commit_import, get_undo_entry, undo_import
 from wp_api._helpers import db_session, json_error, json_ok
-from wp_api._validators import validate_body_size
+from wp_api._validators import (
+    validate_body_size,
+    validate_wildcard_name,
+    validate_wildcard_subcats,
+)
 
 # 7-bucket export request keys (Task 10). Each key, when present, must be
 # a list of UUIDs; missing keys default to []. Mis-typed UUIDs (e.g. a
@@ -69,6 +73,40 @@ async def export_build(request: web.Request) -> web.Response:
     return json_ok(payload)
 
 
+def _validate_wildcard_grammar(body: dict) -> str | None:
+    """Walk the 3 commit buckets and reject any wildcard whose name or
+    sub_categories[] would break the `@{uuid#name:subcat}` ref grammar.
+
+    Bucket entity keys differ — `adds` uses ``entity``, `replaces` uses
+    ``new_content``, `renames` uses ``content``. Each is treated the
+    same for our purposes (we read ``name`` and ``payload.sub_categories``).
+    Returns an error string on first violation, ``None`` on clean pass.
+    """
+    bucket_entity_key = {"adds": "entity", "replaces": "new_content", "renames": "content"}
+    for bucket, key in bucket_entity_key.items():
+        items = body.get(bucket) or []
+        if not isinstance(items, list):
+            continue
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            if item.get("kind") != "wildcard":
+                continue
+            entity = item.get(key)
+            if not isinstance(entity, dict):
+                continue
+            name = entity.get("name")
+            if isinstance(name, str):
+                err = validate_wildcard_name(name)
+                if err is not None:
+                    return f"{bucket}[{i}]: {err}"
+            payload = entity.get("payload")
+            err = validate_wildcard_subcats(payload)
+            if err is not None:
+                return f"{bucket}[{i}].payload: {err}"
+    return None
+
+
 async def import_commit(request: web.Request) -> web.Response:
     """POST /wp/api/import/commit — apply a classified commit payload.
 
@@ -106,6 +144,17 @@ async def import_commit(request: web.Request) -> web.Response:
     for key in ("adds", "replaces", "renames"):
         if key in body and not isinstance(body[key], list):
             return json_error(f"{key} must be a list", status=400)
+
+    # Wildcard name + sub_categories grammar guard. The engine importer
+    # commits whatever it's handed, so the ref-grammar invariant is
+    # enforced at the HTTP boundary here. Older exports (authored
+    # before the `@{uuid#name:subcat}` form locked the forbidden char
+    # set) could otherwise sneak in names with `{}:#@,` and break ref
+    # parsing on the next save. Walks all 3 buckets — adds carry
+    # `entity`, replaces carry `new_content`, renames carry `content`.
+    err = _validate_wildcard_grammar(body)
+    if err is not None:
+        return json_error(err, status=400)
 
     with db_session(request) as conn:
         result = commit_import(conn, body)

@@ -1,9 +1,10 @@
 /**
  * Build the inline-style triple for a `<span class="wp-cat-chip">` matching
- * the prototype's `<Chip color>` pattern (ui.jsx:323-337):
- *   color  = raw color
- *   bg     = color @ 14%
- *   border = color @ 35%
+ * the prototype's `<Chip color>` pattern.
+ *
+ * Theme-aware text: the user-picked category color blends toward
+ * `--wp-text` (which flips with the theme) so a light pastel pick stays
+ * readable in light mode and a dark pick stays readable in dark mode.
  *
  * Returns a fallback (uses `--wp-bg-3` neutral) when no color is provided.
  */
@@ -16,7 +17,7 @@ export function catChipStyle(color?: string | null): Record<string, string> {
     };
   }
   return {
-    color,
+    color: `color-mix(in oklab, ${color} 65%, var(--wp-text))`,
     background: `color-mix(in oklab, ${color} 18%, transparent)`,
     borderColor: `color-mix(in oklab, ${color} 42%, transparent)`,
   };

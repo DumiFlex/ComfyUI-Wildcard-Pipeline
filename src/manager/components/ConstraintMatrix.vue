@@ -360,14 +360,14 @@ defineExpose({ cellAt });
   border-radius: 4px;
 }
 .wp-mx-axis--src {
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 14%, transparent);
-  border: 1px solid color-mix(in oklab, #c084fc 35%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-source) 35%, transparent);
 }
 .wp-mx-axis--tgt {
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 14%, transparent);
-  border: 1px solid color-mix(in oklab, #22d3ee 35%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 35%, transparent);
 }
 .wp-mx-axis .arrow { font: 14px var(--wp-font-mono, monospace); line-height: 1; }
 
@@ -394,17 +394,17 @@ defineExpose({ cellAt });
   border-radius: 4px;
   text-align: left;
   padding: 0 8px !important;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
 }
-.wp-mx-corner .row-1 { display: block; color: #d8b4fe; line-height: 1.3; }
-.wp-mx-corner .row-2 { display: block; color: #67e8f9; line-height: 1.3; }
+.wp-mx-corner .row-1 { display: block; color: var(--wp-constraint-source-text); line-height: 1.3; }
+.wp-mx-corner .row-2 { display: block; color: var(--wp-constraint-target-text); line-height: 1.3; }
 
 .wp-mx-th-col {
   width: 64px;
   height: 28px;
   font: 700 10px var(--wp-font-sans, sans-serif);
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 10%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 10%, transparent);
   border-radius: 4px;
   text-align: center;
 }
@@ -412,8 +412,8 @@ defineExpose({ cellAt });
   width: 96px;
   height: 36px;
   font: 700 10px var(--wp-font-sans, sans-serif);
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 10%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 10%, transparent);
   border-radius: 4px;
   text-align: right;
   padding: 0 12px !important;
@@ -447,29 +447,31 @@ defineExpose({ cellAt });
 }
 .wp-mx-cell:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wp-text) 22%, transparent),
+              0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .wp-mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd),
+              0 4px 12px color-mix(in srgb, var(--wp-text) 25%, transparent);
 }
 .wp-mx-cell.s-neutral {
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--wp-text) 5%, transparent);
   color: var(--wp-text-dim, var(--wp-text-muted, #595c66));
-  border: 1px dashed rgba(255, 255, 255, 0.10);
+  border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
 }
 .wp-mx-cell.s-exclude {
   background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent);
-  color: #fca5a5;
+  color: var(--wp-danger);
   border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent);
 }
 .wp-mx-cell.s-boost {
   background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent);
-  color: #86efac;
+  color: var(--wp-success);
   border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent);
 }
 .wp-mx-cell.s-reduce {
   background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent);
-  color: #fdba74;
+  color: var(--wp-warn);
   border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
 }
 .glyph { font-size: 14px; line-height: 1; }

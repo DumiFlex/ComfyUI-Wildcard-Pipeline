@@ -9,7 +9,7 @@ from engine.db.repositories import BundleRepository, ModuleNotFound, ModuleRepos
 from engine.modules.dispatcher import get_handler
 from engine.modules.snapshot import freeze_snapshot, payload_hash
 from wp_api._helpers import db_session, json_error, json_ok
-from wp_api._validators import validate_body_size, validate_meta
+from wp_api._validators import validate_body_size, validate_meta, validate_wildcard_name
 
 
 def _hydrate_constraint_exceptions(conn, payload: dict) -> None:
@@ -200,6 +200,13 @@ async def create_module(request: web.Request) -> web.Response:
     err = validate_meta(body)
     if err is not None:
         return json_error(err, status=400)
+    # Wildcard names become the `#name` segment of nested refs — block
+    # ref-grammar-reserved chars here so the engine never stores a name
+    # the regex can't parse back.
+    if body["type"] == "wildcard":
+        err = validate_wildcard_name(body["name"])
+        if err is not None:
+            return json_error(err, status=400)
 
     try:
         with db_session(request) as conn:
@@ -255,6 +262,10 @@ async def import_from_workflow(request: web.Request) -> web.Response:
     err = validate_meta(body)
     if err is not None:
         return json_error(err, status=400)
+    if body["type"] == "wildcard":
+        err = validate_wildcard_name(body["name"])
+        if err is not None:
+            return json_error(err, status=400)
 
     try:
         with db_session(request) as conn:
@@ -329,6 +340,9 @@ async def update_module(request: web.Request) -> web.Response:
     err = validate_meta(body)
     if err is not None:
         return json_error(err, status=400)
+    # PUT body may rename without re-stating `type` — the wildcard name
+    # guard needs the existing row's type. Defer the actual check until
+    # we have the existing row in hand (next db_session below).
     kwargs: dict = {k: body[k] for k in _UPDATABLE_FIELDS if k in body}
     propagate = bool(body.get("propagate_to_bundles", True))
 
@@ -345,15 +359,23 @@ async def update_module(request: web.Request) -> web.Response:
 
     # If the caller is rewriting the payload, validate it against the
     # row's existing module type — same guard as POST/import-from-workflow.
-    if "payload" in kwargs:
+    # Same lookup also feeds the wildcard-name char guard for renames.
+    existing_type: str | None = None
+    if "payload" in kwargs or "name" in kwargs:
         with db_session(request) as conn:
             try:
                 existing = ModuleRepository(conn).get(mid)
             except ModuleNotFound:
                 return json_error(f"module not found: {mid}", status=404)
-            if existing["type"] == "constraint":
+            existing_type = existing["type"]
+            if "payload" in kwargs and existing_type == "constraint":
                 _hydrate_constraint_exceptions(conn, kwargs["payload"])
-        err = _validate_payload_for_type(existing["type"], kwargs["payload"])
+        if "payload" in kwargs and existing_type is not None:
+            err = _validate_payload_for_type(existing_type, kwargs["payload"])
+            if err is not None:
+                return json_error(err, status=400)
+    if "name" in kwargs and existing_type == "wildcard":
+        err = validate_wildcard_name(kwargs["name"])
         if err is not None:
             return json_error(err, status=400)
 
@@ -371,12 +393,35 @@ async def update_module(request: web.Request) -> web.Response:
                     f"current version is {current['version']}",
                     status=409,
                 )
+        # Capture the row's pre-update name so we can detect renames
+        # AFTER the update succeeds. Without this we'd need a second
+        # repo.get() inside the rename branch — wasteful.
+        pre_name: str | None = None
+        if "name" in kwargs and existing_type == "wildcard":
+            try:
+                pre_name = repo.get(mid)["name"]
+            except ModuleNotFound:
+                pass
         try:
             row = repo.update(mid, **kwargs)
         except ModuleNotFound:
             return json_error(f"module not found: {mid}", status=404)
         except sqlite3.IntegrityError as e:
             return json_error(f"foreign-key constraint failed: {e}", status=400)
+        # Wildcard rename: rewrite the `#name` segment of every
+        # @{uuid...} ref in the library so workflows render the new
+        # name everywhere. Runs inside the same transaction as the
+        # update for atomicity. Skips when only the name CASE changed
+        # and the engine considers them equivalent — cheapest skip is
+        # "string equal".
+        if (
+            existing_type == "wildcard"
+            and "name" in kwargs
+            and pre_name is not None
+            and pre_name != kwargs["name"]
+        ):
+            from engine.cascade.fixers import fix_wildcard_rename_name
+            fix_wildcard_rename_name(conn, mid, kwargs["name"])
         # Bundle propagation runs in the same transaction so an update is
         # atomic across modules + bundles tables. Only fires when payload
         # or library-facing meta (name/description/tags) changed and the

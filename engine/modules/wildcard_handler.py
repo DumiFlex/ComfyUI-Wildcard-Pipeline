@@ -28,6 +28,15 @@ from engine.syntax import resolve_text
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _MAX_IDENT_LEN = 64
 
+# Characters reserved by the nested-ref grammar `@{uuid[#name][:subcat,subcat...]}`.
+# Forbidden in:
+#   - wildcard `meta.name` / library `name` (the `#name` segment)
+#   - wildcard `payload.sub_categories[*]` (the `:subcat` segment)
+# Comma is in here because subcat lists are comma-separated; the other
+# chars are structural delimiters of the ref grammar. Mirror in
+# `src/manager/utils/validateName.ts` so the editor + API agree.
+_REF_FORBIDDEN_CHARS = frozenset("{}:#@,")
+
 # `_derive_module_rng` lifted to engine/modules/_seed.py so combine +
 # fixed_values handlers share the same helper (Phase: combine v2 +
 # syntax parity cycle). The private alias preserves the existing call
@@ -277,6 +286,19 @@ class WildcardHandler(ModuleHandler):
                 raise ValueError(
                     f"wildcard payload.sub_categories[{i}] 'null' is reserved "
                     f"(used by the nested ref filter syntax)"
+                )
+            # Sub-category name must not contain characters used by the
+            # nested-ref grammar: `,` (subcat list separator), `:`
+            # (subcat segment opener), `}` (ref terminator), `#` (name
+            # segment opener), `@` / `{` (ref-prefix collision risk).
+            # Editor + API guard against this so the regex never sees
+            # ambiguous input.
+            bad = set(sc) & _REF_FORBIDDEN_CHARS
+            if bad:
+                raise ValueError(
+                    f"wildcard payload.sub_categories[{i}] {sc!r} contains "
+                    f"forbidden characters {sorted(bad)} "
+                    f"(would break the @{{uuid:subcat}} syntax)"
                 )
 
     @classmethod

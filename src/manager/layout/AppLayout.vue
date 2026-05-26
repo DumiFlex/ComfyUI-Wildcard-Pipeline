@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
@@ -14,6 +14,12 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useCascadeStore } from "../cascade/cascade-store";
+import {
+  hashes as libraryHashes,
+  bundleHashes as libraryBundleHashes,
+  subscribe as subscribeDrift,
+  unsubscribe as unsubscribeDrift,
+} from "../../components/context/drift-store";
 
 const ui = useUiStore();
 const commandIndex = useCommandIndex();
@@ -37,6 +43,17 @@ function isTypingTarget(t: EventTarget | null): boolean {
   if (tag === "input" || tag === "textarea") return true;
   if (el.isContentEditable) return true;
   return false;
+}
+
+/** Compact fingerprint of a hashes map — sorted "id:hash" pairs joined.
+ *  Changes when ANY key is added, removed, or its hash flips. Returns
+ *  empty string while the polled map is still null (first fetch in
+ *  flight) so the watcher doesn't fire on transition-to-loaded. */
+function hashesFingerprint(map: Record<string, string> | null): string {
+  if (map === null) return "";
+  const keys = Object.keys(map).sort();
+  if (keys.length === 0) return "empty";
+  return keys.map((k) => `${k}:${map[k]}`).join("|");
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -110,8 +127,40 @@ onMounted(() => {
       categories: categoryStore.items.map((c) => ({ id: c.id, name: c.name })),
     });
   }).catch(() => undefined);
+
+  // Live-refresh sidebar count badges + catalogs whenever the drift
+  // store's polled hash maps change (insert/delete/update from any
+  // surface — graph-side ContextWidget writes, SPA edits, external
+  // tools). The store polls every 5s; we react to ANY hash-map delta
+  // (keys OR values) so renames/payload edits propagate too, rather
+  // than wiring explicit pub/sub into every mutation site.
+  // subscribe() is ref-counted so this is safe alongside ContextWidget.
+  //
+  // Guard: skip the first non-empty transition (prev === "" means the
+  // poll just landed for the first time). The onMounted fetchCatalog
+  // above already covers cold-load; firing again here would race that
+  // request and double-mutate catalog.value mid-render — Vue's patcher
+  // observed a null parentNode on insertBefore in the wild.
+  subscribeDrift();
+  watch(
+    () => hashesFingerprint(libraryHashes.value),
+    (next, prev) => {
+      if (prev === undefined || prev === "" || next === prev) return;
+      moduleStore.fetchCatalog().catch(() => undefined);
+    },
+  );
+  watch(
+    () => hashesFingerprint(libraryBundleHashes.value),
+    (next, prev) => {
+      if (prev === undefined || prev === "" || next === prev) return;
+      bundleStore.fetchCatalog().catch(() => undefined);
+    },
+  );
 });
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKeydown);
+  unsubscribeDrift();
+});
 </script>
 
 <template>

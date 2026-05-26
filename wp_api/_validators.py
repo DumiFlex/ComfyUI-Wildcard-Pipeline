@@ -33,6 +33,55 @@ MAX_BODY_BYTES = 5 * 1024 * 1024
 # see CLAUDE.md and engine/modules/types.py:strip_internals).
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
+# Characters reserved by the nested-ref grammar `@{uuid[#name][:subcat[,subcat...]]}`.
+# Wildcard `name` becomes the `#name` segment and subcategory names sit
+# in the comma-separated `:subcat` list. Letting either contain these
+# chars would let users author refs the regex can't parse back
+# unambiguously. Mirror in `engine/modules/wildcard_handler.py` and
+# the SPA validator so editor + API + engine agree.
+REF_GRAMMAR_FORBIDDEN_CHARS = frozenset("{}:#@,")
+
+
+def validate_wildcard_name(name: str) -> str | None:
+    """Wildcard-only name guard. Returns an error string when the name
+    contains characters reserved by the nested-ref grammar, ``None``
+    otherwise. Generic shape checks live in :func:`validate_meta`."""
+    bad = sorted(set(name) & REF_GRAMMAR_FORBIDDEN_CHARS)
+    if bad:
+        return (
+            f"wildcard name must not contain {bad!r} — these characters "
+            f"are reserved by the @{{uuid#name:subcat}} ref grammar"
+        )
+    return None
+
+
+def validate_wildcard_subcats(payload: Any) -> str | None:
+    """Wildcard payload `sub_categories[]` guard — mirrors the engine
+    handler's per-entry check ``engine/modules/wildcard_handler.py`` so
+    the import boundary rejects forbidden chars BEFORE the engine
+    importer commits the row. Lets the import-commit endpoint enforce
+    the same grammar contract the live editor enforces."""
+    if not isinstance(payload, dict):
+        return None
+    subs = payload.get("sub_categories")
+    if not isinstance(subs, list):
+        return None
+    for i, sc in enumerate(subs):
+        if not isinstance(sc, str):
+            return f"sub_categories[{i}] must be a string"
+        if sc == "null":
+            return (
+                f"sub_categories[{i}] 'null' is reserved by the "
+                f"@{{uuid:subcat}} filter syntax"
+            )
+        bad = sorted(set(sc) & REF_GRAMMAR_FORBIDDEN_CHARS)
+        if bad:
+            return (
+                f"sub_categories[{i}] {sc!r} must not contain {bad!r} — "
+                f"reserved by the @{{uuid#name:subcat}} ref grammar"
+            )
+    return None
+
 
 def validate_identifier(value: Any, where: str) -> None:
     """Raise ``ValueError`` when ``value`` is not a usable engine identifier.

@@ -27,7 +27,13 @@ import {
   type ContextWidgetValue,
   type ModuleEntry,
 } from "../widgets/_shared";
-import { computePairings, type ChainModule, type PairingBadge } from "./constraint-pairs";
+import {
+  computePairings,
+  computePairingsFull,
+  type ChainModule,
+  type PairingBadge,
+  type RowPairings,
+} from "./constraint-pairs";
 
 /** Compose a globally-unique row key. Module `_uid` is per-Context-node
  *  unique; prefixing with the litegraph node id makes it graph-wide
@@ -85,6 +91,7 @@ export function collectFullChainModules(
         rowKey: rowKey(nId, m),
         type: m.type,
         payload: (m.payload ?? {}) as Record<string, unknown>,
+        displayName: m.meta?.name,
       });
     }
   }
@@ -96,6 +103,7 @@ export function collectFullChainModules(
       rowKey: rowKey(node.id, m),
       type: m.type,
       payload: (m.payload ?? {}) as Record<string, unknown>,
+      displayName: m.meta?.name,
     });
   }
 
@@ -107,6 +115,7 @@ export function collectFullChainModules(
         rowKey: rowKey(dn.id, m),
         type: m.type,
         payload: (m.payload ?? {}) as Record<string, unknown>,
+        displayName: m.meta?.name,
       });
     }
   }
@@ -161,4 +170,16 @@ export function collectCrossNodePairings(
   node: LiteNodeLike,
 ): Map<string, PairingBadge> {
   return computePairings(collectFullChainModules(rootGraph, node));
+}
+
+/** Rich-shape variant — returns per-row `{ direct, viaInbound[] }` so
+ *  consumers can render both the legacy direct chip AND the new
+ *  collapsed `↪×N` carrier chip. Same input as `collectCrossNodePairings`;
+ *  the legacy map is derivable from this via the type's `direct`
+ *  field, so callers needing both can compute once + pass through. */
+export function collectCrossNodePairingsFull(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): Map<string, RowPairings> {
+  return computePairingsFull(collectFullChainModules(rootGraph, node));
 }

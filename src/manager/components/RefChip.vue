@@ -41,8 +41,15 @@ const subCategoriesLabel = computed(() =>
 
 const label = computed(() => {
   if (!props.resolved) {
-    // Unresolved → show the uuid (refs) or name (vars) so the user can debug.
-    return props.kind === "ref" ? props.uuid : props.name;
+    // Unresolved refs prefer the cached `#name` (kept on the ref atom
+    // from the `@{uuid#name}` syntax) so a broken reference still
+    // tells the user which wildcard was originally there. Falls back
+    // to the uuid when no cached name is available (legacy bare-uuid
+    // refs / older workflows). Vars keep showing the bare name.
+    if (props.kind === "ref") {
+      return props.name && props.name.length > 0 ? props.name : props.uuid;
+    }
+    return props.name;
   }
   return (isRef.value ? "@" : "$") + props.name;
 });
@@ -94,21 +101,21 @@ function onClick(ev: MouseEvent): void {
   vertical-align: baseline;
 }
 .wp-refchip--var {
-  background: color-mix(in srgb, #22c55e 15%, transparent);
-  border-color: color-mix(in srgb, #22c55e 50%, transparent);
-  color: #86efac;
+  background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent);
+  color: var(--wp-success);
 }
 .wp-refchip--ref {
-  background: color-mix(in srgb, #a855f7 15%, transparent);
-  border-color: color-mix(in srgb, #a855f7 50%, transparent);
-  color: #d8b4fe;
+  background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 50%, transparent);
+  color: var(--wp-kind-wildcard);
   cursor: pointer;
 }
-.wp-refchip--ref:hover { background: color-mix(in srgb, #a855f7 25%, transparent); }
+.wp-refchip--ref:hover { background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 25%, transparent); }
 .wp-refchip--unresolved {
-  background: color-mix(in srgb, #ef4444 15%, transparent);
-  border-color: color-mix(in srgb, #ef4444 50%, transparent);
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent);
+  color: var(--wp-danger);
   cursor: help;
 }
 .wp-refchip__icon { font-size: 8px; opacity: 0.75; }

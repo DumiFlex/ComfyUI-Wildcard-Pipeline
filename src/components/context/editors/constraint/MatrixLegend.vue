@@ -59,7 +59,7 @@ function toggle(): void {
   padding: 6px 10px;
   border: 1px solid var(--wp-border, #2a2d35);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
   color: var(--wp-text-muted, #8a8d99);
   font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;
@@ -87,7 +87,7 @@ function toggle(): void {
   gap: 12px;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
 .legend-row:last-child { border-bottom: 0; }
 .legend-sample {
@@ -100,10 +100,14 @@ function toggle(): void {
   border-radius: 4px;
   font: 600 12px var(--wp-font-mono, monospace);
 }
-.legend-sample.s-neutral { background: rgba(255, 255, 255, 0.04); color: var(--wp-text-dim, #595c66); border: 1px dashed rgba(255, 255, 255, 0.10); }
-.legend-sample.s-exclude { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: #fca5a5; border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent); }
-.legend-sample.s-boost { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: #86efac; border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent); }
-.legend-sample.s-reduce { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: #fdba74; border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent); }
+.legend-sample.s-neutral {
+  background: color-mix(in srgb, var(--wp-text) 4%, transparent);
+  color: var(--wp-text-dim, #595c66);
+  border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
+}
+.legend-sample.s-exclude { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: var(--wp-danger); border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent); }
+.legend-sample.s-boost { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: var(--wp-success); border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent); }
+.legend-sample.s-reduce { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: var(--wp-warn); border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent); }
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
 .legend-name {
@@ -111,10 +115,10 @@ function toggle(): void {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.legend-name.n-neutral { color: #c0c0c8; }
-.legend-name.n-exclude { color: #fca5a5; }
-.legend-name.n-boost { color: #86efac; }
-.legend-name.n-reduce { color: #fdba74; }
+.legend-name.n-neutral { color: var(--wp-text-muted); }
+.legend-name.n-exclude { color: var(--wp-danger); }
+.legend-name.n-boost { color: var(--wp-success); }
+.legend-name.n-reduce { color: var(--wp-warn); }
 .legend-desc {
   font: 11px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, #8a8d99);

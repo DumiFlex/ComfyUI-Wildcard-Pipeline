@@ -520,18 +520,18 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
  * cyan target) so users see the role at a glance — same visual cue
  * the axis tags above the rule matrix use. */
 .ex__src {
-  color: #d8b4fe;
-  background: color-mix(in oklab, #c084fc 12%, transparent);
+  color: var(--wp-constraint-source-text);
+  background: color-mix(in oklab, var(--wp-constraint-source) 12%, transparent);
   padding: 1px 6px;
   border-radius: 3px;
-  border: 1px solid color-mix(in oklab, #c084fc 30%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-source) 30%, transparent);
 }
 .ex__tgt {
-  color: #67e8f9;
-  background: color-mix(in oklab, #22d3ee 12%, transparent);
+  color: var(--wp-constraint-target-text);
+  background: color-mix(in oklab, var(--wp-constraint-target) 12%, transparent);
   padding: 1px 6px;
   border-radius: 3px;
-  border: 1px solid color-mix(in oklab, #22d3ee 30%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 30%, transparent);
 }
 .ex__arrow { color: var(--wp-text-dim, var(--wp-text3)); }
 
@@ -678,7 +678,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   width: 22px;
   height: 22px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--wp-text) 3%, transparent);
   border: 1px solid var(--wp-border);
   border-radius: 4px;
   color: var(--wp-text-dim, var(--wp-text3));

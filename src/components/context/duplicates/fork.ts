@@ -28,9 +28,21 @@ export interface ForkResult {
 export async function forkModule(
   draft: ForkInput,
   existingLibraryNames: ReadonlySet<string>,
+  /** When true, skip the " (copy)" suffix and use the base name as-is.
+   *  Used for the re-attach path (library entry was deleted upstream —
+   *  the original name slot is free, so suffixing would just produce
+   *  "foo (copy)" when "foo" is available). */
+  options: { skipCopySuffix?: boolean } = {},
 ): Promise<ForkResult> {
   const baseName = stripCopySuffix(draft.meta?.name ?? draft.type);
-  const suffixedName = pickCopyName(baseName, existingLibraryNames);
+  // Reattach path: always use the bare base name. Library entries are
+  // keyed by uuid, not name — collisions with a separate same-name entry
+  // are tolerable and preferable to "test (copy)" when the user's intent
+  // is "restore my deleted entry". The default fork path keeps the
+  // collision-avoiding suffix.
+  const suffixedName = options.skipCopySuffix
+    ? baseName
+    : pickCopyName(baseName, existingLibraryNames);
 
   const res = await fetch("/wp/api/modules", {
     method: "POST",

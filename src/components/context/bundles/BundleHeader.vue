@@ -49,8 +49,13 @@ const props = withDefaults(
      *  simultaneously — they represent independent axes (modified =
      *  local-vs-snapshot; libraryDrifted = library-vs-snapshot). */
     snapshotModified?: boolean;
+    /** True when the bundle's library entry has been deleted upstream —
+     *  the polled `bundleHashes` map no longer contains its library_id.
+     *  Surfaces a MISSING badge so the user knows "Save changes to
+     *  library" will need to fork a new entry. */
+    libraryMissing?: boolean;
   }>(),
-  { color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false },
+  { color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
 );
 
 const emit = defineEmits<{
@@ -159,10 +164,18 @@ const summary = computed(() => {
          subtitle ("N drifted") since each child row already carries
          its own dot — re-stacking them at the bundle level would be
          visual noise. -->
-    <span v-if="libraryDrifted || snapshotModified" class="wp-mod-dots">
-      <!-- Visual hierarchy: LIBRARY UPDATED (drift) dominates → MOD
-           sits to its right with its own dot + chip. Both can show
-           at once when local edits + library edits both pending. -->
+    <span v-if="libraryMissing || libraryDrifted || snapshotModified" class="wp-mod-dots">
+      <!-- Visual hierarchy: MISSING (library deleted) is the most severe
+           and shows first; LIBRARY UPDATED (drift) dominates next; MOD
+           sits to its right. Multiple can show simultaneously — they
+           represent independent axes. -->
+      <template v-if="libraryMissing">
+        <span class="wp-mod-dot wp-mod-dot--missing"
+          title="The bundle's library entry has been deleted. Right-click → Push to library to re-add as a new entry."
+          aria-hidden="true"></span>
+        <span class="wp-mod-badge wp-mod-badge--missing"
+          title="The bundle's library entry has been deleted. Right-click → Push to library to re-add as a new entry.">missing</span>
+      </template>
       <template v-if="libraryDrifted">
         <span class="wp-mod-dot wp-mod-dot--drift"
           title="Library entry has been edited since this bundle was inserted. Right-click → Reset to library."

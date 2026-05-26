@@ -14,6 +14,8 @@ import { catChipStyle } from "../utils/catChip";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import type { CategoryRow } from "../api/types";
 
 const store = useCategoryStore();
@@ -70,37 +72,41 @@ async function add() {
   } catch (e) { reportError(e, "Failed"); }
 }
 
-async function remove(row: CategoryRow) {
+const delConfirm = useDeleteConfirm<CategoryRow>();
+function remove(row: CategoryRow) {
   const refs = cascade.categoryRefsTo(row.id);
   if (refs.length === 0) {
-    const result = await cascadeApply.apply({
-      kind: "category", id: row.id, action: "delete",
-    });
-    if (result.ok) {
-      store.remove(row.id);
-      const undoId = result.undo_entry_id;
-      toast.push({
-        severity: "success",
-        summary: `"${row.name}" deleted`,
-        life: 5000,
-        action: {
-          label: "Undo",
-          run: async () => {
-            const undoResult = await cascadeApply.undo(undoId);
-            if (!undoResult.ok) {
-              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
-            } else {
-              toast.push({ severity: "info", summary: `"${row.name}" restored`, life: 3000 });
-            }
-          },
-        },
-      });
-    } else {
-      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
-    }
+    delConfirm.ask(row);
     return;
   }
   cascadeDialogRow.value = row;
+}
+async function performDelete(row: CategoryRow) {
+  const result = await cascadeApply.apply({
+    kind: "category", id: row.id, action: "delete",
+  });
+  if (result.ok) {
+    store.remove(row.id);
+    const undoId = result.undo_entry_id;
+    toast.push({
+      severity: "success",
+      summary: `"${row.name}" deleted`,
+      life: 5000,
+      action: {
+        label: "Undo",
+        run: async () => {
+          const undoResult = await cascadeApply.undo(undoId);
+          if (!undoResult.ok) {
+            toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+          } else {
+            toast.push({ severity: "info", summary: `"${row.name}" restored`, life: 3000 });
+          }
+        },
+      },
+    });
+  } else {
+    toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
+  }
 }
 
 function onCatCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
@@ -323,6 +329,15 @@ async function saveEdit() {
     action="delete"
     @confirmed="onCatCascadeDialogConfirmed"
     @cancelled="cascadeDialogRow = null"
+  />
+  <ConfirmDialog
+    :visible="delConfirm.visible.value"
+    :title="`Delete category \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
+    body="This permanently removes the category."
+    confirm-label="Delete"
+    variant="danger"
+    @confirm="delConfirm.confirm(performDelete)"
+    @cancel="delConfirm.cancel"
   />
   </div>
 </template>

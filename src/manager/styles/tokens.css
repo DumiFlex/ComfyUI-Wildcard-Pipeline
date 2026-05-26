@@ -290,9 +290,10 @@
   /* Overlay — lighter scrim so light bg beneath still registers as dimmed */
   --wp-overlay-bg: rgba(15, 15, 30, 0.35);
 
-  /* Bundle default — indigo-700 for WCAG-AA contrast on near-white surfaces.
-   * Mirrors dark theme's indigo-500 family; passes ~7.2:1 on white. */
-  --wp-bundle-default: #4338ca;
+  /* Bundle default — slate-700 for AA contrast on near-white.
+   * Slate signals "container/structural" vs the kind palette which
+   * signals "module type". Passes ~9.2:1 on white. */
+  --wp-bundle-default: #334155;
 
   /* Ref pill — deeper magenta for light surfaces */
   --wp-kind-ref:    #86198f;            /* fuchsia-800 5.03:1 on white */
@@ -321,14 +322,40 @@
 html.wp-theme-light {
   --wp-kind-wildcard:        #6d28d9;                       /* violet-700  — chip 4.91:1 on white */
   --wp-kind-wildcard-bg:     rgba(109, 40, 217, 0.12);
-  --wp-kind-fixed:           #155e75;                       /* cyan-800    — chip 5.15:1 on white */
-  --wp-kind-fixed-bg:        rgba(21, 94, 117, 0.12);
+  /* Fixed moved off cyan-800 — too close to combine emerald-800 in light. */
+  --wp-kind-fixed:           #1d4ed8;                       /* blue-700    — chip 6.61:1 on white */
+  --wp-kind-fixed-bg:        rgba(29, 78, 216, 0.12);
   --wp-kind-combine:         #065f46;                       /* emerald-800 — chip 5.37:1 on white */
   --wp-kind-combine-bg:      rgba(6, 95, 70, 0.12);
   --wp-kind-derivation:      #92400e;                       /* amber-800   — chip 4.99:1 on white */
   --wp-kind-derivation-bg:   rgba(146, 64, 14, 0.12);
   --wp-kind-constraint:      #9d174d;                       /* pink-800    — chip 5.29:1 on white */
   --wp-kind-constraint-bg:   rgba(157, 23, 77, 0.12);
+
+  /* Constraint matrix source/target — darker shades for light bg. */
+  --wp-constraint-source:      #7c3aed;                      /* violet-600 — 6.16:1 on white */
+  --wp-constraint-source-text: #6d28d9;
+  --wp-constraint-target:      #0891b2;                      /* cyan-600   — 4.97:1 on white */
+  --wp-constraint-target-text: #155e75;
+
+  /* Variable hash colors — dark pastel defaults fail on near-white;
+   * shift to *-700 family for AA contrast on the light page surface. */
+  --wp-var-1: #0369a1;  /* sky-700      4.84:1 on white */
+  --wp-var-2: #b45309;  /* amber-700    4.85:1 on white */
+  --wp-var-3: #047857;  /* emerald-700  4.91:1 on white */
+  --wp-var-4: #be185d;  /* rose-700     5.78:1 on white */
+  --wp-var-5: #c2410c;  /* orange-700   4.93:1 on white */
+  --wp-var-6: #6d28d9;  /* violet-700   4.91:1 on white */
+  --wp-var-7: #0e7490;  /* cyan-700     5.24:1 on white */
+  --wp-var-8: #b91c1c;  /* red-700      6.74:1 on white */
+}
+
+/* Constraint source/target — dark-theme defaults at :root above. */
+:root {
+  --wp-constraint-source:      #c084fc;                      /* purple-400 */
+  --wp-constraint-source-text: #d8b4fe;                      /* purple-300 */
+  --wp-constraint-target:      #22d3ee;                      /* cyan-400   */
+  --wp-constraint-target-text: #67e8f9;                      /* cyan-300   */
 }
 
 .wp-theme-light {
@@ -2864,12 +2891,11 @@ html.wp-dark {
   --wp-accent2:     var(--wp-accent-400);
   --wp-accent-glow: rgba(139, 92, 246, 0.15);
 
-  /* Bundle default color — used by bundle kind icon/badge when no user color is set.
-   * Indigo-500 (#6366f1) — distinct from accent purple (#8b5cf6) and injector
-   * blue (#60a5fa), high enough chroma to read clearly on dark + light surfaces.
-   * Earlier slate-blue (#46566B) was too desaturated and disappeared into
-   * borders/text-muted on both themes. */
-  --wp-bundle-default: #6366f1;         /* indigo-500 — light override → #4338ca (indigo-700) */
+  /* Bundle default color — used by bundle kind icon/badge when no user
+   * color is set. Slate signals "container/structural" vs the kind
+   * palette which signals "module type". Distinct from accent purple
+   * + every kind color; works on dark + light surfaces. */
+  --wp-bundle-default: #64748b;         /* slate-500 — light override → #334155 (slate-700) */
 
   /* Module-kind aliases (legacy single-color tokens) */
   --wp-violet:    var(--wp-kind-wildcard);

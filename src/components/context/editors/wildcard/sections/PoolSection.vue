@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
+import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { patchInstance, patchInstanceMapEntry } from "../../instance/patch";
 import { isEnabled, type WildcardOption } from "../probability";
 import OptionRow from "./OptionRow.vue";
@@ -9,7 +10,15 @@ interface OptionFull extends WildcardOption {
   value: string;
 }
 
-const props = defineProps<{ module: ModuleEntry }>();
+const props = withDefaults(
+  defineProps<{
+    module: ModuleEntry;
+    /** Per-option pair badges for via-nested constraint carriers.
+     *  Keyed by option id. Empty when this wildcard is not a carrier. */
+    viaOptionPairs?: Map<string, PairingBadge[]>;
+  }>(),
+  { viaOptionPairs: () => new Map() },
+);
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
 
 const payload = computed(() => (props.module.payload ?? {}) as {
@@ -125,6 +134,7 @@ const skewedTowards = computed(() => {
         :option="option"
         :all-options="allOptions"
         :instance="instance"
+        :pair-badges="viaOptionPairs.get(option.id) ?? []"
         @toggle="onOptionToggle"
         @weight="onOptionWeight"
       />

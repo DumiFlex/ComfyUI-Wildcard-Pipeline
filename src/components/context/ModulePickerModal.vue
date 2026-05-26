@@ -608,7 +608,12 @@ const filteredModules = computed(() => {
         if (!tags.includes(t)) return false;
       }
     }
-    // Search box.
+    // Search box. Matches against identifier-shaped fields only — the
+    // tag taxonomy has its own dedicated chip filter behind the funnel
+    // icon, so folding tag-substring matches into the free-text search
+    // surfaced unrelated rows (e.g. typing a wildcard name pulled in
+    // every module that happened to share that word as a tag) and
+    // muddied the result set.
     if (!q) return true;
     if (m.name.toLowerCase().includes(q)) return true;
     if (m.id.toLowerCase().includes(q)) return true;
@@ -617,13 +622,6 @@ const filteredModules = computed(() => {
     const p = (m.payload ?? {}) as { var_binding?: string; output_var?: string };
     if (p.var_binding && p.var_binding.toLowerCase().includes(q)) return true;
     if (p.output_var && p.output_var.toLowerCase().includes(q)) return true;
-    // Tag substring match — useful when typing "warm" finds every
-    // module tagged with `warm-tones` etc.
-    if (Array.isArray(m.tags)) {
-      for (const t of m.tags) {
-        if (typeof t === "string" && t.toLowerCase().includes(q)) return true;
-      }
-    }
     return false;
   });
 });
@@ -993,7 +991,9 @@ onBeforeUnmount(detachCaptureListeners);
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(35, 35, 35, 0.85);
+  /* Theme-aware wash so the brand gradient stays subtle in both
+   * palettes — dark bg in dark mode, near-white in light mode. */
+  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
   pointer-events: none;
 }
 .wp-picker__head > * { position: relative; z-index: 1; }

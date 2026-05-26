@@ -250,7 +250,17 @@ function onResetBinding(): void {
 }
 .id__input-row .id__input { flex: 1; min-width: 0; }
 /* `.id__reset` styling lives in src/components/context/editors/
- * _modal-template-ctrls.css (imported by ContextWidget unscoped). */
+ * _modal-template-ctrls.css (imported by ContextWidget unscoped).
+ * Override the shared 22×22 fixed box here so the button stretches
+ * to match the row's tallest sibling. The variable-binding input
+ * lives inside `wp-vbind-wrap` (input + `$` prefix in flex), which
+ * renders ~26px tall — without this override the reset rendered as
+ * a stubby 22px square next to the taller wrap. `min-height` keeps
+ * the touch target meeting the design floor when the input shrinks. */
+.id__input-row .id__reset {
+  height: auto;
+  min-height: 22px;
+}
 .id__collision {
   margin-top: 6px;
   display: flex;
