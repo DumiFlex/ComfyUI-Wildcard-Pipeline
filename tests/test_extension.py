@@ -31,6 +31,7 @@ def test_entrypoint_exposes_all_node_classes():
     assert ids == [
         "WP_Context",
         "WP_ContextInjector",
+        "WP_ContextLoop",
         "WP_Debug",
         "WP_PromptAssembler",
         "WP_PromptCleaner",

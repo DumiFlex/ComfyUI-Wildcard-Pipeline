@@ -170,11 +170,12 @@ class ComfyTypeIO:
         )
 
     @classmethod
-    def Output(cls, name: str = "") -> _Slot:
+    def Output(cls, name: str = "", **kwargs: Any) -> _Slot:
         return _Slot(
             kind="output",
             type_name=getattr(cls, "_io_type", "CUSTOM"),
             name=name,
+            **kwargs,
         )
 
 

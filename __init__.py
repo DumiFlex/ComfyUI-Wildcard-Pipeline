@@ -23,6 +23,7 @@ if _PKG_DIR not in sys.path:
 from comfy_api.latest import ComfyExtension
 
 from wp_nodes.assembler_node import WPPromptAssembler
+from wp_nodes.context_loop import WPContextLoop
 from wp_nodes.context_node import WPContext
 from wp_nodes.debug_node import WPDebug
 from wp_nodes.injector_node import WPContextInjector
@@ -38,6 +39,7 @@ class WildcardPipelineExtension(ComfyExtension):
     async def get_node_list(self):
         return [
             WPContext,
+            WPContextLoop,
             WPPromptAssembler,
             WPDebug,
             WPContextInjector,
