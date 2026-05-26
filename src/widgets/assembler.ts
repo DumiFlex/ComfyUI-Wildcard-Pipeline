@@ -30,6 +30,35 @@ function templateOf(node: AssemblerNode): string {
   return typeof w?.value === "string" ? w.value : "";
 }
 
+/** Library identity of the template currently loaded into this
+ *  assembler. Persisted on `node.properties` (workflow-serialized) so
+ *  "Save" can offer to update the exact row the user loaded — the
+ *  template-side analogue of the bundle push-to-library identity.
+ *  Survives workflow reload; cleared by "Clear template". */
+interface LoadedTemplateRef {
+  id: string;
+  name: string;
+}
+
+function loadedTemplateRef(node: AssemblerNode): LoadedTemplateRef | null {
+  const props = (node as { properties?: Record<string, unknown> }).properties;
+  const raw = props?.["wp_loaded_template"];
+  if (raw && typeof raw === "object") {
+    const r = raw as Record<string, unknown>;
+    if (typeof r.id === "string" && typeof r.name === "string") {
+      return { id: r.id, name: r.name };
+    }
+  }
+  return null;
+}
+
+function setLoadedTemplateRef(node: AssemblerNode, ref: LoadedTemplateRef | null): void {
+  const n = node as { properties?: Record<string, unknown> };
+  if (!n.properties) n.properties = {};
+  if (ref) n.properties["wp_loaded_template"] = { id: ref.id, name: ref.name };
+  else delete n.properties["wp_loaded_template"];
+}
+
 /** Overwrite the whole template string. Mirrors `clearTemplate`'s
  *  el/widget/dispatch shape so litegraph + the SFC both observe the
  *  change (the native STRING widget's `inputEl` is the source of truth
@@ -214,7 +243,13 @@ export function mountHelper(node: AssemblerNode) {
       const saveOpen = ref(false);
       const loadOpen = ref(false);
       const saveString = ref("");
-      let pendingWrite: ((tpl: string) => void) | null = null;
+      // Mirrors node.properties.wp_loaded_template into reactive state so
+      // the Save modal's "update existing" target tracks load/save live.
+      // Seeded from the persisted ref so it survives workflow reload.
+      const loadedRef = ref<LoadedTemplateRef | null>(loadedTemplateRef(node));
+      let pendingWrite:
+        | ((row: { id: string; name: string; template_string: string }) => void)
+        | null = null;
 
       // Snapshot is cheap to compute (no fetch); the API-backed roll
       // happens out-of-band, keyed by `chainKey`, and writes its
@@ -421,16 +456,23 @@ export function mountHelper(node: AssemblerNode) {
             nodeMode: nodeMode.value,
             onInsert: (token: string) => insertIntoTemplate(node, token),
             onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
-            onClearTemplate: () => clearTemplate(node),
+            onClearTemplate: () => {
+              clearTemplate(node);
+              setLoadedTemplateRef(node, null);
+              loadedRef.value = null;
+            },
             onSaveTemplate: () => {
               saveString.value = templateOf(node);
               saveOpen.value = true;
             },
             onLoadTemplate: () => {
-              pendingWrite = (tpl: string) => {
+              pendingWrite = (row) => {
                 const current = templateOf(node);
                 if (current.trim() && !window.confirm("Replace the current template?")) return;
-                writeTemplate(node, tpl);
+                writeTemplate(node, row.template_string);
+                const ref = { id: row.id, name: row.name };
+                setLoadedTemplateRef(node, ref);
+                loadedRef.value = ref;
               };
               loadOpen.value = true;
             },
@@ -443,14 +485,21 @@ export function mountHelper(node: AssemblerNode) {
           h(SaveTemplateModal, {
             open: saveOpen.value,
             templateString: saveString.value,
+            loadedRef: loadedRef.value,
             onClose: () => { saveOpen.value = false; },
-            onSaved: () => { saveOpen.value = false; },
+            onSaved: (row: { id: string; name: string }) => {
+              saveOpen.value = false;
+              // Saving (update OR save-as-new) rebinds this assembler to
+              // that row, so subsequent saves default to updating it.
+              setLoadedTemplateRef(node, row);
+              loadedRef.value = row;
+            },
           }),
           h(LoadTemplateModal, {
             open: loadOpen.value,
             onClose: () => { loadOpen.value = false; },
-            onPick: (row: { template_string: string }) => {
-              pendingWrite?.(row.template_string);
+            onPick: (row: { id: string; name: string; template_string: string }) => {
+              pendingWrite?.(row);
               pendingWrite = null;
             },
           }),

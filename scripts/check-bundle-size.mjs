@@ -97,7 +97,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // SFC + TS parser mirror + widget glue. ~4 KB net gzip across the lazy
 // chunks; entry stays put. See
 // docs/superpowers/specs/2026-05-26-converter-nodes-design.md.
-const TOTAL_LIMIT = 380 * 1024;     // 380 KB
+// Bumped 380 -> 385 KB on 2026-05-27 for the prompt-template-library
+// round-trip modals. LoadTemplateModal gains the ModulePicker-style
+// chrome (search + category/tags filter popover + scrollable rows) and
+// SaveTemplateModal gains the push-to-library layout (category select +
+// Update-existing / Save-as-new dual action). ~3 KB net gzip across the
+// two lazy assembler modal chunks; entry stays put.
+const TOTAL_LIMIT = 385 * 1024;     // 385 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

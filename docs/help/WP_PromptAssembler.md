@@ -32,8 +32,10 @@ Below the template, the **Variables** strip lists every value available from ups
 
 Two toolbar buttons next to **Clear template**:
 
-- **Save** — stores the current template string in the library. Pick a name (plus optional category/tags/description); saving with an existing name updates that entry. Manage saved templates in the SPA **Templates** tab.
-- **Load** — opens a searchable picker of saved templates. Choosing one replaces the current template (confirms first if you've already typed something). Any `$vars` the loaded template needs that aren't in the upstream chain show as the usual amber "missing" markers.
+- **Load** — opens a library picker with search plus category / tags / favorites filters. Click a template to load it; this replaces the current template (confirms first if you've already typed something). The assembler remembers which template you loaded.
+- **Save** — opens a save dialog (name, category, tags, description, live preview). When the name matches an existing template — or you loaded one — you get two actions: **Update existing** (overwrite that library entry) and **Save as new entry** (create a fresh copy, auto-suffixed). Otherwise it's a plain **Save**. After saving, the assembler tracks that entry so the next Save defaults to updating it.
+
+Any `$vars` the loaded template needs that aren't in the upstream chain show as the usual amber "missing" markers. Manage saved templates in the SPA **Templates** tab.
 
 ## Tips
 
