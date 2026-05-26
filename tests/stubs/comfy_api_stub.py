@@ -83,6 +83,7 @@ class _Slot:
     min: Any = None
     max: Any = None
     step: Any = None
+    is_list: bool = False
     control_after_generate: bool = False
     placeholder: str | None = None
 
