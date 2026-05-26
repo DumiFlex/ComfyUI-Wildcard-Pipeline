@@ -397,6 +397,22 @@ export function scanConflicts(
   upstreamWildcardUuids: string[] = [],
   downstreamWildcardUuids: string[] = [],
   downstreamNestedReachUuids: string[] = [],
+  // Pair-logic result keyed by constraint's `_uid` (NOT the rowKey
+  // `${nodeId}#${_uid}` form used by cross-node-pairings, because the
+  // scanner runs per-node and doesn't carry the litegraph node id). The
+  // caller in `ContextWidget.vue` is expected to remap the global map
+  // to the per-node form before passing — or pass `null` to disable
+  // the cross-check and fall back to the local static analysis.
+  //
+  // When provided: a constraint whose pair-logic result has
+  // `isOrphan === false` is treated as satisfied — the scanner won't
+  // emit `constraint_orphan_target` for it, no matter what
+  // `claimSlot` / nested-reach says. Same source of truth for the
+  // badge + the warning. Pair-logic walks the cross-node flat chain
+  // and sees configurations (disabled positionally, mixed-context
+  // routes) that the per-node scanner can't reconstruct, so deferring
+  // to it eliminates the mismatch class.
+  constraintPairOrphanByUid: Map<string, boolean> | null = null,
 ): Conflict[] {
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
@@ -653,6 +669,33 @@ export function scanConflicts(
         const inDownstream = downstreamCount > 0;
         const inLocalNestedAfter = localNestedReachAfter[i + 1].has(tgtId);
         const inDownstreamNested = downstreamNestedReach.has(tgtId);
+
+        // Pair-logic veto: when the cross-node pair walker found a
+        // non-orphan match for THIS constraint instance, trust it.
+        // The pair walker has visibility the per-node scanner can't
+        // reproduce (cross-node flat chain, mixed direct/via routes,
+        // per-constraint slot allocation across nodes), so its
+        // "non-orphan" verdict is the source of truth. Lookup keyed by
+        // `_uid` to match what cross-node-pairings.ts produces after
+        // the caller strips the node-id prefix from the global rowKey.
+        const cuid = (m._uid ?? m.id) as string;
+        const pairSaysNotOrphan
+          = constraintPairOrphanByUid !== null
+            && constraintPairOrphanByUid.has(cuid)
+            && constraintPairOrphanByUid.get(cuid) === false;
+
+        if (pairSaysNotOrphan) {
+          // Pair found a match — also bookkeep a slot claim so a
+          // sibling constraint counting on the same target doesn't
+          // double-claim. Best-effort: when pair routed via a nested
+          // carrier the slot isn't really a discrete unit, but
+          // consuming once still matches the count-aware semantic for
+          // direct-target cases without breaking via-nested cases
+          // (those will fall through to `inDownstreamNested` /
+          // `inLocalNestedAfter` for any later sibling).
+          claimSlot(tgtId, i);
+          continue;
+        }
 
         if (
           !inLocalDirect

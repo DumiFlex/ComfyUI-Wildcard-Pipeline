@@ -1993,12 +1993,26 @@ const conflicts = computed<Conflict[]>(() => {
   // full modules array preserves position semantics for constraint-target /
   // nested-ref lookups that need to know where every module sits regardless
   // of run state.
+  // Build the per-uid orphan map from the cross-node pairings prop.
+  // Cross-node-pairings keys are `${nodeId}#${_uid}` — strip the
+  // node-id prefix so the scanner can lookup by local `_uid`. Only
+  // constraint rows in this Context node carry meaningful pair data;
+  // wildcard / carrier rows have no `direct` of their own here.
+  const pairOrphanByUid = new Map<string, boolean>();
+  const nodeIdPrefix = `${props.nodeId}#`;
+  for (const [rowKey, rp] of props.pairings) {
+    if (!rp.direct) continue;
+    if (!rowKey.startsWith(nodeIdPrefix)) continue;
+    const uid = rowKey.slice(nodeIdPrefix.length);
+    pairOrphanByUid.set(uid, rp.direct.isOrphan);
+  }
   const all = scanConflicts(
     value.value,
     props.upstreamVars,
     props.upstreamWildcardUuids,
     props.downstreamWildcardUuids,
     props.downstreamNestedReachUuids,
+    pairOrphanByUid,
   );
   // Filter by user's validation-strictness preference. The accessor
   // reads from the same module-level state map the panel onChange
