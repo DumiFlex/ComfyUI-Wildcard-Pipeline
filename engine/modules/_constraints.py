@@ -76,11 +76,19 @@ def claim_carrier_constraints(
                 carried.add(m.group(1))
     if not carried:
         return
+    # Claim at most ONE constraint per carried target — the first
+    # unconsumed one in registration order. A carrier hosts a single
+    # nested resolution per target, so it consumes a single constraint
+    # for it (matching `apply_constraints_for_target`, which also fires
+    # one per call). Claiming ALL would let a carrier swallow an entire
+    # family of same-target constraints, starving a later direct target
+    # instance that the pair badge assigns to constraint #2.
+    claimed_targets: set[str] = set()
     for c in constraints:
         if not isinstance(c, dict):
             continue
         tgt = c.get("target_wildcard_id")
-        if tgt not in carried:
+        if tgt not in carried or tgt in claimed_targets:
             continue
         cid = c.get("__constraint_module_id__")
         if cid is None or cid in consumed:
@@ -90,6 +98,7 @@ def claim_carrier_constraints(
         if not isinstance(src_pick, dict):
             continue
         consumed.add(cid)
+        claimed_targets.add(tgt)
 
 
 def _push_constraint_warning(

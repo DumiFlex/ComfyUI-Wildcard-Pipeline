@@ -356,13 +356,24 @@ class ConstraintHandler(ModuleHandler):
         # bucket entry so `apply_constraints_for_target` can mark it
         # consumed once its first downstream target instance fires
         # (one-shot semantic per 2026-05-24 first-instance spec).
-        # The pipeline sets `__wp_current_module_id__` before each
-        # handler call; missing id (e.g. headless test paths) leaves
-        # the entry as None and the consumed-set treats it as never
-        # consumable — equivalent to the legacy multi-fire path.
+        #
+        # Key on the PER-INSTANCE uid (`__wp_current_module_uid__`), not
+        # the library uuid (`__wp_current_module_id__`): two instances of
+        # the same library constraint entry must be INDEPENDENT one-shots
+        # (CLAUDE.md — "author multiple constraint modules" to affect
+        # multiple target instances). Pre-2026-05-26 both keyed on the
+        # shared library uuid, so claiming/consuming one silently spent
+        # the other — a carrier could swallow the whole family and a
+        # downstream direct target then rolled unconstrained. The pipeline
+        # falls back to the library id when `_uid` is absent (legacy /
+        # hand-built test modules), preserving the old behaviour there.
         module_id = None
         try:
-            module_id = ctx.get("__wp_current_module_id__") if hasattr(ctx, "get") else None
+            if hasattr(ctx, "get"):
+                module_id = (
+                    ctx.get("__wp_current_module_uid__")
+                    or ctx.get("__wp_current_module_id__")
+                )
         except Exception:
             module_id = None
         meta = {

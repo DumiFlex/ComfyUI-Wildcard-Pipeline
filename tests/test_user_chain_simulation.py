@@ -56,8 +56,8 @@ def _wildcard(uuid: str, var: str, options, sub_categories=None):
     }
 
 
-def _constraint(module_id: str, source_uuid: str, target_uuid: str, matrix=None):
-    return {
+def _constraint(module_id: str, source_uuid: str, target_uuid: str, matrix=None, uid=None):
+    out = {
         "id": module_id,
         "type": "constraint",
         "enabled": True,
@@ -68,6 +68,13 @@ def _constraint(module_id: str, source_uuid: str, target_uuid: str, matrix=None)
             "exceptions": [],
         },
     }
+    # Per-instance uid — distinct from the library `id`. Two sibling
+    # instances of one library constraint entry share `id` but get their
+    # own `_uid`; the engine keys the consumed-set on `_uid` so they're
+    # independent one-shots.
+    if uid is not None:
+        out["_uid"] = uid
+    return out
 
 
 def _build_catalog():
@@ -365,6 +372,76 @@ def test_carrier_claims_on_null_empty_pick():
         assert CN in consumed, (
             f"seed {seed}: carrier rolled null but didn't claim the constraint"
         )
+        assert warns == [], f"seed {seed}: unexpected warnings {warns}"
+
+
+def test_sibling_constraints_same_library_uuid_are_independent_oneshots():
+    """User's real case (2026-05-26): TWO hair_x_mood instances share
+    the SAME library uuid (id) but have distinct `_uid`. The pair badge
+    shows #1 → backdrop (carrier), #2 → mood (direct top-level). The
+    engine must honour that: backdrop claims instance #1, the top-level
+    mood claims instance #2 → mood IS constrained. Pre-fix both keyed on
+    the shared library uuid, so backdrop's claim spent BOTH and mood
+    rolled unconstrained.
+
+    Chain: hair_style → hair_x_mood#1 (uid A) → hair_x_mood#2 (uid B) →
+    backdrop (carries @{mood}, rolls null) → mood (top-level)."""
+    HAIR = "aaaa0001"
+    MOOD = "c14e7527"
+    BACKDROP = "b0b0b0b0"
+    LIB_CID = "e41f5bc4"  # shared library uuid for both hair_x_mood
+    modules = [
+        _wildcard(HAIR, "hair_style", [
+            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+        ]),
+        # Two instances, SAME library id, distinct _uid.
+        _constraint(
+            LIB_CID, HAIR, MOOD,
+            matrix={"long": {"warm": {"mode": "exclude", "factor": 1}}},
+            uid="uidA",
+        ),
+        _constraint(
+            LIB_CID, HAIR, MOOD,
+            matrix={"long": {"warm": {"mode": "exclude", "factor": 1}}},
+            uid="uidB",
+        ),
+        # Backdrop carries @{mood} (weight-0 ref option) but rolls null.
+        _wildcard(BACKDROP, "backdrop", [
+            {"id": "bd_null", "value": "", "weight": 1},
+            {"id": "bd_mood", "value": f"@{{{MOOD}}}", "weight": 0},
+        ]),
+        # Top-level mood AFTER backdrop — must be constrained by uid B.
+        _wildcard(MOOD, "mood", [
+            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_category": "warm"},
+            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_category": "cool"},
+        ]),
+    ]
+    catalog = {
+        MOOD: _wildcard(MOOD, "mood", [
+            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_category": "warm"},
+            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_category": "cool"},
+        ]),
+    }
+    for seed in range(15):
+        ctx = {"__wp_catalog__": dict(catalog)}
+        ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
+        consumed = ctx.get("__wp_consumed_constraints__", set())
+        # Backdrop claimed instance A; top-level mood claimed instance B.
+        assert "uidA" in consumed and "uidB" in consumed, (
+            f"seed {seed}: both instances should be consumed independently "
+            f"(consumed={consumed})"
+        )
+        # mood was constrained by instance B → never the warm option.
+        assert ctx.get("mood") == "cool_ok", (
+            f"seed {seed}: top-level mood rolled {ctx.get('mood')!r} — it "
+            f"wasn't constrained, meaning backdrop's claim of instance A "
+            f"wrongly spent instance B too"
+        )
+        # No leftover warnings.
+        warns = [
+            w for w in ctx.get("__wp_warnings__", [])
+            if w.get("type") == "constraint_never_applied"
+        ]
         assert warns == [], f"seed {seed}: unexpected warnings {warns}"
 
 

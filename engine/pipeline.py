@@ -316,7 +316,20 @@ class PipelineEngine:
             # can read it without reaching into snapshot internals.
             # Cleared in the finally below so a stale id doesn't leak
             # into the next iteration's resolve call.
+            #
+            # Two distinct identifiers:
+            #   - `__wp_current_module_id__`  = library uuid (`id`). The
+            #     wildcard handler matches THIS against a constraint's
+            #     `target_wildcard_id` (which is a library uuid).
+            #   - `__wp_current_module_uid__` = per-instance uid (`_uid`).
+            #     The constraint handler keys its consumed-set entry on
+            #     THIS so two instances of the same library constraint
+            #     entry are independent one-shots (per CLAUDE.md: "author
+            #     multiple constraint modules" to affect multiple
+            #     targets). Falls back to the library id when `_uid` is
+            #     absent (legacy / hand-built test modules).
             ctx["__wp_current_module_id__"] = _module_id
+            ctx["__wp_current_module_uid__"] = _module_uid or _module_id
             meta = _extract_static_meta(module)
             try:
                 bindings = resolve_module(snapshot, ctx)
@@ -416,11 +429,12 @@ class PipelineEngine:
                 **meta,
             })
 
-        # Drop the active-module marker so it doesn't leak into the
-        # public socket payload (it's an `__`-prefixed key, so
-        # `strip_internals` would already filter it, but clearing it
-        # is cheap and keeps post-run ctx introspection tidy).
+        # Drop the active-module markers so they don't leak into the
+        # public socket payload (both are `__`-prefixed so
+        # `strip_internals` would filter them, but clearing is cheap and
+        # keeps post-run ctx introspection tidy).
         ctx.pop("__wp_current_module_id__", None)
+        ctx.pop("__wp_current_module_uid__", None)
 
         # First-instance one-shot semantic: emit a soft (info) warning
         # for every registered constraint whose target instance never
