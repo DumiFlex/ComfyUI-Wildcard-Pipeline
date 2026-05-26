@@ -22,7 +22,7 @@
  */
 import { defineAsyncComponent, h, type Component } from "vue";
 import { app } from "#comfyui/app";
-import { createDomWidgetHost, type MountTargetNode } from "./_shared";
+import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import {
   collectUpstreamResolved,
   collectUpstreamVariables,
@@ -121,11 +121,25 @@ export function create(node: VarPickerNode, inputName: string) {
   // a consistent view.
   const snapshot = reactiveFromGraph(node, () => computeSnapshot(node), snapshotsEqual);
 
+  // Forward-declared so the wrapper's onUpdate closure can call
+  // `host.setValue(next)` and keep ComfyUI's widget state aligned with
+  // `node.properties.var_name`. Without `setValue`, the host's internal
+  // `state` stays at its initial empty string and `execute()` receives
+  // `""` regardless of what the user picked — preview would look right
+  // (it reads `node.properties` directly) but the node would always
+  // fall through to `default`. Closure binding resolves to the assigned
+  // value by the time the user fires a pick.
+  let host: DomWidgetHost | null = null;
+
   const wrapper: Component = {
     setup() {
       function onUpdate(next: string): void {
         if (!node.properties) node.properties = {};
         node.properties.var_name = next;
+        // Keep host.state in lock-step with node.properties so getValue
+        // (which feeds ComfyUI's execute kwargs) returns the picked
+        // name, not the initial empty string.
+        host?.setValue(next);
         // Trigger an immediate snapshot refresh so the preview updates
         // without waiting for the 400ms poll.
         snapshot.value = computeSnapshot(node);
@@ -142,9 +156,13 @@ export function create(node: VarPickerNode, inputName: string) {
     },
   };
 
-  return createDomWidgetHost(node, inputName, wrapper, {
+  host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: String(node.properties?.var_name ?? ""),
     onValueRestored: (v: string) => {
+      // ComfyUI restored the widget value from workflow JSON. Mirror
+      // it back into node.properties so downstream code reading either
+      // path sees the same value. `host.state` is already in sync —
+      // ComfyUI's restore path sets it before calling this hook.
       if (!node.properties) node.properties = {};
       node.properties.var_name = v;
       snapshot.value = computeSnapshot(node);
@@ -152,4 +170,5 @@ export function create(node: VarPickerNode, inputName: string) {
     minHeight: 92,
     minWidth: 260,
   });
+  return host;
 }
