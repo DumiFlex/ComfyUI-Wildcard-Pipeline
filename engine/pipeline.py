@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import random
+import re
 from typing import Any
 
 from engine.context import Context
@@ -18,6 +19,63 @@ from engine.modules.dispatcher import UnknownModuleType, resolve_module
 from engine.modules.snapshot import coerce_legacy_module
 
 logger = logging.getLogger(__name__)
+
+# `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE.
+# Used by the never_applied warning classifier to tell "target has a
+# carrier/instance somewhere in the chain" apart from "target uuid is
+# nowhere to be found".
+_PIPELINE_REF_RE = re.compile(r"@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}")
+
+
+def _module_field(module: Any, key: str) -> Any:
+    """Read a field from a module that may be a dict or an object."""
+    if isinstance(module, dict):
+        return module.get(key)
+    return getattr(module, key, None)
+
+
+def _target_present_in_chain(
+    target_uuid: str,
+    modules: list[Any],
+    catalog: dict[str, Any] | None,
+) -> bool:
+    """True when `target_uuid` has SOME representation in the chain —
+    either a direct wildcard instance (a module whose id == target) or a
+    carrier (any wildcard, in the module list OR the catalog, with an
+    `@{target}` ref in one of its option values).
+
+    Used purely to pick the right never_applied warning wording: if the
+    target is present-but-unclaimed the cause is ordering / a skipped
+    roll; if it's absent the cause is a wrong uuid. Best-effort + cheap
+    (library volumes are dozens of modules, single-digit refs each)."""
+    def _options_of(payload: Any) -> list:
+        if isinstance(payload, dict):
+            opts = payload.get("options")
+            return opts if isinstance(opts, list) else []
+        return []
+
+    def _carries(payload: Any) -> bool:
+        for opt in _options_of(payload):
+            val = opt.get("value") if isinstance(opt, dict) else None
+            if isinstance(val, str) and any(
+                m.group(1) == target_uuid for m in _PIPELINE_REF_RE.finditer(val)
+            ):
+                return True
+        return False
+
+    for m in modules:
+        if _module_field(m, "type") != "wildcard":
+            continue
+        if _module_field(m, "id") == target_uuid:
+            return True
+        if _carries(_module_field(m, "payload")):
+            return True
+    if isinstance(catalog, dict):
+        for entry in catalog.values():
+            payload = entry.get("payload") if isinstance(entry, dict) else None
+            if _carries(payload):
+                return True
+    return False
 
 
 def _extract_static_meta(
@@ -377,6 +435,7 @@ class PipelineEngine:
         # same warning twice for the same logical constraint (2026-05-26).
         constraints_bucket = ctx.get("__wp_constraints__") or []
         consumed_set = ctx.get("__wp_consumed_constraints__") or set()
+        catalog = ctx.get("__wp_catalog__")
         warned_cids: set[str] = set()
         if isinstance(constraints_bucket, list):
             for c in constraints_bucket:
@@ -388,6 +447,32 @@ class PipelineEngine:
                 if cid in warned_cids:
                     continue
                 warned_cids.add(cid)
+                target_uuid = c.get("target_wildcard_id", "")
+                # Classify the cause so the message is actionable.
+                # With the carrier-claim failsafe in place, a carrier
+                # that rolls ANY option claims its constraint — so an
+                # unconsumed constraint whose target IS present in the
+                # chain means the target instance/carrier ran BEFORE
+                # this constraint registered (ordering), or sits in a
+                # branch/Context this run didn't reach. Absent target =
+                # a wrong/stale uuid.
+                present = _target_present_in_chain(
+                    target_uuid, modules, catalog,
+                )
+                if present:
+                    message = (
+                        f"constraint @{{{cid}}} did not apply — its target "
+                        f"@{{{target_uuid}}} exists in the chain but wasn't "
+                        f"claimed (it rolled before this constraint registered, "
+                        f"or sits in a separate branch). Move the constraint "
+                        f"above the target's first appearance."
+                    )
+                else:
+                    message = (
+                        f"constraint @{{{cid}}} did not apply — no @{{{target_uuid}}} "
+                        f"wildcard instance or nested-ref carrier found in this "
+                        f"chain (check the constraint's target uuid)."
+                    )
                 warnings_bucket = ctx.setdefault("__wp_warnings__", [])
                 if isinstance(warnings_bucket, list):
                     warnings_bucket.append({
@@ -399,32 +484,18 @@ class PipelineEngine:
                         "token_index": None,
                         "detail": {
                             "constraint_id": cid,
-                            "target_wildcard_id": c.get("target_wildcard_id", ""),
+                            "target_wildcard_id": target_uuid,
                             "source_wildcard_id": c.get("source_wildcard_id", ""),
+                            # `target_present` lets the DebugViewer pick a
+                            # distinct icon/severity later without re-parsing
+                            # the message string.
+                            "target_present": present,
                         },
-                        # Format ids as `@{uuid}` so the DebugViewer's
-                        # RichTextPreview parses + resolves them via
-                        # the library cache. Without the `@{}`
-                        # wrapper the raw uuids fell through as plain
-                        # text and the user saw `'e4b95847'` instead
-                        # of the constraint / wildcard's display name.
-                        #
-                        # Message phrasing — past tense + parenthetical
-                        # cause — makes it explicit this is a RUNTIME
-                        # result for THIS iteration: the constraint was
-                        # registered but its target instance didn't
-                        # materialise (no top-level wildcard rolled +
-                        # no nested `@{target}` ref hit). Pre-fix said
-                        # "never fired — no downstream @target
-                        # instance" which the user (rightly) read as
-                        # static-analysis output that should have
-                        # matched the canvas pair badge, when it's
-                        # actually per-iteration runtime truth.
-                        "message": (
-                            f"constraint @{{{cid}}} did not apply this iteration "
-                            f"(@{{{c.get('target_wildcard_id', '')}}} target "
-                            f"never rolled — no top-level instance + no nested ref hit)"
-                        ),
+                        # Ids wrapped as `@{uuid}` so the DebugViewer's
+                        # RichTextPreview resolves them to display names
+                        # via the library cache (raw short-uuids would
+                        # otherwise render as plain text).
+                        "message": message,
                     })
 
         return ctx

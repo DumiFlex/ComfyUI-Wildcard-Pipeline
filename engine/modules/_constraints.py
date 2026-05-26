@@ -17,9 +17,79 @@ handler) or narrow ResolveContext-style accessors (ref resolver).
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from engine.modules.wildcard_handler import _apply_constraint_to_options
+
+# Mirror of `engine.syntax.tokenize._REF_RE` (kept local to avoid
+# importing a private symbol across the module boundary). Captures the
+# 8-hex uuid; the optional `#name` / `:subcat` segments are skipped.
+_REF_RE = re.compile(r"@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}")
+
+
+def claim_carrier_constraints(
+    options: list[dict[str, Any]],
+    constraints: list[dict[str, Any]] | None,
+    picks: dict[str, dict[str, Any]] | None,
+    consumed: set[str] | None,
+) -> None:
+    """First-instance positional-claim failsafe (2026-05-26).
+
+    After a wildcard rolls + resolves its chosen option, any *unconsumed*
+    constraint whose target this wildcard CARRIES — i.e. has an
+    ``@{target}`` ref in ANY of its options, not just the chosen one — is
+    consumed-as-skipped, provided the constraint's source has already
+    been picked.
+
+    Why: the pair badge assigns a constraint to the FIRST downstream
+    wildcard that could host its target (direct instance OR nested-ref
+    carrier). Without this failsafe the runtime only consumed a
+    constraint when the target *actually* resolved, so a carrier whose
+    chosen option happened to omit the ref let the constraint "spill"
+    onto a later target instance — contradicting the badge and
+    surprising the user. Claiming here binds the constraint to the
+    carrier positionally: if the carrier's roll skips the ref, the
+    constraint is spent (no spill) and no never_applied warning fires
+    for it (the carrier did roll — it just didn't use the ref).
+
+    No-op cases:
+      - chosen option DID resolve the ref → the nested-resolve path
+        already consumed the constraint; the ``cid in consumed`` guard
+        skips it here.
+      - source not yet picked → don't claim (matches the direct-target
+        apply path, which also defers + warns rather than consuming an
+        un-appliable constraint). Lets it potentially fire once the
+        source is available later in the chain.
+    """
+    if not constraints or not isinstance(constraints, list):
+        return
+    if consumed is None:
+        return
+    if not isinstance(picks, dict):
+        picks = {}
+    carried: set[str] = set()
+    for opt in options:
+        val = opt.get("value")
+        if isinstance(val, str):
+            for m in _REF_RE.finditer(val):
+                carried.add(m.group(1))
+    if not carried:
+        return
+    for c in constraints:
+        if not isinstance(c, dict):
+            continue
+        tgt = c.get("target_wildcard_id")
+        if tgt not in carried:
+            continue
+        cid = c.get("__constraint_module_id__")
+        if cid is None or cid in consumed:
+            continue
+        src_id = c.get("source_wildcard_id")
+        src_pick = picks.get(src_id) if isinstance(src_id, str) else None
+        if not isinstance(src_pick, dict):
+            continue
+        consumed.add(cid)
 
 
 def _push_constraint_warning(

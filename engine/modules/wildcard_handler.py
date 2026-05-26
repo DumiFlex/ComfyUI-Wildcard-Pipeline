@@ -467,4 +467,22 @@ class WildcardHandler(ModuleHandler):
             resolved = resolve_text(value, resolve_ctx)
         finally:
             ctx["__wp_rng__"] = saved_rng
+
+        # First-instance positional-claim failsafe: this wildcard may
+        # CARRY a constraint's target via an `@{target}` ref in one of
+        # its options. If the chosen option happened to omit that ref,
+        # the nested-resolve path above didn't consume the constraint —
+        # but the pair badge already assigned the constraint to this
+        # carrier. Claim it (consume-as-skipped) so it doesn't spill
+        # onto a later target instance. No-op when the chosen option
+        # DID resolve the ref (already consumed) or the source isn't
+        # picked yet. See `_constraints.claim_carrier_constraints`.
+        if ctx is not None:
+            from engine.modules._constraints import claim_carrier_constraints
+            claim_carrier_constraints(
+                options,
+                ctx.get("__wp_constraints__"),
+                ctx.get("__wp_picks__"),
+                ctx.get("__wp_consumed_constraints__"),
+            )
         return {binding: resolved}

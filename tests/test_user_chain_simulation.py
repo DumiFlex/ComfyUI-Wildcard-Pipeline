@@ -255,6 +255,141 @@ def test_multiple_seeds_consistent_constraint_consumption():
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Carrier-claim failsafe (2026-05-26) — no spill past a carrier.
+
+
+def test_carrier_claims_constraint_no_spill_to_later_instance():
+    """A carrier (backdrop) that rolls an option WITHOUT the @{target}
+    ref still claims the constraint positionally — so a later top-level
+    target instance is NOT constrained (no spill). Matches the pair
+    badge, which assigns the constraint to backdrop (the first carrier).
+
+    Chain: shirt → shirt_x_color constraint → backdrop (carries @{color}
+    in some options, but we force the no-ref option) → color (top-level
+    AFTER backdrop). The top-level color must roll FREE (unconstrained)
+    because backdrop already claimed the constraint."""
+    SHIRT = "b2b2b2b2"
+    COLOR = "a361dbdc"
+    BACKDROP = "b0b0b0b0"
+    CN = "cc222222"
+    modules = [
+        _wildcard(SHIRT, "shirt", [
+            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+        ]),
+        _constraint(
+            CN, SHIRT, COLOR,
+            matrix={"casual": {"warm": {"mode": "exclude", "factor": 1}}},
+        ),
+        # Backdrop CARRIES @{color} (it's a carrier) but the ONLY option
+        # has no ref — forces the "carrier rolled, ref omitted" path.
+        # A second option WITH the ref makes it a genuine carrier in the
+        # static sense; weight 0 so RNG never picks it (deterministic).
+        _wildcard(BACKDROP, "backdrop", [
+            {"id": "bd1", "value": "plain studio", "weight": 1},
+            {"id": "bd2", "value": f"with @{{{COLOR}}}", "weight": 0},
+        ]),
+        # Top-level color AFTER backdrop — should NOT be constrained.
+        _wildcard(COLOR, "color", [
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+        ]),
+    ]
+    catalog = {
+        COLOR: _wildcard(COLOR, "color", [
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+        ]),
+    }
+    # Across seeds the top-level color should sometimes roll warm_red —
+    # proving it's NOT being constrained (constraint excludes warm).
+    saw_warm = False
+    for seed in range(20):
+        ctx = {"__wp_catalog__": dict(catalog)}
+        ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
+        consumed = ctx.get("__wp_consumed_constraints__", set())
+        # Backdrop claimed the constraint (consumed-as-skipped).
+        assert CN in consumed, f"seed {seed}: carrier didn't claim constraint"
+        if "warm_red" in (ctx.get("color") or ""):
+            saw_warm = True
+    assert saw_warm, (
+        "top-level color never rolled warm across 20 seeds — it's being "
+        "constrained, meaning the constraint spilled past the carrier"
+    )
+
+
+def test_carrier_claim_noop_when_source_not_picked():
+    """The carrier only claims when the constraint's source is already
+    picked. If the source rolls AFTER the carrier, the carrier must NOT
+    claim (leaves the constraint free to apply once the source + a real
+    target resolution land later)."""
+    SHIRT = "b2b2b2b2"
+    COLOR = "a361dbdc"
+    BACKDROP = "b0b0b0b0"
+    CN = "cc222222"
+    # Carrier (backdrop) comes BEFORE the source (shirt) — source not
+    # picked when carrier rolls, so no claim.
+    modules = [
+        _constraint(
+            CN, SHIRT, COLOR,
+            matrix={"casual": {"warm": {"mode": "exclude", "factor": 1}}},
+        ),
+        _wildcard(BACKDROP, "backdrop", [
+            {"id": "bd1", "value": "plain studio", "weight": 1},
+            {"id": "bd2", "value": f"with @{{{COLOR}}}", "weight": 0},
+        ]),
+        _wildcard(SHIRT, "shirt", [
+            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+        ]),
+    ]
+    ctx = {"__wp_catalog__": {}}
+    ctx = PipelineEngine().run(modules, ctx=ctx, seed=0)
+    consumed = ctx.get("__wp_consumed_constraints__", set())
+    assert CN not in consumed, (
+        "carrier claimed the constraint despite source not being picked "
+        "yet — claim must wait for source readiness"
+    )
+
+
+def test_never_applied_message_distinguishes_present_vs_absent():
+    """The end-of-run warning wording differs by cause: target present
+    in chain (ordering issue) vs target uuid absent (typo)."""
+    # Absent target — no instance, no carrier anywhere.
+    GHOST = "deadbeef"
+    modules_absent = [
+        _wildcard("11111111", "src", [
+            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+        ]),
+        _constraint("22222222", "11111111", GHOST),
+    ]
+    ctx = PipelineEngine().run(modules_absent, ctx={"__wp_catalog__": {}}, seed=0)
+    w = next(
+        x for x in ctx["__wp_warnings__"]
+        if x.get("type") == "constraint_never_applied"
+    )
+    assert w["detail"]["target_present"] is False
+    assert "no @{deadbeef}" in w["message"]
+
+    # Present target — instance exists but rolled BEFORE the constraint.
+    TGT = "33333333"
+    modules_present = [
+        _wildcard(TGT, "tgt", [
+            {"id": "t1", "value": "early", "weight": 1, "sub_category": "warm"},
+        ]),
+        _wildcard("11111111", "src", [
+            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+        ]),
+        _constraint("22222222", "11111111", TGT),
+    ]
+    ctx = PipelineEngine().run(modules_present, ctx={"__wp_catalog__": {}}, seed=0)
+    w = next(
+        x for x in ctx["__wp_warnings__"]
+        if x.get("type") == "constraint_never_applied"
+    )
+    assert w["detail"]["target_present"] is True
+    assert "exists in the chain" in w["message"]
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Cross-node propagation regression (2026-05-26)
 #
 # Before today's fix, two sequential WP_Context nodes downstream of
