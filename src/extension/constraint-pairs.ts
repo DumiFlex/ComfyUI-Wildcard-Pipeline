@@ -201,14 +201,32 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
     for (const cn of cns) {
       const cnIdx = modules.findIndex((m) => m.rowKey === cn.rowKey);
       if (cnIdx < 0) continue;
+      // Single forward scan — first match WINS, regardless of route.
+      // Previous code preferred direct targets over via-nested even when
+      // a via-nested target came earlier in the chain. That was wrong:
+      // the engine fires constraints against the first downstream
+      // instance it encounters at run time (whether the source is a
+      // standalone wildcard instance or appears inside a carrier's
+      // `@{uuid}` ref), so the badge model must match.
       let claimedTarget: ChainModule | null = null;
+      let viaCarrier: ChainModule | null = null;
+      let viaOptionIds: string[] = [];
       for (let j = cnIdx + 1; j < modules.length; j++) {
         const d = modules[j];
-        if (d.type !== "wildcard") continue;
-        if (d.id !== targetUuid) continue;
-        if (claimedRowKeys.has(d.rowKey)) continue;
-        claimedTarget = d;
-        break;
+        // Direct match: a downstream wildcard whose id is the target uuid.
+        if (d.type === "wildcard" && d.id === targetUuid && !claimedRowKeys.has(d.rowKey)) {
+          claimedTarget = d;
+          break;
+        }
+        // Nested match: a downstream wildcard with one of its option
+        // values containing `@{targetUuid}`. Carriers aren't marked
+        // as claimed (multiple constraints can route through them).
+        const optionIds = carrierOptionIdsFor(d, targetUuid);
+        if (optionIds.length > 0) {
+          viaCarrier = d;
+          viaOptionIds = optionIds;
+          break;
+        }
       }
       badgeNumber++;
       const colorIndex = colorFor(cn.rowKey);
@@ -218,29 +236,6 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
         ensure(cn.rowKey).direct = { number: badgeNumber, targetUuid, colorIndex, isOrphan: false };
         ensure(claimedTarget.rowKey).direct = { number: badgeNumber, targetUuid, colorIndex, isOrphan: false };
         continue;
-      }
-
-      // No direct target downstream — scan downstream wildcards' option
-      // values for a nested `@{targetUuid}` ref. The first wildcard
-      // whose options carry it claims the slot AS A CARRIER. Same
-      // first-instance semantic, just routed through nesting. Carriers
-      // are not added to `claimedRowKeys` because two constraints
-      // CAN both fire through nested refs in the same carrier (the
-      // carrier's nested ref triggers each constraint once when the
-      // wildcard's option is picked at runtime; the wildcard itself
-      // isn't "claimed", its OPTIONS carry the references). Engine
-      // runtime semantics for nested-via constraints fall outside
-      // this badge's first-instance one-shot model.
-      let viaCarrier: ChainModule | null = null;
-      let viaOptionIds: string[] = [];
-      for (let j = cnIdx + 1; j < modules.length; j++) {
-        const d = modules[j];
-        const optionIds = carrierOptionIdsFor(d, targetUuid);
-        if (optionIds.length > 0) {
-          viaCarrier = d;
-          viaOptionIds = optionIds;
-          break;
-        }
       }
       if (viaCarrier !== null) {
         const carrierPayload = viaCarrier.payload as {

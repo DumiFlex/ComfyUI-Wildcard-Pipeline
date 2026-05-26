@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computePairings, type ChainModule } from "./constraint-pairs";
+import { computePairings, computePairingsFull, type ChainModule } from "./constraint-pairs";
 import { varColorIndex } from "../components/shared/var-color";
 
 function module_(id: string, type: string, payload: Record<string, unknown> = {}, rowKey?: string): ChainModule {
@@ -119,5 +119,36 @@ describe("computePairings", () => {
     expect(result.get("cn1")?.colorIndex).toBe(colorForPair("cn1", "mood"));
     expect(result.get("mood")?.colorIndex).toBe(colorForPair("cn1", "mood"));
     expect(result.get("cn1")?.colorIndex).toBe(result.get("mood")?.colorIndex);
+  });
+
+  it("first downstream match wins regardless of direct-vs-nested route", () => {
+    // The engine fires constraints against the first downstream instance
+    // it encounters at runtime — direct OR nested. Earlier code preferred
+    // direct over nested even when the nested ref came FIRST in the chain.
+    // Regression: a carrier wildcard immediately downstream of the
+    // constraint should claim the slot before any later direct instance.
+    // Target uuid uses the real 8-hex-char shape so the via-ref regex
+    // (`@\{([0-9a-f]{8})\}`) matches.
+    const targetUuid = "a1b2c3d4";
+    const chain = [
+      module_("s1", "wildcard"),
+      module_("cn1", "constraint", { source_wildcard_id: "s1", target_wildcard_id: targetUuid }),
+      // carrier comes FIRST in chain order
+      module_(
+        "carrier",
+        "wildcard",
+        { options: [{ id: "opt_a", value: `@{${targetUuid}}` }] },
+        "carrier#a",
+      ),
+      // direct match comes LATER — engine never reaches it because
+      // carrier claimed the slot first.
+      module_(targetUuid, "wildcard", {}, "target#a"),
+    ];
+    const full = computePairingsFull(chain);
+    const sender = full.get("cn1");
+    expect(sender?.direct?.via?.carrierRowKey).toBe("carrier#a");
+    expect(sender?.direct?.via?.optionIds).toEqual(["opt_a"]);
+    // Direct `target#a` should NOT be paired (carrier won the race).
+    expect(full.get("target#a")?.direct).toBeUndefined();
   });
 });
