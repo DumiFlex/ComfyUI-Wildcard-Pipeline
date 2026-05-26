@@ -41,8 +41,15 @@ const subCategoriesLabel = computed(() =>
 
 const label = computed(() => {
   if (!props.resolved) {
-    // Unresolved → show the uuid (refs) or name (vars) so the user can debug.
-    return props.kind === "ref" ? props.uuid : props.name;
+    // Unresolved refs prefer the cached `#name` (kept on the ref atom
+    // from the `@{uuid#name}` syntax) so a broken reference still
+    // tells the user which wildcard was originally there. Falls back
+    // to the uuid when no cached name is available (legacy bare-uuid
+    // refs / older workflows). Vars keep showing the bare name.
+    if (props.kind === "ref") {
+      return props.name && props.name.length > 0 ? props.name : props.uuid;
+    }
+    return props.name;
   }
   return (isRef.value ? "@" : "$") + props.name;
 });

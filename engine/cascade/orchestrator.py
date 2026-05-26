@@ -10,6 +10,7 @@ import sqlite3
 from typing import Any
 
 from engine.cascade.fixers import (
+    fix_bundle_delete,
     fix_category_delete,
     fix_combine_output_var_rename,
     fix_option_delete,
@@ -195,6 +196,8 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
                 )
             elif key == ("category", "delete"):
                 touched_before, diff = fix_category_delete(conn, target_id)
+            elif key == ("bundle", "delete"):
+                touched_before, diff = fix_bundle_delete(conn, target_id)
             elif key == ("option", "delete"):
                 touched_before, diff = fix_option_delete(
                     conn, extra.get("wildcard_id", ""), target_id,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
@@ -17,6 +17,10 @@ import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
 import { validateBundle } from "../utils/validateModule";
 import type { BundleRow, CategoryRow } from "../api/types";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import { useDeleteConfirm } from "../composables/useDeleteConfirm";
+import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import { useCascadeStore } from "../cascade/cascade-store";
 
 const route = useRoute();
 const router = useRouter();
@@ -28,6 +32,14 @@ const toast = useToast();
 const bulkAdapter = makeBundleStoreAdapter(store);
 const bulk = useBulkActions(bulkAdapter);
 const loadErr = useLoadError();
+const cascade = useCascadeStore();
+
+// Cascade-confirm state for bundle-with-refs delete. Mirrors the
+// Wildcards.vue grammar — when a bundle has tier-2 parents the
+// CascadeConfirmDialog shows the impact list; no-refs path still
+// goes through the plain ConfirmDialog.
+const cascadeDialogOpen = ref(false);
+const cascadeDialogTarget = ref<BundleRow | null>(null);
 
 const urlState = useListUrlState(undefined, "bundles");
 
@@ -95,13 +107,50 @@ async function fav(row: BundleRow) {
   catch (e) { toast.push({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 }); }
 }
 
-async function del(row: BundleRow) {
+const delConfirm = useDeleteConfirm<BundleRow>();
+function del(row: BundleRow) {
+  // Cascade impact preview when other bundles reference this one as a
+  // tier-2 child. No-refs path falls back to the simple confirm so
+  // accidental clicks still get gated.
+  const refs = cascade.refsTo("bundle", row.id);
+  if (refs.length > 0) {
+    cascadeDialogTarget.value = row;
+    cascadeDialogOpen.value = true;
+    return;
+  }
+  delConfirm.ask(row);
+}
+async function performDelete(row: BundleRow) {
   try {
     await store.remove(row.id);
     toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
   } catch (e) {
     toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
   }
+}
+
+function onBundleCascadeConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
+  cascadeDialogOpen.value = false;
+  const row = cascadeDialogTarget.value;
+  cascadeDialogTarget.value = null;
+  if (!row) return;
+  // Server already deleted the bundle + (cascade-on) cleaned parent
+  // refs. Refetch + rebuild reverse-dep index so the local list +
+  // sidebar counts mirror the post-delete state.
+  void store.fetchAll();
+  void store.fetchCatalog();
+  const count = result.affected_count;
+  toast.push({
+    severity: "success",
+    summary: `Bundle "${row.name}" deleted`,
+    detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+    life: 5000,
+  });
+}
+
+function onBundleCascadeCancelled(): void {
+  cascadeDialogOpen.value = false;
+  cascadeDialogTarget.value = null;
 }
 
 function toggleTag(t: string, currentTags: string[] | undefined): string[] {
@@ -154,6 +203,9 @@ function frameColor(row: BundleRow): string {
 </script>
 
 <template>
+  <!-- Single root vnode — AppLayout's <Transition mode="out-in"> needs
+       one root or it never paints the destination view. -->
+  <div class="wp-route-root">
   <ModuleListView
     title="Bundles"
     subtitle="Bundles wrap a contiguous range of modules into a reusable, library-tracked group. Children are stored as frozen snapshots — library updates do not propagate to in-flight Contexts."
@@ -322,9 +374,30 @@ function frameColor(row: BundleRow): string {
       </ul>
     </template>
   </ModuleListView>
+
+  <ConfirmDialog
+    :visible="delConfirm.visible.value"
+    :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
+    body="This permanently removes the bundle library entry."
+    confirm-label="Delete"
+    variant="danger"
+    @confirm="delConfirm.confirm(performDelete)"
+    @cancel="delConfirm.cancel"
+  />
+  <CascadeConfirmDialog
+    v-if="cascadeDialogTarget"
+    :open="cascadeDialogOpen"
+    kind="bundle"
+    :id="cascadeDialogTarget.id"
+    action="delete"
+    @confirmed="onBundleCascadeConfirmed"
+    @cancelled="onBundleCascadeCancelled"
+  />
+  </div>
 </template>
 
 <style scoped>
+.wp-route-root { display: contents; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
 .wp-tag-chip[data-active="true"] {

@@ -32,7 +32,10 @@ def test_scan_wildcard_delete_returns_bundles_and_constraints_and_text_refs(wp_d
     affected_ids = {a["id"] for a in affected}
     assert constraint["id"] in affected_ids
     assert other_wc["id"] in affected_ids
-    assert bundle["id"] in affected_ids
+    # Bundles intentionally NOT in the impact set — children are frozen
+    # snapshots independent of the source wildcard, so a delete leaves
+    # them untouched. See engine/cascade/fixers.py:fix_wildcard_delete.
+    assert bundle["id"] not in affected_ids
 
 
 def test_scan_subcat_delete_returns_constraint_with_matrix_key(wp_db):

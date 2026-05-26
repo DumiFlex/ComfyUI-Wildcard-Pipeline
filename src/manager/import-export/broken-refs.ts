@@ -63,7 +63,7 @@ export interface ImportedConstraint {
  * the optional `:label` suffix is for editor-display only and not part
  * of the resolution key.
  */
-const REF_REGEX = /@\{([0-9a-f]{8})(?::[^}]*)?\}/g;
+const REF_REGEX = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 
 export function discoverBrokenRefsForImport(
   wildcards: ImportedWildcard[],

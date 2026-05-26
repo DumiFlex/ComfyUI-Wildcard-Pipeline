@@ -33,6 +33,21 @@ const affected = ref<Array<{ kind: string; id: string; name: string }>>([]);
 const loading = ref(true);
 const error = ref<string>("");
 
+/** Names that flow into the @{uuid#name:subcat} grammar must avoid
+ *  the structural chars (and comma, since subcats are comma-listed).
+ *  Mirrors `wp_api/_validators.py:REF_GRAMMAR_FORBIDDEN_CHARS`. */
+const nameError = computed<string | null>(() => {
+  if (props.kind !== "wildcard" && props.kind !== "subcategory") return null;
+  if (props.kind === "subcategory" && newName.value === "null") {
+    return "\"null\" is reserved by the @{uuid:subcat} filter";
+  }
+  const bad = newName.value.match(/[{}:#@,]/);
+  if (bad) {
+    return `Cannot contain "${bad[0]}" (reserved by the @{uuid#name:subcat} ref grammar)`;
+  }
+  return null;
+});
+
 const KIND_CLASS_MAP: Record<string, string> = {
   wildcard: "wildcard",
   fixed_values: "fixed",
@@ -85,7 +100,9 @@ watch(
   { immediate: true },
 );
 
-const canConfirm = computed<boolean>(() => !!newName.value && !loading.value);
+const canConfirm = computed<boolean>(
+  () => !!newName.value && !loading.value && nameError.value === null,
+);
 
 async function onConfirm(): Promise<void> {
   const req: CascadeApplyRequest = {
@@ -132,6 +149,7 @@ function onOpenUpdate(v: boolean): void {
         <span class="wp-cascade-rename__label">New name</span>
         <Input v-model="newName" type="text" aria-label="New name" />
       </label>
+      <p v-if="nameError" class="wp-cascade-rename__error">⚠ {{ nameError }}</p>
       <p v-if="error" class="wp-cascade-rename__error">⚠ {{ error }}</p>
       <div v-if="affected.length > 0" class="wp-cascade-rename__toggle">
         <Checkbox

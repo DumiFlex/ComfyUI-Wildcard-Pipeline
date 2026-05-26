@@ -12,6 +12,8 @@ import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
@@ -197,19 +199,17 @@ async function fav(row: ModuleRow) {
   catch (e) { toast.push({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 }); }
 }
 
-async function del(row: ModuleRow) {
+const delConfirm = useDeleteConfirm<ModuleRow>();
+function del(row: ModuleRow) {
   // Check the reverse-dep index for any incoming references. If anything
   // points at this wildcard (constraint, bundle child, nested `@{uuid}`
   // from another wildcard, etc.) open the cascade dialog so the user
-  // sees the impact before confirming.
+  // sees the impact before confirming. Otherwise gate the instant-delete
+  // path behind the simple confirm — accidental trash-icon clicks
+  // shouldn't drop data silently.
   const refs = cascade.refsTo("wildcard", row.id);
   if (refs.length === 0) {
-    try {
-      await store.remove(row.id);
-      toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
-    } catch (e) {
-      toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
-    }
+    delConfirm.ask(row);
     return;
   }
   pendingDeleteName.value = row.name;
@@ -219,6 +219,14 @@ async function del(row: ModuleRow) {
     action: "delete",
   };
   cascadeDialogOpen.value = true;
+}
+async function performDelete(row: ModuleRow) {
+  try {
+    await store.remove(row.id);
+    toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
+  } catch (e) {
+    toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
+  }
 }
 
 function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
@@ -499,6 +507,15 @@ function issuesFor(row: ModuleRow) {
     v-bind="cascadeDialogProps"
     @confirmed="onCascadeDialogConfirmed"
     @cancelled="onCascadeDialogCancelled"
+  />
+  <ConfirmDialog
+    :visible="delConfirm.visible.value"
+    :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
+    body="This permanently removes the library entry."
+    confirm-label="Delete"
+    variant="danger"
+    @confirm="delConfirm.confirm(performDelete)"
+    @cancel="delConfirm.cancel"
   />
   </div>
 </template>

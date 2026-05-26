@@ -550,9 +550,18 @@ describe("ContextWidget bundle ops via ctxmenu", () => {
     header!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
     await flushPromises();
     const items = Array.from(document.querySelectorAll(".wp-ctxmenu__item")) as HTMLElement[];
-    const save = items.find((el) => el.textContent?.includes("Save changes to library"));
-    expect(save, "Save changes to library item present").toBeTruthy();
+    const save = items.find((el) => el.textContent?.includes("Push to library"));
+    expect(save, "Push to library item present").toBeTruthy();
     save!.click();
+    await flushPromises();
+
+    // New flow: ctx menu opens PushBundleToLibraryModal; user clicks
+    // "Update existing" to commit the PUT.
+    const modal = document.querySelector('[data-test="pbtl"]');
+    expect(modal, "push-to-library bundle modal rendered").toBeTruthy();
+    const updateBtn = document.querySelector('[data-test="pbtl-update"]') as HTMLButtonElement | null;
+    expect(updateBtn, "Update existing button present").toBeTruthy();
+    updateBtn!.click();
     await flushPromises();
 
     const putCall = fetchSpy.mock.calls.find(

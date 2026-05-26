@@ -15,6 +15,7 @@ import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstance
 import CombineInstanceModal from "./editors/combine/CombineInstanceModal.vue";
 import DerivationInstanceModal from "./editors/derivation/DerivationInstanceModal.vue";
 import ConstraintInstanceModal from "./editors/constraint/ConstraintInstanceModal.vue";
+import type { PairingBadge } from "../../extension/constraint-pairs";
 
 
 const props = defineProps<{
@@ -31,6 +32,10 @@ const props = defineProps<{
    *  preview to resolve source/target uuids back to var-binding names.
    *  May include the module being edited; lookups by uuid skip self. */
   siblingModules?: ModuleEntry[];
+  /** Per-option pair badges for the currently-edited wildcard when it
+   *  acts as a constraint carrier (target reached via nested `@{uuid}`).
+   *  Keyed by option id. Empty for non-wildcard or non-carrier rows. */
+  viaOptionPairs?: Map<string, PairingBadge[]>;
   /**
    * Pull the seed THIS module actually rolled with on the last
    * queue. Returns `locked_seed` for wildcards locked at run time;
@@ -225,11 +230,12 @@ function onSaveToLibraryClick(): void {
 }
 
 interface PushSaveResult {
-  mode: "update" | "fork";
+  mode: "update" | "fork" | "reattach";
   id: string;
   payload_hash: string;
   bundles_updated: string[];
   name: string;
+  origId: string;
 }
 
 function onPushToLibrarySaved(result: PushSaveResult): void {
@@ -238,11 +244,11 @@ function onPushToLibrarySaved(result: PushSaveResult): void {
     return;
   }
   setLibraryHash(result.id, result.payload_hash);
-  if (result.mode === "fork") {
-    // The new entry replaces the draft's identity; `_originalId` lets
-    // saveEditedModule swap the row by old id during the next save().
-    // library_name follows the new entry's name so per-field reset
-    // semantics start from the fresh row.
+  if (result.mode === "fork" || result.mode === "reattach") {
+    // Fork: the new entry replaces the draft's identity; `_originalId`
+    // lets saveEditedModule swap the row by old id during the next
+    // save(). Reattach: same wiring — the dead uuid gets swapped for
+    // the new one so MISSING clears.
     (draft.value as ModuleEntry & { _originalId?: string })._originalId = draft.value.id;
     draft.value.id = result.id;
     draft.value.payload_hash = result.payload_hash;
@@ -251,7 +257,12 @@ function onPushToLibrarySaved(result: PushSaveResult): void {
       name: result.name,
       library_name: result.name,
     };
-    pushToast(`Saved as new library entry "${result.name}"`, { severity: "success" });
+    pushToast(
+      result.mode === "reattach"
+        ? `Re-attached "${result.name}" to library`
+        : `Saved as new library entry "${result.name}"`,
+      { severity: "success" },
+    );
     save();
   } else {
     // Update path — same uuid, refreshed hash. Stamp library_name too
@@ -371,6 +382,7 @@ function cancel() {
       :is-modified="instanceModified"
       :upstream-vars="upstreamVars"
       :sibling-vars="siblingVars"
+      :via-option-pairs="viaOptionPairs"
       @update="onUpdate"
       @save="save"
       @cancel="cancel"

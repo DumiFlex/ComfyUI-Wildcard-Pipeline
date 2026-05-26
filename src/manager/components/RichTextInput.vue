@@ -59,6 +59,11 @@ interface Props {
    *  reserved keyword `"null"` in the filter list opts the null
    *  option into the resolved pool (engine recognises this). */
   uuidToHasNull?: Map<string, boolean>;
+  /** Map from wildcard UUID → option count. Optional — when provided
+   *  the `@`-trigger autocomplete row surfaces the count alongside
+   *  the uuid so two same-named wildcards (e.g. duplicates from import)
+   *  can be told apart at-a-glance. */
+  uuidToOptionsCount?: Map<string, number>;
   ariaLabel?: string;
   disabled?: boolean;
 }
@@ -81,6 +86,7 @@ const props = withDefaults(defineProps<Props>(), {
   uuidToName: () => new Map(),
   uuidToSubCategories: () => new Map(),
   uuidToHasNull: () => new Map(),
+  uuidToOptionsCount: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
 });
@@ -377,6 +383,17 @@ const acItems = computed(() => {
 function suggestionLabel(token: string): string {
   if (acTrigger.value === "@") return props.uuidToName.get(token) ?? token;
   return token;
+}
+
+/** Right-side meta string for a `@` popover row — disambiguates rows
+ *  with identical display names (e.g. two wildcards both named "test")
+ *  by surfacing the option count and the uuid. Empty for `$` rows
+ *  since var names are already unique. */
+function suggestionMeta(token: string): string {
+  if (acTrigger.value !== "@") return "";
+  const count = props.uuidToOptionsCount.get(token);
+  const countPart = typeof count === "number" ? `${count} opt${count === 1 ? "" : "s"}` : "";
+  return countPart ? `${countPart} · ${token}` : token;
 }
 
 watch(acItems, (items) => {
@@ -883,9 +900,15 @@ function insertRefAtCursor(
   subCategories: string[],
   caretOverride?: { caret: number; acStart: number },
 ): void {
-  const chipText = subCategories.length > 0
-    ? "@{" + uuid + ":" + subCategories.join(",") + "}"
-    : "@{" + uuid + "}";
+  // Cache the wildcard's current display name in the ref so the chip
+  // can render a label even when the library entry is later deleted.
+  // Resolver matches on uuid only — the name is purely a fossil for
+  // the UI. Missing-name fallback emits the bare-uuid form (legacy
+  // workflows stay parseable round-trip).
+  const name = props.uuidToName.get(uuid);
+  const namePart = name ? "#" + name : "";
+  const subPart = subCategories.length > 0 ? ":" + subCategories.join(",") : "";
+  const chipText = "@{" + uuid + namePart + subPart + "}";
   insertChipAtCaret(chipText, caretOverride);
 }
 
@@ -906,9 +929,13 @@ function onPickerApply(subCats: string[]): void {
   } else if (pickerMode.value === "edit" && pickerTargetAtomIndex.value !== null) {
     const target = atoms.value[pickerTargetAtomIndex.value];
     if (target && target.kind === "ref") {
+      // Refresh the cached display name on edit — the library may
+      // have been renamed since this token was first written.
+      const liveName = props.uuidToName.get(target.uuid);
       const next = replaceAtom(atoms.value, pickerTargetAtomIndex.value, {
         ...target,
         subCategories: subCats,
+        ...(liveName ? { name: liveName } : {}),
       });
       applyAtoms(next);
       emitValue(serialise(atoms.value));
@@ -1051,6 +1078,12 @@ function readHostAsText(): string {
       if (!atom) continue;
       if (atom.kind === "ref") {
         out += "@{" + atom.uuid;
+        // Preserve the cached `#name` segment so re-tokenization
+        // round-trips the display label intact. Without this, every
+        // host-input event (typing, focus changes, etc.) re-derives
+        // text-only refs as `@{uuid}` and broken chips lose their
+        // friendly fallback label.
+        if (atom.name && atom.name.length > 0) out += "#" + atom.name;
         if (atom.subCategories.length > 0) out += ":" + atom.subCategories.join(",");
         out += "}";
       } else if (atom.kind === "var") {
@@ -1525,7 +1558,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     // in a wildcard option (where $ is plain text per surface contract)
     // would be eaten whole by a single Backspace — user reported.
     const chipRegex = props.surface === "wildcard"
-      ? /(@\{[0-9a-f]{8}(?::[^}]*)?\})$/
+      ? /(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})$/
       : /(\$[A-Za-z_][A-Za-z0-9_]*)$/;
     const chipMatch = before.match(chipRegex);
     if (chipMatch) {
@@ -1584,7 +1617,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     if (rawCaret >= rawText.length) return;
     const after = rawText.slice(rawCaret);
     const chipRegex = props.surface === "wildcard"
-      ? /^(@\{[0-9a-f]{8}(?::[^}]*)?\})/
+      ? /^(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})/
       : /^(\$[A-Za-z_][A-Za-z0-9_]*)/;
     const chipMatch = after.match(chipRegex);
     if (chipMatch) {
@@ -1659,7 +1692,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
         <RefChip
           v-if="atom.kind === 'ref' || atom.kind === 'var'"
           :kind="atom.kind"
-          :name="atom.kind === 'var' ? atom.name : (uuidToName.get(atom.uuid) ?? '')"
+          :name="atom.kind === 'var'
+            ? atom.name
+            : (uuidToName.get(atom.uuid) ?? atom.name ?? '')"
           :uuid="atom.kind === 'ref' ? atom.uuid : ''"
           :sub-categories="atom.kind === 'ref' ? atom.subCategories : []"
           :resolved="atomIsResolved(atom)"
@@ -1725,6 +1760,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
         >
           <span class="wp-rt-suggestions__label">
             <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span>{{ suggestionLabel(label) }}
+          </span>
+          <span v-if="suggestionMeta(label)" class="wp-rt-suggestions__meta">
+            {{ suggestionMeta(label) }}
           </span>
         </button>
       </div>
@@ -1925,6 +1963,16 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 .wp-rt-suggestions__trigger {
   color: var(--wp-accent-text, #c4b5fd);
+}
+.wp-rt-suggestions__meta {
+  margin-left: var(--wp-space-4);
+  color: var(--wp-text-dim, #8a8a93);
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  font-size: 11px; /* audit-exempt: micro disambiguator suffix — below scale floor */
+  flex-shrink: 0;
+}
+.wp-rt-suggestions__item[data-active] .wp-rt-suggestions__meta {
+  color: var(--wp-text, #e7e7ee);
 }
 
 /* Step-2 SubcategoryFilterPicker — anchored popover next to the

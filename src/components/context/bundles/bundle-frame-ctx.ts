@@ -15,6 +15,11 @@ import type { BundleInstance } from "../../../widgets/_shared";
 export interface BundleFrameCtx {
   bundleChildDriftCount: (b: BundleInstance) => number;
   isBundleLibraryDrifted: (b: BundleInstance) => boolean;
+  /** True when the bundle's library_id no longer exists in the polled
+   *  bundleHashes map — the library entry has been deleted upstream.
+   *  Drives the bundle's MISSING badge, equivalent to the per-module
+   *  MISSING dot but at bundle scope. */
+  isBundleMissingFromLibrary: (b: BundleInstance) => boolean;
   bundleInternalState: (b: BundleInstance) => "all" | "none" | "partial" | null;
   bundleLockState: (b: BundleInstance) => "all" | "none" | "partial" | null;
   /** Returns "before"/"after" when this bundle is the indicator anchor

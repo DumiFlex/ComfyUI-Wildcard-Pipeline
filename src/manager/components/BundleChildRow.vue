@@ -53,6 +53,12 @@ const KIND_META: Record<string, KindMeta> = {
 
 const kind = computed(() => String(props.child.type ?? "module"));
 const isBundleRef = computed(() => kind.value === "bundle");
+/** Server flag — set on the GET-expanded child when the referenced
+ *  bundle was deleted upstream. The reference still saves fine (it
+ *  carries `{id, type}`), but the row's content is unresolved. Drives
+ *  the danger tint + MISSING badge so users can find + replace the
+ *  reference before it surprises them at insert time. */
+const isMissingRef = computed(() => isBundleRef.value && props.child._missing_ref === true);
 const meta = computed<KindMeta>(
   () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), color: "#8b949e" },
 );
@@ -80,7 +86,10 @@ const displayName = computed(() => {
 // Bundle refs are live (no snapshot, no per-child override state), so
 // the SNAPSHOT · EDITED pill collapses to a single REFERENCE label.
 // For module snapshots the parent diff still drives the edited flag.
+// When the referenced bundle is gone the badge flips to MISSING and the
+// row tint takes the danger color (see `wp-bchild[data-missing]`).
 const badgeLabel = computed(() => {
+  if (isMissingRef.value) return "MISSING";
   if (isBundleRef.value) return "REFERENCE";
   return props.edited ? "SNAPSHOT · EDITED" : "SNAPSHOT";
 });
@@ -93,8 +102,10 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
     :data-kind="kind"
     :data-disabled="enabled ? null : 'true'"
     :data-selected="selected ? 'true' : null"
+    :data-missing="isMissingRef ? 'true' : null"
     :data-test="`bundle-child-${idx}`"
-    :style="{ '--row-kind': rowTint }"
+    :title="isMissingRef ? `Referenced bundle ${child.id} no longer exists — remove or pick a replacement` : undefined"
+    :style="{ '--row-kind': isMissingRef ? 'var(--wp-danger, #ef4444)' : rowTint }"
     draggable="true"
     @dragstart="(e) => emit('drag-start', e)"
     @dragover="(e) => emit('drag-over', e)"
@@ -190,6 +201,17 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
 }
 .wp-bchild[data-disabled] { opacity: 0.5; }
 .wp-bchild[data-disabled] .wp-bchild__name { text-decoration: line-through; }
+/* Missing-reference state — referenced bundle was deleted upstream.
+ * Inline style already swaps --row-kind to the danger token; this rule
+ * adds a tinted background so the row reads as broken-state, not just
+ * "red-tinted bundle". The badge picks up the same danger tint via the
+ * --row-kind cascade through `.wp-bchild__frozen[data-edited]`. */
+.wp-bchild[data-missing="true"] {
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 8%, var(--wp-bg-2));
+}
+.wp-bchild[data-missing="true"]:hover {
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, var(--wp-bg-2));
+}
 .wp-bchild[data-selected="true"] {
   background: color-mix(in oklab, var(--row-kind) 12%, var(--wp-bg-2));
   box-shadow: 0 0 0 1px var(--row-kind);

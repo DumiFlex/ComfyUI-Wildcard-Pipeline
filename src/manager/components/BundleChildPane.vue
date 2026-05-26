@@ -67,6 +67,13 @@ const moduleEntry = computed<ModuleEntry | null>(() => {
   if (!props.child) return null;
   return props.child as unknown as ModuleEntry;
 });
+/** True when the bundle reference points at a deleted library entry.
+ *  Server stamps `_missing_ref: true` on the GET-expanded child when
+ *  the ref id is no longer in the library. Drives the danger banner +
+ *  disables the "Open in bundle editor" CTA (target route would 404). */
+const isMissingRef = computed<boolean>(
+  () => kind.value === "bundle" && props.child?._missing_ref === true,
+);
 const displayName = computed<string>(() => {
   // Bundle refs carry the cached name on the row itself (no `meta`
   // wrapper); module snapshots use the canonical meta.name.
@@ -166,7 +173,17 @@ const constraintTargetValues = computed<string[]>(() => {
       </header>
 
       <div
-        v-if="kind === 'bundle'"
+        v-if="kind === 'bundle' && isMissingRef"
+        class="wp-bpane__banner wp-bpane__banner--missing"
+        data-test="bundle-pane-banner-missing"
+      >
+        <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+        <b>{{ displayName }}</b> no longer exists in the library. This
+        reference is broken — remove it, or add a new child that points
+        at a live bundle.
+      </div>
+      <div
+        v-else-if="kind === 'bundle'"
         class="wp-bpane__banner wp-bpane__banner--ref"
         data-test="bundle-pane-banner"
       >
@@ -262,11 +279,16 @@ const constraintTargetValues = computed<string[]>(() => {
           </div>
           <div class="wp-bpane__ref-field">
             <span class="wp-bpane__ref-key">inner children</span>
-            <span class="wp-bpane__ref-val">{{ refInnerCount }} <span class="wp-bpane__ref-hint">(resolved live)</span></span>
+            <span class="wp-bpane__ref-val">
+              {{ refInnerCount }}
+              <span class="wp-bpane__ref-hint">
+                ({{ isMissingRef ? "unresolved — entry missing" : "resolved live" }})
+              </span>
+            </span>
           </div>
         </div>
         <RouterLink
-          v-if="child?.id"
+          v-if="child?.id && !isMissingRef"
           :to="`/bundles/${child.id}/edit`"
           class="wp-bpane__ref-cta"
           data-test="bundle-pane-ref-open"
@@ -274,6 +296,17 @@ const constraintTargetValues = computed<string[]>(() => {
           <i class="pi pi-external-link" aria-hidden="true" />
           Open in bundle editor
         </RouterLink>
+        <button
+          v-else-if="child?.id"
+          type="button"
+          class="wp-bpane__ref-cta wp-bpane__ref-cta--disabled"
+          disabled
+          data-test="bundle-pane-ref-open-disabled"
+          title="Referenced bundle no longer exists"
+        >
+          <i class="pi pi-ban" aria-hidden="true" />
+          Open in bundle editor
+        </button>
       </div>
 
       <div
@@ -365,6 +398,15 @@ const constraintTargetValues = computed<string[]>(() => {
   border-left-color: var(--wp-accent-500, #8b5cf6);
 }
 .wp-bpane__banner--ref .pi { color: var(--wp-accent-500, #8b5cf6); }
+/* Missing-reference variant — referenced bundle deleted upstream.
+ * Stronger tint than the amber default since this is an actual broken
+ * link, not just an informational warning. Border-left + icon flip to
+ * the danger token so the row reads as "you need to fix this". */
+.wp-bpane__banner--missing {
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
+  border-left-color: var(--wp-danger, #ef4444);
+}
+.wp-bpane__banner--missing .pi { color: var(--wp-danger, #ef4444); }
 
 .wp-bpane__ref-summary {
   display: flex;
@@ -425,6 +467,13 @@ const constraintTargetValues = computed<string[]>(() => {
   transition: filter 120ms ease;
 }
 .wp-bpane__ref-cta:hover { filter: brightness(1.1); }
+.wp-bpane__ref-cta--disabled {
+  background: var(--wp-bg-3);
+  color: var(--wp-text-dim);
+  cursor: not-allowed;
+  border: 1px solid var(--wp-border);
+}
+.wp-bpane__ref-cta--disabled:hover { filter: none; }
 
 .wp-bpane__sections {
   display: flex;

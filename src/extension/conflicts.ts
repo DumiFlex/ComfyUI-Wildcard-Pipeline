@@ -344,7 +344,7 @@ function varReadsOf(m: ModuleEntry): string[] {
  *  reachability, not the filter contents. Kept in sync with
  *  `engine/syntax/tokenize.py:_REF_RE` so the scanner's reach-set
  *  walker recognises every form the engine resolver accepts. */
-const REF_TOKEN_RE = /@\{([0-9a-f]{8})(?::[^}]*)?\}/g;
+const REF_TOKEN_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 
 /** Extract every nested `@{uuid}` ref a wildcard module would walk at
  *  runtime — currently only the option `value` strings. Used by the

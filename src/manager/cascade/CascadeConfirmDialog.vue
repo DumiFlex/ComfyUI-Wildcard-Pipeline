@@ -5,6 +5,8 @@ import { kindIcon } from "../../components/shared/kind-icons";
 import Button from "../components/ui/Button.vue";
 import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
+import { useBundleStore } from "../stores/bundleStore";
+import Checkbox from "../components/ui/Checkbox.vue";
 
 interface Props {
   open: boolean;
@@ -23,16 +25,62 @@ const emit = defineEmits<{
 }>();
 
 const m = useCascadeApply();
+const bundleStore = useBundleStore();
 const loading = ref(true);
 const affected = ref<Array<{ kind: string; id: string; name: string }>>([]);
 const error = ref<string>("");
+/** Local copy of the cascade-refs flag — user-toggleable via the
+ *  "Update N references" checkbox. Defaults to the prop value (true
+ *  by default) so the recommended path is one-click confirm. When
+ *  unchecked, server deletes the target only and leaves dangling
+ *  refs intact (modules get `meta.orphaned`, bundle refs get
+ *  `_missing_ref` on next GET). Re-seeded from props each open so a
+ *  prior false doesn't stick across dialog instances. */
+const cascadeRefsLocal = ref<boolean>(props.cascadeRefs);
+
+/** Resolve the actual color a bundle row should render with. The
+ *  cascade scan returns only {kind, id, name}; the library row carries
+ *  the user-picked color. When the bundle isn't in the catalog yet
+ *  (cold sidebar load, etc.) return null and let CSS fall back to
+ *  --wp-bundle-default. */
+function rowStyleFor(a: { kind: string; id: string }): Record<string, string> {
+  if (a.kind !== "bundle") return {};
+  const row = bundleStore.catalog.find((b) => b.id === a.id);
+  if (!row?.color) return {};
+  // Overriding --wp-bundle-default in the row's scope cascades to both
+  // the leading icon tile (.wp-row-type-icon--bundle) and the trailing
+  // badge (.wp-mod-badge--kind-bundle) — both consume the same token.
+  return { "--wp-bundle-default": row.color };
+}
 
 const title = computed(() =>
   props.action === "delete" ? "Confirm delete" : "Confirm rename",
 );
 const confirmLabel = computed(() =>
-  props.action === "delete" ? "Delete + clean up" : "Rename + update refs",
+  props.action === "delete" ? "Delete" : "Rename + update refs",
 );
+
+/** Action-kind specific blurb under the checkbox — explains what
+ *  cleanup actually does for the target kind. Bundles strip parent
+ *  bundles' tier-2 refs; wildcards delete dependent constraints +
+ *  rewrite ref strings; categories detach the category_id from each
+ *  member; options remove the option from the source wildcard +
+ *  every constraint exception. */
+const cleanupHint = computed<string>(() => {
+  if (props.action !== "delete") return "";
+  switch (props.kind) {
+    case "wildcard":
+      return "Removes constraints that reference this wildcard and strips @{uuid} refs from other wildcards' option values. Without cleanup, dependent constraints stay broken and ref strings point at a dead uuid.";
+    case "bundle":
+      return "Removes this bundle from other bundles' children lists. Without cleanup, parent bundles ship a broken tier-2 reference (rendered as MISSING).";
+    case "category":
+      return "Detaches the deleted category from every module/bundle that used it. Without cleanup, those rows keep a dangling category_id.";
+    case "option":
+      return "Removes the option from the source wildcard and every constraint exception referencing it. Without cleanup, exceptions point at a missing option id.";
+    default:
+      return "Rewrites every reference to this entity. Without cleanup, dependents will reference a deleted id.";
+  }
+});
 const confirmVariant = computed<"danger" | "primary">(() =>
   props.action === "delete" ? "danger" : "primary",
 );
@@ -64,11 +112,14 @@ async function refreshDryRun(): Promise<void> {
   loading.value = true;
   error.value = "";
   affected.value = [];
+  // Dry-run always scans with cascade_refs=true so the affected list
+  // reflects the FULL impact set regardless of the user's toggle —
+  // checkbox controls behavior, not visibility of impact.
   const req: CascadeApplyRequest = {
     kind: props.kind,
     id: props.id,
     action: props.action,
-    cascade_refs: props.cascadeRefs,
+    cascade_refs: true,
     new_name: props.newName,
     extra: props.extra,
   };
@@ -85,6 +136,10 @@ watch(
   () => props.open,
   async (open) => {
     if (open) {
+      // Reset checkbox to prop default — prevents prior "unchecked"
+      // state from sticking when the dialog reopens on a different
+      // target.
+      cascadeRefsLocal.value = props.cascadeRefs;
       await refreshDryRun();
     }
   },
@@ -96,7 +151,7 @@ async function onConfirm(): Promise<void> {
     kind: props.kind,
     id: props.id,
     action: props.action,
-    cascade_refs: props.cascadeRefs,
+    cascade_refs: cascadeRefsLocal.value,
     new_name: props.newName,
     extra: props.extra,
   };
@@ -148,6 +203,7 @@ function onOpenUpdate(v: boolean): void {
           :key="a.id"
           class="wp-cascade-confirm__row"
           :data-kind="a.kind"
+          :style="rowStyleFor(a)"
         >
           <span
             class="wp-row-type-icon"
@@ -168,6 +224,29 @@ function onOpenUpdate(v: boolean): void {
           </span>
         </li>
       </ul>
+      <!-- Cleanup is opt-out — checked by default + marked recommended.
+           Unchecking lets the user delete the target without touching
+           dependents; refs become broken but recoverable. -->
+      <div
+        v-if="affected.length > 0 && action === 'delete'"
+        class="wp-cascade-confirm__cleanup"
+        data-test="cascade-cleanup"
+      >
+        <Checkbox
+          v-model="cascadeRefsLocal"
+          aria-label="Clean up references"
+          data-test="cascade-cleanup-checkbox"
+        />
+        <span
+          class="wp-cascade-confirm__cleanup-text"
+          :title="cleanupHint"
+          @click="cascadeRefsLocal = !cascadeRefsLocal"
+        >
+          Update <strong>{{ affected.length }}</strong>
+          {{ affected.length === 1 ? "reference" : "references" }}
+          <span class="wp-cascade-confirm__cleanup-rec">(recommended)</span>
+        </span>
+      </div>
     </div>
     <template #footer>
       <Button variant="ghost" size="sm" @click="onCancel">Cancel</Button>
@@ -214,6 +293,27 @@ function onOpenUpdate(v: boolean): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.wp-cascade-confirm__cleanup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 8%, transparent);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--wp-text);
+}
+.wp-cascade-confirm__cleanup-text {
+  cursor: pointer;
+  user-select: none;
+  flex: 1;
+}
+.wp-cascade-confirm__cleanup-rec {
+  color: var(--wp-text-dim, #8a8a93);
+  font-size: 12px;
+  margin-left: 4px;
 }
 .wp-cascade-confirm__row {
   display: flex;

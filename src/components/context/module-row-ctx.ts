@@ -38,6 +38,11 @@ export interface ModuleRowCtx {
   openContextMenu: (ev: MouseEvent, m: ModuleEntry, idx: number) => void;
   onCardKeydown: (ev: KeyboardEvent, m: ModuleEntry, idx: number) => void;
   pairingFor: (id: string) => PairingBadge | null;
+  /** Via-nested constraint pairings landing on this row as carrier.
+   *  Empty when no constraint reaches its target through a nested
+   *  `@{uuid}` ref inside this wildcard's options. Drives the
+   *  collapsed `↪×N` chip in `ModuleRow.vue`. */
+  viaInboundFor: (id: string) => PairingBadge[];
 }
 
 export const ModuleRowCtxKey: InjectionKey<ModuleRowCtx> = Symbol("moduleRowCtx");

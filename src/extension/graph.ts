@@ -684,7 +684,7 @@ export function collectUpstreamKinds(
  * -------------------------------------------------------------------- */
 
 const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
-const WC_REF_RE = /@\{([0-9a-f]{8})(?::[^}]*)?\}/g;
+const WC_REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 const MAX_REF_DEPTH = 8;
 
 interface MinimalWildcard {
@@ -731,7 +731,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
     for (const opt of wc.options ?? []) {
       const v = opt.value;
       if (typeof v !== "string") continue;
-      for (const match of v.matchAll(/@\{([0-9a-f]{8})(?::[^}]*)?\}/g)) {
+      for (const match of v.matchAll(/@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g)) {
         if (!catalog.has(match[1])) externalRefs.add(match[1]);
       }
     }

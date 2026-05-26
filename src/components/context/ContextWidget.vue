@@ -8,7 +8,7 @@ import {
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
-import type { PairingBadge } from "../../extension/constraint-pairs";
+import type { PairingBadge, RowPairings } from "../../extension/constraint-pairs";
 import {
   getCollapseMode,
   getCollapsedByDefault,
@@ -28,6 +28,11 @@ import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import { buildBundleInsertion, type BundleLibraryEntry } from "./bundles/insert";
 import { buildLibraryChildrenWithIntegrity, toChildSnapshot } from "./bundles/save";
+import {
+  cascadeRestoreForBundle,
+  scanCascadeRestore,
+  type CascadeRestoreScan,
+} from "./bundles/cascade-restore";
 import { reconcileBundleRanges } from "./bundles/drag";
 import { resolveDropZone, type DropZone } from "./bundles/drop-zone";
 import { applyDrop, type DropPayload } from "./bundles/drop";
@@ -56,6 +61,7 @@ const BundleInstanceModal = defineAsyncComponent(
   () => import("./editors/bundle/BundleInstanceModal.vue"),
 );
 import PushToLibraryModal from "./PushToLibraryModal.vue";
+import PushBundleToLibraryModal from "./PushBundleToLibraryModal.vue";
 import ContextMenu, {
   type ContextMenuEntry,
   type ContextMenuHeader,
@@ -119,7 +125,7 @@ const props = withDefaults(defineProps<{
    *  rows don't collide. ModuleRow.vue looks up its own row's badge
    *  via `pairingFor(module._uid)` in `moduleRowCtx`. Optional for
    *  headless mounts that don't simulate a graph. */
-  pairings?: Map<string, PairingBadge>;
+  pairings?: Map<string, RowPairings>;
   /** Litegraph node mode: 0 ALWAYS, 2 NEVER (mute), 4 BYPASS.
    *  Used to dim the body when the host node is muted/bypassed so
    *  the runtime-skipped state is visually obvious. Other modes are
@@ -138,7 +144,7 @@ const props = withDefaults(defineProps<{
   nodeMode: 0,
   upstreamWildcardUuids: () => [],
   downstreamWildcardUuids: () => [],
-  pairings: () => new Map<string, PairingBadge>(),
+  pairings: () => new Map<string, RowPairings>(),
 });
 
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -435,11 +441,12 @@ function openPushToLibrary(idx: number): void {
 }
 
 interface PushSaveResult {
-  mode: "update" | "fork";
+  mode: "update" | "fork" | "reattach";
   id: string;
   payload_hash: string;
   bundles_updated: string[];
   name: string;
+  origId: string;
 }
 function onPushSaved(result: PushSaveResult): void {
   // Refresh library hashes regardless of mode — the drift store sees
@@ -463,17 +470,31 @@ function onPushSaved(result: PushSaveResult): void {
       };
     });
     commitModules(next);
+  } else if (result.mode === "reattach") {
+    // Re-attach: source library entry was deleted upstream and the
+    // user saved as new. Rebind every workflow row pointing at the
+    // dead uuid to the freshly-created one so MISSING clears + future
+    // refresh/drift checks resolve against the new entry.
+    const next = value.value.modules.map((m) => {
+      if (m.id !== result.origId) return m;
+      return {
+        ...m,
+        id: result.id,
+        payload_hash: result.payload_hash,
+        meta: { ...(m.meta ?? {}), library_name: result.name },
+      };
+    });
+    commitModules(next);
   }
   const bundlesNote =
     result.bundles_updated.length > 0
       ? ` · ${result.bundles_updated.length} bundle${result.bundles_updated.length === 1 ? "" : "s"} synced`
       : "";
-  pushToast(
-    result.mode === "fork"
-      ? `Saved as new library entry "${result.name}"`
-      : `Saved "${result.name}" to library${bundlesNote}`,
-    { severity: "success" },
-  );
+  let msg: string;
+  if (result.mode === "fork") msg = `Saved as new library entry "${result.name}"`;
+  else if (result.mode === "reattach") msg = `Re-attached "${result.name}" to library`;
+  else msg = `Saved "${result.name}" to library${bundlesNote}`;
+  pushToast(msg, { severity: "success" });
   pushOpen.value = false;
   pushDraft.value = null;
 }
@@ -481,9 +502,189 @@ function onPushClosed(): void {
   pushOpen.value = false;
   pushDraft.value = null;
 }
+
+/* ─────── Bundle-scoped Push-to-library modal ─────── */
+const pushBundleDraft = ref<BundleInstance | null>(null);
+const pushBundleChildrenForLibrary = ref<Array<Record<string, unknown>>>([]);
+const pushBundleChildrenPreview = ref<Array<{ name: string; kind: string }>>([]);
+const pushBundleOpen = ref<boolean>(false);
+const pushBundleCascadeScan = ref<CascadeRestoreScan | null>(null);
+/** Captured target uid for the open modal — cascade restore reads
+ *  this to locate the same outer BundleInstance via the workflow
+ *  state at restore time (not modal-open time, since some prior
+ *  cascade phase may have mutated `value.value.modules`/bundles). */
+const pushBundleTargetUid = ref<string | null>(null);
+
+function openPushBundleToLibrary(uid: string): void {
+  const bundles = value.value.bundles ?? [];
+  const target = bundles.find((b) => b._uid === uid);
+  if (!target) return;
+  const integrity = buildLibraryChildrenWithIntegrity(
+    target,
+    value.value.modules,
+    bundles,
+  );
+  if (integrity.orphanedInnerUids.length > 0) {
+    pushToast(
+      `Bundle has ${integrity.orphanedInnerUids.length} orphan inner reference(s) — they'll be flattened on save. Check nesting after.`,
+      { severity: "warning", lifeMs: 7000 },
+    );
+  }
+  // Children preview — render module names + kinds, and inner-bundle
+  // references as "bundle: name". Inner bundles in childrenForLibrary
+  // are shaped `{ kind: "bundle_ref", bundle_id }` (or similar); for
+  // display we walk the workflow bundles to find their friendly name.
+  const preview: Array<{ name: string; kind: string }> = [];
+  for (let i = target.start_idx; i <= target.end_idx; i++) {
+    const m = value.value.modules[i];
+    if (!m) continue;
+    if ((m as ModuleEntry & { bundle_origin?: string }).bundle_origin !== target._uid) continue;
+    preview.push({ kind: m.type, name: m.meta?.name || m.type });
+  }
+  for (const b of bundles) {
+    if (b.parent_uid === target._uid) {
+      preview.push({ kind: "bundle", name: b.name || "bundle" });
+    }
+  }
+  pushBundleChildrenForLibrary.value = integrity.children;
+  pushBundleChildrenPreview.value = preview;
+  // Pre-scan for cascade: how many missing modules + inner bundles are
+  // in this outer's scope. Counts > 0 unlock the cascade UI in the
+  // modal; the same `cascadeRestoreForBundle` will re-walk at restore
+  // time with the live workflow state.
+  pushBundleCascadeScan.value = scanCascadeRestore({
+    outer: target,
+    modules: value.value.modules,
+    bundles,
+    isModuleMissing: isMissingFromLibrary,
+    isBundleMissing: isBundleMissingFromLibrary,
+  });
+  pushBundleTargetUid.value = uid;
+  // Clone the BundleInstance so any edits inside the modal don't dirty
+  // the workflow row until commit.
+  pushBundleDraft.value = JSON.parse(JSON.stringify(target));
+  pushBundleOpen.value = true;
+}
+
+/** Modal-invoked cascade pre-pass. Runs bottom-up restoration over
+ *  the LIVE workflow state for the captured target uid, commits the
+ *  restored uuids back to `value.value`, and returns the rewritten
+ *  outer children for the modal's POST/PUT body. */
+async function pushBundleCascadeRestore(): Promise<{
+  rewrittenChildren: Record<string, unknown>[];
+  restoredModuleCount: number;
+  restoredBundleCount: number;
+}> {
+  const uid = pushBundleTargetUid.value;
+  const bundles = value.value.bundles ?? [];
+  const target = uid ? bundles.find((b) => b._uid === uid) : null;
+  if (!target) {
+    throw new Error("Cascade restore: target bundle no longer in workflow");
+  }
+  const result = await cascadeRestoreForBundle({
+    outer: target,
+    modules: value.value.modules,
+    bundles,
+    isModuleMissing: isMissingFromLibrary,
+    isBundleMissing: isBundleMissingFromLibrary,
+  });
+  // Commit the rebound workflow modules + bundles so the canvas stops
+  // rendering MISSING badges for restored items. Done in-place via
+  // `value.value =` so the deep-watch fires onChange.
+  value.value = {
+    ...value.value,
+    modules: result.newModules,
+    bundles: result.newBundles,
+  };
+  // Refresh polling so the drift-store map picks up the freshly-POSTed
+  // uuids on the next render rather than waiting 5s.
+  void forceRefreshHashes();
+  return {
+    rewrittenChildren: result.rewrittenChildren,
+    restoredModuleCount: result.restoredModuleCount,
+    restoredBundleCount: result.restoredBundleCount,
+  };
+}
+
+interface BundlePushSaveResult {
+  mode: "update" | "fork" | "reattach";
+  id: string;
+  payload_hash: string;
+  name: string;
+  origId: string;
+  cascade?: { restoredModuleCount: number; restoredBundleCount: number };
+}
+function onBundlePushSaved(result: BundlePushSaveResult): void {
+  void forceRefreshHashes();
+  if (result.mode === "update" || result.mode === "reattach") {
+    // Update: refresh inserted_at_hash + snapshot fingerprint for every
+    // BundleInstance pointing at this library entry — drift + MOD dots
+    // clear instantly. Reattach: also rebind library_id from the dead
+    // uuid to the freshly-created one.
+    const nextBundles = (value.value.bundles ?? []).map((b) => {
+      if (b.library_id !== result.origId) return b;
+      const rebound: BundleInstance = {
+        ...b,
+        library_id: result.id,
+        inserted_at_hash: result.payload_hash,
+        name: result.name,
+        snapshot_fingerprint: computeBundleFingerprint(b, value.value.modules),
+      };
+      return rebound;
+    });
+    value.value = { ...value.value, bundles: nextBundles };
+  }
+  let msg: string;
+  if (result.mode === "fork") msg = `Saved as new library bundle "${result.name}"`;
+  else if (result.mode === "reattach") msg = `Re-attached "${result.name}" to library`;
+  else msg = `Saved "${result.name}" to library`;
+  if (result.cascade) {
+    const parts: string[] = [];
+    if (result.cascade.restoredModuleCount > 0) {
+      parts.push(`${result.cascade.restoredModuleCount} module${result.cascade.restoredModuleCount === 1 ? "" : "s"}`);
+    }
+    if (result.cascade.restoredBundleCount > 0) {
+      parts.push(`${result.cascade.restoredBundleCount} inner bundle${result.cascade.restoredBundleCount === 1 ? "" : "s"}`);
+    }
+    if (parts.length > 0) msg += ` · cascade-restored ${parts.join(" + ")}`;
+  }
+  pushToast(msg, { severity: "success" });
+  pushBundleOpen.value = false;
+  pushBundleDraft.value = null;
+  pushBundleTargetUid.value = null;
+  pushBundleCascadeScan.value = null;
+}
+function onBundlePushClosed(): void {
+  pushBundleOpen.value = false;
+  pushBundleDraft.value = null;
+  pushBundleTargetUid.value = null;
+  pushBundleCascadeScan.value = null;
+}
 const editingModule = computed<ModuleEntry | null>(() =>
   editingIdx.value != null ? (value.value.modules[editingIdx.value] ?? null) : null,
 );
+
+/** Per-option pair lookup for the currently-edited wildcard. Map keys
+ *  are option ids; values are pair badges whose `via.optionIds` include
+ *  that option. Drives the trailing `↪#N` chip inside the wildcard
+ *  modal's options table. Empty for non-wildcard modules and for
+ *  wildcards that aren't a constraint carrier. */
+const editingModuleViaOptionPairs = computed<Map<string, PairingBadge[]>>(() => {
+  const m = editingModule.value;
+  if (!m) return new Map();
+  const carrierPairs = viaInboundFor(m._uid ?? m.id);
+  if (carrierPairs.length === 0) return new Map();
+  const out = new Map<string, PairingBadge[]>();
+  for (const p of carrierPairs) {
+    const optionIds = p.via?.optionIds ?? [];
+    for (const optId of optionIds) {
+      const arr = out.get(optId);
+      if (arr) arr.push(p);
+      else out.set(optId, [p]);
+    }
+  }
+  return out;
+});
 
 /** Live-preview source of truth for the modal: combines upstream-chain
  *  bindings + sibling bindings produced in this same node (minus the
@@ -1250,11 +1451,12 @@ async function detachBundle(uid: string): Promise<void> {
  *  doesn't share identity with the original — drag, MOD, undo,
  *  cascade-state aggregation all key off `_uid`.
  */
-function duplicateBundle(uid: string): void {
+async function duplicateBundle(uid: string): Promise<void> {
   const bundles = value.value.bundles ?? [];
   const target = bundles.find((b) => b._uid === uid);
   if (!target) return;
   const modules = value.value.modules;
+  const flipSnap = captureFlipSnapshot();
   // Slice the current child range (deep clone for safety — the
   // engine + drift store both hold references to module objects).
   const sliceClone = modules
@@ -1286,13 +1488,20 @@ function duplicateBundle(uid: string): void {
   const before = modules.slice(0, insertStart);
   const after = modules.slice(insertStart);
   const nextModules = [...before, ...clonedRows, ...after];
+  // Preserve the source's nesting: when the user duplicates an INNER
+  // bundle, the clone must land alongside the original (same parent).
+  // Hardcoding null here detached the clone, and worse the parent's
+  // range never got extended below — outer bundle's end_idx stopped
+  // at the original inner's end, so the cloned rows fell OUT of the
+  // outer's range and the outer's bookkeeping diverged from reality.
+  const targetParentUid = target.parent_uid ?? null;
   // Build cloned BundleInstance for outer + each inner.
   const clonedOuter: BundleInstance = {
     ...target,
     _uid: newOuterUid,
     start_idx: insertStart,
     end_idx: insertStart + cloneLen - 1,
-    parent_uid: null,
+    parent_uid: targetParentUid,
     // Snapshot fingerprint deliberately UNSET — the clone may
     // diverge from the original immediately. `ensureBundleFingerprints`
     // backfills the clean baseline on the next commit so a fresh
@@ -1313,16 +1522,39 @@ function duplicateBundle(uid: string): void {
       snapshot_fingerprint: undefined,
     };
   });
-  // Shift every existing bundle whose start_idx is at or beyond
-  // the insertion point by the clone length so their ranges keep
-  // pointing at the right rows after the splice.
+  // Three-rule index shift for existing bundles:
+  //   1. The duplicated bundle's PARENT (if any) extends end_idx by
+  //      cloneLen so the cloned sibling stays inside its range — the
+  //      standard "shift if end_idx >= insertStart" rule doesn't catch
+  //      this when the target is the parent's last child (parent.end_idx
+  //      == insertStart - 1 in that case).
+  //   2. Any other bundle starting at or after insertStart shifts both
+  //      start_idx and end_idx by cloneLen (it's entirely after the
+  //      insertion).
+  //   3. A bundle straddling the insertion (start_idx < insertStart <=
+  //      end_idx) shifts only end_idx — the cloned rows landed inside it.
   const nextBundles = bundles.map((b) => {
+    if (targetParentUid && b._uid === targetParentUid) {
+      return { ...b, end_idx: b.end_idx + cloneLen };
+    }
     if (b.start_idx >= insertStart) {
       return { ...b, start_idx: b.start_idx + cloneLen, end_idx: b.end_idx + cloneLen };
+    }
+    if (b.end_idx >= insertStart) {
+      return { ...b, end_idx: b.end_idx + cloneLen };
     }
     return b;
   });
   commitModules(nextModules, [...nextBundles, clonedOuter, ...clonedInners]);
+  await nextTick();
+  // Sibling rows shift via FLIP, the cloned outer (and any inner
+  // clones) slide-in via animateEnterBatch. Matches wrapIntoNewBundle's
+  // motion grammar so all bundle-shape mutations read the same.
+  playFlipSnapshot(flipSnap);
+  if (modulesContainer.value) {
+    const enterUids = [newOuterUid, ...clonedInners.map((b) => b._uid)];
+    void animateEnterBatch(enterUids, modulesContainer.value);
+  }
   pushToast(`Duplicated "${target.name || "bundle"}" with local edits`, {
     severity: "success",
     lifeMs: 4000,
@@ -1571,93 +1803,6 @@ async function resetChildToBundleSnapshot(idx: number): Promise<void> {
   }
 }
 
-/** Push current bundle children back to library — mirrors
- *  resetBundleToLibrary in the opposite direction. */
-async function saveBundleToLibrary(uid: string): Promise<void> {
-  const bundles = value.value.bundles ?? [];
-  const target = bundles.find((b) => b._uid === uid);
-  if (!target) return;
-  const hasInnerBundles = bundles.some((b) => b.parent_uid === target._uid);
-  const bodyExtra = hasInnerBundles
-    ? " Nested bundles are saved as references — they always resolve to the referenced bundle's current state."
-    : "";
-  if (!(await maybeConfirm({
-    title: `Save "${target.name || "bundle"}" to library?`,
-    body: `Overwrites the bundle library entry with this instance's current children. Other inserts of this bundle elsewhere will read as drifted until reset. This op has no Undo (it writes to the library DB).${bodyExtra}`,
-    variant: "default",
-    confirmLabel: "Save to library",
-  }))) return;
-  // Library-side write — no Undo because there's no DB delete API
-  // surfaced here. The confirm dialog above gates accidental
-  // overwrites when the local instance has speculative edits the
-  // user didn't intend to publish.
-  const integrity = buildLibraryChildrenWithIntegrity(target, value.value.modules, bundles);
-  const childrenOut = integrity.children;
-  // Surface any orphaned inner uids — the leaves got serialised, but the
-  // user's intended nesting flattened. Likely cause: a stale parent_uid
-  // on an inner BundleInstance. Toast so users notice; library write
-  // still proceeds because the leaf data isn't lost.
-  if (integrity.orphanedInnerUids.length > 0) {
-    pushToast(
-      `Bundle saved with flattened nesting — ${integrity.orphanedInnerUids.length} inner reference(s) didn't link to "${target.name || "bundle"}". Check the bundle's children if nesting looks wrong after reset.`,
-      { severity: "warning", lifeMs: 8000 },
-    );
-  }
-  try {
-    // Save EVERYTHING the user can edit on this instance — name +
-    // color + children. The earlier `{ children }`-only payload kept
-    // the library entry's old display name and color even when the
-    // user had renamed / re-colored the instance via the canvas
-    // modal: clicking "Save to library" appeared to do nothing for
-    // those fields. Server overwrites library entry with whatever we
-    // PUT, so the instance's identity becomes the library identity.
-    const updated = await api.bundles.update(target.library_id, {
-      name: target.name,
-      color: target.color ?? null,
-      children: childrenOut,
-    });
-    // Refresh the BundleInstance's `inserted_at_hash` so a future
-    // resetBundleToLibrary call would compare against the newly
-    // written hash (i.e. "no drift"). Re-snap `snapshot_fingerprint`
-    // so the bundle's MOD indicator clears — local state now matches
-    // what we just published.
-    const nextBundles = bundles.map((b) =>
-      b._uid === uid
-        ? {
-            ...b,
-            inserted_at_hash: updated.payload_hash,
-            snapshot_fingerprint: computeBundleFingerprint(b, value.value.modules),
-          }
-        : b,
-    );
-    value.value = { ...value.value, bundles: nextBundles };
-    await nextTick();
-    // Flash the bundle wrapper so the user gets a visible confirm that
-    // 'this just got pushed to the library' — wrapper-only (children
-    // didn't change locally; library now matches them).
-    if (modulesContainer.value) {
-      void flashRows([target._uid], modulesContainer.value, 0);
-    }
-    pushToast(`Saved "${updated.name}" to library`, { severity: "success" });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    // Tier-3 cap rejections come back from the server with "tier" or
-    // "referenced by" in the body. Surface a clearer user-facing
-    // message so the recovery path is obvious — the raw server text
-    // explains WHICH parents conflict and is preserved verbatim.
-    const lc = msg.toLowerCase();
-    const isTierCap = lc.includes("tier") || lc.includes("referenced by");
-    if (isTierCap) {
-      pushToast(
-        `Can't save "${target.name || "bundle"}" — would create tier-3 nesting (forbidden). ${msg}`,
-        { severity: "error", lifeMs: 9000 },
-      );
-    } else {
-      pushToast(`Save failed: ${msg}`, { severity: "error" });
-    }
-  }
-}
-
 /** Wrap THIS module into a new library bundle (single-row v1).
  *  Users can drag more modules into the range afterwards — the
  *  range-integrity logic handles extension automatically.
@@ -1751,13 +1896,19 @@ function openBundleContextMenu(ev: MouseEvent, uid: string): void {
       subtitle: "Replace children with frozen library state",
       onSelect: () => { void resetBundleToLibrary(uid); },
     },
-    {
-      label: "Save changes to library",
-      icon: "pi-cloud-upload",
-      subtitle: "Overwrite library with current children",
-      onSelect: () => { void saveBundleToLibrary(uid); },
-      divider: true,
-    },
+    (() => {
+      const bundleMissing = isBundleMissingFromLibrary(target);
+      return {
+        label: "Push to library…",
+        icon: "pi-cloud-upload",
+        subtitle: bundleMissing
+          ? "Library entry deleted — re-add to library"
+          : "Rename, retag, overwrite library entry",
+        accent: bundleMissing,
+        onSelect: () => openPushBundleToLibrary(uid),
+        divider: true,
+      };
+    })(),
     {
       label: "Duplicate bundle",
       icon: "pi-clone",
@@ -1866,7 +2017,17 @@ const conflictsByModule = computed(() => {
 // barebones test mount can skip it).
 function pairingFor(rowUid: string): PairingBadge | null {
   const key = `${props.nodeId}#${rowUid}`;
-  return props.pairings?.get(key) ?? null;
+  return props.pairings?.get(key)?.direct ?? null;
+}
+
+/** Inbound via-pairings — non-empty when this row is the CARRIER of
+ *  one or more constraints reaching their target through a nested
+ *  `@{uuid}` ref in this wildcard's option values. UI renders these
+ *  as a collapsed `↪×N` chip beside the row's existing direct pair
+ *  chip (if any), with a popover listing each. */
+function viaInboundFor(rowUid: string): PairingBadge[] {
+  const key = `${props.nodeId}#${rowUid}`;
+  return props.pairings?.get(key)?.viaInbound ?? [];
 }
 
 function severityFor(id: string): "error" | "warning" | "info" | null {
@@ -2143,6 +2304,17 @@ function isBundleLibraryDrifted(bundle: BundleInstance): boolean {
   if (live === undefined) return false;
   if (!bundle.inserted_at_hash) return false;
   return live !== bundle.inserted_at_hash;
+}
+
+/** True when the bundle's library entry has been deleted upstream —
+ *  the polled `bundleHashes` map no longer contains its uuid. Pairs
+ *  with `isMissingFromLibrary` for modules. Returns false until first
+ *  poll lands so we don't flash MISSING before the truth is known. */
+function isBundleMissingFromLibrary(bundle: BundleInstance): boolean {
+  const map = bundleHashes.value;
+  if (map === null) return false;
+  if (!bundle.library_id) return false;
+  return !(bundle.library_id in map);
 }
 
 // Pending confirm-dialog state. Single slot — only one destructive op
@@ -3605,12 +3777,10 @@ function onBundleEditSaveToLibrary(): void {
   const uid = editingBundleUid.value;
   if (!uid) return;
   // Commit the draft FIRST so the user's pending name / color edits
-  // land on the live BundleInstance, then push that live state to
-  // the library. The earlier `cancelBundleEdit()`-then-save sequence
-  // discarded the draft, so any unsaved name / color edits never
-  // made it into the library payload.
+  // land on the live BundleInstance, then open the push-to-library
+  // modal for explicit Update / Save as new selection.
   saveBundleEdit();
-  void saveBundleToLibrary(uid);
+  openPushBundleToLibrary(uid);
 }
 
 function onBundleEditResetToLibrary(): void {
@@ -3727,9 +3897,12 @@ function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
   // the live library. Inline-created rows still qualify — the modal
   // greys out the "Update existing" button when payload_hash is empty.
   if (!!m.payload) {
+    const missing = isMissingFromLibrary(m);
     items.push({
       label: "Push to library…",
       icon: "pi-cloud-upload",
+      subtitle: missing ? "Library entry deleted — re-add as new entry" : undefined,
+      accent: missing,
       onSelect: () => openPushToLibrary(idx),
       divider: true,
     });
@@ -4389,12 +4562,14 @@ const moduleRowCtx: ModuleRowCtx = {
   toggleLockOnCard, toggleInternalOnCard,
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
   pairingFor,
+  viaInboundFor,
 };
 provide(ModuleRowCtxKey, moduleRowCtx);
 
 const bundleFrameCtx: BundleFrameCtx = {
   bundleChildDriftCount,
   isBundleLibraryDrifted,
+  isBundleMissingFromLibrary,
   bundleInternalState,
   bundleLockState,
   bundleHeaderGap,
@@ -4634,6 +4809,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :upstream-resolved="resolvedForEditing"
       :sibling-vars="siblingNodeVars"
       :sibling-modules="value.modules"
+      :via-option-pairs="editingModuleViaOptionPairs"
       :last-used-seed-reader="lastUsedSeedReader"
       @save="saveEditedModule"
       @close="editingIdx = null"
@@ -4674,6 +4850,20 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       :draft="pushDraft"
       @close="onPushClosed"
       @saved="onPushSaved"
+    />
+
+    <!-- Bundle-scoped push-to-library modal — same fork/update grammar
+         as the module modal, but children list preview instead of a
+         JSON payload preview. -->
+    <PushBundleToLibraryModal
+      :open="pushBundleOpen"
+      :bundle="pushBundleDraft"
+      :children-for-library="pushBundleChildrenForLibrary"
+      :children-preview="pushBundleChildrenPreview"
+      :cascade-scan="pushBundleCascadeScan"
+      :cascade-restore="pushBundleCascadeRestore"
+      @close="onBundlePushClosed"
+      @saved="onBundlePushSaved"
     />
 
     <ContextMenu

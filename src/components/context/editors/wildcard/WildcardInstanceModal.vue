@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+import type { PairingBadge } from "../../../../extension/constraint-pairs";
 import IdentitySection from "./sections/IdentitySection.vue";
 import PoolSection from "./sections/PoolSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
@@ -17,8 +18,12 @@ const props = withDefaults(
     upstreamVars?: string[];
     /** Names produced by other modules in the SAME Context node. */
     siblingVars?: string[];
+    /** Per-option pair badges when this wildcard is a constraint carrier
+     *  (one of its options contains a nested `@{uuid}` that resolves to a
+     *  downstream constraint's target). Keyed by option id. */
+    viaOptionPairs?: Map<string, PairingBadge[]>;
   }>(),
-  { isDrifted: false, isModified: false, upstreamVars: () => [], siblingVars: () => [] },
+  { isDrifted: false, isModified: false, upstreamVars: () => [], siblingVars: () => [], viaOptionPairs: () => new Map() },
 );
 
 const emit = defineEmits<{
@@ -81,7 +86,7 @@ function onSpaClick(): void {
       :sibling-vars="siblingVars"
       @update="onUpdate"
     />
-    <PoolSection :module="module" @update="onUpdate" />
+    <PoolSection :module="module" :via-option-pairs="viaOptionPairs" @update="onUpdate" />
     <RuntimeSection :module="module" @update="onUpdate" />
 
     <footer class="wp-wcm__foot">

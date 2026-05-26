@@ -73,13 +73,36 @@ async function fetchHashes(): Promise<void> {
   await Promise.all([fetchModuleHashes(), fetchBundleHashes()]);
 }
 
+/** Cheap deep-equal for the flat `{uuid: hash}` shape both polled
+ *  endpoints return. Only used to gate hashes.value reassignment so
+ *  the poll doesn't fire spurious reactivity every 5s — without this,
+ *  every poll mints a new object ref even when content is unchanged,
+ *  triggering re-renders that could race mid-patch interactions
+ *  (RichTextInput edits in particular were observed crashing Vue's
+ *  patcher with a null parentNode on insertBefore). */
+function sameHashes(
+  a: Record<string, string> | null,
+  b: Record<string, string>,
+): boolean {
+  if (a === null) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const k of keysA) {
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
+
 async function fetchModuleHashes(): Promise<void> {
   try {
     const res = await fetch("/wp/api/modules/hashes");
     if (!res.ok) return;
     const body = (await res.json()) as { hashes?: Record<string, string> };
     if (body && body.hashes && typeof body.hashes === "object") {
-      hashes.value = body.hashes;
+      if (!sameHashes(hashes.value, body.hashes)) {
+        hashes.value = body.hashes;
+      }
     }
   } catch {
     // Silent — leave whatever we last had so transient errors don't flicker UI.
@@ -92,7 +115,9 @@ async function fetchBundleHashes(): Promise<void> {
     if (!res.ok) return;
     const body = (await res.json()) as { hashes?: Record<string, string> };
     if (body && body.hashes && typeof body.hashes === "object") {
-      bundleHashes.value = body.hashes;
+      if (!sameHashes(bundleHashes.value, body.hashes)) {
+        bundleHashes.value = body.hashes;
+      }
     }
   } catch {
     // Silent — same pattern as fetchModuleHashes.

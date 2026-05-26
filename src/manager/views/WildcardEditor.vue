@@ -203,6 +203,19 @@ const uuidToSubCategories = computed<Map<string, string[]>>(() => {
   return out;
 });
 
+/** Per-wildcard option count — drives the autocomplete row's right-
+ *  side meta so two same-named wildcards (e.g. dupes from import) can
+ *  be told apart by `N opts · 8hex` instead of looking identical. */
+const uuidToOptionsCount = computed<Map<string, number>>(() => {
+  const out = new Map<string, number>();
+  for (const mod of moduleStore.catalog) {
+    if (mod.type !== "wildcard") continue;
+    const opts = (mod.payload as { options?: unknown[] } | undefined)?.options;
+    out.set(mod.id, Array.isArray(opts) ? opts.length : 0);
+  }
+  return out;
+});
+
 /** Per-wildcard flag: true when the catalog row has an is_null option.
  *  Forwarded to RichTextInput so the nested-ref sub-cat picker can
  *  surface the "Include null" checkbox. */
@@ -265,6 +278,27 @@ function addSub() {
   if (!s) return;
   if (subCategories.value.includes(s)) {
     toast.push({ severity: "warn", summary: "Duplicate sub-category" });
+    return;
+  }
+  // Sub-category names sit in the comma-separated `:subcat` segment
+  // of nested refs (`@{uuid:warm,cool}`). Reject the same grammar-
+  // reserved char set the wildcard name validator uses — comma is
+  // additionally forbidden here because it's the list separator.
+  const bad = s.match(/[{}:#@,]/);
+  if (bad) {
+    toast.push({
+      severity: "warn",
+      summary: `Sub-category cannot contain "${bad[0]}"`,
+      detail: "Reserved by the @{uuid:subcat,subcat} ref grammar",
+    });
+    return;
+  }
+  if (s === "null") {
+    toast.push({
+      severity: "warn",
+      summary: "Sub-category cannot be \"null\"",
+      detail: "Reserved keyword in the @{uuid:subcat} filter",
+    });
     return;
   }
   subCategories.value.push(s);
@@ -668,6 +702,20 @@ const validationErrors = computed<EditorFieldError[]>(() => {
   const out: EditorFieldError[] = [];
   if (!name.value.trim()) {
     out.push({ field: "editor-section-identity", label: "Name", message: "Required" });
+  } else {
+    // Wildcard names become the `#name` segment of nested refs.
+    // Forbidding the grammar-reserved chars here mirrors
+    // `wp_api/_validators.py:REF_GRAMMAR_FORBIDDEN_CHARS` so the
+    // server never has to reject a save the editor already accepted.
+    const REF_FORBIDDEN = /[{}:#@,]/;
+    const bad = name.value.match(REF_FORBIDDEN);
+    if (bad) {
+      out.push({
+        field: "editor-section-identity",
+        label: "Name",
+        message: `Cannot contain "${bad[0]}" (reserved by the @{uuid#name:subcat} ref grammar)`,
+      });
+    }
   }
   if (varBindingError.value) {
     out.push({ field: "editor-section-identity", label: "$variable binding", message: varBindingError.value });
@@ -838,6 +886,7 @@ defineExpose({ historyEntries, applyRestore, options });
                 :uuid-to-name="nameByUuid"
                 :uuid-to-sub-categories="uuidToSubCategories"
                 :uuid-to-has-null="uuidToHasNull"
+                :uuid-to-options-count="uuidToOptionsCount"
                 placeholder="value (type @ for nested wildcards · {a|b|c} for inline choices)"
                 aria-label="Option value"
               />

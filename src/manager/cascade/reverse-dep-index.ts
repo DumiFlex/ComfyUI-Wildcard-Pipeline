@@ -38,7 +38,11 @@ export interface DiffEntry {
   remove_option?: string;
 }
 
-const REF_REGEX = /@\{([0-9a-f]{8})(?::([^}]*))?\}/g;
+// Mirrors `engine/syntax/tokenize.py:_REF_RE` and the scan-side twin
+// in `engine/cascade/scan.py`. Captures uuid + optional `#name` cache
+// + optional `:subcat,subcat...` filter. Name is informational —
+// scanner only ever reads the uuid.
+const REF_REGEX = /@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/g;
 const VAR_REGEX = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 
 function pushRef(map: Map<string, IncomingRef[]>, key: string, ref: IncomingRef): void {
@@ -53,7 +57,8 @@ function extractRefs(text: string): Array<{ uuid: string; subcat: string | undef
   REF_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = REF_REGEX.exec(text)) !== null) {
-    refs.push({ uuid: match[1], subcat: match[2] });
+    // Groups: 1=uuid, 2=cached name (display-only, ignored), 3=subcat
+    refs.push({ uuid: match[1], subcat: match[3] });
   }
   return refs;
 }
@@ -338,6 +343,13 @@ export function buildIndex(lib: LibraryFixture): ReverseDepIndex {
 export function refsTo(idx: ReverseDepIndex, kind: string, id: string): IncomingRef[] {
   if (kind === "wildcard" || kind === "fixed_values") {
     return idx.toEntity.get(id) || [];
+  }
+  if (kind === "bundle") {
+    // For bundle targets, only bundle-from refs matter — module-from
+    // refs in toEntity[id] target the module by id, not the bundle.
+    // Filter so the impact list shows only parent bundles holding
+    // this one as a tier-2 ref.
+    return (idx.toEntity.get(id) || []).filter((r) => r.from_kind === "bundle");
   }
   return [];
 }

@@ -450,3 +450,33 @@
   font-size: 1.1em;
   line-height: 1;
 }
+/* Sender-side via glyph — the `↪` rendered after `#N` on a constraint
+ * row whose target is reached via a nested ref rather than a direct
+ * downstream target instance. Lighter weight + slight downshift in
+ * size so the number stays primary. */
+.wp-pair-badge__via-glyph {
+  font-weight: 600;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+/* Carrier-side via chip — collapsed `↪×N` indicator on a wildcard
+ * whose nested @{} refs route one or more constraints to their targets.
+ * Solid fill like a direct pair badge so the chip reads as "this row
+ * participates in the pair" rather than the dashed-outline orphan look.
+ * The leading `↪×N` glyph + dim multi-color variant (when constraints
+ * routed through here target DIFFERENT uuids) carry the
+ * "passes through" semantic on their own. */
+.wp-pair-badge--via-carrier {
+  /* Inherits base wp-pair-badge palette + dark text. Per-bucket
+   * background already applied via the .wp-pair-badge--cN sibling
+   * class — no further per-bucket overrides needed for the solid
+   * single-color case. */
+}
+/* Multi-color variant — applied when the collapsed chip aggregates
+ * pairs targeting MORE THAN ONE uuid (different colorIndexes). Falls
+ * back to a neutral surface so no single target's color "claims" the
+ * chip. */
+.wp-pair-badge--via-multi {
+  background: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-bg, #0e1015);
+}

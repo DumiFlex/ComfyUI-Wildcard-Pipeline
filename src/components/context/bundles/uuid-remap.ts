@@ -38,7 +38,12 @@ export interface RemapResult {
   remap: Record<string, string>;
 }
 
-const REF_RE = /@\{([0-9a-f]{6,16})\}/gi;
+// Canonical `@{uuid[#name][:subcat]}` form. Captures the uuid + the
+// optional `#name` cache + the optional `:subcat` list as separate
+// groups so the remap rewrites only the uuid and preserves the rest
+// verbatim. Pre-2026-05 pure-uuid refs still match because both
+// inner groups are optional.
+const REF_RE = /@\{([0-9a-f]{6,16})(#[^#:}@{]*)?(:[^}]*)?\}/gi;
 
 /** Deep walks an unknown value, applying the remap. Returns a new
  *  object — never mutates input. */
@@ -50,9 +55,13 @@ function walkRemap(value: unknown, remap: Record<string, string>): unknown {
       out = remap[out];
     }
     // Embedded `@{uuid}` refs — e.g. wildcard option text "see @{abc} here"
-    out = out.replace(REF_RE, (whole, uuid: string) => {
+    out = out.replace(REF_RE, (whole, uuid: string, nameSeg?: string, subSeg?: string) => {
       const r = remap[uuid];
-      return r ? `@{${r}}` : whole;
+      if (!r) return whole;
+      // Preserve the cached `#name` + `:subcat` segments verbatim —
+      // only the uuid gets remapped. Without this the remap path
+      // stripped the suffix and broke the display label / filter.
+      return `@{${r}${nameSeg ?? ""}${subSeg ?? ""}}`;
     });
     return out;
   }

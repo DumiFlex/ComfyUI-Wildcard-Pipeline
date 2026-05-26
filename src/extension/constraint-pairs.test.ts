@@ -6,6 +6,13 @@ function module_(id: string, type: string, payload: Record<string, unknown> = {}
   return { id, rowKey: rowKey ?? id, type, payload };
 }
 
+/** Pair color hashed from `senderRowKey + ':' + targetUuid`, mirroring
+ *  the production formula in `computePairingsFull`. Each (sender, target)
+ *  pair maps to its own palette bucket. */
+function colorForPair(senderRowKey: string, targetUuid: string): number {
+  return varColorIndex(`${senderRowKey}:${targetUuid}`);
+}
+
 describe("computePairings", () => {
   it("returns empty map when no constraints", () => {
     const result = computePairings([
@@ -21,7 +28,7 @@ describe("computePairings", () => {
       module_("t1", "wildcard"),
     ];
     const result = computePairings(chain);
-    const color = varColorIndex("t1");
+    const color = colorForPair("cn1", "t1");
     expect(result.get("cn1")).toEqual({ number: 1, targetUuid: "t1", colorIndex: color, isOrphan: false });
     expect(result.get("t1")).toEqual({ number: 1, targetUuid: "t1", colorIndex: color, isOrphan: false });
   });
@@ -38,11 +45,16 @@ describe("computePairings", () => {
       module_("t1", "wildcard", {}, "t1#uid-b"),
     ];
     const result = computePairings(chain);
-    const color = varColorIndex("t1");
-    expect(result.get("cn1#uid")).toEqual({ number: 1, targetUuid: "t1", colorIndex: color, isOrphan: false });
-    expect(result.get("t1#uid-a")).toEqual({ number: 1, targetUuid: "t1", colorIndex: color, isOrphan: false });
-    expect(result.get("cn2#uid")).toEqual({ number: 2, targetUuid: "t1", colorIndex: color, isOrphan: false });
-    expect(result.get("t1#uid-b")).toEqual({ number: 2, targetUuid: "t1", colorIndex: color, isOrphan: false });
+    const c1 = colorForPair("cn1#uid", "t1");
+    const c2 = colorForPair("cn2#uid", "t1");
+    expect(result.get("cn1#uid")).toEqual({ number: 1, targetUuid: "t1", colorIndex: c1, isOrphan: false });
+    expect(result.get("t1#uid-a")).toEqual({ number: 1, targetUuid: "t1", colorIndex: c1, isOrphan: false });
+    expect(result.get("cn2#uid")).toEqual({ number: 2, targetUuid: "t1", colorIndex: c2, isOrphan: false });
+    expect(result.get("t1#uid-b")).toEqual({ number: 2, targetUuid: "t1", colorIndex: c2, isOrphan: false });
+    // Distinct senders land on distinct palette buckets even though both
+    // pairs target the same wildcard uuid — that's the whole point of
+    // hashing on the sender+target combo.
+    expect(c1).not.toBe(c2);
   });
 
   it("orphan constraint gets isOrphan: true + still numbers in the sequence", () => {
@@ -54,10 +66,11 @@ describe("computePairings", () => {
       // Only one downstream target — cn2 is orphan.
     ];
     const result = computePairings(chain);
-    const color = varColorIndex("t1");
-    expect(result.get("cn1")).toEqual({ number: 1, targetUuid: "t1", colorIndex: color, isOrphan: false });
-    expect(result.get("t1")).toEqual({ number: 1, targetUuid: "t1", colorIndex: color, isOrphan: false });
-    expect(result.get("cn2")).toEqual({ number: 2, targetUuid: "t1", colorIndex: color, isOrphan: true });
+    const c1 = colorForPair("cn1", "t1");
+    const c2 = colorForPair("cn2", "t1");
+    expect(result.get("cn1")).toEqual({ number: 1, targetUuid: "t1", colorIndex: c1, isOrphan: false });
+    expect(result.get("t1")).toEqual({ number: 1, targetUuid: "t1", colorIndex: c1, isOrphan: false });
+    expect(result.get("cn2")).toEqual({ number: 2, targetUuid: "t1", colorIndex: c2, isOrphan: true });
   });
 
   it("constraint with no target_wildcard_id is silently ignored (scanner flags it separately)", () => {
@@ -87,8 +100,8 @@ describe("computePairings", () => {
     expect(result.get("cn-mood2")?.number).toBe(2);
     expect(result.get("cn-hair1")?.number).toBe(1);
     expect(result.get("cn-hair2")?.number).toBe(2);
-    expect(result.get("cn-mood1")?.colorIndex).toBe(varColorIndex("mood"));
-    expect(result.get("cn-hair1")?.colorIndex).toBe(varColorIndex("hair"));
+    expect(result.get("cn-mood1")?.colorIndex).toBe(colorForPair("cn-mood1", "mood"));
+    expect(result.get("cn-hair1")?.colorIndex).toBe(colorForPair("cn-hair1", "hair"));
     // Distinct target uuids resolve to (usually) distinct buckets.
     expect(result.get("mood#a")?.number).toBe(1);
     expect(result.get("mood#b")?.number).toBe(2);
@@ -96,15 +109,15 @@ describe("computePairings", () => {
     expect(result.get("hair#b")?.number).toBe(2);
   });
 
-  it("color index hashes target uuid — constraint + claimed instance share the color", () => {
+  it("color index hashes sender+target — constraint + claimed instance share the color", () => {
     const chain = [
       module_("s1", "wildcard"),
       module_("cn1", "constraint", { source_wildcard_id: "s1", target_wildcard_id: "mood" }),
       module_("mood", "wildcard"),
     ];
     const result = computePairings(chain);
-    expect(result.get("cn1")?.colorIndex).toBe(varColorIndex("mood"));
-    expect(result.get("mood")?.colorIndex).toBe(varColorIndex("mood"));
+    expect(result.get("cn1")?.colorIndex).toBe(colorForPair("cn1", "mood"));
+    expect(result.get("mood")?.colorIndex).toBe(colorForPair("cn1", "mood"));
     expect(result.get("cn1")?.colorIndex).toBe(result.get("mood")?.colorIndex);
   });
 });

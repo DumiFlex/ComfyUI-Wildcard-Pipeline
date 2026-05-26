@@ -26,6 +26,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { workflowSiblingCount } from "./duplicates/sibling-count";
 import { forkModule } from "./duplicates/fork";
+import { hashes as libraryHashes } from "./drift-store";
 import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
 
@@ -35,7 +36,12 @@ interface Bundle {
 }
 
 interface SaveResult {
-  mode: "update" | "fork";
+  /** `update` — PUT to existing entry. `fork` — POST creating a new
+   *  entry with a "(copy)" suffix; workflow row keeps its old id.
+   *  `reattach` — fork when the source entry was missing upstream;
+   *  no copy suffix, AND the caller should rebind the workflow row to
+   *  the new uuid so MISSING clears. */
+  mode: "update" | "fork" | "reattach";
   /** New library uuid when forking; same as draft.id when updating. */
   id: string;
   /** payload_hash returned by the server after the write. */
@@ -44,6 +50,9 @@ interface SaveResult {
   bundles_updated: string[];
   /** Display name as persisted on the library row. */
   name: string;
+  /** Original draft.id at modal-open time. Lets the caller find the
+   *  workflow row to rebind on `mode: "reattach"`. */
+  origId: string;
 }
 
 interface Props {
@@ -67,6 +76,23 @@ const busy = ref<boolean>(false);
 const errorMsg = ref<string>("");
 
 const isLibraryTracked = computed(() => Boolean(props.draft?.payload_hash));
+
+/** True when the draft was library-tracked but its uuid is no longer
+ *  in the polled hashes map — the upstream library entry has been
+ *  deleted, so "Update existing" would 404. The user must fork via
+ *  "Save as new entry" instead. */
+const isLibraryMissing = computed(() => {
+  if (!isLibraryTracked.value || !props.draft) return false;
+  if (libraryHashes.value === null) return false;
+  return !(props.draft.id in libraryHashes.value);
+});
+
+/** "Update existing" is enabled only when the entry exists AND is
+ *  library-tracked. Disabled when never library-tracked OR when the
+ *  upstream entry has been deleted. */
+const canUpdateExisting = computed(
+  () => isLibraryTracked.value && !isLibraryMissing.value,
+);
 
 const siblings = computed<number>(() => {
   if (!props.draft) return 0;
@@ -211,6 +237,7 @@ async function doUpdate(): Promise<void> {
       payload_hash: (respBody.payload_hash as string | undefined) ?? "",
       bundles_updated: (respBody.bundles_updated as string[] | undefined) ?? [],
       name: name.value.trim() || props.draft.meta?.name || props.draft.type,
+      origId: props.draft.id,
     });
   } catch (err) {
     errorMsg.value = err instanceof Error ? err.message : String(err);
@@ -243,13 +270,22 @@ async function doSaveAsNew(): Promise<void> {
         name: name.value.trim() || props.draft.meta?.name || props.draft.type,
       },
     };
-    const { newId, newHash, suffixedName } = await forkModule(draftCopy, existing);
+    // Re-attach path: source entry was deleted upstream. The original
+    // name slot is free, so skip the "(copy)" suffix — the user's
+    // intent is "put this row back in the library", not "make a copy".
+    const skipCopySuffix = isLibraryMissing.value;
+    const { newId, newHash, suffixedName } = await forkModule(
+      draftCopy,
+      existing,
+      { skipCopySuffix },
+    );
     emit("saved", {
-      mode: "fork",
+      mode: skipCopySuffix ? "reattach" : "fork",
       id: newId,
       payload_hash: newHash,
       bundles_updated: [],
       name: suffixedName,
+      origId: props.draft.id,
     });
   } catch (err) {
     errorMsg.value = err instanceof Error ? err.message : String(err);
@@ -374,6 +410,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               changes the library entry every instance reads from.
             </div>
 
+            <div v-if="isLibraryMissing" class="wp-ptl-note wp-ptl-note--danger" data-test="ptl-missing">
+              The library entry for this module has been deleted upstream. "Update existing"
+              is unavailable — use "Save as new entry" to re-add it to the library as a fresh
+              entry.
+            </div>
+
             <div v-if="errorMsg" class="wp-ptl-error" data-test="ptl-error">
               {{ errorMsg }}
             </div>
@@ -399,8 +441,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               type="button"
               class="wp-ptl-btn wp-ptl-btn--primary"
               data-test="ptl-update"
-              :disabled="busy || !isLibraryTracked"
-              :title="!isLibraryTracked ? 'No existing library entry to update' : undefined"
+              :disabled="busy || !canUpdateExisting"
+              :title="!isLibraryTracked
+                ? 'No existing library entry to update'
+                : isLibraryMissing
+                  ? 'Library entry has been deleted — save as new entry instead'
+                  : undefined"
               @click="doUpdate"
             >Update existing</button>
           </footer>
@@ -506,6 +552,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   background: color-mix(in oklab, var(--wp-warn, #facc15) 10%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 30%, transparent);
   color: var(--wp-warn, #facc15);
+}
+.wp-ptl-note--danger {
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
+  color: var(--wp-danger, #ef4444);
 }
 .wp-ptl-error {
   padding: 8px 10px;

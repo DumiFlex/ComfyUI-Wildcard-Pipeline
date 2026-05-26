@@ -9,16 +9,25 @@ import {
 } from "../probability";
 import { tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
 import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
+import type { PairingBadge } from "../../../../../extension/constraint-pairs";
+import PairBadge from "../../../PairBadge.vue";
 
 interface OptionFull extends WildcardOption {
   value: string;
 }
 
-const props = defineProps<{
-  option: OptionFull;
-  allOptions: readonly OptionFull[];
-  instance: InstanceLike;
-}>();
+const props = withDefaults(
+  defineProps<{
+    option: OptionFull;
+    allOptions: readonly OptionFull[];
+    instance: InstanceLike;
+    /** Via-nested constraint pairs that reach a target through this
+     *  option's `@{uuid}` ref. Rendered as trailing `↪#N` chips at the
+     *  end of the value cell. Empty when this option isn't a carrier. */
+    pairBadges?: readonly PairingBadge[];
+  }>(),
+  { pairBadges: () => [] },
+);
 
 const emit = defineEmits<{
   "toggle": [optionId: string];
@@ -49,12 +58,34 @@ const tokens = computed<RichToken[]>(() => {
   return toks;
 });
 
-function refDisplay(uuid: string | undefined, raw: string): string {
+function refDisplay(
+  uuid: string | undefined,
+  cachedName: string | undefined,
+  raw: string,
+): string {
   if (!uuid) return raw;
+  // Priority: live library lookup → cached `#name` from the token →
+  // raw token text (which still carries `@{uuid#name}` or bare uuid).
+  // Mirrors the SPA's RefChip label-fallback chain so broken refs
+  // surface the cached name instead of a bare uuid.
   const hit = lookup(uuid);
   if (hit?.varBinding && hit.varBinding.trim()) return `@${hit.varBinding.trim()}`;
   if (hit?.name && hit.name.trim()) return `@${hit.name.trim()}`;
+  if (cachedName && cachedName.trim()) return `@${cachedName.trim()}`;
   return raw;
+}
+
+/** True when the ref's uuid resolves against neither the live preview-
+ *  resolver cache nor any local sibling in the chain — i.e. broken
+ *  reference. Drives the danger-tint + `?` icon on the option chip
+ *  so canvas-side broken refs read the same way as the SPA's RefChip
+ *  unresolved state. */
+function refIsUnresolved(uuid: string | undefined): boolean {
+  if (!uuid) return false;
+  // `lookup` is the resolver cache; truthy means we know a live
+  // entry exists for this uuid (live name/varBinding either populated
+  // now or already polled). Anything falsey reads as broken.
+  return !lookup(uuid);
 }
 
 /** Distinguish two reasons a row might be disabled:
@@ -202,6 +233,7 @@ function fmtPct(p: number): string {
       </svg>
     </span>
     <span class="opt__name" data-test="opt-name" :class="{ 'opt__name--null': option.is_null }">
+      <span class="opt__name-main">
       <span
         v-if="option.is_null"
         class="opt__null-chip"
@@ -214,11 +246,17 @@ function fmtPct(p: number): string {
         <span
           v-if="tok.kind === 'ref'"
           class="opt__tok opt__tok--ref"
-          :class="{ 'opt__tok--filtered': Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0 }"
+          :class="{
+            'opt__tok--filtered': Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0,
+            'opt__tok--unresolved': refIsUnresolved(tok.meta?.uuid),
+          }"
           :data-uuid="tok.meta?.uuid"
+          :title="refIsUnresolved(tok.meta?.uuid)
+            ? `Reference ${tok.meta?.uuid} not in library`
+            : undefined"
         >
-          <span class="opt__tok-icon" aria-hidden="true">✦</span>
-          <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.raw) }}</span>
+          <span class="opt__tok-icon" aria-hidden="true">{{ refIsUnresolved(tok.meta?.uuid) ? '?' : '✦' }}</span>
+          <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw) }}</span>
           <span
             v-if="Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0"
             class="opt__tok-suffix"
@@ -245,6 +283,15 @@ function fmtPct(p: number): string {
         >{{ tok.raw }}</span>
         <template v-else>{{ tok.raw }}</template>
       </template>
+      </span>
+      <span v-if="pairBadges.length > 0" class="opt__pair-badges" data-test="opt-pair-badges">
+        <PairBadge
+          v-for="p in pairBadges"
+          :key="`${p.number}-${p.targetUuid}`"
+          :pair="p"
+          variant="option"
+        />
+      </span>
     </span>
     <span class="opt__prob">
       <span class="opt__prob-bar" aria-hidden="true">
@@ -341,13 +388,27 @@ function fmtPct(p: number): string {
 }
 .opt--filtered { cursor: default; }
 .opt__name {
+  /* Outer cell is a flex row so the trailing pair-badge cluster
+   * sticks to the right edge while the tokenised value text fills
+   * the remaining width. Inner `.opt__name-main` holds the actual
+   * inline tokens with the old display-inline behaviour. */
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   font: 11px var(--wp-font-mono);
   color: var(--wp-text);
-  /* Stay `display: inline` so whitespace between text/pill tokens
-   * renders naturally — `inline-flex` collapsed the spaces and the
-   * pills butted up against the surrounding words. */
   line-height: 1.55;
+}
+.opt__name-main {
+  flex: 1;
+  min-width: 0;
   word-break: break-word;
+}
+.opt__pair-badges {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 /* Null option chip — shown in place of the tokenised value when the
  * option carries is_null=true. Visually distinct from the regular
@@ -403,6 +464,17 @@ function fmtPct(p: number): string {
   background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 15%, transparent);
   border-color: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 50%, transparent);
   color: var(--wp-kind-wildcard);
+}
+/* Unresolved ref — broken reference (target uuid not in library +
+ * not in preview-resolver cache). Mirrors the SPA RefChip
+ * `wp-refchip--unresolved` palette so the canvas + SPA chips read
+ * the same broken-state grammar. Wins over the base `.opt__tok--ref`
+ * accent via selector specificity. */
+.opt__tok--ref.opt__tok--unresolved {
+  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent);
+  color: var(--wp-danger, #ef4444);
+  cursor: help;
 }
 .opt__tok--var {
   background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);

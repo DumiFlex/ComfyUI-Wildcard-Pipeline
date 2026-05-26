@@ -2,6 +2,7 @@
 import { inject } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
+import PairBadge from "./PairBadge.vue";
 
 defineProps<{ module: ModuleEntry; idx: number }>();
 
@@ -21,6 +22,7 @@ const {
   toggleLockOnCard, toggleInternalOnCard,
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
   pairingFor,
+  viaInboundFor,
 } = ctx;
 </script>
 
@@ -82,18 +84,21 @@ const {
         class="wp-kind-chip" :class="`wp-kind-chip--${kindChipModifier(module.type)}`">
         {{ KIND_TITLE[module.type] ?? module.type }}
       </span>
-      <span v-if="pairingFor(module._uid ?? module.id)"
-        class="wp-pair-badge"
-        :class="[
-          `wp-pair-badge--c${pairingFor(module._uid ?? module.id)!.colorIndex}`,
-          pairingFor(module._uid ?? module.id)!.isOrphan ? 'wp-pair-badge--orphan' : null,
-        ]"
-        :title="pairingFor(module._uid ?? module.id)!.isOrphan
-          ? `Constraint pair #${pairingFor(module._uid ?? module.id)!.number} — target instance missing downstream`
-          : `Constraint pair #${pairingFor(module._uid ?? module.id)!.number} — target ${pairingFor(module._uid ?? module.id)!.targetUuid}`">
-        <span v-if="pairingFor(module._uid ?? module.id)!.isOrphan" class="wp-pair-badge__warn">!</span>
-        #{{ pairingFor(module._uid ?? module.id)!.number }}
-      </span>
+      <PairBadge
+        v-if="pairingFor(module._uid ?? module.id)"
+        :pair="pairingFor(module._uid ?? module.id)!"
+        :variant="module.type === 'constraint' ? 'sender' : 'direct'"
+      />
+      <!-- Carrier-side: ONE collapsed `↪×N` chip aggregating every
+           constraint whose target lives in one of THIS wildcard's
+           nested @{} refs. Solid background; multi-color fallback when
+           routed pairs target different uuids. Popover lists each
+           routed pair so users can drill into the individual targets. -->
+      <PairBadge
+        v-if="viaInboundFor(module._uid ?? module.id).length > 0"
+        :pairs="viaInboundFor(module._uid ?? module.id)"
+        variant="carrier"
+      />
       <span class="wp-module-name" :title="module.meta.name || '(unnamed)'">
         {{ module.meta.name || "(unnamed)" }}
       </span>

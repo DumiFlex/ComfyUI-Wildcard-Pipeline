@@ -9,6 +9,12 @@ export interface ContextMenuItem {
   divider?: boolean;
   /** Render the label in red (destructive action). */
   danger?: boolean;
+  /** Render the label in accent color to draw attention. Used for
+   *  recommended next actions in a contextual state (e.g. "Push to
+   *  library" when the row's library entry has been deleted upstream).
+   *  Lower-key than `danger`; signals "this is what you probably want"
+   *  not "be careful with this". */
+  accent?: boolean;
   disabled?: boolean;
   /** Optional dim secondary line under the label. Useful for
    *  explaining non-obvious actions like "Pull current library
@@ -182,6 +188,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
             class="wp-ctxmenu__item"
             :class="{
               'wp-ctxmenu__item--danger': entry.danger,
+              'wp-ctxmenu__item--accent': entry.accent,
               'wp-ctxmenu__item--disabled': entry.disabled,
               'wp-ctxmenu__item--active': activeIndex === i,
               'wp-ctxmenu__item--with-sub': !!entry.subtitle,
@@ -272,6 +279,18 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
 .wp-ctxmenu__item--danger { color: var(--wp-red); }
 .wp-ctxmenu__item--danger.wp-ctxmenu__item--active,
 .wp-ctxmenu__item--danger:hover { background: var(--wp-red-bg); color: var(--wp-red); }
+/* Accent variant — recommended action highlight. Tinted background +
+ * accent text in idle state so the eye lands on it; hover uses the
+ * stronger accent-glow + accent text already wired for other hovers. */
+.wp-ctxmenu__item--accent {
+  color: var(--wp-accent);
+  background: color-mix(in oklab, var(--wp-accent) 12%, transparent);
+}
+.wp-ctxmenu__item--accent.wp-ctxmenu__item--active,
+.wp-ctxmenu__item--accent:hover {
+  background: var(--wp-accent-glow);
+  color: var(--wp-accent);
+}
 .wp-ctxmenu__item--disabled {
   color: var(--wp-text3);
   cursor: not-allowed;
