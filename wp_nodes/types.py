@@ -369,6 +369,21 @@ _CROSS_NODE_INTERNAL_KEYS = (
     # the flag map alongside picks/constraints so the next node's
     # PromptAssembler can call `strip_internals` and re-apply the filter.
     "__wp_internal_flags__",
+    # Loop bookkeeping from WP_ContextLoop. These reach the FIRST
+    # WP_Context (direct ContextLoop child) via the payload internals,
+    # but were dropped at that node's output boundary — so a SECOND,
+    # chained WP_Context defaulted loop_index=0 and seed_override=None,
+    # making its own seed (whatever drives it — widget OR an external
+    # node like rgthree Seed) identical across every iteration, and
+    # ignoring override entirely. Propagating them lets effective_chain_seed
+    # vary + override the seed for EVERY node in the chain, not just the
+    # first (2026-05-26).
+    #   - __wp_loop_index__   : per-iteration index (drives the XOR shift)
+    #   - __wp_seed_override__: derived base seed when override_seed=true
+    #   - __wp_loop_seeds__   : the full derived series (debug display)
+    "__wp_loop_index__",
+    "__wp_seed_override__",
+    "__wp_loop_seeds__",
 )
 
 

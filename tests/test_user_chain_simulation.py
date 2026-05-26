@@ -703,3 +703,62 @@ def test_build_payload_dedupes_constraint_never_applied():
     assert cids == ["ghost001", "ghost002"], f"unexpected dedup result: {cids}"
     # Non-constraint warning survived unchanged.
     assert any(w.get("type") == "unknown_wildcard_ref" for w in out_warnings)
+
+
+def test_build_payload_propagates_loop_internals():
+    """Loop bookkeeping must survive the socket boundary so a SECOND
+    chained WP_Context (the one the user wired rgthree Seed into) still
+    varies its seed per iteration + honours override. Pre-fix only the
+    first ContextLoop child saw these; downstream defaulted loop_index=0
+    + seed_override=None, so its seed was identical every iteration and
+    override was ignored (2026-05-26)."""
+    from wp_nodes.types import build_payload
+
+    ctx = {
+        "__wp_loop_index__": 3,
+        "__wp_seed_override__": 12345,
+        "__wp_loop_seeds__": [100, 200, 300, 400],
+        "__wp_trace__": [],
+        "__wp_warnings__": [],
+        "__wp_constraints__": [],
+        "__wp_picks__": {},
+        "__wp_consumed_constraints__": set(),
+    }
+    payload = build_payload(ctx, upstream_debug={}, seed=0)
+    assert payload.internals.get("__wp_loop_index__") == 3
+    assert payload.internals.get("__wp_seed_override__") == 12345
+    assert payload.internals.get("__wp_loop_seeds__") == [100, 200, 300, 400]
+
+
+def test_effective_chain_seed_varies_per_iteration_with_external_seed():
+    """End-to-end seed-variation proof for an external (link-driven)
+    seed: even when widget_seed is a FIXED value (simulating rgthree
+    Seed driving the input), each iteration's loop_index produces a
+    distinct chain seed. This is what a downstream chained context now
+    gets once the loop internals propagate."""
+    from engine.seed_derive import effective_chain_seed
+
+    fixed_external = 303816870871154  # a rgthree-style fixed seed
+    # No override — pure widget_seed + loop_index variation.
+    seeds = [
+        effective_chain_seed(
+            widget_seed=fixed_external, seed_override=None, loop_index=i,
+        )
+        for i in range(4)
+    ]
+    assert len(set(seeds)) == 4, f"iterations didn't vary: {seeds}"
+    # iteration 0 is the unshifted base (backwards-compat).
+    assert seeds[0] == fixed_external & 0xFFFFFFFFFFFFFFFF
+
+    # With override ON, the derived series replaces the external seed.
+    overridden = [
+        effective_chain_seed(
+            widget_seed=fixed_external, seed_override=900 + i, loop_index=i,
+        )
+        for i in range(4)
+    ]
+    # iteration 0 base is the override, not the external seed.
+    assert overridden[0] == 900
+    assert all(s != fixed_external for s in overridden[1:]), (
+        "override didn't replace the external seed"
+    )
