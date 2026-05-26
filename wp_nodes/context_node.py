@@ -7,6 +7,7 @@ from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.modules.snapshot import walk_transitive_refs
 from engine.pipeline import PipelineEngine
+from engine.seed_derive import effective_chain_seed
 from wp_nodes.types import (
     ContextModulesInput,
     PipelineContext,
@@ -129,9 +130,20 @@ class WPContext(io.ComfyNode):
             else:
                 ctx[key] = value
 
-        ctx = PipelineEngine().run(module_list, ctx=ctx, seed=int(seed))
+        # Compute the actual chain seed for THIS iteration. When no
+        # WP_ContextLoop is upstream, `upstream_internals` lacks both
+        # keys → helper returns `widget_seed` unchanged (backwards-compat).
+        # When ContextLoop is upstream with override_seed=true, the
+        # override replaces the widget seed; loop_index>0 XORs in a
+        # stable hash shift so each iteration walks a distinct seed.
+        chain_seed = effective_chain_seed(
+            widget_seed=int(seed),
+            seed_override=upstream_internals.get("__wp_seed_override__"),
+            loop_index=int(upstream_internals.get("__wp_loop_index__", 0)),
+        )
+        ctx = PipelineEngine().run(module_list, ctx=ctx, seed=chain_seed)
 
-        payload = build_payload(ctx, upstream_debug=upstream_debug, seed=int(seed))
+        payload = build_payload(ctx, upstream_debug=upstream_debug, seed=chain_seed)
         # Emit two seed-tracking values via the UI payload so the
         # frontend `executed` listener (widgets/context.ts) gets
         # authoritative state — works whether the seed was supplied
