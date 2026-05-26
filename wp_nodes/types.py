@@ -441,3 +441,44 @@ class VarPickerInput:
                 raw_link,
                 advanced,
             )
+
+
+@comfytype(io_type="WP_CONTEXT_LOOP_CONFIG")
+class ContextLoopConfigInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_CONTEXT_LOOP_CONFIG"]``.
+
+    Value is a JSON string holding ``{strategy, override_seed,
+    iteration_var_name, bypass}``. WPContextLoop.execute parses it
+    defensively (recovery path tolerates missing / malformed keys).
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,
+                None,
+                extra_dict,
+                raw_link,
+                advanced,
+            )
