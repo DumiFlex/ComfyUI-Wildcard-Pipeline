@@ -254,6 +254,41 @@ export interface BundleUpdateInput {
   is_favorite?: boolean;
 }
 
+export interface TemplateRow {
+  id: string;
+  name: string;
+  description: string;
+  category_id: string | null;
+  tags: string[];
+  is_favorite: boolean;
+  template_string: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TemplateListResponse {
+  items: TemplateRow[];
+  total: number;
+}
+
+export interface TemplateCreateInput {
+  name: string;
+  template_string?: string;
+  description?: string;
+  category_id?: string | null;
+  tags?: string[];
+  is_favorite?: boolean;
+}
+
+export interface TemplateUpdateInput {
+  name?: string;
+  template_string?: string;
+  description?: string;
+  category_id?: string | null;
+  tags?: string[];
+  is_favorite?: boolean;
+}
+
 export interface CategoryCreateInput {
   name: string;
   color?: string | null;

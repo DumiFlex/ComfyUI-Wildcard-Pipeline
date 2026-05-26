@@ -24,6 +24,7 @@ export type ListKind =
   | "derivations"
   | "constraints"
   | "bundles"
+  | "templates"
   | "all";
 
 export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
@@ -74,6 +75,7 @@ export const useListPrefsStore = defineStore("listPrefs", () => {
     derivations:    stored.pageSize?.derivations    ?? DEFAULT_PAGE_SIZE,
     constraints:    stored.pageSize?.constraints    ?? DEFAULT_PAGE_SIZE,
     bundles:        stored.pageSize?.bundles        ?? DEFAULT_PAGE_SIZE,
+    templates:      stored.pageSize?.templates      ?? DEFAULT_PAGE_SIZE,
     all:            stored.pageSize?.all            ?? DEFAULT_PAGE_SIZE,
   });
 
@@ -84,6 +86,7 @@ export const useListPrefsStore = defineStore("listPrefs", () => {
     derivations:    stored.sortBy?.derivations    ?? DEFAULT_SORT,
     constraints:    stored.sortBy?.constraints    ?? DEFAULT_SORT,
     bundles:        stored.sortBy?.bundles        ?? DEFAULT_SORT,
+    templates:      stored.sortBy?.templates      ?? DEFAULT_SORT,
     all:            stored.sortBy?.all            ?? DEFAULT_SORT,
   });
 
