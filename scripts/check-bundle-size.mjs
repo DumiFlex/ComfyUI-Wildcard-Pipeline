@@ -92,7 +92,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // chunk, and shared types/intensity helpers. ~9 KB net gzip across
 // the lazy cleaner chunks; entry stays put. See
 // docs/superpowers/specs/2026-05-25-prompt-cleaner-node-design.md.
-const TOTAL_LIMIT = 360 * 1024;     // 360 KB
+// Bumped 360 -> 380 KB on 2026-05-26 to accommodate the WP_VarToInt /
+// WP_VarToFloat / WP_VarToBool converter nodes. New chunks: var-picker
+// SFC + TS parser mirror + widget glue. ~4 KB net gzip across the lazy
+// chunks; entry stays put. See
+// docs/superpowers/specs/2026-05-26-converter-nodes-design.md.
+const TOTAL_LIMIT = 380 * 1024;     // 380 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

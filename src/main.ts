@@ -13,6 +13,7 @@ const [
   asmMod,
   injMod,
   cleanerMod,
+  varPickerMod,
   graphEventsMod,
   ToastModule,
   graphMod,
@@ -29,6 +30,7 @@ const [
   import("./widgets/assembler"),
   import("./widgets/injector"),
   import("./widgets/cleaner"),
+  import("./widgets/var_picker"),
   import("./extension/graph-events"),
   import("./components/shared/Toast.vue"),
   import("./extension/graph"),
@@ -71,6 +73,7 @@ type ContextCreateNode = Parameters<typeof ctxMod.create>[0];
 type DebugCreateNode = Parameters<typeof dbgMod.create>[0];
 type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
+type VarPickerCreateNode = Parameters<typeof varPickerMod.create>[0];
 type AssemblerHelperNode = Parameters<typeof asmMod.mountHelper>[0];
 
 interface NodeData { name: string }
@@ -162,6 +165,8 @@ app.registerExtension({
         injMod.create(node, inputName),
       WP_CLEANER: (node: CleanerCreateNode, inputName: string) =>
         cleanerMod.create(node, inputName),
+      WP_VAR_PICKER: (node: VarPickerCreateNode, inputName: string) =>
+        varPickerMod.create(node, inputName),
     };
   },
 
