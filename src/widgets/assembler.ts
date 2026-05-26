@@ -361,25 +361,19 @@ export function mountHelper(node: AssemblerNode) {
         const rawKindByVar = rootG2
           ? collectUpstreamKinds(rootG2, node as unknown as LiteNodeLike)
           : {};
-        // Mirror render-boundary strip: drop user-flagged internal vars
-        // + the engine flag map so chip strip matches what
-        // PromptAssembler will resolve at runtime. Walker stashes the
-        // flag map on `__wp_internal_flags__` per the new propagation
-        // contract (engine commit a345bd4).
-        const kindFlagsBlob = rawKindByVar["__wp_internal_flags__"];
-        const kindInternal = new Set<string>();
-        if (typeof kindFlagsBlob === "string") {
-          try {
-            const parsed = JSON.parse(kindFlagsBlob) as Record<string, boolean>;
-            for (const [k, v] of Object.entries(parsed)) {
-              if (v) kindInternal.add(k);
-            }
-          } catch { /* malformed, treat as empty */ }
-        }
+        // Keep the kind for EVERY var that appears as a chip — including
+        // user-flagged internal ones. The chip strip (`upstreamVars` =
+        // keys of the resolved map) already lists internal vars, so
+        // dropping only their kind left an iconless chip (the
+        // overridden `$hair_style` + the loop `$iteration` vars). The
+        // icon reflects the SOURCE kind regardless of internal status;
+        // the render boundary that actually strips internal vars lives
+        // in PromptAssembler, not in this chip-strip display. We still
+        // drop the reserved `__wp_internal_flags__` blob (and any other
+        // `__`-prefixed engine key) so it never renders as a chip.
         const kindByVar: Record<string, string> = {};
         for (const [k, v] of Object.entries(rawKindByVar)) {
           if (k.startsWith("__")) continue;
-          if (kindInternal.has(k)) continue;
           kindByVar[k] = v;
         }
 

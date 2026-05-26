@@ -17,6 +17,12 @@ export const KIND_ICON_MAP = {
   derivation:   "pi pi-arrow-right-arrow-left",
   constraint:   "pi pi-filter",
   bundle:       "pi pi-box",
+  // WP_ContextLoop iteration vars (`$iteration` / `$<name>_total`).
+  // Not a library module kind — synthesised by the loop head — but it
+  // flows through the same kind→icon path so the assembler chip reads
+  // "this came from the loop" at a glance. `pi-replay` = the loop-back
+  // arrow, matching the iteration-counter semantic.
+  loop:         "pi pi-replay",
 } as const;
 
 export type WpKind = keyof typeof KIND_ICON_MAP;

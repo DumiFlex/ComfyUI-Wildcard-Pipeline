@@ -592,6 +592,26 @@ export function collectUpstreamKinds(
       }
       continue;
     }
+    if (n.type === "WP_ContextLoop") {
+      // Loop head stamps `$<iteration_var_name>` + `$<name>_total`.
+      // Tag them with the `loop` kind so the assembler chip shows the
+      // loop icon — mirrors the `resolveChainStatic` branch that
+      // stamps their placeholder values. Per-key internal-ness comes
+      // from the widget config (same globe toggles as a module).
+      const raw = widgetValue(n, "config");
+      const cfg = parseWidgetJson<{
+        iteration_var_name?: string;
+        iteration_internal?: boolean;
+        total_internal?: boolean;
+      }>(typeof raw === "string" ? raw : "", {});
+      const baseName = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
+      const totalName = `${baseName}_total`;
+      kinds[baseName] = "loop";
+      kinds[totalName] = "loop";
+      if (cfg.iteration_internal === true) internalKeys.add(baseName);
+      if (cfg.total_internal === true) internalKeys.add(totalName);
+      continue;
+    }
     if (n.type !== "WP_Context") continue;
     const v = parseWidgetJson<ContextWidgetValue>(
       widgetValue(n, "modules"),

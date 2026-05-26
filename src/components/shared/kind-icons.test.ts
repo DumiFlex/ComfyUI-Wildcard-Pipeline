@@ -8,6 +8,7 @@ describe("kind-icons", () => {
     expect(kindIcon("combine")).toBe("pi pi-link");
     expect(kindIcon("derivation")).toBe("pi pi-arrow-right-arrow-left");
     expect(kindIcon("constraint")).toBe("pi pi-filter");
+    expect(kindIcon("loop")).toBe("pi pi-replay");
   });
 
   it("falls back to a neutral circle icon for unknown kinds", () => {
