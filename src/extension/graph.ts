@@ -785,9 +785,11 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
     if (n.type === "WP_ContextLoop") {
       // Loop stamps `$<iteration_var_name>` + `$<name>_total` into the
       // per-iteration context. Static walker doesn't know the iteration
-      // index, so stub with a placeholder ("0" / count) so consumers
+      // index, so stub with a placeholder ("1" / count) so consumers
       // (assembler insert-var dropdown, conflict scanner) see the keys
-      // exist. Per-key internal-ness comes from the widget config.
+      // exist. The runtime emits 1-based values too — keeping the
+      // static placeholder aligned avoids the assembler's live-preview
+      // showing "0" then a queue-time "1" jump.
       const raw = widgetValue(n, "config");
       const cfg = parseWidgetJson<{
         iteration_var_name?: string;
@@ -796,7 +798,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
       }>(typeof raw === "string" ? raw : "", {});
       const baseName = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
       const totalName = `${baseName}_total`;
-      ctx[baseName] = "0";
+      ctx[baseName] = "1";
       ctx[totalName] = "1";
       if (cfg.iteration_internal === true) internalKeys.add(baseName);
       if (cfg.total_internal === true) internalKeys.add(totalName);

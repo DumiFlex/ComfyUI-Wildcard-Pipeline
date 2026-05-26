@@ -129,8 +129,14 @@ class WPContextLoop(io.ComfyNode):
 
         payloads = []
         for idx in range(effective_count):
+            # User-facing iteration counter is 1-based — reads naturally
+            # in PromptAssembler templates (`iteration 1 of 4`) and in
+            # the debug viewer. The internal `__wp_loop_index__` below
+            # stays 0-based because `derive_loop_seeds[idx]` indexes the
+            # derived series + `effective_chain_seed` math assumes
+            # zero-origin (loop_index=0 means "no XOR shift").
             context_vars = {
-                iteration_var_name: str(idx),
+                iteration_var_name: str(idx + 1),
                 total_var_name: str(effective_count),
             }
             internals: dict[str, object] = {

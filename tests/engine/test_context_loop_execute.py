@@ -100,15 +100,17 @@ def test_execute_override_on_stamps_derived_series():
 
 
 def test_execute_iteration_var_default():
+    # 1-based — user-facing counter reads naturally in templates.
+    # Internal `__wp_loop_index__` stays 0-based (engine seed math).
     payloads = _execute(42, 2, {})
-    assert payloads[0].context == {"iteration": "0", "iteration_total": "2"}
-    assert payloads[1].context == {"iteration": "1", "iteration_total": "2"}
+    assert payloads[0].context == {"iteration": "1", "iteration_total": "2"}
+    assert payloads[1].context == {"iteration": "2", "iteration_total": "2"}
 
 
 def test_execute_iteration_var_custom_name():
     payloads = _execute(42, 2, {"iteration_var_name": "idx"})
-    assert payloads[0].context == {"idx": "0", "idx_total": "2"}
-    assert payloads[1].context == {"idx": "1", "idx_total": "2"}
+    assert payloads[0].context == {"idx": "1", "idx_total": "2"}
+    assert payloads[1].context == {"idx": "2", "idx_total": "2"}
 
 
 def test_execute_count_clamps_to_one_min():
