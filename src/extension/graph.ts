@@ -1050,6 +1050,78 @@ export function collectDownstreamWildcardUuids(
 }
 
 /**
+ * BFS downstream from `node` along PIPELINE_CONTEXT edges, harvesting
+ * `@{uuid}` nested-ref uuids found inside any downstream wildcard's
+ * option values. Mirrors pair-badge logic (`carrierOptionIdsFor`) so
+ * the conflict scanner agrees with the badge: a constraint targeting
+ * a wildcard that has no direct downstream instance but IS referenced
+ * via `@{}` from a downstream carrier shouldn't warn orphan.
+ *
+ * One-hop only — pair badge also doesn't transitively chase nested
+ * refs across nodes. Local same-node transitive walking is still
+ * handled by `localNestedReachAfter` inside `scanConflicts`. The
+ * asymmetry is intentional and matches the pair-time engine semantic.
+ */
+export function collectDownstreamNestedReachUuids(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): string[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const out: string[] = [];
+  const reach = new Set<string>();
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const queue: { graph: LiteGraphLike; node: LiteNodeLike }[] = [
+    { graph: graphOf(node, rootGraph), node },
+  ];
+  // Same regex shape used in pair-badge + dep-graph + tokenize. Uuid
+  // captured; `#name` and `:subcat` segments non-capturing.
+  const REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
+
+  while (queue.length) {
+    const cur = queue.shift();
+    if (!cur) break;
+    for (const o of cur.node.outputs ?? []) {
+      if (o.type !== "PIPELINE_CONTEXT") continue;
+      for (const linkId of o.links ?? []) {
+        const link = cur.graph.links[linkId];
+        if (!link) continue;
+        const stepped = downstreamStep(cur.graph, link, parents);
+        if (!stepped) continue;
+        const key = locator(stepped.graph, stepped.node);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
+          const v = parseWidgetJson<ContextWidgetValue>(
+            widgetValue(stepped.node, "modules"),
+            { version: 1, modules: [] },
+          );
+          const bundleEnabled = buildBundleEnabledMap(v.bundles);
+          for (const m of v.modules) {
+            if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
+            if (m.type !== "wildcard") continue;
+            const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
+            for (const opt of payload.options ?? []) {
+              const val = opt.value;
+              if (typeof val !== "string") continue;
+              REF_RE.lastIndex = 0;
+              let match: RegExpExecArray | null;
+              while ((match = REF_RE.exec(val)) !== null) {
+                if (!reach.has(match[1])) {
+                  reach.add(match[1]);
+                  out.push(match[1]);
+                }
+              }
+            }
+          }
+        }
+        queue.push({ graph: stepped.graph, node: stepped.node });
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * BFS downstream from `node` along PIPELINE_CONTEXT edges, returning every
  * WP_PromptAssembler in reach. Walks through subgraph boundaries: a
  * SubgraphNode in the chain is unwrapped by following its inputNode slot

@@ -396,6 +396,7 @@ export function scanConflicts(
   upstreamVars: string[],
   upstreamWildcardUuids: string[] = [],
   downstreamWildcardUuids: string[] = [],
+  downstreamNestedReachUuids: string[] = [],
 ): Conflict[] {
   const upstream = new Set(upstreamVars);
   const upstreamUuids = new Set(upstreamWildcardUuids);
@@ -408,6 +409,13 @@ export function scanConflicts(
   for (const u of downstreamWildcardUuids) {
     downstreamCounts.set(u, (downstreamCounts.get(u) ?? 0) + 1);
   }
+  // Set (not counted) — via-nested route is non-consuming. Pair badge
+  // logic lets ↪×N multiple constraints route through the same downstream
+  // carrier, so the scanner mirrors that by treating cross-node nested
+  // reach as a slot that can satisfy any number of constraints. Used
+  // alongside `inLocalNestedAfter` to suppress the orphan warning when
+  // the pair badge would have found a downstream `@{uuid}` carrier.
+  const downstreamNestedReach = new Set(downstreamNestedReachUuids);
   // Same-node wildcard index lookup. Used by the constraint ordering
   // checks: a constraint references its source/target by uuid, and we
   // need to know whether each uuid lives in this node (and at what
@@ -644,8 +652,15 @@ export function scanConflicts(
         const downstreamCount = downstreamCounts.get(tgtId) ?? 0;
         const inDownstream = downstreamCount > 0;
         const inLocalNestedAfter = localNestedReachAfter[i + 1].has(tgtId);
+        const inDownstreamNested = downstreamNestedReach.has(tgtId);
 
-        if (!inLocalDirect && !inUpstream && !inDownstream && !inLocalNestedAfter) {
+        if (
+          !inLocalDirect
+          && !inUpstream
+          && !inDownstream
+          && !inLocalNestedAfter
+          && !inDownstreamNested
+        ) {
           out.push({
             moduleId: m._uid ?? m.id,
             variable: tgtId,
@@ -657,9 +672,13 @@ export function scanConflicts(
           // then a downstream cross-node instance. Falls back to
           // nested-reach (best-effort — counts as one extra slot, not
           // tracked per nested instance because static counting through
-          // `@{}` chains gets hairy fast).
+          // `@{}` chains gets hairy fast). Cross-node via-nested
+          // (`inDownstreamNested`) mirrors the pair-badge `↪×N` semantic:
+          // multiple constraints can route through the same downstream
+          // carrier without consuming a slot — so it suppresses orphan
+          // unconditionally.
           const claimed = claimSlot(tgtId, i);
-          if (!claimed && !inLocalNestedAfter) {
+          if (!claimed && !inLocalNestedAfter && !inDownstreamNested) {
             out.push({
               moduleId: m._uid ?? m.id,
               variable: tgtId,

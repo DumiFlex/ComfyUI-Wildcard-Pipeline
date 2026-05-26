@@ -6,6 +6,7 @@ import {
 } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
 import {
+  collectDownstreamNestedReachUuids,
   collectDownstreamWildcardUuids,
   collectLocalResolvedForModule,
   collectUpstreamResolved,
@@ -186,6 +187,22 @@ export function create(node: ContextNode, inputName: string) {
         stringArrayEqual,
       );
 
+      // Cross-node nested-reach set — pairs the pair-badge `↪×N` carrier
+      // logic with the scanner so constraints landing on a downstream
+      // via-nested carrier don't get a stale `constraint_orphan_target`
+      // warning. Same reactivity wiring as the other walkers.
+      const downstreamNestedReach = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return collectDownstreamNestedReachUuids(rootGraph, node);
+        },
+        stringArrayEqual,
+      );
+
       // Cross-node pairing badges. Flat map keyed by `${nodeId}#${_uid}`
       // so duplicate library instances + cross-node rows don't collide.
       // Polled via the same `reactiveFromGraph` machinery the other
@@ -272,6 +289,7 @@ export function create(node: ContextNode, inputName: string) {
         localResolvedReader,
         upstreamWildcardUuids: upstreamUuids.value,
         downstreamWildcardUuids: downstreamUuids.value,
+        downstreamNestedReachUuids: downstreamNestedReach.value,
         pairings: pairingsRef.value,
         nodeMode: nodeMode.value,
         lastUsedSeedReader,

@@ -118,6 +118,13 @@ const props = withDefaults(defineProps<{
    *  constraint runs) and fire `constraint_source_in_downstream`
    *  when the source is in the wrong direction. */
   downstreamWildcardUuids?: string[];
+  /** Uuids referenced via `@{uuid}` nested refs in any downstream
+   *  Context wildcard's option values. Mirrors the pair-badge logic
+   *  for via-nested carriers: a constraint whose target only resolves
+   *  through a downstream carrier still pairs (`↪×N`), so the scanner
+   *  must agree by suppressing the `constraint_orphan_target` /
+   *  `constraint_target_missing` warning for that route. */
+  downstreamNestedReachUuids?: string[];
   /** Cross-node pairing badge map. Computed at the mount layer
    *  (`widgets/context.ts`) by walking upstream + own + downstream
    *  WP_Context modules into a flat chain. Keys are
@@ -144,6 +151,7 @@ const props = withDefaults(defineProps<{
   nodeMode: 0,
   upstreamWildcardUuids: () => [],
   downstreamWildcardUuids: () => [],
+  downstreamNestedReachUuids: () => [],
   pairings: () => new Map<string, RowPairings>(),
 });
 
@@ -1990,6 +1998,7 @@ const conflicts = computed<Conflict[]>(() => {
     props.upstreamVars,
     props.upstreamWildcardUuids,
     props.downstreamWildcardUuids,
+    props.downstreamNestedReachUuids,
   );
   // Filter by user's validation-strictness preference. The accessor
   // reads from the same module-level state map the panel onChange

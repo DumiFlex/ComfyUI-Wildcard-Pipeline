@@ -744,6 +744,46 @@ describe("scanConflicts — constraint nested-reach classification", () => {
       out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_")),
     ).toBeUndefined();
   });
+
+  it("target reachable via downstream Context's nested @{} carrier does NOT flag missing", () => {
+    // Constraint at this node targets `aabbccdd`. Target wildcard
+    // doesn't appear locally, upstream, OR as a direct downstream
+    // instance. BUT a downstream Context has a wildcard whose option
+    // value contains `@{aabbccdd}` — the pair badge `↪×N` semantic.
+    // The runtime engine fires the constraint at ref-resolve time on
+    // that nested call, so the scanner must agree by not warning
+    // `constraint_target_missing` for this route.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [constraint("c1", "aaaa1111", "aabbccdd")],
+    };
+    const out = scanConflicts(value, [], ["aaaa1111"], [], ["aabbccdd"]);
+    expect(
+      out.find((c) => c.moduleId === "c1" && c.type.startsWith("constraint_target_")),
+    ).toBeUndefined();
+  });
+
+  it("target reachable ONLY via downstream nested carrier does NOT flag orphan even when also in upstream", () => {
+    // Pair badge would route this constraint through the downstream
+    // via-nested carrier (↪). Scanner must agree — even though target
+    // appears upstream (which would otherwise flag orphan), the
+    // downstream nested-reach satisfies the route. Mirrors `↪×N`:
+    // multiple constraints can share the same carrier without
+    // consuming a slot, so this also suppresses orphan unconditionally.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        constraint("c1", "aaaa1111", "bbbb2222"),
+        constraint("c2", "aaaa1111", "bbbb2222"),
+      ],
+    };
+    const out = scanConflicts(
+      value, [], ["aaaa1111", "bbbb2222"], [], ["bbbb2222"],
+    );
+    expect(
+      out.find((c) => c.type === "constraint_orphan_target"),
+    ).toBeUndefined();
+  });
 });
 
 describe("conflict scanner — instance.variable_binding override", () => {
