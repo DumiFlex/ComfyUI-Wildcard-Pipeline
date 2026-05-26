@@ -32,6 +32,7 @@ const VarPicker = defineAsyncComponent(() => import("../components/var-picker/Va
 interface VarPickerNode extends MountTargetNode, LiteNodeLike {
   properties?: Record<string, unknown>;
   widgets?: { name: string; value: unknown }[];
+  mode?: number;
 }
 
 interface ExecutedDetail {
@@ -86,6 +87,11 @@ export function create(node: VarPickerNode, inputName: string) {
   // nodes that don't fire connection events on us).
   const upstreamVars = reactiveFromGraph(node, () => upstreamVarsOf(node), arraysEqual);
 
+  // Track ComfyUI's litegraph mode (0=ALWAYS, 2=NEVER/mute, 4=BYPASS)
+  // so the widget visually dims to mirror node-level mute/bypass.
+  // Mirrors the cleaner / context / debug widget pattern.
+  const nodeMode = reactiveFromGraph(node, () => node.mode ?? 0, Object.is);
+
   // Last execute payload from the Python node. Stays empty until the
   // workflow runs at least once; flips to live values after each run.
   const previewSource = ref<string>("");
@@ -112,6 +118,7 @@ export function create(node: VarPickerNode, inputName: string) {
           previewSource: hasExecuted.value ? previewSource.value : "",
           previewParsed: hasExecuted.value ? previewParsed.value : null,
           previewDefault: previewDefault.value,
+          nodeMode: nodeMode.value,
           "onUpdate:modelValue": onUpdate,
         });
     },

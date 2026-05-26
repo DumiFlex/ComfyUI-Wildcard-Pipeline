@@ -31,8 +31,11 @@ const props = withDefaults(
     previewSource?: string;
     previewParsed?: string | null;
     previewDefault?: string;
+    /** Litegraph mode: 0 = ALWAYS (live), 2 = NEVER (muted), 4 = BYPASS.
+     *  Drives the dim overlay so canvas-side mute/bypass reads visually. */
+    nodeMode?: number;
   }>(),
-  { previewSource: "", previewParsed: null, previewDefault: "" },
+  { previewSource: "", previewParsed: null, previewDefault: "", nodeMode: 0 },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: string] }>();
@@ -46,6 +49,8 @@ const displayValue = computed<string>(() => {
 
 const hasExecuted = computed<boolean>(() => Boolean(props.previewSource));
 const usedDefault = computed<boolean>(() => props.previewParsed === null);
+const isMuted = computed<boolean>(() => props.nodeMode === 2);
+const isBypassed = computed<boolean>(() => props.nodeMode === 4);
 
 function toggleOpen(): void {
   open.value = !open.value;
@@ -58,7 +63,7 @@ function pick(name: string): void {
 </script>
 
 <template>
-  <div class="wp-var-picker">
+  <div class="wp-var-picker" :class="{ 'wp-var-picker--muted': isMuted, 'wp-var-picker--bypassed': isBypassed }">
     <button
       type="button"
       class="wp-var-picker__trigger"
@@ -194,4 +199,11 @@ function pick(name: string): void {
   color: var(--wp-text-dim, #7a7d88);
   text-align: right;
 }
+
+/* Mute / bypass dim — mirrors how cleaner / context / debug widgets
+ * react to ComfyUI's node.mode flag. Mute (2) is heavier than bypass
+ * (4); bypass usually means "passthrough" so the user might still
+ * tweak settings, mute means "node is dead this run". */
+.wp-var-picker--muted { opacity: 0.45; pointer-events: none; }
+.wp-var-picker--bypassed { opacity: 0.65; }
 </style>
