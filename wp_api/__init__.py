@@ -14,6 +14,7 @@ from wp_api import import_export as _import_export
 from wp_api import modules as _modules
 from wp_api import preview as _preview
 from wp_api import spa as _spa
+from wp_api import templates as _templates
 from wp_api import test_runner as _test_runner
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ def register_routes(app: web.Application) -> None:
 
     _modules.register(app.router)
     _bundles.register(app.router)
+    _templates.register(app.router)
     _categories.register(app.router)
     _test_runner.register(app.router)
     _import_export.register(app.router)
