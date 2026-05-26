@@ -8,7 +8,7 @@ agrees — keeps the two implementations from drifting.
 
 import pytest
 
-from engine.converters import parse_int
+from engine.converters import parse_float, parse_int
 
 
 @pytest.mark.parametrize(
@@ -26,3 +26,20 @@ from engine.converters import parse_int
 )
 def test_parse_int(text, index, default, expected):
     assert parse_int(text, index, default) == expected
+
+
+@pytest.mark.parametrize(
+    "text,index,default,expected",
+    [
+        ("strength: 0.85, scale: 1.5", 0, 0.0, 0.85),
+        ("strength: 0.85, scale: 1.5", 1, 0.0, 1.5),
+        ("1920", 0, 0.0, 1920.0),
+        ("none", 0, 1.0, 1.0),
+        ("3.2e-4", 0, 0.0, 0.00032),
+        ("-1.5 +2.0", 0, 0.0, -1.5),
+        ("", 0, 0.5, 0.5),
+        ("v1.0.0", 2, -1.0, -1.0),
+    ],
+)
+def test_parse_float(text, index, default, expected):
+    assert parse_float(text, index, default) == pytest.approx(expected)
