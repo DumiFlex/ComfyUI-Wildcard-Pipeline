@@ -82,7 +82,11 @@ class WPContextLoop(io.ComfyNode):
                 ),
             ],
             outputs=[
-                PipelineContext.Output("context", is_list=True),
+                # `is_output_list=True` is the V3 contract for emitting a
+                # list that ComfyUI auto-iterates downstream. Not `is_list`
+                # (that was wrong — stub accepted any kwarg, real API
+                # rejects). See `comfy_api/latest/_io.py:Output.__init__`.
+                PipelineContext.Output("context", is_output_list=True),
             ],
             not_idempotent=False,
         )

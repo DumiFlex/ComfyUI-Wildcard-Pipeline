@@ -83,7 +83,11 @@ class _Slot:
     min: Any = None
     max: Any = None
     step: Any = None
-    is_list: bool = False
+    # Real V3 spells this `is_output_list` (see comfy_api/latest/_io.py:Output).
+    # Earlier `is_list` was a copy of the V1 flag name + a stub-only field —
+    # accepted at test time but rejected by real ComfyUI at registration,
+    # which caused EVERY node after WP_ContextLoop to vanish silently.
+    is_output_list: bool = False
     control_after_generate: bool = False
     placeholder: str | None = None
 
@@ -170,12 +174,19 @@ class ComfyTypeIO:
         )
 
     @classmethod
-    def Output(cls, name: str = "", **kwargs: Any) -> _Slot:
+    def Output(cls, name: str = "", is_output_list: bool = False) -> _Slot:
+        """Strict mirror of comfy_api/latest/_io.py:Output.__init__.
+
+        Listed kwargs only — adding `**kwargs` swallowing here once let an
+        invalid `is_list=True` arg slip past pytest while crashing real
+        ComfyUI at `comfy_entrypoint`. Keep this signature in lockstep
+        with the real surface so misnamed kwargs fail loud in tests.
+        """
         return _Slot(
             kind="output",
             type_name=getattr(cls, "_io_type", "CUSTOM"),
             name=name,
-            **kwargs,
+            is_output_list=is_output_list,
         )
 
 
