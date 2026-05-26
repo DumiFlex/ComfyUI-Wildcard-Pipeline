@@ -37,6 +37,12 @@ const props = defineProps<{
   /** Clear the entire template string. Wired to the toolbar trash
    *  button; optional so headless mounts/tests can skip it. */
   onClearTemplate?: () => void;
+  /** Open the save-template-to-library modal. Toolbar Save button;
+   *  disabled when the template is empty. Optional. */
+  onSaveTemplate?: () => void;
+  /** Open the load-template-from-library picker. Toolbar Load button.
+   *  Optional. */
+  onLoadTemplate?: () => void;
   /** Per-var module-kind lookup. When known, each chip renders a
    *  small pi-icon matching the source module's kind (wildcard,
    *  fixed_values, combine, derivation, constraint,
@@ -370,19 +376,46 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
       <div v-else key="content" class="wp-asm-content">
       <div class="wp-asm-section wp-asm-section--vars">
         <span>variables</span>
-        <button
-          v-if="onClearTemplate"
-          type="button"
-          class="wp-asm-clear"
-          :disabled="!props.template"
-          data-test="asm-clear-template-icon"
-          :title="props.template ? 'Clear the entire template' : 'Template already empty'"
-          aria-label="Clear template"
-          @click="onClearTemplate"
-        >
-          <i class="pi pi-trash" aria-hidden="true" />
-          <span>Clear template</span>
-        </button>
+        <div class="wp-asm-toolbtns">
+          <button
+            v-if="onLoadTemplate"
+            type="button"
+            class="wp-asm-clear"
+            data-test="asm-load-template"
+            title="Load a saved template from the library"
+            aria-label="Load template"
+            @click="onLoadTemplate"
+          >
+            <i class="pi pi-folder-open" aria-hidden="true" />
+            <span>Load</span>
+          </button>
+          <button
+            v-if="onSaveTemplate"
+            type="button"
+            class="wp-asm-clear"
+            :disabled="!props.template"
+            data-test="asm-save-template"
+            :title="props.template ? 'Save this template to the library' : 'Template is empty'"
+            aria-label="Save template"
+            @click="onSaveTemplate"
+          >
+            <i class="pi pi-save" aria-hidden="true" />
+            <span>Save</span>
+          </button>
+          <button
+            v-if="onClearTemplate"
+            type="button"
+            class="wp-asm-clear"
+            :disabled="!props.template"
+            data-test="asm-clear-template-icon"
+            :title="props.template ? 'Clear the entire template' : 'Template already empty'"
+            aria-label="Clear template"
+            @click="onClearTemplate"
+          >
+            <i class="pi pi-trash" aria-hidden="true" />
+            <span>Clear template</span>
+          </button>
+        </div>
         <span class="wp-asm-section-stat">
           {{ upstreamNames.length }} upstream
           <template v-if="missing.length">
@@ -527,6 +560,11 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section--vars > .wp-asm-section-stat {
   margin-left: 0;
   justify-self: end;
+}
+.wp-asm-toolbtns {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: center;
 }
 .wp-asm-clear {
   display: inline-flex;

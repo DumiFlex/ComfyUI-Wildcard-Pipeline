@@ -16,6 +16,10 @@ import { reactiveFromGraph } from "../extension/reactive";
 const PREVIEW_SEED = 42;
 
 const AssemblerHelper = defineAsyncComponent(() => import("../components/assembler/AssemblerHelper.vue"));
+// Lazy chunks — only pulled when the user first opens a Save/Load modal,
+// keeping them out of the assembler critical chunk (bundle-size gate).
+const SaveTemplateModal = defineAsyncComponent(() => import("../components/assembler/SaveTemplateModal.vue"));
+const LoadTemplateModal = defineAsyncComponent(() => import("../components/assembler/LoadTemplateModal.vue"));
 
 interface AssemblerNode extends LiteNodeLike, MountTargetNode {
   widgets?: { name: string; value: unknown }[];
@@ -24,6 +28,25 @@ interface AssemblerNode extends LiteNodeLike, MountTargetNode {
 function templateOf(node: AssemblerNode): string {
   const w = node.widgets?.find((x) => x.name === "template");
   return typeof w?.value === "string" ? w.value : "";
+}
+
+/** Overwrite the whole template string. Mirrors `clearTemplate`'s
+ *  el/widget/dispatch shape so litegraph + the SFC both observe the
+ *  change (the native STRING widget's `inputEl` is the source of truth
+ *  when present; the widget `.value` is the serialization fallback). */
+function writeTemplate(node: AssemblerNode, next: string) {
+  const w = node.widgets?.find((x) => x.name === "template") as
+    | { name: string; value: unknown; inputEl?: HTMLTextAreaElement | HTMLInputElement }
+    | undefined;
+  if (!w) return;
+  const el = w.inputEl;
+  if (el) {
+    el.value = next;
+    w.value = next;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+  w.value = next;
 }
 
 interface UpstreamSnapshot {
@@ -183,6 +206,16 @@ export function mountHelper(node: AssemblerNode) {
   let dynamicMinWidth = 320;
   const wrapper: Component = {
     setup() {
+      // Save/Load template modal state. The modals render as siblings of
+      // AssemblerHelper in this same wrapper tree (Teleport keeps them
+      // out of the widget's layout box). `pendingWrite` carries the
+      // load-replace action so the confirm-if-dirty check runs at pick
+      // time against the live template.
+      const saveOpen = ref(false);
+      const loadOpen = ref(false);
+      const saveString = ref("");
+      let pendingWrite: ((tpl: string) => void) | null = null;
+
       // Snapshot is cheap to compute (no fetch); the API-backed roll
       // happens out-of-band, keyed by `chainKey`, and writes its
       // result into `apiResolved`. The component reads whichever has
@@ -377,23 +410,51 @@ export function mountHelper(node: AssemblerNode) {
           kindByVar[k] = v;
         }
 
-        return h(AssemblerHelper, {
-          upstreamVars,
-          templateVars: templateVarsArr,
-          template,
-          resolvedMap: fresh,
-          kindByVar,
-          previewSeed: PREVIEW_SEED,
-          nodeMode: nodeMode.value,
-          onInsert: (token: string) => insertIntoTemplate(node, token),
-          onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
-          onClearTemplate: () => clearTemplate(node),
-          onRequestMinWidth: (w: number) => {
-            if (w === dynamicMinWidth) return;
-            dynamicMinWidth = w;
-            assemblerHost.requestRelayout();
-          },
-        });
+        return [
+          h(AssemblerHelper, {
+            upstreamVars,
+            templateVars: templateVarsArr,
+            template,
+            resolvedMap: fresh,
+            kindByVar,
+            previewSeed: PREVIEW_SEED,
+            nodeMode: nodeMode.value,
+            onInsert: (token: string) => insertIntoTemplate(node, token),
+            onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
+            onClearTemplate: () => clearTemplate(node),
+            onSaveTemplate: () => {
+              saveString.value = templateOf(node);
+              saveOpen.value = true;
+            },
+            onLoadTemplate: () => {
+              pendingWrite = (tpl: string) => {
+                const current = templateOf(node);
+                if (current.trim() && !window.confirm("Replace the current template?")) return;
+                writeTemplate(node, tpl);
+              };
+              loadOpen.value = true;
+            },
+            onRequestMinWidth: (w: number) => {
+              if (w === dynamicMinWidth) return;
+              dynamicMinWidth = w;
+              assemblerHost.requestRelayout();
+            },
+          }),
+          h(SaveTemplateModal, {
+            open: saveOpen.value,
+            templateString: saveString.value,
+            onClose: () => { saveOpen.value = false; },
+            onSaved: () => { saveOpen.value = false; },
+          }),
+          h(LoadTemplateModal, {
+            open: loadOpen.value,
+            onClose: () => { loadOpen.value = false; },
+            onPick: (row: { template_string: string }) => {
+              pendingWrite?.(row.template_string);
+              pendingWrite = null;
+            },
+          }),
+        ];
       };
     },
   };
