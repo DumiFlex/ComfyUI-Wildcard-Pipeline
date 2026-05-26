@@ -91,6 +91,12 @@ def _apply_constraint_to_options(
     src_sub = source_pick.get("sub_category")
 
     # Index exceptions by (source_value, target_value) for O(1) lookup.
+    # Empty string is a valid key — it's the null-option marker (a
+    # wildcard option with `is_null: True` has `value: ""`). So
+    # `{source: "rain", target: ""}` excludes the null option when the
+    # source rolls "rain". The validator allows empty strings on these
+    # fields for the same reason; only fully-missing keys (None on both
+    # legacy + tier-2 names) are rejected upstream.
     exc_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
     for exc in exceptions:
         if not isinstance(exc, dict):

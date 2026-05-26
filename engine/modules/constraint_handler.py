@@ -151,13 +151,20 @@ class ConstraintHandler(ModuleHandler):
                 raise ValueError(
                     f"constraint payload.exceptions[{i}] must be an object"
                 )
-            # Support both legacy (source/target) and tier 2 (source_value/target_value) naming
+            # Support both legacy (source/target) and tier 2 (source_value/target_value) naming.
+            # Empty STRING is allowed — it's the null-option marker (a
+            # wildcard option with `is_null: True` has `value: ""`, and
+            # exceptions targeting that option store `source: ""` /
+            # `target: ""`). Reject only when neither key is present as
+            # a string (genuine missing-data) — that means we don't know
+            # WHICH option the exception was authored against.
             for key_legacy, key_tier2 in (("source", "source_value"), ("target", "target_value")):
-                v = exc.get(key_legacy) or exc.get(key_tier2)
-                if not isinstance(v, str) or not v:
+                v_legacy = exc.get(key_legacy)
+                v_tier2 = exc.get(key_tier2)
+                if not isinstance(v_legacy, str) and not isinstance(v_tier2, str):
                     raise ValueError(
                         f"constraint payload.exceptions[{i}].{key_legacy} must be a "
-                        f"non-empty string"
+                        f"string (empty allowed for null-option matches)"
                     )
             mode = exc.get("mode")
             if mode not in _VALID_MODES:

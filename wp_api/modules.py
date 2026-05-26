@@ -70,16 +70,21 @@ def _hydrate_constraint_exceptions(conn, payload: dict) -> None:
     for exc in excs:
         if not isinstance(exc, dict):
             continue
-        # Skip exceptions that already carry a usable source/target.
-        # Mirror the engine's "legacy or tier-2" check so we only fill
-        # the field the validator would otherwise reject.
-        if not (exc.get("source") or exc.get("source_value")):
+        # Skip exceptions that already carry a usable source/target string
+        # (empty IS valid — it's the null-option marker, see the engine
+        # validator note). Only fill when the field is genuinely absent
+        # (None for both legacy + tier-2 names).
+        legacy_src = exc.get("source")
+        tier_src = exc.get("source_value")
+        if not isinstance(legacy_src, str) and not isinstance(tier_src, str):
             v = _lookup(src_wid, exc.get("source_id"))
-            if v:
+            if v is not None:
                 exc["source_value"] = v
-        if not (exc.get("target") or exc.get("target_value")):
+        legacy_tgt = exc.get("target")
+        tier_tgt = exc.get("target_value")
+        if not isinstance(legacy_tgt, str) and not isinstance(tier_tgt, str):
             v = _lookup(tgt_wid, exc.get("target_id"))
-            if v:
+            if v is not None:
                 exc["target_value"] = v
 
 
