@@ -8,7 +8,14 @@ agrees — keeps the two implementations from drifting.
 
 import pytest
 
-from engine.converters import parse_bool, parse_float, parse_int
+from engine.converters import lookup_var, parse_bool, parse_float, parse_int
+
+
+class _StubCtx:
+    """Mimics the ContextPayload shape — only `.context` is read."""
+
+    def __init__(self, ctx):
+        self.context = ctx
 
 
 @pytest.mark.parametrize(
@@ -60,3 +67,19 @@ def test_parse_float(text, index, default, expected):
 )
 def test_parse_bool(text, index, default, expected):
     assert parse_bool(text, index, default) is expected
+
+
+@pytest.mark.parametrize(
+    "ctx,name,expected",
+    [
+        ({"seed": "1920"}, "$seed", "1920"),
+        ({"seed": "1920"}, "seed", "1920"),  # bare name accepted
+        ({"seed": "1920"}, "$$seed", "1920"),  # multiple $ stripped
+        ({"seed": 42}, "$seed", "42"),  # int coerced to str
+        ({}, "$missing", ""),  # missing → empty
+        ({"x": None}, "$x", ""),  # None → empty
+        ({}, "", ""),  # empty name → empty
+    ],
+)
+def test_lookup_var(ctx, name, expected):
+    assert lookup_var(_StubCtx(ctx), name) == expected

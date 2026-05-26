@@ -8,6 +8,12 @@ Each function:
 """
 
 import re
+from typing import Protocol
+
+
+class _CtxLike(Protocol):
+    context: dict[str, object]
+
 
 _INT_RE = re.compile(r"-?\d+")
 _FLOAT_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
@@ -63,3 +69,18 @@ def parse_bool(text: str, index: int, default: bool) -> bool:
     if index < 0 or index >= len(bools):
         return default
     return bools[index]
+
+
+def lookup_var(context: _CtxLike, name: str) -> str:
+    """Read `name` from `context.context`. Strips leading `$`. Never raises.
+
+    Missing key, `None`, or empty name all collapse to `""` — every parser
+    then falls back to its `default`.
+    """
+    bare = (name or "").lstrip("$").strip()
+    if not bare:
+        return ""
+    value = context.context.get(bare) if context and getattr(context, "context", None) else None
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else str(value)
