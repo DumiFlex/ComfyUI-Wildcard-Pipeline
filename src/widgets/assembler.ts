@@ -20,6 +20,7 @@ const AssemblerHelper = defineAsyncComponent(() => import("../components/assembl
 // keeping them out of the assembler critical chunk (bundle-size gate).
 const SaveTemplateModal = defineAsyncComponent(() => import("../components/assembler/SaveTemplateModal.vue"));
 const LoadTemplateModal = defineAsyncComponent(() => import("../components/assembler/LoadTemplateModal.vue"));
+const ConfirmDialog = defineAsyncComponent(() => import("../components/shared/ConfirmDialog.vue"));
 
 interface AssemblerNode extends LiteNodeLike, MountTargetNode {
   widgets?: { name: string; value: unknown }[];
@@ -247,9 +248,28 @@ export function mountHelper(node: AssemblerNode) {
       // the Save modal's "update existing" target tracks load/save live.
       // Seeded from the persisted ref so it survives workflow reload.
       const loadedRef = ref<LoadedTemplateRef | null>(loadedTemplateRef(node));
-      let pendingWrite:
-        | ((row: { id: string; name: string; template_string: string }) => void)
-        | null = null;
+      // Themed confirm dialog (replaces window.confirm) — drives both the
+      // destructive Clear prompt and the load-over-dirty Replace prompt.
+      const confirmState = ref<{
+        open: boolean;
+        title: string;
+        body: string;
+        variant: "default" | "danger";
+        confirmLabel: string;
+        action: () => void;
+      }>({ open: false, title: "", body: "", variant: "default", confirmLabel: "Confirm", action: () => {} });
+      function askConfirm(opts: {
+        title: string;
+        body: string;
+        variant: "default" | "danger";
+        confirmLabel: string;
+        action: () => void;
+      }): void {
+        confirmState.value = { ...opts, open: true };
+      }
+      function closeConfirm(): void {
+        confirmState.value = { ...confirmState.value, open: false };
+      }
 
       // Snapshot is cheap to compute (no fetch); the API-backed roll
       // happens out-of-band, keyed by `chainKey`, and writes its
@@ -457,23 +477,23 @@ export function mountHelper(node: AssemblerNode) {
             onInsert: (token: string) => insertIntoTemplate(node, token),
             onRemoveVar: (varname: string) => removeFromTemplate(node, varname),
             onClearTemplate: () => {
-              clearTemplate(node);
-              setLoadedTemplateRef(node, null);
-              loadedRef.value = null;
+              askConfirm({
+                title: "Clear the template?",
+                body: "This wipes the entire template text. This can't be undone.",
+                variant: "danger",
+                confirmLabel: "Clear template",
+                action: () => {
+                  clearTemplate(node);
+                  setLoadedTemplateRef(node, null);
+                  loadedRef.value = null;
+                },
+              });
             },
             onSaveTemplate: () => {
               saveString.value = templateOf(node);
               saveOpen.value = true;
             },
             onLoadTemplate: () => {
-              pendingWrite = (row) => {
-                const current = templateOf(node);
-                if (current.trim() && !window.confirm("Replace the current template?")) return;
-                writeTemplate(node, row.template_string);
-                const ref = { id: row.id, name: row.name };
-                setLoadedTemplateRef(node, ref);
-                loadedRef.value = ref;
-              };
               loadOpen.value = true;
             },
             onRequestMinWidth: (w: number) => {
@@ -499,9 +519,38 @@ export function mountHelper(node: AssemblerNode) {
             open: loadOpen.value,
             onClose: () => { loadOpen.value = false; },
             onPick: (row: { id: string; name: string; template_string: string }) => {
-              pendingWrite?.(row);
-              pendingWrite = null;
+              const applyLoad = () => {
+                writeTemplate(node, row.template_string);
+                const ref = { id: row.id, name: row.name };
+                setLoadedTemplateRef(node, ref);
+                loadedRef.value = ref;
+              };
+              // Confirm only when overwriting non-empty work; loading
+              // onto an empty template applies immediately.
+              if (templateOf(node).trim()) {
+                askConfirm({
+                  title: "Replace the current template?",
+                  body: "The assembler's current template will be overwritten by the one you loaded.",
+                  variant: "default",
+                  confirmLabel: "Replace",
+                  action: applyLoad,
+                });
+              } else {
+                applyLoad();
+              }
             },
+          }),
+          h(ConfirmDialog, {
+            visible: confirmState.value.open,
+            title: confirmState.value.title,
+            body: confirmState.value.body,
+            variant: confirmState.value.variant,
+            confirmLabel: confirmState.value.confirmLabel,
+            onConfirm: () => {
+              confirmState.value.action();
+              closeConfirm();
+            },
+            onCancel: closeConfirm,
           }),
         ];
       };
