@@ -1,0 +1,32 @@
+{
+  "parse_int": [
+    {"text": "1920x1080", "index": 0, "default": -1, "expected": 1920},
+    {"text": "1920x1080", "index": 1, "default": -1, "expected": 1080},
+    {"text": "1920x1080", "index": 2, "default": -1, "expected": -1},
+    {"text": "hello", "index": 0, "default": -1, "expected": -1},
+    {"text": "temp -5C", "index": 0, "default": 0, "expected": -5},
+    {"text": "", "index": 0, "default": 7, "expected": 7},
+    {"text": "0 1 2 3", "index": 2, "default": -1, "expected": 2},
+    {"text": "v3.2.1 build 4096", "index": 3, "default": -1, "expected": 4096}
+  ],
+  "parse_float": [
+    {"text": "strength: 0.85, scale: 1.5", "index": 0, "default": 0.0, "expected": 0.85},
+    {"text": "strength: 0.85, scale: 1.5", "index": 1, "default": 0.0, "expected": 1.5},
+    {"text": "1920", "index": 0, "default": 0.0, "expected": 1920.0},
+    {"text": "none", "index": 0, "default": 1.0, "expected": 1.0},
+    {"text": "3.2e-4", "index": 0, "default": 0.0, "expected": 0.00032},
+    {"text": "-1.5 +2.0", "index": 0, "default": 0.0, "expected": -1.5},
+    {"text": "", "index": 0, "default": 0.5, "expected": 0.5},
+    {"text": "v1.0.0", "index": 2, "default": -1.0, "expected": -1.0}
+  ],
+  "parse_bool": [
+    {"text": "true false true", "index": 2, "default": false, "expected": true},
+    {"text": "yes,no,yes", "index": 1, "default": true, "expected": false},
+    {"text": "1 0 1", "index": 0, "default": false, "expected": true},
+    {"text": "1.5", "index": 0, "default": false, "expected": false},
+    {"text": "enabled disabled", "index": 0, "default": true, "expected": true},
+    {"text": "on off ON OFF", "index": 3, "default": false, "expected": false},
+    {"text": "", "index": 0, "default": true, "expected": true},
+    {"text": "yes|no/on;off", "index": 3, "default": true, "expected": false}
+  ]
+}
