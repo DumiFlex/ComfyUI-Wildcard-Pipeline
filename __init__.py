@@ -27,6 +27,9 @@ from wp_nodes.context_node import WPContext
 from wp_nodes.debug_node import WPDebug
 from wp_nodes.injector_node import WPContextInjector
 from wp_nodes.prompt_cleaner import WPPromptCleaner
+from wp_nodes.var_to_bool import WPVarToBool
+from wp_nodes.var_to_float import WPVarToFloat
+from wp_nodes.var_to_int import WPVarToInt
 
 
 class WildcardPipelineExtension(ComfyExtension):
@@ -39,6 +42,9 @@ class WildcardPipelineExtension(ComfyExtension):
             WPDebug,
             WPContextInjector,
             WPPromptCleaner,
+            WPVarToInt,
+            WPVarToFloat,
+            WPVarToBool,
         ]
 
 

@@ -82,6 +82,7 @@ class _Slot:
     socketless: bool = False
     min: Any = None
     max: Any = None
+    step: Any = None
     control_after_generate: bool = False
     placeholder: str | None = None
 
@@ -100,6 +101,8 @@ class _IOType:
 
 
 Int = _IOType("INT")
+Float = _IOType("FLOAT")
+Boolean = _IOType("BOOLEAN")
 String = _IOType("STRING")
 AnyType = _IOType("*")
 
@@ -251,6 +254,8 @@ class _IONamespace:
     Schema = Schema
     NodeOutput = NodeOutput
     Int = Int
+    Float = Float
+    Boolean = Boolean
     String = String
     AnyType = AnyType
     Autogrow = _Autogrow

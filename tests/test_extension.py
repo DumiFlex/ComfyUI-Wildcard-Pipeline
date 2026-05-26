@@ -34,4 +34,7 @@ def test_entrypoint_exposes_all_node_classes():
         "WP_Debug",
         "WP_PromptAssembler",
         "WP_PromptCleaner",
+        "WP_VarToBool",
+        "WP_VarToFloat",
+        "WP_VarToInt",
     ]
