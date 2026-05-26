@@ -324,6 +324,12 @@ def _resolve_ref(
     if module is None:
         if ctx.strict:
             raise UnknownRefError(uuid)
+        # Surface the cached `#name` from the ref token if the original
+        # syntax carried one (`@{uuid#name}`). Lets WP_Debug + RichTextPreview
+        # render a friendly label even when the target wildcard has been
+        # deleted from the library — same fallback chain RichTextPreview
+        # uses for unresolved chips elsewhere.
+        cached_name = tok.meta.get("name") if hasattr(tok, "meta") else None
         _push_warning(
             ctx,
             type="unknown_ref",
@@ -332,8 +338,8 @@ def _resolve_ref(
             source_field="",
             position=tok.start,
             token_index=None,
-            detail={"uuid": uuid, "name": None},
-            message=f"Unknown wildcard ref @{{{uuid}}}",
+            detail={"uuid": uuid, "name": cached_name},
+            message=f"Unknown wildcard ref @{{{uuid}{'#' + cached_name if cached_name else ''}}}",
         )
         return ""
 
