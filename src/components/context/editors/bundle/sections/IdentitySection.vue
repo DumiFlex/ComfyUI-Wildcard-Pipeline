@@ -225,7 +225,7 @@ function onResetColor(): void {
       <div
         v-if="pickerOpen"
         ref="popoverEl"
-        class="bdm-color-popover"
+        class="wp-bdm-color-popover"
         data-test="bdm-color-popover"
         role="dialog"
         aria-label="Custom color picker"
@@ -270,9 +270,9 @@ function onResetColor(): void {
 
 <style>
 /* Unscoped — popover is teleported to body, scoped attribute can't
- * reach it. Class is namespace-prefixed (.bdm-color-*) so global
- * declaration is collision-safe. */
-.bdm-color-popover {
+ * reach it. Class is wp-prefixed so the global declaration is
+ * collision-safe (enforced by pnpm check:css-isolation). */
+.wp-bdm-color-popover {
   position: fixed;
   z-index: 10000;
   width: 240px;
