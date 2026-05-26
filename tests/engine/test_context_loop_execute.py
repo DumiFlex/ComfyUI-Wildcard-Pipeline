@@ -16,6 +16,8 @@ _DEFAULTS = {
     "override_seed": False,
     "iteration_var_name": "iteration",
     "bypass": False,
+    "iteration_internal": False,
+    "total_internal": False,
 }
 
 
@@ -30,14 +32,20 @@ _DEFAULTS = {
             '{"strategy": "sequential", "override_seed": true, '
             '"iteration_var_name": "idx", "bypass": true}',
             {"strategy": "sequential", "override_seed": True,
-             "iteration_var_name": "idx", "bypass": True},
+             "iteration_var_name": "idx", "bypass": True,
+             "iteration_internal": False, "total_internal": False},
         ),
         (
             '{"strategy": "wat", "override_seed": true}',
             {"strategy": "hash_index", "override_seed": True,
-             "iteration_var_name": "iteration", "bypass": False},
+             "iteration_var_name": "iteration", "bypass": False,
+             "iteration_internal": False, "total_internal": False},
         ),
         ('{"iteration_var_name": "   "}', _DEFAULTS),
+        (
+            '{"iteration_internal": true, "total_internal": true}',
+            {**_DEFAULTS, "iteration_internal": True, "total_internal": True},
+        ),
     ],
 )
 def test_parse_config(raw, expected):
@@ -106,3 +114,40 @@ def test_execute_iteration_var_custom_name():
 def test_execute_count_clamps_to_one_min():
     payloads = _execute(42, 0, {})
     assert len(payloads) == 1
+
+
+def test_execute_no_internal_flags_when_off():
+    payloads = _execute(42, 2, {"iteration_var_name": "idx"})
+    for p in payloads:
+        assert "__wp_internal_flags__" not in p.internals
+
+
+def test_execute_iteration_internal_stamps_flag():
+    payloads = _execute(42, 2, {
+        "iteration_var_name": "idx",
+        "iteration_internal": True,
+    })
+    for p in payloads:
+        flags = p.internals["__wp_internal_flags__"]
+        assert flags == {"idx": True}
+
+
+def test_execute_total_internal_stamps_flag():
+    payloads = _execute(42, 2, {
+        "iteration_var_name": "idx",
+        "total_internal": True,
+    })
+    for p in payloads:
+        flags = p.internals["__wp_internal_flags__"]
+        assert flags == {"idx_total": True}
+
+
+def test_execute_both_internal_flags_stamped():
+    payloads = _execute(42, 2, {
+        "iteration_var_name": "iteration",
+        "iteration_internal": True,
+        "total_internal": True,
+    })
+    for p in payloads:
+        flags = p.internals["__wp_internal_flags__"]
+        assert flags == {"iteration": True, "iteration_total": True}

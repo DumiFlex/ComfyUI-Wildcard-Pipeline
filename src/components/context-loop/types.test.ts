@@ -28,6 +28,20 @@ describe("parseContextLoopConfig", () => {
       override_seed: true,
       iteration_var_name: "idx",
       bypass: true,
+      iteration_internal: false,
+      total_internal: false,
+    };
+    expect(parseContextLoopConfig(JSON.stringify(cfg))).toEqual(cfg);
+  });
+
+  it("honors internal flag fields", () => {
+    const cfg: ContextLoopConfig = {
+      strategy: "hash_index",
+      override_seed: false,
+      iteration_var_name: "iteration",
+      bypass: false,
+      iteration_internal: true,
+      total_internal: true,
     };
     expect(parseContextLoopConfig(JSON.stringify(cfg))).toEqual(cfg);
   });
@@ -49,6 +63,8 @@ describe("parseContextLoopConfig", () => {
       override_seed: false,
       iteration_var_name: "loop",
       bypass: true,
+      iteration_internal: false,
+      total_internal: true,
     };
     const round = parseContextLoopConfig(serializeContextLoopConfig(cfg));
     expect(round).toEqual(cfg);

@@ -62,4 +62,25 @@ describe("ContextLoopWidget", () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig(), nodeMode: 4 } });
     expect(w.classes()).toContain("wp-loop--bypassed");
   });
+
+  it("emits iteration_internal toggle on its button click", async () => {
+    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
+    await w.find('[data-test="loop-iteration-internal"]').trigger("click");
+    const emitted = w.emitted("update:modelValue")?.[0]?.[0] as { iteration_internal: boolean };
+    expect(emitted.iteration_internal).toBe(true);
+  });
+
+  it("emits total_internal toggle on its button click", async () => {
+    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
+    await w.find('[data-test="loop-total-internal"]').trigger("click");
+    const emitted = w.emitted("update:modelValue")?.[0]?.[0] as { total_internal: boolean };
+    expect(emitted.total_internal).toBe(true);
+  });
+
+  it("renders internal-on style when flag set", () => {
+    const w = mount(ContextLoopWidget, {
+      props: { modelValue: { ...emptyContextLoopConfig(), iteration_internal: true } },
+    });
+    expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
+  });
 });

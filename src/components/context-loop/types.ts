@@ -13,6 +13,13 @@ export interface ContextLoopConfig {
   override_seed: boolean;
   iteration_var_name: string;
   bypass: boolean;
+  /** When true, `$<iteration_var_name>` is stamped as internal — engine
+   *  propagates it across socket boundaries but the PromptAssembler
+   *  strips it before render. Lets users reference the iteration index
+   *  in Combine / Derivation chains without leaking it into prompts. */
+  iteration_internal: boolean;
+  /** Same idea for `$<iteration_var_name>_total`. */
+  total_internal: boolean;
 }
 
 const STRATEGIES = new Set<LoopStrategy>(["sequential", "hash_index", "prime_stride"]);
@@ -23,6 +30,8 @@ export function emptyContextLoopConfig(): ContextLoopConfig {
     override_seed: false,
     iteration_var_name: "iteration",
     bypass: false,
+    iteration_internal: false,
+    total_internal: false,
   };
 }
 
@@ -49,6 +58,8 @@ export function parseContextLoopConfig(raw: string | null | undefined): ContextL
     out.iteration_var_name = obj.iteration_var_name.trim();
   }
   if (typeof obj.bypass === "boolean") out.bypass = obj.bypass;
+  if (typeof obj.iteration_internal === "boolean") out.iteration_internal = obj.iteration_internal;
+  if (typeof obj.total_internal === "boolean") out.total_internal = obj.total_internal;
   return out;
 }
 

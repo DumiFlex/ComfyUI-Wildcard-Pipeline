@@ -32,6 +32,8 @@ def _parse_config(raw: str) -> dict[str, object]:
         "override_seed": False,
         "iteration_var_name": "iteration",
         "bypass": False,
+        "iteration_internal": False,
+        "total_internal": False,
     }
     if not raw or not isinstance(raw, str):
         return defaults
@@ -49,6 +51,8 @@ def _parse_config(raw: str) -> dict[str, object]:
     if isinstance(name, str) and name.strip():
         out["iteration_var_name"] = name.strip()
     out["bypass"] = bool(parsed.get("bypass", False))
+    out["iteration_internal"] = bool(parsed.get("iteration_internal", False))
+    out["total_internal"] = bool(parsed.get("total_internal", False))
     return out
 
 
@@ -98,6 +102,8 @@ class WPContextLoop(io.ComfyNode):
         strategy = cfg["strategy"]
         iteration_var_name = cfg["iteration_var_name"]
         bypass = bool(cfg["bypass"])
+        iteration_internal = bool(cfg["iteration_internal"])
+        total_internal = bool(cfg["total_internal"])
 
         # Resolve effective count. `bypass` collapses to single-run while
         # preserving the list-shape output contract — downstream still
@@ -109,11 +115,23 @@ class WPContextLoop(io.ComfyNode):
             if has_override else None
         )
 
+        # Build the internal-flags map once — same across iterations
+        # (per-iteration values differ but their internal-ness doesn't).
+        # Engine reads `__wp_internal_flags__` from the payload internals
+        # at downstream merge time; PromptAssembler then strips internal
+        # keys at render so they never leak into prompts.
+        total_var_name = f"{iteration_var_name}_total"
+        internal_flags: dict[str, bool] = {}
+        if iteration_internal:
+            internal_flags[iteration_var_name] = True
+        if total_internal:
+            internal_flags[total_var_name] = True
+
         payloads = []
         for idx in range(effective_count):
             context_vars = {
                 iteration_var_name: str(idx),
-                f"{iteration_var_name}_total": str(effective_count),
+                total_var_name: str(effective_count),
             }
             internals: dict[str, object] = {
                 "__wp_loop_index__": idx,
@@ -124,6 +142,11 @@ class WPContextLoop(io.ComfyNode):
             # widget seeds). WP_Debug renders this only when present.
             if has_override:
                 internals["__wp_loop_seeds__"] = list(derived)
+            if internal_flags:
+                # Merge by-value so successive iterations don't share
+                # the same dict reference; downstream WP_Context copies
+                # internals defensively but explicit copy here is safer.
+                internals["__wp_internal_flags__"] = dict(internal_flags)
             payloads.append(ContextPayload(
                 context=context_vars,
                 debug={},

@@ -53,6 +53,20 @@ function onIterationVarInput(ev: Event): void {
   const v = (ev.target as HTMLInputElement).value;
   emit("update:modelValue", { ...props.modelValue, iteration_var_name: v });
 }
+
+function toggleIterationInternal(): void {
+  emit("update:modelValue", {
+    ...props.modelValue,
+    iteration_internal: !props.modelValue.iteration_internal,
+  });
+}
+
+function toggleTotalInternal(): void {
+  emit("update:modelValue", {
+    ...props.modelValue,
+    total_internal: !props.modelValue.total_internal,
+  });
+}
 </script>
 
 <template>
@@ -110,6 +124,32 @@ function onIterationVarInput(ev: Event): void {
           aria-label="iteration variable name"
           @input="onIterationVarInput"
         />
+        <button
+          type="button"
+          class="wp-loop__pi-btn"
+          :class="{ 'wp-loop__pi-btn--on': modelValue.iteration_internal }"
+          data-test="loop-iteration-internal"
+          :aria-pressed="modelValue.iteration_internal"
+          :title="modelValue.iteration_internal
+            ? `Mark $${modelValue.iteration_var_name} as PUBLIC (renders in prompts)`
+            : `Mark $${modelValue.iteration_var_name} as INTERNAL (engine-only — strips from prompts)`"
+          @click="toggleIterationInternal"
+        >
+          <i class="pi pi-globe" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="wp-loop__pi-btn"
+          :class="{ 'wp-loop__pi-btn--on': modelValue.total_internal }"
+          data-test="loop-total-internal"
+          :aria-pressed="modelValue.total_internal"
+          :title="modelValue.total_internal
+            ? `Mark $${modelValue.iteration_var_name}_total as PUBLIC`
+            : `Mark $${modelValue.iteration_var_name}_total as INTERNAL`"
+          @click="toggleTotalInternal"
+        >
+          <span class="wp-loop__pi-btn-label">Σ</span>
+        </button>
       </div>
     </div>
 
@@ -229,6 +269,30 @@ function onIterationVarInput(ev: Event): void {
   outline: none;
 }
 .wp-loop__var-text:focus { color: var(--wp-text); }
+
+.wp-loop__pi-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--wp-border, #353841);
+  border-radius: 3px;
+  color: var(--wp-text-dim, #7a7d88);
+  cursor: pointer;
+  font: 600 11px var(--wp-font-mono, monospace);
+}
+.wp-loop__pi-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
+.wp-loop__pi-btn--on {
+  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
+  border-color: var(--wp-accent, #c4b5fd);
+  color: var(--wp-accent, #c4b5fd);
+}
+.wp-loop__pi-btn .pi { font-size: 11px; }
+.wp-loop__pi-btn-label { font: 600 12px var(--wp-font-mono, monospace); line-height: 1; }
 
 /* Bypass-on visually dims the strategy/override/var rows since the loop
  * is effectively off. The bypass row itself stays bright. */
