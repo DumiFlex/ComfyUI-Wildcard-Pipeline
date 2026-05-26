@@ -45,8 +45,6 @@ const usedCategories = computed<{ id: string; name: string }[]>(() => {
     .sort((a, b) => a.name.localeCompare(b.name));
 });
 
-const hasFavoritesInData = computed<boolean>(() => rows.value.some((r) => r.is_favorite));
-
 const activePopoverCount = computed<number>(
   () => (selectedCategoryId.value !== null ? 1 : 0) + selectedTags.value.size,
 );
@@ -159,7 +157,6 @@ function pick(row: TemplateRow) {
         </div>
 
         <button
-          v-if="hasFavoritesInData"
           type="button"
           class="wp-ltm__icon-btn"
           :class="{ 'wp-ltm__icon-btn--active': favoritesOnly }"
@@ -170,7 +167,7 @@ function pick(row: TemplateRow) {
           <i :class="['pi', favoritesOnly ? 'pi-star-fill' : 'pi-star']" aria-hidden="true" />
         </button>
 
-        <div v-if="usedCategories.length || availableTags.length" class="wp-ltm__filters-pop">
+        <div class="wp-ltm__filters-pop">
           <button
             type="button"
             class="wp-ltm__icon-btn"
@@ -186,6 +183,9 @@ function pick(row: TemplateRow) {
 
           <Transition name="wp-pop">
             <div v-if="filtersOpen" class="wp-ltm__pop">
+              <div v-if="!usedCategories.length && !availableTags.length" class="wp-ltm__pop-empty">
+                No categories or tags on saved templates yet.
+              </div>
               <div v-if="usedCategories.length" class="wp-ltm__pop-section">
                 <div class="wp-ltm__pop-label">CATEGORY</div>
                 <select
@@ -400,6 +400,7 @@ function pick(row: TemplateRow) {
   color: var(--wp-text3, var(--wp-text-dim)); letter-spacing: 0.08em; font-weight: 600;
 }
 .wp-ltm__pop-hint { font-weight: 400; letter-spacing: 0; font-style: italic; }
+.wp-ltm__pop-empty { font-size: 11px; color: var(--wp-text-dim); padding: 2px 0; }
 .wp-ltm__cat-select {
   width: 100%;
   background: var(--wp-bg, #0e1015);

@@ -50,6 +50,21 @@ describe("LoadTemplateModal", () => {
     expect(visible[0].text()).toContain("landscape");
   });
 
+  it("always shows favorites + filter buttons, even with plain templates", async () => {
+    const { api } = await import("../../manager/api/client");
+    (api.templates.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      items: [{
+        id: "p1", name: "plain", description: "", category_id: null, tags: [],
+        is_favorite: false, template_string: "$x", created_at: "", updated_at: "",
+      }],
+      total: 1,
+    });
+    const w = mount(LoadTemplateModal, { props: { open: true }, ...stubs });
+    await flushPromises();
+    expect(w.find('[data-test="load-tpl-favorites"]').exists()).toBe(true);
+    expect(w.find('[data-test="load-tpl-filter-trigger"]').exists()).toBe(true);
+  });
+
   it("shows empty state when none", async () => {
     const { api } = await import("../../manager/api/client");
     (api.templates.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ items: [], total: 0 });
