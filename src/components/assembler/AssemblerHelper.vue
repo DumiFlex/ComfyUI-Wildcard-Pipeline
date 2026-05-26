@@ -380,7 +380,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           <button
             v-if="onLoadTemplate"
             type="button"
-            class="wp-asm-clear"
+            class="wp-asm-toolbtn"
             data-test="asm-load-template"
             title="Load a saved template from the library"
             aria-label="Load template"
@@ -392,7 +392,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           <button
             v-if="onSaveTemplate"
             type="button"
-            class="wp-asm-clear"
+            class="wp-asm-toolbtn"
             :disabled="!props.template"
             data-test="asm-save-template"
             :title="props.template ? 'Save this template to the library' : 'Template is empty'"
@@ -405,7 +405,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           <button
             v-if="onClearTemplate"
             type="button"
-            class="wp-asm-clear"
+            class="wp-asm-toolbtn wp-asm-toolbtn--danger"
             :disabled="!props.template"
             data-test="asm-clear-template-icon"
             :title="props.template ? 'Clear the entire template' : 'Template already empty'"
@@ -542,11 +542,11 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
 
-/* Clear-template button — sits in the variables section header,
- * centered between the label and the upstream-count stat. Text +
- * icon so the action reads at a glance ("Clear template"). Turns
- * red on hover (destructive). Stays visible-but-disabled when the
- * template is empty so the affordance is always discoverable. */
+/* Toolbar buttons (Load / Save / Clear) — sit in the variables
+ * section header, centered between the label and the upstream-count
+ * stat. Text + icon so each action reads at a glance. Neutral accent
+ * hover; only Clear (--danger) turns red. Stay visible-but-disabled
+ * when the template is empty so the affordances stay discoverable. */
 .wp-asm-section--vars {
   /* 3-column grid lets the clear button center between label
    * (left) and stat (right). Flex + auto-margin couldn't pull
@@ -566,7 +566,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   gap: 6px;
   justify-content: center;
 }
-.wp-asm-clear {
+.wp-asm-toolbtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -580,16 +580,23 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   transition: color var(--wp-motion-quick), border-color var(--wp-motion-quick), background var(--wp-motion-quick);
   white-space: nowrap;
 }
-.wp-asm-clear:hover:not(:disabled) {
+/* Neutral accent hover — Load / Save are non-destructive. */
+.wp-asm-toolbtn:hover:not(:disabled) {
+  color: var(--wp-text);
+  border-color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 10%, transparent);
+}
+/* Destructive hover — Clear only. */
+.wp-asm-toolbtn--danger:hover:not(:disabled) {
   color: var(--wp-danger);
   border-color: color-mix(in srgb, var(--wp-danger) 45%, transparent);
   background: color-mix(in srgb, var(--wp-danger) 10%, transparent);
 }
-.wp-asm-clear:disabled {
+.wp-asm-toolbtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.wp-asm-clear .pi { font-size: 10px; }
+.wp-asm-toolbtn .pi { font-size: 10px; }
 
 /* Empty-state ghost — mirrors injector + debug ghosts. Stacked
  * icon + line + hint, dim color, centered. */
