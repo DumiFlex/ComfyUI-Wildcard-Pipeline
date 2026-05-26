@@ -12,7 +12,13 @@ interface DebugNode extends MountTargetNode {
 }
 
 export function create(node: DebugNode, inputName: string) {
-  const snapshot = ref("");
+  // Snapshots array — populated by `onExecuted` below. With a single
+  // PIPELINE_CONTEXT upstream we get one snapshot per run; when a
+  // WP_ContextLoop is upstream, ComfyUI iterates the chain N times and
+  // ui.wp_debug_snapshot arrives as an N-item array. Iteration picker
+  // lets the user step between them.
+  const snapshots = ref<string[]>([]);
+  const activeIdx = ref<number>(0);
   // State-driven minWidth — seed with the no-filter-visible value;
   // DebugViewer's `request-min-width` emit updates this when the user
   // switches tabs (trace/picks tabs reveal the filter input which
@@ -27,8 +33,13 @@ export function create(node: DebugNode, inputName: string) {
         Object.is,
       );
       return () => h(DebugViewer, {
-        snapshot: snapshot.value,
+        snapshot: snapshots.value[activeIdx.value] ?? "",
+        iterationCount: snapshots.value.length,
+        iterationIndex: activeIdx.value,
         nodeMode: nodeMode.value,
+        "onUpdate:iterationIndex": (next: number) => {
+          if (next >= 0 && next < snapshots.value.length) activeIdx.value = next;
+        },
         onRequestMinWidth: (w: number) => {
           if (w === dynamicMinWidth) return;
           dynamicMinWidth = w;
@@ -58,7 +69,14 @@ export function create(node: DebugNode, inputName: string) {
   node.onExecuted = function (output) {
     orig?.call(this, output);
     const snap = output?.wp_debug_snapshot;
-    if (Array.isArray(snap) && typeof snap[0] === "string") snapshot.value = snap[0];
+    if (!Array.isArray(snap)) return;
+    const next = snap.filter((s): s is string => typeof s === "string");
+    if (next.length === 0) return;
+    snapshots.value = next;
+    // Reset active index to 0 on a fresh run so the user sees the
+    // first iteration immediately. Preserve `activeIdx` only when the
+    // same count came back (rare — N stays stable across rerun).
+    if (activeIdx.value >= next.length) activeIdx.value = 0;
   };
   return host;
 }

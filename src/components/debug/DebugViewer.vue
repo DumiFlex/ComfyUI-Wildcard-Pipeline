@@ -11,8 +11,14 @@ const props = withDefaults(
      *  the dim overlay so muted/bypassed state matches litegraph's
      *  native title/border dim. */
     nodeMode?: number;
+    /** Total iterations available from the last run. 1 = single-shot
+     *  (no loop upstream); >1 means a WP_ContextLoop fed N contexts
+     *  and the widget shows an iteration picker. */
+    iterationCount?: number;
+    /** 0-based index of the currently-displayed iteration. */
+    iterationIndex?: number;
   }>(),
-  { nodeMode: 0 },
+  { nodeMode: 0, iterationCount: 1, iterationIndex: 0 },
 );
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -24,7 +30,18 @@ const emit = defineEmits<{
    *  pattern InjectorWidget uses — no DOM measurements, just CSS
    *  knowns summed against current state. */
   (e: "request-min-width", w: number): void;
+  /** Switch displayed iteration (0..iterationCount-1). Mount glue
+   *  swaps the active snapshot from the cached batch. */
+  (e: "update:iterationIndex", idx: number): void;
 }>();
+
+const hasMultipleIterations = computed(() => props.iterationCount > 1);
+
+function gotoIteration(next: number): void {
+  if (next < 0 || next >= props.iterationCount) return;
+  if (next === props.iterationIndex) return;
+  emit("update:iterationIndex", next);
+}
 
 type TabId = "snapshot" | "trace" | "picks" | "warnings";
 
@@ -1101,6 +1118,36 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
 
 <template>
   <div class="wp-debug" :class="{ 'wp-debug--skipped': isSkipped }">
+    <!-- Iteration picker — only shown when upstream WP_ContextLoop fed
+         multiple PIPELINE_CONTEXT items into this debug node. Walks
+         the cached snapshot batch; each click swaps the active snapshot
+         the rest of the viewer reads from. -->
+    <div
+      v-if="hasMultipleIterations"
+      class="wp-dbg-iter-bar"
+      role="navigation"
+      aria-label="loop iteration picker"
+    >
+      <button
+        type="button"
+        class="wp-dbg-iter-btn"
+        :disabled="iterationIndex <= 0"
+        data-test="dbg-iter-prev"
+        title="Previous iteration"
+        @click="gotoIteration(iterationIndex - 1)"
+      >‹</button>
+      <span class="wp-dbg-iter-label" data-test="dbg-iter-label">
+        iter {{ iterationIndex + 1 }} of {{ iterationCount }}
+      </span>
+      <button
+        type="button"
+        class="wp-dbg-iter-btn"
+        :disabled="iterationIndex >= iterationCount - 1"
+        data-test="dbg-iter-next"
+        title="Next iteration"
+        @click="gotoIteration(iterationIndex + 1)"
+      >›</button>
+    </div>
     <div v-if="parsed" class="wp-dbg-tabs" role="tablist">
       <button
         v-for="t in TABS"
@@ -1439,6 +1486,50 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
 /* Mute (mode 2) / bypass (mode 4) — dim widget body so the muted
  * state matches litegraph's native node-frame dim. */
 .wp-debug--skipped { opacity: 0.45; }
+/* Iteration picker bar — appears above the tab strip when upstream
+ * WP_ContextLoop emitted a list of contexts. Width-stable across
+ * iteration counts (chevrons + center label). */
+.wp-dbg-iter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
+  border-bottom: 1px solid var(--wp-border, #353841);
+}
+.wp-dbg-iter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid var(--wp-border, #353841);
+  border-radius: 3px;
+  color: var(--wp-text-muted, #aeb1bb);
+  cursor: pointer;
+  font: 600 14px var(--wp-font-mono, monospace);
+  line-height: 1;
+  padding: 0;
+}
+.wp-dbg-iter-btn:hover:not(:disabled) {
+  color: var(--wp-text);
+  border-color: var(--wp-border-strong, #4a4d55);
+}
+.wp-dbg-iter-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.wp-dbg-iter-label {
+  font: 600 10px var(--wp-font-sans, sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-accent, #c4b5fd);
+  min-width: 100px;
+  text-align: center;
+}
+
 .wp-dbg-tabs {
   display: flex;
   gap: 2px;
