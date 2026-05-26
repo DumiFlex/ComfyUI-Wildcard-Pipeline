@@ -460,12 +460,22 @@ class PipelineEngine:
                     target_uuid, modules, catalog,
                 )
                 if present:
+                    # Target IS in the chain. With the carrier-claim
+                    # failsafe, any carrier/instance that ROLLS after the
+                    # constraint registers claims it — so reaching this
+                    # branch means the target's only appearance(s) ran
+                    # BEFORE this constraint registered (e.g. a source
+                    # wildcard that nests its own @{target}), or live in
+                    # a branch / Context this run didn't execute, or are
+                    # disabled. Deliberately NOT prescribing "move the
+                    # constraint up" — that's wrong when the target's
+                    # carrier is also the constraint's source (the source
+                    # must stay upstream of the constraint).
                     message = (
                         f"constraint @{{{cid}}} did not apply — its target "
-                        f"@{{{target_uuid}}} exists in the chain but wasn't "
-                        f"claimed (it rolled before this constraint registered, "
-                        f"or sits in a separate branch). Move the constraint "
-                        f"above the target's first appearance."
+                        f"@{{{target_uuid}}} is in the chain but every appearance "
+                        f"resolved before this constraint registered, or is "
+                        f"disabled / in a branch this run skipped."
                     )
                 else:
                     message = (

@@ -317,6 +317,57 @@ def test_carrier_claims_constraint_no_spill_to_later_instance():
     )
 
 
+def test_carrier_claims_on_null_empty_pick():
+    """Regression (2026-05-26): a carrier that rolls its `null` /
+    empty-value option still claims its carried constraints. The bug
+    was the wildcard handler's empty-value early-return skipping the
+    claim_carrier_constraints call (it sat only after resolve_text), so
+    a null backdrop pick let the constraint surface a misleading
+    never_applied warning + spill.
+
+    Chain: shirt → shirt_x_color → backdrop (ONLY option is empty/null,
+    but it CARRIES @{color} via a weight-0 option so it's statically a
+    carrier). The constraint must be consumed-as-skipped, zero
+    never_applied warnings."""
+    SHIRT = "b2b2b2b2"
+    COLOR = "a361dbdc"
+    BACKDROP = "b0b0b0b0"
+    CN = "cc222222"
+    modules = [
+        _wildcard(SHIRT, "shirt", [
+            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+        ]),
+        _constraint(
+            CN, SHIRT, COLOR,
+            matrix={"casual": {"warm": {"mode": "exclude", "factor": 1}}},
+        ),
+        # Backdrop: the winning option is empty (null), but a weight-0
+        # option carries @{color} → backdrop is a carrier of color.
+        _wildcard(BACKDROP, "backdrop", [
+            {"id": "bd_null", "value": "", "weight": 1},
+            {"id": "bd_color", "value": f"@{{{COLOR}}}", "weight": 0},
+        ]),
+    ]
+    catalog = {
+        COLOR: _wildcard(COLOR, "color", [
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+        ]),
+    }
+    for seed in (0, 1, 7, 42, 99):
+        ctx = {"__wp_catalog__": dict(catalog)}
+        ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
+        consumed = ctx.get("__wp_consumed_constraints__", set())
+        warns = [
+            w for w in ctx.get("__wp_warnings__", [])
+            if w.get("type") == "constraint_never_applied"
+        ]
+        assert CN in consumed, (
+            f"seed {seed}: carrier rolled null but didn't claim the constraint"
+        )
+        assert warns == [], f"seed {seed}: unexpected warnings {warns}"
+
+
 def test_carrier_claim_noop_when_source_not_picked():
     """The carrier only claims when the constraint's source is already
     picked. If the source rolls AFTER the carrier, the carrier must NOT
@@ -386,7 +437,7 @@ def test_never_applied_message_distinguishes_present_vs_absent():
         if x.get("type") == "constraint_never_applied"
     )
     assert w["detail"]["target_present"] is True
-    assert "exists in the chain" in w["message"]
+    assert "is in the chain" in w["message"]
 
 
 # ─────────────────────────────────────────────────────────────────────

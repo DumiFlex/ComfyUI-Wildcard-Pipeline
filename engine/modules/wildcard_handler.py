@@ -444,8 +444,39 @@ class WildcardHandler(ModuleHandler):
         # constraint exception keys on the literal empty pick value).
         _record_pick(ctx, chosen)
 
+        # First-instance positional-claim failsafe. This wildcard may
+        # CARRY a constraint's target via an `@{target}` ref in one of
+        # its options. The pair badge already assigned the constraint to
+        # this carrier, so once the carrier ROLLS — regardless of which
+        # option won, including the `null` / empty-value option — it
+        # claims the constraint so it doesn't spill onto a later target
+        # instance. `claim_carrier_constraints` is a no-op when the
+        # chosen option DID resolve the ref (the nested-resolve path
+        # below already consumed it) or the source isn't picked yet.
+        #
+        # CRITICAL: must fire on EVERY roll path, including the
+        # empty-value early return — a backdrop that rolls its `null`
+        # option still "rolled" and must still claim its carried
+        # constraints. The 2026-05-26 bug was calling this only after
+        # resolve_text, so a null/empty pick skipped the claim and the
+        # constraint either spilled or surfaced a misleading
+        # never_applied warning.
+        def _claim_carried() -> None:
+            if ctx is None:
+                return
+            from engine.modules._constraints import claim_carrier_constraints
+            claim_carrier_constraints(
+                options,
+                ctx.get("__wp_constraints__"),
+                ctx.get("__wp_picks__"),
+                ctx.get("__wp_consumed_constraints__"),
+            )
+
         value = str(chosen.get("value", ""))
         if not value:
+            # Empty / null pick — no ref to resolve, but the carrier
+            # still rolled, so claim before returning.
+            _claim_carried()
             return {binding: ""}
 
         # Swap `ctx['__wp_rng__']` to the per-module rng for the
@@ -468,21 +499,8 @@ class WildcardHandler(ModuleHandler):
         finally:
             ctx["__wp_rng__"] = saved_rng
 
-        # First-instance positional-claim failsafe: this wildcard may
-        # CARRY a constraint's target via an `@{target}` ref in one of
-        # its options. If the chosen option happened to omit that ref,
-        # the nested-resolve path above didn't consume the constraint —
-        # but the pair badge already assigned the constraint to this
-        # carrier. Claim it (consume-as-skipped) so it doesn't spill
-        # onto a later target instance. No-op when the chosen option
-        # DID resolve the ref (already consumed) or the source isn't
-        # picked yet. See `_constraints.claim_carrier_constraints`.
-        if ctx is not None:
-            from engine.modules._constraints import claim_carrier_constraints
-            claim_carrier_constraints(
-                options,
-                ctx.get("__wp_constraints__"),
-                ctx.get("__wp_picks__"),
-                ctx.get("__wp_consumed_constraints__"),
-            )
+        # Claim AFTER resolve_text so a chosen option that DID carry the
+        # ref gets consumed-with-effect by the nested-resolve path
+        # first; the claim then no-ops on it.
+        _claim_carried()
         return {binding: resolved}
