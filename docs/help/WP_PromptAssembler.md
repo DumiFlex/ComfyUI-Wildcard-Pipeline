@@ -28,6 +28,13 @@ Below the template, the **Variables** strip lists every value available from ups
 - purple highlight = resolved value
 - amber wavy underline = missing variable (will render empty)
 
+## Save / Load template
+
+Two toolbar buttons next to **Clear template**:
+
+- **Save** — stores the current template string in the library. Pick a name (plus optional category/tags/description); saving with an existing name updates that entry. Manage saved templates in the SPA **Templates** tab.
+- **Load** — opens a searchable picker of saved templates. Choosing one replaces the current template (confirms first if you've already typed something). Any `$vars` the loaded template needs that aren't in the upstream chain show as the usual amber "missing" markers.
+
 ## Tips
 
 - Use `$$` for a literal `$` in your prompt.
