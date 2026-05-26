@@ -399,3 +399,45 @@ def build_payload(
         },
         internals=internals,
     )
+
+
+@comfytype(io_type="WP_VAR_PICKER")
+class VarPickerInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_VAR_PICKER"]``.
+
+    The widget renders a dropdown of upstream ``$var`` names + a live
+    parse preview strip. Stored as a plain string property
+    (``node.properties["var_name"]``) carrying the ``"$seed"`` form;
+    Python ``lookup_var`` strips the leading ``$`` on read.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,
+                None,
+                extra_dict,
+                raw_link,
+                advanced,
+            )
