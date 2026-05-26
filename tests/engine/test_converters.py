@@ -8,7 +8,7 @@ agrees — keeps the two implementations from drifting.
 
 import pytest
 
-from engine.converters import parse_float, parse_int
+from engine.converters import parse_bool, parse_float, parse_int
 
 
 @pytest.mark.parametrize(
@@ -43,3 +43,20 @@ def test_parse_int(text, index, default, expected):
 )
 def test_parse_float(text, index, default, expected):
     assert parse_float(text, index, default) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "text,index,default,expected",
+    [
+        ("true false true", 2, False, True),
+        ("yes,no,yes", 1, True, False),
+        ("1 0 1", 0, False, True),
+        ("1.5", 0, False, False),  # 1.5 is NOT a bool token
+        ("enabled disabled", 0, True, True),  # neither token matches → default
+        ("on off ON OFF", 3, False, False),  # case-insensitive
+        ("", 0, True, True),
+        ("yes|no/on;off", 3, True, False),  # multi-separator split
+    ],
+)
+def test_parse_bool(text, index, default, expected):
+    assert parse_bool(text, index, default) is expected

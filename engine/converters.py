@@ -11,6 +11,9 @@ import re
 
 _INT_RE = re.compile(r"-?\d+")
 _FLOAT_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+_BOOL_SPLIT_RE = re.compile(r"[\s,;|/]+")
+_TRUTHY: frozenset[str] = frozenset({"true", "yes", "on", "1"})
+_FALSY: frozenset[str] = frozenset({"false", "no", "off", "0"})
 
 
 def parse_int(text: str, index: int, default: int) -> int:
@@ -37,3 +40,26 @@ def parse_float(text: str, index: int, default: float) -> float:
         return float(matches[index])
     except ValueError:
         return default
+
+
+def parse_bool(text: str, index: int, default: bool) -> bool:
+    """Return the Nth bool token from `text`, or `default`.
+
+    Tokens are produced by splitting on `[\\s,;|/]+`. Each token is
+    matched case-insensitively against the truthy/falsy sets. Tokens
+    that match neither (e.g. `"1.5"`, `"enabled"`) are skipped — they
+    don't consume an index slot.
+    """
+    if not text:
+        return default
+    tokens = _BOOL_SPLIT_RE.split(text)
+    bools: list[bool] = []
+    for tok in tokens:
+        low = tok.lower()
+        if low in _TRUTHY:
+            bools.append(True)
+        elif low in _FALSY:
+            bools.append(False)
+    if index < 0 or index >= len(bools):
+        return default
+    return bools[index]
