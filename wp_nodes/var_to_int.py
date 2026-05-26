@@ -39,4 +39,26 @@ class WPVarToInt(io.ComfyNode):
     @classmethod
     def execute(cls, context, var_name, index, default):
         text = lookup_var(context, var_name)
-        return io.NodeOutput(parse_int(text, index, default))
+        value = parse_int(text, index, default)
+        # Detect "fell back to default" via sentinel-default trick: run
+        # parser twice with distinct defaults; if both return the same
+        # value the parser hit a real match (defaults never read). If
+        # they differ, the parser returned each default → fallback path.
+        # Same trick the TS preview uses for parse_bool. Robust against
+        # `parse_int("0 1 2", 0, 0) → 0` looking like a fallback.
+        a = parse_int(text, index, 0)
+        b = parse_int(text, index, 1)
+        matched = a == b
+        # `wp_varpicker_*` UI payload feeds the widget's "last execute"
+        # strip. Static client-side preview would lie for wildcard
+        # template vars (e.g. `{1|2|3}` parses to `1` while the engine
+        # rolls a real pick) — sending the resolved source + parsed
+        # output back from execute() gives the user the truth.
+        return io.NodeOutput(
+            value,
+            ui={
+                "wp_varpicker_source": [text],
+                "wp_varpicker_parsed": [str(value) if matched else None],
+                "wp_varpicker_default": [str(default)],
+            },
+        )

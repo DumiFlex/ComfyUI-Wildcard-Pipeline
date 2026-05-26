@@ -7,31 +7,25 @@
  * State sources:
  *  - `node.properties.var_name` — persisted "$seed" string (workflow JSON)
  *  - upstream graph walk via `collectUpstreamVariables` — refreshed by
- *    the standard `reactiveFromGraph` poll (~400ms) + connection events
- *  - the chosen var's RESOLVED value (post-wildcard-roll) — pulled from
- *    the upstream context snapshot the assembler already computes; we
- *    re-use the same helper (`collectUpstreamResolved`) so the preview
- *    matches what the engine will see at run time.
- *  - parsed preview value — computed locally via the TS mirror parser
- *    (`parser.ts`) so the widget is responsive without server round trips.
- *
- * The kind of parser to run is selected by inspecting `node.type`:
- *   WP_VarToInt  → parseInt
- *   WP_VarToFloat→ parseFloat
- *   WP_VarToBool → parseBool
+ *    the standard `reactiveFromGraph` poll (~400ms) + connection events.
+ *    Drives the dropdown of available `$vars`.
+ *  - `executed` event from ComfyUI's API — the Python node emits a
+ *    `wp_varpicker_*` UI payload on every run; the widget mirrors that
+ *    into its `last execute` strip. Static client-side parsing was
+ *    misleading for wildcard-template vars (e.g. `{1|2|3}` parses to
+ *    `1` while the engine rolls a real pick), so we now only show
+ *    what actually came out of the engine.
  */
-import { defineAsyncComponent, h, type Component } from "vue";
+import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import {
-  collectUpstreamResolved,
   collectUpstreamVariables,
   findRootGraph,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
 import { reactiveFromGraph } from "../extension/reactive";
-import { parseBool, parseFloat as parseFloatStr, parseInt as parseIntStr } from "../components/var-picker/parser";
 
 const VarPicker = defineAsyncComponent(() => import("../components/var-picker/VarPicker.vue"));
 
@@ -40,17 +34,13 @@ interface VarPickerNode extends MountTargetNode, LiteNodeLike {
   widgets?: { name: string; value: unknown }[];
 }
 
-interface PickerSnapshot {
-  upstreamVars: string[];
-  previewSource: string;
-  previewParsed: string | null;
-  previewDefault: string;
+interface ExecutedDetail {
+  node: string | number;
+  output?: Record<string, unknown> | null;
 }
 
-function indexOf(node: VarPickerNode): number {
-  const w = node.widgets?.find((x) => x.name === "index");
-  const n = Number(w?.value);
-  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+interface ExecutedEvent extends Event {
+  detail?: ExecutedDetail;
 }
 
 function defaultStr(node: VarPickerNode): string {
@@ -58,77 +48,51 @@ function defaultStr(node: VarPickerNode): string {
   return w?.value === undefined ? "" : String(w.value);
 }
 
-function previewParsedFor(node: VarPickerNode, source: string): string | null {
-  if (!source) return null;
-  const idx = indexOf(node);
-  if (node.type === "WP_VarToInt") {
-    const parsed = parseIntStr(source, idx, Number.NaN);
-    return Number.isNaN(parsed) ? null : String(parsed);
-  }
-  if (node.type === "WP_VarToFloat") {
-    const parsed = parseFloatStr(source, idx, Number.NaN);
-    return Number.isNaN(parsed) ? null : String(parsed);
-  }
-  if (node.type === "WP_VarToBool") {
-    // Distinguish "fell back to default" from "parsed False": run twice
-    // with sentinel defaults; mismatch means no real bool token at idx.
-    const a = parseBool(source, idx, true);
-    const b = parseBool(source, idx, false);
-    if (a === b) return String(a);
-    return null;
-  }
-  return null;
-}
-
-function snapshotsEqual(a: PickerSnapshot, b: PickerSnapshot): boolean {
-  if (a.previewSource !== b.previewSource) return false;
-  if (a.previewParsed !== b.previewParsed) return false;
-  if (a.previewDefault !== b.previewDefault) return false;
-  if (a.upstreamVars.length !== b.upstreamVars.length) return false;
-  for (let i = 0; i < a.upstreamVars.length; i++) {
-    if (a.upstreamVars[i] !== b.upstreamVars[i]) return false;
-  }
-  return true;
-}
-
-function computeSnapshot(node: VarPickerNode): PickerSnapshot {
+function upstreamVarsOf(node: VarPickerNode): string[] {
   const startGraph =
     (node as unknown as { graph?: LiteGraphLike }).graph
     ?? (app.graph as unknown as LiteGraphLike);
-  if (!startGraph) {
-    return { upstreamVars: [], previewSource: "", previewParsed: null, previewDefault: defaultStr(node) };
-  }
+  if (!startGraph) return [];
   const root = findRootGraph(startGraph);
-  const upstreamVars = collectUpstreamVariables(root, node).map((n) => `$${n}`);
-  const resolved = (collectUpstreamResolved(root, node) ?? {}) as Record<string, string | undefined>;
-  const bare = String(node.properties?.var_name ?? "").replace(/^\$+/, "");
-  const src = bare && bare in resolved ? String(resolved[bare] ?? "") : "";
-  return {
-    upstreamVars,
-    previewSource: src,
-    previewParsed: previewParsedFor(node, src),
-    previewDefault: defaultStr(node),
-  };
+  return collectUpstreamVariables(root, node).map((n) => `$${n}`);
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** Read the first non-undefined value out of an executed-event payload.
+ *  ComfyUI normalises ui dicts under either `output.<key>` (array) or
+ *  `output.ui.<key>` (array) depending on version + node-kind path. */
+function pickFirst(obj: Record<string, unknown>, key: string): unknown {
+  const direct = obj[key];
+  if (direct !== undefined) return Array.isArray(direct) ? direct[0] : direct;
+  const ui = obj.ui as Record<string, unknown> | undefined;
+  if (ui) {
+    const fromUi = ui[key];
+    if (fromUi !== undefined) return Array.isArray(fromUi) ? fromUi[0] : fromUi;
+  }
+  return undefined;
 }
 
 export function create(node: VarPickerNode, inputName: string) {
   if (!node.properties) node.properties = {};
   if (typeof node.properties.var_name !== "string") node.properties.var_name = "";
 
-  // Reactive snapshot — refreshes on connection events + 400ms poll
-  // + workflow-load. Recomputes upstream vars, source value, parsed
-  // preview, and default literal in one pass so the SFC always reads
-  // a consistent view.
-  const snapshot = reactiveFromGraph(node, () => computeSnapshot(node), snapshotsEqual);
+  // Reactive list of available upstream `$vars`. Refreshes on graph
+  // events + 400ms poll (handles wildcard-name edits in upstream Context
+  // nodes that don't fire connection events on us).
+  const upstreamVars = reactiveFromGraph(node, () => upstreamVarsOf(node), arraysEqual);
 
-  // Forward-declared so the wrapper's onUpdate closure can call
-  // `host.setValue(next)` and keep ComfyUI's widget state aligned with
-  // `node.properties.var_name`. Without `setValue`, the host's internal
-  // `state` stays at its initial empty string and `execute()` receives
-  // `""` regardless of what the user picked — preview would look right
-  // (it reads `node.properties` directly) but the node would always
-  // fall through to `default`. Closure binding resolves to the assigned
-  // value by the time the user fires a pick.
+  // Last execute payload from the Python node. Stays empty until the
+  // workflow runs at least once; flips to live values after each run.
+  const previewSource = ref<string>("");
+  const previewParsed = ref<string | null>(null);
+  const previewDefault = ref<string>(defaultStr(node));
+  const hasExecuted = ref<boolean>(false);
+
   let host: DomWidgetHost | null = null;
 
   const wrapper: Component = {
@@ -136,21 +100,18 @@ export function create(node: VarPickerNode, inputName: string) {
       function onUpdate(next: string): void {
         if (!node.properties) node.properties = {};
         node.properties.var_name = next;
-        // Keep host.state in lock-step with node.properties so getValue
-        // (which feeds ComfyUI's execute kwargs) returns the picked
-        // name, not the initial empty string.
+        // Keep host.state in sync so getValue (which feeds ComfyUI's
+        // execute kwargs) returns the picked name, not the initial
+        // empty string.
         host?.setValue(next);
-        // Trigger an immediate snapshot refresh so the preview updates
-        // without waiting for the 400ms poll.
-        snapshot.value = computeSnapshot(node);
       }
       return () =>
         h(VarPicker, {
           modelValue: String(node.properties?.var_name ?? ""),
-          upstreamVars: snapshot.value.upstreamVars,
-          previewSource: snapshot.value.previewSource,
-          previewParsed: snapshot.value.previewParsed,
-          previewDefault: snapshot.value.previewDefault,
+          upstreamVars: upstreamVars.value,
+          previewSource: hasExecuted.value ? previewSource.value : "",
+          previewParsed: hasExecuted.value ? previewParsed.value : null,
+          previewDefault: previewDefault.value,
           "onUpdate:modelValue": onUpdate,
         });
     },
@@ -159,16 +120,37 @@ export function create(node: VarPickerNode, inputName: string) {
   host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: String(node.properties?.var_name ?? ""),
     onValueRestored: (v: string) => {
-      // ComfyUI restored the widget value from workflow JSON. Mirror
-      // it back into node.properties so downstream code reading either
-      // path sees the same value. `host.state` is already in sync —
-      // ComfyUI's restore path sets it before calling this hook.
       if (!node.properties) node.properties = {};
       node.properties.var_name = v;
-      snapshot.value = computeSnapshot(node);
     },
     minHeight: 92,
     minWidth: 260,
   });
+
+  // Subscribe to ComfyUI's "executed" event so the widget's `last
+  // execute` strip mirrors what the Python node actually produced this
+  // run. The matching `wp_varpicker_*` UI payload is emitted from
+  // `wp_nodes/var_to_{int,float,bool}.py:execute()`.
+  function onExecuted(ev: Event): void {
+    const detail = (ev as ExecutedEvent).detail;
+    if (!detail || String(detail.node) !== String(node.id)) return;
+    if (!detail.output || typeof detail.output !== "object") return;
+    const out = detail.output as Record<string, unknown>;
+    const src = pickFirst(out, "wp_varpicker_source");
+    const parsed = pickFirst(out, "wp_varpicker_parsed");
+    const def = pickFirst(out, "wp_varpicker_default");
+    if (typeof src === "string") previewSource.value = src;
+    // Python sends `null` when the parser fell back to default — keep
+    // the null so the SFC paints the amber "default" state.
+    previewParsed.value = typeof parsed === "string" ? parsed : null;
+    if (typeof def === "string") previewDefault.value = def;
+    hasExecuted.value = true;
+  }
+  const apiObj = (app as unknown as { api?: {
+    addEventListener: (n: string, fn: (e: Event) => void) => void;
+    removeEventListener: (n: string, fn: (e: Event) => void) => void;
+  } }).api;
+  apiObj?.addEventListener("executed", onExecuted);
+
   return host;
 }

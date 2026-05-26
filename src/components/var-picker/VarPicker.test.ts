@@ -36,16 +36,26 @@ describe("VarPicker", () => {
     });
     const preview = w.find('[data-test="var-picker-preview"]');
     expect(preview.classes()).not.toContain("wp-var-picker__preview--default");
+    expect(preview.classes()).not.toContain("wp-var-picker__preview--idle");
     expect(preview.text()).toContain("→ 1920");
   });
 
-  it("shows the default fallback in amber when previewParsed is null", () => {
+  it("shows the default fallback in amber when previewParsed is null + source present", () => {
     const w = mount(VarPicker, {
       props: { modelValue: "$seed", upstreamVars: ["$seed"], previewSource: "hello", previewParsed: null, previewDefault: "0" },
     });
     const preview = w.find('[data-test="var-picker-preview"]');
     expect(preview.classes()).toContain("wp-var-picker__preview--default");
     expect(preview.text()).toContain("→ default (0)");
+  });
+
+  it("shows the idle state when previewSource is empty (no execute yet)", () => {
+    const w = mount(VarPicker, {
+      props: { modelValue: "$seed", upstreamVars: ["$seed"], previewSource: "", previewParsed: null, previewDefault: "0" },
+    });
+    const preview = w.find('[data-test="var-picker-preview"]');
+    expect(preview.classes()).toContain("wp-var-picker__preview--idle");
+    expect(preview.text()).toContain("run workflow to see result");
   });
 
   it("shows the empty-state message when no upstream vars exist", async () => {

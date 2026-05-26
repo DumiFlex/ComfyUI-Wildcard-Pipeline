@@ -44,6 +44,7 @@ const displayValue = computed<string>(() => {
   return v && v.length > 0 ? v : "(no var selected)";
 });
 
+const hasExecuted = computed<boolean>(() => Boolean(props.previewSource));
 const usedDefault = computed<boolean>(() => props.previewParsed === null);
 
 function toggleOpen(): void {
@@ -96,16 +97,20 @@ function pick(name: string): void {
 
     <div
       class="wp-var-picker__preview"
-      :class="{ 'wp-var-picker__preview--default': usedDefault }"
+      :class="{
+        'wp-var-picker__preview--default': hasExecuted && usedDefault,
+        'wp-var-picker__preview--idle': !hasExecuted,
+      }"
       data-test="var-picker-preview"
     >
-      <span class="wp-var-picker__preview-label">last preview</span>
+      <span class="wp-var-picker__preview-label">last execute</span>
       <span class="wp-var-picker__preview-value">
-        <template v-if="usedDefault">→ default ({{ previewDefault }})</template>
+        <template v-if="!hasExecuted">→ <em>run workflow to see result</em></template>
+        <template v-else-if="usedDefault">→ default ({{ previewDefault }})</template>
         <template v-else>→ {{ previewParsed }}</template>
       </span>
     </div>
-    <div v-if="previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
+    <div v-if="hasExecuted && previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
       parsed from "{{ previewSource }}"
     </div>
   </div>
@@ -174,6 +179,8 @@ function pick(name: string): void {
   font-size: 10px;
 }
 .wp-var-picker__preview--default { border-left-color: var(--wp-status-modified, #fbbf24); }
+.wp-var-picker__preview--idle { border-left-color: var(--wp-text-dim, #595c66); }
+.wp-var-picker__preview--idle .wp-var-picker__preview-value { color: var(--wp-text-dim, #7a7d88); font-weight: 400; font-style: italic; }
 .wp-var-picker__preview-label { color: var(--wp-text-dim, #7a7d88); }
 .wp-var-picker__preview-value {
   font-weight: 600;

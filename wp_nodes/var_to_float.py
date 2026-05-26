@@ -39,4 +39,18 @@ class WPVarToFloat(io.ComfyNode):
     @classmethod
     def execute(cls, context, var_name, index, default):
         text = lookup_var(context, var_name)
-        return io.NodeOutput(parse_float(text, index, default))
+        value = parse_float(text, index, default)
+        a = parse_float(text, index, 0.0)
+        b = parse_float(text, index, 1.0)
+        matched = a == b
+        # See WP_VarToInt for the `wp_varpicker_*` UI-payload rationale
+        # — engine-resolved source + parsed output feeds the widget's
+        # "last execute" strip so wildcard-template vars show the truth.
+        return io.NodeOutput(
+            value,
+            ui={
+                "wp_varpicker_source": [text],
+                "wp_varpicker_parsed": [str(value) if matched else None],
+                "wp_varpicker_default": [str(default)],
+            },
+        )

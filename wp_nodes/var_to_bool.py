@@ -36,4 +36,16 @@ class WPVarToBool(io.ComfyNode):
     @classmethod
     def execute(cls, context, var_name, index, default):
         text = lookup_var(context, var_name)
-        return io.NodeOutput(parse_bool(text, index, default))
+        value = parse_bool(text, index, default)
+        a = parse_bool(text, index, True)
+        b = parse_bool(text, index, False)
+        matched = a == b
+        # See WP_VarToInt for the `wp_varpicker_*` UI-payload rationale.
+        return io.NodeOutput(
+            value,
+            ui={
+                "wp_varpicker_source": [text],
+                "wp_varpicker_parsed": [str(value) if matched else None],
+                "wp_varpicker_default": [str(default)],
+            },
+        )
