@@ -27,3 +27,32 @@ def derive_loop_seeds(base: int, count: int, strategy: str) -> list[int]:
             out.append(int.from_bytes(digest[:8], "big"))
         return out
     raise ValueError(f"unknown loop seed strategy: {strategy!r}")
+
+
+def effective_chain_seed(
+    *,
+    widget_seed: int,
+    seed_override: int | None,
+    loop_index: int,
+) -> int:
+    """Compute the chain seed for THIS iteration before module handlers run.
+
+    Precedence:
+      1. ``seed_override`` (from ContextLoop) replaces ``widget_seed`` as
+         base when present.
+      2. Otherwise ``widget_seed`` is the base.
+      3. ``loop_index`` is mixed via XOR with a stable hash. ``loop_index=0``
+         → no-op (backwards-compat for chains without ContextLoop).
+
+    Locked-module precedence lives in the per-module handlers, NOT here.
+    Locked modules read ``instance.locked_seed`` directly and ignore the
+    chain seed — so loop iteration cannot affect them.
+
+    Returns a non-negative 64-bit int.
+    """
+    base = seed_override if seed_override is not None else widget_seed
+    if loop_index == 0:
+        return base & 0xFFFFFFFFFFFFFFFF
+    digest = hashlib.sha256(f"loop:{loop_index}".encode()).digest()
+    shift = int.from_bytes(digest[:8], "big")
+    return (base ^ shift) & 0xFFFFFFFFFFFFFFFF
