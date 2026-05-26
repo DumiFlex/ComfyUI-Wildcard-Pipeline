@@ -127,6 +127,11 @@ class WPContext(io.ComfyNode):
                 ctx[key] = list(value)
             elif isinstance(value, dict):
                 ctx[key] = dict(value)
+            elif isinstance(value, set):
+                # `__wp_consumed_constraints__` is a set keyed by
+                # constraint module id. Defensive copy so upstream
+                # payload's set isn't mutated by this node's run.
+                ctx[key] = set(value)
             else:
                 ctx[key] = value
 

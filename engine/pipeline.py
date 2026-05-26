@@ -370,8 +370,14 @@ class PipelineEngine:
         # sees "you put a constraint here but nothing downstream took
         # it" — the chain still succeeds.
         # See docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
+        #
+        # Dedup by cid — sibling instances of the same library entry
+        # share `__constraint_module_id__`, so they show up as two
+        # entries in the bucket. Without the dedup the user sees the
+        # same warning twice for the same logical constraint (2026-05-26).
         constraints_bucket = ctx.get("__wp_constraints__") or []
         consumed_set = ctx.get("__wp_consumed_constraints__") or set()
+        warned_cids: set[str] = set()
         if isinstance(constraints_bucket, list):
             for c in constraints_bucket:
                 if not isinstance(c, dict):
@@ -379,6 +385,9 @@ class PipelineEngine:
                 cid = c.get("__constraint_module_id__")
                 if not cid or cid in consumed_set:
                     continue
+                if cid in warned_cids:
+                    continue
+                warned_cids.add(cid)
                 warnings_bucket = ctx.setdefault("__wp_warnings__", [])
                 if isinstance(warnings_bucket, list):
                     warnings_bucket.append({
@@ -399,9 +408,22 @@ class PipelineEngine:
                         # wrapper the raw uuids fell through as plain
                         # text and the user saw `'e4b95847'` instead
                         # of the constraint / wildcard's display name.
+                        #
+                        # Message phrasing — past tense + parenthetical
+                        # cause — makes it explicit this is a RUNTIME
+                        # result for THIS iteration: the constraint was
+                        # registered but its target instance didn't
+                        # materialise (no top-level wildcard rolled +
+                        # no nested `@{target}` ref hit). Pre-fix said
+                        # "never fired — no downstream @target
+                        # instance" which the user (rightly) read as
+                        # static-analysis output that should have
+                        # matched the canvas pair badge, when it's
+                        # actually per-iteration runtime truth.
                         "message": (
-                            f"constraint @{{{cid}}} never fired — no downstream "
-                            f"@{{{c.get('target_wildcard_id', '')}}} instance"
+                            f"constraint @{{{cid}}} did not apply this iteration "
+                            f"(@{{{c.get('target_wildcard_id', '')}}} target "
+                            f"never rolled — no top-level instance + no nested ref hit)"
                         ),
                     })
 

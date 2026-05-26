@@ -1487,46 +1487,49 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
  * state matches litegraph's native node-frame dim. */
 .wp-debug--skipped { opacity: 0.45; }
 /* Iteration picker bar — appears above the tab strip when upstream
- * WP_ContextLoop emitted a list of contexts. Width-stable across
- * iteration counts (chevrons + center label). */
+ * WP_ContextLoop emitted a list of contexts. Mirrors the tab strip's
+ * visual weight: transparent background, thin bottom border, compact
+ * chevron buttons sized to match the tab text. Used to be a dark-bg
+ * strip that visually disconnected from the rest of the node; now it
+ * reads as a quiet sub-header in the same family as the tabs. */
 .wp-dbg-iter-bar {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 4px 8px;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border-bottom: 1px solid var(--wp-border, #353841);
+  padding: 2px 6px 3px;
+  background: transparent;
+  border-bottom: 1px solid var(--wp-border);
 }
 .wp-dbg-iter-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   background: transparent;
-  border: 1px solid var(--wp-border, #353841);
+  border: 1px solid transparent;
   border-radius: 3px;
-  color: var(--wp-text-muted, #aeb1bb);
+  color: var(--wp-text-muted);
   cursor: pointer;
-  font: 600 14px var(--wp-font-mono, monospace);
-  line-height: 1;
+  font: 500 13px/1 var(--wp-font-sans);
   padding: 0;
 }
 .wp-dbg-iter-btn:hover:not(:disabled) {
   color: var(--wp-text);
-  border-color: var(--wp-border-strong, #4a4d55);
+  border-color: var(--wp-border);
+  background: var(--wp-bg-deep, var(--wp-bg));
 }
 .wp-dbg-iter-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 .wp-dbg-iter-label {
-  font: 600 10px var(--wp-font-sans, sans-serif);
+  font: 500 10px/1 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--wp-accent, #c4b5fd);
-  min-width: 100px;
+  color: var(--wp-text-muted);
+  min-width: 78px;
   text-align: center;
 }
 
