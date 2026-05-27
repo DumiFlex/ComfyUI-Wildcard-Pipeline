@@ -30,4 +30,4 @@ Concrete example: `count=3`, `override_seed=ON`, `seed=42`, `strategy=sequential
 - The `seed` field is a stock ComfyUI INT widget with `control_after_generate` — same randomize / fixed / increment buttons KSampler exposes. Right-click → "Convert widget to input" to swap it for an rgthree Seed wire when you want its UI affordances.
 - Set `override_seed=OFF` (default) to let each WP_Context's own widget seed drive that node's rolls; loop iteration still varies results via XOR with `loop_index`. Set `override_seed=ON` to take central control.
 - Combine with `$iteration` in your prompt template for variation labels: `"variation $iteration of $iteration_total: ..."`.
-- ComfyUI's native bypass (Ctrl-B) doesn't work on this node — use the `bypass` switch instead. Native mute (Ctrl-M) does work; the chain falls back to single-run with widget seeds.
+- The `bypass` switch collapses the loop to a single run (`count=1`) while keeping the node wired — handy for A/B without rebuilding the graph. Native ComfyUI bypass (Ctrl-B) and mute (Ctrl-M) also work as usual.

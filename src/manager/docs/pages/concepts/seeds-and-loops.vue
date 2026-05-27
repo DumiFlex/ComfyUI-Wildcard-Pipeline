@@ -89,10 +89,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Bypass and mute">
-      <DocCallout variant="warn">
-        Native ComfyUI Ctrl-B bypass does <b>not</b> work correctly for WP Context Loop. Use
-        the node's own <b>bypass</b> switch instead. Native Ctrl-M mute works normally.
+    <DocSection title="Turning the loop off">
+      <DocCallout variant="tip">
+        The loop config has a <b>Bypass</b> switch that collapses it to a single run while keeping
+        the node wired — handy for comparing looped vs single output without rebuilding the graph.
       </DocCallout>
     </DocSection>
 
