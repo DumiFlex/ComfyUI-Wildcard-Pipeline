@@ -6,6 +6,7 @@ import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const rowFields = [
   { term: "Name", desc: 'The $variable name to set — for example, "style" sets $style.' },
@@ -60,6 +61,15 @@ const instanceOptions = [
         is a producer, not a consumer. If you need to build a value from earlier picks, use a
         Combine module instead.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Try it">
+      <p>
+        Create a starter Fixed Values module that sets <VarToken>$style</VarToken> to "oil
+        painting". It's the constant the starter set's prompt template reuses every run — drop it in
+        and every module below can read it.
+      </p>
+      <StarterButton slot="style" />
     </DocSection>
 
     <DocSection title="Works with">

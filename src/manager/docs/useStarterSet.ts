@@ -29,19 +29,29 @@ import {
   STARTER_BUNDLE_NAME,
   STARTER_MODULE_DESCRIPTORS,
   STARTER_MODULE_SLOTS,
+  STARTER_TEMPLATE_NAME,
   buildTemplateInput,
   type PairingBuildContext,
   type StarterModuleSlot,
 } from "./starter-recipe";
 
 /** Route name each module slot's "Open" link targets. */
-const SLOT_EDIT_ROUTE: Record<StarterModuleSlot, string> = {
+export const SLOT_EDIT_ROUTE: Record<StarterModuleSlot, string> = {
   subject: "wildcards-edit",
   mood: "wildcards-edit",
   style: "fixed-values-edit",
   scene: "combines-edit",
   accent: "derivations-edit",
   pairing: "constraints-edit",
+};
+
+/** Route name every recordable starter key's "Open" link targets — the six
+ *  module slots plus the standalone `template` and assembled `bundle`. Reused
+ *  by `StarterButton.vue` so the button doesn't hard-code route names. */
+export const STARTER_EDIT_ROUTE: Record<StarterModuleSlot | "template" | "bundle", string> = {
+  ...SLOT_EDIT_ROUTE,
+  template: "templates-edit",
+  bundle: "bundles-edit",
 };
 
 export function useStarterSet() {
@@ -172,6 +182,27 @@ export function useStarterSet() {
   }
 
   /**
+   * Per-page entry point for the Templates doc page button. Mirrors
+   * `createStarterModule`'s side-effects for the standalone template: ensure
+   * the template exists (idempotent), refresh catalogs, and toast success with
+   * an "Open" action routing to the template editor. Returns the template id.
+   */
+  async function createStarterTemplate(): Promise<string> {
+    const id = await ensureStarterTemplate();
+    await refreshCatalogs();
+    toast.push({
+      severity: "success",
+      summary: `Created “${STARTER_TEMPLATE_NAME}”`,
+      detail: "Added to your library.",
+      action: {
+        label: "Open",
+        run: () => { void router.push({ name: "templates-edit", params: { id } }); },
+      },
+    });
+    return id;
+  }
+
+  /**
    * FAILSAFE — guarantee the entire starter set exists, then assemble it.
    *
    * 1. `ensureSlot` each of the six module slots in dependency order
@@ -242,6 +273,7 @@ export function useStarterSet() {
     ensurePairing,
     createStarterModule,
     ensureStarterTemplate,
+    createStarterTemplate,
     buildStarterBundle,
   };
 }

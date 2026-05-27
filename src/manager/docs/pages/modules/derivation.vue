@@ -6,6 +6,7 @@ import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const conditionOps = [
   { term: "equals / not equals", desc: "Matches when the variable's value is (or isn't) exactly the text you provide. Case-sensitive." },
@@ -82,6 +83,15 @@ const instanceOptions = [
         When you add a Derivation to a Context you can tune which rules are active for that use:
       </p>
       <DocKeyList :items="instanceOptions" />
+    </DocSection>
+
+    <DocSection title="Try it">
+      <p>
+        Create a starter Derivation that sets <VarToken>$accent</VarToken> based on the mood: if
+        <VarToken>$mood</VarToken> is "dramatic" it writes "cinematic lighting", otherwise "soft
+        lighting". A one-rule example of conditional logic reacting to an upstream pick.
+      </p>
+      <StarterButton slot="accent" />
     </DocSection>
 
     <DocSection title="Works with">

@@ -6,6 +6,7 @@ import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const optionFields = [
   { term: "Value", desc: 'The text that goes into the prompt when this option is picked — for example, "a cat", "a dog", or "a fox".' },
@@ -72,6 +73,15 @@ const instanceOptions = [
         ratio="16 / 6"
         caption="A module stack showing a $weather wildcard, then a Constraint module, then a $mood wildcard. The Constraint sits between its source and target."
       />
+    </DocSection>
+
+    <DocSection title="Try it">
+      <p>
+        Create a ready-made <VarToken>$subject</VarToken> wildcard in your library — four options
+        ("cat", "tiger", "dog", "wolf") split across two sub-categories. It lands as the first
+        piece of the starter set you can build into a full pipeline.
+      </p>
+      <StarterButton slot="subject" />
     </DocSection>
 
     <DocSection title="Works with">

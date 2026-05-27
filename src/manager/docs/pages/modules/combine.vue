@@ -6,6 +6,7 @@ import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const instanceOptions = [
   { term: "Template override", desc: "Replace the entire template for this particular use without changing the shared library entry." },
@@ -64,6 +65,15 @@ const instanceOptions = [
 
     <DocSection title="Per-use options">
       <DocKeyList :items="instanceOptions" />
+    </DocSection>
+
+    <DocSection title="Try it">
+      <p>
+        Create a starter Combine that fills <VarToken>$mood $subject</VarToken> into a single
+        <VarToken>$scene</VarToken> variable. It reads the starter subject and mood wildcards, so
+        build those first (or just use "Build starter bundle" to get the whole set at once).
+      </p>
+      <StarterButton slot="scene" />
     </DocSection>
 
     <DocSection title="Works with">

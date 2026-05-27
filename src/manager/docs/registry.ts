@@ -114,6 +114,9 @@ export const DOC_PAGES: DocPageMeta[] = [
   { id: "bundles", title: "Bundles", group: "modules", icon: "pi pi-box", tone: "bundle",
     blurb: "Group a range of modules into a reusable unit.", keywords: ["group", "snapshot"],
     ...page(() => import("./pages/modules/bundles.vue")) },
+  { id: "templates", title: "Templates", group: "modules", icon: "pi pi-file-edit", tone: "neutral",
+    blurb: "Save a reusable $var prompt string for the Assembler.", keywords: ["template", "assembler", "$var", "prompt"],
+    ...page(() => import("./pages/modules/templates.vue")) },
   // Reference
   { id: "warning-types", title: "Warning & conflict types", group: "reference", icon: "pi pi-list", tone: "neutral",
     blurb: "Every runtime warning + scanner rule, explained.", keywords: ["warning", "error", "conflict", "reference"],

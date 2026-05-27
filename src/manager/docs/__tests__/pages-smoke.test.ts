@@ -1,5 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { describe, it, expect } from "vitest";
+import { createPinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import { DOC_PAGES } from "../registry";
 
@@ -17,7 +18,9 @@ describe("doc pages smoke", () => {
       await router.push("/docs");
       await router.isReady();
       const mod = await p.loader();
-      const w = mount(mod.default, { global: { plugins: [router] } });
+      // Module doc pages now embed <StarterButton>, which reads a Pinia store
+      // in setup — install a fresh Pinia so those pages mount.
+      const w = mount(mod.default, { global: { plugins: [router, createPinia()] } });
       await flushPromises();
       expect(w.find(".wp-doc-page__title").exists()).toBe(true);
     },

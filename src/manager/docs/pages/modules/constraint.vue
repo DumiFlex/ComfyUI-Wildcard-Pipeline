@@ -6,6 +6,7 @@ import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const reweightModes = [
   { term: "Allow", desc: "Only these options can be picked — all others are removed from the pool." },
@@ -72,6 +73,16 @@ const reweightModes = [
         nested references, and the "never fired" runtime notice — are covered on the Constraints
         concept page.
       </p>
+    </DocSection>
+
+    <DocSection title="Try it">
+      <p>
+        Create a starter Constraint that pairs the subject and mood wildcards: feline subjects lean
+        intense, canine subjects lean calm. Clicking this also creates the two wildcards it needs
+        (<VarToken>$subject</VarToken> and <VarToken>$mood</VarToken>) if they aren't in your
+        library yet, so the pairing always wires up correctly.
+      </p>
+      <StarterButton slot="pairing" />
     </DocSection>
 
     <DocSection title="Works with">

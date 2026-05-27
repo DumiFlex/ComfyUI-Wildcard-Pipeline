@@ -4,6 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import StarterButton from "../../../components/docs/StarterButton.vue";
 </script>
 
 <template>
@@ -65,6 +66,15 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         their children are frozen snapshots, so they continue to work correctly even after the
         source wildcard is gone.
       </p>
+    </DocSection>
+
+    <DocSection title="Try it">
+      <p>
+        Build the whole starter set in one click: the subject, mood, style, scene, accent, and
+        pairing modules — plus a bundle that groups them, ready to drop into a Context. Anything
+        you already created from the other pages is reused, and anything missing is filled in.
+      </p>
+      <StarterButton slot="bundle" />
     </DocSection>
 
     <DocSection title="Works with">

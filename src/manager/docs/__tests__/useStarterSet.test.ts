@@ -175,6 +175,44 @@ describe("useStarterSet", () => {
     });
   });
 
+  describe("createStarterTemplate", () => {
+    it("creates the template + toasts an Open action routing to templates-edit", async () => {
+      apiMock.templates.create.mockResolvedValue({
+        id: "tpl1", name: "Starter prompt", description: "", category_id: null,
+        tags: [], is_favorite: false, template_string: "x", created_at: "", updated_at: "",
+      });
+      const { createStarterTemplate } = useStarterSet();
+      const id = await createStarterTemplate();
+      expect(id).toBe("tpl1");
+      expect(apiMock.templates.create).toHaveBeenCalledTimes(1);
+      expect(pushMock).toHaveBeenCalledWith(expect.objectContaining({
+        severity: "success",
+        action: expect.objectContaining({ label: "Open" }),
+      }));
+      // The Open action routes to the template editor.
+      const entry = pushMock.mock.calls[0][0];
+      entry.action.run();
+      expect(routerPushMock).toHaveBeenCalledWith({
+        name: "templates-edit", params: { id },
+      });
+    });
+
+    it("reuses the recorded template (no second create) when it still resolves", async () => {
+      const store = useStarterStore();
+      store.record("template", "tplX");
+      apiMock.templates.get.mockResolvedValueOnce({
+        id: "tplX", name: "Starter prompt", description: "", category_id: null,
+        tags: [], is_favorite: false, template_string: "x", created_at: "", updated_at: "",
+      });
+      const { createStarterTemplate } = useStarterSet();
+      const id = await createStarterTemplate();
+      expect(id).toBe("tplX");
+      expect(apiMock.templates.create).not.toHaveBeenCalled();
+      // Still toasts (the per-page button always confirms).
+      expect(pushMock).toHaveBeenCalledWith(expect.objectContaining({ severity: "success" }));
+    });
+  });
+
   describe("buildStarterBundle (failsafe)", () => {
     beforeEach(() => {
       createReturnsFreshRows();

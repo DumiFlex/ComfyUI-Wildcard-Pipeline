@@ -1,5 +1,6 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { describe, it, expect, beforeAll } from "vitest";
+import { createPinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import Docs from "../../views/Docs.vue";
 import { DOC_PAGES, findPage } from "../../docs/registry";
@@ -24,7 +25,7 @@ beforeAll(async () => {
 async function mountAt(page?: string) {
   await router.push(page ? `/docs/${page}` : "/docs");
   await router.isReady();
-  const w = mount(Docs, { props: { page }, global: { plugins: [router] } });
+  const w = mount(Docs, { props: { page }, global: { plugins: [router, createPinia()] } });
   await flushPromises();
   return w;
 }
