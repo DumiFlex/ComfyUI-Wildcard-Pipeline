@@ -13,7 +13,7 @@
 import { migratePayload, type RawPayload } from "./migrations";
 import { moduleFingerprint, type ModuleRow } from "./fingerprint";
 
-export type WarningField = "bundle" | "wildcard" | "fixed_value" | "combine" | "derivation" | "constraint" | "category";
+export type WarningField = "bundle" | "wildcard" | "fixed_value" | "combine" | "derivation" | "constraint" | "category" | "template";
 
 export interface IntegrityWarning {
   /** Short UUID of the entity (the `id` field of the entity row, per
@@ -52,6 +52,7 @@ const PLURAL_TO_SINGULAR: Record<string, WarningField> = {
   derivations: "derivation",
   constraints: "constraint",
   categories: "category",
+  templates: "template",
 };
 
 function verifyOne(entity: Record<string, unknown>, kind: WarningField): IntegrityWarning | null {
@@ -64,6 +65,10 @@ function verifyOne(entity: Record<string, unknown>, kind: WarningField): Integri
   // Categories are organizational metadata (name-based merge-or-create).
   // They carry no snapshot_fingerprint, so fingerprint verification is N/A.
   if (kind === "category") return null;
+  // Templates carry no snapshot_fingerprint either (they can't drift —
+  // loading copies the string with no stored back-reference), so they're
+  // out of scope for this module-fingerprint verify pass.
+  if (kind === "template") return null;
   const recomputed = moduleFingerprint(entity as unknown as ModuleRow);
   if (recomputed === stamped) return null;
   return {

@@ -183,6 +183,10 @@ function partition(
         delete newContent.version;
         delete newContent.snapshot_fingerprint;
         delete newContent.payload_hash;
+        // Templates carry a computed `template_fingerprint` (not the
+        // module `snapshot_fingerprint`); strip it too so a renamed
+        // template can't smuggle a fingerprint keyed to the old id.
+        delete newContent.template_fingerprint;
         out.renames.push({
           kind,
           old_id: r.entity.id,
