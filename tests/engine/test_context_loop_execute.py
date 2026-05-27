@@ -16,8 +16,8 @@ _DEFAULTS = {
     "override_seed": False,
     "iteration_var_name": "iteration",
     "bypass": False,
-    "iteration_internal": False,
-    "total_internal": False,
+    "iteration_internal": True,
+    "total_internal": True,
 }
 
 
@@ -33,13 +33,13 @@ _DEFAULTS = {
             '"iteration_var_name": "idx", "bypass": true}',
             {"strategy": "sequential", "override_seed": True,
              "iteration_var_name": "idx", "bypass": True,
-             "iteration_internal": False, "total_internal": False},
+             "iteration_internal": True, "total_internal": True},
         ),
         (
             '{"strategy": "wat", "override_seed": true}',
             {"strategy": "hash_index", "override_seed": True,
              "iteration_var_name": "iteration", "bypass": False,
-             "iteration_internal": False, "total_internal": False},
+             "iteration_internal": True, "total_internal": True},
         ),
         ('{"iteration_var_name": "   "}', _DEFAULTS),
         (
@@ -119,15 +119,30 @@ def test_execute_count_clamps_to_one_min():
 
 
 def test_execute_no_internal_flags_when_off():
-    payloads = _execute(42, 2, {"iteration_var_name": "idx"})
+    # Explicitly opt both flags out — asserts no internal_flags entry.
+    payloads = _execute(42, 2, {
+        "iteration_var_name": "idx",
+        "iteration_internal": False,
+        "total_internal": False,
+    })
     for p in payloads:
         assert "__wp_internal_flags__" not in p.internals
 
 
+def test_execute_default_config_internal_flags_both_set():
+    # Empty config uses defaults: both iteration + total are internal.
+    payloads = _execute(42, 2, {})
+    for p in payloads:
+        flags = p.internals["__wp_internal_flags__"]
+        assert flags == {"iteration": True, "iteration_total": True}
+
+
 def test_execute_iteration_internal_stamps_flag():
+    # Opt total out so only iteration appears in flags.
     payloads = _execute(42, 2, {
         "iteration_var_name": "idx",
         "iteration_internal": True,
+        "total_internal": False,
     })
     for p in payloads:
         flags = p.internals["__wp_internal_flags__"]
@@ -135,8 +150,10 @@ def test_execute_iteration_internal_stamps_flag():
 
 
 def test_execute_total_internal_stamps_flag():
+    # Opt iteration out so only total appears in flags.
     payloads = _execute(42, 2, {
         "iteration_var_name": "idx",
+        "iteration_internal": False,
         "total_internal": True,
     })
     for p in payloads:

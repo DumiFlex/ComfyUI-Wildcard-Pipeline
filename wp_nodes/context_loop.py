@@ -32,8 +32,8 @@ def _parse_config(raw: str) -> dict[str, object]:
         "override_seed": False,
         "iteration_var_name": "iteration",
         "bypass": False,
-        "iteration_internal": False,
-        "total_internal": False,
+        "iteration_internal": True,
+        "total_internal": True,
     }
     if not raw or not isinstance(raw, str):
         return defaults
@@ -51,8 +51,8 @@ def _parse_config(raw: str) -> dict[str, object]:
     if isinstance(name, str) and name.strip():
         out["iteration_var_name"] = name.strip()
     out["bypass"] = bool(parsed.get("bypass", False))
-    out["iteration_internal"] = bool(parsed.get("iteration_internal", False))
-    out["total_internal"] = bool(parsed.get("total_internal", False))
+    out["iteration_internal"] = bool(parsed.get("iteration_internal", True))
+    out["total_internal"] = bool(parsed.get("total_internal", True))
     return out
 
 

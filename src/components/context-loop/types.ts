@@ -30,8 +30,8 @@ export function emptyContextLoopConfig(): ContextLoopConfig {
     override_seed: false,
     iteration_var_name: "iteration",
     bypass: false,
-    iteration_internal: false,
-    total_internal: false,
+    iteration_internal: true,
+    total_internal: true,
   };
 }
 
