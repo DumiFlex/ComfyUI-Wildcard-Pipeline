@@ -2,6 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 </script>
@@ -16,57 +17,59 @@ import VarToken from "../../../components/docs/VarToken.vue";
   >
     <DocSection title="What a bundle is">
       <p>
-        A <b>bundle</b> is a container that groups a contiguous range of modules from a Context
-        into a named, reusable unit. Bundles are stored separately from modules — they live in
-        a top-level <code>bundles</code> array, not in the module kind handlers. The engine has
-        no separate bundle handler; when a Context executes, it flattens the bundle's children
-        and runs them inline as though the modules had been placed directly in the stack.
+        A <b>bundle</b> groups a contiguous range of modules in a Context into a named, collapsible
+        unit. You can collapse it in the module stack to keep long setups tidy, and you can save it
+        to the library to reuse the whole group in other Contexts or workflows.
       </p>
+      <p>
+        At generation time the bundle is transparent — its modules run inline exactly as if they
+        had been placed directly in the stack. The bundle is purely an organisational tool; it does
+        not add any processing of its own.
+      </p>
+      <DocImage
+        ratio="16 / 6"
+        caption="A collapsed bundle row in the module stack, showing its name and child count. The expand arrow reveals the individual modules inside."
+      />
     </DocSection>
 
     <DocSection title="Frozen snapshots">
       <p>
-        When a bundle is created from existing modules, the engine deep-copies each module's
-        payload, options, and metadata into <code>bundle.children[]</code>. These are
-        <em>frozen snapshots</em>: changes made to the source modules in the library after the
-        bundle was captured do not propagate into the bundle. Each bundle child resolves
-        identically to when it was captured.
+        When you capture a bundle, the current state of each module — its options, settings, and
+        metadata — is saved into the bundle as a frozen snapshot. Changes you later make to the
+        source modules in the library do <em>not</em> propagate into existing bundles. Each
+        bundle keeps resolving from the state it captured.
       </p>
       <DocCallout variant="tip">
-        Because children are frozen snapshots, bundles are excluded from the wildcard-delete
-        cascade. Deleting a source wildcard from the library does not touch bundles that
-        captured a snapshot of it — the bundle keeps resolving identically. The MISSING badge
-        on workflow rows still fires (the drift store sees the source id is gone), which is
-        the honest signal that the library entry and the snapshot have diverged.
+        Because bundle children are frozen, deleting a source wildcard from the library does not
+        break bundles that captured it. The bundle keeps working. A MISSING badge appears on the
+        workflow row to signal that the library entry and the bundle's snapshot have diverged —
+        giving you an honest indication to decide whether to update or leave it as-is.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Non-destructive enable overlay">
+    <DocSection title="Disabling a bundle">
       <p>
-        Each bundle has an <b>enabled</b> flag. This flag is applied as a non-destructive
-        overlay: the effective enabled state for any child module is the logical AND of the
-        bundle's <code>enabled</code>, any ancestor bundle's <code>enabled</code>, and the
-        child's own <code>enabled</code> flag. Disabling a bundle suppresses all its children
-        without modifying their individual settings; re-enabling the bundle restores them.
+        Each bundle has an <b>enabled</b> toggle. Disabling a bundle suppresses all its children
+        without touching their individual settings. Re-enabling it restores them exactly as they
+        were. This lets you mute an entire group of modules in one click during testing without
+        having to disable each one separately.
       </p>
     </DocSection>
 
-    <DocSection title="UUID remap on insert">
+    <DocSection title="Inserting a bundle">
       <p>
-        When a bundle is inserted into a Context, the engine generates new UUIDs for each child
-        module and rewrites any <VarToken kind="ref">@{uuid}</VarToken> cross-references and
-        constraint source/target ids within the bundle's payload to match the new ids. This
-        ensures that inserting the same bundle multiple times does not create id collisions in
-        the same Context.
+        When you drop a saved bundle into a Context, each child module receives a fresh ID so that
+        inserting the same bundle multiple times does not cause ID collisions. Any
+        <VarToken kind="ref">@{uuid}</VarToken> references and constraint pairings inside the
+        bundle are automatically rewritten to match the new IDs.
       </p>
     </DocSection>
 
     <DocSection title="Bundles are not a module kind">
       <p>
-        Bundles are intentionally neutral — they have no engine handler and no kind color. The
-        default icon is <code>pi-box</code> and the default color is <code>#46566B</code>. A
-        bundle is a grouping and portability mechanism, not a processing step; it contributes
-        to the pipeline only through its flattened children.
+        Bundles are a grouping and portability mechanism, not a processing step. They have no
+        module type, no kind colour, and no engine handler of their own. Everything they contribute
+        to the pipeline comes from their children.
       </p>
     </DocSection>
 

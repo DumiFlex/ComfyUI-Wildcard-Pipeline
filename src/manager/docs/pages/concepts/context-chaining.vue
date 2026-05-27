@@ -2,6 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 </script>
@@ -16,62 +17,49 @@ import VarToken from "../../../components/docs/VarToken.vue";
   >
     <DocSection title="How chaining works">
       <p>
-        A <b>WP Context</b> node accepts an optional <code>upstream</code> input of type
-        <code>PIPELINE_CONTEXT</code>. When connected, the node starts its execution by copying the
-        upstream map into a new dict — <code>ctx = dict(upstream)</code> — and then runs its own
-        module stack on top. Any variable set by this node's modules overwrites the upstream value
-        for that name. The upstream's variables that are not re-set pass through unchanged.
+        A <b>WP Context</b> node has an optional upstream input. When you connect one Context into
+        another, the downstream Context starts with all the variables the upstream already produced,
+        then runs its own modules on top. Any variable the downstream modules set replaces the
+        upstream value for that name. Variables that the downstream does not touch pass through
+        unchanged.
       </p>
       <p>
-        This makes it straightforward to build a base Context (character, setting) and a style
-        Context that overrides only <VarToken>$style</VarToken>, keeping everything else intact.
-        You can chain as many Contexts as needed; the last write to any given
-        <VarToken>$variable</VarToken> name is the value that reaches the Assembler.
+        This makes it easy to build a base Context (character, setting) and then add a second
+        Context that overrides only <VarToken>$style</VarToken>, leaving everything else alone.
+        You can chain as many Contexts as you like — the last value written for any variable is
+        what the Assembler receives.
       </p>
       <DocCallout variant="tip">
-        Use <b>WP Context Injector</b> for one-off variable overrides without introducing a second
-        Context node — it lets you lift any external node output into a named
+        Use <b>WP Context Injector</b> for one-off variable overrides without adding a full new
+        Context node — it lets you route any node output into a named
         <VarToken>$variable</VarToken> slot.
       </DocCallout>
+      <DocImage
+        ratio="16 / 7"
+        caption="Two WP Context nodes chained: the first sets $subject and $style; the second overrides only $style. Show the PIPELINE_CONTEXT wire connecting them and the final $style value reaching the Assembler."
+      />
     </DocSection>
 
-    <DocSection title="The two strip functions">
+    <DocSection title="Internal variables survive the chain">
       <p>
-        The engine has two separate stripping functions that remove keys from a Context at different
-        boundaries:
+        When you mark a variable as <b>internal</b> in a module's settings, it travels through
+        the chain to downstream Contexts and combine/derivation modules — it is only hidden at
+        the very end, when the Assembler renders the final prompt string. This means a variable
+        you need for intermediate calculations can be internal from the start, passing through as
+        many chained Contexts as you like, and it still will not appear in the rendered prompt.
       </p>
-      <ul>
-        <li>
-          <b>strip_engine_internals</b> — applied at the <em>socket boundary</em> when emitting
-          a <code>PIPELINE_CONTEXT</code> value. Drops only the <code>__</code>-prefixed internal
-          keys (<code>__wp_picks__</code>, <code>__wp_constraints__</code>, etc.) that were added
-          by the engine itself. User-flagged-internal variables are <em>not</em> stripped here and
-          continue to travel downstream.
-        </li>
-        <li>
-          <b>strip_internals</b> — applied at the <em>render boundary</em> inside the Assembler
-          just before template resolution. Also removes any variable that was flagged
-          <code>internal</code> by a module's instance settings. These variables remain readable
-          by combine/derivation modules along the chain; they simply do not appear in the final
-          prompt string.
-        </li>
-      </ul>
     </DocSection>
 
-    <DocSection title="Cross-node internals carve-out">
+    <DocSection title="Constraint modules cross chain boundaries">
       <p>
-        Certain engine-internal keys — <VarToken kind="inline">__wp_picks__</VarToken>,
-        <VarToken kind="inline">__wp_constraints__</VarToken>, and related constraint tracking
-        state — do not live in the plain variable map. They travel on a separate
-        <code>ContextPayload.internals</code> structure so that, for example, a constraint module
-        placed in <b>Context A</b> can still fire against a wildcard placed in <b>Context B</b>
-        downstream. The constraint machinery reads from <code>internals</code>, not from the
-        user-visible variable map.
+        A constraint module placed in one Context can still apply to a wildcard in a later
+        Context downstream. You can even create a dedicated "constraints" Context that does nothing
+        but hold constraint modules, and chain it before the Context with the target wildcards —
+        the constraints fire when those wildcards roll, exactly as if they were in the same Context.
       </p>
       <DocCallout variant="tip">
-        This means you can author a dedicated "constraints" Context that does nothing but register
-        constraint modules, and then chain it before the Context that holds the actual wildcards
-        those constraints target. The constraint is still consumed when the target wildcard rolls.
+        Separating constraints into their own Context keeps your module stacks readable when you
+        have complex pairing rules across many wildcards.
       </DocCallout>
     </DocSection>
 

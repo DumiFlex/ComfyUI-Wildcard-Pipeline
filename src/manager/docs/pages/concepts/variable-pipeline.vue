@@ -18,83 +18,84 @@ import VarToken from "../../../components/docs/VarToken.vue";
   >
     <DocSection title="The pipeline">
       <p>
-        When a <b>WP Context</b> executes, it seeds an RNG from its <code>seed</code> input and
-        runs its module stack top-to-bottom. Each module returns a set of
-        <VarToken>name = value</VarToken> bindings which are written into the Context. The final
-        Context is emitted on the <code>PIPELINE_CONTEXT</code> output and consumed downstream by
-        Assemblers, other Contexts, or Debug nodes.
+        When a <b>WP Context</b> runs, it works through its module stack from top to bottom. Each
+        module produces one or more <VarToken>name = value</VarToken> bindings. Those bindings
+        build up inside the Context and are then passed downstream to Assemblers, other Contexts,
+        or Debug nodes. The Assembler's job is to take your prompt template and swap in the
+        values — every <VarToken>$name</VarToken> token becomes the value that was set upstream.
       </p>
     </DocSection>
 
     <DocSection title="Syntax reference">
-      <p>The following constructs are recognized inside template strings and wildcard option text:</p>
+      <p>The following constructs are recognised inside template strings and wildcard option text:</p>
       <table class="wp-doc-syntax-table">
         <thead>
           <tr>
             <th>Syntax</th>
-            <th>Surface</th>
-            <th>Meaning</th>
+            <th>Where it works</th>
+            <th>What it does</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><VarToken>$name</VarToken></td>
             <td>combine, derivation, assembler</td>
-            <td>Read the named variable from the Context.</td>
+            <td>Reads the named variable from the Context and inserts its value.</td>
           </tr>
           <tr>
             <td><VarToken kind="ref">@{8hexchars}</VarToken></td>
             <td>wildcard options only</td>
             <td>
-              Nested wildcard ref — resolves to the picked value of the target wildcard instance.
-              Optionally followed by <VarToken kind="inline">#displayname</VarToken> (display only,
-              matched on uuid) and/or <VarToken kind="inline">:subcat</VarToken> (subcategory filter
-              with inverted-null: null options are included unless <code>null</code> is explicitly in
-              the filter list).
+              Nested wildcard reference — resolves to the picked value of the target wildcard.
+              Optionally followed by <VarToken kind="inline">#displayname</VarToken> (a human
+              label matched on uuid, display only) and/or <VarToken kind="inline">:subcat</VarToken>
+              (subcategory filter; <code>null</code> options are included unless
+              <code>null</code> appears explicitly in the filter list).
             </td>
           </tr>
           <tr>
             <td><VarToken kind="inline">{a|b|c}</VarToken></td>
             <td>all text fields</td>
-            <td>Uniform random pick from the alternatives.</td>
+            <td>Randomly picks one of the alternatives.</td>
           </tr>
           <tr>
             <td><VarToken kind="inline">{N$$sep$$a|b|c}</VarToken></td>
             <td>all text fields</td>
-            <td>Pick N alternatives, joined by <em>sep</em>.</td>
+            <td>Picks N alternatives, joined by <em>sep</em>.</td>
           </tr>
           <tr>
             <td><VarToken kind="inline">$$</VarToken></td>
             <td>all text fields</td>
-            <td>Escaped literal <code>$</code>.</td>
+            <td>Produces a literal <code>$</code> character.</td>
           </tr>
           <tr>
             <td><VarToken kind="inline">@@</VarToken></td>
             <td>all text fields</td>
-            <td>Escaped literal <code>@</code>.</td>
+            <td>Produces a literal <code>@</code> character.</td>
           </tr>
         </tbody>
       </table>
       <p style="margin-top: 10px; font-size: 12.5px; color: var(--wp-text-muted);">
         Variable names must match <code>^[A-Za-z_][A-Za-z0-9_]*$</code>, be at most 64 characters,
-        and must not start with <code>__</code> (reserved for internal keys).
+        and must not start with <code>__</code> (reserved for internal use).
         Ref UUIDs are exactly 8 lowercase hex characters.
       </p>
     </DocSection>
 
-    <DocSection title="Surface gating">
+    <DocSection title="Where each syntax works">
       <p>
-        Not every construct is active in every context. Surfaces control what resolves where:
+        Not every syntax token is active in every field. Here is a quick guide:
       </p>
       <ul>
-        <li><VarToken>$var</VarToken> reads from the Context in <b>combine</b>, <b>derivation</b>, and <b>assembler</b> (template fill).</li>
-        <li><VarToken kind="ref">@{uuid}</VarToken> resolves in <b>wildcard</b> option text only (nested pick).</li>
-        <li><VarToken kind="inline">{a|b|c}</VarToken> and multi-pick forms are active everywhere text is resolved.</li>
+        <li><VarToken>$var</VarToken> works in <b>combine</b>, <b>derivation</b>, and <b>assembler</b> templates.</li>
+        <li><VarToken kind="ref">@{uuid}</VarToken> works in <b>wildcard option text</b> only — it lets one wildcard pull in the result of another.</li>
+        <li><VarToken kind="inline">{a|b|c}</VarToken> and multi-pick forms work everywhere text is resolved.</li>
       </ul>
       <DocCallout variant="warn">
-        Producer modules (wildcard, fixed values) run before the Context has a full map, so they
-        cannot read <VarToken>$var</VarToken> references from the same Context. Use a
-        <b>combine</b> or <b>derivation</b> module placed after the producers to compose values.
+        Modules that produce values (wildcards, fixed values) run before all other modules in the
+        same Context have completed. This means a producer cannot read a <VarToken>$var</VarToken>
+        set by another module in the same Context. To build a value from earlier picks, add a
+        <b>combine</b> or <b>derivation</b> module placed after the producers.
       </DocCallout>
     </DocSection>
 

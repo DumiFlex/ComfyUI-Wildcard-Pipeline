@@ -2,8 +2,24 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const strategies = [
+  {
+    term: "Hashed (default)",
+    desc: "Each iteration gets an unrelated seed derived from the base. Produces the most variety — neighbouring iterations look nothing alike.",
+  },
+  {
+    term: "Sequential",
+    desc: "Seeds walk seed, seed+1, seed+2 … so adjacent iterations feel related and drift gradually.",
+  },
+  {
+    term: "Prime stride",
+    desc: "Takes large even jumps through the seed space. Good for sampling widely spread results from a known base.",
+  },
+];
 </script>
 
 <template>
@@ -12,95 +28,87 @@ import VarToken from "../../../components/docs/VarToken.vue";
     title="Seeds &amp; loops"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="How the chain seed drives per-module RNG, what locked seeds do, and how WP Context Loop generates batches with 1-based iteration variables."
+    blurb="How the seed drives per-module randomness, what locked seeds do, and how WP Context Loop generates batches."
   >
-    <DocSection title="The chain seed">
+    <DocSection title="The seed and per-module randomness">
       <p>
-        Every <b>WP Context</b> node has a <code>seed</code> INT input. At execution time the
-        engine derives an independent per-module RNG via <code>derive_module_rng(chain_seed,
-        module_id)</code>. Each module therefore gets a deterministic but independent stream of
-        random numbers — changing the chain seed changes every module, but changing one module's
-        position does not disturb the others.
+        Every <b>WP Context</b> node has a <code>seed</code> input. At generation time, each
+        module in the stack gets its own independent random stream derived from that seed — so
+        changing the seed changes every module's picks together, but reordering modules does not
+        disturb each other's results.
       </p>
       <p>
-        The seed uses <code>control_after_generate</code> so it advances automatically each queue
-        cycle, giving you a new pick on every generation without manual edits.
+        The seed advances automatically after each generation, so you get a fresh set of picks
+        every time you press Generate without editing anything manually.
       </p>
     </DocSection>
 
     <DocSection title="Locked seeds">
       <p>
-        A module's instance overrides include a <b>locked_seed</b> field. When set, the engine
-        uses that fixed value instead of the chain-derived RNG. The module makes the same pick
-        every queue cycle regardless of the chain seed — useful for fixing a background style while
-        randomising the subject, or for freezing one module's pick across all WP Context Loop
-        iterations.
+        Any module can have its seed locked. When a module's seed is locked, it always makes the
+        same pick regardless of what the Context seed is doing — perfect for holding a background
+        style or an art direction steady while everything else randomises. Locked modules are also
+        unaffected by the WP Context Loop seed strategies, so they do not vary between iterations.
       </p>
       <DocCallout variant="tip">
-        Locked modules are also unaffected by the WP Context Loop seed strategies — their pick
-        does not vary between iterations.
+        Lock one module and leave the rest free to compare how different random picks combine with
+        a fixed element — useful for testing whether a style works with a variety of subjects.
       </DocCallout>
     </DocSection>
 
     <DocSection title="WP Context Loop">
       <p>
-        <b>WP Context Loop</b> emits a list of N Contexts in a single execution pass
-        (<code>is_output_list=True</code>), driving downstream image generation over multiple
-        seeds without requiring a batch node. Three seed strategies control how the per-iteration
-        seed is derived from the base seed:
+        Add a <b>WP Context Loop</b> before your WP Context and one Generate produces N images in
+        a single run — each with its own seed. The <b>Variation strategy</b> controls how those
+        seeds are spread:
       </p>
-      <ul>
-        <li><b>sequential</b> — seed for iteration i = base + i</li>
-        <li><b>hash_index</b> — seed = first 8 bytes of SHA-256(<code>{base}:{i}</code>), read as a big-endian 64-bit integer</li>
-        <li><b>prime_stride</b> — seed = base + i × 1 000 003</li>
-      </ul>
-      <p>
-        The <code>override_seed</code> toggle controls whether those strategies apply. When
-        <b>on</b>, the loop derives N seeds from the base and overrides each iteration's Context
-        seed. When <b>off</b> (the default), the base seed is ignored and each downstream Context
-        rolls from its own widget seed independently — the loop only layers per-iteration variation.
+      <DocKeyList :items="strategies" />
+      <p style="margin-top: 14px;">
+        The <b>Override seed</b> toggle on the loop controls whether these strategies apply. When
+        <b>on</b>, the loop derives N seeds from the base and sets each iteration's seed
+        accordingly, making the whole batch reproducible from that one base seed. When <b>off</b>
+        (the default), each downstream Context uses its own widget seed independently and the loop
+        only provides per-iteration variation on top.
       </p>
     </DocSection>
 
     <DocSection title="Iteration variables">
       <p>
-        Inside each iteration the engine injects two special variables into the Context:
+        Inside each loop iteration, two variables are available for your templates:
       </p>
       <ul>
         <li>
-          <VarToken>$iteration</VarToken> — the current iteration number, <b>1-based</b>
-          (first iteration = 1, last = N).
+          <VarToken>$iteration</VarToken> — which run you are on, starting at 1 (so 1, 2, 3 … up
+          to the count).
         </li>
         <li>
-          <VarToken>$iteration_total</VarToken> — a constant equal to the total iteration
-          count N (the name follows the configured loop variable name).
+          <VarToken>$iteration_total</VarToken> — the total number of runs, constant across every
+          iteration.
         </li>
       </ul>
       <p>
-        Internally the engine tracks a 0-based index
-        (<VarToken kind="inline">__wp_loop_index__</VarToken>), but the user-visible
-        <VarToken>$iteration</VarToken> is always 1-based.
+        By default both are hidden from the rendered prompt. You can turn off the
+        <b>internal</b> flag for either one in the loop settings if you want them to appear in the
+        output text — for example to caption images "frame 1 of 4".
       </p>
       <DocCallout variant="warn">
-        These variables are injected with the <b>internal</b> flag by default
-        (<code>iteration_internal</code> / <code>total_internal</code> config options). Set
-        either flag to <code>false</code> if you want <VarToken>$iteration</VarToken> to appear
-        in the rendered prompt.
+        These variables are injected as internal by default, so they will not appear in your prompt
+        unless you deliberately expose them.
       </DocCallout>
     </DocSection>
 
     <DocSection title="Turning the loop off">
       <DocCallout variant="tip">
-        The loop config has a <b>Bypass</b> switch that collapses it to a single run while keeping
-        the node wired — handy for comparing looped vs single output without rebuilding the graph.
+        The loop has a <b>Bypass</b> switch that collapses it to a single run while keeping the
+        node wired — handy for comparing looped vs single output without rebuilding the graph.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="External seed nodes">
+    <DocSection title="Connecting an external seed">
       <p>
-        You can convert the <code>seed</code> widget to an input socket and connect any INT
-        source — a Primitive node, a seed from rgthree's Seed Anywhere, or any other integer
-        output. This lets you synchronise the loop seed with an upstream sampler seed.
+        You can convert the <code>seed</code> widget to an input socket and connect any integer
+        source — a Primitive node, or any other INT output. This lets you synchronise the loop
+        seed with an upstream sampler or another node.
       </p>
     </DocSection>
 

@@ -16,53 +16,40 @@ import VarToken from "../../../components/docs/VarToken.vue";
   >
     <DocSection title="What internal means">
       <p>
-        A module's instance settings include an <b>internal</b> flag. When set, every binding that
-        module produces is recorded into
-        <VarToken kind="inline">__wp_internal_flags__</VarToken> inside the Context. The variable
-        still lives in the Context and is fully readable by downstream combine and derivation
-        modules. It is only removed at the <em>render boundary</em> — just before the Assembler
-        resolves the template string — so it never appears in the final prompt.
+        When you mark a module as <b>internal</b> in its settings, all the variables it produces
+        are hidden from the final rendered prompt. They still travel through the whole pipeline —
+        you can read them in combine and derivation modules further down the chain — but they are
+        removed just before the Assembler turns the template into text, so they never appear in
+        the output.
       </p>
       <p>
-        This is useful for intermediate computation variables: for example, a wildcard that picks
-        a lighting preset name (<VarToken>$_lighting_key</VarToken>) which a derivation then uses
-        to set a human-readable <VarToken>$lighting</VarToken> description. The key variable is
-        internal; the description is not.
+        A typical use: a wildcard picks a lighting key code like
+        <VarToken>$_lighting_key</VarToken>, marked internal. A derivation module then uses that
+        key to produce a human-readable <VarToken>$lighting</VarToken> description. Only the
+        description reaches the prompt; the key code stays hidden.
       </p>
     </DocSection>
 
-    <DocSection title="Two strip boundaries">
+    <DocSection title="Internal variables survive chaining">
       <p>
-        There are two points where variables are removed from the Context:
+        Internal variables are only removed at the <em>render</em> step inside the Assembler —
+        not when a Context passes its output to the next node. This means a variable set as
+        internal in <b>Context A</b> is still readable by a derivation in <b>Context B</b>
+        downstream. Only the final Assembler hides it from the prompt.
       </p>
-      <ul>
-        <li>
-          <b>Socket boundary</b> (<code>strip_engine_internals</code>) — when a Context is emitted
-          on a <code>PIPELINE_CONTEXT</code> output socket. Only
-          <VarToken kind="inline">__</VarToken>-prefixed engine-internal keys are dropped here.
-          User-flagged-internal variables travel unaffected to the next node in the chain.
-        </li>
-        <li>
-          <b>Render boundary</b> (<code>strip_internals</code>) — inside the Assembler, just
-          before template resolution. Both engine-internal keys <em>and</em> user-flagged-internal
-          variables are removed from the map used for substitution.
-        </li>
-      </ul>
       <DocCallout variant="tip">
-        Because internal variables survive the socket boundary, a variable set as internal in
-        <b>Context A</b> is still readable by a derivation in <b>Context B</b> downstream. Only
-        the Assembler hides it.
+        You can set a variable internal in an early Context and use it as a building block in
+        every subsequent Context in the chain — it will never pollute your rendered prompt.
       </DocCallout>
     </DocSection>
 
     <DocSection title="Loop iteration variable flags">
       <p>
-        The iteration variables injected by <b>WP Context Loop</b> —
-        <VarToken>$iteration</VarToken> and <VarToken>$&lt;name&gt;_total</VarToken> — each have
-        their own internal flag in the loop configuration
-        (<code>iteration_internal</code> / <code>total_internal</code>). By default both are
-        flagged internal, so they do not appear in the rendered prompt. Set either flag to
-        <code>false</code> to surface the variable in the Assembler output.
+        The <VarToken>$iteration</VarToken> and <VarToken>$iteration_total</VarToken> variables
+        injected by <b>WP Context Loop</b> each have their own internal flag in the loop
+        configuration. By default both are internal, so they do not show up in the rendered
+        prompt. Turn off the flag for either one if you want it to appear — for example, to
+        caption outputs with "frame 1 of 4".
       </p>
     </DocSection>
 

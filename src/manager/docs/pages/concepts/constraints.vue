@@ -2,9 +2,30 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocFigure from "../../../components/docs/DocFigure.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const modes = [
+  {
+    term: "Allow",
+    desc: "Keep only matching options in the target pool. Everything else is removed before the target rolls.",
+  },
+  {
+    term: "Exclude",
+    desc: "Remove matching options from the target pool before it rolls.",
+  },
+  {
+    term: "Boost",
+    desc: "Multiply the weight of matching options by the factor you set (> 1 = more likely).",
+  },
+  {
+    term: "Reduce",
+    desc: "Multiply the weight of matching options by a factor less than 1 (= less likely).",
+  },
+];
 </script>
 
 <template>
@@ -18,11 +39,17 @@ import VarToken from "../../../components/docs/VarToken.vue";
     <DocSection title="What a constraint does">
       <p>
         A <b>Constraint</b> module links a <em>source</em> wildcard to a <em>target</em> wildcard.
-        After the source wildcard rolls its pick, the constraint reweights the target wildcard's
-        option pool before the target rolls. The constraint module itself does not set any
-        <VarToken>$variable</VarToken> — it only adjusts probabilities for the target pick.
+        After the source rolls its pick, the constraint adjusts the target's option pool — boosting
+        some choices, excluding others, or narrowing it to a specific set — before the target rolls.
+        The constraint itself does not set any <VarToken>$variable</VarToken>; it only shapes the
+        odds for the target.
       </p>
-      <DocFigure caption="Source rolls → constraint reweights target pool → target rolls.">
+      <p>
+        A classic use: the source wildcard picks a season, and the constraint makes warm-toned
+        lighting far more likely when the source rolled "summer", while cool tones become more
+        likely when it rolled "winter".
+      </p>
+      <DocFigure caption="Source rolls → constraint adjusts target pool → target rolls.">
         <div class="wp-doc-constraint-flow">
           <div class="wp-doc-constraint-box wp-doc-constraint-box--source">
             <span class="wp-doc-constraint-label">Source wildcard</span>
@@ -31,7 +58,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
           <div class="wp-doc-constraint-arrow">→</div>
           <div class="wp-doc-constraint-box wp-doc-constraint-box--constraint">
             <span class="wp-doc-constraint-label">Constraint</span>
-            <span class="wp-doc-constraint-sub">reweights pool</span>
+            <span class="wp-doc-constraint-sub">adjusts target pool</span>
           </div>
           <div class="wp-doc-constraint-arrow">→</div>
           <div class="wp-doc-constraint-box wp-doc-constraint-box--target">
@@ -42,66 +69,64 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </DocFigure>
     </DocSection>
 
-    <DocSection title="Ordering requirement">
+    <DocSection title="Order matters">
       <p>
-        Module order in the stack matters: the <em>source</em> wildcard must appear before the
-        Constraint, and the Constraint must appear before the <em>target</em> wildcard. The engine
-        processes modules top-to-bottom; a constraint whose source has not yet rolled is silently
-        skipped.
+        The module stack runs top to bottom. The <em>source</em> wildcard must come before the
+        Constraint, and the Constraint must come before the <em>target</em> wildcard. A constraint
+        whose source has not yet rolled is silently skipped for that iteration.
       </p>
     </DocSection>
 
-    <DocSection title="Matrix vs exceptions">
+    <DocSection title="Matrix and exceptions">
       <p>
-        A constraint's matching rules come in two forms:
+        A constraint's rules come in two layers that work together:
       </p>
       <ul>
         <li>
-          <b>Matrix</b> — keyed by <code>(source_subcategory, target_subcategory)</code> pairs.
-          Assigns a mode and factor to entire subcategory cross-products.
+          <b>Matrix</b> — rules that apply to whole <em>subcategory</em> pairs. For example: when
+          source subcategory "season/warm" rolled, boost all target options in subcategory
+          "lighting/warm".
         </li>
         <li>
-          <b>Exceptions</b> — keyed by <code>(source_option_id, target_option_id)</code> pairs.
-          Override the matrix for specific individual option combinations.
+          <b>Exceptions</b> — rules that apply to specific individual option pairs. These override
+          the matrix for exact combinations.
         </li>
       </ul>
       <DocCallout variant="tip">
-        When both a matrix rule and an exception match a given pick, the <b>exception wins</b>.
-        Use exceptions for exact overrides on top of a broad subcategory matrix.
+        When a matrix rule and an exception both match a given pair, the <b>exception wins</b>.
+        This lets you set broad subcategory behaviour and then fine-tune individual combinations
+        on top.
       </DocCallout>
-      <p>
-        Modes: <code>allow</code> (keep only matching options), <code>exclude</code> (remove
-        matching options), <code>boost</code> (multiply weight by factor), <code>reduce</code>
-        (multiply weight by factor &lt; 1). Factor must be ≥ 0. The null option is treated as a
-        real option and is addressed by an empty-string key in the matrix/exceptions.
-      </p>
+      <p>Each rule has a <b>mode</b>:</p>
+      <DocKeyList :items="modes" />
+      <DocImage
+        ratio="16 / 7"
+        caption="The constraint matrix editor open on a Constraint module, showing source subcategory rows, target subcategory columns, and mode/factor cells being filled in."
+      />
     </DocSection>
 
-    <DocSection title="First-instance one-shot consumption">
+    <DocSection title="One-shot per target instance">
       <p>
-        Each Constraint module is consumed on the <b>first</b> downstream target wildcard instance
-        it encounters — including instances reached through nested
-        <VarToken kind="ref">@{uuid}</VarToken> refs. Once consumed, the constraint is inert for
-        any further instances of the same target wildcard in the same execution. Consumed
-        constraints are tracked in
-        <VarToken kind="inline">__wp_consumed_constraints__</VarToken> (a set keyed by the owning
-        constraint module's id).
+        Each Constraint module fires exactly once — on the first downstream target wildcard instance
+        it finds, including instances reached through nested <VarToken kind="ref">@{uuid}</VarToken>
+        refs. After that it is consumed for this generation and has no further effect on any
+        additional instances of the same target wildcard.
       </p>
       <DocCallout variant="warn">
-        There are <b>no</b> Local/Global or Stack/Override scope modes. If you need the same
-        pairing to apply to multiple target instances, author multiple Constraint modules — one
-        per target instance you want to affect. The position of each constraint in the module
-        stack controls which target instance it claims.
+        There are no global or repeating scope modes. If you need a pairing rule to affect multiple
+        downstream instances of the same target, add multiple Constraint modules — one per instance
+        you want to influence. The position of each constraint in the stack controls which instance
+        it claims.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Nested reach and carrier claim">
+    <DocSection title="Constraints reach through nested refs">
       <p>
-        The constraint engine follows <VarToken kind="ref">@{uuid}</VarToken> nested refs as it
-        scans downstream for the target wildcard. If the target is reached via a nested ref inside
-        another wildcard's option text, the constraint still fires — the intermediate wildcard acts
-        as a carrier. A carrier-claim failsafe prevents the same constraint from claiming the same
-        downstream instance more than once, even when multiple ref paths converge on it.
+        If the target wildcard appears only inside another wildcard's option text (via a
+        <VarToken kind="ref">@{uuid}</VarToken> nested reference), the constraint still applies —
+        it follows the reference chain to find the target. A safeguard prevents the same constraint
+        from claiming the same downstream instance more than once even when multiple reference paths
+        converge on it.
       </p>
     </DocSection>
 
