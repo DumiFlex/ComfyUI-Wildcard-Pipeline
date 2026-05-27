@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
 import ModalShell from "../shared/ModalShell.vue";
+import { pushToast } from "../shared/toast-store";
 
 const props = defineProps<{
   open: boolean;
@@ -74,6 +75,10 @@ async function submit(mode: "update" | "new") {
     const row = target
       ? await api.templates.update(target, body)
       : await api.templates.create(body);
+    pushToast(
+      `${target ? "Updated" : "Saved"} template “${row.name}”`,
+      { severity: "success" },
+    );
     emit("saved", { id: row.id, name: row.name });
     emit("close");
   } catch (e) {
