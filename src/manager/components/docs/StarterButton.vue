@@ -31,7 +31,7 @@ const props = defineProps<{ slot: ButtonSlot; label?: string }>();
 
 const starter = useStarterStore();
 const toast = useToast();
-const { createStarterModule, createStarterTemplate, buildStarterBundle } = useStarterSet();
+const { createStarterModule, createStarterTemplate, buildStarterBundle, isSlotLive } = useStarterSet();
 
 const busy = ref(false);
 
@@ -54,8 +54,10 @@ const idleLabel = computed<string>(() => {
   return `Create starter ${slotNoun.value}`;
 });
 
-/** Whether the recorded row exists (reactive — flips after a create). */
-const created = computed<boolean>(() => starter.has(props.slot));
+/** Whether the recorded row exists AND is still in the live library catalog.
+ *  Reactive — flips true after a create, and back to false if the user deletes
+ *  the created module / bundle / template, so the button resets to "Create". */
+const created = computed<boolean>(() => isSlotLive(props.slot));
 
 /** Route the "Open" affordance targets for the recorded row. */
 const openRoute = computed(() => {

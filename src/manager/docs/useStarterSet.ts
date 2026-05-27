@@ -25,6 +25,7 @@ import { useToast } from "../composables/useToast";
 import { useBundleStore } from "../stores/bundleStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useStarterStore } from "../stores/starterStore";
+import { useTemplateStore } from "../stores/templateStore";
 import {
   STARTER_BUNDLE_NAME,
   STARTER_BUNDLE_ORDER,
@@ -61,10 +62,30 @@ export function useStarterSet() {
   const starter = useStarterStore();
   const moduleStore = useModuleStore();
   const bundleStore = useBundleStore();
+  const templateStore = useTemplateStore();
 
-  /** Refresh both library catalogs after a write so counts/lists stay live. */
+  /** Refresh all three library catalogs after a write so the sidebar counts +
+   *  lists stay live. Templates are included so the nav Templates count (which
+   *  reads `templateStore.catalog.length`) updates without a page refresh. */
   async function refreshCatalogs(): Promise<void> {
-    await Promise.all([moduleStore.fetchCatalog(), bundleStore.fetchCatalog()]);
+    await Promise.all([
+      moduleStore.fetchCatalog(),
+      bundleStore.fetchCatalog(),
+      templateStore.fetchCatalog(),
+    ]);
+  }
+
+  /** Whether the row recorded for `slot` still exists in the live library
+   *  catalog. Drives StarterButton's created/Open state: if the user deletes
+   *  the created module / bundle / template, this flips false and the button
+   *  resets to its create affordance. Reactive — reads the store catalogs, so a
+   *  computed that calls it re-evaluates when a catalog changes. */
+  function isSlotLive(slot: StarterModuleSlot | "template" | "bundle"): boolean {
+    const id = starter.idFor(slot);
+    if (!id) return false;
+    if (slot === "bundle") return bundleStore.catalog.some((b) => b.id === id);
+    if (slot === "template") return templateStore.catalog.some((t) => t.id === id);
+    return moduleStore.catalog.some((m) => m.id === id);
   }
 
   /** Liveness check for a recorded module id. Resolves `true` if the row is
@@ -279,6 +300,7 @@ export function useStarterSet() {
     ensureStarterTemplate,
     createStarterTemplate,
     buildStarterBundle,
+    isSlotLive,
   };
 }
 

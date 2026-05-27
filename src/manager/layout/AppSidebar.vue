@@ -6,6 +6,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
+import { useCategoryStore } from "../stores/categoryStore";
 import { GITHUB_REPO, GITHUB_WIKI } from "../config/links";
 
 interface NavItem {
@@ -29,6 +30,7 @@ const route = useRoute();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
+const categoryStore = useCategoryStore();
 
 const SECTIONS: NavSection[] = [
   {
@@ -173,6 +175,7 @@ const countByKey = computed<Record<string, number>>(() => {
     constraints: all.filter((m) => m.type === "constraint").length,
     bundles:     bundleStore.catalog.length,
     templates:   templateStore.catalog.length,
+    categories:  categoryStore.items.length,
   };
 });
 

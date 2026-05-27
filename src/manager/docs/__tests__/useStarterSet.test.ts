@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from "pinia";
 const apiMock = vi.hoisted(() => ({
   modules: { get: vi.fn(), create: vi.fn(), list: vi.fn() },
   bundles: { create: vi.fn(), list: vi.fn() },
-  templates: { get: vi.fn(), create: vi.fn() },
+  templates: { get: vi.fn(), create: vi.fn(), list: vi.fn() },
 }));
 
 const pushMock = vi.hoisted(() => vi.fn());
@@ -66,6 +66,7 @@ describe("useStarterSet", () => {
     apiMock.bundles.list.mockReset().mockResolvedValue({ items: [], total: 0 });
     apiMock.templates.get.mockReset();
     apiMock.templates.create.mockReset();
+    apiMock.templates.list.mockReset().mockResolvedValue({ items: [], total: 0 });
     pushMock.mockReset();
     routerPushMock.mockReset();
   });

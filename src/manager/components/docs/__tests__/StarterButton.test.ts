@@ -10,6 +10,9 @@ import { createRouter, createMemoryHistory } from "vue-router";
 const createStarterModule = vi.hoisted(() => vi.fn(() => Promise.resolve("m1")));
 const createStarterTemplate = vi.hoisted(() => vi.fn(() => Promise.resolve("tpl1")));
 const buildStarterBundle = vi.hoisted(() => vi.fn(() => Promise.resolve("bundle1")));
+// Default impl is wired in beforeEach (presence-based) so existing tests keep
+// their record/no-record behaviour; the reset test overrides it to false.
+const isSlotLive = vi.hoisted(() => vi.fn((_slot: string) => false));
 vi.mock("../../../docs/useStarterSet", () => ({
   STARTER_EDIT_ROUTE: {
     subject: "wildcards-edit",
@@ -25,6 +28,7 @@ vi.mock("../../../docs/useStarterSet", () => ({
     createStarterModule,
     createStarterTemplate,
     buildStarterBundle,
+    isSlotLive,
     ensureSlot: vi.fn(),
     ensurePairing: vi.fn(),
     ensureStarterTemplate: vi.fn(),
@@ -83,6 +87,11 @@ beforeEach(() => {
   createStarterTemplate.mockClear();
   buildStarterBundle.mockClear();
   pushMock.mockClear();
+  // Default: a slot reads "live" iff it's recorded in the store — mirrors the
+  // old `starter.has(slot)` behaviour so the record/no-record tests below are
+  // unaffected. The reset test overrides this to a flat false.
+  isSlotLive.mockReset();
+  isSlotLive.mockImplementation((slot: string) => useStarterStore().idFor(slot as ButtonSlot) != null);
 });
 
 describe("StarterButton", () => {
@@ -137,6 +146,18 @@ describe("StarterButton", () => {
     expect(w.find('[data-test="starter-create"]').exists()).toBe(false);
     expect(w.text()).toContain("Created");
     expect(w.find('[data-test="starter-open"]').exists()).toBe(true);
+  });
+
+  it("resets to Create when the recorded row is gone from the library", async () => {
+    // Recorded in the store, but the live catalog no longer has it (user
+    // deleted the created module) → the button must drop back to Create.
+    isSlotLive.mockReturnValue(false);
+    const store = useStarterStore();
+    store.record("pairing", "con9");
+    const { w } = await mountButton({ slot: "pairing" });
+    await flushPromises();
+    expect(w.find('[data-test="starter-create"]').exists()).toBe(true);
+    expect(w.find('[data-test="starter-open"]').exists()).toBe(false);
   });
 
   it("Open navigates to the recorded row's editor", async () => {
