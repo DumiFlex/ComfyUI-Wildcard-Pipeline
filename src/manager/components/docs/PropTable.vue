@@ -24,6 +24,6 @@ defineProps<{ rows: PropRow[] }>();
 .wp-doc-ptable tr:last-child td { border-bottom: none; }
 .wp-doc-ptable__nm { font-family: var(--wp-font-mono); color: var(--wp-text); font-size: 12px; }
 .wp-doc-ptable__opt { color: var(--wp-text-dim); font-family: var(--wp-font); font-size: 10.5px; }
-.wp-doc-ptable__ty { font-family: var(--wp-font-mono); font-size: 11px; color: var(--wp-node); }
+.wp-doc-ptable__ty { font-family: var(--wp-font-mono); font-size: 11px; color: var(--wp-text-muted); }
 .wp-doc-ptable__ds { color: var(--wp-text-muted); }
 </style>

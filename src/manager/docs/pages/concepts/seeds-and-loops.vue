@@ -51,12 +51,14 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </p>
       <ul>
         <li><b>sequential</b> — seed for iteration i = base + i</li>
-        <li><b>hash_index</b> — seed = first 8 hex digits of sha256(base, i)</li>
+        <li><b>hash_index</b> — seed = first 8 bytes of SHA-256(<code>{base}:{i}</code>), read as a big-endian 64-bit integer</li>
         <li><b>prime_stride</b> — seed = base + i × 1 000 003</li>
       </ul>
       <p>
-        The <code>override_seed</code> toggle lets you pin the entire loop to a fixed seed
-        (disabling the per-iteration derivation) for reproducible batches.
+        The <code>override_seed</code> toggle controls whether those strategies apply. When
+        <b>on</b>, the loop derives N seeds from the base and overrides each iteration's Context
+        seed. When <b>off</b> (the default), the base seed is ignored and each downstream Context
+        rolls from its own widget seed independently — the loop only layers per-iteration variation.
       </p>
     </DocSection>
 
@@ -70,8 +72,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
           (first iteration = 1, last = N).
         </li>
         <li>
-          <VarToken>$&lt;loop_name&gt;_total</VarToken> — the total iteration count N,
-          also 1-based.
+          <VarToken>$iteration_total</VarToken> — a constant equal to the total iteration
+          count N (the name follows the configured loop variable name).
         </li>
       </ul>
       <p>
