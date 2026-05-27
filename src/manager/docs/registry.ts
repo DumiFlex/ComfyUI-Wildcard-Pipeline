@@ -1,4 +1,4 @@
-import { defineAsyncComponent, type Component } from "vue";
+import { type Component } from "vue";
 
 export type DocTone =
   | "node" | "neutral"
@@ -14,10 +14,8 @@ export interface DocPageMeta {
   blurb: string;
   /** WP node id chip shown in the hero (nodes only). */
   nodeId?: string;
-  /** defineAsyncComponent wrapper — used by Docs.vue for lazy rendering. */
-  component: Component;
-  /** Raw dynamic import loader — resolved by Docs.vue via watch+shallowRef
-   *  so that flushPromises() fully settles it in tests. */
+  /** Lazy dynamic-import loader for the page SFC — resolved by Docs.vue
+   *  via watch+shallowRef so flushPromises() fully settles it in tests. */
   loader: () => Promise<{ default: Component }>;
   keywords?: string[];
 }
@@ -32,8 +30,8 @@ export const DOC_GROUPS: { id: DocGroupId; label: string }[] = [
 
 type Loader = () => Promise<{ default: Component }>;
 
-function page(p: Loader): Pick<DocPageMeta, "component" | "loader"> {
-  return { component: defineAsyncComponent(p), loader: p };
+function page(p: Loader): Pick<DocPageMeta, "loader"> {
+  return { loader: p };
 }
 
 export const DOC_PAGES: DocPageMeta[] = [

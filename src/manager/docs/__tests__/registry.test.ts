@@ -2,14 +2,14 @@ import { describe, it, expect } from "vitest";
 import { DOC_GROUPS, DOC_PAGES, pagesByGroup, findPage, searchPages, toneVar } from "../registry";
 
 describe("docs registry", () => {
-  it("every page has a unique id, a known group, and a component", () => {
+  it("every page has a unique id, a known group, and a loader", () => {
     const ids = new Set<string>();
     const groupIds = new Set(DOC_GROUPS.map((g) => g.id));
     for (const p of DOC_PAGES) {
       expect(ids.has(p.id), `dupe id ${p.id}`).toBe(false);
       ids.add(p.id);
       expect(groupIds.has(p.group), `bad group ${p.group}`).toBe(true);
-      expect(p.component).toBeTruthy();
+      expect(typeof p.loader).toBe("function");
       expect(p.title.length).toBeGreaterThan(0);
     }
   });
