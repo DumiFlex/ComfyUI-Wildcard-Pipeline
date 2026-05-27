@@ -374,4 +374,33 @@ describe("AssemblerHelper var-color rendering", () => {
     expect(remove?.classList.contains("wp-ctxmenu__item--disabled")).toBe(false);
     wrapper.unmount();
   });
+
+  // NOTE: the toolbar lives in the content branch, which only renders when
+  // there's upstream vars OR a typed template (else the ghost shows). Tests
+  // pass `upstreamVars` so the content + toolbar mount even with an empty
+  // template.
+  it("calls onLoadTemplate on Load click", async () => {
+    const onLoadTemplate = vi.fn();
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["x"], template: "", onSaveTemplate: () => {}, onLoadTemplate },
+    });
+    await wrapper.find('[data-test="asm-load-template"]').trigger("click");
+    expect(onLoadTemplate).toHaveBeenCalled();
+  });
+
+  it("calls onSaveTemplate on Save click", async () => {
+    const onSaveTemplate = vi.fn();
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["x"], template: "$a", onSaveTemplate, onLoadTemplate: () => {} },
+    });
+    await wrapper.find('[data-test="asm-save-template"]').trigger("click");
+    expect(onSaveTemplate).toHaveBeenCalled();
+  });
+
+  it("disables Save when the template is empty", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["x"], template: "", onSaveTemplate: () => {}, onLoadTemplate: () => {} },
+    });
+    expect(wrapper.find('[data-test="asm-save-template"]').attributes("disabled")).toBeDefined();
+  });
 });

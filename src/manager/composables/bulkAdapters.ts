@@ -1,9 +1,10 @@
-import type { ModuleRow, BundleRow } from "../api/types";
+import type { ModuleRow, BundleRow, TemplateRow } from "../api/types";
 
 type ModuleStore = ReturnType<typeof import("../stores/moduleStore").useModuleStore>;
 type BundleStore = ReturnType<typeof import("../stores/bundleStore").useBundleStore>;
+type TemplateStore = ReturnType<typeof import("../stores/templateStore").useTemplateStore>;
 
-export type AnyRow = ModuleRow | BundleRow;
+export type AnyRow = ModuleRow | BundleRow | TemplateRow;
 
 export interface BulkResult {
   ok: number;
@@ -175,6 +176,64 @@ export function makeBundleStoreAdapter(store: BundleStore): BulkAdapter {
     },
     async delete(items) {
       return runEach(items as BundleRow[], async (i) => { await store.remove(i.id); });
+    },
+  };
+}
+
+export function makeTemplateStoreAdapter(store: TemplateStore): BulkAdapter {
+  // Same staleness defeat as the module/bundle adapters — re-read live
+  // state from the store before idempotence filtering. Items arrive as
+  // AnyRow[] (the BulkAdapter contract) but are TemplateRow at runtime.
+  function fresh(items: AnyRow[]): TemplateRow[] {
+    return items.map((i) => {
+      const live = store.items.find((s) => s.id === i.id) ?? store.catalog.find((s) => s.id === i.id);
+      return (live ?? (i as unknown as TemplateRow));
+    });
+  }
+  return {
+    async setFavorite(items, on) {
+      const live = fresh(items);
+      const target = live.filter((i) => Boolean(i.is_favorite) !== on);
+      const skipped = live.length - target.length;
+      const res = await runEach(target, async (i) => { await store.toggleFavorite(i.id); });
+      res.ok += skipped;
+      return res;
+    },
+    async duplicate(items) {
+      // Templates are duplicated by re-saving from the assembler, not via
+      // the library bulk action — mirror bundles + hide the button in the
+      // list view (`:hide-bulk-duplicate`).
+      const errors = items.map((i) => ({ id: i.id, reason: "template duplicate not supported in library" }));
+      return { ok: 0, failed: items.length, errors, created: [] };
+    },
+    async addTag(items, tag) {
+      const live = fresh(items);
+      const target = live.filter((i) => !(i.tags ?? []).includes(tag));
+      const skipped = live.length - target.length;
+      const res = await runEach(target, async (i) => {
+        await store.update(i.id, { tags: [...(i.tags ?? []), tag] });
+      });
+      res.ok += skipped;
+      return res;
+    },
+    async removeTag(items, tag) {
+      const live = fresh(items);
+      const target = live.filter((i) => (i.tags ?? []).includes(tag));
+      const skipped = live.length - target.length;
+      const res = await runEach(target, async (i) => {
+        await store.update(i.id, { tags: (i.tags ?? []).filter((t) => t !== tag) });
+      });
+      res.ok += skipped;
+      return res;
+    },
+    async setCategory(items) {
+      // Set per-template via the editor, not bulk — hidden in the list
+      // view (`:hide-bulk-set-category`), mirroring bundles.
+      const errors = items.map((i) => ({ id: i.id, reason: "set category from the template editor" }));
+      return { ok: 0, failed: items.length, errors };
+    },
+    async delete(items) {
+      return runEach(fresh(items), async (i) => { await store.remove(i.id); });
     },
   };
 }

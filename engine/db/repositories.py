@@ -695,3 +695,186 @@ class BundleRepository:
         sql = "SELECT COUNT(*) AS n FROM bundles" + where
         row = self._conn.execute(sql, params).fetchone()
         return int(row["n"]) if row is not None else 0
+
+
+class TemplateNotFound(LookupError):
+    """Raised when a requested template id does not exist."""
+
+
+def _row_to_template(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "category_id": row["category_id"],
+        "tags": json.loads(row["tags"]),
+        "is_favorite": bool(row["is_favorite"]),
+        "template_string": row["template_string"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+class TemplateRepository:
+    """CRUD for reusable PromptAssembler template strings.
+
+    Mirrors BundleRepository but simpler: a template is a single
+    `template_string` plus library metadata. No children / color /
+    payload_hash / version (templates can't drift — loading copies the
+    string with no stored back-reference). Pure DB — engine-isolated.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def _gen_id(self) -> str:
+        return secrets.token_hex(_ID_HEX_LEN // 2)
+
+    def create(
+        self,
+        *,
+        name: str,
+        template_string: str = "",
+        description: str = "",
+        category_id: str | None = None,
+        tags: list[str] | None = None,
+        is_favorite: bool = False,
+    ) -> dict[str, Any]:
+        tid = self._gen_id()
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO templates("
+                "id, name, description, category_id, tags, "
+                "is_favorite, template_string, created_at, updated_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                (
+                    tid, name, description, category_id,
+                    json.dumps(tags or []), int(is_favorite),
+                    template_string, now, now,
+                ),
+            )
+        return self.get(tid)
+
+    def get(self, template_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM templates WHERE id = ?;", (template_id,),
+        ).fetchone()
+        if row is None:
+            raise TemplateNotFound(template_id)
+        return _row_to_template(row)
+
+    def update(
+        self,
+        template_id: str,
+        *,
+        name: str | _Unset = _UNSET,
+        description: str | _Unset = _UNSET,
+        category_id: str | None | _Unset = _UNSET,
+        tags: list[str] | _Unset = _UNSET,
+        template_string: str | _Unset = _UNSET,
+        is_favorite: bool | _Unset = _UNSET,
+    ) -> dict[str, Any]:
+        existing = self.get(template_id)
+        new = {
+            "name": existing["name"] if isinstance(name, _Unset) else name,
+            "description": (
+                existing["description"] if isinstance(description, _Unset) else description
+            ),
+            "category_id": (
+                existing["category_id"] if isinstance(category_id, _Unset) else category_id
+            ),
+            "tags": existing["tags"] if isinstance(tags, _Unset) else tags,
+            "template_string": (
+                existing["template_string"]
+                if isinstance(template_string, _Unset)
+                else template_string
+            ),
+            "is_favorite": (
+                existing["is_favorite"] if isinstance(is_favorite, _Unset) else is_favorite
+            ),
+        }
+        now = _now()
+        with self._conn:
+            self._conn.execute(
+                "UPDATE templates SET "
+                "name = ?, description = ?, category_id = ?, tags = ?, "
+                "is_favorite = ?, template_string = ?, updated_at = ? "
+                "WHERE id = ?;",
+                (
+                    new["name"], new["description"], new["category_id"],
+                    json.dumps(new["tags"]), int(new["is_favorite"]),
+                    new["template_string"], now, template_id,
+                ),
+            )
+        return self.get(template_id)
+
+    def delete(self, template_id: str) -> None:
+        with self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM templates WHERE id = ?;", (template_id,),
+            )
+        if cur.rowcount == 0:
+            raise TemplateNotFound(template_id)
+
+    def _build_filter_clause(
+        self,
+        *,
+        category_id: str | None,
+        query: str | None,
+        favorites_only: bool,
+    ) -> tuple[str, list[Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if category_id is not None:
+            clauses.append("category_id = ?")
+            params.append(category_id)
+        if query:
+            escaped = (
+                query.replace("\\", "\\\\")
+                     .replace("%", "\\%")
+                     .replace("_", "\\_")
+            )
+            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            params.append(f"%{escaped}%")
+        if favorites_only:
+            clauses.append("is_favorite = 1")
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        return where, params
+
+    def list(
+        self,
+        *,
+        category_id: str | None = None,
+        query: str | None = None,
+        favorites_only: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where, params = self._build_filter_clause(
+            category_id=category_id, query=query, favorites_only=favorites_only,
+        )
+        sql = "SELECT * FROM templates" + where + " ORDER BY updated_at DESC, id DESC"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        elif offset:
+            sql += " LIMIT -1 OFFSET ?"
+            params.append(offset)
+        rows = self._conn.execute(sql, params).fetchall()
+        return [_row_to_template(r) for r in rows]
+
+    def count(
+        self,
+        *,
+        category_id: str | None = None,
+        query: str | None = None,
+        favorites_only: bool = False,
+    ) -> int:
+        where, params = self._build_filter_clause(
+            category_id=category_id, query=query, favorites_only=favorites_only,
+        )
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM templates" + where, params,
+        ).fetchone()
+        return int(row["n"]) if row is not None else 0

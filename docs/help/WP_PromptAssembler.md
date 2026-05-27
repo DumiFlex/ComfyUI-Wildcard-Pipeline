@@ -28,6 +28,15 @@ Below the template, the **Variables** strip lists every value available from ups
 - purple highlight = resolved value
 - amber wavy underline = missing variable (will render empty)
 
+## Save / Load template
+
+Two toolbar buttons next to **Clear template**:
+
+- **Load** — opens a library picker with search plus category / tags / favorites filters. Click a template to load it; this replaces the current template (confirms first if you've already typed something). The assembler remembers which template you loaded.
+- **Save** — opens a save dialog (name, category, tags, description, live preview). When the name matches an existing template — or you loaded one — you get two actions: **Update existing** (overwrite that library entry) and **Save as new entry** (create a fresh copy, auto-suffixed). Otherwise it's a plain **Save**. After saving, the assembler tracks that entry so the next Save defaults to updating it.
+
+Any `$vars` the loaded template needs that aren't in the upstream chain show as the usual amber "missing" markers. Manage saved templates in the SPA **Templates** tab.
+
 ## Tips
 
 - Use `$$` for a literal `$` in your prompt.

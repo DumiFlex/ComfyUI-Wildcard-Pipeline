@@ -5,6 +5,7 @@ import Icon, { ICON_SM } from "../components/ui/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
+import { useTemplateStore } from "../stores/templateStore";
 import { GITHUB_REPO, GITHUB_WIKI } from "../config/links";
 
 interface NavItem {
@@ -27,6 +28,7 @@ const router = useRouter();
 const route = useRoute();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
+const templateStore = useTemplateStore();
 
 const SECTIONS: NavSection[] = [
   {
@@ -50,6 +52,7 @@ const SECTIONS: NavSection[] = [
   {
     label: "Library",
     items: [
+      { id: "templates",  label: "Templates",       icon: "pi-file-edit",                to: "/templates"      },
       { id: "categories", label: "Categories",      icon: "pi-bookmark",                 to: "/categories"     },
       { id: "io",         label: "Import / Export", icon: "pi-arrow-right-arrow-left",   to: "/import-export"  },
       { id: "test",       label: "Test Runner",     icon: "pi-bolt",                     to: "/test"           },
@@ -79,6 +82,7 @@ const activeId = computed<string>(() => {
     ["derivations", "derivations"],
     ["constraints", "constraints"],
     ["bundles", "bundles"],
+    ["templates", "templates"],
     ["categories", "categories"],
     ["import-export", "io"],
     ["test", "test"],
@@ -166,6 +170,7 @@ const countByKey = computed<Record<string, number>>(() => {
     derivations: all.filter((m) => m.type === "derivation").length,
     constraints: all.filter((m) => m.type === "constraint").length,
     bundles:     bundleStore.catalog.length,
+    templates:   templateStore.catalog.length,
   };
 });
 

@@ -6,6 +6,7 @@ import type {
   MatchRequest, MatchResponse,
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
   SnapshotShape, TestRequest, TestResponse,
+  TemplateCreateInput, TemplateListResponse, TemplateRow, TemplateUpdateInput,
 } from "./types";
 
 export class ApiError extends Error {
@@ -133,6 +134,37 @@ export const api = {
     },
     favorite(id: string) {
       return request<BundleRow>(`/wp/api/bundles/${id}/favorite`, { method: "POST" });
+    },
+  },
+  templates: {
+    list(params: ListParams = {}) {
+      const query = qs({
+        category: params.category,
+        q: params.q,
+        favorites: params.favorites ? "1" : undefined,
+        limit: params.limit,
+        offset: params.offset,
+      });
+      return request<TemplateListResponse>(`/wp/api/templates${query}`, { method: "GET" });
+    },
+    get(id: string) {
+      return request<TemplateRow>(`/wp/api/templates/${id}`, { method: "GET" });
+    },
+    create(body: TemplateCreateInput) {
+      return request<TemplateRow>("/wp/api/templates", {
+        method: "POST", body: JSON.stringify(body),
+      });
+    },
+    update(id: string, body: TemplateUpdateInput) {
+      return request<TemplateRow>(`/wp/api/templates/${id}`, {
+        method: "PUT", body: JSON.stringify(body),
+      });
+    },
+    delete(id: string) {
+      return request<void>(`/wp/api/templates/${id}`, { method: "DELETE" });
+    },
+    favorite(id: string) {
+      return request<TemplateRow>(`/wp/api/templates/${id}/favorite`, { method: "POST" });
     },
   },
   categories: {
