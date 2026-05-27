@@ -5,7 +5,7 @@ describe("migratePayload", () => {
   it("returns payload as-is if version matches CURRENT_SCHEMA_VERSION", () => {
     const payload = {
       schema_version: CURRENT_SCHEMA_VERSION,
-      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [],
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
     };
     const result = migratePayload(payload);
     expect(result.ok).toBe(true);
@@ -123,6 +123,46 @@ describe("migratePayload", () => {
       expect(result.migrated.combines).toEqual([]);
       expect(result.migrated.derivations).toEqual([]);
       expect(result.migrated.categories).toEqual([]);
+    }
+  });
+
+  it("defaults missing templates bucket to [] (back-compat: pre-templates export)", () => {
+    // Old exports predate the templates bucket and lack the key entirely;
+    // the normalizer must default it so downstream code never sees undefined.
+    const noTemplates = {
+      schema_version: CURRENT_SCHEMA_VERSION,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [],
+    } as Record<string, unknown>;
+    const result = migratePayload(noTemplates);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.migrated.templates).toEqual([]);
+    }
+  });
+
+  it("tags templates with migrated_from when migration runs", () => {
+    const v0Payload = {
+      schema_version: 0,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [],
+      templates: [{ id: "t1", name: "hero" }],
+    };
+    const result = migratePayload(v0Payload);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.migrated.templates[0] as Record<string, unknown>).migrated_from).toBe(0);
+    }
+  });
+
+  it("includes templates in the migratedEntityCount sum", () => {
+    const v0Payload = {
+      schema_version: 0,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [],
+      templates: [{ id: "t1" }, { id: "t2" }],
+    };
+    const result = migratePayload(v0Payload);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.migratedEntityCount).toBe(2);
     }
   });
 });

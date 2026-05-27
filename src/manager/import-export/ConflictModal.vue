@@ -441,6 +441,7 @@ const KIND_CLASS: Record<string, string> = {
   constraint:   "constraint",
   bundle:       "bundle",
   category:     "category",
+  template:     "template",
 };
 
 /** Canonical pi-icon class per kind — mirrors `kindIcon` from
@@ -455,6 +456,7 @@ function iconForKind(kind: string): string {
   if (kind === "constraint")   return "pi pi-filter";
   if (kind === "bundle")       return "pi pi-box";
   if (kind === "category")     return "pi pi-folder";
+  if (kind === "template")     return "pi pi-file-edit";
   return "pi pi-circle";
 }
 

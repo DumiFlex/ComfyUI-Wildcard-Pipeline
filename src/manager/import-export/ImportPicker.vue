@@ -2,9 +2,10 @@
 /**
  * Import picker — selection surface.
  *
- * Renders one PickerSection per bucket (7 total: bundles, wildcards,
- * fixed_values, combines, derivations, constraints, categories) over
- * the migrated payload emitted by ImportTab. Each section exposes per-row
+ * Renders one PickerSection per bucket (8 total: bundles, wildcards,
+ * fixed_values, combines, derivations, constraints, categories,
+ * templates) over the migrated payload emitted by ImportTab. Each
+ * section exposes per-row
  * checkboxes plus a section "select all" affordance, and the picker
  * surfaces badges + dep warnings the user needs to make an informed
  * pick:
@@ -42,8 +43,16 @@ import type { StatusBadge, DepRef } from "./PickerRow.vue";
 import { CURRENT_SCHEMA_VERSION, type RawPayload } from "./migrations";
 import type { IntegrityWarning } from "./parse";
 import { buildDepGraph, transitiveClosure } from "./dep-graph";
-import { detectCollisions, type CollisionState, type LibraryRow } from "./collision";
-import type { ModuleRow as FingerprintModuleRow } from "./fingerprint";
+import {
+  detectCollisions,
+  detectTemplateCollisions,
+  type CollisionState,
+  type LibraryRow,
+} from "./collision";
+import type {
+  ModuleRow as FingerprintModuleRow,
+  TemplateRow as FingerprintTemplateRow,
+} from "./fingerprint";
 
 /**
  * Minimal shape of an entity row in the payload, sufficient for the
@@ -115,7 +124,8 @@ type BucketKey =
   | "combines"
   | "derivations"
   | "constraints"
-  | "categories";
+  | "categories"
+  | "templates";
 
 interface BucketMeta {
   key: BucketKey;
@@ -137,6 +147,7 @@ const BUCKETS: BucketMeta[] = [
   { key: "derivations",  title: "Derivations",  kindFallback: "derivation" },
   { key: "constraints",  title: "Constraints",  kindFallback: "constraint" },
   { key: "categories",   title: "Categories",   kindFallback: "category" },
+  { key: "templates",    title: "Templates",    kindFallback: "template" },
 ];
 
 function entitiesForBucket(bucket: BucketKey): PayloadEntity[] {
@@ -179,6 +190,7 @@ function lookupCategoryFromPayload(
 function kindForEntity(entity: PayloadEntity, bucket: BucketMeta): string {
   if (bucket.key === "bundles") return "bundle";
   if (bucket.key === "categories") return "category";
+  if (bucket.key === "templates") return "template";
   return typeof entity.type === "string" && entity.type.length > 0
     ? entity.type
     : bucket.kindFallback;
@@ -263,6 +275,11 @@ const warningIds = computed<Set<string>>(() => {
  * (bundle-fingerprint.ts) and categories merge by name. The picker
  * surfaces a placeholder id-presence conflict for bundles separately
  * in `badgesForEntity`; categories never get a conflict badge here.
+ *
+ * Templates run a SEPARATE pass (`detectTemplateCollisions`) because
+ * they collide on a `templateFingerprint` rather than the module
+ * `snapshot_fingerprint`; the result is merged into the same record so
+ * the existing module-state branch in `badgesForEntity` covers them.
  */
 const collisionStates = computed<Record<string, CollisionState>>(() => {
   if (!props.libraryRows) return {};
@@ -279,7 +296,17 @@ const collisionStates = computed<Record<string, CollisionState>>(() => {
       incoming.push(row);
     }
   }
-  return detectCollisions(incoming, props.libraryRows);
+  const result = detectCollisions(incoming, props.libraryRows);
+  // Template pass — separate fingerprint, same collision-state vocabulary.
+  const incomingTemplates: Array<FingerprintTemplateRow & { id: string }> = [];
+  for (const row of props.payload.templates) {
+    if (typeof row.id !== "string" || row.id.length === 0) continue;
+    incomingTemplates.push(row as unknown as FingerprintTemplateRow & { id: string });
+  }
+  if (incomingTemplates.length > 0) {
+    Object.assign(result, detectTemplateCollisions(incomingTemplates, props.libraryRows));
+  }
+  return result;
 });
 
 /**
@@ -365,6 +392,7 @@ const entityIndex = computed<Map<string, { name: string; type: string }>>(() => 
       const type =
         b.key === "bundles" ? "bundle"
         : b.key === "categories" ? "category"
+        : b.key === "templates" ? "template"
         : (typeof e.type === "string" && e.type.length > 0 ? e.type : b.kindFallback);
       m.set(e.id, { name, type });
     }

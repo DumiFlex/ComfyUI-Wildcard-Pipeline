@@ -11,7 +11,12 @@ import ExportTab from "../import-export/ExportTab.vue";
 import ImportTab from "../import-export/ImportTab.vue";
 import ImportPicker from "../import-export/ImportPicker.vue";
 import ConflictModal from "../import-export/ConflictModal.vue";
-import { detectCollisions, type LibraryRow } from "../import-export/collision";
+import {
+  detectCollisions,
+  detectTemplateCollisions,
+  type LibraryRow,
+} from "../import-export/collision";
+import { templateFingerprint } from "../import-export/fingerprint";
 import {
   buildCommitPayload,
   type CommitPayload,
@@ -32,7 +37,10 @@ import type {
   PerItemDecision,
   PerItemIssue,
 } from "../import-export/conflict-types";
-import type { ModuleRow as FingerprintModuleRow } from "../import-export/fingerprint";
+import type {
+  ModuleRow as FingerprintModuleRow,
+  TemplateRow as FingerprintTemplateRow,
+} from "../import-export/fingerprint";
 import type { RawPayload } from "../import-export/migrations";
 import type { IntegrityWarning } from "../import-export/parse";
 import { newShortId } from "../utils/ids";
@@ -46,26 +54,42 @@ const bundleStore = useBundleStore();
 const mode = ref<Mode>("export");
 
 // ---------- Source library state (fetched once on mount) ----------
-// Powers the collision detector + broken-ref walker. Categories are not
-// needed by the pipeline so we don't fetch them.
+// Powers the collision detector + broken-ref walker. Modules + bundles
+// drive the snapshot_fingerprint collision path; templates drive the
+// separate templateFingerprint path. Categories aren't fetched here —
+// they merge by name server-side and never produce a collision badge.
 
 interface LibraryModule { id: string; snapshot_fingerprint?: string }
 interface LibraryBundle { id: string; snapshot_fingerprint?: string }
+/** Templates carry no snapshot_fingerprint; the orchestrator computes a
+ *  `templateFingerprint` from these literal fields for collision detection. */
+interface LibraryTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category_id: string | null;
+  tags: string[];
+  is_favorite: boolean;
+  template_string: string;
+}
 
 const localModules = ref<LibraryModule[]>([]);
 const localBundles = ref<LibraryBundle[]>([]);
+const localTemplates = ref<LibraryTemplate[]>([]);
 
 const refreshing = ref(false);
 
 async function loadLibrary() {
   refreshing.value = true;
   try {
-    const [mods, buns] = await Promise.all([
+    const [mods, buns, tmpls] = await Promise.all([
       api.modules.list({ limit: 1000 }),
       api.bundles.list({ limit: 1000 }),
+      api.templates.list({ limit: 1000 }),
     ]);
     localModules.value = mods.items as unknown as LibraryModule[];
     localBundles.value = buns.items as unknown as LibraryBundle[];
+    localTemplates.value = tmpls.items;
   } catch (e) {
     toast.push({
       severity: "error",
@@ -146,11 +170,12 @@ const BUCKET_FOR_KIND: Record<EntityKind, RawPayloadArrayKey> = {
   derivation: "derivations",
   constraint: "constraints",
   category: "categories",
+  template: "templates",
 };
 
 const ALL_KINDS: EntityKind[] = [
   "bundle", "wildcard", "fixed_values", "combine",
-  "derivation", "constraint", "category",
+  "derivation", "constraint", "category", "template",
 ];
 
 /** Module kinds carry `snapshot_fingerprint` and route through the
@@ -171,6 +196,11 @@ function buildLibraryMap(): Map<string, LibraryRow> {
   }
   for (const row of localBundles.value) {
     m.set(row.id, { snapshot_fingerprint: row.snapshot_fingerprint });
+  }
+  for (const row of localTemplates.value) {
+    // Templates have no server snapshot_fingerprint; stamp a computed
+    // templateFingerprint so detectTemplateCollisions can prove drift.
+    m.set(row.id, { template_fingerprint: templateFingerprint(row) });
   }
   return m;
 }
@@ -206,12 +236,28 @@ function buildSelectedEntities(
   for (const [kind, rows] of Object.entries(moduleEntitiesByKind)) {
     collisionByKind[kind] = detectCollisions(rows, library);
   }
+  // Templates run a separate collision pass — they compare a
+  // `templateFingerprint` (computed on both sides) instead of the module
+  // `snapshot_fingerprint`, so they can't go through `detectCollisions`.
+  const templateRows: Array<FingerprintTemplateRow & { id: string }> = [];
+  for (const id of selection) {
+    const hit = idIndex.get(id);
+    if (!hit || hit.kind !== "template") continue;
+    templateRows.push(hit.entity as unknown as FingerprintTemplateRow & { id: string });
+  }
+  const templateColl: Record<string, SelectedEntity["collision"]> =
+    templateRows.length > 0 ? detectTemplateCollisions(templateRows, library) : {};
   for (const id of selection) {
     const hit = idIndex.get(id);
     if (!hit) continue;
-    const collision: SelectedEntity["collision"] = MODULE_KINDS.has(hit.kind)
-      ? (collisionByKind[hit.kind]?.[id] ?? "no-collision")
-      : "no-collision";
+    let collision: SelectedEntity["collision"];
+    if (hit.kind === "template") {
+      collision = templateColl[id] ?? "no-collision";
+    } else if (MODULE_KINDS.has(hit.kind)) {
+      collision = collisionByKind[hit.kind]?.[id] ?? "no-collision";
+    } else {
+      collision = "no-collision";
+    }
     result.push({ kind: hit.kind, entity: hit.entity, collision });
   }
   return result;
@@ -359,7 +405,7 @@ function partitionSelection(
 ): ResolvedSelection {
   const out: ResolvedSelection = {
     bundles: [], wildcards: [], fixed_values: [], combines: [],
-    derivations: [], constraints: [], categories: [],
+    derivations: [], constraints: [], categories: [], templates: [],
   };
   for (const s of selected) {
     if (s.collision === "silent-skip"
@@ -423,6 +469,7 @@ function partitionSelection(
       case "combine":     out.combines.push(entry); break;
       case "derivation":  out.derivations.push(entry); break;
       case "constraint":  out.constraints.push(entry); break;
+      case "template":    out.templates.push(entry); break;
     }
   }
   return out;

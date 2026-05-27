@@ -44,3 +44,35 @@ export function moduleFingerprint(m: ModuleRow): string {
   ];
   return djb2(parts.join("\n"));
 }
+
+/**
+ * Template content fingerprint. Templates carry NO server-computed
+ * `payload_hash` / `snapshot_fingerprint` (they're the simplest entity —
+ * a `template_string` plus library metadata), so collision detection
+ * computes this fingerprint on BOTH the incoming and live rows.
+ *
+ * Hashes `[name, description, sorted_tags_csv, template_string,
+ * category_id ?? ""]` joined by `\n`. Mirrors the Python side computed in
+ * the engine importer's template collision path — same field order, same
+ * djb2, so cross-language parity is free.
+ *
+ * Pure function — no DOM, no Vue, no I/O.
+ */
+export interface TemplateRow {
+  name: string;
+  description: string;
+  tags: string[];
+  template_string: string;
+  category_id?: string | null;
+}
+
+export function templateFingerprint(t: TemplateRow): string {
+  const parts = [
+    t.name,
+    t.description,
+    [...(t.tags ?? [])].sort().join(","),
+    t.template_string,
+    t.category_id ?? "",
+  ];
+  return djb2(parts.join("\n"));
+}

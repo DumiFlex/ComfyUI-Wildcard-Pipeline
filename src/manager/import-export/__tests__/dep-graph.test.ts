@@ -12,6 +12,7 @@ function makePayload(parts: Partial<RawPayload>): RawPayload {
     derivations: parts.derivations ?? [],
     constraints: parts.constraints ?? [],
     categories: parts.categories ?? [],
+    templates: parts.templates ?? [],
   };
 }
 

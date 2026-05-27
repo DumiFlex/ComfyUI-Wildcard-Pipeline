@@ -5,7 +5,7 @@ import PickerRow from "../PickerRow.vue";
 import type { RawPayload } from "../migrations";
 import type { IntegrityWarning } from "../parse";
 import type { LibraryRow } from "../collision";
-import { moduleFingerprint, type ModuleRow } from "../fingerprint";
+import { moduleFingerprint, templateFingerprint, type ModuleRow } from "../fingerprint";
 
 /**
  * Test data shape: 7-bucket RawPayload with `id` (not `uuid`) as the
@@ -20,6 +20,7 @@ const EMPTY_BUCKETS = {
   derivations: [],
   constraints: [],
   categories: [],
+  templates: [],
 };
 
 function makePayload(parts: Partial<RawPayload>): RawPayload {
@@ -510,6 +511,64 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "categories");
     const row = wrap.findAllComponents(PickerRow)[0]!;
     expect(row.props("kind")).toBe("category");
+  });
+
+  it("renders a Templates section with selectable rows + passes kind=template", async () => {
+    const payload = makePayload({
+      templates: [
+        { id: "t1", name: "Hero", template_string: "$subject" },
+        { id: "t2", name: "Scene", template_string: "$scene" },
+      ],
+    });
+    const wrap = mountPicker({ payload });
+    await flushPromises();
+    // Section header present with the correct title + count.
+    const section = wrap.get('[data-test="import-picker-section-templates"]');
+    expect(section.get(".wp-picker-section__title").text()).toBe("Templates");
+    expect(section.get(".wp-picker-section__count").text()).toBe("2 items");
+    // Expand + verify rows are real selectable PickerRows tagged template.
+    await expandSection(wrap, "templates");
+    const row = wrap.get('[data-test="import-picker-row-t1"]');
+    expect(row.findComponent(PickerRow).props("kind")).toBe("template");
+    await row.get('button[role="checkbox"]').trigger("click");
+    await flushPromises();
+    expect(wrap.get('[data-test="import-picker-selected-count"]').text()).toContain("1 of 2");
+  });
+
+  it("adds a MODIFIED badge for a template when libraryRows carries a different template_fingerprint", async () => {
+    // Incoming template fingerprint vs a different library fingerprint →
+    // conflict → MODIFIED (the same module-state badge branch covers it).
+    const incoming = { id: "t1", name: "Hero", description: "", tags: [], template_string: "$a", category_id: null };
+    const libraryFp = templateFingerprint({
+      name: "Hero", description: "", tags: [], template_string: "$DIFFERENT", category_id: null,
+    });
+    const wrap = mountPicker({
+      payload: makePayload({ templates: [incoming] }),
+      libraryRows: new Map([["t1", { template_fingerprint: libraryFp }]]),
+    });
+    await flushPromises();
+    await expandSection(wrap, "templates");
+    const row = wrap.findAllComponents(PickerRow)[0]!;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
+    const modBadge = badges.find((b) => b.label === "MODIFIED");
+    expect(modBadge).toBeDefined();
+    expect(modBadge!.variant).toBe("mod");
+  });
+
+  it("surfaces a DUPLICATE badge for a template whose fingerprint matches the library", async () => {
+    const incoming = { id: "t1", name: "Hero", description: "", tags: [], template_string: "$a", category_id: null };
+    const fp = templateFingerprint(incoming);
+    const wrap = mountPicker({
+      payload: makePayload({ templates: [incoming] }),
+      libraryRows: new Map([["t1", { template_fingerprint: fp }]]),
+    });
+    await flushPromises();
+    await expandSection(wrap, "templates");
+    const row = wrap.findAllComponents(PickerRow)[0]!;
+    const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
+    const dup = badges.find((b) => b.label === "DUPLICATE");
+    expect(dup).toBeTruthy();
+    expect(dup!.variant).toBe("duplicate");
   });
 
   it("passes showId=true to PickerRow", async () => {

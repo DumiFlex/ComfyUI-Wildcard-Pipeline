@@ -3,13 +3,13 @@
  * Export tab — picker UI.
  *
  * Loads the live library on mount, shows one PickerSection per bucket
- * (7 buckets: bundles, wildcards, fixed_values, combines, derivations,
- * constraints, categories), tracks selection in seven independent
- * Sets, and POSTs the picked UUIDs to /wp/api/export/build. The
- * response payload is JSON-stringified and offered to the user as a
+ * (8 buckets: bundles, wildcards, fixed_values, combines, derivations,
+ * constraints, categories, templates), tracks selection in eight
+ * independent Sets, and POSTs the picked UUIDs to /wp/api/export/build.
+ * The response payload is JSON-stringified and offered to the user as a
  * file download.
  *
- * Bucket naming is locked to the engine's 7-bucket schema — wildcards,
+ * Bucket naming is locked to the engine's 8-bucket schema — wildcards,
  * fixed_values, combines, derivations, constraints are five separate
  * module-type buckets, NOT a flat "variables" array. The request body
  * keys (`*_uuids`) match the Python endpoint exactly.
@@ -18,7 +18,7 @@ import { computed, onMounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
 import { useToast } from "../composables/useToast";
 import { api, ApiError, type ExportBuildRequest } from "../api/client";
-import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
+import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
 import type { DepRef } from "./PickerRow.vue";
@@ -30,10 +30,10 @@ import { buildDepGraph, transitiveClosure } from "./dep-graph";
 const toast = useToast();
 
 /**
- * Bucket key — matches the 7-bucket schema. `wildcard`, `fixed_values`,
+ * Bucket key — matches the 8-bucket schema. `wildcard`, `fixed_values`,
  * `combine`, `derivation`, `constraint` are module subtypes (filtered
- * from `api.modules.list()` by `row.type`); `bundle` and `category`
- * come from their own endpoints.
+ * from `api.modules.list()` by `row.type`); `bundle`, `category`, and
+ * `template` come from their own endpoints.
  */
 type BucketKey =
   | "bundle"
@@ -42,7 +42,8 @@ type BucketKey =
   | "combine"
   | "derivation"
   | "constraint"
-  | "category";
+  | "category"
+  | "template";
 
 interface BucketMeta {
   key: BucketKey;
@@ -59,6 +60,7 @@ const BUCKETS: BucketMeta[] = [
   { key: "derivation",   title: "Derivations",   requestKey: "derivation_uuids" },
   { key: "constraint",   title: "Constraints",   requestKey: "constraint_uuids" },
   { key: "category",     title: "Categories",    requestKey: "category_uuids" },
+  { key: "template",     title: "Templates",     requestKey: "template_uuids" },
 ];
 
 /** Map ModuleType (from api.modules.list) → BucketKey. */
@@ -75,6 +77,7 @@ const MODULE_TYPE_TO_BUCKET: Record<ModuleType, BucketKey> = {
 const modules = ref<ModuleRow[]>([]);
 const bundles = ref<BundleRow[]>([]);
 const categories = ref<CategoryRow[]>([]);
+const templates = ref<TemplateRow[]>([]);
 
 const loading = ref<boolean>(false);
 const exporting = ref<boolean>(false);
@@ -85,14 +88,16 @@ async function loadLibrary() {
     // Single modules.list() call returns ALL types; client-side split
     // into 5 buckets via row.type. Five parallel filtered requests
     // would be 5 needless network roundtrips.
-    const [mods, buns, cats] = await Promise.all([
+    const [mods, buns, cats, tmpls] = await Promise.all([
       api.modules.list({ limit: 1000 }),
       api.bundles.list({ limit: 1000 }),
       api.categories.list(),
+      api.templates.list({ limit: 1000 }),
     ]);
     modules.value = mods.items;
     bundles.value = buns.items;
     categories.value = cats.items;
+    templates.value = tmpls.items;
   } catch (err) {
     toast.push({
       severity: "error",
@@ -122,10 +127,11 @@ const selection = ref<Record<BucketKey, Set<string>>>({
   derivation:   new Set(),
   constraint:   new Set(),
   category:     new Set(),
+  template:     new Set(),
 });
 
 function modulesForBucket(b: BucketKey): ModuleRow[] {
-  if (b === "bundle" || b === "category") return [];
+  if (b === "bundle" || b === "category" || b === "template") return [];
   return modules.value.filter((m) => MODULE_TYPE_TO_BUCKET[m.type] === b);
 }
 
@@ -180,6 +186,19 @@ function rowsForBucket(b: BucketKey): RowItem[] {
     return categories.value.map((x) => ({
       id: x.id, name: x.name, kind: "category", isFavorite: false,
     }));
+  }
+  if (b === "template") {
+    return templates.value.map((x) => {
+      const cat = lookupCategory(x.category_id);
+      return {
+        id: x.id,
+        name: x.name,
+        kind: "template",
+        categoryName: cat?.name,
+        categoryColor: cat?.color,
+        isFavorite: x.is_favorite,
+      };
+    });
   }
   return modulesForBucket(b).map((x) => {
     const cat = lookupCategory(x.category_id);
@@ -254,6 +273,7 @@ function applyClosureToSelection(closure: Set<string>): void {
     derivation:   new Set(selection.value.derivation),
     constraint:   new Set(selection.value.constraint),
     category:     new Set(selection.value.category),
+    template:     new Set(selection.value.template),
   };
   for (const b of BUCKETS) {
     const ids = new Set(rowsForBucket(b.key).map((r) => r.id));
@@ -315,6 +335,9 @@ const libraryRowById = computed<Map<string, { name: string; type: string }>>(() 
   }
   for (const c of categories.value) {
     m.set(c.id, { name: c.name, type: "category" });
+  }
+  for (const t of templates.value) {
+    m.set(t.id, { name: t.name, type: "template" });
   }
   return m;
 });
@@ -386,6 +409,7 @@ function buildRequest(): ExportBuildRequest {
     derivation_uuids:   [...selection.value.derivation],
     constraint_uuids:   [...selection.value.constraint],
     category_uuids:     [...selection.value.category],
+    template_uuids:     [...selection.value.template],
   };
 }
 
@@ -509,6 +533,7 @@ function clearAll() {
     derivation:   new Set(),
     constraint:   new Set(),
     category:     new Set(),
+    template:     new Set(),
   };
 }
 
@@ -529,6 +554,7 @@ function presetFullLibrary(): void {
     derivation:   new Set(modulesForBucket("derivation").map((m) => m.id)),
     constraint:   new Set(modulesForBucket("constraint").map((m) => m.id)),
     category:     new Set(categories.value.map((c) => c.id)),
+    template:     new Set(templates.value.map((t) => t.id)),
   };
 }
 
@@ -546,6 +572,7 @@ function presetWildcardsOnly(): void {
     derivation:   new Set(),
     constraint:   new Set(),
     category:     new Set(),
+    template:     new Set(),
   };
 }
 
@@ -557,6 +584,7 @@ function presetWildcardsOnly(): void {
 function presetFavoritesOnly(): void {
   const favModules = modules.value.filter((m) => m.is_favorite);
   const favBundles = bundles.value.filter((b) => b.is_favorite);
+  const favTemplates = templates.value.filter((t) => t.is_favorite);
   selection.value = {
     bundle:       new Set(favBundles.map((b) => b.id)),
     wildcard:     new Set(favModules.filter((m) => m.type === "wildcard").map((m) => m.id)),
@@ -565,6 +593,7 @@ function presetFavoritesOnly(): void {
     derivation:   new Set(favModules.filter((m) => m.type === "derivation").map((m) => m.id)),
     constraint:   new Set(favModules.filter((m) => m.type === "constraint").map((m) => m.id)),
     category:     new Set(),
+    template:     new Set(favTemplates.map((t) => t.id)),
   };
 }
 </script>

@@ -35,7 +35,8 @@ export type EntityKind =
   | "combine"
   | "derivation"
   | "constraint"
-  | "category";
+  | "category"
+  | "template";
 
 /**
  * Picker decision per entity. ``rename`` carries the freshly-allocated
@@ -96,6 +97,7 @@ export interface ResolvedSelection {
   derivations: ResolvedEntity[];
   constraints: ResolvedEntity[];
   categories: ResolvedCategoryEntity[];
+  templates: ResolvedEntity[];
 }
 
 /**
@@ -211,6 +213,10 @@ export function buildCommitPayload(selection: ResolvedSelection): CommitPayload 
   partition("combine", selection.combines, out);
   partition("derivation", selection.derivations, out);
   partition("constraint", selection.constraints, out);
+  // Templates support all three decisions (add / replace / rename), same
+  // as the five module kinds — the server's `template` kind handler in
+  // engine/importer.py mirrors the module insert/update/rename paths.
+  partition("template", selection.templates, out);
   // Categories: only "add" is valid (enforced by CategoryDecision).
   // Fail loudly if a non-add decision is smuggled past the type system —
   // silently dropping it would mask a real bug at the picker boundary

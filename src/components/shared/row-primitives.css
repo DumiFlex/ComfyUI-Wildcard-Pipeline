@@ -242,6 +242,12 @@
   background: color-mix(in oklab, var(--wp-text-muted) 18%, transparent);
   color: var(--wp-text-muted);
 }
+.wp-row-type-icon--template {
+  /* Templates are reusable assembler strings — neutral muted like
+   * categories (no kind-color token exists for templates). */
+  background: color-mix(in oklab, var(--wp-text-muted) 18%, transparent);
+  color: var(--wp-text-muted);
+}
 
 /* ── Drag handle ─────────────────────────────────────────────────── */
 

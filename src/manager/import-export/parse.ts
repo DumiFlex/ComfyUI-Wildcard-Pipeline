@@ -92,6 +92,12 @@ export function parsePayload(raw: string): ParseResult {
       return { ok: false, reason: `missing or non-array '${key}'` };
     }
   }
+  // Templates are OPTIONAL for back-compat: exports predating the
+  // templates bucket lack the key entirely and must still import. Only
+  // reject when the key is present but not an array.
+  if (obj.templates !== undefined && !Array.isArray(obj.templates)) {
+    return { ok: false, reason: "'templates' must be an array" };
+  }
   const migrationResult = migratePayload(obj as Partial<RawPayload>);
   if (!migrationResult.ok) return { ok: false, reason: migrationResult.reason };
   const { migrated, migratedEntityCount } = migrationResult;

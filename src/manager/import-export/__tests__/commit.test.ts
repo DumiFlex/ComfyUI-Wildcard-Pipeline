@@ -19,6 +19,7 @@ function emptySelection(): ResolvedSelection {
     derivations: [],
     constraints: [],
     categories: [],
+    templates: [],
   };
 }
 
@@ -61,7 +62,34 @@ describe("buildCommitPayload", () => {
     expect((result.renames[0]?.content as { id: string }).id).toBe("w3_new");
   });
 
-  it("partitions adds across all 7 entity kinds", () => {
+  it("partitions all three decision kinds for templates", () => {
+    const sel = emptySelection();
+    sel.templates = [
+      { entity: row("t1", "hero"), decision: { kind: "add" } },
+      { entity: row("t2", "scene"), decision: { kind: "replace" } },
+      {
+        entity: row("t3", "mood"),
+        decision: { kind: "rename", new_id: "t3_new", new_name: "mood (imported)" },
+      },
+    ];
+    const result = buildCommitPayload(sel);
+
+    const addT = result.adds.find((a) => a.kind === "template");
+    expect(addT).toBeDefined();
+    expect((addT!.entity as { id: string }).id).toBe("t1");
+
+    const repT = result.replaces.find((r) => r.kind === "template");
+    expect(repT).toBeDefined();
+    expect(repT!.id).toBe("t2");
+
+    const renT = result.renames.find((r) => r.kind === "template");
+    expect(renT).toBeDefined();
+    expect(renT!.old_id).toBe("t3");
+    expect(renT!.new_id).toBe("t3_new");
+    expect((renT!.content as { name: string }).name).toBe("mood (imported)");
+  });
+
+  it("partitions adds across all 8 entity kinds", () => {
     const sel: ResolvedSelection = {
       bundles: [{ entity: row("b1"), decision: { kind: "add" } }],
       wildcards: [{ entity: row("w1"), decision: { kind: "add" } }],
@@ -70,14 +98,16 @@ describe("buildCommitPayload", () => {
       derivations: [{ entity: row("d1"), decision: { kind: "add" } }],
       constraints: [{ entity: row("cn1"), decision: { kind: "add" } }],
       categories: [{ entity: cat("cat1"), decision: { kind: "add" } }],
+      templates: [{ entity: row("t1"), decision: { kind: "add" } }],
     };
     const result = buildCommitPayload(sel);
-    expect(result.adds).toHaveLength(7);
+    expect(result.adds).toHaveLength(8);
     expect(result.replaces).toHaveLength(0);
     expect(result.renames).toHaveLength(0);
 
     // Order mirrors the partitioner call order; the contract doesn't lock
     // order on the wire but locking it here keeps regressions visible.
+    // Templates partition AFTER constraints, BEFORE categories.
     const kinds = result.adds.map((a) => a.kind);
     expect(kinds).toEqual([
       "bundle",
@@ -86,6 +116,7 @@ describe("buildCommitPayload", () => {
       "combine",
       "derivation",
       "constraint",
+      "template",
       "category",
     ]);
   });
@@ -136,6 +167,7 @@ describe("buildCommitPayload", () => {
         combines: [],
         derivations: [],
         constraints: [],
+        templates: [],
         categories: [
           // @ts-expect-error — runtime guard for if TS narrowing is ever loosened.
           { entity: cat("cat_x"), decision: { kind: "replace" } },
@@ -176,6 +208,7 @@ describe("buildCommitPayload", () => {
       derivations: [],
       constraints: [],
       categories: [],
+      templates: [],
     });
     expect(result.renames).toHaveLength(1);
     const content = result.renames[0]!.content as Record<string, unknown>;
