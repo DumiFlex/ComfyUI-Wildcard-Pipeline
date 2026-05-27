@@ -17,7 +17,7 @@ const ports = [
 const rowOptions = [
   { term: "Binding name", desc: "The $variable name that downstream modules and the Assembler will see. Use letters, digits, and underscores; must start with a letter." },
   { term: "Template", desc: "Leave blank to write the raw socket value as-is. Enter a template like $input_0 by $input_1 to compose a value from multiple sockets. Use $$ for a literal dollar sign." },
-  { term: "Internal", desc: "Tick this to make the variable available to Combine and Derivation modules upstream but keep it out of the assembled prompt text." },
+  { term: "Internal", desc: "Tick this to make the variable available to Combine and Derivation modules downstream but keep it out of the assembled prompt text." },
 ];
 </script>
 

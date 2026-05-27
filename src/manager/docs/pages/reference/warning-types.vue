@@ -9,17 +9,17 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 interface WarningRow { label: string; severity: string; desc: string }
 
 const runtimeWarnings: WarningRow[] = [
-  { label: "Unknown variable", severity: "warn", desc: "A $variable used in a template or combine was never set by any module, so it rendered literally." },
+  { label: "Unknown variable", severity: "warn", desc: "A $variable used in a template or combine was never set by any module, so it resolved to empty." },
   { label: "Unresolved reference", severity: "warn", desc: "An @{…} nested reference couldn't be resolved — its target wildcard wasn't found, or wasn't upstream." },
   { label: "Reference nested too deep", severity: "warn", desc: "Nested @{…} references went past the depth limit and stopped expanding." },
   { label: "Circular reference", severity: "warn", desc: "A loop of @{…} references pointed back at itself; it was broken to avoid hanging." },
   { label: "Variable used where it can't be", severity: "warn", desc: "A $variable was read somewhere that doesn't support one (for example, inside a wildcard option)." },
-  { label: "Sub-category filter matched nothing", severity: "warn", desc: "An @{…} sub-category filter left no options, so the pick fell back to the full pool." },
+  { label: "Sub-category filter matched nothing", severity: "warn", desc: "An @{…} sub-category filter matched no options, so the reference resolved to nothing (empty)." },
   { label: "Fixed Values override unreadable", severity: "warn", desc: "A Fixed Values instance's per-instance overrides couldn't be read, so they were ignored." },
   { label: "Unknown constraint mode", severity: "warn", desc: "A constraint used a reweight mode that isn't recognised; that entry was skipped." },
   { label: "Factor ignored (Allow)", severity: "info", desc: "A factor was set together with mode Allow, where the factor has no effect." },
   { label: "Constraint source missing at run", severity: "warn", desc: "The constraint's source wildcard wasn't present in the stack when the run reached it." },
-  { label: "Constraint excluded everything", severity: "warn", desc: "Reweighting zeroed out every option on the target, so the pick fell back to the full pool." },
+  { label: "Constraint excluded everything", severity: "warn", desc: "Reweighting zeroed out every option on the target, so the pick fell back to the first remaining option." },
   { label: "Constraint never fired", severity: "info", desc: "A constraint was set up but its target wildcard never came up this run, so it had no effect." },
   { label: "Invalid injector name", severity: "warn", desc: "A WP Context Injector row used a variable name that isn't valid." },
   { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row tried to use a name starting with __, which is reserved internally." },

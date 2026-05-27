@@ -92,10 +92,11 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <li><VarToken kind="inline">{a|b|c}</VarToken> and multi-pick forms work everywhere text is resolved.</li>
       </ul>
       <DocCallout variant="warn">
-        Modules that produce values (wildcards, fixed values) run before all other modules in the
-        same Context have completed. This means a producer cannot read a <VarToken>$var</VarToken>
-        set by another module in the same Context. To build a value from earlier picks, add a
-        <b>combine</b> or <b>derivation</b> module placed after the producers.
+        Wildcards and fixed values are <b>producers</b> — their option text doesn't read
+        <VarToken>$var</VarToken> at all (only combine, derivation, and assembler templates do). So a
+        wildcard can't pull in a value another module set, no matter the order. To build a value from
+        earlier picks, add a <b>combine</b> or <b>derivation</b> after the producers — those surfaces
+        do read <VarToken>$var</VarToken>.
       </DocCallout>
     </DocSection>
 

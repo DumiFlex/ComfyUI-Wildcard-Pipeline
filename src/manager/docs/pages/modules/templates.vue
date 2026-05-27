@@ -40,8 +40,9 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
       </p>
       <DocCallout variant="tip">
         Any <VarToken>$var</VarToken> in the template must be produced by a module upstream of the
-        Assembler. If a placeholder has no matching variable at runtime it's left in place so you can
-        spot the gap — add a module (or fix the name) that sets it.
+        Assembler. If a placeholder has no matching variable at runtime it resolves to empty (the
+        assembler preview underlines it) so you can spot the gap — add a module (or fix the name)
+        that sets it.
       </DocCallout>
     </DocSection>
 

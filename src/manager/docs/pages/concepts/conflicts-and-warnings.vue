@@ -19,7 +19,7 @@ const commonFlags = [
   },
   {
     term: "Missing variable",
-    desc: "Your Prompt Assembler template uses a $variable that nothing upstream produces — it'll appear literally in the prompt. Add a module that sets it, or drop the token.",
+    desc: "Your Prompt Assembler template uses a $variable that nothing upstream produces — it resolves to empty (the canvas preview underlines the token so you can spot it). Add a module that sets it, or drop the token.",
   },
   {
     term: "Constraint not wired",
