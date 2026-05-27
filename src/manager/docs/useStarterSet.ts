@@ -27,6 +27,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useStarterStore } from "../stores/starterStore";
 import {
   STARTER_BUNDLE_NAME,
+  STARTER_BUNDLE_ORDER,
   STARTER_MODULE_DESCRIPTORS,
   STARTER_MODULE_SLOTS,
   STARTER_TEMPLATE_NAME,
@@ -236,9 +237,12 @@ export function useStarterSet() {
     }
 
     // 2. Fetch fresh rows for canonical payload + payload_hash, then
-    // 3. build children in the canonical ChildSnapshot shape.
+    // 3. build children in RUNTIME order (STARTER_BUNDLE_ORDER) — NOT the
+    //    creation order above. The child array order IS the in-Context
+    //    resolution order, and the constraint must sit between its source and
+    //    target wildcard (see STARTER_BUNDLE_ORDER for the why).
     const children: Record<string, unknown>[] = [];
-    for (const slot of STARTER_MODULE_SLOTS) {
+    for (const slot of STARTER_BUNDLE_ORDER) {
       const id = slotIds.get(slot);
       if (!id) continue;
       const row: ModuleRow = await api.modules.get(id);

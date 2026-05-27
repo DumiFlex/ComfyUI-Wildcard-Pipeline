@@ -47,6 +47,25 @@ export const STARTER_MODULE_SLOTS: readonly Exclude<StarterSlot, "template">[] =
   "pairing",
 ] as const;
 
+/** RUNTIME order for the bundle's `children[]` — NOT the creation order above.
+ *  A bundle's child array order IS the in-Context resolution order, and module
+ *  order is load-bearing:
+ *    - a constraint only re-weights the FIRST instance of its target wildcard
+ *      that appears DOWNSTREAM of itself, so `pairing` must sit between its
+ *      source (`subject`) and target (`mood`);
+ *    - `subject` must precede `mood` so the constraint sees a resolved source pick;
+ *    - `scene` (combine `$mood $subject`) and `accent` (derivation reading `$mood`)
+ *      must come after both wildcards have resolved.
+ *  Hence: source → constraint → target → fixed → combine → derivation. */
+export const STARTER_BUNDLE_ORDER: readonly Exclude<StarterSlot, "template">[] = [
+  "subject",
+  "pairing",
+  "mood",
+  "style",
+  "scene",
+  "accent",
+] as const;
+
 /** Name constants — referenced by the store/composable + asserted in tests. */
 export const STARTER_BUNDLE_NAME = "Starter set";
 export const STARTER_TEMPLATE_NAME = "Starter prompt";

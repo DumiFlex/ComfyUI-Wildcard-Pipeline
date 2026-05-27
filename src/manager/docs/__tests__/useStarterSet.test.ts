@@ -280,6 +280,23 @@ describe("useStarterSet", () => {
       }
     });
 
+    it("orders children so the constraint sits between its source and target wildcards", async () => {
+      const store = useStarterStore();
+      const { buildStarterBundle } = useStarterSet();
+      await buildStarterBundle();
+      const body = apiMock.bundles.create.mock.calls[0][0];
+      // Bundle child array order IS the runtime resolution order. The
+      // constraint only re-weights the first DOWNSTREAM instance of its target,
+      // so it must come after `subject` (source) and before `mood` (target).
+      const ids = (body.children as { id: string }[]).map((c) => c.id);
+      const iSubject = ids.indexOf(store.idFor("subject") ?? "");
+      const iPairing = ids.indexOf(store.idFor("pairing") ?? "");
+      const iMood = ids.indexOf(store.idFor("mood") ?? "");
+      expect(iSubject).toBeGreaterThanOrEqual(0);
+      expect(iSubject).toBeLessThan(iPairing);
+      expect(iPairing).toBeLessThan(iMood);
+    });
+
     it("reuses already-created modules (no duplicate creates) when store is populated", async () => {
       // Pre-populate store with live ids; get() resolves them all.
       const store = useStarterStore();
