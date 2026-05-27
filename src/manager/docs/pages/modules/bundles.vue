@@ -2,6 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 </script>
 
@@ -11,69 +12,57 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
     title="Bundles"
     icon="pi pi-box"
     tone="bundle"
-    blurb="Group a contiguous range of modules into a reusable, self-contained unit. Not a module kind — a container."
+    blurb="Save a set of modules as a reusable, named group. Drop the whole set into any Context in one click."
   >
     <DocSection title="What bundles are">
       <p>
-        A Bundle is <strong>not a module kind</strong> — it has no engine handler and produces no
-        <code>$variable</code> directly. Bundles live in a separate top-level <code>bundles</code>
-        array alongside the modules list. In the engine, bundle children execute <em>flat</em>:
-        the bundle is expanded in-place and each child module runs as if it were a direct member
-        of the parent Context's module stack.
+        A Bundle is a named container that holds several modules together — not a module kind
+        itself. Think of it as a saved preset: you author a combination of wildcards, fixed values,
+        derivations, or whatever you like, save them as a bundle, and then drop that bundle into
+        any Context widget without having to recreate the same setup each time.
       </p>
-      <DocCallout variant="tip">
-        Think of a Bundle as a named, saved selection of modules — a reusable preset you can drop
-        into any Context widget without re-authoring the same module combination each time.
-      </DocCallout>
+      <p>
+        At runtime, bundle children run as if they were placed directly in the stack — the bundle
+        is just a grouping layer for the editor.
+      </p>
+      <DocImage
+        ratio="16 / 6"
+        caption="A Context widget stack showing a collapsed bundle row labeled 'Portrait lighting kit' with a disclosure arrow. Below it, the same bundle expanded to reveal three child module rows inside."
+      />
     </DocSection>
 
     <DocSection title="Frozen snapshots">
       <p>
-        When you insert a bundle into a Context, the engine takes a <strong>deep-cloned frozen
-        snapshot</strong> of the bundle's children at insert time. Subsequent edits to the
-        bundle's library entry do <em>not</em> propagate into the snapshot. This is intentional:
-        bundles are designed for offline / portable capture of a known-working module combination.
+        When you insert a bundle into a Context, the editor takes a snapshot of its children at
+        that moment. If you later edit the bundle's library entry, those changes do <em>not</em>
+        flow into existing snapshots — each use is independent.
       </p>
       <p>
-        If the source bundle is later deleted from the library, the snapshot continues to execute
-        correctly — it is self-contained. The workflow row shows a <strong>MISSING</strong> badge
-        to signal that the snapshot is now detached from any live library entry, but the
-        captured content is preserved.
+        This is intentional: a bundle is a point-in-time capture of a known-working setup. If the
+        original bundle is later deleted from the library, the snapshot keeps working and the row
+        simply shows a <strong>MISSING</strong> badge to let you know it is no longer linked to a
+        live library entry.
+      </p>
+      <DocCallout variant="tip">
+        To pick up changes from the library entry, use "Push to library" from the bundle's context
+        menu to sync the snapshot back up, or re-insert a fresh copy.
+      </DocCallout>
+    </DocSection>
+
+    <DocSection title="Disabling a bundle">
+      <p>
+        Each bundle has its own enable/disable toggle. Turning a bundle off suppresses all of its
+        children without changing their individual settings. Turn it back on and everything
+        restores exactly as it was — nothing is lost.
       </p>
     </DocSection>
 
-    <DocSection title="Enable overlay">
+    <DocSection title="Bundles and the wildcard cascade">
       <p>
-        Each bundle (and each child module inside it) has an <code>enabled</code> flag. The
-        bundle's own <code>enabled</code> flag is a <strong>non-destructive overlay</strong>:
-        the effective enabled state of a child is <code>bundle.enabled AND ancestor.enabled AND child.enabled</code>.
-        Disabling a bundle suppresses all its children without modifying the children's individual
-        flags — re-enabling the bundle restores them exactly as they were.
-      </p>
-    </DocSection>
-
-    <DocSection title="UUID remap on insert">
-      <p>
-        When a bundle snapshot is inserted, the engine remaps all internal UUIDs and rewrites
-        any <code>@{uuid}</code> / constraint source-target references within the snapshot so
-        they remain internally consistent. Cross-snapshot references to modules outside the
-        bundle are not remapped.
-      </p>
-    </DocSection>
-
-    <DocSection title="Identity">
-      <p>
-        Default bundle color: <code>#46566B</code>. Default icon: <code>pi pi-box</code>
-        (neutral — bundles are containers, not a module kind, so they carry no kind color).
-      </p>
-    </DocSection>
-
-    <DocSection title="Wildcard-delete cascade">
-      <p>
-        Bundles are excluded from the wildcard-delete cascade dialog. Because bundle children are
-        frozen snapshots (not live references to the library row), deleting the source wildcard
-        does not break the snapshot's execution. Surfacing the bundle in the cascade dialog would
-        imply its snapshot is going to be mutated — it is not.
+        When you delete a wildcard from the library, the manager offers to clean up every use of
+        that wildcard across your Contexts. Bundles are intentionally excluded from this cascade —
+        their children are frozen snapshots, so they continue to work correctly even after the
+        source wildcard is gone.
       </p>
     </DocSection>
 

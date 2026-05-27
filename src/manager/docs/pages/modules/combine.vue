@@ -2,8 +2,15 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const instanceOptions = [
+  { term: "Template override", desc: "Replace the entire template for this particular use without changing the shared library entry." },
+  { term: "Output variable", desc: "Change which $variable name this combine writes to for this use." },
+];
 </script>
 
 <template>
@@ -12,52 +19,50 @@ import VarToken from "../../../components/docs/VarToken.vue";
     title="Combine"
     icon="pi pi-link"
     tone="combine"
-    blurb="Template-fill $variables and inline syntax into a single output $variable. The consumer module for assembling multi-part values."
+    blurb="Fill a template with $variables from earlier modules and write the result to a new $variable. The tool for assembling multi-part values."
   >
     <DocSection title="What it does">
       <p>
-        A Combine module resolves a template string — interpolating
-        <VarToken>$var</VarToken> references and <VarToken kind="inline">{a|b|c}</VarToken>
-        inline picks — and writes the result to a single <VarToken>$output_var</VarToken>.
-        Because Combine is a <em>consumer</em> module, it can read any
-        <VarToken>$variable</VarToken> that was set earlier in the module stack.
-        <VarToken kind="ref">@{uuid}</VarToken> refs are <strong>not</strong> supported
-        in Combine templates (that surface is wildcard-only).
+        A Combine module takes a template string you write — like
+        <VarToken>$style portrait of $subject, $mood lighting</VarToken> — and fills in the
+        <VarToken>$variable</VarToken> placeholders with whatever was picked or set earlier in the
+        stack. The filled-in result is written to a single output variable (e.g.
+        <VarToken>$prompt_fragment</VarToken>) that your prompt assembler or further modules can use.
       </p>
+      <p>
+        You can also sprinkle <VarToken kind="inline">{a|b|c}</VarToken> inline picks directly
+        inside the template for any on-the-fly variation that doesn't need its own wildcard.
+      </p>
+      <DocImage
+        ratio="16 / 7"
+        caption="The Combine editor showing a template field containing '$style portrait of $subject, $mood lighting', the detected $var chips listed below it, and the output variable set to $prompt_fragment."
+      />
     </DocSection>
 
-    <DocSection title="Payload shape">
-      <p>Key fields in a Combine library entry:</p>
+    <DocSection title="What you type in the template">
       <ul>
         <li>
-          <code>template</code> — the template string containing <VarToken>$var</VarToken>
-          placeholders and/or <VarToken kind="inline">{a|b|c}</VarToken> picks.
-          <code>$$</code> escapes to a literal <code>$</code>.
+          <VarToken>$variablename</VarToken> — substituted with whatever that variable holds at
+          this point in the stack. The variable must have been set by an earlier module.
         </li>
         <li>
-          <code>output_var</code> — the <VarToken>$variable</VarToken> name this module
-          writes. Must match <code>^[A-Za-z_][A-Za-z0-9_]*$</code>, ≤ 64 chars,
-          never <code>__</code>-prefixed.
+          <VarToken kind="inline">{a|b|c}</VarToken> — picks one of the options at random inline.
+          Good for small variations you don't need a full wildcard for.
         </li>
         <li>
-          <code>input_vars</code> — advisory list of <VarToken>$variables</VarToken> the
-          template reads. Used by the scanner to detect missing upstream producers; not
-          enforced at runtime.
+          <code>$$</code> — a literal <code>$</code> character in the output (escape if you need
+          to write a dollar sign that shouldn't be treated as a variable).
         </li>
-      </ul>
-    </DocSection>
-
-    <DocSection title="Instance overrides">
-      <p>An instance can override library defaults without modifying the library entry:</p>
-      <ul>
-        <li><b>template_override</b> — replace the entire template string for this instance.</li>
-        <li><b>variable_binding</b> — remap the output variable name for this instance.</li>
       </ul>
       <DocCallout variant="tip">
-        Combine is the primary tool for merging multiple <VarToken>$vars</VarToken> into a
-        single composite value — for example, combining <VarToken>$style</VarToken> and
-        <VarToken>$subject</VarToken> into a <VarToken>$prompt_fragment</VarToken>.
+        The manager shows you which <VarToken>$variables</VarToken> your template reads as chips
+        below the template field. If a chip is highlighted as missing, add an upstream module that
+        sets that variable.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Per-use options">
+      <DocKeyList :items="instanceOptions" />
     </DocSection>
 
     <DocSection title="Works with">

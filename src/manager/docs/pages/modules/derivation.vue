@@ -2,8 +2,31 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const conditionOps = [
+  { term: "equals / not equals", desc: "Matches when the variable's value is (or isn't) exactly the text you provide. Case-sensitive." },
+  { term: "contains", desc: "Matches when the variable's value includes the text you provide somewhere inside it." },
+  { term: "matches", desc: "Matches using a regular expression — for flexible pattern-based conditions." },
+  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value." },
+  { term: "is set / is unset", desc: "is set matches when the variable is present and non-empty; is unset matches when it's absent or empty." },
+];
+
+const actionModes = [
+  { term: "Replace", desc: "Overwrite the variable's current value entirely with the action text." },
+  { term: "Append", desc: "Add the action text to the end of the variable's current value." },
+  { term: "Prepend", desc: "Insert the action text before the variable's current value." },
+];
+
+const instanceOptions = [
+  { term: "Disable a rule", desc: "Skip one of the top-level IF/ELIF/ELSE rules for this use without removing it from the library entry." },
+  { term: "Disable a branch", desc: "Skip a specific IF, ELIF, or ELSE branch within a rule for this use." },
+  { term: "Value override", desc: "Replace the text that a specific branch action writes, for this use only." },
+  { term: "Rule order", desc: "Reorder the rules for this use without changing the shared library entry." },
+];
 </script>
 
 <template>
@@ -12,52 +35,52 @@ import VarToken from "../../../components/docs/VarToken.vue";
     title="Derivation"
     icon="pi pi-arrow-right-arrow-left"
     tone="derivation"
-    blurb="IF/ELIF/ELSE rules that read the current Context and mutate it. The conditional logic layer of the pipeline."
+    blurb="IF/ELIF/ELSE rules that read what's been picked so far and update the Context accordingly. Add conditional logic to your pipeline."
   >
     <DocSection title="What it does">
       <p>
-        A Derivation module evaluates a set of IF/ELIF/ELSE rule branches top-to-bottom. Each
-        branch checks a condition against a <VarToken>$variable</VarToken> already in the Context
-        and, if it matches, performs one or more actions (replace, append, prepend) on Context
-        variables. Rules are evaluated <em>independently</em> — every rule is checked even after
-        an earlier rule fires; there is no early-exit across rules, only within a single
-        IF/ELIF/ELSE chain.
+        A Derivation module runs a set of IF/ELIF/ELSE rules after earlier modules have made their
+        picks. Each rule checks a <VarToken>$variable</VarToken> already in the Context and, if the
+        condition matches, changes one or more variables — replacing, appending to, or prepending
+        to their current values.
       </p>
+      <p>
+        For example: IF <VarToken>$subject</VarToken> equals "ocean" → append ", with crashing
+        waves" to <VarToken>$mood</VarToken>. If not, the rule does nothing and the next rule is
+        checked.
+      </p>
+      <DocImage
+        ratio="16 / 7"
+        caption="A Derivation rule card open in the editor: an IF branch checking '$subject equals ocean' with an Append action on $mood, and an ELSE branch that does nothing."
+      />
     </DocSection>
 
-    <DocSection title="Condition operators">
-      <p>Supported condition types for branch matching:</p>
-      <ul>
-        <li><code>equals</code> / <code>not_equals</code> — exact string equality.</li>
-        <li><code>contains</code> — substring match.</li>
-        <li><code>matches</code> — regular-expression match.</li>
-        <li><code>exists</code> / <code>not_exists</code> — variable is present/absent in the Context.</li>
-        <li><code>is_set</code> / <code>is_unset</code> — variable is present and non-empty / absent or empty.</li>
-      </ul>
-    </DocSection>
-
-    <DocSection title="Action modes">
-      <p>Each branch action can:</p>
-      <ul>
-        <li><b>replace</b> — overwrite the target variable's value entirely.</li>
-        <li><b>append</b> — concatenate to the end of the current value.</li>
-        <li><b>prepend</b> — insert before the current value.</li>
-      </ul>
+    <DocSection title="How rules work">
+      <p>
+        Each Derivation module can hold multiple rules. Every rule is checked from top to bottom —
+        even if an earlier rule fired, the next one is still evaluated independently. Within a
+        single rule, only the first matching branch (IF, ELIF, or ELSE) runs.
+      </p>
       <DocCallout variant="tip">
-        Actions can target any <VarToken>$variable</VarToken> — including ones produced by earlier
-        modules in the same stack. This makes Derivation useful for post-processing picks from
-        upstream Wildcard or Combine modules.
+        Because rules are independent, you can chain several simple rules instead of writing one
+        very complex one. It also means two rules can both fire in the same run if their conditions
+        are both true.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Instance overrides">
-      <p>An instance can override library defaults without modifying the library entry:</p>
-      <ul>
-        <li><b>disabled_rule_ids</b> — skip specific top-level rules for this instance.</li>
-        <li><b>disabled_branch_keys</b> — skip specific IF/ELIF/ELSE branches within a rule.</li>
-        <li><b>value overrides</b> — replace the action value for a specific branch.</li>
-        <li><b>rule_order_override</b> — reorder rules for this instance without modifying the library entry.</li>
-      </ul>
+    <DocSection title="Condition operators">
+      <DocKeyList :items="conditionOps" />
+    </DocSection>
+
+    <DocSection title="Action modes">
+      <DocKeyList :items="actionModes" />
+    </DocSection>
+
+    <DocSection title="Per-use options">
+      <p>
+        When you add a Derivation to a Context you can tune which rules are active for that use:
+      </p>
+      <DocKeyList :items="instanceOptions" />
     </DocSection>
 
     <DocSection title="Works with">

@@ -2,8 +2,21 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const rowFields = [
+  { term: "Name", desc: 'The $variable name to set — for example, "style" sets $style.' },
+  { term: "Value", desc: "The text to assign. You can use inline {a|b|c} pick syntax here to add a touch of randomness, but you cannot read other $variables — use Combine for that." },
+  { term: "Enable / disable", desc: "Turn a row off without deleting it. Useful for toggling optional extras like a quality booster or a negative-prompt fragment." },
+];
+
+const instanceOptions = [
+  { term: "Value override", desc: "Replace the value of any row for this particular use, without changing the shared library entry. Good for adapting a reusable Fixed Values module to a specific workflow." },
+  { term: "Locked seed", desc: "Freezes any inline {a|b|c} picks across loop iterations so the value stays the same throughout a batch." },
+];
 </script>
 
 <template>
@@ -12,42 +25,39 @@ import VarToken from "../../../components/docs/VarToken.vue";
     title="Fixed Values"
     icon="pi pi-tag"
     tone="fixed_values"
-    blurb="Assign explicit name = value bindings into the Context. Values resolve inline syntax but cannot read $variables from the Context."
+    blurb="Set one or more $variables to exact text values. The simplest way to inject a constant into the pipeline."
   >
     <DocSection title="What it does">
       <p>
-        A Fixed Values module writes one or more <VarToken>$name = value</VarToken> pairs
-        into the Context unconditionally. Each value is passed through <code>resolve_text</code>
-        to expand <VarToken kind="inline">{a|b|c}</VarToken> inline-pick syntax and handle
-        <code>$$</code>→<code>$</code> / <code>@@</code>→<code>@</code> escapes.
-        Because Fixed Values is a <em>producer</em> module, it cannot read
-        <VarToken>$variables</VarToken> or <VarToken kind="ref">@{uuid}</VarToken> refs from
-        the Context — those surfaces are gated to consumer modules (Combine, Derivation, Assembler).
+        A Fixed Values module lets you write plain name = value pairs into the Context. Every time
+        the pipeline runs, those <VarToken>$variables</VarToken> are set to whatever text you typed.
+        Nothing is picked at random (unless you use inline <VarToken kind="inline">{a|b|c}</VarToken>
+        syntax inside the value), and nothing depends on other modules — it just stamps the values in.
       </p>
+      <p>
+        Use it for anything that should stay constant: an artist style like "oil painting", a
+        quality booster like "8k, masterpiece", or a reusable negative-prompt fragment. Drop it at
+        the top of your stack and every module below can read those variables.
+      </p>
+      <DocImage
+        ratio="16 / 6"
+        caption="The Fixed Values editor showing two rows: 'style = oil painting' and 'quality = 8k, masterpiece', each with a name field, a value field, and an enable toggle."
+      />
     </DocSection>
 
-    <DocSection title="Payload shape">
-      <p>Key fields in a Fixed Values library entry:</p>
-      <ul>
-        <li>
-          <code>values</code> — array of <code>{ id, name, value }</code>.
-          <code>name</code> must be a valid variable name (<code>^[A-Za-z_][A-Za-z0-9_]*$</code>,
-          ≤ 64 chars, never <code>__</code>-prefixed). <code>id</code> must be unique within
-          the module. <code>value</code> is a plain string (resolved at runtime).
-        </li>
-      </ul>
+    <DocSection title="Row fields">
+      <DocKeyList :items="rowFields" />
     </DocSection>
 
-    <DocSection title="Instance overrides">
-      <p>An instance can override library defaults without modifying the library entry:</p>
-      <ul>
-        <li><b>values_overrides</b> — full replacement of the value for a specific binding id.</li>
-        <li><b>enabled_options</b> — per-binding enable/disable flags.</li>
-        <li><b>locked_seed</b> — freeze any inline <code>{a|b|c}</code> picks across loop iterations.</li>
-      </ul>
+    <DocSection title="Per-use options">
+      <p>
+        When you add a Fixed Values module to a Context you can adjust it for that use:
+      </p>
+      <DocKeyList :items="instanceOptions" />
       <DocCallout variant="tip">
-        Fixed Values is the simplest way to inject a constant into the Context — no options, no
-        weights, just a direct name-to-string mapping.
+        Fixed Values cannot read <VarToken>$variables</VarToken> that other modules have set — it
+        is a producer, not a consumer. If you need to build a value from earlier picks, use a
+        Combine module instead.
       </DocCallout>
     </DocSection>
 
