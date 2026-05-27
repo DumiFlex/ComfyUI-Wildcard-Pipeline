@@ -34,6 +34,8 @@ const routes: RouteRecordRaw[] = [
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
       { path: "settings", name: "settings", component: () => import("../views/Settings.vue") },
+      { path: "docs", name: "documentation", component: () => import("../views/Docs.vue") },
+      { path: "docs/:page", name: "documentation-page", component: () => import("../views/Docs.vue"), props: true },
       // Community hub is on `feat/community-tab` while it bakes; main ships
       // a WIP placeholder so the sidebar entry has somewhere to land. The
       // catch-all `community/:rest(.*)?` swallows any deep-links saved from
