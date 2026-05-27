@@ -218,6 +218,10 @@
    * `.wp-mod-dot--drift`). */
   --wp-status-modified: #fb923c;
 
+  /* WP node identity accent — brand teal, deliberately distinct from the
+   * 5 module kind colors so a node icon never reads as a module kind. */
+  --wp-node: var(--wp-brand-3); /* #2dd4bf */
+
   /* Accent gradient (used by progress bars, hero strokes, etc.) */
   --wp-accent-gradient: linear-gradient(90deg, var(--wp-accent-500), var(--wp-accent-400));
 }
@@ -307,6 +311,9 @@
 
   /* Status-modified badge (ImportExport mod indicator) — orange-800 for light */
   --wp-status-modified:  #c2410c;       /* orange-700  4.63:1 on white */
+
+  /* teal-700 — AA on near-white (4.54:1) */
+  --wp-node: #0f766e;
 }
 
 /* ---------- Light-theme kind-color overrides ----------
