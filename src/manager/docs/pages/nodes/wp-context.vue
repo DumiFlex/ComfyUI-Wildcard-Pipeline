@@ -2,11 +2,17 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import DocFigure from "../../../components/docs/DocFigure.vue";
-import PipelineDiagram from "../../../components/docs/PipelineDiagram.vue";
-import PropTable from "../../../components/docs/PropTable.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const ports = [
+  { term: "upstream (in)", desc: "Connect an earlier WP Context here to chain them together. Its variables flow through and can be overridden by modules in this node. Leave unconnected to start a fresh chain." },
+  { term: "seed", desc: "Controls the random picks inside this node. Change it to get a different roll; right-click → Convert widget to input to drive it from a seed widget or the WP Context Loop." },
+  { term: "modules", desc: "The stack of modules inside this node — wildcards, fixed values, combines, constraints, and bundles. Add modules by clicking the + button. Drag rows to reorder." },
+  { term: "context (out)", desc: "The resolved variable map produced by this node. Wire it into a WP Prompt Assembler, WP Debug, WP Context Injector, or another WP Context." },
+];
 </script>
 
 <template>
@@ -16,44 +22,40 @@ import VarToken from "../../../components/docs/VarToken.vue";
     icon="pi pi-sitemap"
     tone="node"
     node-id="WP_Context"
-    blurb="The heart of the pipeline. Holds an ordered stack of modules, rolls each one with a seed, and emits a Context of resolved $variables for everything downstream."
+    blurb="The heart of the pipeline. Build a stack of modules, roll them with a seed, and send resolved $variables downstream to an Assembler or Debug node."
   >
-    <DocSection title="What it does">
+    <DocSection title="What it's for">
       <p>
-        Drop modules into a Context and each contributes named values: a
-        <VarToken>$subject</VarToken> from a wildcard, a <VarToken>$style</VarToken> from a fixed
-        value, a <VarToken>$lighting</VarToken> from a combine. Chain Contexts to layer or override
-        values — the last write wins. Feed the output into a <b>WP Prompt Assembler</b> to fill a
-        template string, or pass it to a <b>WP Debug</b> node to inspect the resolved map.
+        A <b>WP Context</b> is where you define the named values that power your prompt.
+        Add a wildcard module and it becomes <VarToken>$subject</VarToken>. Add a fixed-value
+        module and it becomes <VarToken>$style</VarToken>. When you press Generate the node
+        rolls every module with your seed and hands a complete map of
+        <VarToken>$variable</VarToken> → value to whatever is wired downstream.
       </p>
-    </DocSection>
-
-    <DocSection title="How it fits — the $variable pipeline">
-      <DocFigure caption="Modules roll inside a Context → resolved $vars → Assembler → CLIP.">
-        <PipelineDiagram />
-      </DocFigure>
-    </DocSection>
-
-    <DocSection title="Inputs &amp; outputs">
-      <PropTable
-        :rows="[
-          { name: 'upstream', type: 'PIPELINE_CONTEXT', required: false, desc: 'Upstream Context to chain onto. Its $vars flow through; same-named values are overridden by this node.' },
-          { name: 'seed', type: 'INT', required: true, desc: 'Drives every roll in the module stack. Uses control_after_generate so it cycles automatically in the queue.' },
-          { name: 'modules', type: 'WP_CONTEXT_MODULES', required: true, desc: 'The ordered module stack widget — add wildcards, fixed values, combines, derivations, constraints, or bundles.' },
-          { name: 'context (out)', type: 'PIPELINE_CONTEXT', required: true, desc: 'Resolved $variable map emitted for downstream Assembler, Injector, Debug, or another Context.' },
-        ]"
+      <p>
+        Chain two Context nodes together — the downstream one can add new variables or
+        override ones set above. The last write wins, so a downstream
+        <VarToken>$subject</VarToken> replaces the upstream one.
+      </p>
+      <DocImage
+        ratio="16 / 6"
+        caption="A WP Context node showing the module-stack widget with a wildcard, a fixed value, and a combine module. Its context output connects to a WP Prompt Assembler."
       />
     </DocSection>
 
-    <DocSection title="Key behaviors">
-      <ul>
-        <li><b>not_idempotent</b> — re-rolls every queue execution, even if inputs are unchanged. This ensures seed cycling always produces a new result.</li>
-        <li><b>Last write wins</b> — when chaining two Contexts that set the same <VarToken>$variable</VarToken>, the downstream Context overrides. Use <b>WP Context Injector</b> for a one-off override without restructuring the chain.</li>
-        <li><b>Wildcard catalog</b> — the engine expands wildcard options against the live library database at execution time.</li>
-      </ul>
+    <DocSection title="Inputs &amp; outputs">
+      <DocKeyList :items="ports" />
+    </DocSection>
+
+    <DocSection title="Good to know">
       <DocCallout variant="tip">
-        Lock a module's seed (set <b>locked_seed</b> in the module's instance overrides) to freeze
-        that module's pick across WP Context Loop iterations while everything else varies.
+        Lock a module's seed (via the module's instance options) to freeze that pick across
+        all <b>WP Context Loop</b> iterations — handy for holding the art style steady while
+        the subject varies across a batch.
+      </DocCallout>
+      <DocCallout variant="tip">
+        The wildcard catalog is read from the live library at generation time, so editing a
+        wildcard file takes effect on the next run without reloading the workflow.
       </DocCallout>
     </DocSection>
 

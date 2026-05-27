@@ -2,8 +2,16 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import PropTable from "../../../components/docs/PropTable.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+
+const tabs = [
+  { term: "Snapshot", desc: "Every $variable and its resolved value at this point in the chain — the quickest way to check that your wildcards rolled what you expected." },
+  { term: "Trace", desc: "A per-module history of which values each module wrote. Use this when a variable has the wrong value and you need to see which module set it last." },
+  { term: "Picks", desc: "Exactly what each wildcard rolled on this run — useful for reproducing a result or understanding which option was chosen." },
+  { term: "Warnings", desc: "Runtime notices: missing variables referenced in templates, constraints that never fired, invalid bindings, and similar issues. Check here first when something looks off." },
+];
 </script>
 
 <template>
@@ -13,55 +21,40 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
     icon="pi pi-eye"
     tone="node"
     node-id="WP_Debug"
-    blurb="Terminal inspection node — snapshot every $var, trace module history, see wildcard picks, and review runtime warnings."
+    blurb="See inside your pipeline at any point. Drop it anywhere in the chain and get a tabbed view of every $variable, every wildcard pick, and any runtime warnings — after every run."
   >
-    <DocSection title="What it does">
+    <DocSection title="What it's for">
       <p>
-        Drop a <b>WP Debug</b> node anywhere in the chain and wire any
-        <code>PIPELINE_CONTEXT</code> output into it. After each run the built-in
-        <b>DebugViewer</b> widget populates with a tabbed view of everything that flowed
-        through that point in the pipeline. It produces no outputs — it is purely a
-        read-only observation node.
+        Drop a <b>WP Debug</b> node anywhere and wire a Context output into it. After each
+        Generate the built-in viewer fills with a tabbed snapshot of everything that flowed
+        through that point. It has no output — it is a read-only observation tool that
+        updates every run so you always see fresh data.
       </p>
-    </DocSection>
-
-    <DocSection title="Inputs &amp; outputs">
-      <PropTable
-        :rows="[
-          { name: 'context', type: 'PIPELINE_CONTEXT', required: true, desc: 'Any point in the Context chain to inspect.' },
-          { name: 'viewer', type: 'WP_DEBUG_VIEWER', required: true, desc: 'The debug viewer widget (socketless). Resize by dragging the bottom-right corner.' },
-        ]"
+      <DocImage
+        ratio="16 / 8"
+        caption="The WP Debug viewer open on the Snapshot tab, showing a list of resolved $variables and their values. The tab strip shows Snapshot, Trace, Picks, and Warnings tabs."
       />
     </DocSection>
 
-    <DocSection title="Key behaviors">
-      <ul>
-        <li>
-          <b>not_idempotent = true, is_output_node = true</b> — re-runs on every queue
-          execution (never cached) and is treated as a terminal output node by ComfyUI so it
-          always executes even when nothing downstream depends on it.
-        </li>
-        <li>
-          <b>Four viewer tabs:</b>
-          <ul>
-            <li><b>Snapshot</b> — every bound <code>$variable</code> and its resolved value.
-            Engine-internal keys (<code>__wp_*</code>) are filtered out by default.</li>
-            <li><b>Trace</b> — per-module resolution history showing each module's writes.</li>
-            <li><b>Picks</b> — what each wildcard rolled on this execution.</li>
-            <li><b>Warnings</b> — runtime warning objects (unknown vars, never-fired
-            constraints, invalid bindings, etc.).</li>
-          </ul>
-        </li>
-        <li>
-          <b>Flattens the typed payload</b> — the engine merges <code>context</code>,
-          <code>debug</code>, and <code>internals</code> into one flat dict with
-          <code>__</code>-prefixed meta keys; the viewer tabs read each category explicitly.
-        </li>
-      </ul>
+    <DocSection title="Viewer tabs">
+      <DocKeyList :items="tabs" />
       <DocCallout variant="tip">
-        Use the filter box at the top of each tab to narrow on a variable name or warning type.
-        Always re-runs so seed-driven values refresh every queue.
+        Use the filter box at the top of each tab to search by variable name or warning type
+        when the list is long.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Placement tips">
+      <p>
+        Wire the debug node after a specific Context to inspect that stage of the chain, or
+        wire it after the final Context to see the complete resolved map. You can have multiple
+        debug nodes at different points in the same workflow — each shows what it sees at its
+        own position.
+      </p>
+      <DocImage
+        ratio="16 / 5"
+        caption="A workflow with two WP Debug nodes — one wired after the first WP Context and one after the second — showing how each captures the pipeline state at that point."
+      />
     </DocSection>
 
     <DocSection title="Works with">

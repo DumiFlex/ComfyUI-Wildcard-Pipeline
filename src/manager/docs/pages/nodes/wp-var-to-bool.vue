@@ -2,9 +2,18 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import PropTable from "../../../components/docs/PropTable.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const controls = [
+  { term: "context (in)", desc: "The upstream Context carrying the $variable you want to read." },
+  { term: "var_name", desc: "Pick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context." },
+  { term: "index", desc: "Which boolean token to use when the variable contains more than one recognised value. 0 gives the first match, 1 the second. Words like \"maybe\" or numbers like 1.5 are ignored and do not count toward the index." },
+  { term: "default", desc: "The value to use when the variable is missing or contains no recognised boolean words. The node never errors — it always falls back to this." },
+  { term: "value (out)", desc: "The parsed boolean, ready to wire into any node that accepts BOOLEAN — sampler toggles, switch nodes, and so on." },
+];
 </script>
 
 <template>
@@ -14,57 +23,46 @@ import VarToken from "../../../components/docs/VarToken.vue";
     icon="pi pi-check-square"
     tone="node"
     node-id="WP_VarToBool"
-    blurb="Parse a boolean out of a $var from the PipelineContext and emit it as a native BOOLEAN."
+    blurb="Parse a true/false decision from a $variable. Use a wildcard with on/off options to make any ComfyUI boolean input probabilistic."
   >
-    <DocSection title="What it does">
+    <DocSection title="What it's for">
       <p>
-        Pick a variable name from the upstream Context, choose a 0-based match index and a
-        fallback default. The node tokenizes the variable's value on whitespace, commas,
-        semicolons, pipes, and slashes, then matches each token case-insensitively against
-        truthy (<code>true yes on 1</code>) or falsy (<code>false no off 0</code>) sets.
-        Tokens that match neither are <b>skipped</b> and do not consume an index slot —
-        so <code>1.5</code> is invisible to the bool parser. The Nth matching token is
-        emitted as a <code>BOOLEAN</code>.
+        <b>WP Var → Bool</b> reads a <VarToken>$variable</VarToken> from the upstream
+        Context and interprets its text as a boolean. Words like <code>true</code>,
+        <code>yes</code>, <code>on</code>, and <code>1</code> become <code>true</code>;
+        words like <code>false</code>, <code>no</code>, <code>off</code>, and <code>0</code>
+        become <code>false</code>. Wire the output into any node that accepts BOOLEAN — a
+        sampler toggle, a switch, a boolean math node — to make that switch probabilistic.
       </p>
-    </DocSection>
-
-    <DocSection title="Inputs &amp; outputs">
-      <PropTable
-        :rows="[
-          { name: 'context', type: 'PIPELINE_CONTEXT', required: true, desc: 'Upstream Context carrying the $var to read.' },
-          { name: 'var_name', type: 'WP_VAR_PICKER', required: true, desc: 'Dropdown of upstream $vars.' },
-          { name: 'index', type: 'INT', required: true, desc: '0-based index into the list of truthy/falsy token matches (non-matching tokens skipped). Default 0.' },
-          { name: 'default', type: 'BOOLEAN', required: true, desc: 'Returned when the var is missing or has fewer than index+1 boolean tokens. Default false.' },
-          { name: 'value (out)', type: 'BOOLEAN', required: true, desc: 'The parsed boolean, or default on miss.' },
-        ]"
+      <DocImage
+        ratio="16 / 5"
+        caption="The WP Var → Bool node with its var_name picker showing a $hires_fix variable. Its BOOLEAN output connects to the enabled input of an upscaler node."
       />
     </DocSection>
 
-    <DocSection title="Key behaviors">
+    <DocSection title="Controls">
+      <DocKeyList :items="controls" />
+    </DocSection>
+
+    <DocSection title="How the parsing works">
+      <p>
+        The node splits the variable's value on spaces, commas, semicolons, pipes, and
+        slashes, then checks each piece against the recognised word lists
+        (case-insensitive). Words that match neither list are skipped entirely — they do
+        not advance the index:
+      </p>
       <ul>
-        <li>
-          <b>Cacheable (not_idempotent = false)</b> — pure function of its inputs.
-        </li>
-        <li>
-          <b>Truthy tokens:</b> <code>true</code>, <code>yes</code>, <code>on</code>,
-          <code>1</code>. <b>Falsy tokens:</b> <code>false</code>, <code>no</code>,
-          <code>off</code>, <code>0</code>. Matching is case-insensitive.
-        </li>
-        <li>
-          <b>Non-matching tokens skipped (no index consumed)</b> — tokens like <code>1.5</code>,
-          <code>maybe</code>, or <code>hello</code> are invisible. Index counts only over
-          tokens that matched truthy or falsy. This means a var like
-          <VarToken>true maybe false</VarToken> has index 0 → <code>true</code>, index 1 →
-          <code>false</code>.
-        </li>
-        <li>
-          <b>Never raises</b> — missing var, empty string, no matching tokens, or out-of-range
-          index all silently fall back to <code>default</code>.
-        </li>
+        <li>Truthy words: <code>true</code>, <code>yes</code>, <code>on</code>, <code>1</code></li>
+        <li>Falsy words: <code>false</code>, <code>no</code>, <code>off</code>, <code>0</code></li>
+        <li>Everything else (e.g. <code>maybe</code>, <code>1.5</code>, <code>hello</code>) is ignored</li>
       </ul>
+      <p>
+        So a variable value of <VarToken>true maybe false</VarToken> has two boolean
+        tokens: index 0 → <code>true</code>, index 1 → <code>false</code>.
+      </p>
       <DocCallout variant="tip">
-        Use a wildcard with options <code>on</code> / <code>off</code> and wire it through
-        WP Var → Bool to make any ComfyUI boolean input (e.g. a sampler toggle) probabilistic.
+        Add a wildcard with options <code>on</code> / <code>off</code> and wire it through
+        WP Var → Bool to randomly enable or disable any boolean input in your workflow.
       </DocCallout>
     </DocSection>
 

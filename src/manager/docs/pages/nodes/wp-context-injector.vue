@@ -2,9 +2,23 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import PropTable from "../../../components/docs/PropTable.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const ports = [
+  { term: "upstream (in)", desc: "An existing Context to extend. All of its variables pass through; the injector adds or overrides bindings on top. Leave unconnected to create a standalone Context from injected values only." },
+  { term: "rows widget", desc: "Each row defines one variable. Give it a name, optionally write a template mixing socket values (e.g. $input_0 by $input_1), and choose whether it should be internal (available to modules but hidden from the final prompt)." },
+  { term: "input_0 … input_9", desc: "Dynamic socket slots. Wire any ComfyUI output — a STRING, INT, FLOAT, or anything else — into a slot. Each wired socket is available in row templates by its slot name. Add up to 10 sockets; chain a second injector for more." },
+  { term: "context (out)", desc: "The upstream Context with your injected bindings merged on top. Wire it into an Assembler, Debug node, or another Context." },
+];
+
+const rowOptions = [
+  { term: "Binding name", desc: "The $variable name that downstream modules and the Assembler will see. Use letters, digits, and underscores; must start with a letter." },
+  { term: "Template", desc: "Leave blank to write the raw socket value as-is. Enter a template like $input_0 by $input_1 to compose a value from multiple sockets. Use $$ for a literal dollar sign." },
+  { term: "Internal", desc: "Tick this to make the variable available to Combine and Derivation modules upstream but keep it out of the assembled prompt text." },
+];
 </script>
 
 <template>
@@ -14,74 +28,52 @@ import VarToken from "../../../components/docs/VarToken.vue";
     icon="pi pi-bolt"
     tone="node"
     node-id="WP_ContextInjector"
-    blurb="Lifts arbitrary ComfyUI outputs into named $var bindings on the PipelineContext — bridge from non-WP nodes into the variable pipeline."
+    blurb="Bridge any ComfyUI output into a named $variable. Wire a LoRA name, an INT, a slider value — anything — and give it a name the Assembler can use."
   >
-    <DocSection title="What it does">
+    <DocSection title="What it's for">
       <p>
-        Connect any ComfyUI output — a LoRA name string, an INT from a seed node, a FLOAT
-        from a slider — into a socket slot, then give it a variable name. The injector writes
-        <VarToken>$binding = stringified(value)</VarToken> into the Context so downstream
-        modules (Combine, Derivation) and the Assembler can reference it just like a wildcard
-        pick. Chain multiple injectors for more bindings; each forwards the upstream Context
-        unchanged then adds or overrides its own bindings on top (last write wins).
+        Most variables in the pipeline come from wildcards and fixed values inside a WP Context.
+        The <b>WP Context Injector</b> lets you bring in values from outside — a LoRA name
+        picked by another node, an INT from a seed widget, a FLOAT from a slider — and give
+        each one a <VarToken>$variable</VarToken> name. From that point on it behaves just like
+        any other variable: you can reference it in the Assembler template, use it in a Combine
+        rule, or read it in a Derivation.
       </p>
-    </DocSection>
-
-    <DocSection title="Inputs &amp; outputs">
-      <PropTable
-        :rows="[
-          { name: 'upstream', type: 'PIPELINE_CONTEXT', required: false, desc: 'Optional upstream Context to chain onto. Its $vars flow through; injected bindings override same-named keys.' },
-          { name: 'rows', type: 'WP_INJECTOR_ROWS', required: true, desc: 'The injector widget — each row has a binding name, an optional template, and an internal toggle.' },
-          { name: 'input_0 … input_9', type: 'any', required: false, desc: 'Dynamic socket slots. Wire any ComfyUI output here. Managed by the frontend; capped at 10 sockets.' },
-          { name: 'context (out)', type: 'PIPELINE_CONTEXT', required: true, desc: 'Resolved Context with injected bindings merged on top of upstream.' },
-        ]"
+      <p>
+        Chain multiple injectors for more bindings. Each one passes the upstream Context through
+        unchanged and adds its own variables on top.
+      </p>
+      <DocImage
+        ratio="16 / 6"
+        caption="A WP Context Injector with two rows visible in the widget, each named and wired to an input socket. The context output connects to a WP Prompt Assembler."
       />
     </DocSection>
 
-    <DocSection title="Key behaviors">
-      <ul>
-        <li>
-          <b>not_idempotent = true</b> — re-runs on every queue execution, even if the wired
-          inputs are unchanged. This ensures the bound values always reflect the current upstream
-          node outputs.
-        </li>
-        <li>
-          <b>10-socket cap (frontend-enforced)</b> — the UI allows up to 10 dynamic socket slots
-          (<code>slot_0…slot_9</code>). The Python node accepts all connected inputs via
-          <code>accept_all_inputs=True</code>; the 10-slot limit is a user-facing constraint
-          enforced by the frontend widget. Chain a second injector if you need more than 10.
-        </li>
-        <li>
-          <b>Binding name rules</b> — names must match <code>^[a-zA-Z][a-zA-Z0-9_]*$</code>.
-          Names starting with <code>_</code> are reserved and emit a runtime warning.
-        </li>
-        <li>
-          <b>Pass-through vs template rows</b> — a row with no template writes the raw socket
-          value directly. A row with a template (e.g. <code>prefix $input_0</code>) renders
-          <VarToken>$slot_name</VarToken> substitutions from all wired sockets, then writes
-          the resulting string. <code>$$</code> escapes to a literal <code>$</code>.
-        </li>
-        <li>
-          <b>Internal rows</b> — tick <b>internal</b> on a row to hide its binding from the
-          assembled prompt while keeping it readable by Combine and Derivation rules downstream.
-        </li>
-        <li>
-          <b>Non-primitive values</b> — LATENT, IMAGE, and other complex types are stored as
-          their Python <code>str()</code> representation. Intended for STRING / INT / FLOAT use.
-        </li>
-      </ul>
+    <DocSection title="Ports &amp; sockets">
+      <DocKeyList :items="ports" />
+    </DocSection>
+
+    <DocSection title="Row options">
+      <DocKeyList :items="rowOptions" />
+    </DocSection>
+
+    <DocSection title="Good to know">
       <DocCallout variant="tip">
-        Use a template row to compose a value from multiple sockets without adding extra
-        Combine modules: set a template like <code>$input_0 by $input_1</code> and wire two
-        STRING sources.
+        Use a template row to combine two sockets without an extra Combine module — set a
+        template like <VarToken>$input_0 by $input_1</VarToken> and wire two STRING sources.
+      </DocCallout>
+      <DocCallout variant="tip">
+        The injector is best suited for STRING, INT, and FLOAT values. Complex types like
+        IMAGE or LATENT are stored as their text representation, which is rarely useful in a
+        prompt.
       </DocCallout>
     </DocSection>
 
     <DocSection title="Works with">
       <CrossLinks
         :links="[
-          { id: 'internal-variables', label: 'Internal variables', icon: 'pi pi-share-alt', tone: 'neutral' },
-          { id: 'context-chaining', label: 'Context chaining', icon: 'pi pi-share-alt', tone: 'neutral' },
+          { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
+          { id: 'wp-prompt-assembler', label: 'WP Prompt Assembler', icon: 'pi pi-align-left', tone: 'node' },
         ]"
       />
     </DocSection>

@@ -2,9 +2,18 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import PropTable from "../../../components/docs/PropTable.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const controls = [
+  { term: "context (in)", desc: "The upstream Context carrying the $variable you want to read." },
+  { term: "var_name", desc: "Pick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context." },
+  { term: "index", desc: "Which number to extract when the variable contains more than one. 0 gives the first, 1 the second, and so on. Most variables only have one number, so leave this at 0." },
+  { term: "default", desc: "The value to use when the variable is missing, has no numbers in it, or the index is beyond what was found. The node never errors — it always falls back to this." },
+  { term: "value (out)", desc: "The extracted integer, ready to wire into any node that accepts INT — image width, step count, batch size, and so on." },
+];
 </script>
 
 <template>
@@ -14,51 +23,47 @@ import VarToken from "../../../components/docs/VarToken.vue";
     icon="pi pi-hashtag"
     tone="node"
     node-id="WP_VarToInt"
-    blurb="Parse an integer out of a $var from the PipelineContext and emit it as a native INT."
+    blurb="Pull a number out of a $variable and use it as a real INT. Great for driving image dimensions, step counts, or any numeric input from a wildcard pick."
   >
-    <DocSection title="What it does">
+    <DocSection title="What it's for">
       <p>
-        Pick a variable name from the upstream Context, choose a 0-based match index and a
-        fallback default, and the node scans the variable's string value for signed-integer
-        substrings. The Nth match is emitted as an <code>INT</code>. If the variable is
-        missing, has no integer matches, or the index is out of range, the node falls back to
-        <code>default</code> — it never raises an error.
+        Sometimes a wildcard pick contains a number — a resolution like
+        <VarToken>1920x1080</VarToken>, a step count like <VarToken>30 steps</VarToken>, or
+        just a plain value like <VarToken>512</VarToken>. <b>WP Var → Int</b> extracts the
+        number and emits it as a proper integer you can wire into any node that expects one.
+        If the variable is missing or contains no recognisable number, it quietly returns the
+        default you set — it never stops the run.
       </p>
-    </DocSection>
-
-    <DocSection title="Inputs &amp; outputs">
-      <PropTable
-        :rows="[
-          { name: 'context', type: 'PIPELINE_CONTEXT', required: true, desc: 'Upstream Context carrying the $var to read.' },
-          { name: 'var_name', type: 'WP_VAR_PICKER', required: true, desc: 'Dropdown of upstream $vars. Stored as the plain name (e.g. resolution).' },
-          { name: 'index', type: 'INT', required: true, desc: '0-based index into the list of integer matches found in the var value. Default 0.' },
-          { name: 'default', type: 'INT', required: true, desc: 'Returned when the var is missing or has fewer than index+1 integer matches. Default 0.' },
-          { name: 'value (out)', type: 'INT', required: true, desc: 'The parsed integer, or default on miss.' },
-        ]"
+      <DocImage
+        ratio="16 / 5"
+        caption="The WP Var → Int node with its var_name picker open, showing the list of available $variables. Its INT output connects to the width input of an Empty Latent Image node."
       />
     </DocSection>
 
-    <DocSection title="Key behaviors">
+    <DocSection title="Controls">
+      <DocKeyList :items="controls" />
+    </DocSection>
+
+    <DocSection title="How the extraction works">
+      <p>
+        The node scans the variable's text value for signed integers and collects them in
+        order. The <b>index</b> control selects which one to return:
+      </p>
       <ul>
         <li>
-          <b>Cacheable (not_idempotent = false)</b> — pure function of its inputs; ComfyUI
-          may skip re-execution when context + var_name + index + default are unchanged.
+          <VarToken>1920x1080</VarToken> — index 0 → 1920, index 1 → 1080
         </li>
         <li>
-          <b>Parsing rule: Nth <code>-?\d+</code> match</b> — the var's string value is
-          scanned for all substrings matching a signed integer pattern. Index selects the Nth
-          match (0-based). Examples: <VarToken>1920x1080</VarToken> index 0 → 1920, index 1
-          → 1080. <VarToken>hello</VarToken> any index → <code>default</code>.
+          <VarToken>30 steps</VarToken> — index 0 → 30
         </li>
         <li>
-          <b>Never raises</b> — missing var, empty string, no matches, out-of-range index all
-          silently fall back to <code>default</code>.
+          <VarToken>hello</VarToken> — no numbers found → returns default
         </li>
       </ul>
       <DocCallout variant="tip">
-        To extract both width and height from a single <VarToken>$resolution</VarToken> var
-        (e.g. <code>1920x1080</code>), place two WP Var → Int nodes reading the same var:
-        one with index 0 (width) and one with index 1 (height).
+        To extract both width and height from a single <VarToken>$resolution</VarToken>
+        variable, place two WP Var → Int nodes reading the same variable: one with index 0
+        for width and one with index 1 for height.
       </DocCallout>
     </DocSection>
 

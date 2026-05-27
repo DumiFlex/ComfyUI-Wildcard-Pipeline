@@ -2,9 +2,18 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import PropTable from "../../../components/docs/PropTable.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+
+const controls = [
+  { term: "context (in)", desc: "The upstream Context carrying the $variable you want to read." },
+  { term: "var_name", desc: "Pick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context." },
+  { term: "index", desc: "Which number to extract when the variable contains more than one. 0 gives the first, 1 the second, and so on. Leave at 0 for single-value variables." },
+  { term: "default", desc: "The value to use when the variable is missing, has no numbers in it, or the index is beyond what was found. The node never errors — it always falls back to this." },
+  { term: "value (out)", desc: "The extracted float, ready to wire into any node that accepts FLOAT — CFG scale, denoising strength, and similar inputs." },
+];
 </script>
 
 <template>
@@ -14,49 +23,41 @@ import VarToken from "../../../components/docs/VarToken.vue";
     icon="pi pi-hashtag"
     tone="node"
     node-id="WP_VarToFloat"
-    blurb="Parse a float out of a $var from the PipelineContext and emit it as a native FLOAT."
+    blurb="Pull a decimal number out of a $variable and use it as a real FLOAT. Ideal for driving CFG scale, denoising strength, or any decimal input from a wildcard pick."
   >
-    <DocSection title="What it does">
+    <DocSection title="What it's for">
       <p>
-        Pick a variable name from the upstream Context, choose a 0-based match index and a
-        fallback default, and the node scans the variable's string value for decimal or
-        scientific-notation numbers. The Nth match is emitted as a <code>FLOAT</code>. Plain
-        integers match too (e.g. <code>1920</code> → <code>1920.0</code>). Missing var, no
-        matches, or out-of-range index fall back to <code>default</code> without raising.
+        When a wildcard pick contains a decimal value — <VarToken>0.75</VarToken>,
+        <VarToken>cfg 7.5</VarToken>, or even a plain integer like <VarToken>8</VarToken>
+        — <b>WP Var → Float</b> extracts it and emits it as a proper float you can wire
+        into any node that expects one. Plain integers match too, so you can use this node
+        wherever you need FLOAT output even if your variable only ever holds whole numbers.
+        Missing variables or ones with no recognisable number quietly return the default.
       </p>
-    </DocSection>
-
-    <DocSection title="Inputs &amp; outputs">
-      <PropTable
-        :rows="[
-          { name: 'context', type: 'PIPELINE_CONTEXT', required: true, desc: 'Upstream Context carrying the $var to read.' },
-          { name: 'var_name', type: 'WP_VAR_PICKER', required: true, desc: 'Dropdown of upstream $vars.' },
-          { name: 'index', type: 'INT', required: true, desc: '0-based index into the list of float matches. Default 0.' },
-          { name: 'default', type: 'FLOAT', required: true, desc: 'Returned when the var is missing or has fewer than index+1 float matches. Default 0.0.' },
-          { name: 'value (out)', type: 'FLOAT', required: true, desc: 'The parsed float, or default on miss.' },
-        ]"
+      <DocImage
+        ratio="16 / 5"
+        caption="The WP Var → Float node with its var_name picker open. Its FLOAT output connects to the cfg input of a KSampler node."
       />
     </DocSection>
 
-    <DocSection title="Key behaviors">
+    <DocSection title="Controls">
+      <DocKeyList :items="controls" />
+    </DocSection>
+
+    <DocSection title="How the extraction works">
+      <p>
+        The node scans the variable's text for decimal and scientific-notation numbers.
+        Whole integers match too:
+      </p>
       <ul>
-        <li>
-          <b>Cacheable (not_idempotent = false)</b> — pure function of its inputs.
-        </li>
-        <li>
-          <b>Parsing rule: Nth decimal/scientific match</b> — pattern
-          <code>-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?</code>. Integers match too, so
-          <VarToken>1920</VarToken> → <code>1920.0</code>. Floats like <VarToken>1.5e-3</VarToken>
-          are captured as-is.
-        </li>
-        <li>
-          <b>Never raises</b> — all miss conditions (missing var, empty string, no matches,
-          out-of-range index) silently fall back to <code>default</code>.
-        </li>
+        <li><VarToken>cfg 7.5</VarToken> — index 0 → 7.5</li>
+        <li><VarToken>1920x1080</VarToken> — index 0 → 1920.0, index 1 → 1080.0</li>
+        <li><VarToken>1.5e-3</VarToken> — index 0 → 0.0015</li>
+        <li><VarToken>hello</VarToken> — no numbers found → returns default</li>
       </ul>
       <DocCallout variant="tip">
-        Because integers match the float pattern, you can use WP Var → Float in place of
-        WP Var → Int when you need a FLOAT output from a whole-number var value.
+        Because whole integers match the float pattern, WP Var → Float works as a drop-in
+        when you need a FLOAT output from a variable that holds a whole number.
       </DocCallout>
     </DocSection>
 
