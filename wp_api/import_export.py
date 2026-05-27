@@ -12,7 +12,7 @@ from wp_api._validators import (
     validate_wildcard_subcats,
 )
 
-# 7-bucket export request keys (Task 10). Each key, when present, must be
+# 8-bucket export request keys (Task 10). Each key, when present, must be
 # a list of UUIDs; missing keys default to []. Mis-typed UUIDs (e.g. a
 # wildcard id under combine_uuids) are silently dropped by the exporter.
 _EXPORT_BUILD_KEYS = (
@@ -23,11 +23,12 @@ _EXPORT_BUILD_KEYS = (
     "derivation_uuids",
     "constraint_uuids",
     "category_uuids",
+    "template_uuids",
 )
 
 
 async def export_build(request: web.Request) -> web.Response:
-    """POST /wp/api/export/build — assemble a 7-bucket export payload.
+    """POST /wp/api/export/build — assemble an 8-bucket export payload.
 
     Body shape:
         {
@@ -38,6 +39,7 @@ async def export_build(request: web.Request) -> web.Response:
             "derivation_uuids":  [...],
             "constraint_uuids":  [...],
             "category_uuids":    [...],
+            "template_uuids":    [...],
         }
 
     Every key is optional and defaults to ``[]``. UUID format is NOT
@@ -69,6 +71,7 @@ async def export_build(request: web.Request) -> web.Response:
             derivation_uuids=body.get("derivation_uuids", []),
             constraint_uuids=body.get("constraint_uuids", []),
             category_uuids=body.get("category_uuids", []),
+            template_uuids=body.get("template_uuids", []),
         )
     return json_ok(payload)
 
@@ -120,9 +123,10 @@ async def import_commit(request: web.Request) -> web.Response:
         }
 
     Every bucket is optional and defaults to ``[]``. ``kind`` must be one
-    of the 7 buckets (``wildcard``, ``fixed_values``, ``combine``,
-    ``derivation``, ``constraint``, ``bundle``, ``category``) — the engine
-    rejects anything else as a contract violation.
+    of the 8 buckets (``wildcard``, ``fixed_values``, ``combine``,
+    ``derivation``, ``constraint``, ``bundle``, ``category``,
+    ``template``) — the engine rejects anything else as a contract
+    violation.
 
     Response on success: ``{"ok": True, "undo_entry_id": str, "summary":
     {...}}`` (200). Contract violations and DB-layer errors return

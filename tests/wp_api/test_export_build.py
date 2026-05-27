@@ -1,7 +1,7 @@
 """Tests for /wp/api/export/build — Task 10 / importer-exporter v2.
 
 Endpoint wraps `engine.exporter.build_export_payload` and returns the
-full 7-bucket payload directly. UUID sets are partitioned by bucket;
+full 8-bucket payload directly. UUID sets are partitioned by bucket;
 mis-typed UUIDs are silently dropped by the exporter (cross-bucket
 isolation guarantee).
 """
@@ -28,6 +28,15 @@ async def _create_bundle(wp_client, *, name: str, children=None) -> dict:
     return await resp.json()
 
 
+async def _create_template(wp_client, *, name: str = "tpl") -> dict:
+    resp = await wp_client.post("/wp/api/templates", json={
+        "name": name,
+        "template_string": "$subject, $style",
+    })
+    assert resp.status == 201
+    return await resp.json()
+
+
 # ── Happy path ────────────────────────────────────────────────────────────
 
 
@@ -41,10 +50,10 @@ async def test_build_returns_seven_bucket_payload_with_wildcard(wp_client):
     assert body["schema_version"] == 1
     assert isinstance(body["exported_at"], str)
     assert body["exported_at"] != ""
-    # All 7 buckets present.
+    # All 8 buckets present.
     for key in (
         "bundles", "wildcards", "fixed_values", "combines",
-        "derivations", "constraints", "categories",
+        "derivations", "constraints", "categories", "templates",
     ):
         assert key in body, f"missing bucket: {key}"
     # Wildcard appears in wildcards bucket with non-empty fingerprint.
@@ -60,7 +69,7 @@ async def test_build_with_empty_body_returns_empty_buckets(wp_client):
     assert body["schema_version"] == 1
     for key in (
         "bundles", "wildcards", "fixed_values", "combines",
-        "derivations", "constraints", "categories",
+        "derivations", "constraints", "categories", "templates",
     ):
         assert body[key] == [], f"expected empty bucket: {key}"
 
@@ -80,6 +89,19 @@ async def test_build_transitive_bundle_walk(wp_client):
     body = await resp.json()
     ids = {row["id"] for row in body["bundles"]}
     assert ids == {a["id"], b["id"]}
+
+
+async def test_build_accepts_template_uuids_and_returns_templates(wp_client):
+    tpl = await _create_template(wp_client, name="Hero shot")
+    resp = await wp_client.post("/wp/api/export/build", json={
+        "template_uuids": [tpl["id"]],
+    })
+    assert resp.status == 200
+    body = await resp.json()
+    assert len(body["templates"]) == 1
+    assert body["templates"][0]["id"] == tpl["id"]
+    assert body["templates"][0]["name"] == "Hero shot"
+    assert body["templates"][0]["template_string"] == "$subject, $style"
 
 
 # ── Validation ────────────────────────────────────────────────────────────

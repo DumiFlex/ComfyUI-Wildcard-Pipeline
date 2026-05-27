@@ -1,5 +1,5 @@
 """Export payload builder. Transitive ref walk + inner-bundle
-auto-include + 7-bucket grouping.
+auto-include + 8-bucket grouping.
 
 Pure relative to DB — reads via repositories only, no writes.
 Stateless: caller passes the requested UUID sets, exporter returns
@@ -30,6 +30,8 @@ from engine.db.repositories import (
     CategoryRepository,
     ModuleNotFound,
     ModuleRepository,
+    TemplateNotFound,
+    TemplateRepository,
 )
 from engine.migrations import CURRENT_SCHEMA_VERSION
 
@@ -103,13 +105,16 @@ def build_export_payload(
     derivation_uuids: list[str],
     constraint_uuids: list[str],
     category_uuids: list[str],
+    template_uuids: list[str],
 ) -> dict[str, Any]:
-    """Build the 7-bucket export payload.
+    """Build the 8-bucket export payload.
 
     Performs:
     - Transitive inner-bundle walk from ``bundle_uuids`` seed
     - Type-gated module resolution (UUID in wrong bucket → silently skipped)
     - Category lookup by id
+    - Template lookup by id (templates have their own repo/table; a
+      missing id is silently dropped)
 
     Returns a dict ready for JSON serialisation.
     """
@@ -139,6 +144,14 @@ def build_export_payload(
         except CategoryNotFound:
             pass
 
+    template_repo = TemplateRepository(conn)
+    templates: list[dict[str, Any]] = []
+    for uuid in template_uuids:
+        try:
+            templates.append(template_repo.get(uuid))
+        except TemplateNotFound:
+            pass
+
     return {
         "schema_version": CURRENT_SCHEMA_VERSION,
         "exported_at": now_iso(),
@@ -149,4 +162,5 @@ def build_export_payload(
         "derivations": derivations,
         "constraints": constraints,
         "categories": categories,
+        "templates": templates,
     }

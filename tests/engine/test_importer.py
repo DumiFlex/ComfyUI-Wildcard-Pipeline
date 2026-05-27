@@ -16,6 +16,8 @@ from engine.db.repositories import (
     CategoryRepository,
     ModuleNotFound,
     ModuleRepository,
+    TemplateNotFound,
+    TemplateRepository,
 )
 from engine.importer import commit_import, get_undo_entry, undo_import
 
@@ -95,6 +97,14 @@ def _category_entity(id_: str, name: str) -> dict[str, Any]:
     }
 
 
+def _template_entity(id_: str, name: str = "tpl") -> dict[str, Any]:
+    return {
+        "id": id_, "name": name, "description": "",
+        "category_id": None, "tags": [], "is_favorite": False,
+        "template_string": "$subject, $style",
+    }
+
+
 # ---------------------------------------------------------------------------
 # adds
 # ---------------------------------------------------------------------------
@@ -151,6 +161,37 @@ def test_commit_handles_bundle_add(wp_db):
     result = commit_import(wp_db, payload)
     assert result["ok"] is True
     assert BundleRepository(wp_db).get("bbbbbbb1")["name"] == "pack"
+
+
+def test_commit_handles_template_add(wp_db):
+    payload = {
+        "adds": [{"kind": "template", "entity": _template_entity("ttttttt1")}],
+        "replaces": [], "renames": [],
+    }
+    result = commit_import(wp_db, payload)
+    assert result["ok"] is True
+    row = TemplateRepository(wp_db).get("ttttttt1")
+    assert row["name"] == "tpl"
+    assert row["template_string"] == "$subject, $style"
+
+
+def test_commit_template_id_collision_on_add_returns_error(wp_db):
+    """Adding a template at an id that already exists is a contract
+    violation — the colliding id must surface in the message."""
+    TemplateRepository(wp_db).create(name="seed")
+    # Create at a known id by inserting a second template, then collide.
+    existing = TemplateRepository(wp_db).create(name="taken")
+    payload = {
+        "adds": [{
+            "kind": "template",
+            "entity": _template_entity(existing["id"], name="dupe"),
+        }],
+        "replaces": [], "renames": [],
+    }
+    result = commit_import(wp_db, payload)
+    assert result["ok"] is False
+    assert "collision" in result["error"].lower()
+    assert existing["id"] in result["error"]
 
 
 def test_commit_handles_category_add_with_name_merge(wp_db):
@@ -250,6 +291,40 @@ def test_commit_snapshots_replaced(wp_db):
     assert snap["row"]["version"] == existing["version"]
 
 
+def test_commit_replaces_template_and_snapshots(wp_db):
+    """Replacing a template updates the row and stores the pre-replace
+    snapshot (kind=='template') for undo."""
+    repo = TemplateRepository(wp_db)
+    existing = repo.create(
+        name="old-tpl", description="old-desc",
+        template_string="$a", tags=["x"],
+    )
+    tid = existing["id"]
+
+    new_content = {
+        "name": "new-tpl", "description": "new-desc",
+        "category_id": None, "tags": ["y"], "is_favorite": True,
+        "template_string": "$b",
+    }
+    result = commit_import(wp_db, {
+        "adds": [],
+        "replaces": [{"kind": "template", "id": tid, "new_content": new_content}],
+        "renames": [],
+    })
+    assert result["ok"] is True
+
+    after = repo.get(tid)
+    assert after["name"] == "new-tpl"
+    assert after["template_string"] == "$b"
+
+    undo = get_undo_entry(wp_db, result["undo_id"])
+    assert undo is not None
+    snap = undo["replaced_snapshots"][tid]
+    assert snap["kind"] == "template"
+    assert snap["row"]["name"] == "old-tpl"
+    assert snap["row"]["template_string"] == "$a"
+
+
 def test_commit_replace_missing_target_returns_error(wp_db):
     """Replacing a non-existent id is a contract violation — caller
     should have classified as add."""
@@ -298,6 +373,30 @@ def test_commit_handles_rename(wp_db):
     assert undo is not None
     assert undo["rename_map"]["aaaa1111"] == "bbbb2222"
     assert {"kind": "wildcard", "id": "bbbb2222"} in undo["imported_records"]
+
+
+def test_commit_handles_template_rename(wp_db):
+    """A template rename inserts at new_id and records old->new."""
+    result = commit_import(wp_db, {
+        "adds": [], "replaces": [],
+        "renames": [{
+            "kind": "template",
+            "old_id": "tpold111",
+            "new_id": "tpnew222",
+            "content": _template_entity("tpnew222", name="renamed"),
+        }],
+    })
+    assert result["ok"] is True
+
+    repo = TemplateRepository(wp_db)
+    assert repo.get("tpnew222")["name"] == "renamed"
+    with pytest.raises(TemplateNotFound):
+        repo.get("tpold111")
+
+    undo = get_undo_entry(wp_db, result["undo_id"])
+    assert undo is not None
+    assert undo["rename_map"]["tpold111"] == "tpnew222"
+    assert {"kind": "template", "id": "tpnew222"} in undo["imported_records"]
 
 
 def test_commit_rename_collision_on_new_id_returns_error(wp_db):
@@ -488,6 +587,60 @@ def test_undo_deletes_added_category(wp_db):
     assert not any(
         c["id"] == "freshcat" for c in CategoryRepository(wp_db).list()
     )
+
+
+def test_undo_deletes_added_template(wp_db):
+    """Template add path: undo deletes the template row."""
+    commit_result = commit_import(
+        wp_db,
+        {
+            "adds": [{
+                "kind": "template", "entity": _template_entity("tplundo1"),
+            }],
+            "replaces": [], "renames": [],
+        },
+    )
+    assert commit_result["ok"] is True
+
+    repo = TemplateRepository(wp_db)
+    assert repo.get("tplundo1")["name"] == "tpl"
+
+    undo_import(wp_db, commit_result["undo_id"])
+
+    with pytest.raises(TemplateNotFound):
+        repo.get("tplundo1")
+
+
+def test_undo_restores_replaced_template(wp_db):
+    """Template replace path: undo restores the prior content."""
+    repo = TemplateRepository(wp_db)
+    original = repo.create(
+        name="orig-tpl", description="orig-desc",
+        template_string="$a", tags=["a", "b"],
+    )
+    tid = original["id"]
+
+    new_content = {
+        "name": "new-tpl", "description": "new-desc",
+        "category_id": None, "tags": ["z"], "is_favorite": True,
+        "template_string": "$b",
+    }
+    commit_result = commit_import(wp_db, {
+        "adds": [],
+        "replaces": [{"kind": "template", "id": tid, "new_content": new_content}],
+        "renames": [],
+    })
+    assert commit_result["ok"] is True
+    assert repo.get(tid)["name"] == "new-tpl"
+
+    undo_import(wp_db, commit_result["undo_id"])
+
+    restored = repo.get(tid)
+    assert restored["name"] == "orig-tpl"
+    assert restored["description"] == "orig-desc"
+    assert restored["template_string"] == "$a"
+    assert restored["tags"] == ["a", "b"]
+    assert restored["is_favorite"] is False
 
 
 def test_undo_reverses_rename(wp_db):

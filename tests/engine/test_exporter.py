@@ -8,7 +8,7 @@ def test_stamps_schema_version_and_exported_at(wp_db):
         wp_db,
         bundle_uuids=[], wildcard_uuids=[], fixed_values_uuids=[],
         combine_uuids=[], derivation_uuids=[], constraint_uuids=[],
-        category_uuids=[],
+        category_uuids=[], template_uuids=[],
     )
     assert payload["schema_version"] == CURRENT_SCHEMA_VERSION
     assert "exported_at" in payload
@@ -20,11 +20,12 @@ def test_empty_export_returns_empty_arrays(wp_db):
         wp_db,
         bundle_uuids=[], wildcard_uuids=[], fixed_values_uuids=[],
         combine_uuids=[], derivation_uuids=[], constraint_uuids=[],
-        category_uuids=[],
+        category_uuids=[], template_uuids=[],
     )
     for key in (
         "bundles", "wildcards", "fixed_values",
         "combines", "derivations", "constraints", "categories",
+        "templates",
     ):
         assert payload[key] == [], f"{key} should be empty array"
 
@@ -40,7 +41,7 @@ def test_wildcard_included_with_fingerprint(wp_db):
         wp_db,
         bundle_uuids=[], wildcard_uuids=[m["id"]], fixed_values_uuids=[],
         combine_uuids=[], derivation_uuids=[], constraint_uuids=[],
-        category_uuids=[],
+        category_uuids=[], template_uuids=[],
     )
     assert len(payload["wildcards"]) == 1
     w = payload["wildcards"][0]
@@ -63,6 +64,7 @@ def test_module_uuid_only_appears_in_correct_type_bucket(wp_db):
         bundle_uuids=[], wildcard_uuids=[],
         fixed_values_uuids=[], combine_uuids=[w["id"]],
         derivation_uuids=[], constraint_uuids=[], category_uuids=[],
+        template_uuids=[],
     )
     # Exporter must filter — a wildcard requested under combines should not be
     # silently coerced into the combines[] array.
@@ -99,7 +101,7 @@ def test_fixed_values_combine_derivation_constraint_each_routed_to_correct_bucke
         combine_uuids=[co["id"]],
         derivation_uuids=[de["id"]],
         constraint_uuids=[cn["id"]],
-        category_uuids=[],
+        category_uuids=[], template_uuids=[],
     )
     assert len(payload["fixed_values"]) == 1 and payload["fixed_values"][0]["name"] == "fv"
     assert len(payload["combines"]) == 1 and payload["combines"][0]["name"] == "co"
@@ -124,6 +126,7 @@ def test_inner_bundle_auto_include(wp_db):
         bundle_uuids=[outer["id"]],
         wildcard_uuids=[], fixed_values_uuids=[], combine_uuids=[],
         derivation_uuids=[], constraint_uuids=[], category_uuids=[],
+        template_uuids=[],
     )
     uuids = {b["id"] for b in payload["bundles"]}
     assert outer["id"] in uuids
@@ -140,7 +143,38 @@ def test_category_included(wp_db):
         wp_db,
         bundle_uuids=[], wildcard_uuids=[], fixed_values_uuids=[],
         combine_uuids=[], derivation_uuids=[], constraint_uuids=[],
-        category_uuids=[cat["id"]],
+        category_uuids=[cat["id"]], template_uuids=[],
     )
     assert len(payload["categories"]) == 1
     assert payload["categories"][0]["name"] == "Style"
+
+
+def test_template_included(wp_db):
+    from engine.db.repositories import TemplateRepository
+    repo = TemplateRepository(wp_db)
+    # TemplateRepository.create: name, template_string, description,
+    # category_id, tags, is_favorite (all keyword). Returns the row.
+    tpl = repo.create(name="Hero shot", template_string="$subject, $style")
+    payload = build_export_payload(
+        wp_db,
+        bundle_uuids=[], wildcard_uuids=[], fixed_values_uuids=[],
+        combine_uuids=[], derivation_uuids=[], constraint_uuids=[],
+        category_uuids=[], template_uuids=[tpl["id"]],
+    )
+    assert len(payload["templates"]) == 1
+    t = payload["templates"][0]
+    assert t["id"] == tpl["id"]
+    assert t["name"] == "Hero shot"
+    assert t["template_string"] == "$subject, $style"
+
+
+def test_bogus_template_uuid_silently_dropped(wp_db):
+    """A template_uuid that doesn't exist is filtered out, not raised —
+    mirrors the missing-bundle / missing-category behaviour."""
+    payload = build_export_payload(
+        wp_db,
+        bundle_uuids=[], wildcard_uuids=[], fixed_values_uuids=[],
+        combine_uuids=[], derivation_uuids=[], constraint_uuids=[],
+        category_uuids=[], template_uuids=["does-not-exist"],
+    )
+    assert payload["templates"] == []
