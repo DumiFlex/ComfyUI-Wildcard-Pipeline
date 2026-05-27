@@ -4,34 +4,36 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
-interface WarningRow { key: string; severity: string; desc: string }
+// Human-readable labels — what the hover message / Warnings-tab line actually
+// conveys — NOT the internal rule names. Severity drives the dot colour.
+interface WarningRow { label: string; severity: string; desc: string }
 
 const runtimeWarnings: WarningRow[] = [
-  { key: "unknown_var", severity: "warn", desc: "A $var reference in a template or combine was not found in the Context." },
-  { key: "unknown_ref", severity: "warn", desc: "An @{uuid} nested ref could not be resolved (uuid not in catalog or not upstream)." },
-  { key: "recursion_limit", severity: "warn", desc: "Nested ref resolution exceeded the recursion depth limit." },
-  { key: "cycle_detected", severity: "warn", desc: "A circular @{uuid} chain was detected and halted." },
-  { key: "var_out_of_surface", severity: "warn", desc: "A $var read was attempted in a surface that does not support it (e.g. wildcard option)." },
-  { key: "ref_subcategory_empty_pool", severity: "warn", desc: "An @{uuid}:subcat filter left an empty option pool; pick falls back to all options." },
-  { key: "fixed_values_overrides_malformed", severity: "warn", desc: "The values_overrides payload on a Fixed Values instance could not be parsed." },
-  { key: "unknown_constraint_mode", severity: "warn", desc: "A Constraint module specified an unrecognized reweight mode; entry is skipped." },
-  { key: "constraint_factor_ignored_on_allow", severity: "info", desc: "A factor was provided with mode 'allow'; factor has no effect in allow mode." },
-  { key: "unknown_constraint_source", severity: "warn", desc: "The constraint's source wildcard id was not found in the module stack." },
-  { key: "constraint_excludes_all_options", severity: "warn", desc: "Constraint reweighting zeroed out every option; pick falls back to the unweighted pool." },
-  { key: "constraint_never_applied", severity: "info", desc: "A constraint module was consumed by carrier-claim but its target wildcard never appeared downstream; constraint had no effect." },
-  { key: "injector_invalid_binding", severity: "warn", desc: "An Injector row has a binding name that fails the variable name validation regex." },
-  { key: "injector_reserved_binding", severity: "warn", desc: "An Injector row attempts to bind a name starting with __ (reserved for internal keys)." },
+  { label: "Unknown variable", severity: "warn", desc: "A $variable used in a template or combine was never set by any module, so it rendered literally." },
+  { label: "Unresolved reference", severity: "warn", desc: "An @{…} nested reference couldn't be resolved — its target wildcard wasn't found, or wasn't upstream." },
+  { label: "Reference nested too deep", severity: "warn", desc: "Nested @{…} references went past the depth limit and stopped expanding." },
+  { label: "Circular reference", severity: "warn", desc: "A loop of @{…} references pointed back at itself; it was broken to avoid hanging." },
+  { label: "Variable used where it can't be", severity: "warn", desc: "A $variable was read somewhere that doesn't support one (for example, inside a wildcard option)." },
+  { label: "Sub-category filter matched nothing", severity: "warn", desc: "An @{…} sub-category filter left no options, so the pick fell back to the full pool." },
+  { label: "Fixed Values override unreadable", severity: "warn", desc: "A Fixed Values instance's per-instance overrides couldn't be read, so they were ignored." },
+  { label: "Unknown constraint mode", severity: "warn", desc: "A constraint used a reweight mode that isn't recognised; that entry was skipped." },
+  { label: "Factor ignored (Allow)", severity: "info", desc: "A factor was set together with mode Allow, where the factor has no effect." },
+  { label: "Constraint source missing at run", severity: "warn", desc: "The constraint's source wildcard wasn't present in the stack when the run reached it." },
+  { label: "Constraint excluded everything", severity: "warn", desc: "Reweighting zeroed out every option on the target, so the pick fell back to the full pool." },
+  { label: "Constraint never fired", severity: "info", desc: "A constraint was set up but its target wildcard never came up this run, so it had no effect." },
+  { label: "Invalid injector name", severity: "warn", desc: "A WP Context Injector row used a variable name that isn't valid." },
+  { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row tried to use a name starting with __, which is reserved internally." },
 ];
 
 const scannerRules: WarningRow[] = [
-  { key: "shadows_upstream", severity: "info", desc: "A variable set by this Context is also set by an upstream Context (last write wins; advisory only)." },
-  { key: "duplicate_variable", severity: "warn", desc: "Two modules in the same Context write to the same $var name; the lower one overrides." },
-  { key: "missing_template_variable", severity: "warn", desc: "The Assembler template references a $var that no upstream module produces." },
-  { key: "constraint_source_missing", severity: "warn", desc: "A constraint's source wildcard uuid is not found in the catalog." },
-  { key: "constraint_target_missing", severity: "warn", desc: "A constraint's target wildcard uuid is not found in the catalog." },
-  { key: "constraint_orphan_source", severity: "warn", desc: "No source instance is upstream of the constraint in the current chain." },
-  { key: "constraint_orphan_target", severity: "warn", desc: "No available target instance is downstream of the constraint (count-aware: N constraints targeting the same wildcard need N downstream instances)." },
-  { key: "injector_binding_missing", severity: "warn", desc: "An Injector row's binding name doesn't match any variable produced upstream." },
+  { label: "Shadowed variable", severity: "info", desc: "An upstream Context already sets this variable; this one overrides it (last write wins). Normal when chaining — shown so the override is visible." },
+  { label: "Duplicate variable", severity: "warn", desc: "Two modules in the same Context set the same variable name; the lower one wins." },
+  { label: "Missing variable in template", severity: "warn", desc: "The Prompt Assembler template references a $variable that no upstream module produces." },
+  { label: "Constraint source not found", severity: "warn", desc: "A constraint points at a source wildcard that isn't in your library." },
+  { label: "Constraint target not found", severity: "warn", desc: "A constraint points at a target wildcard that isn't in your library." },
+  { label: "Constraint source not upstream", severity: "warn", desc: "The constraint's source wildcard doesn't appear before the constraint in the chain, so it can't read a pick from it." },
+  { label: "Constraint target not downstream", severity: "warn", desc: "No copy of the target wildcard appears after the constraint. Each constraint needs its own downstream target — N constraints on the same wildcard need N copies." },
+  { label: "Injector binding unmatched", severity: "warn", desc: "A WP Context Injector row names a variable that nothing upstream produces." },
 ];
 </script>
 
@@ -41,27 +43,29 @@ const scannerRules: WarningRow[] = [
     title="Warning &amp; conflict types"
     icon="pi pi-list"
     tone="neutral"
-    blurb="Every runtime warning + advisory scanner rule, with severity and one-line meaning."
+    blurb="Every condition the canvas flags as you build, and every warning a run can produce — with how serious it is and what it means."
   >
     <DocCallout variant="tip">
-      The conflict scanner is <b>advisory only</b> and never blocks execution. Runtime warnings
-      surface in the <b>WP Debug</b> node's Warnings tab. Both the scanner and the runtime follow
-      last-write-wins semantics — they report but do not prevent.
+      You don't look these up by name — on the canvas each shows as a coloured dot + short label on
+      the node (hover for the message), and after a run they're listed in the <b>WP Debug</b> node's
+      <b>Warnings</b> tab. Everything here is <b>advisory</b>: it reports, it never blocks a run.
+      Blue = info, amber = worth a look.
     </DocCallout>
 
-    <DocSection title="Runtime warnings">
+    <DocSection title="As you build (canvas)">
+      <p>The scanner watches your graph and flags these straight away:</p>
       <div class="wp-doc-warn-table-wrap">
         <table class="wp-doc-warn-table">
           <thead>
             <tr>
-              <th>Warning key</th>
+              <th>What it flags</th>
               <th>Severity</th>
-              <th>Meaning</th>
+              <th>What it means</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in runtimeWarnings" :key="row.key">
-              <td class="wp-doc-warn-table__key">{{ row.key }}</td>
+            <tr v-for="row in scannerRules" :key="row.label">
+              <td class="wp-doc-warn-table__label">{{ row.label }}</td>
               <td>
                 <span class="wp-doc-warn-badge" :class="`wp-doc-warn-badge--${row.severity}`">{{ row.severity }}</span>
               </td>
@@ -72,19 +76,20 @@ const scannerRules: WarningRow[] = [
       </div>
     </DocSection>
 
-    <DocSection title="Scanner rules (advisory)">
+    <DocSection title="After a run (WP Debug → Warnings)">
+      <p>These only become clear during an actual generation:</p>
       <div class="wp-doc-warn-table-wrap">
         <table class="wp-doc-warn-table">
           <thead>
             <tr>
-              <th>Rule key</th>
+              <th>What it flags</th>
               <th>Severity</th>
-              <th>Meaning</th>
+              <th>What it means</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in scannerRules" :key="row.key">
-              <td class="wp-doc-warn-table__key">{{ row.key }}</td>
+            <tr v-for="row in runtimeWarnings" :key="row.label">
+              <td class="wp-doc-warn-table__label">{{ row.label }}</td>
               <td>
                 <span class="wp-doc-warn-badge" :class="`wp-doc-warn-badge--${row.severity}`">{{ row.severity }}</span>
               </td>
@@ -136,10 +141,9 @@ const scannerRules: WarningRow[] = [
   vertical-align: top;
 }
 .wp-doc-warn-table tr:last-child td { border-bottom: none; }
-.wp-doc-warn-table__key {
-  font-family: var(--wp-font-mono);
-  font-size: 11.5px;
+.wp-doc-warn-table__label {
   color: var(--wp-text);
+  font-weight: 500;
   white-space: nowrap;
 }
 .wp-doc-warn-table__desc { color: var(--wp-text-muted); line-height: 1.5; }

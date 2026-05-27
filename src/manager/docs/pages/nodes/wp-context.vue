@@ -55,8 +55,11 @@ const ports = [
         the subject varies across a batch.
       </DocCallout>
       <DocCallout variant="tip">
-        The wildcard catalog is read from the live library at generation time, so editing a
-        wildcard file takes effect on the next run without reloading the workflow.
+        Modules you add to a WP Context are <b>snapshots</b>, not live links. If you edit a module
+        in the library afterward, the Context doesn't change under you — it flags that row as
+        <b>drifted</b> so you can pull (sync) the updated version when you're ready. That keeps a
+        saved workflow reproducible: it won't silently change because you edited a module somewhere
+        else.
       </DocCallout>
     </DocSection>
 

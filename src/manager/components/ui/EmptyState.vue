@@ -32,9 +32,16 @@ withDefaults(defineProps<Props>(), {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   text-align: center;
   padding: var(--wp-space-8) var(--wp-space-6);
   gap: var(--wp-space-5);
+  /* Fill the list body so the empty/no-results/error message sits centered in
+   * the available space rather than floating at the top of a tall container.
+   * The host cell (a full-width table `<td>`) grows to this height, and the
+   * flex centering above + here keeps the content centered both axes. */
+  min-height: 420px;
+  box-sizing: border-box;
 }
 .wp-empty__icon {
   display: inline-flex;
