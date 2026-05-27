@@ -175,7 +175,14 @@ onBeforeUnmount(() => {
       <main id="wp-main" class="wp-content" tabindex="-1">
         <RouterView v-slot="{ Component, route }">
           <Transition name="route-fade" mode="out-in">
-            <component :is="Component" :key="route.path" />
+            <!-- Key by `route.meta.layoutKey` when set so a view that backs
+                 several param routes (e.g. Docs.vue across /docs/:page) stays
+                 mounted across those navigations — its sub-nav keeps scroll
+                 position. Falls back to route.path for every other view. -->
+            <component
+              :is="Component"
+              :key="typeof route.meta.layoutKey === 'string' ? route.meta.layoutKey : route.path"
+            />
           </Transition>
         </RouterView>
       </main>

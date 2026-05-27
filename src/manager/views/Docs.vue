@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch, type Component } from "vue";
+import { computed, nextTick, ref, shallowRef, watch, type Component } from "vue";
 import { RouterLink } from "vue-router";
 import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroupId } from "../docs/registry";
 
@@ -18,12 +18,19 @@ function groupPages(g: DocGroupId) {
 // needing Suspense. In production the Promise resolves on first render with no
 // visible difference (the shallowRef update triggers Vue's reactivity).
 const resolvedComponent = shallowRef<Component | null>(null);
+const contentEl = ref<HTMLElement | null>(null);
 watch(
   activeMeta,
   async (meta) => {
     if (!meta) { resolvedComponent.value = null; return; }
     const mod = await meta.loader();
     resolvedComponent.value = mod.default;
+    // The view persists across /docs/:page changes (shared layoutKey), so the
+    // content pane is NOT remounted between pages — reset its scroll to the top
+    // on each switch. The nav's scroll is intentionally left untouched so the
+    // user keeps their place in the page list.
+    await nextTick();
+    contentEl.value?.scrollTo?.({ top: 0 });
   },
   { immediate: true },
 );
@@ -60,7 +67,7 @@ watch(
         </RouterLink>
       </template>
     </aside>
-    <main class="wp-doc__content">
+    <main ref="contentEl" class="wp-doc__content">
       <component :is="resolvedComponent" v-if="resolvedComponent" />
     </main>
   </div>
