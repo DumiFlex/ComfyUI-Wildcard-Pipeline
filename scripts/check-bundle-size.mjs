@@ -103,13 +103,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // SaveTemplateModal gains the push-to-library layout (category select +
 // Update-existing / Save-as-new dual action). ~3 KB net gzip across the
 // two lazy assembler modal chunks; entry stays put.
-// Bumped 385 -> 395 KB on 2026-05-27 for the in-SPA Documentation tab.
-// New lazy `Docs` chunk: registry + doc primitives (DocPage/PropTable/
-// PipelineDiagram/…) + ~26 authored content pages (every node, module
-// kind, and interaction concept). All hand-authored Vue, no markdown dep;
-// entry `main.js` untouched. See
-// docs/superpowers/specs/2026-05-27-spa-documentation-tab-design.md.
-const TOTAL_LIMIT = 395 * 1024;     // 395 KB
+// NOTE: this gate measures the EXTENSION bundle (`js/`, from
+// build:extension) only — NOT the manager SPA (`web_dist/`). The 2026-05-27
+// Documentation tab lives entirely in src/manager → web_dist, so it does
+// not affect this budget; no bump was needed for it.
+const TOTAL_LIMIT = 385 * 1024;     // 385 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
