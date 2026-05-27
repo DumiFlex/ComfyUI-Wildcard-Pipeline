@@ -227,6 +227,14 @@
         <div v-else-if="filteredModules.length === 0" class="wp-picker__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
           {{ searchTerm ? `No matches for "${searchTerm}"` : "No modules in this category." }}
+          <button
+            v-if="!searchTerm"
+            type="button"
+            class="wp-picker__create"
+            data-testid="picker-create-module"
+            :title="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
+            @click="createInSpa"
+          ><i class="pi pi-plus" aria-hidden="true"></i> {{ createLabel }}</button>
         </div>
 
         <template v-else>
@@ -569,6 +577,35 @@ const KIND_LABELS: Record<string, string> = {
   derivation:   "Derivations",
   constraint:   "Constraints",
 };
+
+// Empty-state "create" deep-links into the manager SPA's new-module editor
+// for the active kind (the picker runs on the canvas; the SPA is the
+// authoring surface). Mirrors topbar.ts's `/wp/<route>` window.open.
+const KIND_NEW_ROUTE: Record<string, string> = {
+  wildcard: "wildcards",
+  fixed_values: "fixed-values",
+  combine: "combines",
+  derivation: "derivations",
+  constraint: "constraints",
+};
+const KIND_SINGULAR: Record<string, string> = {
+  wildcard: "wildcard",
+  fixed_values: "fixed value",
+  combine: "combine",
+  derivation: "derivation",
+  constraint: "constraint",
+};
+const createLabel = computed(() =>
+  kindFilter.value === "all"
+    ? "New module"
+    : `New ${KIND_SINGULAR[kindFilter.value] ?? "module"}`,
+);
+function createInSpa(): void {
+  const slug = kindFilter.value === "all"
+    ? "wildcards"
+    : (KIND_NEW_ROUTE[kindFilter.value] ?? "wildcards");
+  window.open(`/wp/${slug}/new`, "_blank", "noopener");
+}
 
 const visibleModules = computed<PickerModule[]>(() => modules.value);
 
@@ -967,7 +1004,7 @@ onBeforeUnmount(detachCaptureListeners);
   border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius-lg);
   box-shadow: var(--wp-shadow-lg);
-  width: 720px;
+  width: 780px;
   max-width: calc(100vw - 32px);
   height: 600px;
   max-height: calc(100vh - 32px);
@@ -1148,6 +1185,18 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__state .pi { font-size: 18px; color: var(--wp-text-dim); }
 .wp-picker__state--error { color: var(--wp-danger, #fca5a5); }
+.wp-picker__create {
+  margin-top: 4px;
+  height: 30px;
+  padding: 0 14px;
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--wp-accent-600); border: 1px solid var(--wp-accent-500);
+  color: #fff; border-radius: 7px;
+  font: 500 12px var(--wp-font-sans); cursor: pointer;
+  transition: background var(--wp-motion-quick) ease;
+}
+.wp-picker__create:hover { background: var(--wp-accent-500); }
+.wp-picker__create .pi { font-size: 11px; color: #fff; }
 .wp-picker__retry {
   margin-top: 8px;
   height: 28px;

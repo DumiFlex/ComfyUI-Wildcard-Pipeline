@@ -9,7 +9,6 @@ import { api } from "../api/client";
 import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
 import { catChipStyle } from "../utils/catChip";
 import { useCategoryStore } from "../stores/categoryStore";
-import { GITHUB_WIKI } from "../config/links";
 import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -84,10 +83,8 @@ const favoriteItems = ref<DashboardRow[]>([]);
 const tab = ref<"recent" | "opened" | "favorites">("opened");
 
 const logoUrl = `${import.meta.env.BASE_URL}images/favicon.svg`;
-const wikiUrl = GITHUB_WIKI;
-
 function openDocs() {
-  window.open(wikiUrl, "_blank", "noopener");
+  router.push("/docs");
 }
 
 function navigateToKind(slug: string) {
