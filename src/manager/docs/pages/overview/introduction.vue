@@ -7,6 +7,7 @@ import DocCallout from "../../../components/docs/DocCallout.vue";
 import PipelineDiagram from "../../../components/docs/PipelineDiagram.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import StarterButton from "../../../components/docs/StarterButton.vue";
 </script>
 
 <template>
@@ -17,6 +18,19 @@ import VarToken from "../../../components/docs/VarToken.vue";
     tone="neutral"
     blurb="Wildcard Pipeline is a ComfyUI extension that builds varied, structured prompts from a set of named modules — no manual editing between generations."
   >
+    <div class="wp-doc-starter-cta">
+      <div class="wp-doc-starter-cta__body">
+        <span class="wp-doc-starter-cta__eyebrow"><i class="pi pi-bolt" aria-hidden="true" /> New here?</span>
+        <h2 class="wp-doc-starter-cta__title">Build a runnable starter set in one click</h2>
+        <p class="wp-doc-starter-cta__sub">
+          Creates a complete, working example — two wildcards, a fixed value, a combine, a
+          derivation, and a constraint, packaged into a bundle (plus a matching prompt template).
+          Drop it into a WP Context and generate, then open any piece to see how it's built.
+        </p>
+      </div>
+      <StarterButton slot="bundle" />
+    </div>
+
     <DocSection title="What does it do?">
       <p>
         Each time you press Generate, Wildcard Pipeline randomly picks from your
@@ -92,3 +106,46 @@ import VarToken from "../../../components/docs/VarToken.vue";
     </DocSection>
   </DocPage>
 </template>
+
+<style scoped>
+/* Hero CTA — the new-user entry point to the starter-set feature. Sits at the
+ * top of the docs landing so the "Build starter bundle" action is visible
+ * without scrolling to a module page's bottom. */
+.wp-doc-starter-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  border-radius: var(--wp-radius-lg, 12px);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 38%, var(--wp-border));
+  background:
+    linear-gradient(120deg, color-mix(in oklab, var(--wp-accent-500) 12%, transparent), transparent 62%),
+    var(--wp-bg-1);
+}
+.wp-doc-starter-cta__body { min-width: 0; flex: 1 1 320px; }
+.wp-doc-starter-cta__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-accent-text, var(--wp-accent-500));
+}
+.wp-doc-starter-cta__title {
+  margin: 6px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--wp-text);
+}
+.wp-doc-starter-cta__sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--wp-text-muted);
+}
+</style>
