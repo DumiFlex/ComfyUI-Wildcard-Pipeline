@@ -96,16 +96,6 @@ async function run(): Promise<void> {
       <RouterLink class="wp-starter-btn__open" :to="openRoute" data-test="starter-open">
         Open <i class="pi pi-arrow-up-right" aria-hidden="true" />
       </RouterLink>
-      <Button
-        v-if="slot !== 'bundle'"
-        variant="ghost"
-        size="sm"
-        :loading="busy"
-        data-test="starter-recreate"
-        @click="run"
-      >
-        Recreate
-      </Button>
     </template>
     <Button
       v-else
