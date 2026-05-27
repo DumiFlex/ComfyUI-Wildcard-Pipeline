@@ -116,6 +116,20 @@ def test_internal_flag_appends_to_internal_keys_set():
     assert "cfg" in keys
 
 
+def test_internal_flag_rides_internal_flags_for_assembler():
+    # The PromptAssembler strips on `internals["__wp_internal_flags__"]`, so an
+    # internal injector row must populate it (not just `__wp_internal_keys__`)
+    # or the var leaks into the rendered prompt.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row("input_0", "cfg", internal=True), _row("input_1", "shown")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0=7.5, input_1="x")
+    flags = out.values[0].internals.get("__wp_internal_flags__", {})
+    assert flags.get("cfg") is True
+    assert "shown" not in flags
+
+
 def test_non_internal_row_does_not_pollute_internal_keys():
     rows = json.dumps({"version": 1, "rows": [_row("input_0", "public_var")]})
     out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x")

@@ -189,6 +189,19 @@ class WPContextInjector(io.ComfyNode):
         if internal_keys:
             ctx["__wp_internal_keys__"] = sorted(internal_keys)
 
+        # Carry user-marked-internal bindings on `__wp_internal_flags__` in the
+        # cross-node `internals` field — the SAME channel WP_Context +
+        # WP_ContextLoop use, and the only one the PromptAssembler consults
+        # (via `strip_internals`) to keep an internal var out of the rendered
+        # prompt. Writing only `__wp_internal_keys__` above left the toggle
+        # cosmetic: nothing downstream stripped on it.
+        out_internals = dict(upstream_internals)
+        if internal_keys:
+            flags = dict(out_internals.get("__wp_internal_flags__") or {})
+            for name in internal_keys:
+                flags[name] = True
+            out_internals["__wp_internal_flags__"] = flags
+
         debug = dict(upstream_debug)
         if traces:
             existing_trace = debug.get("__wp_trace__", [])
@@ -201,6 +214,6 @@ class WPContextInjector(io.ComfyNode):
             PipelineContext.Type(
                 context=ctx,
                 debug=debug,
-                internals=dict(upstream_internals),
+                internals=out_internals,
             )
         )
