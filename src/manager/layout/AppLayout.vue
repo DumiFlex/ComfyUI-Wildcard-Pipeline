@@ -12,6 +12,7 @@ import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
+import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useCascadeStore } from "../cascade/cascade-store";
 import {
@@ -26,6 +27,7 @@ const commandIndex = useCommandIndex();
 const recent = useRecentStore();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
+const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
 const cascadeStore = useCascadeStore();
 
@@ -101,6 +103,7 @@ onMounted(() => {
   Promise.all([
     moduleStore.fetchCatalog().catch(() => undefined),
     bundleStore.fetchCatalog().catch(() => undefined),
+    templateStore.fetchCatalog().catch(() => undefined),
     categoryStore.fetchAll().catch(() => undefined),
   ]).then(() => {
     const catalog = moduleStore.catalog;
