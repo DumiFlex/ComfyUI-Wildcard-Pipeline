@@ -50,6 +50,7 @@ const instanceOptions = [
         checked.
       </p>
       <DocImage
+        src="images/docs/derivation.png"
         ratio="16 / 7"
         caption="A Derivation rule card open in the editor: an IF branch checking '$subject equals ocean' with an Append action on $mood, and an ELSE branch that does nothing."
       />

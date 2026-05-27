@@ -27,6 +27,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         not add any processing of its own.
       </p>
       <DocImage
+        src="images/docs/bundles-concept.png"
         ratio="16 / 6"
         caption="A collapsed bundle row in the module stack, showing its name and child count. The expand arrow reveals the individual modules inside."
       />

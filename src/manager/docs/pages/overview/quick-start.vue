@@ -38,6 +38,7 @@ function createStarterWildcard(): void {
         </button>
       </div>
       <DocImage
+        src="images/docs/quick-start-starter.png"
         ratio="16 / 7"
         caption="The wildcard editor pre-filled with the 'subject' starter: name, $variable binding, and three options ready to save."
       />
@@ -78,6 +79,7 @@ function createStarterWildcard(): void {
         </li>
       </ol>
       <DocImage
+        src="images/docs/quick-start-graph.png"
         ratio="16 / 6"
         caption="The finished three-node graph: WP Context → WP Prompt Assembler → CLIP Text Encode, with the subject wildcard loaded in the context widget."
       />

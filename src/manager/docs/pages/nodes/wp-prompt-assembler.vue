@@ -33,6 +33,7 @@ const ports = [
         the rendered prompt automatically.
       </p>
       <DocImage
+        src="images/docs/wp-prompt-assembler.png"
         ratio="16 / 7"
         caption="The WP Prompt Assembler node showing the template field with $variable placeholders, the variable chip strip below it with each upstream binding listed, and the resolved preview text."
       />

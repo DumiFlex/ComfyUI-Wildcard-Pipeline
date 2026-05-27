@@ -35,6 +35,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <VarToken>$variable</VarToken> slot.
       </DocCallout>
       <DocImage
+        src="images/docs/context-chaining.png"
         ratio="16 / 7"
         caption="Two WP Context nodes chained: the first sets $subject and $style; the second overrides only $style. Show the PIPELINE_CONTEXT wire connecting them and the final $style value reaching the Assembler."
       />

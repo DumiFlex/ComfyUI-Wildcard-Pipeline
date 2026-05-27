@@ -8,7 +8,9 @@
  * public base, e.g. "images/docs/<name>.png") to swap the placeholder for
  * the real image — the caption stays as the figure label.
  */
-withDefaults(
+import { computed, ref } from "vue";
+
+const props = withDefaults(
   defineProps<{
     /** Describes what the image depicts — shown as the caption AND as the
      *  placeholder brief. Always required so an unfilled slot is self-documenting. */
@@ -21,11 +23,23 @@ withDefaults(
   }>(),
   { ratio: "16 / 9" },
 );
+
+const failed = ref(false);
+
+const fullSrc = computed(() =>
+  props.src ? `${import.meta.env.BASE_URL}${props.src.replace(/^\/+/, "")}` : "",
+);
 </script>
 
 <template>
   <figure class="wp-doc-img">
-    <img v-if="src" :src="src" :alt="alt ?? caption" class="wp-doc-img__real" />
+    <img
+      v-if="props.src && !failed"
+      :src="fullSrc"
+      :alt="alt ?? caption"
+      class="wp-doc-img__real"
+      @error="failed = true"
+    />
     <div v-else class="wp-doc-img__ph" :style="{ aspectRatio: ratio }" role="img" :aria-label="`Placeholder: ${caption}`">
       <i class="pi pi-image wp-doc-img__ph-icon" aria-hidden="true" />
       <span class="wp-doc-img__ph-tag">Example image</span>

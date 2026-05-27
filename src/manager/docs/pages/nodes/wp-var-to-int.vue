@@ -35,6 +35,7 @@ const controls = [
         default you set — it never stops the run.
       </p>
       <DocImage
+        src="images/docs/wp-var-to-int.png"
         ratio="16 / 5"
         caption="The WP Var → Int node with its var_name picker open, showing the list of available $variables. Its INT output connects to the width input of an Empty Latent Image node."
       />

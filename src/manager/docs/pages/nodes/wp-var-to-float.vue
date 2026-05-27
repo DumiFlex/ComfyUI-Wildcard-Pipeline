@@ -35,6 +35,7 @@ const controls = [
         Missing variables or ones with no recognisable number quietly return the default.
       </p>
       <DocImage
+        src="images/docs/wp-var-to-float.png"
         ratio="16 / 5"
         caption="The WP Var → Float node with its var_name picker open. Its FLOAT output connects to the cfg input of a KSampler node."
       />

@@ -38,6 +38,7 @@ const ports = [
         <VarToken>$subject</VarToken> replaces the upstream one.
       </p>
       <DocImage
+        src="images/docs/wp-context.png"
         ratio="16 / 6"
         caption="A WP Context node showing the module-stack widget with a wildcard, a fixed value, and a combine module. Its context output connects to a WP Prompt Assembler."
       />

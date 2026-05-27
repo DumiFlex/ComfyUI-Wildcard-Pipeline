@@ -26,6 +26,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         is just a grouping layer for the editor.
       </p>
       <DocImage
+        src="images/docs/bundles.png"
         ratio="16 / 6"
         caption="A Context widget stack showing a collapsed bundle row labeled 'Portrait lighting kit' with a disclosure arrow. Below it, the same bundle expanded to reveal three child module rows inside."
       />

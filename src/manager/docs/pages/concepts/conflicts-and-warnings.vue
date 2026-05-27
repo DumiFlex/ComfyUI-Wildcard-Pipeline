@@ -91,6 +91,7 @@ const runtimeWarnings = [
         flags it so the override is intentional and visible.
       </DocCallout>
       <DocImage
+        src="images/docs/conflicts-warning.png"
         ratio="16 / 6"
         caption="A WP Context node in the canvas showing an advisory warning badge, and the WP Debug Warnings tab open alongside it listing the same warning with its message."
       />

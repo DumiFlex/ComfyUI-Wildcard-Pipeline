@@ -38,6 +38,7 @@ const presets = [
         needs no Context connection.
       </p>
       <DocImage
+        src="images/docs/wp-prompt-cleaner.png"
         ratio="16 / 5"
         caption="A before-and-after view: the raw assembled prompt on the left shows duplicate tags and stray commas; the cleaned output on the right has them removed."
       />

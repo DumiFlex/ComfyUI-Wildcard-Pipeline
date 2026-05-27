@@ -38,6 +38,7 @@ const instanceOptions = [
         than others, and you can group them with sub-category labels to filter on the fly.
       </p>
       <DocImage
+        src="images/docs/wildcard-editor.png"
         ratio="16 / 7"
         caption="The wildcard option-pool editor open on a wildcard called $subject, showing three options ('a cat', 'a dog', 'a fox') each with a weight field and a sub-category chip."
       />
@@ -67,6 +68,7 @@ const instanceOptions = [
         wildcard in the stack. See the Constraint page for the full picture.
       </p>
       <DocImage
+        src="images/docs/wildcard-constraint-order.png"
         ratio="16 / 6"
         caption="A module stack showing a $weather wildcard, then a Constraint module, then a $mood wildcard. The Constraint sits between its source and target."
       />

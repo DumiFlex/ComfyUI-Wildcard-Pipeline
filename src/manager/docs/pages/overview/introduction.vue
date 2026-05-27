@@ -75,6 +75,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
 
     <DocSection title="A finished graph">
       <DocImage
+        src="images/docs/introduction-graph.png"
         ratio="16 / 6"
         caption="A minimal finished graph: WP Context (with a subject wildcard) → WP Prompt Assembler → CLIP Text Encode → KSampler."
       />

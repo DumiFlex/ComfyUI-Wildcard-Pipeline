@@ -37,6 +37,7 @@ const reweightModes = [
         The target still picks randomly — you're just shifting the odds.
       </p>
       <DocImage
+        src="images/docs/constraint-matrix.png"
         ratio="16 / 7"
         caption="The constraint matrix editor with a $weather wildcard as the source and $mood as the target. Cells in the grid show Boost, Reduce, Allow, or Exclude for each source-option / target-option pair."
       />

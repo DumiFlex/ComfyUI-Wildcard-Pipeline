@@ -31,6 +31,7 @@ const tabs = [
         updates every run so you always see fresh data.
       </p>
       <DocImage
+        src="images/docs/wp-debug-viewer.png"
         ratio="16 / 8"
         caption="The WP Debug viewer open on the Snapshot tab, showing a list of resolved $variables and their values. The tab strip shows Snapshot, Trace, Picks, and Warnings tabs."
       />
@@ -52,6 +53,7 @@ const tabs = [
         own position.
       </p>
       <DocImage
+        src="images/docs/wp-debug-two.png"
         ratio="16 / 5"
         caption="A workflow with two WP Debug nodes — one wired after the first WP Context and one after the second — showing how each captures the pipeline state at that point."
       />

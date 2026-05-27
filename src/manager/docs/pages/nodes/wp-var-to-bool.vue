@@ -35,6 +35,7 @@ const controls = [
         sampler toggle, a switch, a boolean math node — to make that switch probabilistic.
       </p>
       <DocImage
+        src="images/docs/wp-var-to-bool.png"
         ratio="16 / 5"
         caption="The WP Var → Bool node with its var_name picker showing a $hires_fix variable. Its BOOLEAN output connects to the enabled input of an upscaler node."
       />

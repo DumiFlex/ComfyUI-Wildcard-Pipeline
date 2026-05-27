@@ -33,6 +33,7 @@ const controls = [
         repeated queueing, no batch node to wire.
       </p>
       <DocImage
+        src="images/docs/wp-context-loop-graph.png"
         ratio="16 / 6"
         caption="The WP Context Loop node wired in front of a WP Context → WP Prompt Assembler → KSampler chain, with its count set to 4. Show the node and its widget clearly."
       />
@@ -63,6 +64,7 @@ const controls = [
         if you want them to appear in the text.
       </p>
       <DocImage
+        src="images/docs/wp-context-loop-grid.png"
         ratio="16 / 7"
         caption="A 2×2 grid of four generated images, each captioned “frame 1 of 4” … “frame 4 of 4”, showing $iteration count up while the rest of the prompt stays constant."
       />

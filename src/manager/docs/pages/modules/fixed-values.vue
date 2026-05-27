@@ -40,6 +40,7 @@ const instanceOptions = [
         the top of your stack and every module below can read those variables.
       </p>
       <DocImage
+        src="images/docs/fixed-values.png"
         ratio="16 / 6"
         caption="The Fixed Values editor showing two rows: 'style = oil painting' and 'quality = 8k, masterpiece', each with a name field, a value field, and an enable toggle."
       />

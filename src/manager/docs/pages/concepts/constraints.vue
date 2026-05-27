@@ -100,6 +100,7 @@ const modes = [
       <p>Each rule has a <b>mode</b>:</p>
       <DocKeyList :items="modes" />
       <DocImage
+        src="images/docs/constraints-matrix.png"
         ratio="16 / 7"
         caption="The constraint matrix editor open on a Constraint module, showing source subcategory rows, target subcategory columns, and mode/factor cells being filled in."
       />

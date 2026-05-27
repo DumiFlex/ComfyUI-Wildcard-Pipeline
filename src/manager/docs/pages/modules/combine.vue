@@ -34,6 +34,7 @@ const instanceOptions = [
         inside the template for any on-the-fly variation that doesn't need its own wildcard.
       </p>
       <DocImage
+        src="images/docs/combine.png"
         ratio="16 / 7"
         caption="The Combine editor showing a template field containing '$style portrait of $subject, $mood lighting', the detected $var chips listed below it, and the output variable set to $prompt_fragment."
       />

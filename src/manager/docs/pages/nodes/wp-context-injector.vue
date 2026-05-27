@@ -44,6 +44,7 @@ const rowOptions = [
         unchanged and adds its own variables on top.
       </p>
       <DocImage
+        src="images/docs/wp-context-injector.png"
         ratio="16 / 6"
         caption="A WP Context Injector with two rows visible in the widget, each named and wired to an input socket. The context output connects to a WP Prompt Assembler."
       />
