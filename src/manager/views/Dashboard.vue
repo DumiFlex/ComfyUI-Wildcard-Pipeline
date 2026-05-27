@@ -174,33 +174,6 @@ const healthIssues = computed<HealthIssue[]>(() => {
 /** Getting-started steps. The check column reflects actual library
  *  state so users can see their progress against the checklist as
  *  they create things. */
-const startSteps = computed(() => [
-  {
-    id: "wildcard",
-    title: "Create your first wildcard",
-    body: "Wildcards pick one weighted option from a pool. They form the base of every prompt template.",
-    cta: "New wildcard",
-    slug: "wildcards",
-    done: counts.value.wildcard > 0,
-  },
-  {
-    id: "combine",
-    title: "Compose a Combine module",
-    body: "Combine joins fixed text with wildcard variables into a reusable template.",
-    cta: "New combine",
-    slug: "combines",
-    done: counts.value.combine > 0,
-  },
-  {
-    id: "test",
-    title: "Try the Test Runner",
-    body: "Run any module against the engine to preview output before wiring it into a graph.",
-    cta: "Open Test Runner",
-    slug: "test",
-    done: false,
-  },
-]);
-
 function editRow(row: DashboardRow) {
   if (row.kind === "bundle") {
     router.push(`/bundles/${row.id}/edit`);
@@ -504,34 +477,14 @@ onMounted(refresh);
         <div class="dashboard__start-head">
           <Icon name="pi-compass" />
           <div>
-            <h3 class="dashboard__start-title">Get started in three steps</h3>
-            <p class="dashboard__start-sub">Each step turns into a checkmark once you've done it.</p>
+            <h3 class="dashboard__start-title">New here?</h3>
+            <p class="dashboard__start-sub">Build your first prompt pipeline in a couple of minutes. The Quick start walks you through every step — and creates a starter wildcard for you, so there's something to run right away.</p>
           </div>
         </div>
-        <ol class="dashboard__start-list">
-          <li
-            v-for="(step, i) in startSteps"
-            :key="step.id"
-            class="dashboard__start-row"
-            :data-done="step.done || undefined"
-          >
-            <span class="dashboard__start-step">
-              <Icon v-if="step.done" name="pi-check-circle" />
-              <span v-else class="dashboard__start-num">{{ i + 1 }}</span>
-            </span>
-            <div class="dashboard__start-body">
-              <strong>{{ step.title }}</strong>
-              <p>{{ step.body }}</p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              :icon="step.id === 'test' ? 'pi-bolt' : 'pi-plus'"
-              :disabled="step.done && step.id !== 'test'"
-              @click="router.push(`/${step.slug}${step.id === 'test' ? '' : '/new'}`)"
-            >{{ step.done && step.id !== 'test' ? 'Done' : step.cta }}</Button>
-          </li>
-        </ol>
+        <div class="dashboard__start-cta">
+          <Button variant="primary" icon="pi-play" @click="router.push('/docs/quick-start')">Open the Quick start</Button>
+          <Button variant="outline" icon="pi-book" @click="router.push('/docs')">Browse all docs</Button>
+        </div>
       </template>
     </Card>
 
@@ -732,6 +685,12 @@ onMounted(refresh);
 .dashboard__start-row[data-done] {
   background: color-mix(in oklab, var(--wp-success, #22c55e) 6%, transparent);
   border-color: color-mix(in oklab, var(--wp-success, #22c55e) 26%, transparent);
+}
+.dashboard__start-cta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
 }
 .dashboard__start-step {
   width: 28px;
