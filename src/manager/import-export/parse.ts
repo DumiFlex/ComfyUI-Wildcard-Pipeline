@@ -116,6 +116,10 @@ export function parsePayload(raw: string): ParseResult {
     ["derivations", migrated.derivations] as const,
     ["constraints", migrated.constraints] as const,
     ["categories", migrated.categories] as const,
+    // templates carry no snapshot_fingerprint — verifyOne short-circuits
+    // for kind "template" — but keep the loop in sync with RawPayload's
+    // shape so future template integrity checks get coverage for free.
+    ["templates", migrated.templates] as const,
   ]) {
     const kindSingular = PLURAL_TO_SINGULAR[kindPlural];
     for (const e of arr) {
