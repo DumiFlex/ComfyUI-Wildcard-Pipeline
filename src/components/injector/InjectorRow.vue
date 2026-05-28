@@ -379,7 +379,12 @@ function onDragEnd(): void {
   margin-bottom: 4px;  /* gap between rows — mirrors Context module spacing */
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* No flex `gap` on the column. A collapsed `.wp-collapse-row` shrinks to 0
+   * height, but a parent flex gap would STILL render between the header and
+   * that 0-height child — leaving ~2px of dead space below the header so the
+   * row reads as not-vertically-centered when collapsed. The summary supplies
+   * its own (collapsible) top padding for the expanded header↔summary gap
+   * instead. Mirrors ModuleRow, which has no column gap for the same reason. */
   font: 500 12px var(--wp-font-sans);
   color: var(--wp-text);
   transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover),
