@@ -59,7 +59,7 @@ def _execute(seed, count, config_dict):
     runtime uses the same surface. The first element is our payload list.
     """
     config_json = json.dumps(config_dict)
-    result = WPContextLoop.execute(seed=seed, count=count, config=config_json)
+    result = WPContextLoop.execute(seed=seed, count=count, wp_context_loop_config=config_json)
     if hasattr(result, "values"):
         return result.values[0]
     return result
@@ -170,3 +170,44 @@ def test_execute_both_internal_flags_stamped():
     for p in payloads:
         flags = p.internals["__wp_internal_flags__"]
         assert flags == {"iteration": True, "iteration_total": True}
+
+
+# --------------------------------------------- loop_config side output ---
+
+
+def _execute_full(seed, count, config_dict):
+    """Same as ``_execute`` but returns the full NodeOutput.values tuple."""
+    config_json = json.dumps(config_dict)
+    result = WPContextLoop.execute(seed=seed, count=count, wp_context_loop_config=config_json)
+    return result.values
+
+
+def test_execute_emits_loop_config_payload_on_second_output():
+    """The second output is the resolved config dict — count / strategy /
+    base_seed / override_seed — for WP_SeedList + friends to mirror the
+    loop's series."""
+    values = _execute_full(42, 3, {"strategy": "sequential", "override_seed": True})
+    assert len(values) == 2
+    loop_config = values[1]
+    assert loop_config == {
+        "count": 3,
+        "strategy": "sequential",
+        "base_seed": 42,
+        "override_seed": True,
+    }
+
+
+def test_loop_config_count_reflects_bypass_collapse():
+    """Bypass collapses to effective_count=1, and the side output must
+    reflect what the loop is ACTUALLY running, not the raw widget."""
+    values = _execute_full(42, 5, {"bypass": True})
+    loop_config = values[1]
+    assert loop_config["count"] == 1
+
+
+def test_loop_config_strategy_falls_back_to_default_on_unknown():
+    """_parse_config sanitises unknown strategies to the default —
+    the side output reflects the resolved strategy."""
+    values = _execute_full(42, 3, {"strategy": "wat"})
+    loop_config = values[1]
+    assert loop_config["strategy"] == "hash_index"

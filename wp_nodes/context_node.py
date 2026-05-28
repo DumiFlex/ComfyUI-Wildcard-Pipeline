@@ -81,22 +81,36 @@ class WPContext(io.ComfyNode):
             display_name="WP Context",
             category="wildcard-pipeline",
             inputs=[
-                PipelineContext.Input("upstream", optional=True),
+                PipelineContext.Input(
+                    "upstream",
+                    optional=True,
+                    tooltip=(
+                        "Optional upstream Context to extend. Variables pass "
+                        "through; this node's modules add or override bindings "
+                        "on top. Leave unconnected to start fresh."
+                    ),
+                ),
                 io.Int.Input(
                     "seed",
                     default=0,
                     min=0,
                     max=0xFFFFFFFFFFFFFFFF,
                     control_after_generate=True,
+                    tooltip=(
+                        "Starting point for randomisation. Change for a "
+                        "different roll; keep the same to reproduce. "
+                        "Right-click → Convert widget to input to drive from "
+                        "another seed node."
+                    ),
                 ),
-                ContextModulesInput.Input("modules", socketless=True),
+                ContextModulesInput.Input("wp_modules", socketless=True),
             ],
             outputs=[PipelineContext.Output("context")],
             not_idempotent=True,
         )
 
     @classmethod
-    def execute(cls, seed, modules, upstream=None):
+    def execute(cls, seed, wp_modules, upstream=None):
         upstream_ctx: dict = upstream.context if upstream is not None else {}
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = (
@@ -108,7 +122,7 @@ class WPContext(io.ComfyNode):
         # synthesised on the fly. Then we expand that catalog with
         # any transitive nested wildcards by hitting the live library
         # — picker no longer auto-walks at pick time (issue #2).
-        module_list, catalog, _pick_order = deserialize_node_input(modules)
+        module_list, catalog, _pick_order = deserialize_node_input(wp_modules)
         catalog = _expand_catalog_via_live_db(catalog)
 
         ctx: dict = dict(upstream_ctx)

@@ -15,6 +15,7 @@ const [
   cleanerMod,
   varPickerMod,
   ctxLoopMod,
+  seedListMod,
   graphEventsMod,
   ToastModule,
   graphMod,
@@ -33,6 +34,7 @@ const [
   import("./widgets/cleaner"),
   import("./widgets/var_picker"),
   import("./widgets/context_loop"),
+  import("./widgets/seed_list"),
   import("./extension/graph-events"),
   import("./components/shared/Toast.vue"),
   import("./extension/graph"),
@@ -77,6 +79,7 @@ type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
 type VarPickerCreateNode = Parameters<typeof varPickerMod.create>[0];
 type CtxLoopCreateNode = Parameters<typeof ctxLoopMod.create>[0];
+type SeedListCreateNode = Parameters<typeof seedListMod.create>[0];
 type AssemblerHelperNode = Parameters<typeof asmMod.mountHelper>[0];
 
 interface NodeData { name: string }
@@ -170,8 +173,18 @@ app.registerExtension({
         cleanerMod.create(node, inputName),
       WP_VAR_PICKER: (node: VarPickerCreateNode, inputName: string) =>
         varPickerMod.create(node, inputName),
-      WP_CONTEXT_LOOP_CONFIG: (node: CtxLoopCreateNode, inputName: string) =>
+      // Loop's DOM widget uses `WP_CONTEXT_LOOP_WIDGET` — a widget-only
+      // TYPE (see `wp_nodes/types.py::ContextLoopWidgetInput`) distinct
+      // from the wire-payload TYPE `WP_CONTEXT_LOOP_CONFIG` carried on
+      // the loop's output + WP_SeedList's `loop_config` socket. NO
+      // factory is registered for `WP_CONTEXT_LOOP_CONFIG` here — that's
+      // deliberate, so consumers of that type render as plain sockets
+      // (gated factories returning `{widget: undefined}` ended up
+      // hiding the socket entirely, see the type's docstring).
+      WP_CONTEXT_LOOP_WIDGET: (node: CtxLoopCreateNode, inputName: string) =>
         ctxLoopMod.create(node, inputName),
+      WP_SEED_LIST_CONFIG: (node: SeedListCreateNode, inputName: string) =>
+        seedListMod.create(node, inputName),
     };
   },
 

@@ -33,6 +33,16 @@ const STRATEGIES: { id: LoopStrategy; label: string; hint: string }[] = [
   { id: "prime_stride", label: "stride", hint: "base + i × 1,000,003. Wide spread, deterministic." },
 ];
 
+/** Same wording as the WP_ContextLoop schema-level tooltip for the
+ *  override toggle — surfaces on hover for the SFC row. Long form so
+ *  users see exactly what flipping it changes downstream. */
+const OVERRIDE_SEED_TOOLTIP =
+  "When ON, the loop chooses the seed for every iteration so the whole batch " +
+  "is reproducible from this Loop's seed widget — each downstream WP Context " +
+  "ignores its own seed and uses the loop's. When OFF (default), each WP " +
+  "Context keeps its own seed and the loop only nudges per-iteration variation " +
+  "on top.";
+
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
 
@@ -98,14 +108,19 @@ function toggleTotalInternal(): void {
       </div>
     </div>
 
-    <div class="wp-loop__row">
-      <span class="wp-loop__row-label">override seed</span>
+    <div
+      class="wp-loop__row"
+      :title="OVERRIDE_SEED_TOOLTIP"
+    >
+      <span class="wp-loop__row-label">Override Context seed</span>
       <button
         type="button"
         class="wp-loop__switch"
         :class="{ 'wp-loop__switch--on': modelValue.override_seed }"
         data-test="loop-override-toggle"
         :aria-pressed="modelValue.override_seed"
+        :aria-label="`Override Context seed: ${modelValue.override_seed ? 'on' : 'off'}`"
+        :title="OVERRIDE_SEED_TOOLTIP"
         @click="toggleOverride"
       >
         <span class="wp-loop__switch-thumb" />

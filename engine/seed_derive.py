@@ -11,20 +11,32 @@ Pure Python — zero ComfyUI imports.
 
 import hashlib
 
+MAX_SAFE_SEED = (1 << 50) - 1
+"""1_125_899_906_842_623 — matches ComfyUI's frontend randomize cap
+(Math.random() * 1125899906842624) so emitted seeds stay copy-pasteable +
+visually consistent with stock seed nodes. KSampler accepts up to 64-bit,
+but anything past 2^50 falls outside the canvas's typical seed shape and
+is unsightly."""
+
 
 def derive_loop_seeds(base: int, count: int, strategy: str) -> list[int]:
-    """Produce `count` base seeds from `base` using the given strategy."""
+    """Produce `count` base seeds from `base` using the given strategy.
+
+    Every emitted seed is masked to ``MAX_SAFE_SEED`` (50 bits) so the
+    values stay within ComfyUI's frontend randomize range — see the
+    module docstring for the rationale.
+    """
     if count <= 1:
-        return [base]
+        return [base & MAX_SAFE_SEED]
     if strategy == "sequential":
-        return [base + i for i in range(count)]
+        return [(base + i) & MAX_SAFE_SEED for i in range(count)]
     if strategy == "prime_stride":
-        return [base + i * 1000003 for i in range(count)]
+        return [(base + i * 1000003) & MAX_SAFE_SEED for i in range(count)]
     if strategy == "hash_index":
         out: list[int] = []
         for i in range(count):
             digest = hashlib.sha256(f"{base}:{i}".encode()).digest()
-            out.append(int.from_bytes(digest[:8], "big"))
+            out.append(int.from_bytes(digest[:8], "big") & MAX_SAFE_SEED)
         return out
     raise ValueError(f"unknown loop seed strategy: {strategy!r}")
 
@@ -48,11 +60,12 @@ def effective_chain_seed(
     Locked modules read ``instance.locked_seed`` directly and ignore the
     chain seed — so loop iteration cannot affect them.
 
-    Returns a non-negative 64-bit int.
+    Returns a non-negative seed masked to ``MAX_SAFE_SEED`` (50 bits) —
+    matches the visual shape of ComfyUI's frontend-randomised seeds.
     """
     base = seed_override if seed_override is not None else widget_seed
     if loop_index == 0:
-        return base & 0xFFFFFFFFFFFFFFFF
+        return base & MAX_SAFE_SEED
     digest = hashlib.sha256(f"loop:{loop_index}".encode()).digest()
     shift = int.from_bytes(digest[:8], "big")
-    return (base ^ shift) & 0xFFFFFFFFFFFFFFFF
+    return (base ^ shift) & MAX_SAFE_SEED

@@ -13,6 +13,7 @@ import {
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
   findRootGraph,
+  hasUpstreamLoopOverridingSeed,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
@@ -255,6 +256,45 @@ export function create(node: ContextNode, inputName: string) {
         Object.is,
       );
 
+      // Upstream Loop is overriding `seed`? If yes, grey out the local
+      // `seed` stock widget so the user reads "this value is dead while
+      // the Loop drives it". Mirrors the seed-list lock pattern.
+      // The walker climbs the pipeline-context chain (subgraph-aware)
+      // and checks each WP_ContextLoop's widget config — at most one
+      // Loop sits upstream so the cost is bounded. Polled via the same
+      // `reactiveFromGraph` machinery so the lock updates immediately
+      // when the user toggles the Loop's override or wires it in.
+      const upstreamLoopOverrides = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const rootGraph = findRootGraph(startGraph);
+          return hasUpstreamLoopOverridingSeed(rootGraph, node);
+        },
+        Object.is,
+      );
+      // Toggle the `seed` stock widget's `disabled` flag in lockstep
+      // with the upstream-override state. Using a render-side effect
+      // (call inside the render thunk) keeps the lock cheap — no
+      // separate watch / dispose dance, no leak. `setDirtyCanvas`
+      // forces litegraph to repaint the greyed-out style on the same
+      // tick instead of waiting for the next user interaction.
+      function syncSeedWidgetGate(disabled: boolean): void {
+        const widgets = (node as unknown as {
+          widgets?: Array<{ name?: string; disabled?: boolean }>;
+        }).widgets;
+        if (!widgets) return;
+        const seedWidget = widgets.find((w) => w.name === "seed");
+        if (!seedWidget) return;
+        if (seedWidget.disabled === disabled) return;
+        seedWidget.disabled = disabled;
+        (node as unknown as {
+          setDirtyCanvas?: (a: boolean, b: boolean) => void;
+        }).setDirtyCanvas?.(true, true);
+      }
+
       /** Resolved-var map from THIS module's perspective — includes
        *  upstream-chain bindings AND sibling bindings produced
        *  earlier in the same node, while excluding the asking module
@@ -281,25 +321,33 @@ export function create(node: ContextNode, inputName: string) {
           .__wp_last_used_seed__;
         return typeof v === "number" && Number.isFinite(v) ? v : null;
       }
-      return () => h(ContextWidget, {
-        nodeId: node.id,
-        initialJson: currentJson.value,
-        upstreamVars: upstreamVars.value,
-        upstreamResolved: upstreamResolved.value,
-        localResolvedReader,
-        upstreamWildcardUuids: upstreamUuids.value,
-        downstreamWildcardUuids: downstreamUuids.value,
-        downstreamNestedReachUuids: downstreamNestedReach.value,
-        pairings: pairingsRef.value,
-        nodeMode: nodeMode.value,
-        lastUsedSeedReader,
-        onChange: (json: string) => host.setValue(json),
-        onRequestMinWidth: (w: number) => {
-          if (w === dynamicMinWidth) return;
-          dynamicMinWidth = w;
-          host.requestRelayout();
-        },
-      });
+      return () => {
+        // Reactive lock: read the upstream-override ref inside the
+        // render thunk so Vue tracks it. `syncSeedWidgetGate` is a
+        // no-op when the value hasn't changed, so this is safe to
+        // call on every render. Doing it here keeps the lock tied
+        // to the SFC lifecycle — no separate watch/dispose to leak.
+        syncSeedWidgetGate(upstreamLoopOverrides.value);
+        return h(ContextWidget, {
+          nodeId: node.id,
+          initialJson: currentJson.value,
+          upstreamVars: upstreamVars.value,
+          upstreamResolved: upstreamResolved.value,
+          localResolvedReader,
+          upstreamWildcardUuids: upstreamUuids.value,
+          downstreamWildcardUuids: downstreamUuids.value,
+          downstreamNestedReachUuids: downstreamNestedReach.value,
+          pairings: pairingsRef.value,
+          nodeMode: nodeMode.value,
+          lastUsedSeedReader,
+          onChange: (json: string) => host.setValue(json),
+          onRequestMinWidth: (w: number) => {
+            if (w === dynamicMinWidth) return;
+            dynamicMinWidth = w;
+            host.requestRelayout();
+          },
+        });
+      };
     },
   };
 

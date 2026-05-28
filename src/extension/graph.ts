@@ -353,7 +353,7 @@ export function collectLocalResolvedForModule(
   if (isSkippedMode(node)) return ctx;
 
   const v = parseWidgetJson<ContextWidgetValue>(
-    widgetValue(node, "modules"),
+    widgetValue(node, "wp_modules"),
     { version: 1, modules: [] },
   );
 
@@ -389,6 +389,40 @@ export function collectUpstreamVariables(rootGraph: LiteGraphLike, node: LiteNod
 }
 
 /**
+ * Walk upstream from `node` and return true iff some WP_ContextLoop in
+ * the pipeline-context chain has `override_seed=true` in its widget
+ * config. Used by WP_Context's widget glue to grey out the local `seed`
+ * stock widget — when a Loop upstream is overriding seeds, the local
+ * widget's value is unused at runtime so editing it would mislead.
+ *
+ * Walker uses the same `pipelineUpstreamOf` chain as the var / uuid
+ * walkers so subgraph boundaries are crossed transparently. Stops at
+ * the first upstream Loop (Loop has no PIPELINE_CONTEXT input so the
+ * chain naturally terminates there) — a downstream Loop wouldn't drive
+ * this node's seed, so we never look in that direction.
+ */
+export function hasUpstreamLoopOverridingSeed(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+): boolean {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    if (cur.node.type === "WP_ContextLoop" && !isSkippedMode(cur.node)) {
+      // Loop's widget config carries the override toggle. Mute / bypass
+      // skips the Loop entirely so its override shouldn't apply.
+      const raw = widgetValue(cur.node, "wp_context_loop_config");
+      const cfg = parseWidgetJson<{ override_seed?: boolean }>(raw, {});
+      return cfg.override_seed === true;
+    }
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  return false;
+}
+
+/**
  * Variable bindings contributed by every `WP_ContextInjector` upstream
  * of `node`. Used by the assembler so the in-template preview shows
  * the injector's `$binding` placeholder for keys an injector
@@ -415,7 +449,7 @@ export function collectUpstreamInjectorBindings(
     const inj = parseWidgetJson<{
       version: 1;
       rows?: Array<{ binding?: string; enabled?: boolean }>;
-    }>(widgetValue(n, "rows"), { version: 1, rows: [] });
+    }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
     for (const row of inj.rows ?? []) {
       if (row.enabled !== true) continue;
       const binding = (row.binding ?? "").trim();
@@ -458,7 +492,7 @@ export function collectUpstreamWildcardUuids(
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
     const v = parseWidgetJson<ContextWidgetValue>(
-      widgetValue(n, "modules"),
+      widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
@@ -507,7 +541,7 @@ export function collectUpstreamChain(
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
     const v = parseWidgetJson<ContextWidgetValue>(
-      widgetValue(n, "modules"),
+      widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
     // Apply the bundle gate before posting to `/wp/api/preview/resolve`.
@@ -582,7 +616,7 @@ export function collectUpstreamKinds(
       const inj = parseWidgetJson<{
         version: 1;
         rows?: Array<{ binding?: string; enabled?: boolean; internal?: boolean }>;
-      }>(widgetValue(n, "rows"), { version: 1, rows: [] });
+      }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
       for (const row of inj.rows ?? []) {
         if (row.enabled !== true) continue;
         const b = (row.binding ?? "").trim();
@@ -598,7 +632,7 @@ export function collectUpstreamKinds(
       // loop icon — mirrors the `resolveChainStatic` branch that
       // stamps their placeholder values. Per-key internal-ness comes
       // from the widget config (same globe toggles as a module).
-      const raw = widgetValue(n, "config");
+      const raw = widgetValue(n, "wp_context_loop_config");
       const cfg = parseWidgetJson<{
         iteration_var_name?: string;
         iteration_internal?: boolean;
@@ -614,7 +648,7 @@ export function collectUpstreamKinds(
     }
     if (n.type !== "WP_Context") continue;
     const v = parseWidgetJson<ContextWidgetValue>(
-      widgetValue(n, "modules"),
+      widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
@@ -654,6 +688,29 @@ export function collectUpstreamKinds(
           const name = (e.variable_name ?? "").replace(/^\$/, "").trim();
           if (name) kinds[name] = "fixed_values";
           if (name && m.instance?.internal) internalKeys.add(name);
+        }
+        continue;
+      }
+      if (m.type === "derivation") {
+        // Each branch + the optional ELSE can name a target_var. We
+        // don't know statically which branch will match, so emit every
+        // distinct target_var the derivation can write to. That keeps
+        // the assembler's pre-run "unresolved $var" scan from false-
+        // flagging derivation outputs and lets the chip strip render
+        // its kind icon.
+        const dp = (m.payload ?? {}) as { rules?: Array<{
+          branches?: Array<{ action?: { target_var?: string } }>;
+          else?: { action?: { target_var?: string } };
+        }> };
+        for (const rule of dp.rules ?? []) {
+          for (const branch of rule.branches ?? []) {
+            const name = (branch.action?.target_var ?? "").replace(/^\$/, "").trim();
+            if (name) kinds[name] = "derivation";
+            if (name && m.instance?.internal) internalKeys.add(name);
+          }
+          const elseName = (rule.else?.action?.target_var ?? "").replace(/^\$/, "").trim();
+          if (elseName) kinds[elseName] = "derivation";
+          if (elseName && m.instance?.internal) internalKeys.add(elseName);
         }
         continue;
       }
@@ -721,7 +778,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
     const v = parseWidgetJson<ContextWidgetValue>(
-      widgetValue(n, "modules"),
+      widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
     for (const m of v.modules) {
@@ -779,7 +836,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
       // the binding exists. Internal-flagged rows still emit the key
       // (it's in ctx for downstream consumers) but get stripped from
       // the public map below — same path WP_Context modules use.
-      const raw = widgetValue(n, "rows");
+      const raw = widgetValue(n, "wp_rows");
       const inj = parseWidgetJson<{
         version: 1;
         rows?: Array<{
@@ -810,7 +867,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
       // exist. The runtime emits 1-based values too — keeping the
       // static placeholder aligned avoids the assembler's live-preview
       // showing "0" then a queue-time "1" jump.
-      const raw = widgetValue(n, "config");
+      const raw = widgetValue(n, "wp_context_loop_config");
       const cfg = parseWidgetJson<{
         iteration_var_name?: string;
         iteration_internal?: boolean;
@@ -826,7 +883,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
     }
     if (n.type !== "WP_Context") continue;
     const v = parseWidgetJson<ContextWidgetValue>(
-      widgetValue(n, "modules"),
+      widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
@@ -942,7 +999,81 @@ function writeBindings(
     if (out) ctx[out] = expandValue(tmpl, ctx, catalog, 0);
     return;
   }
-  // derivation / constraint / pipeline: no static binding for preview.
+  if (m.type === "derivation") {
+    // Best-effort static preview that mirrors engine/modules/
+    // derivation_handler.py: each rule evaluates its branches against
+    // the current static ctx in order; the first branch whose
+    // condition matches fires its action; if none match, the optional
+    // ELSE clause fires. Wildcard "static value = first option",
+    // fixed_values literals, and the running ctx mutations from
+    // earlier modules feed the condition checks, so a derivation
+    // that keys off `$mood = "dramatic"` resolves correctly when
+    // `$mood` is statically known. Without this, $accent etc. were
+    // absent from `collectUpstreamResolved`, which made the pre-run
+    // "unresolved $var" scan and the chip-strip icon path both miss
+    // derivation outputs.
+    const dp = (m.payload ?? {}) as { rules?: Array<{
+      branches?: Array<{
+        condition?: { var?: string; op?: string; value?: string };
+        action?: { target_var?: string; mode?: string; value?: string };
+      }>;
+      else?: { action?: { target_var?: string; mode?: string; value?: string } };
+    }> };
+    for (const rule of dp.rules ?? []) {
+      let applied = false;
+      for (const branch of rule.branches ?? []) {
+        if (matchDerivationCondition(branch.condition, ctx)) {
+          applyDerivationAction(branch.action, ctx, catalog);
+          applied = true;
+          break;
+        }
+      }
+      if (!applied && rule.else) {
+        applyDerivationAction(rule.else.action, ctx, catalog);
+      }
+    }
+    return;
+  }
+  // constraint / pipeline: no static binding for preview.
+}
+
+function matchDerivationCondition(
+  cond: { var?: string; op?: string; value?: string } | undefined,
+  ctx: Record<string, string>,
+): boolean {
+  if (!cond) return false;
+  const varName = cond.var ?? "";
+  const op = cond.op ?? "";
+  const value = cond.value ?? "";
+  // Presence-check ops short-circuit before reading the stored value.
+  if (op === "exists") return varName in ctx;
+  if (op === "not_exists") return !(varName in ctx);
+  if (op === "is_set") return varName in ctx && ctx[varName] !== "";
+  if (op === "is_unset") return !(varName in ctx) || ctx[varName] === "";
+  const actual = ctx[varName] ?? "";
+  if (op === "equals") return actual === value;
+  if (op === "not_equals") return actual !== value;
+  if (op === "contains") return actual.includes(value);
+  if (op === "matches") {
+    try { return new RegExp(value).test(actual); } catch { return false; }
+  }
+  return false;
+}
+
+function applyDerivationAction(
+  action: { target_var?: string; mode?: string; value?: string } | undefined,
+  ctx: Record<string, string>,
+  catalog: Map<string, MinimalWildcard>,
+): void {
+  if (!action) return;
+  const target = (action.target_var ?? "").replace(/^\$/, "").trim();
+  if (!target) return;
+  const mode = action.mode ?? "replace";
+  const raw = action.value ?? "";
+  const newValue = expandValue(raw, ctx, catalog, 0);
+  if (mode === "replace") ctx[target] = newValue;
+  else if (mode === "append") ctx[target] = (ctx[target] ?? "") + newValue;
+  else if (mode === "prepend") ctx[target] = newValue + (ctx[target] ?? "");
 }
 
 function expandValue(
@@ -1055,7 +1186,7 @@ export function collectDownstreamWildcardUuids(
         // WP_Context and not muted/bypassed.
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
           const v = parseWidgetJson<ContextWidgetValue>(
-            widgetValue(stepped.node, "modules"),
+            widgetValue(stepped.node, "wp_modules"),
             { version: 1, modules: [] },
           );
           const bundleEnabled = buildBundleEnabledMap(v.bundles);
@@ -1114,7 +1245,7 @@ export function collectDownstreamNestedReachUuids(
         seen.add(key);
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
           const v = parseWidgetJson<ContextWidgetValue>(
-            widgetValue(stepped.node, "modules"),
+            widgetValue(stepped.node, "wp_modules"),
             { version: 1, modules: [] },
           );
           const bundleEnabled = buildBundleEnabledMap(v.bundles);

@@ -90,6 +90,12 @@ class _Slot:
     is_output_list: bool = False
     control_after_generate: bool = False
     placeholder: str | None = None
+    # V3 surface: display_name overrides the canvas label, tooltip drives
+    # the hover affordance. Pure-Python tests don't render either, but
+    # they have to be ACCEPTED by the stub or the **kwargs forward from
+    # Input() raises TypeError on any node that supplies them.
+    tooltip: str | None = None
+    display_name: str | None = None
 
 
 class _IOType:
@@ -101,8 +107,16 @@ class _IOType:
     def Input(self, name: str = "", **kwargs: Any) -> _Slot:
         return _Slot(kind="input", type_name=self._type_name, name=name, **kwargs)
 
-    def Output(self, name: str = "") -> _Slot:
-        return _Slot(kind="output", type_name=self._type_name, name=name)
+    def Output(self, name: str = "", is_output_list: bool = False) -> _Slot:
+        # ``is_output_list`` mirrors comfy_api/latest/_io.py:Output.__init__.
+        # WP_SeedList relies on this so a downstream node with
+        # ``is_input_list=True`` fans the seed list out one-per-iteration.
+        return _Slot(
+            kind="output",
+            type_name=self._type_name,
+            name=name,
+            is_output_list=is_output_list,
+        )
 
 
 Int = _IOType("INT")
@@ -110,6 +124,27 @@ Float = _IOType("FLOAT")
 Boolean = _IOType("BOOLEAN")
 String = _IOType("STRING")
 AnyType = _IOType("*")
+
+
+class _ComboType:
+    """Factory for io.Combo — the real V3 surface accepts an ``options``
+    list at the Input call site. Stub mirrors just enough of that shape
+    for schema construction during tests."""
+
+    _type_name = "COMBO"
+
+    def Input(self, name: str = "", options: list | None = None, **kwargs: Any) -> _Slot:
+        # ``options`` is intentionally swallowed — schema tests only assert
+        # type_name / name / default; option enumeration is verified by
+        # frontend Vitest, not Python pytest.
+        del options
+        return _Slot(kind="input", type_name=self._type_name, name=name, **kwargs)
+
+    def Output(self, name: str = "") -> _Slot:
+        return _Slot(kind="output", type_name=self._type_name, name=name)
+
+
+Combo = _ComboType()
 
 
 # ---------------------------------------------------------- Autogrow stub ---
@@ -270,6 +305,7 @@ class _IONamespace:
     Float = Float
     Boolean = Boolean
     String = String
+    Combo = Combo
     AnyType = AnyType
     Autogrow = _Autogrow
     Custom = staticmethod(Custom)

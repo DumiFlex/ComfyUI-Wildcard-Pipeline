@@ -56,8 +56,16 @@ class WPContextInjector(io.ComfyNode):
             display_name="WP Context Injector",
             category="wildcard-pipeline",
             inputs=[
-                PipelineContext.Input("upstream", optional=True),
-                InjectorRowsInput.Input("rows", socketless=True),
+                PipelineContext.Input(
+                    "upstream",
+                    optional=True,
+                    tooltip=(
+                        "Optional upstream Context to extend. Variables pass "
+                        "through; this node's rows write fresh bindings on "
+                        "top. Leave unconnected to start a new chain."
+                    ),
+                ),
+                InjectorRowsInput.Input("wp_rows", socketless=True),
                 # NO `io.Autogrow.Input` here. V3 Autogrow declares all
                 # `max` slots up-front (see comfy_api/latest/_io.py:997)
                 # and ComfyUI's frontend doesn't shrink on disconnect.
@@ -73,7 +81,12 @@ class WPContextInjector(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, rows: str = "", upstream: PipelineContext | None = None, **slot_values: Any):
+    def execute(
+        cls,
+        wp_rows: str = "",
+        upstream: PipelineContext | None = None,
+        **slot_values: Any,
+    ):
         # V3 Autogrow namespaces dynamic inputs as `inputs.input_0`,
         # `inputs.input_1`, … — but the widget JSON's `slot_name` field
         # holds the bare label `input_0`. Normalize incoming kwargs to
@@ -102,7 +115,7 @@ class WPContextInjector(io.ComfyNode):
 
         # Empty rows / parse failure → forward unchanged.
         try:
-            parsed = json.loads(rows) if rows else {"version": 1, "rows": []}
+            parsed = json.loads(wp_rows) if wp_rows else {"version": 1, "rows": []}
         except json.JSONDecodeError:
             parsed = {"version": 1, "rows": []}
 

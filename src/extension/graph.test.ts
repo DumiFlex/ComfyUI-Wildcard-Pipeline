@@ -7,6 +7,7 @@ import {
   collectUpstreamWildcardUuids,
   findDownstreamAssemblers,
   findRootGraph,
+  hasUpstreamLoopOverridingSeed,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
@@ -19,7 +20,7 @@ function fakeContextNode(id: number, vars: string[], upstreamLink?: number): Lit
     inputs: [{ name: "upstream", link: upstreamLink ?? null }],
     outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
     widgets: [{
-      name: "modules",
+      name: "wp_modules",
       value: JSON.stringify({
         version: 1,
         modules: [{
@@ -80,7 +81,7 @@ describe("collectUpstreamWildcardUuids", () => {
       inputs: [{ name: "upstream", link: upstreamLink ?? null }],
       outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
       widgets: [{
-        name: "modules",
+        name: "wp_modules",
         value: JSON.stringify({
           version: 1,
           modules: wildcardUuids.map((u) => ({
@@ -138,7 +139,7 @@ describe("collectDownstreamWildcardUuids", () => {
       inputs: [{ name: "upstream", link: upstreamLink ?? null }],
       outputs: [{ name: "context", links: outgoingLinkIds, type: "PIPELINE_CONTEXT" }],
       widgets: [{
-        name: "modules",
+        name: "wp_modules",
         value: JSON.stringify({
           version: 1,
           modules: wildcardUuids.map((u) => ({
@@ -402,7 +403,7 @@ function fakeWildcardContextNode(
     inputs: [{ name: "upstream", link: upstreamLink ?? null }],
     outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
     widgets: [{
-      name: "modules",
+      name: "wp_modules",
       value: JSON.stringify({
         version: 1,
         modules: modules.map((m) => ({
@@ -537,7 +538,7 @@ describe("collectUpstreamResolved — combine instance overrides", () => {
       inputs: [{ name: "upstream", link: null }],
       outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
       widgets: [{
-        name: "modules",
+        name: "wp_modules",
         value: JSON.stringify({ version: 1, modules: [...upstreamMods, combineMod] }),
       }],
     };
@@ -611,7 +612,7 @@ describe("collectLocalResolvedForModule", () => {
       inputs: [{ name: "upstream", link: null }],
       outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
       widgets: [{
-        name: "modules",
+        name: "wp_modules",
         value: JSON.stringify({ version: 1, modules }),
       }],
     };
@@ -702,5 +703,109 @@ describe("collectLocalResolvedForModule", () => {
     ]);
     const result = collectLocalResolvedForModule(graph, ctx, "cb000001");
     expect(result.style).toBeUndefined();
+  });
+});
+
+describe("hasUpstreamLoopOverridingSeed", () => {
+  // Helper — fakes a WP_ContextLoop with the given override_seed flag
+  // baked into its widget config. Output slot 0 is the PIPELINE_CONTEXT
+  // (loop's first output, matches the real Loop node schema).
+  function fakeLoopNode(id: number, overrideSeed: boolean): LiteNodeLike {
+    return {
+      id,
+      type: "WP_ContextLoop",
+      inputs: [],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_context_loop_config",
+        value: JSON.stringify({ override_seed: overrideSeed }),
+      }],
+    };
+  }
+
+  it("returns true when upstream Loop has override_seed=true", () => {
+    const loop = fakeLoopNode(1, true);
+    const ctx = fakeContextNode(2, [], 100);
+    const graph: LiteGraphLike = {
+      _nodes: [loop, ctx],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: loop, 2: ctx } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(hasUpstreamLoopOverridingSeed(graph, ctx)).toBe(true);
+  });
+
+  it("returns false when upstream Loop has override_seed=false", () => {
+    const loop = fakeLoopNode(1, false);
+    const ctx = fakeContextNode(2, [], 100);
+    const graph: LiteGraphLike = {
+      _nodes: [loop, ctx],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: loop, 2: ctx } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(hasUpstreamLoopOverridingSeed(graph, ctx)).toBe(false);
+  });
+
+  it("returns false when no upstream Loop exists", () => {
+    // Standalone Context — no upstream link at all.
+    const ctx = fakeContextNode(1, []);
+    const graph: LiteGraphLike = {
+      _nodes: [ctx],
+      links: {},
+      getNodeById: () => null,
+    };
+    expect(hasUpstreamLoopOverridingSeed(graph, ctx)).toBe(false);
+  });
+
+  it("finds Loop through intermediate WP_Context nodes", () => {
+    // Loop → Context A → Context B. Walker must climb past A to find
+    // the Loop at the head.
+    const loop = fakeLoopNode(1, true);
+    const ctxA = fakeContextNode(2, ["x"], 100);
+    const ctxB = fakeContextNode(3, ["y"], 101);
+    const graph: LiteGraphLike = {
+      _nodes: [loop, ctxA, ctxB],
+      links: {
+        100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 },
+        101: { id: 101, origin_id: 2, origin_slot: 0, target_id: 3, target_slot: 0 },
+      },
+      getNodeById: (id) =>
+        ({ 1: loop, 2: ctxA, 3: ctxB } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(hasUpstreamLoopOverridingSeed(graph, ctxB)).toBe(true);
+  });
+
+  it("treats malformed widget config as override off", () => {
+    // Loop with non-JSON widget value — defensive: don't crash, treat
+    // as "no override". Mirrors the parser-recovery story everywhere
+    // else in the codebase.
+    const loop: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextLoop",
+      inputs: [],
+      outputs: [{ name: "context", links: [], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_context_loop_config", value: "not json" }],
+    };
+    const ctx = fakeContextNode(2, [], 100);
+    const graph: LiteGraphLike = {
+      _nodes: [loop, ctx],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: loop, 2: ctx } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(hasUpstreamLoopOverridingSeed(graph, ctx)).toBe(false);
+  });
+
+  it("ignores Loops that are muted (mode 2)", () => {
+    // A muted Loop's modules don't run, so its override shouldn't
+    // grey out the downstream Context's seed widget. Matches the
+    // canvas runtime which skips muted nodes entirely.
+    const loop = fakeLoopNode(1, true);
+    loop.mode = 2; // MUTE
+    const ctx = fakeContextNode(2, [], 100);
+    const graph: LiteGraphLike = {
+      _nodes: [loop, ctx],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id) => ({ 1: loop, 2: ctx } as Record<number, LiteNodeLike>)[id] ?? null,
+    };
+    expect(hasUpstreamLoopOverridingSeed(graph, ctx)).toBe(false);
   });
 });

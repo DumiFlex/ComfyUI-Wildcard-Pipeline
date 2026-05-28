@@ -70,7 +70,7 @@ def test_execute_injects_catalog_synthesised_from_modules(monkeypatch):
 
     cn.WPContext.execute(
         seed=42,
-        modules={
+        wp_modules={
             "modules": [
                 {
                     "id": "ou111111",
@@ -101,7 +101,7 @@ def test_execute_defaults_to_empty_catalog_for_old_workflow_json(monkeypatch):
 
     cn.WPContext.execute(
         seed=0,
-        modules={"modules": []},  # no snapshots
+        wp_modules={"modules": []},  # no snapshots
         upstream=None,
     )
     assert captured["__wp_catalog__"] == {}
