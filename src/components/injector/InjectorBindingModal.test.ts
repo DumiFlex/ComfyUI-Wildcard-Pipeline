@@ -180,3 +180,65 @@ describe("InjectorBindingModal — Save / Cancel / keybinds", () => {
     expect(btn.element.disabled).toBe(false);
   });
 });
+
+describe("InjectorBindingModal — general (template) row", () => {
+  function generalRow(over: Partial<InjectorRow> = {}): InjectorRow {
+    return makeRow({ kind: "general", slot_name: "", binding: "combo", template: "$input_0 by $test", ...over });
+  }
+
+  it("header reads as a Template row, not a socket", () => {
+    const w = mount(InjectorBindingModal, { props: { row: generalRow() } });
+    expect(w.find('[data-test="ibm-name"]').text()).toBe("template row");
+    expect(w.find('[data-test="ibm-chip"]').text()).toBe("Template");
+  });
+
+  it("insert menu lists every reference (sockets + socket-row bindings)", async () => {
+    const w = mount(InjectorBindingModal, {
+      props: { row: generalRow(), references: ["input_0", "input_1", "test"] },
+    });
+    await w.find('[data-test="ibm-insert-slot"]').trigger("click");
+    expect(w.find('[data-test="ibm-slot-item-input_0"]').exists()).toBe(true);
+    expect(w.find('[data-test="ibm-slot-item-input_1"]').exists()).toBe(true);
+    expect(w.find('[data-test="ibm-slot-item-test"]').exists()).toBe(true);
+  });
+
+  it("preview treats references as known refs (no unknown flags)", () => {
+    const w = mount(InjectorBindingModal, {
+      props: { row: generalRow({ template: "$input_0 by $test" }), references: ["input_0", "test"] },
+    });
+    expect(w.findAll(".ibm-tok--ref")).toHaveLength(2);
+    expect(w.findAll(".ibm-tok--ref-unknown")).toHaveLength(0);
+  });
+
+  it("flags a ref that isn't in the references list as unknown", () => {
+    const w = mount(InjectorBindingModal, {
+      props: { row: generalRow({ template: "$input_0 and $missing" }), references: ["input_0"] },
+    });
+    expect(w.findAll(".ibm-tok--ref")).toHaveLength(1);
+    expect(w.findAll(".ibm-tok--ref-unknown")).toHaveLength(1);
+  });
+
+  it("Save emits binding + template for a general row", async () => {
+    const w = mount(InjectorBindingModal, {
+      props: { row: generalRow({ binding: "combo", template: "$input_0" }), references: ["input_0", "test"] },
+    });
+    await w.find<HTMLTextAreaElement>('[data-test="ibm-template"]').setValue("$input_0 by $test");
+    await w.find('[data-test="ibm-save"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const last = updates[updates.length - 1][0] as Partial<InjectorRow>;
+    expect(last.template).toBe("$input_0 by $test");
+    expect(last.binding).toBe("combo");
+  });
+
+  it("inserting a socket-row binding ref appends $name to the draft", async () => {
+    const w = mount(InjectorBindingModal, {
+      props: { row: generalRow({ template: "prefix " }), references: ["input_0", "test"] },
+    });
+    await w.find('[data-test="ibm-insert-slot"]').trigger("click");
+    await w.find('[data-test="ibm-slot-item-test"]').trigger("click");
+    await w.find('[data-test="ibm-save"]').trigger("click");
+    const updates = w.emitted("update")!;
+    const last = updates[updates.length - 1][0] as Partial<InjectorRow>;
+    expect(last.template).toBe("prefix $test");
+  });
+});

@@ -122,4 +122,13 @@ describe("resolveTokens — inline + multi-pick", () => {
     const out = resolveTokens("{5$$, $$a|b|c}", makeCtx());
     expect(out.split(", ").length).toBe(3);
   });
+
+  it("assembler surface renders inline + multi-pick literally (seedless)", () => {
+    // Mirrors engine/syntax/resolve.py: the assembler has no seed, so an
+    // inline pick would freeze deterministically. Render the source
+    // verbatim; $var still resolves so only the brace block stays literal.
+    const ctx = makeCtx({ surface: "assembler", vars: { color: "red" } });
+    expect(resolveTokens("$color {a|b|c}", ctx)).toBe("red {a|b|c}");
+    expect(resolveTokens("{2$$, $$a|b|c}", makeCtx({ surface: "assembler" }))).toBe("{2$$, $$a|b|c}");
+  });
 });

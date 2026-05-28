@@ -655,7 +655,7 @@ def test_build_payload_dedupes_constraint_never_applied():
         "__wp_warnings__": [
             {
                 "type": "constraint_never_applied",
-                "severity": "info",
+                "severity": "warn",
                 "module_id": "ghost001",
                 "detail": {"constraint_id": "ghost001"},
                 "message": "...",
@@ -667,7 +667,7 @@ def test_build_payload_dedupes_constraint_never_applied():
             # Same constraint id — should be deduped against upstream.
             {
                 "type": "constraint_never_applied",
-                "severity": "info",
+                "severity": "warn",
                 "module_id": "ghost001",
                 "detail": {"constraint_id": "ghost001"},
                 "message": "...",
@@ -675,7 +675,7 @@ def test_build_payload_dedupes_constraint_never_applied():
             # Different cid — should survive.
             {
                 "type": "constraint_never_applied",
-                "severity": "info",
+                "severity": "warn",
                 "module_id": "ghost002",
                 "detail": {"constraint_id": "ghost002"},
                 "message": "...",

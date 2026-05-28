@@ -31,6 +31,7 @@ vi.mock("vue-router", () => ({
 import { ApiError } from "../../api/client";
 import { useStarterSet } from "../useStarterSet";
 import { useStarterStore } from "../../stores/starterStore";
+import { useCascadeStore } from "../../cascade/cascade-store";
 import { STARTER_MODULE_NAMES } from "../starter-recipe";
 import type { ModuleRow, ModuleType } from "../../api/types";
 
@@ -272,12 +273,38 @@ describe("useStarterSet", () => {
       expect(body.children).toHaveLength(6);
       for (const child of body.children) {
         expect(child).toMatchObject({
-          enabled: true, collapsed: false, instance: {}, entries: [],
+          enabled: true, collapsed: false, entries: [],
         });
         expect(typeof child.id).toBe("string");
         expect(typeof child.payload_hash).toBe("string");
         expect(child).toHaveProperty("payload");
+        expect(child).toHaveProperty("instance");
         expect(child.meta).toMatchObject({ name: expect.any(String), library_name: expect.any(String) });
+      }
+    });
+
+    it("marks the upstream-only `subject` and `mood` wildcards internal in the bundle", async () => {
+      const store = useStarterStore();
+      const { buildStarterBundle } = useStarterSet();
+      await buildStarterBundle();
+      const body = apiMock.bundles.create.mock.calls[0][0];
+      const subjectId = store.idFor("subject");
+      const moodId = store.idFor("mood");
+      const byId = new Map(
+        (body.children as { id: string; instance: Record<string, unknown> }[]).map((c) => [c.id, c]),
+      );
+      // Subject + mood feed downstream `scene` / `accent` modules but never
+      // appear in the starter prompt template, so the bundle preset stamps
+      // their instances internal — drops them from the rendered prompt at
+      // the assembler boundary AND showcases the per-module internal flag.
+      expect(byId.get(subjectId ?? "")?.instance).toEqual({ internal: true });
+      expect(byId.get(moodId ?? "")?.instance).toEqual({ internal: true });
+      // The other four slots stay plain — they're either consumed by the
+      // template ($style, $scene, $accent) or aren't binding-producing
+      // (the pairing constraint).
+      for (const child of body.children as { id: string; instance: Record<string, unknown> }[]) {
+        if (child.id === subjectId || child.id === moodId) continue;
+        expect(child.instance).toEqual({});
       }
     });
 
@@ -326,6 +353,47 @@ describe("useStarterSet", () => {
       expect(routerPushMock).toHaveBeenCalledWith({
         name: "bundles-edit", params: { id: "bundle1" },
       });
+    });
+  });
+
+  describe("cascade index refresh", () => {
+    it("createStarterModule('pairing') refreshes the cascade index so the constraint's source + target wildcards have constraint refs", async () => {
+      // Accumulate every created row, then make `modules.list` (called by
+      // `fetchCatalog` inside `refreshCatalogs`) echo them back so the
+      // post-create cascade rebuild sees a non-empty catalog. Without this
+      // wiring the mock returns `{items: []}` and the rebuild is empty.
+      const created: ModuleRow[] = [];
+      apiMock.modules.create.mockImplementation(
+        (body: { type: ModuleType; name: string; payload: Record<string, unknown> }) => {
+          const row = moduleRow(body.type, { name: body.name, payload: body.payload });
+          created.push(row);
+          return Promise.resolve(row);
+        },
+      );
+      apiMock.modules.list.mockImplementation(() =>
+        Promise.resolve({ items: created.slice(), total: created.length }),
+      );
+
+      const { createStarterModule } = useStarterSet();
+      await createStarterModule("pairing");
+
+      const store = useStarterStore();
+      const subjectId = store.idFor("subject");
+      const moodId = store.idFor("mood");
+      const pairingId = store.idFor("pairing");
+      expect(subjectId).toBeTruthy();
+      expect(moodId).toBeTruthy();
+      expect(pairingId).toBeTruthy();
+
+      const cascade = useCascadeStore();
+      // Cascade index now self-heals after refreshCatalogs — the
+      // just-created constraint's source/target refs should be present
+      // immediately (previously: empty until the 5s drift poll).
+      expect(cascade.isStale).toBe(false);
+      const subjectRefs = cascade.refsTo("wildcard", subjectId ?? "");
+      const moodRefs = cascade.refsTo("wildcard", moodId ?? "");
+      expect(subjectRefs.some((r) => r.from_kind === "constraint" && r.from_id === pairingId)).toBe(true);
+      expect(moodRefs.some((r) => r.from_kind === "constraint" && r.from_id === pairingId)).toBe(true);
     });
   });
 });

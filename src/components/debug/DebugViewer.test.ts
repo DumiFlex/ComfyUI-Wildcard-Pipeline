@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import DebugViewer from "./DebugViewer.vue";
+import { _resetForTests, _setForTests } from "../../extension/preview-resolver";
 
 const SAMPLE_SNAPSHOT = JSON.stringify({
   hair_style: "long flowing",
@@ -588,7 +589,7 @@ describe("DebugViewer", () => {
       __wp_warnings__: [
         {
           type: "constraint_never_applied",
-          severity: "info",
+          severity: "warn",
           module_id: "k1",
           message: "constraint 'k1' never fired — no downstream 'tgt1' instance",
         },
@@ -632,7 +633,7 @@ describe("DebugViewer", () => {
       __wp_warnings__: [
         {
           type: "constraint_never_applied",
-          severity: "info",
+          severity: "warn",
           module_id: "e4b95847",
           message: "constraint 'e4b95847' never fired — no downstream 'c0f09840' instance",
         },
@@ -662,7 +663,7 @@ describe("DebugViewer", () => {
         // this row as never-fired.
         {
           type: "constraint_never_applied",
-          severity: "info",
+          severity: "warn",
           module_id: "other-constraint-id",
           message: "constraint 'other' never fired",
         },
@@ -835,6 +836,71 @@ describe("DebugViewer", () => {
     expect(labels).toContain("$alpha");
     expect(labels).toContain("$beta");
     wrapper.unmount();
+  });
+
+  it("constraint_never_applied warning renders constraint id with kind-aware chip", async () => {
+    // Engine wraps BOTH the constraint module's own id AND the target
+    // wildcard id as `@{uuid}` in the warning text. Pre-fix the chip
+    // resolver assumed every uuid was a wildcard — the constraint id
+    // fell through as an unresolved red `?` chip even though the trace
+    // CLEARLY identifies it as `type: "constraint"`. After the
+    // moduleKind plumbing the constraint id resolves to a colored chip
+    // with the constraint kind palette + pi-filter icon, while the
+    // target wildcard id still resolves as a wildcard chip.
+    //
+    // Seed the preview-resolver cache with the constraint's library
+    // entry — mirrors what happens at runtime once the lazy
+    // embed-bundle fetch lands (the constraint trace doesn't carry a
+    // `binding`, so the chip would otherwise stay unresolved). The
+    // cache hit gives RichTextPreview a name to display AND the kind
+    // so RefChip picks the constraint palette.
+    _resetForTests();
+    _setForTests("c0011111", { name: "exclude_rule", kind: "constraint" });
+    const snap = JSON.stringify({
+      __wp_trace__: [
+        {
+          id: "c0011111",
+          type: "constraint",
+          status: "ok",
+          writes: [],
+          constraint_source: "5a55a5a5",
+          constraint_target: "deadbeef",
+        },
+        {
+          id: "deadbeef",
+          type: "wildcard",
+          status: "ok",
+          binding: "shape",
+          writes: [{ variable: "shape", value: "circle" }],
+        },
+      ],
+      __wp_warnings__: [
+        {
+          type: "constraint_never_applied",
+          severity: "warn",
+          module_id: "c0011111",
+          message:
+            "constraint @{c0011111} did not apply — no @{deadbeef} wildcard "
+            + "instance or nested-ref carrier found in this chain.",
+        },
+      ],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[3].trigger("click");
+    const chips = wrapper.findAll(".wp-dbg-warn-msg .wp-refchip");
+    expect(chips).toHaveLength(2);
+    // First chip is the constraint id — kind-aware chip painted with
+    // the constraint tone inline + the pi-filter icon (vs the legacy
+    // unresolved red `?`).
+    expect(chips[0].classes()).not.toContain("wp-refchip--unresolved");
+    expect(chips[0].attributes("style") ?? "").toContain("--wp-kind-constraint");
+    expect(chips[0].find(".wp-refchip__icon--pi.pi-filter").exists()).toBe(true);
+    // Second chip is the target wildcard — default wildcard styling
+    // (no inline tone var, just the CSS fallback).
+    expect(chips[1].attributes("style") ?? "").not.toContain("--wp-refchip-tone");
+    expect(chips[1].classes()).not.toContain("wp-refchip--unresolved");
+    expect(chips[1].text()).toContain("@shape");
+    _resetForTests();
   });
 
   it("right-click on a pick row opens the shared ContextMenu", async () => {

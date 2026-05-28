@@ -106,29 +106,9 @@ onMounted(() => {
     templateStore.fetchCatalog().catch(() => undefined),
     categoryStore.fetchAll().catch(() => undefined),
   ]).then(() => {
-    const catalog = moduleStore.catalog;
-    cascadeStore.rebuild({
-      wildcards: catalog.filter((m) => m.type === "wildcard").map((m) => ({
-        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
-      })),
-      fixed_values: catalog.filter((m) => m.type === "fixed_values").map((m) => ({
-        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
-      })),
-      combines: catalog.filter((m) => m.type === "combine").map((m) => ({
-        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
-      })),
-      derivations: catalog.filter((m) => m.type === "derivation").map((m) => ({
-        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
-      })),
-      constraints: catalog.filter((m) => m.type === "constraint").map((m) => ({
-        id: m.id, name: m.name, payload: m.payload ?? {},
-      })),
-      bundles: bundleStore.catalog.map((b) => ({
-        id: b.id, name: b.name,
-        children: (b.children ?? []) as Array<{ id: string; type: string }>,
-      })),
-      categories: categoryStore.items.map((c) => ({ id: c.id, name: c.name })),
-    });
+    cascadeStore.rebuildFromCatalogs(
+      moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+    );
   }).catch(() => undefined);
 
   // Live-refresh sidebar count badges + catalogs whenever the drift
@@ -145,18 +125,32 @@ onMounted(() => {
   // request and double-mutate catalog.value mid-render — Vue's patcher
   // observed a null parentNode on insertBefore in the wild.
   subscribeDrift();
+  // After the catalog refetch resolves, rebuild the cascade reverse-dep
+  // index so a wildcard delete (etc.) immediately routes through the cascade
+  // impact dialog. `rebuildFromCatalogs` is a pure read+build — safe to call
+  // from a watch handler. This self-heals the index on ANY external write
+  // (graph-side ContextWidget, SPA edits, the starter-set tutorial, external
+  // tools), not just cascade-applies.
   watch(
     () => hashesFingerprint(libraryHashes.value),
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
-      moduleStore.fetchCatalog().catch(() => undefined);
+      moduleStore.fetchCatalog()
+        .then(() => cascadeStore.rebuildFromCatalogs(
+          moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+        ))
+        .catch(() => undefined);
     },
   );
   watch(
     () => hashesFingerprint(libraryBundleHashes.value),
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
-      bundleStore.fetchCatalog().catch(() => undefined);
+      bundleStore.fetchCatalog()
+        .then(() => cascadeStore.rebuildFromCatalogs(
+          moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+        ))
+        .catch(() => undefined);
     },
   );
 });

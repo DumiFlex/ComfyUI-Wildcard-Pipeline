@@ -24,6 +24,13 @@ import { ref } from "vue";
 export interface PreviewLookup {
   /** Display name from the library row. */
   name?: string;
+  /** Module kind from the library row (`wildcard` / `fixed_values` /
+   *  `combine` / `derivation` / `constraint` / `bundle`). Lets non-
+   *  wildcard `@{uuid}` refs (e.g. the constraint id embedded in a
+   *  `constraint_never_applied` warning) render as a colored chip
+   *  matching their kind, instead of falling through as an unresolved
+   *  wildcard ref. */
+  kind?: string;
   /** First option's value for `wildcard` modules — used to recurse. */
   firstOption?: string;
   /** `payload.var_binding` for `wildcard` modules — the canonical $-var
@@ -166,6 +173,7 @@ async function fetchBundle(uuids: string[]): Promise<void> {
         continue;
       }
       const entry: PreviewLookup = { name: snap.name };
+      if (typeof snap.type === "string" && snap.type) entry.kind = snap.type;
       if (snap.type === "wildcard") {
         const opts = snap.payload?.options ?? [];
         const v = opts[0]?.value;

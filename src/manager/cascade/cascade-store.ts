@@ -11,6 +11,7 @@
 
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
+import type { BundleRow, CategoryRow, ModuleRow } from "../api/types";
 import {
   applyDiff as _applyDiff,
   buildIndex,
@@ -32,6 +33,45 @@ export const useCascadeStore = defineStore("cascade", () => {
   function rebuild(lib: LibraryFixture): void {
     index.value = buildIndex(lib);
     stale.value = false;
+  }
+
+  /**
+   * Build the reverse-dep index straight from the three live library store
+   * catalogs (modules, bundles, categories). Encapsulates the LibraryFixture
+   * mapping so every call site stays in lockstep — modules are split by `type`
+   * into the per-kind arrays, bundles carry their children, categories their
+   * names. Constraints omit `category_id` (constraints are not category-tagged).
+   *
+   * Pure read + build (no DOM mutation), so it's safe to call from a `watch`
+   * handler / drift self-heal as well as the initial bootstrap.
+   */
+  function rebuildFromCatalogs(
+    modules: ModuleRow[],
+    bundles: BundleRow[],
+    categories: CategoryRow[],
+  ): void {
+    rebuild({
+      wildcards: modules.filter((m) => m.type === "wildcard").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      fixed_values: modules.filter((m) => m.type === "fixed_values").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      combines: modules.filter((m) => m.type === "combine").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      derivations: modules.filter((m) => m.type === "derivation").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {}, category_id: m.category_id,
+      })),
+      constraints: modules.filter((m) => m.type === "constraint").map((m) => ({
+        id: m.id, name: m.name, payload: m.payload ?? {},
+      })),
+      bundles: bundles.map((b) => ({
+        id: b.id, name: b.name,
+        children: (b.children ?? []) as Array<{ id: string; type: string }>,
+      })),
+      categories: categories.map((c) => ({ id: c.id, name: c.name })),
+    });
   }
 
   function invalidate(): void {
@@ -72,6 +112,7 @@ export const useCascadeStore = defineStore("cascade", () => {
   return {
     isStale,
     rebuild,
+    rebuildFromCatalogs,
     invalidate,
     applyDiff,
     refsTo,

@@ -23,7 +23,7 @@ def test_chain_of_two_context_nodes_into_assembler():
     # Upstream context sets style + subject.
     upstream = WPContext.execute(
         seed=1,
-        modules=_mods([
+        wp_modules=_mods([
             {"variable_name": "style", "value": "photoreal"},
             {"variable_name": "subject", "value": "knight"},
         ]),
@@ -33,7 +33,7 @@ def test_chain_of_two_context_nodes_into_assembler():
     # Downstream context adds environment vars + overrides style.
     downstream = WPContext.execute(
         seed=2,
-        modules=_mods([
+        wp_modules=_mods([
             {"variable_name": "style", "value": "painted"},
             {"variable_name": "location", "value": "forest"},
         ]),
@@ -58,13 +58,13 @@ def test_chain_of_two_context_nodes_into_assembler():
 def test_debug_node_snapshots_downstream_context():
     upstream = WPContext.execute(
         seed=7,
-        modules=_mods([
+        wp_modules=_mods([
             {"variable_name": "style", "value": "photoreal"},
         ]),
         upstream=None,
     ).values[0]
 
-    out = WPDebug.execute(context=upstream, viewer=None)
+    out = WPDebug.execute(context=upstream, wp_viewer=None)
     snapshot = json.loads(out.ui["wp_debug_snapshot"][0])
 
     # Flat snapshot shape — user vars at the top, engine internals

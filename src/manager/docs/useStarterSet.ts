@@ -21,8 +21,10 @@
 import { useRouter } from "vue-router";
 import { api } from "../api/client";
 import type { ModuleRow } from "../api/types";
+import { useCascadeStore } from "../cascade/cascade-store";
 import { useToast } from "../composables/useToast";
 import { useBundleStore } from "../stores/bundleStore";
+import { useCategoryStore } from "../stores/categoryStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useStarterStore } from "../stores/starterStore";
 import { useTemplateStore } from "../stores/templateStore";
@@ -63,16 +65,29 @@ export function useStarterSet() {
   const moduleStore = useModuleStore();
   const bundleStore = useBundleStore();
   const templateStore = useTemplateStore();
+  const categoryStore = useCategoryStore();
+  const cascade = useCascadeStore();
 
   /** Refresh all three library catalogs after a write so the sidebar counts +
    *  lists stay live. Templates are included so the nav Templates count (which
-   *  reads `templateStore.catalog.length`) updates without a page refresh. */
+   *  reads `templateStore.catalog.length`) updates without a page refresh.
+   *
+   *  Then rebuild the cascade reverse-dep index from the freshly-fetched
+   *  catalogs. Without this, a just-created starter constraint isn't in the
+   *  index, so deleting a starter wildcard right after misses the cascade
+   *  impact dialog (the index otherwise only self-heals on the 5s drift poll
+   *  in AppLayout, or a manual editor save). Categories may still be empty if
+   *  AppLayout's eager fetch hasn't landed — that's fine, the index just maps
+   *  no category refs until the next rebuild. */
   async function refreshCatalogs(): Promise<void> {
     await Promise.all([
       moduleStore.fetchCatalog(),
       bundleStore.fetchCatalog(),
       templateStore.fetchCatalog(),
     ]);
+    cascade.rebuildFromCatalogs(
+      moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+    );
   }
 
   /** Whether the row recorded for `slot` still exists in the live library
@@ -267,7 +282,7 @@ export function useStarterSet() {
       const id = slotIds.get(slot);
       if (!id) continue;
       const row: ModuleRow = await api.modules.get(id);
-      children.push(toStarterChild(row));
+      children.push(toStarterChild(row, slot));
     }
 
     const bundle = await api.bundles.create({
@@ -304,13 +319,29 @@ export function useStarterSet() {
   };
 }
 
+/** Bundle slots whose runtime $variable is consumed UPSTREAM-ONLY by other
+ *  starter modules (subject feeds the `scene` combine; mood feeds both
+ *  `scene` and the `accent` derivation) and never appears in the starter
+ *  prompt template. Marking them internal in the bundle's child instance
+ *  drops them from the rendered prompt at the assembler boundary while
+ *  keeping them readable by downstream modules — a tutorial-grade
+ *  demonstration of the per-module `internal` flag. */
+const INTERNAL_STARTER_SLOTS = new Set<StarterModuleSlot>(["subject", "mood"]);
+
 /**
  * Canonical library-linked bundle child for a freshly-fetched module row.
  * Matches `toChildSnapshot` (`src/components/context/bundles/save.ts`): carries
- * `id` + `payload` + `payload_hash` so the child is library-linked, with empty
- * `instance` / `entries` and `library_name` denormalized onto `meta`.
+ * `id` + `payload` + `payload_hash` so the child is library-linked, with
+ * `library_name` denormalized onto `meta`. `instance.internal` is preset on
+ * the upstream-only slots (subject / mood) so the starter prompt
+ * (`$scene, $style, $accent, masterpiece, highly detailed`) renders without
+ * `$subject` / `$mood` showing up in the variable strip — also showcases the
+ * internal-flag feature on the tutorial bundle.
  */
-function toStarterChild(row: ModuleRow): Record<string, unknown> {
+function toStarterChild(row: ModuleRow, slot: StarterModuleSlot): Record<string, unknown> {
+  const instance: Record<string, unknown> = INTERNAL_STARTER_SLOTS.has(slot)
+    ? { internal: true }
+    : {};
   return {
     id: row.id,
     type: row.type,
@@ -319,7 +350,7 @@ function toStarterChild(row: ModuleRow): Record<string, unknown> {
     meta: { name: row.name, library_name: row.name },
     payload: row.payload,
     payload_hash: row.payload_hash,
-    instance: {},
+    instance,
     entries: [],
   };
 }

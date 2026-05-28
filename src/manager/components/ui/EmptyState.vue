@@ -36,11 +36,17 @@ withDefaults(defineProps<Props>(), {
   text-align: center;
   padding: var(--wp-space-8) var(--wp-space-6);
   gap: var(--wp-space-5);
-  /* Fill the list body so the empty/no-results/error message sits centered in
-   * the available space rather than floating at the top of a tall container.
-   * The host cell (a full-width table `<td>`) grows to this height, and the
-   * flex centering above + here keeps the content centered both axes. */
-  min-height: 420px;
+  /* Cover "most of the viewport" without exceeding it. `60vh` fills the
+   * empty area on typical desktop heights so the message reads as the
+   * page's content (not floating at the top of a tall container), while
+   * the `max(..., 360px)` floor keeps it presentable on short viewports.
+   * A prior version chained `height: 100%` through a table + tbody + td
+   * stack so the cell absorbed the full scroll-wrap height, but that
+   * compounded with the table's `<thead>` and produced a permanent
+   * scrollbar on every empty list. `min-height` keeps the layout flat
+   * (no 100% propagation), so populated lists are untouched and the
+   * scrollbar only appears when content genuinely overflows. */
+  min-height: max(60vh, 360px);
   box-sizing: border-box;
 }
 .wp-empty__icon {

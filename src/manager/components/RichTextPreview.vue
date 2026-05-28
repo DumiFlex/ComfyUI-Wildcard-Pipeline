@@ -40,6 +40,15 @@ interface Props {
   /** Map from UUID to display name; used to render `@{uuid}` refs as human labels.
    *  Accepts `ReadonlyMap` for caller convenience — we only read from it. */
   uuidToName?: ReadonlyMap<string, string>;
+  /** Map from UUID to module kind (`wildcard` / `fixed_values` /
+   *  `combine` / `derivation` / `constraint` / `bundle`). Optional —
+   *  when set, drives the RefChip's color + icon so a non-wildcard
+   *  `@{uuid}` ref (e.g. the constraint id wrapped in the
+   *  `constraint_never_applied` warning text) renders with the
+   *  matching kind tone instead of falling through as a wildcard chip.
+   *  Caller-supplied entries WIN over the preview-resolver cache
+   *  fallback (same priority pattern as `uuidToName`). */
+  uuidToKind?: ReadonlyMap<string, string>;
   /** $var names known to the surrounding scope. Drives the var chip's resolved state. */
   varSuggestions?: string[];
   /** Surface gates ref styling: non-wildcard surfaces mark refs as "ignored". */
@@ -58,6 +67,7 @@ const props = withDefaults(defineProps<Props>(), {
   modelValue: undefined,
   value: undefined,
   uuidToName: () => new Map(),
+  uuidToKind: () => new Map(),
   varSuggestions: () => [],
   surface: "wildcard",
   warnings: () => [],
@@ -121,6 +131,34 @@ function refName(uuid: string, cachedName?: string): string {
   return "";
 }
 
+/** Module kinds RefChip's `moduleKind` prop accepts — local literal
+ *  union mirroring `ChipModuleKind`. */
+type RefModuleKind =
+  | "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle";
+
+const KNOWN_MODULE_KINDS: ReadonlySet<string> = new Set<string>([
+  "wildcard", "fixed_values", "combine", "derivation", "constraint", "bundle",
+]);
+
+function isKnownModuleKind(v: string | undefined): v is RefModuleKind {
+  return typeof v === "string" && KNOWN_MODULE_KINDS.has(v);
+}
+
+/** Resolve a ref uuid to its module kind so RefChip can apply the
+ *  kind-aware color + icon. Without this, a `@{uuid}` token pointing
+ *  at a non-wildcard (e.g. the constraint id wrapped in the engine's
+ *  `constraint_never_applied` warning) falls through as an unresolved
+ *  wildcard chip. Caller-supplied `uuidToKind` wins; the shared
+ *  preview-resolver cache (`PreviewLookup.kind`) is the fallback.
+ *  Defaults to `wildcard` so legacy callers keep their behavior. */
+function refModuleKind(uuid: string): RefModuleKind {
+  const live = props.uuidToKind?.get(uuid);
+  if (isKnownModuleKind(live)) return live;
+  const cached = lookup(uuid)?.kind;
+  if (isKnownModuleKind(cached)) return cached;
+  return "wildcard";
+}
+
 function atomIsResolved(atom: Atom): boolean {
   // Vars bind at runtime — a $name not in the static catalog may still
   // resolve via upstream context / derivation / runtime overrides. The
@@ -170,6 +208,7 @@ function textHtml(text: string): string {
         :uuid="atom.uuid"
         :sub-categories="atom.subCategories"
         :resolved="atomIsResolved(atom)"
+        :module-kind="refModuleKind(atom.uuid)"
         :class="[
           'wp-rt-ref',
           !isWildcard ? 'wp-rt-ref--ignored' : null,

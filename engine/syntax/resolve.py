@@ -149,6 +149,15 @@ def _resolve_inline_pick(
     visited: tuple[str, ...],
 ) -> str:
     """Pick one branch uniformly at random; recursively resolve its content."""
+    # Assembler surface is seedless — its RNG always rolls from seed 0, so
+    # an inline pick there would freeze on the same branch every run. That's
+    # misleading, so render the source verbatim instead and let the user
+    # produce the random value in a seeded module (Wildcard / Combine /
+    # Derivation inside a WP Context) and reference its $var here. Other
+    # surfaces (wildcard / combine / derivation) run inside a seeded Context
+    # and keep resolving normally.
+    if ctx.surface == "assembler":
+        return tok.raw
     branches: list[str] = tok.meta.get("branches", [])
     if not branches:
         return ""
@@ -210,6 +219,10 @@ def _resolve_multi_pick(
 
     Each chosen branch is recursively resolved.
     """
+    # Seedless assembler surface — see _resolve_inline_pick. Render verbatim
+    # rather than freezing a deterministic seed-0 multi-pick.
+    if ctx.surface == "assembler":
+        return tok.raw
     count: int = tok.meta.get("count", 0)
     sep: str = tok.meta.get("sep", "")
     branches: list[str] = list(tok.meta.get("branches", []))

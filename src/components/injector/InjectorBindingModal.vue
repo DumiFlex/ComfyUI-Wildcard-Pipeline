@@ -38,8 +38,14 @@ const props = withDefaults(
      *  Surfaces next to slot_name in the insert dropdown so the user
      *  picks by their own label. */
     slotLabels?: Record<string, string>;
+    /** GENERAL rows only: the reference tokens a template row can
+     *  compose from — wired sockets (`input_N`) + socket-row bindings
+     *  (`test`), in resolution order. Built by the widget
+     *  (`generalRowReferences`). Becomes the insert-menu source and the
+     *  preview's known-ref set. Ignored for socket rows. */
+    references?: string[];
   }>(),
-  { siblingRows: () => [], slotTypes: () => ({}), slotLabels: () => ({}) },
+  { siblingRows: () => [], slotTypes: () => ({}), slotLabels: () => ({}), references: () => [] },
 );
 
 const emit = defineEmits<{
@@ -86,27 +92,50 @@ const TYPE_COLOR: Record<string, string> = {
   sampler: "var(--wp-var-2)",
 };
 
+/** General (template) rows have no socket — header + insert menu +
+ *  preview branch on this. */
+const isGeneral = computed(() => props.row.kind === "general");
+
 const rowTypeKey = computed(() =>
   (props.slotTypes[props.row.slot_name] ?? "").toLowerCase(),
 );
-const headerIcon = computed(() => TYPE_ICON[rowTypeKey.value] ?? "pi-circle");
-const headerColor = computed(() => TYPE_COLOR[rowTypeKey.value] ?? "var(--wp-accent)");
+const headerIcon = computed(() =>
+  isGeneral.value ? "pi-bolt" : (TYPE_ICON[rowTypeKey.value] ?? "pi-circle"),
+);
+const headerColor = computed(() =>
+  isGeneral.value ? "var(--wp-accent)" : (TYPE_COLOR[rowTypeKey.value] ?? "var(--wp-accent)"),
+);
 const headerType = computed(() => {
+  if (isGeneral.value) return "Template";
   const k = rowTypeKey.value;
   return k ? k[0].toUpperCase() + k.slice(1) : "Input";
 });
+/** Identity label in the header. Socket rows show the slot they bind;
+ *  general rows have no slot, so they read as "template row". */
+const headerName = computed(() => (isGeneral.value ? "template row" : props.row.slot_name));
 
 interface InsertOption {
   slotName: string;
   label: string;
   typeKey: string;
 }
-// Insert-slot dropdown source. Injector rows are independent — each
-// row's template wraps / transforms ITS OWN socket value, never
-// references other rows' sockets. So the dropdown lists only this
-// row's slot_name. Cross-row references are intentionally out of
-// scope: that's what a Combine module is for.
+// Insert-menu source — diverges by row kind:
+//   - SOCKET rows: a template wraps / transforms ITS OWN socket value
+//     only. Top-to-bottom resolution means an early socket row can't
+//     read a later socket, so the menu lists just this row's slot.
+//     Cross-socket composition is what a GENERAL row (or Combine) is for.
+//   - GENERAL rows: resolved in a second pass AFTER all socket rows, so
+//     the template can compose from every wired socket (`$input_N`) AND
+//     every socket-row binding (`$test`). Those names arrive via the
+//     `references` prop (built by the widget) and become the menu.
 const insertOptions = computed<InsertOption[]>(() => {
+  if (isGeneral.value) {
+    return props.references.map((ref) => ({
+      slotName: ref,
+      label: props.slotLabels[ref] ?? ref,
+      typeKey: (props.slotTypes[ref] ?? "").toLowerCase(),
+    }));
+  }
   const tk = (props.slotTypes[props.row.slot_name] ?? "").toLowerCase();
   return [{
     slotName: props.row.slot_name,
@@ -196,7 +225,10 @@ const previewTokens = computed<PreviewToken[]>(() => {
   const s = templateValue.value;
   if (!s) return [];
   const knownSlots = new Set(insertOptions.value.map((o) => o.slotName));
-  knownSlots.add(props.row.slot_name);
+  // Socket rows can always ref their own slot even before it's typed
+  // into the menu; general rows have no slot (slot_name === ""), so the
+  // known set is exactly the references list.
+  if (!isGeneral.value) knownSlots.add(props.row.slot_name);
   const out: PreviewToken[] = [];
   let i = 0;
   while (i < s.length) {
@@ -271,10 +303,10 @@ function onKeydown(ev: KeyboardEvent): void {
         <i :class="['pi', headerIcon, 'ibm__head-icon']" aria-hidden="true" />
         <div class="ibm__title-block">
           <div class="ibm__title-row">
-            <span id="ibm-title" class="ibm__name" data-test="ibm-name">{{ row.slot_name }}</span>
+            <span id="ibm-title" class="ibm__name" data-test="ibm-name">{{ headerName }}</span>
             <span class="ibm__chip" data-test="ibm-chip">{{ headerType }}</span>
           </div>
-          <div class="ibm__sub">Injector binding · ctx[$<wbr>{{ draftBinding || "…" }}] ← {{ templateValue ? "template" : "socket value" }}</div>
+          <div class="ibm__sub">Injector binding · ctx[$<wbr>{{ draftBinding || "…" }}] ← {{ templateValue ? "template" : isGeneral ? "no template yet" : "socket value" }}</div>
         </div>
         <button
           type="button"
@@ -297,7 +329,7 @@ function onKeydown(ev: KeyboardEvent): void {
             class="ibm__binding-input"
             data-test="ibm-binding"
             :value="draftBinding"
-            :aria-label="`binding for ${row.slot_name}`"
+            :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
             placeholder="variable_name"
             spellcheck="false"
             @input="onBindingInput"
@@ -308,7 +340,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <section class="ibm__section">
         <div class="ibm__section-head">
           <span class="ibm__section-label">Template</span>
-          <span class="ibm__section-hint">$slot_name refs · $$ for literal $ · empty = pass-through</span>
+          <span class="ibm__section-hint">{{ isGeneral ? "$ref names · $$ for literal $ · composed after socket rows" : "$slot_name refs · $$ for literal $ · empty = pass-through" }}</span>
           <div class="ibm__head-actions">
             <div class="ibm__menu-wrap">
               <button
@@ -316,11 +348,11 @@ function onKeydown(ev: KeyboardEvent): void {
                 type="button"
                 class="ibm__menu-btn"
                 data-test="ibm-insert-slot"
-                :title="`Insert $slot_name (${insertOptions.length} available)`"
-                aria-label="Insert slot reference"
+                :title="`Insert a reference (${insertOptions.length} available)`"
+                aria-label="Insert reference"
                 :aria-expanded="showInsertMenu"
                 @click="toggleInsertMenu"
-              ><i class="pi pi-plus" aria-hidden="true" /> $slot</button>
+              ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
               <div
                 v-if="showInsertMenu"
                 class="ibm__menu"
@@ -361,7 +393,9 @@ function onKeydown(ev: KeyboardEvent): void {
           :class="{ 'ibm__template--set': !!templateValue }"
           data-test="ibm-template"
           :value="templateValue"
-          placeholder="e.g. i love $input_0 — leave empty to pass the raw socket value"
+          :placeholder="isGeneral
+            ? 'e.g. $input_0 by $test — composed after all socket rows'
+            : 'e.g. i love $input_0 — leave empty to pass the raw socket value'"
           aria-label="Template"
           rows="3"
           @input="onTemplateInput"

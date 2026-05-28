@@ -548,11 +548,18 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
  * hover; only Clear (--danger) turns red. Stay visible-but-disabled
  * when the template is empty so the affordances stay discoverable. */
 .wp-asm-section--vars {
-  /* 3-column grid lets the clear button center between label
-   * (left) and stat (right). Flex + auto-margin couldn't pull
-   * off true horizontal centering with two siblings. */
+  /* 3-column grid: label (natural width, left), toolbar buttons
+   * (centered in the elastic middle), stat (natural width, right).
+   * Earlier this used `1fr auto 1fr` to balance the label / stat
+   * columns around the centered toolbar, but `1fr` capped the stat
+   * column at the leftover width / 2 — on a typical node width that
+   * was ~85px, narrower than "3 upstream · 1 missing" (~110px), so
+   * the stat wrapped onto a second line. Letting both side columns
+   * size to their content (`auto`) and giving the elastic middle to
+   * the toolbar keeps the buttons centered while the stat reads on
+   * one line. */
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px;
 }
@@ -560,6 +567,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section--vars > .wp-asm-section-stat {
   margin-left: 0;
   justify-self: end;
+  /* Belt-and-braces: even with `auto` sizing the column to content,
+   * keep the stat from breaking mid-phrase if a wider stat shape ever
+   * forces overflow (e.g. localised wording, or a future N-digit
+   * count). It stays a single line; the node's minWidth formula adds
+   * 60px when `missing > 0` so there's room. */
+  white-space: nowrap;
 }
 .wp-asm-toolbtns {
   display: inline-flex;

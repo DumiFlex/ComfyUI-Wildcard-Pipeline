@@ -18,7 +18,7 @@ class TestWPDebugSchema:
     def test_inputs(self):
         schema = WPDebug.define_schema()
         names = [s.name for s in schema.inputs]
-        assert names == ["context", "viewer"]
+        assert names == ["context", "wp_viewer"]
 
         ctx_in, viewer_in = schema.inputs
         assert ctx_in.type_name == "PIPELINE_CONTEXT"
@@ -47,7 +47,7 @@ class TestWPDebugExecute:
             context={"style": "photo"},
             debug={"node_seed": 42, "__wp_trace__": [], "__wp_warnings__": []},
         )
-        out = WPDebug.execute(context=payload, viewer=None)
+        out = WPDebug.execute(context=payload, wp_viewer=None)
 
         assert out.ui is not None
         assert "wp_debug_snapshot" in out.ui
@@ -67,7 +67,7 @@ class TestWPDebugExecute:
             },
             internals={"__wp_picks__": {"abc": {"value": "v1"}}},
         )
-        out = WPDebug.execute(context=payload, viewer=None)
+        out = WPDebug.execute(context=payload, wp_viewer=None)
         snapshot = self._parse_snapshot(out)
         assert snapshot["style"] == "photo"
         assert snapshot["__wp_trace__"] == [{"id": "abc", "type": "wildcard"}]
@@ -83,12 +83,12 @@ class TestWPDebugExecute:
             context={"obj": Weird()},
             debug={},
         )
-        out = WPDebug.execute(context=payload, viewer=None)
+        out = WPDebug.execute(context=payload, wp_viewer=None)
         snapshot = self._parse_snapshot(out)
         assert snapshot["obj"] == "weird"
 
     def test_empty_context(self):
         payload = ContextPayload()
-        out = WPDebug.execute(context=payload, viewer=None)
+        out = WPDebug.execute(context=payload, wp_viewer=None)
         snapshot = self._parse_snapshot(out)
         assert snapshot == {}

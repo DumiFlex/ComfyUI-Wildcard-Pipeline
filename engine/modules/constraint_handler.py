@@ -376,12 +376,37 @@ class ConstraintHandler(ModuleHandler):
                 )
         except Exception:
             module_id = None
+        # The per-instance `_uid` (12+ chars) keys the consumed-set so two
+        # canvas instances of the same library constraint stay independent
+        # one-shots. The LIBRARY id (8-hex) is also stashed because the
+        # never-applied warning text needs it to render the chip — the SPA
+        # / Debug viewer's chip resolver looks up library uuids in the
+        # module catalog, and a per-instance `_uid` would never resolve
+        # (silently rendering as raw `@{…}` text in the warning).
+        library_id = None
+        library_name = None
+        try:
+            if hasattr(ctx, "get"):
+                library_id = ctx.get("__wp_current_module_id__")
+                library_name = ctx.get("__wp_current_module_name__")
+        except Exception:
+            library_id = None
+            library_name = None
         meta = {
             "source_wildcard_id": payload["source_wildcard_id"],
             "target_wildcard_id": payload["target_wildcard_id"],
             "matrix": matrix,
             "exceptions": exceptions,
             "__constraint_module_id__": module_id,
+            "__constraint_library_id__": library_id,
+            # Cached display name (e.g. "Starter pairing"). The never-applied
+            # warning text embeds this as the `#name` suffix on the constraint
+            # ref so the chip renders a readable label even when the workflow
+            # was imported on a machine whose library doesn't have this
+            # constraint — both the SPA library catalog AND the embed-bundle
+            # endpoint would 404 there, leaving the chip stuck on the raw
+            # uuid otherwise.
+            "__constraint_library_name__": library_name,
         }
         _ctx_set_constraint(ctx, meta)
         return {}

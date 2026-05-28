@@ -3099,14 +3099,30 @@ function summaryTokens(m: ModuleEntry): SummaryToken[] {
   const lit = (text: string): SummaryToken => ({ kind: "literal", text });
 
   if (m.type === "fixed_values") {
-    const named = m.entries.filter((e) => e.variable_name.trim() !== "");
-    if (named.length === 0) return [lit("(empty)")];
-    const heads = named.slice(0, 2);
-    const more = named.length - heads.length;
+    // Read the bindings from `entries` first — that's the UI-mirror
+    // populated when the user types directly into the inline editor.
+    // Library-linked rows (bundle children, modules dragged in fresh
+    // from the picker) ship with `entries: []` because the canonical
+    // values live in `payload.values`. Fall back to that payload
+    // shape so a library-linked fixed_values row doesn't render as
+    // "(empty)" just because its UI-mirror hasn't been populated.
+    const fromEntries = m.entries
+      .map((e) => e.variable_name.trim())
+      .filter((n) => n !== "");
+    const fromPayload =
+      fromEntries.length > 0
+        ? []
+        : (((m.payload ?? {}) as { values?: Array<{ name?: string }> }).values ?? [])
+            .map((vv) => (vv.name ?? "").trim())
+            .filter((n) => n !== "");
+    const names = fromEntries.length > 0 ? fromEntries : fromPayload;
+    if (names.length === 0) return [lit("(empty)")];
+    const heads = names.slice(0, 2);
+    const more = names.length - heads.length;
     const out: SummaryToken[] = [];
-    heads.forEach((e, i) => {
+    heads.forEach((name, i) => {
       if (i > 0) out.push(lit(", "));
-      out.push(v(e.variable_name));
+      out.push(v(name));
     });
     if (more > 0) out.push(lit(`, +${more} more`));
     return out;

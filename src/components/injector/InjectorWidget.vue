@@ -93,11 +93,31 @@ const enabledCount = computed(
   () => value.value.rows.filter((r) => r.enabled).length,
 );
 
-/** Socket-row count drives reorder eligibility — drag-to-reorder only
- *  makes sense among socket rows (it reassigns `input_N` slot names).
- *  General rows are excluded from the count + from reordering. */
+/** Hard cap on durable template rows. Rationale: it's
+ *  floor(MAX_INJECTOR_SLOTS / 2) — each socket row already carries its
+ *  own per-socket template, so template rows exist only to COMBINE 2+
+ *  inputs into one composed variable. With at most 10 sockets you'd
+ *  never need more than 5 such combiners. The cap keeps the rows list
+ *  bounded + the "Add template row" button has a clear stop. */
+const MAX_GENERAL_INJECTOR_ROWS = 5;
+
+/** Socket-row count drives reorder eligibility within the socket group
+ *  — drag-to-reorder reassigns `input_N` slot names so only makes sense
+ *  with >1 socket rows. */
 const socketRowCount = computed(
   () => value.value.rows.filter((r) => r.kind !== "general").length,
+);
+
+/** Template-row count drives the template group's reorder eligibility
+ *  + the add-button cap. Template rows reorder among themselves (engine
+ *  resolves them in array order, so order is meaningful), staying
+ *  pinned after every socket row. */
+const generalRowCount = computed(
+  () => value.value.rows.filter((r) => r.kind === "general").length,
+);
+
+const atGeneralRowCap = computed(
+  () => generalRowCount.value >= MAX_GENERAL_INJECTOR_ROWS,
 );
 
 const connectedSet = computed(() => new Set(props.connectedSlots));
@@ -302,11 +322,20 @@ function addRow(slotName: string): void {
  *  slot + is never reconciled against connections — it sits after all
  *  socket rows and composes a value from sockets + socket-row bindings.
  *  The new row starts expanded so the user immediately sees the binding
- *  + template inputs to fill in. */
+ *  + template inputs to fill in.
+ *
+ *  Hard-capped at MAX_GENERAL_INJECTOR_ROWS (= 5). The cap is also
+ *  reflected on the "Add template row" button (rendered :disabled), but
+ *  this guard catches the imperative defineExpose path so external
+ *  callers can't bypass the UI. */
 function addGeneralRow(): void {
+  if (generalRowCount.value >= MAX_GENERAL_INJECTOR_ROWS) return;
+  // Match socket rows: insert collapsed so the new row reads as a
+  // compact summary by default. The header still exposes the binding
+  // input inline; right-click → Edit opens the modal for the template.
   value.value = {
     ...value.value,
-    rows: [...value.value.rows, { ...newGeneralInjectorRow(), _collapsed: false }],
+    rows: [...value.value.rows, { ...newGeneralInjectorRow(), _collapsed: true }],
   };
   persist();
 }
@@ -387,7 +416,30 @@ watch(
 // shared/flip.ts honors the wp-a11y-no-motion body class so the
 // animation no-ops under reduce-motion settings.
 const dragSrcIdx = ref<number | null>(null);
+// Kind of the row being dragged, captured on dragstart. The list-level
+// dragover handler reads this to confine the drop target to the
+// dragged row's OWN kind-group (socket drags land only among socket
+// rows; template drags only among template rows) so the two groups
+// never interleave. Cleared on drop / dragend alongside dragSrcIdx.
+const dragSrcKind = ref<"socket" | "general" | null>(null);
 const listEl = ref<HTMLElement | null>(null);
+
+/** Half-open `[start, end)` index range of the kind-group a row at
+ *  `idx` belongs to. Reconcile always lays rows out as
+ *  `[...sockets, ...generals]`, so the socket group is the leading
+ *  `[0, socketRowCount)` block and the template group is the trailing
+ *  `[socketRowCount, rows.length)` block. Used by BOTH the drag clamp
+ *  and the context-menu moves so reorder can never cross the boundary.
+ *  Falls back to the whole list if `idx` is out of range (defensive). */
+function rowGroupBounds(idx: number): { start: number; end: number } {
+  const rows = value.value.rows;
+  const socketEnd = socketRowCount.value;
+  const row = rows[idx];
+  if (!row) return { start: 0, end: rows.length };
+  return row.kind === "general"
+    ? { start: socketEnd, end: rows.length }
+    : { start: 0, end: socketEnd };
+}
 
 // Parent-coordinated drop indicator. Tracks the row + edge the
 // pointer is currently over so only ONE row shows the gap+bar
@@ -413,6 +465,8 @@ const DROP_PULSE_MS = 420;
 
 function onRowDragStart(fromIdx: number): void {
   dragSrcIdx.value = fromIdx;
+  const row = value.value.rows[fromIdx];
+  dragSrcKind.value = row?.kind === "general" ? "general" : "socket";
 }
 
 // List-level dragover. Tracking at LIST level (not per-row) so the
@@ -430,7 +484,18 @@ function onListDragOver(ev: DragEvent): void {
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
   const list = listEl.value;
   if (!list) return;
-  const rows = Array.from(list.querySelectorAll<HTMLElement>(".wp-inj-row[data-uid]"));
+  // Filter candidate rows to the dragged row's OWN kind-group. Socket
+  // rows never see template rows as drop targets and vice-versa, so
+  // the two groups can't interleave mid-drag. Each row carries
+  // data-kind="socket"|"general"; we discriminate on it. When
+  // dragSrcKind is unset (extremely defensive — would only happen if
+  // a drag started before kind was recorded), the empty filter falls
+  // through to the "no target" branch and the drop becomes a no-op.
+  const srcKind = dragSrcKind.value;
+  const allRows = Array.from(list.querySelectorAll<HTMLElement>(".wp-inj-row[data-uid]"));
+  const rows = srcKind
+    ? allRows.filter((el) => el.dataset.kind === srcKind)
+    : [];
   let targetUid: string | null = null;
   let edge: "before" | "after" | null = null;
   for (const el of rows) {
@@ -447,7 +512,11 @@ function onListDragOver(ev: DragEvent): void {
     }
   }
   if (!targetUid && rows.length > 0) {
-    // Pointer past all rows → drop at end (after last row).
+    // Pointer past all rows in this group → drop at the END of the
+    // DRAGGED ROW'S GROUP. Falling back to the whole list's last row
+    // would let a socket drag drop "after" the final template row,
+    // re-interleaving the two groups; clamping to the group's last
+    // row keeps the invariant intact.
     const lastEl = rows[rows.length - 1];
     targetUid = lastEl.dataset.uid ?? null;
     edge = "after";
@@ -481,6 +550,7 @@ function onListDrop(ev: DragEvent): void {
 function onRowDrop(overIdx: number, edge: "before" | "after"): void {
   const from = dragSrcIdx.value;
   dragSrcIdx.value = null;
+  dragSrcKind.value = null;
   clearDropIndicator();
   if (from === null || from === overIdx) return;
   // Convert the (overIdx, edge) pair into a single splice-style
@@ -533,6 +603,7 @@ function onRowDrop(overIdx: number, edge: "before" | "after"): void {
 
 function onRowDragEnd(): void {
   dragSrcIdx.value = null;
+  dragSrcKind.value = null;
   clearDropIndicator();
 }
 
@@ -540,12 +611,18 @@ function onRowDragEnd(): void {
 // Same FLIP-animated path as drag-drop reorder, just driven by the
 // right-click menu. Falls through to reorderInjectorRows so slot_name
 // reassignment + sequential ordering stays consistent with the drag
-// path. Skips when the row is already at the target edge.
+// path. Group-bounded: "top" lands at the start of the row's own
+// kind-group, "bottom" at the end — never crosses the socket/template
+// boundary. Skips when the row is already at the group edge.
 function moveRowToEdge(idx: number, edge: "top" | "bottom"): void {
   const rows = value.value.rows;
-  const toIdx = edge === "top" ? 0 : rows.length;
-  if (edge === "top" && idx === 0) return;
-  if (edge === "bottom" && idx === rows.length - 1) return;
+  const { start, end } = rowGroupBounds(idx);
+  // toIdx for reorderInjectorRows is the desired POST-removal target
+  // index — for "top" that's the group's start, for "bottom" that's
+  // the group's end (exclusive upper bound feeds straight into splice).
+  const toIdx = edge === "top" ? start : end;
+  if (edge === "top" && idx === start) return;
+  if (edge === "bottom" && idx === end - 1) return;
   const nextRows = reorderInjectorRows(rows, idx, toIdx);
   if (nextRows === rows) return;
 
@@ -640,24 +717,22 @@ function closeEditModal(): void {
 function openRowContextMenu(ev: MouseEvent, idx: number): void {
   const row = value.value.rows[idx];
   if (!row) return;
-  const rows = value.value.rows;
   const isGeneral = row.kind === "general";
   const estW = 250;
   const estH = 280;
   const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
   const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
-  // General rows are edited inline (binding + template inputs on the
-  // row) and aren't tied to a socket — so they skip the Edit modal +
-  // the slot-reassigning Move/Disconnect entries. They get a plain
-  // Delete instead. Socket rows keep the full menu.
-  const items: ContextMenuItem[] = [];
-  if (!isGeneral) {
-    items.push({
+  // Both row kinds open the same Edit modal (binding + template). What
+  // differs is the trailing cluster: socket rows get the slot-
+  // reassigning Move-to-top/bottom + Disconnect entries; general rows
+  // get Move-to-top/bottom (within the template group) + Delete.
+  const items: ContextMenuItem[] = [
+    {
       label: "Edit",
       icon: "pi-pencil",
       onSelect: () => openEditModal(row._uid),
-    });
-  }
+    },
+  ];
   items.push(
     {
       label: row.enabled ? "Disable" : "Enable",
@@ -671,7 +746,33 @@ function openRowContextMenu(ev: MouseEvent, idx: number): void {
       divider: true,
     },
   );
+  // Move-to-top/bottom bounds = the row's OWN kind-group, never the
+  // whole list. rowGroupBounds returns [start, end) over value.rows.
+  // Socket row's group is [0, socketRowCount); template row's group
+  // is [socketRowCount, rows.length). A socket row's "bottom" lands
+  // at the end of the socket group, NOT past the first template row.
+  const { start, end } = rowGroupBounds(idx);
+  // Only show the move items when the group has more than one row —
+  // otherwise both entries would always be disabled and add no value.
+  const groupSize = end - start;
   if (isGeneral) {
+    if (groupSize > 1) {
+      items.push(
+        {
+          label: "Move to top",
+          icon: "pi-angle-double-up",
+          disabled: idx === start,
+          onSelect: () => moveRowToEdge(idx, "top"),
+        },
+        {
+          label: "Move to bottom",
+          icon: "pi-angle-double-down",
+          disabled: idx === end - 1,
+          onSelect: () => moveRowToEdge(idx, "bottom"),
+          divider: true,
+        },
+      );
+    }
     items.push({
       label: "Delete",
       icon: "pi-trash",
@@ -683,13 +784,13 @@ function openRowContextMenu(ev: MouseEvent, idx: number): void {
       {
         label: "Move to top",
         icon: "pi-angle-double-up",
-        disabled: idx === 0,
+        disabled: idx === start,
         onSelect: () => moveRowToEdge(idx, "top"),
       },
       {
         label: "Move to bottom",
         icon: "pi-angle-double-down",
-        disabled: idx === rows.length - 1,
+        disabled: idx === end - 1,
         onSelect: () => moveRowToEdge(idx, "bottom"),
       },
       {
@@ -776,11 +877,10 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         :class="{ 'wp-drop-pulse': recentDropUids.has(row._uid) }"
         :row="row"
         :index="idx"
-        :reorderable="row.kind !== 'general' && socketRowCount > 1"
+        :reorderable="row.kind === 'general' ? generalRowCount > 1 : socketRowCount > 1"
         :is-connected="row.kind === 'general' ? true : isConnected(row.slot_name)"
         :value-type="row.kind === 'general' ? undefined : slotTypes[row.slot_name]"
         :display-label="row.kind === 'general' ? undefined : slotLabels[row.slot_name]"
-        :references="row.kind === 'general' ? generalRowReferences : undefined"
         :conflict-severity="conflictByUid[row._uid]?.severity"
         :conflict-label="conflictByUid[row._uid]?.label"
         :drop-indicator="dropIndicatorFor(row._uid)"
@@ -800,8 +900,13 @@ defineExpose({ addRow, addGeneralRow, removeRow });
       <button
         type="button"
         class="wp-inj-add-general"
+        :class="{ 'wp-inj-add-general--disabled': atGeneralRowCap }"
         data-test="inj-add-general"
-        title="Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects"
+        :disabled="atGeneralRowCap"
+        :aria-disabled="atGeneralRowCap"
+        :title="atGeneralRowCap
+          ? `Maximum ${MAX_GENERAL_INJECTOR_ROWS} template rows`
+          : 'Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects'"
         @click="addGeneralRow"
       >
         <i class="pi pi-plus" aria-hidden="true" /> Add template row
@@ -824,6 +929,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
           :sibling-rows="value.rows"
           :slot-types="slotTypes"
           :slot-labels="slotLabels"
+          :references="editingRow?.kind === 'general' ? generalRowReferences : []"
           @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
           @close="closeEditModal"
         />
@@ -975,10 +1081,19 @@ defineExpose({ addRow, addGeneralRow, removeRow });
   cursor: pointer;
   transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
-.wp-inj-add-general:hover {
+.wp-inj-add-general:hover:not(:disabled) {
   background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
   border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border2, var(--wp-border)));
   color: var(--wp-text);
+}
+/* Disabled at the template-row cap. Mirrors the assembler toolbar
+ * pattern (`.wp-asm-toolbtn:disabled`) — dim + not-allowed cursor so
+ * the user reads the affordance as "intentionally inert". Tooltip
+ * spells out the cap. */
+.wp-inj-add-general:disabled,
+.wp-inj-add-general--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .wp-inj-add-general .pi { font-size: 10px; line-height: 1; }
 </style>

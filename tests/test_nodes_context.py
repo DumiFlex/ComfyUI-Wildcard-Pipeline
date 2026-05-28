@@ -17,7 +17,7 @@ class TestWPContextSchema:
     def test_schema_inputs(self):
         schema = WPContext.define_schema()
         names = [s.name for s in schema.inputs]
-        assert names == ["upstream", "seed", "modules"]
+        assert names == ["upstream", "seed", "wp_modules"]
 
         upstream, seed, modules = schema.inputs
         assert upstream.type_name == "PIPELINE_CONTEXT"
@@ -47,7 +47,7 @@ class TestWPContextExecute:
         payload = self._modules_json([
             {"variable_name": "style", "value": "photo"},
         ])
-        out = WPContext.execute(seed=0, modules=payload, upstream=None)
+        out = WPContext.execute(seed=0, wp_modules=payload, upstream=None)
 
         assert len(out.values) == 1
         result = out.values[0]
@@ -65,7 +65,7 @@ class TestWPContextExecute:
         payload = self._modules_json([
             {"variable_name": "style", "value": "painted"},
         ])
-        out = WPContext.execute(seed=42, modules=payload, upstream=upstream)
+        out = WPContext.execute(seed=42, wp_modules=payload, upstream=upstream)
         result = out.values[0]
 
         assert result.context == {"subject": "knight", "style": "painted"}
@@ -82,7 +82,7 @@ class TestWPContextExecute:
     def test_empty_modules_still_emits_payload(self):
         out = WPContext.execute(
             seed=0,
-            modules='{"version":1,"modules":[]}',
+            wp_modules='{"version":1,"modules":[]}',
             upstream=None,
         )
         result = out.values[0]
@@ -92,7 +92,7 @@ class TestWPContextExecute:
     def test_malformed_modules_runs_empty(self):
         # deserialize_node_input is robust: malformed JSON returns ([], {}, [])
         # so the pipeline runs with an empty module list rather than crashing.
-        out = WPContext.execute(seed=0, modules="{not json", upstream=None)
+        out = WPContext.execute(seed=0, wp_modules="{not json", upstream=None)
         result = out.values[0]
         assert result.context == {}
         assert result.debug["__wp_trace__"] == []
@@ -115,7 +115,7 @@ class TestWPContextExecute:
                 "instance": {"locked_seed": 99999, "internal": True},
             }],
         })
-        out = WPContext.execute(seed=42, modules=payload, upstream=None)
+        out = WPContext.execute(seed=42, wp_modules=payload, upstream=None)
         result = out.values[0]
         trace = result.debug["__wp_trace__"]
         assert len(trace) == 1
@@ -136,7 +136,7 @@ class TestWPContextExecute:
                 "instance": {"internal": True},
             }],
         })
-        out = WPContext.execute(seed=42, modules=payload, upstream=None)
+        out = WPContext.execute(seed=42, wp_modules=payload, upstream=None)
         result = out.values[0]
         trace = result.debug["__wp_trace__"]
         entry = trace[0]
@@ -148,7 +148,7 @@ class TestWPContextExecute:
     def test_downstream_overwrite_flows(self):
         first = WPContext.execute(
             seed=1,
-            modules=json.dumps({
+            wp_modules=json.dumps({
                 "version": 1,
                 "modules": [{
                     "id": "a",
@@ -161,7 +161,7 @@ class TestWPContextExecute:
 
         second = WPContext.execute(
             seed=2,
-            modules=json.dumps({
+            wp_modules=json.dumps({
                 "version": 1,
                 "modules": [{
                     "id": "b",

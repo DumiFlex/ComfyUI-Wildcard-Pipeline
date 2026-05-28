@@ -174,6 +174,11 @@ function resolveInlinePick(
   depth: number,
   visited: string[],
 ): string {
+  // Assembler surface is seedless (RNG always rolls from seed 0), so an
+  // inline pick there freezes deterministically — misleading. Mirror the
+  // engine (engine/syntax/resolve.py): render the source verbatim. Produce
+  // the random value in a seeded module and reference its $var instead.
+  if (ctx.surface === "assembler") return tok.raw;
   const branches = (tok.meta?.branches as string[]) ?? [];
   if (!branches.length) return "";
   const idx = ctx.rng.randrange(branches.length);
@@ -188,6 +193,8 @@ function resolveMultiPick(
   depth: number,
   visited: string[],
 ): string {
+  // Seedless assembler surface — see resolveInlinePick. Render verbatim.
+  if (ctx.surface === "assembler") return tok.raw;
   const count = (tok.meta?.count as number) ?? 0;
   const sep = (tok.meta?.sep as string) ?? "";
   const branches = [...((tok.meta?.branches as string[]) ?? [])];

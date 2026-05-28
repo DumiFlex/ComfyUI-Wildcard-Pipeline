@@ -290,6 +290,14 @@ def test_resolve_inline_pick_single_branch_is_text_token():
     assert resolve_text("{just_one}", ctx) == "{just_one}"
 
 
+def test_resolve_inline_pick_literal_on_assembler_surface():
+    """Assembler surface is seedless — an inline pick would freeze on one
+    branch every run, so it renders the source verbatim instead. $var still
+    resolves; only the brace block stays literal."""
+    ctx = _ctx(rng=random.Random(0), surface="assembler", _vars={"color": "red"})
+    assert resolve_text("$color {a|b|c}", ctx) == "red {a|b|c}"
+
+
 # ---------------------------------------------------------------------------
 # DP_MULTI resolution tests (Task 11)
 # ---------------------------------------------------------------------------

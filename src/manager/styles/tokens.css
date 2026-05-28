@@ -1548,6 +1548,10 @@ input, textarea, select { font: inherit; }
   color: var(--wp-text-dim);
   font-size: 12.5px;
 }
+/* A leading info/status icon (e.g. the matrix "needs a sub-category" hint or
+   the exceptions hint) sat flush against the message text. Give it breathing
+   room without restructuring the centered single-line layout. */
+.wp-empty-card .pi { margin-right: 6px; }
 
 /* Small muted hint text used above editor card content
    (replaces dv-hint / cn-hint / pl-hint / wp-text-xs duplicates). */

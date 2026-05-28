@@ -78,6 +78,26 @@ def _target_present_in_chain(
     return False
 
 
+# Characters that break the engine ref tokenizer's `#name` segment
+# (`[^#:}@{]*`). Anything in this set gets replaced with a space when
+# embedding a cached name into a `@{uuid#name}` ref so a stray apostrophe
+# or curly brace can't shatter the warning's parse on the frontend.
+_REF_NAME_FORBIDDEN = re.compile(r"[#:}@{]")
+
+
+def _build_ref_name_suffix(name: Any) -> str:
+    """Return the `#name` suffix for a cached ref token, or `""` when no
+    usable name was provided. Used by the `constraint_never_applied`
+    warning emitter so chips render a readable label even when the
+    workflow is imported on a machine whose library lacks the referenced
+    modules — the cached `#name` is the only fallback RefChip has in
+    that scenario."""
+    if not isinstance(name, str):
+        return ""
+    cleaned = _REF_NAME_FORBIDDEN.sub(" ", name).strip()
+    return f"#{cleaned}" if cleaned else ""
+
+
 def _extract_static_meta(
     module_raw: Any,
 ) -> dict[str, Any]:
@@ -247,11 +267,20 @@ class PipelineEngine:
                 _module_uid = module.get("_uid", "") or ""
                 _module_type_raw = module.get("type", None) or ""
                 _module_enabled = module.get("enabled", True)
+                # Display name. Stashed alongside `id` / `_uid` so handlers
+                # that emit user-facing warnings (notably the constraint
+                # handler — see `__constraint_library_name__`) can embed
+                # the name as a cached `#name` ref suffix. That suffix
+                # survives library + embed-bundle misses (workflows
+                # imported from someone else's machine), letting WP_Debug
+                # render a readable chip instead of a raw uuid.
+                _module_name = module.get("name", "") or ""
             else:
                 _module_id = getattr(module, "id", "")
                 _module_uid = getattr(module, "_uid", "") or ""
                 _module_type_raw = getattr(module, "type", None) or ""
                 _module_enabled = getattr(module, "enabled", True)
+                _module_name = getattr(module, "name", "") or ""
 
             if not _module_enabled:
                 # Disabled modules don't run — but the trace row still
@@ -330,6 +359,7 @@ class PipelineEngine:
             #     absent (legacy / hand-built test modules).
             ctx["__wp_current_module_id__"] = _module_id
             ctx["__wp_current_module_uid__"] = _module_uid or _module_id
+            ctx["__wp_current_module_name__"] = _module_name
             meta = _extract_static_meta(module)
             try:
                 bindings = resolve_module(snapshot, ctx)
@@ -435,6 +465,7 @@ class PipelineEngine:
         # keeps post-run ctx introspection tidy).
         ctx.pop("__wp_current_module_id__", None)
         ctx.pop("__wp_current_module_uid__", None)
+        ctx.pop("__wp_current_module_name__", None)
 
         # First-instance one-shot semantic: emit a soft (info) warning
         # for every registered constraint whose target instance never
@@ -461,7 +492,36 @@ class PipelineEngine:
                 if cid in warned_cids:
                     continue
                 warned_cids.add(cid)
+                # `cid` keys the dedup bookkeeping (per-instance `_uid` so
+                # two canvas instances of the same library constraint are
+                # independent). The message text, on the other hand, must
+                # reference the LIBRARY id — that's the 8-hex uuid the
+                # SPA/Debug chip resolver looks up in the module catalog
+                # to render the constraint's name. Falling back to `cid`
+                # only when the library id is missing (legacy / hand-built
+                # constraints) keeps the warning informative either way.
+                library_cid = c.get("__constraint_library_id__") or cid
                 target_uuid = c.get("target_wildcard_id", "")
+                # Build `#name` cache suffixes so the chip survives a
+                # library-missing import. The SPA's chip resolver looks
+                # the uuid up against the importer's local library — if
+                # the workflow ships with modules the importer doesn't
+                # have, the lookup misses and the chip falls back to
+                # whatever cached name the ref token carries (per
+                # RefChip.vue's unresolved-with-cached-name path). The
+                # constraint's name was stashed by its handler; the
+                # target's name is read from the per-run catalog. Sanitise
+                # both against the engine's ref tokenizer (`[^#:}@{]*` is
+                # the allowed name charset; anything else is replaced with
+                # a space) so a name with stray punctuation can't break
+                # the warning's parse.
+                target_name = ""
+                if isinstance(catalog, dict):
+                    target_row = catalog.get(target_uuid)
+                    if isinstance(target_row, dict):
+                        target_name = target_row.get("name", "") or ""
+                cid_suffix = _build_ref_name_suffix(c.get("__constraint_library_name__"))
+                tgt_suffix = _build_ref_name_suffix(target_name)
                 # Classify the cause so the message is actionable.
                 # With the carrier-claim failsafe in place, a carrier
                 # that rolls ANY option claims its constraint — so an
@@ -486,22 +546,31 @@ class PipelineEngine:
                     # carrier is also the constraint's source (the source
                     # must stay upstream of the constraint).
                     message = (
-                        f"constraint @{{{cid}}} did not apply — its target "
-                        f"@{{{target_uuid}}} is in the chain but every appearance "
+                        f"constraint @{{{library_cid}{cid_suffix}}} did not apply — its target "
+                        f"@{{{target_uuid}{tgt_suffix}}} is in the chain but every appearance "
                         f"resolved before this constraint registered, or is "
                         f"disabled / in a branch this run skipped."
                     )
                 else:
                     message = (
-                        f"constraint @{{{cid}}} did not apply — no @{{{target_uuid}}} "
-                        f"wildcard instance or nested-ref carrier found in this "
-                        f"chain (check the constraint's target uuid)."
+                        f"constraint @{{{library_cid}{cid_suffix}}} did not apply — "
+                        f"no @{{{target_uuid}{tgt_suffix}}} wildcard instance or "
+                        f"nested-ref carrier found in this chain "
+                        f"(check the constraint's target uuid)."
                     )
                 warnings_bucket = ctx.setdefault("__wp_warnings__", [])
                 if isinstance(warnings_bucket, list):
                     warnings_bucket.append({
                         "type": "constraint_never_applied",
-                        "severity": "info",
+                        # `warn` (not `info`): an authored constraint that
+                        # silently never fires is almost always either a
+                        # misconfiguration (wrong target uuid, missing
+                        # source/target wildcard in the chain) or a
+                        # disabled / dead branch the user forgot about.
+                        # Either way it deserves the yellow advisory chip,
+                        # not the blue informational one — the constraint
+                        # is doing nothing, and the user should see it.
+                        "severity": "warn",
                         "module_id": cid,
                         "source_field": "",
                         "position": 0,

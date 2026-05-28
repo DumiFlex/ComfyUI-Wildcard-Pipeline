@@ -226,9 +226,21 @@
         </div>
         <div v-else-if="filteredModules.length === 0" class="wp-picker__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
-          {{ searchTerm ? `No matches for "${searchTerm}"` : "No modules in this category." }}
+          <template v-if="searchTerm">No matches for "{{ searchTerm }}"</template>
+          <template v-else-if="isHideAddedSuppressing">
+            All matching modules are already in this Context.
+          </template>
+          <template v-else>No modules in this category.</template>
           <button
-            v-if="!searchTerm"
+            v-if="isHideAddedSuppressing"
+            type="button"
+            class="wp-picker__create"
+            data-testid="picker-show-already-added"
+            title="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
+            @click="hideAlreadyAdded = false"
+          ><i class="pi pi-eye" aria-hidden="true"></i> Show already added</button>
+          <button
+            v-else-if="!searchTerm"
             type="button"
             class="wp-picker__create"
             data-testid="picker-create-module"
@@ -661,6 +673,37 @@ const filteredModules = computed(() => {
     if (p.output_var && p.output_var.toLowerCase().includes(q)) return true;
     return false;
   });
+});
+
+/** True when `filteredModules` is empty BUT only because the
+ *  hide-already-added toggle hid modules that would otherwise show.
+ *  Lets the empty-state copy distinguish "nothing in this category" from
+ *  "all the matching modules are already in this Context" — the second
+ *  is a normal state once a bundle is loaded, and the misleading
+ *  "+ New module" CTA shouldn't fire there. */
+const isHideAddedSuppressing = computed<boolean>(() => {
+  if (filteredModules.value.length > 0) return false;
+  if (searchTerm.value.trim()) return false;
+  if (!hideAlreadyAdded.value) return false;
+  // Replay the same non-search gates as `filteredModules`, minus the
+  // hide-already-added filter. If any module survives, the toggle is
+  // the reason the list reads empty.
+  const tagFilter = selectedTags.value;
+  for (const m of visibleModules.value) {
+    if (kindFilter.value !== "all" && m.type !== kindFilter.value) continue;
+    if (favoritesOnly.value && !m.is_favorite) continue;
+    if (selectedCategoryId.value !== null && m.category_id !== selectedCategoryId.value) continue;
+    if (tagFilter.size > 0) {
+      const tags = Array.isArray(m.tags) ? m.tags : [];
+      let allMatch = true;
+      for (const t of tagFilter) {
+        if (!tags.includes(t)) { allMatch = false; break; }
+      }
+      if (!allMatch) continue;
+    }
+    if (alreadyAddedSet.value.has(m.id)) return true;
+  }
+  return false;
 });
 
 const KIND_ORDER = ["wildcard", "combine", "derivation", "constraint", "fixed_values"];

@@ -660,6 +660,22 @@ const uuidToNameMap = computed<Map<string, string>>(() => {
   return m;
 });
 
+/** `uuid → module kind` Map derived from the trace. Lets RichTextPreview
+ *  render non-wildcard `@{uuid}` refs (e.g. the constraint id embedded
+ *  in a `constraint_never_applied` warning) with the matching kind
+ *  color + icon. Falls back to the preview-resolver cache's `kind`
+ *  field when the trace doesn't cover a uuid. */
+const uuidToKindMap = computed<Map<string, string>>(() => {
+  const m = new Map<string, string>();
+  for (const t of traceEntriesRaw.value) {
+    const id = typeof t.id === "string" ? t.id : "";
+    if (!id) continue;
+    const type = typeof t.type === "string" ? t.type : "";
+    if (type) m.set(id, type);
+  }
+  return m;
+});
+
 /** Picks tab — re-key raw `__wp_picks__[module_id]` map into a list of
  *  `$variable_name → value` rows. Splits the option dict's `value` /
  *  `sub_category` into separate columns so the user reads "what got
@@ -1335,6 +1351,7 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
               v-if="row.value"
               :value="row.value"
               :uuid-to-name="uuidToNameMap"
+              :uuid-to-kind="uuidToKindMap"
               surface="wildcard"
             />
             <template v-else>—</template>
@@ -1393,6 +1410,7 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
             <RichTextPreview
               :value="row.valueText"
               :uuid-to-name="uuidToNameMap"
+              :uuid-to-kind="uuidToKindMap"
               surface="wildcard"
             />
           </span>
@@ -1425,6 +1443,7 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
             <RichTextPreview
               :value="`$${w.bindingText}`"
               :uuid-to-name="uuidToNameMap"
+              :uuid-to-kind="uuidToKindMap"
               surface="wildcard"
             />
           </span>
@@ -1432,6 +1451,7 @@ function openPickRowMenu(ev: MouseEvent, row: PickRow): void {
             <RichTextPreview
               :value="w.messageText"
               :uuid-to-name="uuidToNameMap"
+              :uuid-to-kind="uuidToKindMap"
               surface="wildcard"
             />
           </span>
