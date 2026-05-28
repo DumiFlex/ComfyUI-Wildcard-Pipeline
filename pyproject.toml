@@ -60,7 +60,7 @@ includes = ["js", "web"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["js", "web_dist", "node_modules"]
+extend-exclude = ["js", "web", "node_modules"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -71,7 +71,7 @@ ignore = []
 # so `from engine.template import ...` resolves in tests and editor.
 extraPaths = ["."]
 include = ["engine", "wp_nodes", "tests", "conftest.py"]
-exclude = ["node_modules", "js", "web_dist", ".venv", "**/__pycache__"]
+exclude = ["node_modules", "js", "web", ".venv", "**/__pycache__"]
 
 # Dispatch-pattern handlers (engine.handlers.handle_*) share a uniform
 # signature `(module, ctx, rng) -> Context`; handlers that don't consume
