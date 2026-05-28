@@ -18,6 +18,56 @@ describe("createDomWidgetHost", () => {
     expect(element.querySelector(".hi")).toBeNull();
   });
 
+  it("stops Ctrl+V / Ctrl+C / Ctrl+X / Ctrl+A from bubbling out when target is editable", () => {
+    // ComfyUI's canvas binds those shortcuts at document level. When a
+    // user types in an input inside a DOM widget, the keystroke must
+    // NOT reach the canvas — paste/copy/cut/select-all should act on
+    // the input, not the graph. The shield lives on the widget host
+    // so every WP custom widget gets this for free.
+    const Empty = defineComponent({ setup: () => () => h("span") });
+    const fakeNode = { addDOMWidget: (_n: string, _t: string, el: HTMLElement) => ({ element: el }) };
+    const { element, unmount } = createDomWidgetHost(fakeNode, "modules", Empty, {});
+    const input = document.createElement("input");
+    element.appendChild(input);
+
+    const cases = ["a", "c", "v", "x", "z", "y"] as const;
+    for (const k of cases) {
+      const event = new KeyboardEvent("keydown", { key: k, ctrlKey: true, bubbles: true, cancelable: true });
+      let reachedParent = false;
+      const onParent = () => { reachedParent = true; };
+      // Mount host into a parent so the event has somewhere to bubble.
+      const parent = document.createElement("div");
+      parent.appendChild(element);
+      parent.addEventListener("keydown", onParent);
+      input.dispatchEvent(event);
+      parent.removeEventListener("keydown", onParent);
+      parent.removeChild(element);
+      expect(reachedParent, `Ctrl+${k} bubbled past the host shield`).toBe(false);
+    }
+    unmount();
+  });
+
+  it("lets Ctrl-modifier keys bubble normally when target is NOT editable", () => {
+    // A click on a non-editable element inside the widget shouldn't
+    // suppress Ctrl shortcuts — only the editable-target path triggers
+    // the shield. Otherwise the user couldn't (for instance) Ctrl+A to
+    // select all graph nodes while their cursor sat over a chip.
+    const Empty = defineComponent({ setup: () => () => h("span") });
+    const fakeNode = { addDOMWidget: (_n: string, _t: string, el: HTMLElement) => ({ element: el }) };
+    const { element, unmount } = createDomWidgetHost(fakeNode, "modules", Empty, {});
+    const chip = document.createElement("span");
+    chip.textContent = "@uuid";
+    element.appendChild(chip);
+
+    const parent = document.createElement("div");
+    parent.appendChild(element);
+    let reachedParent = false;
+    parent.addEventListener("keydown", () => { reachedParent = true; });
+    chip.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(reachedParent).toBe(true);
+    unmount();
+  });
+
   it("exposes getValue/setValue backed by the closure state", () => {
     const Empty = defineComponent({ setup: () => () => h("span") });
     let captured: { getValue?: () => string; setValue?: (v: string) => void } = {};

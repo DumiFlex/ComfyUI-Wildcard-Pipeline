@@ -105,6 +105,53 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   }
   host.appendChild(inner);
 
+  // ---------------------------------------------------------------
+  // Clipboard-shortcut shield.
+  //
+  // ComfyUI's canvas binds Ctrl+A / Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+Z /
+  // Ctrl+Y at the document level. When a user types in any input inside
+  // a custom DOM widget, those keystrokes bubble up to the document
+  // handler — which runs node-level paste / copy / select-all instead
+  // of the input-level action. Symptom from the field: pasting into a
+  // combine module's template input spawned a brand-new WP_Context node
+  // from a previously-copied node clipboard payload.
+  //
+  // Fix: stop the event from bubbling OUT of the widget host when the
+  // focused target is an editable element. We use the bubble phase
+  // (not capture) so the native input handler still receives + acts on
+  // the keystroke. Then `stopPropagation` blocks it from reaching the
+  // canvas / document handlers above us. `preventDefault` is NEVER
+  // called — the input handles paste/copy/cut natively as the user
+  // expects. Single point of fix benefits every WP custom widget that
+  // mounts via this helper (Context, ContextLoop, SeedList, Injector,
+  // Debug, Cleaner, VarPicker, Assembler helper) without per-widget
+  // boilerplate.
+  function isEditableTarget(t: EventTarget | null): boolean {
+    if (!(t instanceof HTMLElement)) return false;
+    if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return true;
+    return t.isContentEditable === true;
+  }
+  function shieldKeydown(e: KeyboardEvent): void {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k !== "a" && k !== "c" && k !== "v" && k !== "x" && k !== "z" && k !== "y") return;
+    if (!isEditableTarget(e.target)) return;
+    e.stopPropagation();
+  }
+  function shieldClipboard(e: ClipboardEvent): void {
+    if (!isEditableTarget(e.target)) return;
+    e.stopPropagation();
+  }
+  // Attach to `inner` (the Vue mount target) — that's where the actual
+  // input elements live. Bubble path is: input → inner (this listener)
+  // → host → parent (canvas/document). Catching at `inner` is one hop
+  // closer than `host` and matches what `element` returns from this
+  // helper so unit tests can drive the same surface.
+  inner.addEventListener("keydown", shieldKeydown);
+  inner.addEventListener("copy", shieldClipboard);
+  inner.addEventListener("cut", shieldClipboard);
+  inner.addEventListener("paste", shieldClipboard);
+
   let state = options.initialValue ?? "";
   // baseMin pre-snapped so the initial `getMinHeight` answer + every
   // subsequent floor enforcement land on the LiteGraph grid. Without
