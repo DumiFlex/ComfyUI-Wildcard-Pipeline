@@ -110,8 +110,16 @@ export default {
       "@semantic-release/git",
       {
         assets: ["CHANGELOG.md", "package.json", "pyproject.toml"],
-        message:
-          "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
+        // Plain message — `${nextRelease.notes}` here would expand to
+        // the entire changelog, which on a divergent history (where
+        // semantic-release can't find the last tag in main's first-
+        // parent chain) blows past the OS arg-list limit and `git
+        // commit` exits with E2BIG. The full notes already live in:
+        //   1. CHANGELOG.md (asset committed in the same step)
+        //   2. The GitHub release body (via @semantic-release/github)
+        // So duplicating them inside the commit message is pure cost
+        // for zero reader benefit.
+        message: "chore(release): ${nextRelease.version} [skip ci]",
       },
     ],
     [
