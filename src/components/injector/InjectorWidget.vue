@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 import {
   emptyInjectorRowsValue,
+  newGeneralInjectorRow,
   newRowUid,
   parseWidgetJsonWithRecovery,
   serializeWidgetJson,
@@ -92,11 +93,39 @@ const enabledCount = computed(
   () => value.value.rows.filter((r) => r.enabled).length,
 );
 
+/** Socket-row count drives reorder eligibility — drag-to-reorder only
+ *  makes sense among socket rows (it reassigns `input_N` slot names).
+ *  General rows are excluded from the count + from reordering. */
+const socketRowCount = computed(
+  () => value.value.rows.filter((r) => r.kind !== "general").length,
+);
+
 const connectedSet = computed(() => new Set(props.connectedSlots));
 
 function isConnected(slotName: string): boolean {
   return connectedSet.value.has(slotName);
 }
+
+/** References a general row can compose from: every wired socket
+ *  (`$input_N`, in pin order) plus every enabled socket-row binding
+ *  (`$test`). Surfaced to general rows as a hint so the user knows what
+ *  tokens resolve. Excludes general-row bindings — a general row reading
+ *  a peer general binding works at runtime (in-order resolution) but the
+ *  primary affordance is "compose from sockets + socket vars". */
+const generalRowReferences = computed<string[]>(() => {
+  const refs: string[] = [];
+  const sockets = [...props.connectedSlots].sort(
+    (a, b) => slotOrderIndex(a) - slotOrderIndex(b),
+  );
+  refs.push(...sockets);
+  for (const r of value.value.rows) {
+    if (r.kind === "general") continue;
+    if (!r.enabled) continue;
+    const b = r.binding.trim();
+    if (b && !refs.includes(b)) refs.push(b);
+  }
+  return refs;
+});
 
 /** Per-row conflict map keyed by `_uid`. Recomputes from row state
  *  + connection set; warn-class + tooltip surface in InjectorRow. */
@@ -250,13 +279,14 @@ function removeRow(uid: string): void {
 }
 
 function addRow(slotName: string): void {
-  if (value.value.rows.some((r) => r.slot_name === slotName)) return;
+  if (value.value.rows.some((r) => r.kind !== "general" && r.slot_name === slotName)) return;
   value.value = {
     ...value.value,
     rows: [
       ...value.value.rows,
       {
         _uid: newRowUid(),
+        kind: "socket",
         slot_name: slotName,
         binding: "",
         enabled: true,
@@ -264,6 +294,19 @@ function addRow(slotName: string): void {
         _collapsed: true,
       },
     ],
+  };
+  persist();
+}
+
+/** Append a durable general-template row. Unlike socket rows it has no
+ *  slot + is never reconciled against connections — it sits after all
+ *  socket rows and composes a value from sockets + socket-row bindings.
+ *  The new row starts expanded so the user immediately sees the binding
+ *  + template inputs to fill in. */
+function addGeneralRow(): void {
+  value.value = {
+    ...value.value,
+    rows: [...value.value.rows, { ...newGeneralInjectorRow(), _collapsed: false }],
   };
   persist();
 }
@@ -290,30 +333,40 @@ watch(
   () => props.connectedSlots,
   (next) => {
     const freshRows = parseWidgetJsonWithRecovery(props.initialJson, emptyInjectorRowsValue()).value.rows;
+    // Two-tier reconcile: ONLY socket rows reconcile against connected
+    // sockets. General rows (kind === "general") are durable — they
+    // survive socket churn untouched and always render after the
+    // socket rows. Partition first so the connection logic never sees
+    // a general row.
+    const socketRows = freshRows.filter((r) => r.kind !== "general");
+    const generalRows = freshRows.filter((r) => r.kind === "general");
     const connectedSet = new Set(next);
-    const known = new Set(freshRows.map((r) => r.slot_name));
+    const known = new Set(socketRows.map((r) => r.slot_name));
     const toAdd = next.filter((slot) => !known.has(slot));
-    const survivors = freshRows.filter((r) => connectedSet.has(r.slot_name));
-    const removed = survivors.length !== freshRows.length;
+    const survivors = socketRows.filter((r) => connectedSet.has(r.slot_name));
+    const removed = survivors.length !== socketRows.length;
     if (toAdd.length === 0 && !removed) return;
+    const reconciledSockets = [
+      ...survivors,
+      ...toAdd.map((slot) => ({
+        _uid: newRowUid(),
+        kind: "socket" as const,
+        slot_name: slot,
+        binding: "",
+        enabled: true,
+        internal: false,
+        _collapsed: true,
+      })),
+    // Always order socket rows by slot index so the visual list matches
+    // the socket pin order on the node body, regardless of when each
+    // row was added (toAdd appends at end; without this sort a
+    // newly-connected lower-numbered slot would render below
+    // already-known higher-numbered rows).
+    ].sort((a, b) => slotOrderIndex(a.slot_name) - slotOrderIndex(b.slot_name));
     value.value = {
       ...value.value,
-      rows: [
-        ...survivors,
-        ...toAdd.map((slot) => ({
-          _uid: newRowUid(),
-          slot_name: slot,
-          binding: "",
-          enabled: true,
-          internal: false,
-          _collapsed: true,
-        })),
-      // Always order rows by slot index so the visual list matches
-      // the socket pin order on the node body, regardless of when
-      // each row was added (toAdd appends at end; without this sort
-      // a newly-connected lower-numbered slot would render below
-      // already-known higher-numbered rows).
-      ].sort((a, b) => slotOrderIndex(a.slot_name) - slotOrderIndex(b.slot_name)),
+      // General rows always trail the socket rows.
+      rows: [...reconciledSockets, ...generalRows],
     };
     persist();
   },
@@ -588,16 +641,24 @@ function openRowContextMenu(ev: MouseEvent, idx: number): void {
   const row = value.value.rows[idx];
   if (!row) return;
   const rows = value.value.rows;
+  const isGeneral = row.kind === "general";
   const estW = 250;
   const estH = 280;
   const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
   const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
-  const items: ContextMenuItem[] = [
-    {
+  // General rows are edited inline (binding + template inputs on the
+  // row) and aren't tied to a socket — so they skip the Edit modal +
+  // the slot-reassigning Move/Disconnect entries. They get a plain
+  // Delete instead. Socket rows keep the full menu.
+  const items: ContextMenuItem[] = [];
+  if (!isGeneral) {
+    items.push({
       label: "Edit",
       icon: "pi-pencil",
       onSelect: () => openEditModal(row._uid),
-    },
+    });
+  }
+  items.push(
     {
       label: row.enabled ? "Disable" : "Enable",
       icon: row.enabled ? "pi-eye-slash" : "pi-eye",
@@ -609,31 +670,48 @@ function openRowContextMenu(ev: MouseEvent, idx: number): void {
       onSelect: () => updateRow(row._uid, { _collapsed: !row._collapsed }),
       divider: true,
     },
-    {
-      label: "Move to top",
-      icon: "pi-angle-double-up",
-      disabled: idx === 0,
-      onSelect: () => moveRowToEdge(idx, "top"),
-    },
-    {
-      label: "Move to bottom",
-      icon: "pi-angle-double-down",
-      disabled: idx === rows.length - 1,
-      onSelect: () => moveRowToEdge(idx, "bottom"),
-    },
-    {
-      label: "Disconnect",
+  );
+  if (isGeneral) {
+    items.push({
+      label: "Delete",
       icon: "pi-trash",
       danger: true,
-      divider: true,
-      onSelect: () => emit("disconnect-slot", row.slot_name),
-    },
-  ];
-  const typeKey = (props.slotTypes[row.slot_name] ?? "").toLowerCase();
-  const typeLabel = typeKey ? typeKey[0].toUpperCase() + typeKey.slice(1) : "Input";
+      onSelect: () => removeRow(row._uid),
+    });
+  } else {
+    items.push(
+      {
+        label: "Move to top",
+        icon: "pi-angle-double-up",
+        disabled: idx === 0,
+        onSelect: () => moveRowToEdge(idx, "top"),
+      },
+      {
+        label: "Move to bottom",
+        icon: "pi-angle-double-down",
+        disabled: idx === rows.length - 1,
+        onSelect: () => moveRowToEdge(idx, "bottom"),
+      },
+      {
+        label: "Disconnect",
+        icon: "pi-trash",
+        danger: true,
+        divider: true,
+        onSelect: () => emit("disconnect-slot", row.slot_name),
+      },
+    );
+  }
+  const typeKey = isGeneral ? "" : (props.slotTypes[row.slot_name] ?? "").toLowerCase();
+  const typeLabel = isGeneral
+    ? "Template"
+    : typeKey
+      ? typeKey[0].toUpperCase() + typeKey.slice(1)
+      : "Input";
   const nameForHeader = row.binding.trim()
     ? `$${row.binding}`
-    : (props.slotLabels[row.slot_name] ?? row.slot_name);
+    : isGeneral
+      ? "template row"
+      : (props.slotLabels[row.slot_name] ?? row.slot_name);
   ctxMenu.value = {
     visible: true,
     x: Math.max(8, x),
@@ -642,16 +720,17 @@ function openRowContextMenu(ev: MouseEvent, idx: number): void {
     // Scope header — mirrors the bundle/module ctxmenu pattern:
     // type icon + "<Type> · <Name>". Name falls back to the slot
     // label (e.g. input_0) when no binding is typed yet, so the
-    // header always reads as a specific row identifier.
+    // header always reads as a specific row identifier. General rows
+    // use a wand icon + "Template · …".
     header: {
-      icon: HEADER_TYPE_ICON[typeKey] ?? "pi-circle",
+      icon: isGeneral ? "pi-bolt" : (HEADER_TYPE_ICON[typeKey] ?? "pi-circle"),
       label: `${typeLabel} · ${nameForHeader}`,
-      iconColor: HEADER_TYPE_COLOR[typeKey],
+      iconColor: isGeneral ? "var(--wp-accent)" : HEADER_TYPE_COLOR[typeKey],
     },
   };
 }
 
-defineExpose({ addRow, removeRow });
+defineExpose({ addRow, addGeneralRow, removeRow });
 </script>
 
 <template>
@@ -697,15 +776,16 @@ defineExpose({ addRow, removeRow });
         :class="{ 'wp-drop-pulse': recentDropUids.has(row._uid) }"
         :row="row"
         :index="idx"
-        :reorderable="value.rows.length > 1"
-        :is-connected="isConnected(row.slot_name)"
-        :value-type="slotTypes[row.slot_name]"
-        :display-label="slotLabels[row.slot_name]"
+        :reorderable="row.kind !== 'general' && socketRowCount > 1"
+        :is-connected="row.kind === 'general' ? true : isConnected(row.slot_name)"
+        :value-type="row.kind === 'general' ? undefined : slotTypes[row.slot_name]"
+        :display-label="row.kind === 'general' ? undefined : slotLabels[row.slot_name]"
+        :references="row.kind === 'general' ? generalRowReferences : undefined"
         :conflict-severity="conflictByUid[row._uid]?.severity"
         :conflict-label="conflictByUid[row._uid]?.label"
         :drop-indicator="dropIndicatorFor(row._uid)"
         @update="(patch) => updateRow(row._uid, patch)"
-        @disconnect="emit('disconnect-slot', row.slot_name)"
+        @disconnect="row.kind === 'general' ? removeRow(row._uid) : emit('disconnect-slot', row.slot_name)"
         @row-drag-start="(p) => onRowDragStart(p.fromIdx)"
         @row-drag-end="onRowDragEnd"
         @row-contextmenu="(p) => openRowContextMenu(p.ev, p.idx)"
@@ -717,6 +797,15 @@ defineExpose({ addRow, removeRow });
       >
         ↓ Wire an upstream node's output into this node's input pin — a variable row appears here.
       </div>
+      <button
+        type="button"
+        class="wp-inj-add-general"
+        data-test="inj-add-general"
+        title="Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects"
+        @click="addGeneralRow"
+      >
+        <i class="pi pi-plus" aria-hidden="true" /> Add template row
+      </button>
     </div>
     </div>
     <ContextMenu
@@ -865,4 +954,31 @@ defineExpose({ addRow, removeRow });
   font: italic 11px var(--wp-font-sans);
   background: color-mix(in srgb, var(--wp-text) 2%, transparent);
 }
+
+/* Add-template-row button — full-width dashed affordance below the
+ * rows list, mirroring the "add" pattern other WP list editors use.
+ * Sits inside the list so it scrolls + collapses with the rows. */
+.wp-inj-add-general {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px dashed var(--wp-border2, var(--wp-border));
+  border-radius: var(--wp-radius-sm, 4px);
+  background: transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
+  font: 600 10px var(--wp-font-sans);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
+}
+.wp-inj-add-general:hover {
+  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border2, var(--wp-border)));
+  color: var(--wp-text);
+}
+.wp-inj-add-general .pi { font-size: 10px; line-height: 1; }
 </style>

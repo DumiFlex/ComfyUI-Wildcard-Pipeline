@@ -192,6 +192,113 @@ describe("InjectorWidget — right-click context menu (Phase 4)", () => {
   });
 });
 
+describe("InjectorWidget — general (template) rows", () => {
+  it("addGeneralRow appends a durable kind:general row with no slot", async () => {
+    const w = mount(InjectorWidget, { props: { nodeId: 7, initialJson: EMPTY } });
+    const vm = w.vm as unknown as { addGeneralRow: () => void };
+    vm.addGeneralRow();
+    await w.vm.$nextTick();
+    const events = w.emitted("change")!;
+    const parsed = JSON.parse(events[events.length - 1][0] as string);
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0].kind).toBe("general");
+    expect(parsed.rows[0].slot_name).toBe("");
+    expect(parsed.rows[0].binding).toBe("");
+    expect(parsed.rows[0].template).toBe("");
+    expect(parsed.rows[0].enabled).toBe(true);
+    expect(parsed.rows[0]._uid).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it("renders the 'Add template row' affordance", () => {
+    const w = mount(InjectorWidget, { props: { nodeId: 7, initialJson: EMPTY } });
+    expect(w.find('[data-test="inj-add-general"]').exists()).toBe(true);
+  });
+
+  it("reconcile KEEPS general rows when sockets churn", async () => {
+    const WITH_GENERAL = JSON.stringify({
+      version: 1,
+      rows: [
+        { _uid: "sock_a", kind: "socket", slot_name: "input_0", binding: "a", enabled: true, internal: false },
+        { _uid: "gen_a", kind: "general", slot_name: "", binding: "combo", template: "$a!", enabled: true, internal: false },
+      ],
+    });
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: WITH_GENERAL, connectedSlots: ["input_0"] },
+    });
+    // Sever input_0 — the socket row should drop, the general row must survive.
+    await w.setProps({ connectedSlots: [] });
+    await w.vm.$nextTick();
+    const events = w.emitted("change")!;
+    const parsed = JSON.parse(events[events.length - 1][0] as string);
+    const kinds = parsed.rows.map((r: { kind?: string }) => r.kind);
+    expect(kinds).toContain("general");
+    expect(parsed.rows.find((r: { _uid: string }) => r._uid === "gen_a")).toBeTruthy();
+    expect(parsed.rows.find((r: { _uid: string }) => r._uid === "sock_a")).toBeUndefined();
+  });
+
+  it("general rows render AFTER socket rows even when sockets are added later", async () => {
+    const WITH_GENERAL_FIRST = JSON.stringify({
+      version: 1,
+      rows: [
+        { _uid: "gen_a", kind: "general", slot_name: "", binding: "combo", template: "$x", enabled: true, internal: false },
+      ],
+    });
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: WITH_GENERAL_FIRST, connectedSlots: [] },
+    });
+    await w.setProps({ connectedSlots: ["input_0", "input_1"] });
+    await w.vm.$nextTick();
+    const events = w.emitted("change")!;
+    const parsed = JSON.parse(events[events.length - 1][0] as string);
+    const kinds = parsed.rows.map((r: { kind?: string }) => r.kind);
+    // Two socket rows first, general row trailing.
+    expect(kinds).toEqual(["socket", "socket", "general"]);
+  });
+
+  it("round-trips a general row through serialize/parse unchanged", async () => {
+    const ROUND = JSON.stringify({
+      version: 1,
+      rows: [
+        { _uid: "gen_rt", kind: "general", slot_name: "", binding: "combo", template: "$input_0 by $test", enabled: true, internal: true, _collapsed: false },
+      ],
+    });
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: ROUND, connectedSlots: [] },
+      attachTo: document.body,
+    });
+    // Toggle the internal flag off then on to force a couple of persist cycles.
+    await w.find('[data-uid="gen_rt"] [data-test="inj-row-internal"]').trigger("click");
+    await w.vm.$nextTick();
+    const events = w.emitted("change")!;
+    const parsed = JSON.parse(events[events.length - 1][0] as string);
+    const row = parsed.rows[0];
+    expect(row.kind).toBe("general");
+    expect(row.binding).toBe("combo");
+    expect(row.template).toBe("$input_0 by $test");
+    expect(row.internal).toBe(false); // toggled off
+    w.unmount();
+  });
+
+  it("general-row context menu offers Delete instead of Disconnect", async () => {
+    const WITH_GENERAL = JSON.stringify({
+      version: 1,
+      rows: [
+        { _uid: "gen_a", kind: "general", slot_name: "", binding: "combo", template: "$x", enabled: true, internal: false },
+      ],
+    });
+    const w = mount(InjectorWidget, {
+      props: { nodeId: 7, initialJson: WITH_GENERAL, connectedSlots: [] },
+      attachTo: document.body,
+    });
+    await w.find('[data-uid="gen_a"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+    const labels = Array.from(document.querySelectorAll(".wp-ctxmenu__title")).map((n) => n.textContent);
+    expect(labels).toContain("Delete");
+    expect(labels).not.toContain("Disconnect");
+    expect(labels).not.toContain("Edit"); // general rows edit inline
+    w.unmount();
+  });
+});
+
 describe("InjectorWidget — collapse-connections button", () => {
   it("renders the toolbar button with merge-wires label + icon when expanded (default)", () => {
     const w = mount(InjectorWidget, {

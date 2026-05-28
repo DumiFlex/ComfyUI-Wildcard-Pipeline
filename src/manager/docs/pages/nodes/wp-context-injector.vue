@@ -9,15 +9,20 @@ import VarToken from "../../../components/docs/VarToken.vue";
 
 const ports = [
   { term: "upstream (in)", desc: "An existing Context to extend. All of its variables pass through; the injector adds or overrides bindings on top. Leave unconnected to create a standalone Context from injected values only." },
-  { term: "rows widget", desc: "Each row defines one variable. Give it a name, optionally write a template mixing socket values (e.g. $input_0 by $input_1), and choose whether it should be internal (available to modules but hidden from the final prompt)." },
-  { term: "input_0 … input_9", desc: "Dynamic socket slots. Wire any ComfyUI output — a STRING, INT, FLOAT, or anything else — into a slot. Each wired socket is available in row templates by its slot name. Add up to 10 sockets; chain a second injector for more." },
+  { term: "rows widget", desc: "Holds two kinds of rows: socket rows (one per wired input) and template rows you add manually. Each defines one $variable and can be marked internal (available to modules but hidden from the final prompt)." },
+  { term: "input_0 … input_9", desc: "Dynamic socket slots. Wire any ComfyUI output — a STRING, INT, FLOAT, or anything else — into a slot. A socket row appears automatically. Add up to 10 sockets; chain a second injector for more." },
   { term: "context (out)", desc: "The upstream Context with your injected bindings merged on top. Wire it into an Assembler, Debug node, or another Context." },
+];
+
+const rowKinds = [
+  { term: "Socket row", desc: "Created automatically when you wire an input, and removed when you disconnect it. Binds that one socket to a $variable. Its optional template may reference only its OWN socket (e.g. the input_0 row can use $input_0) — rows resolve top to bottom, so a socket row can't read a later socket." },
+  { term: "Template row", desc: "Add one with the “Add template row” button. It isn't tied to any socket and survives disconnects. It runs after all socket rows, so its template can compose from both the raw sockets ($input_0, $input_1, …) and the variables the socket rows produced ($test). Use it to combine multiple inputs." },
 ];
 
 const rowOptions = [
   { term: "Binding name", desc: "The $variable name that downstream modules and the Assembler will see. Use letters, digits, and underscores; must start with a letter." },
-  { term: "Template", desc: "Leave blank to write the raw socket value as-is. Enter a template like $input_0 by $input_1 to compose a value from multiple sockets. Use $$ for a literal dollar sign." },
-  { term: "Internal", desc: "Tick this to make the variable available to Combine and Derivation modules downstream but keep it out of the assembled prompt text." },
+  { term: "Template", desc: "On a socket row: leave blank to write the raw socket value as-is, or wrap just that socket (e.g. prefix $input_0). On a template row: required — compose from any input or socket-row variable (e.g. $input_0 by $test). Use $$ for a literal dollar sign." },
+  { term: "Internal", desc: "Tick this to make the variable available to Combine and Derivation modules downstream but keep it out of the assembled prompt text. Works on both row kinds." },
 ];
 </script>
 
@@ -54,14 +59,28 @@ const rowOptions = [
       <DocKeyList :items="ports" />
     </DocSection>
 
+    <DocSection title="Two kinds of rows">
+      <p>
+        The injector resolves rows top to bottom in two passes. <b>Socket rows</b> run first
+        — each one turns a single wired input into a <VarToken>$variable</VarToken>, and its
+        template (if any) can only reference its own socket. <b>Template rows</b> run last, so
+        they can compose from every input <em>and</em> from the variables the socket rows
+        produced.
+      </p>
+      <DocKeyList :items="rowKinds" />
+    </DocSection>
+
     <DocSection title="Row options">
       <DocKeyList :items="rowOptions" />
     </DocSection>
 
     <DocSection title="Good to know">
       <DocCallout variant="tip">
-        Use a template row to combine two sockets without an extra Combine module — set a
-        template like <VarToken>$input_0 by $input_1</VarToken> and wire two STRING sources.
+        To combine two sockets without an extra Combine module, click <b>Add template row</b>
+        and set a template like <VarToken>$input_0 by $input_1</VarToken>. A template row runs
+        after every socket row, so it can also reference the variables those rows produce (for
+        example <VarToken>$test</VarToken>) — and it sticks around even if you re-wire the
+        inputs. A socket row's own template can only use its own socket.
       </DocCallout>
       <DocCallout variant="tip">
         The injector is best suited for STRING, INT, and FLOAT values. Complex types like

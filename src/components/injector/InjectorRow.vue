@@ -34,9 +34,41 @@ const props = defineProps<{
    *  with the next dragenter, so per-row local state can leave a
    *  stale indicator on a row the pointer just left. */
   dropIndicator?: "before" | "after" | null;
+  /** GENERAL rows only: the reference tokens the user can compose
+   *  from — wired sockets (`input_N`) + socket-row bindings. Surfaced
+   *  as a hint line + placeholder so the user knows what `$names`
+   *  resolve. Ignored for socket rows. */
+  references?: string[];
 }>();
 
+/** A general-template row: no slot, inline binding + template inputs,
+ *  resolved after all socket rows. Driven by `row.kind`. */
+const isGeneral = computed(() => props.row.kind === "general");
+
 const slotLabel = computed(() => props.displayLabel ?? props.row.slot_name);
+
+/** Placeholder for a general row's template input — shows the first
+ *  couple of available refs so the user has a concrete starting point
+ *  (e.g. `e.g. $input_0 by $test`). Falls back to a generic hint when
+ *  nothing is wired yet. */
+const generalTemplatePlaceholder = computed(() => {
+  const refs = props.references ?? [];
+  if (refs.length === 0) return "e.g. $input_0 by $other — composed after socket rows";
+  const sample = refs.slice(0, 2).map((r) => `$${r}`).join(" by ");
+  return `e.g. ${sample}`;
+});
+
+/** Compact one-line hint listing the tokens a general row can compose
+ *  from. A plain string (not chips) keeps the bundle lean. */
+const generalRefsHint = computed(() => {
+  const refs = props.references ?? [];
+  if (refs.length === 0) return "";
+  return refs.map((r) => `$${r}`).join("  ");
+});
+
+function onTemplateInput(ev: Event): void {
+  emit("update", { template: (ev.target as HTMLInputElement).value });
+}
 
 const emit = defineEmits<{
   (e: "update", patch: Partial<InjectorRow>): void;
@@ -96,6 +128,10 @@ const hasTemplate = computed(() => {
 });
 
 const summaryTitle = computed(() => {
+  if (isGeneral.value) {
+    if (isEmpty.value) return "Template row — type a variable name to write the composed value into ctx";
+    return `ctx["${props.row.binding}"] ← template "${props.row.template ?? ""}" (composed after socket rows)`;
+  }
   if (isEmpty.value) return `Socket ${props.row.slot_name} has no binding — type a variable name to write the wired value into ctx`;
   if (hasTemplate.value) return `ctx["${props.row.binding}"] ← template "${props.row.template}"`;
   const t = props.valueType ? ` (${props.valueType.toLowerCase()})` : "";
@@ -152,6 +188,7 @@ function onDragEnd(): void {
       'wp-inj-row--drop-before': dropIndicator === 'before',
       'wp-inj-row--drop-after': dropIndicator === 'after',
       'wp-inj-row--has-template': hasTemplate,
+      'wp-inj-row--general': isGeneral,
       'wp-conflict-info': conflictSeverity === 'info',
       'wp-conflict-warning': conflictSeverity === 'warning',
       'wp-conflict-error': conflictSeverity === 'error',
@@ -193,10 +230,17 @@ function onDragEnd(): void {
       </label>
 
       <span class="wp-row-type-icon" aria-hidden="true">
-        <i :class="['pi', typeIcon]" />
+        <i :class="['pi', isGeneral ? 'pi-bolt' : typeIcon]" />
       </span>
 
       <span
+        v-if="isGeneral"
+        class="wp-inj-slot wp-inj-slot--general"
+        title="Template row — composes a value from sockets and socket-row variables; runs after all socket rows and survives disconnects"
+        data-test="inj-row-general-tag"
+      >template</span>
+      <span
+        v-else
         class="wp-inj-slot"
         :title="slotLabel === row.slot_name
           ? `Bound to socket ${row.slot_name}`
@@ -205,7 +249,7 @@ function onDragEnd(): void {
       >{{ slotLabel }}</span>
 
       <span
-        v-if="valueType"
+        v-if="!isGeneral && valueType"
         class="wp-kind-chip"
         data-test="inj-row-type"
       >{{ valueType.toLowerCase() }}</span>
@@ -221,7 +265,7 @@ function onDragEnd(): void {
           class="wp-vbind-input"
           data-test="inj-row-binding"
           :value="row.binding"
-          :aria-label="`binding for ${row.slot_name}`"
+          :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
           placeholder="variable_name"
           spellcheck="false"
           draggable="false"
@@ -259,24 +303,57 @@ function onDragEnd(): void {
           class="wp-btn--icon-sm wp-btn--danger"
           data-test="inj-row-remove"
           draggable="false"
-          title="Disconnect this input wire"
-          :aria-label="`disconnect ${row.slot_name}`"
+          :title="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
+          :aria-label="isGeneral ? 'delete template row' : `disconnect ${row.slot_name}`"
           @click="emit('disconnect')"
         ><i class="pi pi-trash" aria-hidden="true" /></button>
       </div>
     </div>
     <div class="wp-collapse-row" :data-collapsed="row._collapsed ? 'true' : 'false'">
+      <!-- General rows edit their template inline (no socket → no modal).
+           A free-text input + a references hint listing the tokens the
+           user can compose from. -->
+      <div v-if="isGeneral" class="wp-inj-general-edit" draggable="false">
+        <div class="wp-inj-general-tpl-wrap">
+          <span class="wp-inj-general-tpl-icon" aria-hidden="true"><i class="pi pi-code" /></span>
+          <input
+            type="text"
+            class="wp-inj-general-tpl-input"
+            data-test="inj-row-general-template"
+            :value="row.template ?? ''"
+            aria-label="template for this row"
+            :placeholder="generalTemplatePlaceholder"
+            spellcheck="false"
+            draggable="false"
+            @input="onTemplateInput"
+          />
+        </div>
+        <div
+          v-if="generalRefsHint"
+          class="wp-inj-general-refs"
+          data-test="inj-row-general-refs"
+        >
+          <span class="wp-inj-general-refs__label">refs</span>
+          <span class="wp-inj-general-refs__list">{{ generalRefsHint }}</span>
+        </div>
+        <div v-else class="wp-inj-general-refs wp-inj-general-refs--empty" data-test="inj-row-general-refs-empty">
+          Wire a socket or name a row above to compose from <span class="wp-inj-general-refs__list">$refs</span>.
+        </div>
+      </div>
       <div class="wp-summary wp-inj-summary" :title="summaryTitle" data-test="inj-row-summary">
         <span class="wp-summary__main">
           <template v-if="isEmpty"><span class="wp-inj-summary__empty">no binding — type a variable name</span></template>
+          <template v-else-if="isGeneral"><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__template" data-test="inj-row-summary-template">{{ row.template || "(empty template)" }}</span></template>
           <template v-else-if="hasTemplate"><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__template" data-test="inj-row-summary-template">{{ row.template }}</span></template>
           <template v-else><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__slot">{{ row.slot_name }}</span><template v-if="valueType"><span class="wp-inj-summary__type"> ({{ valueType.toLowerCase() }})</span></template></template>
         </span>
         <span
-          v-if="hasTemplate"
+          v-if="hasTemplate || isGeneral"
           class="wp-inj-summary__tpl-badge"
           data-test="inj-row-tpl-badge"
-          title="Template active — engine substitutes $slot_name refs before writing to ctx"
+          :title="isGeneral
+            ? 'Template row — composed after socket rows from sockets + socket-row variables'
+            : 'Template active — engine substitutes $slot_name refs before writing to ctx'"
         >tpl</span>
       </div>
     </div>
@@ -604,4 +681,66 @@ function onDragEnd(): void {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
 }
+
+/* ── General-template rows ──────────────────────────────────────────
+ * Accent left-stripe so a general row reads as distinct from the
+ * type-colored socket rows at a glance. The `template` tag reuses the
+ * slot-chip shape but with an accent tint + the wand icon. */
+.wp-inj-row.wp-inj-row--general { border-left-color: var(--wp-accent); }
+.wp-inj-row.wp-inj-row--general .wp-row-type-icon { color: var(--wp-accent); }
+.wp-inj-slot--general {
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
+}
+
+/* Inline template editor — only general rows render this. A code-tinted
+ * input plus a wrapping row of reference chips below it. */
+.wp-inj-general-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 4px 4px 50px;  /* align under the binding column, matching .wp-inj-summary */
+}
+.wp-inj-general-tpl-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--wp-bg2);
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  padding: 0 6px;
+}
+.wp-inj-general-tpl-wrap:focus-within { border-color: var(--wp-accent); }
+.wp-inj-general-tpl-icon { color: var(--wp-text3); font-size: 10px; display: inline-flex; }
+.wp-inj-general-tpl-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: 500 11px/1.6 var(--wp-font-mono, monospace);
+  color: var(--wp-text);
+  padding: 4px 0;
+}
+.wp-inj-general-tpl-input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); font-style: italic; }
+
+.wp-inj-general-refs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font: 500 9px var(--wp-font-sans);
+  color: var(--wp-text3);
+}
+.wp-inj-general-refs__label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.wp-inj-general-refs__list {
+  font-family: var(--wp-font-mono, monospace);
+  color: var(--wp-accent);
+}
+.wp-inj-general-refs--empty { font-style: italic; }
+.wp-inj-general-refs--empty .wp-inj-general-refs__list { color: var(--wp-text2); }
 </style>

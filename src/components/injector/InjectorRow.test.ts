@@ -285,6 +285,73 @@ describe("InjectorRow — collapse / summary (Phase 5)", () => {
   });
 });
 
+describe("InjectorRow — general (template) row", () => {
+  function generalRow(over: Partial<RowType> = {}): RowType {
+    return makeRow({ kind: "general", slot_name: "", binding: "combo", template: "$input_0 by $test", ...over });
+  }
+
+  it("renders no slot chip — shows a 'template' tag instead", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find('[data-test="inj-row-slot"]').exists()).toBe(false);
+    expect(w.find('[data-test="inj-row-general-tag"]').text()).toBe("template");
+  });
+
+  it("does not render the socket type chip for a general row", () => {
+    const w = mount(InjectorRow, {
+      props: { row: generalRow(), valueType: "STRING" },
+    });
+    expect(w.find('[data-test="inj-row-type"]').exists()).toBe(false);
+  });
+
+  it("renders a binding input and an inline template input", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find<HTMLInputElement>('[data-test="inj-row-binding"]').element.value).toBe("combo");
+    expect(w.find<HTMLInputElement>('[data-test="inj-row-general-template"]').element.value).toBe(
+      "$input_0 by $test",
+    );
+  });
+
+  it("emits update with new template when the template input changes", async () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    await w.find('[data-test="inj-row-general-template"]').setValue("$a, $b");
+    const updates = w.emitted("update")!;
+    const last = updates[updates.length - 1][0] as Partial<RowType>;
+    expect(last.template).toBe("$a, $b");
+  });
+
+  it("surfaces available references from the references prop", () => {
+    const w = mount(InjectorRow, {
+      props: { row: generalRow(), references: ["input_0", "test"] },
+    });
+    const hint = w.find('[data-test="inj-row-general-refs"]').text();
+    expect(hint).toContain("$input_0");
+    expect(hint).toContain("$test");
+  });
+
+  it("shows an empty-refs hint when no references are available", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow({ binding: "" }), references: [] } });
+    expect(w.find('[data-test="inj-row-general-refs-empty"]').exists()).toBe(true);
+  });
+
+  it("summary shows the template and the tpl badge", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find('[data-test="inj-row-summary-template"]').text()).toBe("$input_0 by $test");
+    expect(w.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(true);
+  });
+
+  it("trash button reads as Delete (not Disconnect) for a general row", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find('[data-test="inj-row-remove"]').attributes("title")).toBe(
+      "Delete this template row",
+    );
+  });
+
+  it("carries the wp-inj-row--general modifier class", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find(".wp-inj-row").classes()).toContain("wp-inj-row--general");
+  });
+});
+
 describe("InjectorRow — slot tag (Phase C.1a)", () => {
   it("renders .wp-inj-slot containing the row.slot_name when no displayLabel", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ slot_name: "input_2" }) } });

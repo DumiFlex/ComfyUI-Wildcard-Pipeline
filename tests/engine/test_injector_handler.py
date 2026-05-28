@@ -177,18 +177,24 @@ def test_template_substitutes_self_slot_value():
     assert out.values[0].context["phrase"] == "i love puppies"
 
 
-def test_template_substitutes_cross_slot_value():
+def test_socket_row_template_only_substitutes_own_slot():
+    # Two-tier model: a SOCKET row's template may reference ONLY its own
+    # socket. A `$input_0` ref from the row bound to input_1 is out of
+    # scope and stays literal — rows resolve top-to-bottom, so an early
+    # row must not read a later socket. (Use a GENERAL row to compose
+    # across sockets.)
     rows = json.dumps({
         "version": 1,
         "rows": [
             _row("input_0", "raw_name"),
-            _row_with_template("input_1", "greeting", "hello $input_0!"),
+            _row_with_template("input_1", "greeting", "hello $input_0 / $input_1"),
         ],
     })
     out = WPContextInjector.execute(
-        rows=rows, upstream=None, input_0="Alice", input_1="ignored"
+        rows=rows, upstream=None, input_0="Alice", input_1="Bob"
     )
-    assert out.values[0].context["greeting"] == "hello Alice!"
+    # Only $input_1 (own slot) resolved; $input_0 left literal.
+    assert out.values[0].context["greeting"] == "hello $input_0 / Bob"
 
 
 def test_template_unknown_ref_left_literal():
@@ -209,19 +215,16 @@ def test_template_double_dollar_escapes_to_literal():
     assert out.values[0].context["phrase"] == "$5.00 paid by Bob"
 
 
-def test_template_with_unwired_self_slot_still_renders_when_template_uses_others():
-    # Self-slot disconnected, but template only references another wired
-    # slot. Engine should NOT skip the row — template path bypasses the
-    # "self slot must be wired" gate the pass-through path enforces.
+def test_socket_row_template_renders_even_when_own_slot_unwired():
+    # A socket row's template path does NOT require its own slot to be
+    # wired — the row still renders. The own-slot ref resolves to empty
+    # (`slot_values.get(slot_name, "")`) when unwired.
     rows = json.dumps({
         "version": 1,
-        "rows": [
-            _row("input_0", "name"),
-            _row_with_template("input_1", "shout", "$input_0 IS HERE"),
-        ],
+        "rows": [_row_with_template("input_1", "shout", "[$input_1] IS HERE")],
     })
-    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="Eve")
-    assert out.values[0].context["shout"] == "Eve IS HERE"
+    out = WPContextInjector.execute(rows=rows, upstream=None)
+    assert out.values[0].context["shout"] == "[] IS HERE"
 
 
 def test_template_empty_or_whitespace_falls_back_to_pass_through():
@@ -284,3 +287,144 @@ def test_trace_carries_written_value_for_debug_viewer():
     by_binding = {t.get("binding"): t for t in trace}
     assert by_binding["a"]["value"] == "alpha"
     assert by_binding["b"]["value"] == "42 boom"
+
+
+# ─── General-template rows (two-tier row model) ──────────────────────────────
+
+
+def _general_row(
+    binding: str, template: str | None, enabled: bool = True, internal: bool = False
+) -> dict:
+    return {
+        "_uid": f"gen_{binding}",
+        "kind": "general",
+        "binding": binding,
+        "template": template,
+        "enabled": enabled,
+        "internal": internal,
+    }
+
+
+def test_general_row_resolves_against_sockets_and_socket_row_bindings():
+    # Socket row input_0 has a template bound to $test; a general row
+    # composes from BOTH $test (a socket-row output) AND $input_0 (the
+    # raw socket). This is the worked example from the spec.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row_with_template("input_0", "test", "i love $input_0"),
+            _general_row("combo", "$test, also $input_0"),
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="puppies")
+    assert out.values[0].context["test"] == "i love puppies"
+    assert out.values[0].context["combo"] == "i love puppies, also puppies"
+
+
+def test_general_row_runs_after_all_socket_rows():
+    # Even though the general row is listed FIRST in the array, it
+    # resolves AFTER the socket rows so it can read their bindings.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _general_row("combo", "$a + $b"),
+            _row("input_0", "a"),
+            _row("input_1", "b"),
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="X", input_1="Y")
+    assert out.values[0].context["combo"] == "X + Y"
+
+
+def test_general_row_reads_earlier_general_row_binding():
+    # General rows resolve in order, so a later general row can read an
+    # earlier general row's binding.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_0", "base"),
+            _general_row("first", "$base!"),
+            _general_row("second", "$first?"),
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="hi")
+    assert out.values[0].context["first"] == "hi!"
+    assert out.values[0].context["second"] == "hi!?"
+
+
+def test_general_row_survives_socket_disconnect_via_raw_ref():
+    # A general row referencing a socket whose wire is gone resolves the
+    # missing socket to empty (it's not in slot_values), but the row
+    # still produces a value — durability of the general row.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_general_row("note", "prefix=[$input_0]")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None)
+    # $input_0 not wired → out of scope → left literal.
+    assert out.values[0].context["note"] == "prefix=[$input_0]"
+
+
+def test_general_row_needs_binding_and_template():
+    # A general row with no binding, or no template, writes nothing.
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _general_row("", "$input_0"),       # missing binding
+            _general_row("only_binding", ""),     # missing template
+            _general_row("only_binding2", None),  # null template
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x")
+    assert out.values[0].context == {}
+
+
+def test_general_row_honors_internal_flag():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_0", "shown"),
+            _general_row("secret", "$input_0-derived", internal=True),
+        ],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="v")
+    assert out.values[0].context["secret"] == "v-derived"
+    flags = out.values[0].internals.get("__wp_internal_flags__", {})
+    assert flags.get("secret") is True
+    assert "shown" not in flags
+
+
+def test_general_row_disabled_skipped():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_general_row("nope", "$input_0", enabled=False)],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x")
+    assert "nope" not in out.values[0].context
+
+
+def test_general_row_reserved_binding_warns():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_general_row("_reserved", "$input_0")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=None, input_0="x")
+    assert out.values[0].context == {}
+    warnings = out.values[0].debug.get("__wp_warnings__", [])
+    assert any(w.get("type") == "injector_reserved_binding" for w in warnings)
+
+
+def test_general_row_does_not_leak_internal_ctx_keys_into_template_scope():
+    # Internal bookkeeping keys (`__wp_*`) carried from upstream must NOT
+    # be exposed as `$__wp_...` refs in a general row's merged scope.
+    upstream = ContextPayload(
+        context={"existing": "up", "__wp_internal_keys__": ["existing"]},
+        debug={},
+        internals={},
+    )
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_general_row("combo", "$existing")],
+    })
+    out = WPContextInjector.execute(rows=rows, upstream=upstream, input_0="x")
+    assert out.values[0].context["combo"] == "up"

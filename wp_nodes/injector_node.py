@@ -116,14 +116,37 @@ class WPContextInjector(io.ComfyNode):
             internal_keys.update(existing_internal)
 
         rows_list = parsed.get("rows", []) if isinstance(parsed, dict) else []
-        for row in rows_list:
-            if not isinstance(row, dict):
-                continue
-            if not row.get("enabled", False):
-                continue
+
+        def _emit_trace(
+            binding_name: str, stored_val: Any, trace_kind: str, is_internal: bool
+        ) -> None:
+            # `value` surfaces the written ctx value in Debug's trace
+            # tab. Engine module traces use `writes: [{...}]` for the
+            # same purpose; injector trace stays flat (single-write per
+            # row) so a top-level `value` keeps the shape minimal while
+            # giving Debug something to render. Stringified to keep the
+            # JSON shape stable across primitive types — Debug formats
+            # further.
+            value = (
+                stored_val
+                if isinstance(stored_val, (str, int, float, bool))
+                else str(stored_val)
+            )
+            traces.append({
+                "node": "WP_ContextInjector",
+                "binding": binding_name,
+                "internal": is_internal,
+                "type": trace_kind,
+                "value": value,
+            })
+
+        def _validated_binding(row: dict) -> str | None:
+            """Shared binding validation for both row kinds. Returns the
+            stripped binding, or None when the row should be skipped
+            (appending a warning for reserved / invalid names)."""
             binding = row.get("binding", "")
             if not isinstance(binding, str) or not binding.strip():
-                continue
+                return None
             stripped = binding.strip()
             if stripped.startswith("_"):
                 warnings.append({
@@ -131,13 +154,42 @@ class WPContextInjector(io.ComfyNode):
                     "binding": stripped,
                     "row_uid": row.get("_uid"),
                 })
-                continue
+                return None
             if not _BINDING_RE.match(stripped):
                 warnings.append({
                     "type": "injector_invalid_binding",
                     "binding": stripped,
                     "row_uid": row.get("_uid"),
                 })
+                return None
+            return stripped
+
+        # Two-tier row model:
+        #   - SOCKET rows (kind absent / "socket"): bind one wired socket
+        #     to a $variable. An optional template substitutes ONLY the
+        #     row's OWN `$input_N` — rows resolve top-to-bottom, so an
+        #     early row must not read a later socket's value.
+        #   - GENERAL rows (kind "general"): durable, not tied to a
+        #     socket. Survives socket disconnect/reconnect. Resolved
+        #     AFTER all socket rows so its template can reference BOTH the
+        #     raw sockets (`$input_N`) AND the variables produced by the
+        #     socket rows (`$test`).
+        socket_rows: list[dict] = []
+        general_rows: list[dict] = []
+        for row in rows_list:
+            if not isinstance(row, dict):
+                continue
+            if row.get("kind") == "general":
+                general_rows.append(row)
+            else:
+                socket_rows.append(row)
+
+        # ── Pass 1: socket rows (existing order) ──────────────────────
+        for row in socket_rows:
+            if not row.get("enabled", False):
+                continue
+            stripped = _validated_binding(row)
+            if stripped is None:
                 continue
             slot_name = row.get("slot_name", "")
             template_raw = row.get("template", None)
@@ -162,29 +214,57 @@ class WPContextInjector(io.ComfyNode):
                 trace_type = type(value).__name__
             else:
                 # Template path: render `$<slot_name>` substitutions
-                # against ALL wired sockets (not just this row's). Result
-                # is always a string. The row's own slot does NOT need
-                # to be wired in this case — the template might only
-                # reference other rows' sockets.
-                stored = _render_template(template_str, slot_values)
+                # against ONLY this row's OWN socket. Other `$input_M`
+                # refs are out of scope (left as literal `$input_M`, same
+                # as any unknown ref) — top-to-bottom resolution means an
+                # early socket row must not read a later socket. To
+                # compose multiple sockets, use a GENERAL row instead.
+                own_slot: dict[str, Any] = (
+                    {slot_name: slot_values.get(slot_name, "")}
+                    if isinstance(slot_name, str)
+                    else {}
+                )
+                stored = _render_template(template_str, own_slot)
                 trace_type = "str(template)"
             ctx[stripped] = stored
-            if row.get("internal", False):
+            is_internal = bool(row.get("internal", False))
+            if is_internal:
                 internal_keys.add(stripped)
-            traces.append({
-                "node": "WP_ContextInjector",
-                "binding": stripped,
-                "internal": bool(row.get("internal", False)),
-                "type": trace_type,
-                # `value` surfaces the written ctx value in Debug's
-                # trace tab. Engine module traces use `writes: [{...}]`
-                # for the same purpose; injector trace stays flat
-                # (single-write per row) so a top-level `value` keeps
-                # the shape minimal while giving Debug something to
-                # render. Stringified to keep the JSON shape stable
-                # across primitive types — Debug formats further.
-                "value": str(stored) if not isinstance(stored, (str, int, float, bool)) else stored,
-            })
+            _emit_trace(stripped, stored, trace_type, is_internal)
+
+        # ── Pass 2: general rows (in order, after all socket rows) ────
+        # A general row resolves its template against `merged`: every
+        # non-`__`-prefixed ctx var written so far (socket-row bindings +
+        # any earlier general-row binding) overlaid with the raw sockets.
+        # So `$test` (a socket-row output) AND `$input_0` (a raw socket)
+        # both resolve. Processing in order lets a later general row read
+        # an earlier general row's binding.
+        for row in general_rows:
+            if not row.get("enabled", False):
+                continue
+            stripped = _validated_binding(row)
+            if stripped is None:
+                continue
+            template_raw = row.get("template", None)
+            template_str = (
+                template_raw.strip()
+                if isinstance(template_raw, str) and template_raw.strip()
+                else ""
+            )
+            # A general row has no socket — it needs a non-empty template
+            # to produce anything. Skip otherwise.
+            if not template_str:
+                continue
+            merged: dict[str, Any] = {
+                k: v for k, v in ctx.items() if not k.startswith("__")
+            }
+            merged.update(slot_values)
+            stored = _render_template(template_str, merged)
+            ctx[stripped] = stored
+            is_internal = bool(row.get("internal", False))
+            if is_internal:
+                internal_keys.add(stripped)
+            _emit_trace(stripped, stored, "str(template)", is_internal)
 
         if internal_keys:
             ctx["__wp_internal_keys__"] = sorted(internal_keys)

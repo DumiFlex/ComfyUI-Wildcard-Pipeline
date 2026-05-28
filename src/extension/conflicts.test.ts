@@ -54,6 +54,39 @@ describe("scanInjectorConflicts", () => {
     };
     expect(scanInjectorConflicts(value, ["input_0", "input_1"])).toEqual([]);
   });
+
+  it("does NOT flag a freshly-added general row (no binding, no template)", () => {
+    // A blank general row is the just-added state — flagging it
+    // immediately is noise. Only flag once it has a template.
+    const value: InjectorRowsValue = {
+      version: 1,
+      rows: [injRow({ _uid: "g", kind: "general", slot_name: "", binding: "", template: "" })],
+    };
+    expect(scanInjectorConflicts(value, [])).toEqual([]);
+  });
+
+  it("flags a general row that has a template but no binding", () => {
+    const value: InjectorRowsValue = {
+      version: 1,
+      rows: [injRow({ _uid: "g", kind: "general", slot_name: "", binding: "", template: "$input_0" })],
+    };
+    const out = scanInjectorConflicts(value, []);
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("injector_binding_missing");
+    expect(out[0].variable).toBe("template row");
+  });
+
+  it("flags a general binding that duplicates a socket-row binding", () => {
+    const value: InjectorRowsValue = {
+      version: 1,
+      rows: [
+        injRow({ _uid: "a", slot_name: "input_0", binding: "foo" }),
+        injRow({ _uid: "g", kind: "general", slot_name: "", binding: "foo", template: "$input_0!" }),
+      ],
+    };
+    const out = scanInjectorConflicts(value, ["input_0"]);
+    expect(out.find((c) => c.type === "duplicate_variable")?.variable).toBe("foo");
+  });
 });
 
 const mod = (id: string, vars: string[]): ContextWidgetValue["modules"][number] => ({

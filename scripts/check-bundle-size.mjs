@@ -107,7 +107,15 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // build:extension) only — NOT the manager SPA (`web_dist/`). The 2026-05-27
 // Documentation tab lives entirely in src/manager → web_dist, so it does
 // not affect this budget; no bump was needed for it.
-const TOTAL_LIMIT = 385 * 1024;     // 385 KB
+// Bumped 385 -> 387 KB on 2026-05-28 for the injector two-tier row model.
+// Adds the durable general-template row to the InjectorWidget lazy chunk:
+// the inline binding+template editor + refs hint in InjectorRow.vue, the
+// `kind` discriminator + addGeneralRow + general-aware reconcile in
+// InjectorWidget.vue, and the general-row branch in the conflict scanner.
+// ~1.5 KB net gzip in the lazy InjectorWidget chunk (baseline was already
+// at 393968/394240 — only 272 B free — so the bump is required); entry
+// stays put.
+const TOTAL_LIMIT = 387 * 1024;     // 387 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
