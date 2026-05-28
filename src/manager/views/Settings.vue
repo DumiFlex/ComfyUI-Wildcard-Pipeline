@@ -16,6 +16,12 @@ import { GITHUB_REPO } from "../config/links";
 const uiStore = useUiStore();
 
 const repoUrl = GITHUB_REPO;
+// Build-time injected via vite `define` (see vite.config.mts) — source
+// of truth is package.json, which semantic-release stamps on every
+// release. Keeps the About card from drifting from the published
+// version (we shipped 1.7.0 with `1.4.x-dev` hardcoded here pre-fix).
+const appVersion = __APP_VERSION__;
+const appLicense = __APP_LICENSE__;
 
 interface ThemeOption { value: ThemeMode; label: string; icon: string }
 const THEMES: ThemeOption[] = [
@@ -57,8 +63,8 @@ function resetPreferences() {
 
     <Card title="About">
       <div class="wp-settings__about">
-        <span class="wp-dim">Version</span><span class="wp-mono">1.4.x-dev</span>
-        <span class="wp-dim">License</span><span class="wp-mono">GPL-3.0-or-later</span>
+        <span class="wp-dim">Version</span><span class="wp-mono">{{ appVersion }}</span>
+        <span class="wp-dim">License</span><span class="wp-mono">{{ appLicense }}</span>
         <span class="wp-dim">Repository</span>
         <a
           class="wp-settings__link wp-mono"

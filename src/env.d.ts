@@ -20,8 +20,10 @@ declare module "/scripts/ui/components/button.js";
 declare module "/scripts/ui/components/buttonGroup.js";
 
 // Build-time constants. `vite.config.mts` injects these via
-// `define: { __APP_VERSION__: ... }` so AppTopbar.vue + the release
-// check composable can read the current package.json version without
+// `define: { __APP_VERSION__: ..., __APP_LICENSE__: ... }` so
+// AppTopbar.vue, the release check composable, and the Settings
+// About card can read the current package.json fields without
 // importing the JSON file (which would pull the whole manifest into
 // the bundle).
 declare const __APP_VERSION__: string;
+declare const __APP_LICENSE__: string;

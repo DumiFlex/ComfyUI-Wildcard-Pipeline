@@ -4,15 +4,19 @@ import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 import { resolve } from "node:path";
 import { copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 
-// Inject package.json `version` into the bundle as `__APP_VERSION__`.
-// AppTopbar.vue + any other surface that wants the current app version
-// reads this constant instead of duplicating the string. Source of
-// truth: package.json. Semantic-release writes back to that field on
-// every release, so the SPA's displayed version follows automatically.
+// Inject package.json `version` + `license` into the bundle as
+// `__APP_VERSION__` + `__APP_LICENSE__`. AppTopbar.vue, the release
+// check composable, and the Settings About card read these constants
+// instead of duplicating strings. Source of truth: package.json.
+// Semantic-release writes back to `version` on every release, so the
+// SPA's displayed version follows automatically. License is stamped
+// once at publish time and stays in sync with pyproject.toml.
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")) as {
   version: string;
+  license: string;
 };
 const APP_VERSION = pkg.version;
+const APP_LICENSE = pkg.license;
 
 // Two build targets controlled by --mode flag:
 //   pnpm build:extension → js/main.js  (ComfyUI web extension, critical-path bundle)
@@ -32,6 +36,7 @@ export default defineConfig(({ mode }) => {
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
       __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __APP_LICENSE__: JSON.stringify(APP_LICENSE),
     },
     // PostCSS config moved to `config/postcss.config.js` — Vite no
     // longer auto-discovers it from the project root, so point at it
