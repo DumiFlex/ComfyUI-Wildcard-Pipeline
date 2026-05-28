@@ -1,3 +1,24 @@
+## 🎉 Wildcard Pipeline 2.0.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* ci: re-fire release after v1.8.0 tag re-anchor ([7ababca](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/7ababca))
+* ci: re-trigger release workflow after E2BIG fix ([1287556](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/1287556))
+* fix(release): drop nextRelease.notes from git commit message to avoid E2BIG ([ea90f97](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/ea90f97))
+* fix(spa): inject version + license at build time so About card stays in sync ([6f94bc5](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/6f94bc5))
+* feat!: cut v2.0.0 — modular procedural prompt pipeline general availability ([64aa7d5](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/64aa7d5))
+* chore: pre-push audit cleanup — webmanifest, web_dist drift, dead TypePill ([b8c0387](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/b8c0387))
+* chore: tidy ComfyUI-Wildcard-Pipeline name in LICENSE + links comment ([4adb5b9](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/4adb5b9))
+* feat(github): publish workflow + issue/PR templates + release-zip + cleaner notes ([9b91012](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/9b91012))
+* feat(registry): comfyignore + 21:9 banner + includes + collapsed changelog header ([730721f](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/730721f))
+* docs(readme): rewrite with svg flow banners + comfyui manager install path ([892479a](https://github.com/DumiFlex/ComfyUI-WildcardPipeline/commit/892479a))
+
+</details>
+
 # [1.7.0](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/compare/v1.6.0...v1.7.0) (2026-04-29)
 
 
