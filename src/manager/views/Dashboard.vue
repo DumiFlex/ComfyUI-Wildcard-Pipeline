@@ -478,12 +478,12 @@ onMounted(refresh);
           <Icon name="pi-compass" />
           <div>
             <h3 class="dashboard__start-title">New here?</h3>
-            <p class="dashboard__start-sub">Build your first prompt pipeline in a couple of minutes. The Quick start walks you through every step — and creates a starter wildcard for you, so there's something to run right away.</p>
+            <p class="dashboard__start-sub">Start with the introduction — it shows how the pieces fit together. From there, the Quick start gets you a runnable graph in a couple of minutes.</p>
           </div>
         </div>
         <div class="dashboard__start-cta">
-          <Button variant="primary" icon="pi-play" @click="router.push('/docs/quick-start')">Open the Quick start</Button>
-          <Button variant="outline" icon="pi-book" @click="router.push('/docs')">Browse all docs</Button>
+          <Button variant="primary" icon="pi-compass" @click="router.push('/docs/introduction')">Read the introduction</Button>
+          <Button variant="outline" icon="pi-play" @click="router.push('/docs/quick-start')">Quick start</Button>
         </div>
       </template>
     </Card>

@@ -261,6 +261,7 @@ function addRow(slotName: string): void {
         binding: "",
         enabled: true,
         internal: false,
+        _collapsed: true,
       },
     ],
   };
@@ -305,6 +306,7 @@ watch(
           binding: "",
           enabled: true,
           internal: false,
+          _collapsed: true,
         })),
       // Always order rows by slot index so the visual list matches
       // the socket pin order on the node body, regardless of when

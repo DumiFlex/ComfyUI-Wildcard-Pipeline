@@ -95,6 +95,15 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
       />
     </DocSection>
 
+    <DocSection title="Good to know">
+      <DocCallout variant="tip">
+        Right-click is your friend. Most WP nodes — and the rows inside their widgets — carry a
+        context menu: push a module to the library, sync a drifted one, bypass, duplicate, and
+        more. If something looks interactive, try right-clicking it too; a lot of the handy stuff
+        is tucked in there.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Where to next">
       <CrossLinks
         :links="[
