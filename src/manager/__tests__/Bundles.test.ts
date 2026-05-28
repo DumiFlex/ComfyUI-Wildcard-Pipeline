@@ -97,7 +97,7 @@ describe("Bundles.vue", () => {
     expect(wrap.text()).toContain("Context");
   });
 
-  it("renders default frame color when row.color is null", async () => {
+  it("renders default frame color via the --wp-bundle-default token when row.color is null", async () => {
     apiBundles.list.mockResolvedValue({
       items: [{
         id: "bn_x", name: "Default", description: "", color: null, category_id: null,
@@ -110,10 +110,13 @@ describe("Bundles.vue", () => {
     await flushPromises();
     const swatch = wrap.find(".wp-bundle-swatch");
     expect(swatch.exists()).toBe(true);
-    // jsdom resolves rgb(...) for the inline-style background.
-    // Indigo (#6366f1) — matches `--wp-bundle-default` so the list
-    // swatch reads identically to the canvas frame for default-color
-    // bundles.
-    expect(swatch.attributes("style") ?? "").toMatch(/#6366f1|rgb\(99,\s*102,\s*241\)/i);
+    // Routes through `--wp-bundle-default` (slate per tokens.css) instead
+    // of a hardcoded indigo literal so the list swatch, the canvas frame,
+    // the Dashboard swatch, and the editor picker all stay in sync via
+    // the token. The fallback hex `#334155` is the dark-theme value so
+    // jsdom (no theme applied) reads the literal.
+    expect(swatch.attributes("style") ?? "").toMatch(
+      /var\(--wp-bundle-default,\s*#334155\)|rgb\(51,\s*65,\s*85\)/i,
+    );
   });
 });

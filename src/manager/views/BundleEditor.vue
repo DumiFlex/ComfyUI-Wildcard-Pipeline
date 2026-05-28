@@ -121,15 +121,27 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
 
 const addModalOpen = ref(false);
 
-/** Default bundle frame color when user hasn't picked one. Mirrors the
- *  `--wp-bundle-default` token + ContextWidget fallback so the SPA
- *  editor preview matches the canvas frame at rest. Previously
- *  `#46566B` (slate gray) which diverged from the canvas indigo —
- *  users saw gray in the SPA but indigo on the canvas, because the
- *  canvas fell back to `--wp-bundle-default` (#6366f1) when the
- *  stored color was null. Aligning both ends on indigo-500 keeps
- *  "no color picked" looking identical across surfaces. */
-const DEFAULT_COLOR = "#6366f1";
+/** Default bundle frame color when user hasn't picked one. Resolved
+ *  at mount from the `--wp-bundle-default` CSS token (see
+ *  `tokens.css`), with a slate-700 hard fallback for unit-test envs
+ *  where `getComputedStyle` returns "". This keeps the editor picker,
+ *  the Bundles list swatch, the Dashboard swatch, and the canvas
+ *  frame all paint the same colour for "no explicit colour", and
+ *  retheming is a one-line token change.
+ *
+ *  Previous version hardcoded `#6366f1` (indigo) which diverged from
+ *  the slate token the canvas + dashboard actually paint with — list
+ *  showed slate, picker showed indigo, neither agreed with the user
+ *  intent the comment claimed. */
+const DEFAULT_COLOR_FALLBACK = "#334155";
+const defaultColor = ref<string>(DEFAULT_COLOR_FALLBACK);
+
+function resolveDefaultColor(): void {
+  const v = getComputedStyle(document.documentElement)
+    .getPropertyValue("--wp-bundle-default")
+    .trim();
+  if (v) defaultColor.value = v;
+}
 
 const COLOR_PRESETS = [
   "#6366f1", "#7c3aed", "#a78bfa", "#22d3ee", "#34d399",
@@ -156,7 +168,7 @@ const original = ref<BundleRow | null>(null);
 
 const name = ref("");
 const description = ref("");
-const color = ref<string>(DEFAULT_COLOR);
+const color = ref<string>(defaultColor.value);
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 
@@ -315,6 +327,19 @@ const childrenSubtitle = computed<string>(() => {
 });
 
 onMounted(async () => {
+  // Pull the bundle-default token from CSS so the picker shows the
+  // same colour the canvas + Dashboard + Bundles list paint when the
+  // row carries no explicit colour. Must run before the `color.value =
+  // row.color || defaultColor.value` line below so a freshly-loaded row
+  // with NULL colour shows the token-derived swatch, not the hardcoded
+  // fallback.
+  resolveDefaultColor();
+  // Refresh the editor's local `color` ref if it's still on the
+  // pre-resolve fallback — covers the "create new bundle" path where
+  // the ref initialised before the token was readable.
+  if (color.value === DEFAULT_COLOR_FALLBACK) {
+    color.value = defaultColor.value;
+  }
   await categoryStore.fetchAll();
   // Catalog loads power the add-child library picker AND
   // ConstraintMatrixSection's sub-category lookups inside the pane.
@@ -335,7 +360,7 @@ onMounted(async () => {
     original.value = row;
     name.value = row.name;
     description.value = row.description ?? "";
-    color.value = row.color || DEFAULT_COLOR;
+    color.value = row.color || defaultColor.value;
     categoryId.value = row.category_id;
     tags.value = [...(row.tags ?? [])];
     children.value = Array.isArray(row.children)
@@ -377,7 +402,11 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    const colorOut = color.value === DEFAULT_COLOR ? null : color.value;
+    // Normalise "still at the resolved default" back to NULL so the
+    // server stores "no explicit colour" instead of pinning the row to
+    // the current token value (which would freeze the colour across
+    // theme switches + future token retunes).
+    const colorOut = color.value === defaultColor.value ? null : color.value;
     const updated = await store.update(props.id, {
       name: name.value.trim(),
       description: description.value,
