@@ -105,6 +105,53 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   }
   host.appendChild(inner);
 
+  // ---------------------------------------------------------------
+  // Clipboard-shortcut shield.
+  //
+  // ComfyUI's canvas binds Ctrl+A / Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+Z /
+  // Ctrl+Y at the document level. When a user types in any input inside
+  // a custom DOM widget, those keystrokes bubble up to the document
+  // handler — which runs node-level paste / copy / select-all instead
+  // of the input-level action. Symptom from the field: pasting into a
+  // combine module's template input spawned a brand-new WP_Context node
+  // from a previously-copied node clipboard payload.
+  //
+  // Fix: stop the event from bubbling OUT of the widget host when the
+  // focused target is an editable element. We use the bubble phase
+  // (not capture) so the native input handler still receives + acts on
+  // the keystroke. Then `stopPropagation` blocks it from reaching the
+  // canvas / document handlers above us. `preventDefault` is NEVER
+  // called — the input handles paste/copy/cut natively as the user
+  // expects. Single point of fix benefits every WP custom widget that
+  // mounts via this helper (Context, ContextLoop, SeedList, Injector,
+  // Debug, Cleaner, VarPicker, Assembler helper) without per-widget
+  // boilerplate.
+  function isEditableTarget(t: EventTarget | null): boolean {
+    if (!(t instanceof HTMLElement)) return false;
+    if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return true;
+    return t.isContentEditable === true;
+  }
+  function shieldKeydown(e: KeyboardEvent): void {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k !== "a" && k !== "c" && k !== "v" && k !== "x" && k !== "z" && k !== "y") return;
+    if (!isEditableTarget(e.target)) return;
+    e.stopPropagation();
+  }
+  function shieldClipboard(e: ClipboardEvent): void {
+    if (!isEditableTarget(e.target)) return;
+    e.stopPropagation();
+  }
+  // Attach to `inner` (the Vue mount target) — that's where the actual
+  // input elements live. Bubble path is: input → inner (this listener)
+  // → host → parent (canvas/document). Catching at `inner` is one hop
+  // closer than `host` and matches what `element` returns from this
+  // helper so unit tests can drive the same surface.
+  inner.addEventListener("keydown", shieldKeydown);
+  inner.addEventListener("copy", shieldClipboard);
+  inner.addEventListener("cut", shieldClipboard);
+  inner.addEventListener("paste", shieldClipboard);
+
   let state = options.initialValue ?? "";
   // baseMin pre-snapped so the initial `getMinHeight` answer + every
   // subsequent floor enforcement land on the LiteGraph grid. Without
@@ -824,12 +871,27 @@ export interface InjectorRowsValue {
   rows: InjectorRow[];
 }
 
+/** Row kind discriminator for the two-tier injector model.
+ *   - `"socket"` (default / absent): auto-created per connected
+ *     `input_N` socket. Binds one socket to a `$variable`; its optional
+ *     template substitutes ONLY its OWN `$input_N`. Reconciled to live
+ *     connections — removed when its socket is severed.
+ *   - `"general"`: user-added, durable. NOT tied to a socket; survives
+ *     socket disconnect/reconnect. Has a free template resolved AFTER
+ *     all socket rows, referencing both raw sockets (`$input_N`) and the
+ *     variables produced by socket rows (`$test`). */
+export type InjectorRowKind = "socket" | "general";
+
 export interface InjectorRow {
   /** Stable per-row UID for v-for keying. Independent of slot reorder. */
   _uid: string;
+  /** Row kind. Absent = `"socket"` (backward compat with workflows saved
+   *  before the two-tier model). */
+  kind?: InjectorRowKind;
   /** ComfyUI input slot name this row binds to (e.g. "input_0").
    *  Engine reads slot by NAME, not index, so reordering rows in the
-   *  widget doesn't break value lookup at execute time. */
+   *  widget doesn't break value lookup at execute time. General rows
+   *  carry an empty string here — they aren't tied to a socket. */
   slot_name: string;
   /** Variable name written to ctx. Empty = unset; row renders with
    *  warn-color placeholder until user types a name. */
@@ -845,22 +907,40 @@ export interface InjectorRow {
    *  stable. Persists in the widget JSON via the same `change` emit
    *  the other field updates use. */
   _collapsed?: boolean;
-  /** Optional binding template — when set + non-empty, the engine
-   *  writes the substituted template into ctx[binding] instead of the
-   *  raw socket value. Supports `$<slot_name>` refs to other rows'
-   *  sockets in the same injector (e.g. `"i love $input_0"`). Empty /
-   *  null = pass-through (legacy behavior: ctx[binding] = raw socket
-   *  value). The InjectorBindingModal manages this field; row chrome
-   *  surfaces a small badge when a template is active so users see at
-   *  a glance which rows transform their values. Engine plumbing lives
-   *  in wp_nodes/injector_node.py — when this field is set, the engine
-   *  substitutes `$<slot_name>` tokens with the live socket value at
-   *  each referenced slot before writing to ctx. */
+  /** Optional binding template. Scope depends on `kind`:
+   *   - SOCKET row: when set + non-empty, the engine writes the
+   *     substituted template into ctx[binding] instead of the raw
+   *     socket value. Substitutes ONLY this row's OWN `$<slot_name>`
+   *     (e.g. `"i love $input_0"` on the input_0 row). Other sockets are
+   *     out of scope — rows resolve top-to-bottom. Empty / null =
+   *     pass-through (ctx[binding] = raw socket value).
+   *   - GENERAL row: REQUIRED. Resolved after all socket rows against
+   *     both the raw sockets (`$input_N`) AND the variables produced by
+   *     socket rows (e.g. `$test`). Empty = the row produces nothing.
+   *  The InjectorBindingModal manages this field for socket rows; the
+   *  inline row template input manages it for general rows. Engine
+   *  plumbing lives in wp_nodes/injector_node.py. */
   template?: string | null;
 }
 
 export function emptyInjectorRowsValue(): InjectorRowsValue {
   return { version: 1, rows: [] };
+}
+
+/** Build a fresh general-template row: no slot, empty binding + template,
+ *  enabled, collapsed by default. Durable — not reconciled against
+ *  connected sockets. */
+export function newGeneralInjectorRow(): InjectorRow {
+  return {
+    _uid: newRowUid(),
+    kind: "general",
+    slot_name: "",
+    binding: "",
+    template: "",
+    enabled: true,
+    internal: false,
+    _collapsed: true,
+  };
 }
 
 export function newModuleId(): string {

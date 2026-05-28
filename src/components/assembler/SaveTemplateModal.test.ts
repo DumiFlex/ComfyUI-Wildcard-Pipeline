@@ -52,6 +52,20 @@ describe("SaveTemplateModal", () => {
     expect(w.emitted("saved")).toBeTruthy();
   });
 
+  it("pushes a success toast on save", async () => {
+    const { toasts } = await import("../shared/toast-store");
+    const before = toasts.value.length;
+    const w = mount(SaveTemplateModal, { props: { open: true, templateString: "$a" }, ...stubs });
+    await flushPromises();
+    const input = w.find<HTMLInputElement>('[data-test="save-tpl-name"]');
+    input.element.value = "fresh";
+    await input.trigger("input");
+    await w.find('[data-test="save-tpl-submit"]').trigger("click");
+    await flushPromises();
+    const pushed = toasts.value.slice(before);
+    expect(pushed.some((t) => t.severity === "success" && t.message.includes("fresh"))).toBe(true);
+  });
+
   it("pre-fills name from loadedRef + Update targets its id", async () => {
     const w = mount(SaveTemplateModal, {
       props: { open: true, templateString: "$a", loadedRef: { id: "L1", name: "myloaded" } },

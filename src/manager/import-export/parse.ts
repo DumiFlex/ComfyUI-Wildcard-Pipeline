@@ -13,7 +13,7 @@
 import { migratePayload, type RawPayload } from "./migrations";
 import { moduleFingerprint, type ModuleRow } from "./fingerprint";
 
-export type WarningField = "bundle" | "wildcard" | "fixed_value" | "combine" | "derivation" | "constraint" | "category";
+export type WarningField = "bundle" | "wildcard" | "fixed_value" | "combine" | "derivation" | "constraint" | "category" | "template";
 
 export interface IntegrityWarning {
   /** Short UUID of the entity (the `id` field of the entity row, per
@@ -52,6 +52,7 @@ const PLURAL_TO_SINGULAR: Record<string, WarningField> = {
   derivations: "derivation",
   constraints: "constraint",
   categories: "category",
+  templates: "template",
 };
 
 function verifyOne(entity: Record<string, unknown>, kind: WarningField): IntegrityWarning | null {
@@ -64,6 +65,10 @@ function verifyOne(entity: Record<string, unknown>, kind: WarningField): Integri
   // Categories are organizational metadata (name-based merge-or-create).
   // They carry no snapshot_fingerprint, so fingerprint verification is N/A.
   if (kind === "category") return null;
+  // Templates carry no snapshot_fingerprint either (they can't drift —
+  // loading copies the string with no stored back-reference), so they're
+  // out of scope for this module-fingerprint verify pass.
+  if (kind === "template") return null;
   const recomputed = moduleFingerprint(entity as unknown as ModuleRow);
   if (recomputed === stamped) return null;
   return {
@@ -92,6 +97,12 @@ export function parsePayload(raw: string): ParseResult {
       return { ok: false, reason: `missing or non-array '${key}'` };
     }
   }
+  // Templates are OPTIONAL for back-compat: exports predating the
+  // templates bucket lack the key entirely and must still import. Only
+  // reject when the key is present but not an array.
+  if (obj.templates !== undefined && !Array.isArray(obj.templates)) {
+    return { ok: false, reason: "'templates' must be an array" };
+  }
   const migrationResult = migratePayload(obj as Partial<RawPayload>);
   if (!migrationResult.ok) return { ok: false, reason: migrationResult.reason };
   const { migrated, migratedEntityCount } = migrationResult;
@@ -105,6 +116,10 @@ export function parsePayload(raw: string): ParseResult {
     ["derivations", migrated.derivations] as const,
     ["constraints", migrated.constraints] as const,
     ["categories", migrated.categories] as const,
+    // templates carry no snapshot_fingerprint — verifyOne short-circuits
+    // for kind "template" — but keep the loop in sync with RawPayload's
+    // shape so future template integrity checks get coverage for free.
+    ["templates", migrated.templates] as const,
   ]) {
     const kindSingular = PLURAL_TO_SINGULAR[kindPlural];
     for (const e of arr) {

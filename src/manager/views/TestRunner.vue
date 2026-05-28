@@ -748,9 +748,9 @@ function pickKind(k: SelectorKind) {
       </Card>
       <Card :title="`Per-rule fire rate — ${result.samples} samples`">
         <div class="wp-hist">
-          <div v-for="rule in result.rules" :key="rule.id" class="wp-hist__row">
+          <div v-for="(rule, ruleIdx) in result.rules" :key="rule.id" class="wp-hist__row">
             <div class="wp-hist__template">
-              <code class="wp-mono">{{ rule.id }}</code>
+              <code class="wp-mono">rule {{ String(ruleIdx + 1).padStart(2, '0') }}</code>
               <div class="wp-dim wp-tr-rule-fire-meta">
                 branch {{ result.fireCounts[rule.id]?.branch ?? 0 }} ·
                 else {{ result.fireCounts[rule.id]?.else ?? 0 }} ·

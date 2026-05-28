@@ -48,6 +48,14 @@ def _category_entity(id_: str, name: str) -> dict:
     }
 
 
+def _template_entity(id_: str, name: str = "tpl") -> dict:
+    return {
+        "id": id_, "name": name, "description": "",
+        "category_id": None, "tags": [], "is_favorite": False,
+        "template_string": "$subject, $style",
+    }
+
+
 async def _seed_wildcard(wp_client, name: str = "seed") -> dict:
     resp = await wp_client.post("/wp/api/modules", json={
         "type": "wildcard", "name": name, "description": "",
@@ -135,6 +143,24 @@ async def test_commit_add_bundle(wp_client):
     assert g.status == 200
     row = await g.json()
     assert row["name"] == "pack"
+
+
+async def test_commit_add_template(wp_client):
+    resp = await wp_client.post("/wp/api/import/commit", json={
+        "adds": [{"kind": "template", "entity": _template_entity("ttee1122")}],
+        "replaces": [],
+        "renames": [],
+    })
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["ok"] is True
+    assert body["undo_entry_id"]
+
+    g = await wp_client.get("/wp/api/templates/ttee1122")
+    assert g.status == 200
+    row = await g.json()
+    assert row["name"] == "tpl"
+    assert row["template_string"] == "$subject, $style"
 
 
 async def test_commit_add_category_name_merge(wp_client):

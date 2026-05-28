@@ -17,6 +17,9 @@ export const KIND_ICON_MAP = {
   derivation:   "pi pi-arrow-right-arrow-left",
   constraint:   "pi pi-filter",
   bundle:       "pi pi-box",
+  // Templates are reusable assembler strings (a `template_string` plus
+  // metadata). `pi-file-edit` reads as "editable text document".
+  template:     "pi pi-file-edit",
   // WP_ContextLoop iteration vars (`$iteration` / `$<name>_total`).
   // Not a library module kind — synthesised by the loop head — but it
   // flows through the same kind→icon path so the assembler chip reads

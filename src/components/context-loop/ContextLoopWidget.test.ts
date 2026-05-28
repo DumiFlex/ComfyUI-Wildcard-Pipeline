@@ -4,12 +4,15 @@ import ContextLoopWidget from "./ContextLoopWidget.vue";
 import { emptyContextLoopConfig } from "./types";
 
 describe("ContextLoopWidget", () => {
-  it("renders defaults — hash chip active, both switches off", () => {
+  it("renders defaults — hash chip active, both switches off, internal toggles on", () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
     expect(w.find('[data-test="loop-strategy-hash_index"]').classes()).toContain("wp-loop__chip--active");
     expect(w.find('[data-test="loop-strategy-sequential"]').classes()).not.toContain("wp-loop__chip--active");
     expect(w.find('[data-test="loop-override-toggle"]').classes()).not.toContain("wp-loop__switch--on");
     expect(w.find('[data-test="loop-bypass-toggle"]').classes()).not.toContain("wp-loop__switch--on");
+    // Both internal toggles default to ON.
+    expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
+    expect(w.find('[data-test="loop-total-internal"]').classes()).toContain("wp-loop__pi-btn--on");
   });
 
   it("emits new strategy on chip click", async () => {
@@ -63,18 +66,20 @@ describe("ContextLoopWidget", () => {
     expect(w.classes()).toContain("wp-loop--bypassed");
   });
 
-  it("emits iteration_internal toggle on its button click", async () => {
+  it("emits iteration_internal toggle on its button click (true → false)", async () => {
+    // Default is true; clicking toggles to false.
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
     await w.find('[data-test="loop-iteration-internal"]').trigger("click");
     const emitted = w.emitted("update:modelValue")?.[0]?.[0] as { iteration_internal: boolean };
-    expect(emitted.iteration_internal).toBe(true);
+    expect(emitted.iteration_internal).toBe(false);
   });
 
-  it("emits total_internal toggle on its button click", async () => {
+  it("emits total_internal toggle on its button click (true → false)", async () => {
+    // Default is true; clicking toggles to false.
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
     await w.find('[data-test="loop-total-internal"]').trigger("click");
     const emitted = w.emitted("update:modelValue")?.[0]?.[0] as { total_internal: boolean };
-    expect(emitted.total_internal).toBe(true);
+    expect(emitted.total_internal).toBe(false);
   });
 
   it("renders internal-on style when flag set", () => {

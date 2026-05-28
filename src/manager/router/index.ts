@@ -34,6 +34,12 @@ const routes: RouteRecordRaw[] = [
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
       { path: "settings", name: "settings", component: () => import("../views/Settings.vue") },
+      // Both docs routes render the same Docs.vue. They share a `layoutKey`
+      // so AppLayout's keyed <RouterView> does NOT remount the view when
+      // switching between doc pages — the nav stays mounted (preserving its
+      // scroll position); only the content pane swaps reactively.
+      { path: "docs", name: "documentation", component: () => import("../views/Docs.vue"), meta: { layoutKey: "docs" } },
+      { path: "docs/:page", name: "documentation-page", component: () => import("../views/Docs.vue"), props: true, meta: { layoutKey: "docs" } },
       // Community hub is on `feat/community-tab` while it bakes; main ships
       // a WIP placeholder so the sidebar entry has somewhere to land. The
       // catch-all `community/:rest(.*)?` swallows any deep-links saved from

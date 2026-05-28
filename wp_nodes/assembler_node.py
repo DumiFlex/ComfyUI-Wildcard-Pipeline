@@ -17,7 +17,14 @@ class WPPromptAssembler(io.ComfyNode):
             display_name="WP Prompt Assembler",
             category="wildcard-pipeline",
             inputs=[
-                PipelineContext.Input("context"),
+                PipelineContext.Input(
+                    "context",
+                    tooltip=(
+                        "The resolved $variable context from any upstream "
+                        "WP Context / Loop / Injector chain. Required — "
+                        "without it the template can't resolve any $vars."
+                    ),
+                ),
                 io.String.Input(
                     "template",
                     multiline=True,
@@ -28,6 +35,13 @@ class WPPromptAssembler(io.ComfyNode):
                     # blank instead of pre-populating prose users
                     # immediately have to delete.
                     placeholder="A $style portrait of $subject",
+                    tooltip=(
+                        "Your prompt template. Type free text and insert "
+                        "$variable names where the upstream Context's "
+                        "values should appear. Inline {a|b|c} picks render "
+                        "verbatim here — produce randomness in a seeded "
+                        "module instead."
+                    ),
                 ),
             ],
             outputs=[io.String.Output("prompt")],

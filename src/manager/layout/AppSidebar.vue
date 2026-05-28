@@ -6,6 +6,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
+import { useCategoryStore } from "../stores/categoryStore";
 import { GITHUB_REPO, GITHUB_WIKI } from "../config/links";
 
 interface NavItem {
@@ -29,6 +30,7 @@ const route = useRoute();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
+const categoryStore = useCategoryStore();
 
 const SECTIONS: NavSection[] = [
   {
@@ -61,9 +63,10 @@ const SECTIONS: NavSection[] = [
   {
     label: "Get Started",
     items: [
-      { id: "community", label: "Community",     icon: "pi-globe",  to: "/community" },
-      { id: "_docs",     label: "Documentation", icon: "pi-book",   url: GITHUB_WIKI },
-      { id: "_source",   label: "View Source",   icon: "pi-github", url: GITHUB_REPO },
+      { id: "community",     label: "Community",     icon: "pi-globe",         to: "/community" },
+      { id: "documentation", label: "Documentation", icon: "pi-book",          to: "/docs" },
+      { id: "_wiki",         label: "Wiki",          icon: "pi-external-link",  url: GITHUB_WIKI },
+      { id: "_source",       label: "View Source",   icon: "pi-github",         url: GITHUB_REPO },
     ],
   },
 ];
@@ -86,6 +89,7 @@ const activeId = computed<string>(() => {
     ["categories", "categories"],
     ["import-export", "io"],
     ["test", "test"],
+    ["documentation", "documentation"],
     ["dashboard", "dashboard"],
     ["all", "all"],
   ];
@@ -171,6 +175,7 @@ const countByKey = computed<Record<string, number>>(() => {
     constraints: all.filter((m) => m.type === "constraint").length,
     bundles:     bundleStore.catalog.length,
     templates:   templateStore.catalog.length,
+    categories:  categoryStore.items.length,
   };
 });
 

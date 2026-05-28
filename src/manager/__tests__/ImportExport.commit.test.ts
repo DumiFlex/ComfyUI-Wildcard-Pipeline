@@ -18,6 +18,7 @@ vi.mock("../api/client", () => {
       modules: { list: vi.fn() },
       categories: { list: vi.fn() },
       bundles: { list: vi.fn() },
+      templates: { list: vi.fn() },
       importExport: {
         build: vi.fn(),
         commit: vi.fn(),
@@ -42,6 +43,7 @@ interface MockedApi {
   modules: { list: ReturnType<typeof vi.fn> };
   categories: { list: ReturnType<typeof vi.fn> };
   bundles: { list: ReturnType<typeof vi.fn> };
+  templates: { list: ReturnType<typeof vi.fn> };
   importExport: {
     commit: ReturnType<typeof vi.fn>;
     undo: ReturnType<typeof vi.fn>;
@@ -83,6 +85,7 @@ function mkPayload(over: Partial<Record<string, unknown>> = {}) {
     derivations: [],
     constraints: [],
     categories: [],
+    templates: [],
     ...over,
   };
 }
@@ -104,11 +107,13 @@ beforeEach(() => {
   apiM.modules.list.mockReset();
   apiM.categories.list.mockReset();
   apiM.bundles.list.mockReset();
+  apiM.templates.list.mockReset();
   apiM.importExport.commit.mockReset();
   apiM.importExport.undo.mockReset();
   apiM.modules.list.mockResolvedValue({ items: [], total: 0 });
   apiM.categories.list.mockResolvedValue({ items: [] });
   apiM.bundles.list.mockResolvedValue({ items: [], total: 0 });
+  apiM.templates.list.mockResolvedValue({ items: [], total: 0 });
   useResolveWarnings().clearAll();
   // Phase 9: Continue gating uses window.confirm when selected rows have
   // unresolvable deps. jsdom doesn't implement confirm → stub it to

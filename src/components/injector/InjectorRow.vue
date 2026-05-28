@@ -36,6 +36,12 @@ const props = defineProps<{
   dropIndicator?: "before" | "after" | null;
 }>();
 
+/** A general-template row: no slot, durable, resolved after all socket
+ *  rows. Its binding is edited inline (shared header input); its
+ *  template is edited via the InjectorBindingModal, same as socket
+ *  rows. Driven by `row.kind`. */
+const isGeneral = computed(() => props.row.kind === "general");
+
 const slotLabel = computed(() => props.displayLabel ?? props.row.slot_name);
 
 const emit = defineEmits<{
@@ -96,6 +102,10 @@ const hasTemplate = computed(() => {
 });
 
 const summaryTitle = computed(() => {
+  if (isGeneral.value) {
+    if (isEmpty.value) return "Template row — type a variable name to write the composed value into ctx";
+    return `ctx["${props.row.binding}"] ← template "${props.row.template ?? ""}" (composed after socket rows)`;
+  }
   if (isEmpty.value) return `Socket ${props.row.slot_name} has no binding — type a variable name to write the wired value into ctx`;
   if (hasTemplate.value) return `ctx["${props.row.binding}"] ← template "${props.row.template}"`;
   const t = props.valueType ? ` (${props.valueType.toLowerCase()})` : "";
@@ -145,6 +155,7 @@ function onDragEnd(): void {
     class="wp-inj-row"
     :data-type="(valueType ?? '').toLowerCase()"
     :data-uid="row._uid"
+    :data-kind="isGeneral ? 'general' : 'socket'"
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
@@ -152,6 +163,7 @@ function onDragEnd(): void {
       'wp-inj-row--drop-before': dropIndicator === 'before',
       'wp-inj-row--drop-after': dropIndicator === 'after',
       'wp-inj-row--has-template': hasTemplate,
+      'wp-inj-row--general': isGeneral,
       'wp-conflict-info': conflictSeverity === 'info',
       'wp-conflict-warning': conflictSeverity === 'warning',
       'wp-conflict-error': conflictSeverity === 'error',
@@ -193,10 +205,17 @@ function onDragEnd(): void {
       </label>
 
       <span class="wp-row-type-icon" aria-hidden="true">
-        <i :class="['pi', typeIcon]" />
+        <i :class="['pi', isGeneral ? 'pi-bolt' : typeIcon]" />
       </span>
 
       <span
+        v-if="isGeneral"
+        class="wp-inj-slot wp-inj-slot--general"
+        title="Template row — composes a value from sockets and socket-row variables; runs after all socket rows and survives disconnects"
+        data-test="inj-row-general-tag"
+      >template</span>
+      <span
+        v-else
         class="wp-inj-slot"
         :title="slotLabel === row.slot_name
           ? `Bound to socket ${row.slot_name}`
@@ -205,7 +224,7 @@ function onDragEnd(): void {
       >{{ slotLabel }}</span>
 
       <span
-        v-if="valueType"
+        v-if="!isGeneral && valueType"
         class="wp-kind-chip"
         data-test="inj-row-type"
       >{{ valueType.toLowerCase() }}</span>
@@ -221,7 +240,7 @@ function onDragEnd(): void {
           class="wp-vbind-input"
           data-test="inj-row-binding"
           :value="row.binding"
-          :aria-label="`binding for ${row.slot_name}`"
+          :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
           placeholder="variable_name"
           spellcheck="false"
           draggable="false"
@@ -259,24 +278,32 @@ function onDragEnd(): void {
           class="wp-btn--icon-sm wp-btn--danger"
           data-test="inj-row-remove"
           draggable="false"
-          title="Disconnect this input wire"
-          :aria-label="`disconnect ${row.slot_name}`"
+          :title="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
+          :aria-label="isGeneral ? 'delete template row' : `disconnect ${row.slot_name}`"
           @click="emit('disconnect')"
         ><i class="pi pi-trash" aria-hidden="true" /></button>
       </div>
     </div>
+    <!-- Collapse-row holds only the shared summary line — identical
+         shape for socket + general rows. General rows edit their
+         template via the InjectorBindingModal (right-click → Edit),
+         same affordance socket rows use; the binding stays inline in
+         the header. -->
     <div class="wp-collapse-row" :data-collapsed="row._collapsed ? 'true' : 'false'">
       <div class="wp-summary wp-inj-summary" :title="summaryTitle" data-test="inj-row-summary">
         <span class="wp-summary__main">
           <template v-if="isEmpty"><span class="wp-inj-summary__empty">no binding — type a variable name</span></template>
+          <template v-else-if="isGeneral"><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__template" data-test="inj-row-summary-template">{{ row.template || "(empty template)" }}</span></template>
           <template v-else-if="hasTemplate"><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__template" data-test="inj-row-summary-template">{{ row.template }}</span></template>
           <template v-else><span class="wp-inj-summary__prefix">$</span><span class="wp-inj-summary__var">{{ row.binding }}</span><span class="wp-inj-summary__sep"> ← </span><span class="wp-inj-summary__slot">{{ row.slot_name }}</span><template v-if="valueType"><span class="wp-inj-summary__type"> ({{ valueType.toLowerCase() }})</span></template></template>
         </span>
         <span
-          v-if="hasTemplate"
+          v-if="hasTemplate || isGeneral"
           class="wp-inj-summary__tpl-badge"
           data-test="inj-row-tpl-badge"
-          title="Template active — engine substitutes $slot_name refs before writing to ctx"
+          :title="isGeneral
+            ? 'Template row — composed after socket rows from sockets + socket-row variables'
+            : 'Template active — engine substitutes $slot_name refs before writing to ctx'"
         >tpl</span>
       </div>
     </div>
@@ -302,7 +329,12 @@ function onDragEnd(): void {
   margin-bottom: 4px;  /* gap between rows — mirrors Context module spacing */
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* No flex `gap` on the column. A collapsed `.wp-collapse-row` shrinks to 0
+   * height, but a parent flex gap would STILL render between the header and
+   * that 0-height child — leaving ~2px of dead space below the header so the
+   * row reads as not-vertically-centered when collapsed. The summary supplies
+   * its own (collapsible) top padding for the expanded header↔summary gap
+   * instead. Mirrors ModuleRow, which has no column gap for the same reason. */
   font: 500 12px var(--wp-font-sans);
   color: var(--wp-text);
   transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover),
@@ -601,6 +633,17 @@ function onDragEnd(): void {
   letter-spacing: 0.04em;
   padding: 1px 5px;
   border-radius: 2px;
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
+}
+
+/* ── General-template rows ──────────────────────────────────────────
+ * Accent left-stripe so a general row reads as distinct from the
+ * type-colored socket rows at a glance. The `template` tag reuses the
+ * slot-chip shape but with an accent tint + the wand icon. */
+.wp-inj-row.wp-inj-row--general { border-left-color: var(--wp-accent); }
+.wp-inj-row.wp-inj-row--general .wp-row-type-icon { color: var(--wp-accent); }
+.wp-inj-slot--general {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
 }

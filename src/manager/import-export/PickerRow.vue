@@ -71,6 +71,7 @@ const KIND_CLASS: Record<string, string> = {
   constraint:   "constraint",
   bundle:       "bundle",
   category:     "category",
+  template:     "template",
 };
 
 interface Props {

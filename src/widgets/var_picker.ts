@@ -92,6 +92,20 @@ export function create(node: VarPickerNode, inputName: string) {
   // Mirrors the cleaner / context / debug widget pattern.
   const nodeMode = reactiveFromGraph(node, () => node.mode ?? 0, Object.is);
 
+  // Local reactive mirror of `node.properties.var_name`. Litegraph's
+  // properties bag is NOT a Vue reactive root, so writing to it during
+  // `onUpdate` (below) wouldn't trigger the render function to re-run —
+  // the SFC's `modelValue` would stay stuck at its initial value until
+  // some OTHER reactive dep (upstreamVars / nodeMode) happened to
+  // change. That mostly hides itself when the upstream is a WP_Context
+  // (modules / picks churn the upstream-vars list every poll), but
+  // surfaces hard when the only upstream is a WP_ContextLoop: the
+  // list is just `[$iteration, $iteration_total]` and never changes,
+  // so the trigger stays on "(no var selected)" even after a click
+  // and the user reads it as "can't select". Mirroring through a ref
+  // gives the render function a real reactive source.
+  const currentVar = ref<string>(String(node.properties?.var_name ?? ""));
+
   // Last execute payload from the Python node. Stays empty until the
   // workflow runs at least once; flips to live values after each run.
   const previewSource = ref<string>("");
@@ -106,6 +120,11 @@ export function create(node: VarPickerNode, inputName: string) {
       function onUpdate(next: string): void {
         if (!node.properties) node.properties = {};
         node.properties.var_name = next;
+        // Bump the reactive mirror so the render function re-runs and
+        // the trigger reflects the new pick immediately — see the
+        // `currentVar` comment above for why this is load-bearing for
+        // a static-upstream picker (e.g. wired directly to a Loop).
+        currentVar.value = next;
         // Keep host.state in sync so getValue (which feeds ComfyUI's
         // execute kwargs) returns the picked name, not the initial
         // empty string.
@@ -113,7 +132,7 @@ export function create(node: VarPickerNode, inputName: string) {
       }
       return () =>
         h(VarPicker, {
-          modelValue: String(node.properties?.var_name ?? ""),
+          modelValue: currentVar.value,
           upstreamVars: upstreamVars.value,
           previewSource: hasExecuted.value ? previewSource.value : "",
           previewParsed: hasExecuted.value ? previewParsed.value : null,
@@ -129,6 +148,9 @@ export function create(node: VarPickerNode, inputName: string) {
     onValueRestored: (v: string) => {
       if (!node.properties) node.properties = {};
       node.properties.var_name = v;
+      // Mirror into the reactive ref so a loaded workflow's picked var
+      // surfaces in the trigger immediately (same reason as onUpdate).
+      currentVar.value = v;
     },
     minHeight: 92,
     minWidth: 260,

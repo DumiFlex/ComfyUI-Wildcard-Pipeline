@@ -489,12 +489,125 @@ class VarPickerInput:
 
 
 @comfytype(io_type="WP_CONTEXT_LOOP_CONFIG")
-class ContextLoopConfigInput:
-    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_CONTEXT_LOOP_CONFIG"]``.
+class ContextLoopConfigInput(ComfyTypeIO):
+    """Custom type — Input renders as a widget via
+    ``getCustomWidgets["WP_CONTEXT_LOOP_CONFIG"]`` (JSON string config);
+    Output carries the parsed dict so sibling nodes like WP_SeedList can
+    mirror WP_ContextLoop's count / strategy / base_seed without the
+    user double-wiring widgets.
 
-    Value is a JSON string holding ``{strategy, override_seed,
-    iteration_var_name, bypass}``. WPContextLoop.execute parses it
+    Input payload: JSON string ``{strategy, override_seed,
+    iteration_var_name, bypass}``. ``WPContextLoop.execute`` parses it
     defensively (recovery path tolerates missing / malformed keys).
+
+    Output payload: dict ``{count, strategy, base_seed, override_seed}``
+    emitted by ``WPContextLoop.execute`` — the resolved view (post-
+    bypass count, validated strategy). Receivers should still defend
+    against unexpected shapes when reading (see
+    ``wp_nodes/seed_list.py::_resolve_config`` for the pattern).
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,
+                None,
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
+@comfytype(io_type="WP_CONTEXT_LOOP_WIDGET")
+class ContextLoopWidgetInput(ComfyTypeIO):
+    """Widget-only twin of ``ContextLoopConfigInput``.
+
+    Earlier the Loop's DOM widget AND the wire payload both used
+    ``WP_CONTEXT_LOOP_CONFIG``. The ``getCustomWidgets`` factory is keyed
+    by TYPE, so registering a factory for ``WP_CONTEXT_LOOP_CONFIG`` made
+    EVERY consumer of that type (including WP_SeedList's
+    ``loop_config`` socket) try to mount the Loop's DOM widget. Gating
+    the factory on input-name kept the widget off SeedList but ComfyUI
+    still hid the socket because a (broken / undefined) widget was
+    registered for the input's type.
+
+    Split fix: this widget-only type is unique to WP_ContextLoop's
+    own ``wp_context_loop_config`` input. ``WP_CONTEXT_LOOP_CONFIG``
+    stays as the wire-payload type — Loop's OUTPUT and SeedList's INPUT
+    both use that, with NO factory registered → ComfyUI renders them as
+    plain sockets and the user can wire Loop → SeedList directly.
+
+    Payload format is identical to ``ContextLoopConfigInput.Input``'s
+    (JSON string with the same keys). Kept as a separate class so the
+    canvas typing can discriminate without runtime ambiguity.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,
+                None,
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
+@comfytype(io_type="WP_SEED_LIST_CONFIG")
+class SeedListConfigInput(ComfyTypeIO):
+    """Custom type — Input renders as a widget via
+    ``getCustomWidgets["WP_SEED_LIST_CONFIG"]`` (JSON string config).
+    Holds WP_SeedList's strategy chip + two override toggles in a
+    single socketless DOM widget so the canvas isn't littered with
+    three separate stock widgets for what is conceptually one
+    configuration block.
+
+    Payload: JSON string ``{strategy, override_seed, override_config}``.
+    ``WPSeedList.execute`` parses it defensively (unknown strategy →
+    "hash_index", non-bool → False) before resolving against the
+    optional ``loop_config`` socket.
     """
 
     Type = str

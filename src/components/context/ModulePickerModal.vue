@@ -226,7 +226,27 @@
         </div>
         <div v-else-if="filteredModules.length === 0" class="wp-picker__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
-          {{ searchTerm ? `No matches for "${searchTerm}"` : "No modules in this category." }}
+          <template v-if="searchTerm">No matches for "{{ searchTerm }}"</template>
+          <template v-else-if="isHideAddedSuppressing">
+            All matching modules are already in this Context.
+          </template>
+          <template v-else>No modules in this category.</template>
+          <button
+            v-if="isHideAddedSuppressing"
+            type="button"
+            class="wp-picker__create"
+            data-testid="picker-show-already-added"
+            title="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
+            @click="hideAlreadyAdded = false"
+          ><i class="pi pi-eye" aria-hidden="true"></i> Show already added</button>
+          <button
+            v-else-if="!searchTerm"
+            type="button"
+            class="wp-picker__create"
+            data-testid="picker-create-module"
+            :title="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
+            @click="createInSpa"
+          ><i class="pi pi-plus" aria-hidden="true"></i> {{ createLabel }}</button>
         </div>
 
         <template v-else>
@@ -570,6 +590,35 @@ const KIND_LABELS: Record<string, string> = {
   constraint:   "Constraints",
 };
 
+// Empty-state "create" deep-links into the manager SPA's new-module editor
+// for the active kind (the picker runs on the canvas; the SPA is the
+// authoring surface). Mirrors topbar.ts's `/wp/<route>` window.open.
+const KIND_NEW_ROUTE: Record<string, string> = {
+  wildcard: "wildcards",
+  fixed_values: "fixed-values",
+  combine: "combines",
+  derivation: "derivations",
+  constraint: "constraints",
+};
+const KIND_SINGULAR: Record<string, string> = {
+  wildcard: "wildcard",
+  fixed_values: "fixed value",
+  combine: "combine",
+  derivation: "derivation",
+  constraint: "constraint",
+};
+const createLabel = computed(() =>
+  kindFilter.value === "all"
+    ? "New module"
+    : `New ${KIND_SINGULAR[kindFilter.value] ?? "module"}`,
+);
+function createInSpa(): void {
+  const slug = kindFilter.value === "all"
+    ? "wildcards"
+    : (KIND_NEW_ROUTE[kindFilter.value] ?? "wildcards");
+  window.open(`/wp/${slug}/new`, "_blank", "noopener");
+}
+
 const visibleModules = computed<PickerModule[]>(() => modules.value);
 
 function countByKind(kind: string): number {
@@ -624,6 +673,37 @@ const filteredModules = computed(() => {
     if (p.output_var && p.output_var.toLowerCase().includes(q)) return true;
     return false;
   });
+});
+
+/** True when `filteredModules` is empty BUT only because the
+ *  hide-already-added toggle hid modules that would otherwise show.
+ *  Lets the empty-state copy distinguish "nothing in this category" from
+ *  "all the matching modules are already in this Context" — the second
+ *  is a normal state once a bundle is loaded, and the misleading
+ *  "+ New module" CTA shouldn't fire there. */
+const isHideAddedSuppressing = computed<boolean>(() => {
+  if (filteredModules.value.length > 0) return false;
+  if (searchTerm.value.trim()) return false;
+  if (!hideAlreadyAdded.value) return false;
+  // Replay the same non-search gates as `filteredModules`, minus the
+  // hide-already-added filter. If any module survives, the toggle is
+  // the reason the list reads empty.
+  const tagFilter = selectedTags.value;
+  for (const m of visibleModules.value) {
+    if (kindFilter.value !== "all" && m.type !== kindFilter.value) continue;
+    if (favoritesOnly.value && !m.is_favorite) continue;
+    if (selectedCategoryId.value !== null && m.category_id !== selectedCategoryId.value) continue;
+    if (tagFilter.size > 0) {
+      const tags = Array.isArray(m.tags) ? m.tags : [];
+      let allMatch = true;
+      for (const t of tagFilter) {
+        if (!tags.includes(t)) { allMatch = false; break; }
+      }
+      if (!allMatch) continue;
+    }
+    if (alreadyAddedSet.value.has(m.id)) return true;
+  }
+  return false;
 });
 
 const KIND_ORDER = ["wildcard", "combine", "derivation", "constraint", "fixed_values"];
@@ -967,7 +1047,7 @@ onBeforeUnmount(detachCaptureListeners);
   border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius-lg);
   box-shadow: var(--wp-shadow-lg);
-  width: 720px;
+  width: 780px;
   max-width: calc(100vw - 32px);
   height: 600px;
   max-height: calc(100vh - 32px);
@@ -1148,6 +1228,18 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__state .pi { font-size: 18px; color: var(--wp-text-dim); }
 .wp-picker__state--error { color: var(--wp-danger, #fca5a5); }
+.wp-picker__create {
+  margin-top: 4px;
+  height: 30px;
+  padding: 0 14px;
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--wp-accent-600); border: 1px solid var(--wp-accent-500);
+  color: #fff; border-radius: 7px;
+  font: 500 12px var(--wp-font-sans); cursor: pointer;
+  transition: background var(--wp-motion-quick) ease;
+}
+.wp-picker__create:hover { background: var(--wp-accent-500); }
+.wp-picker__create .pi { font-size: 11px; color: #fff; }
 .wp-picker__retry {
   margin-top: 8px;
   height: 28px;

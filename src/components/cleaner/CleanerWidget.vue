@@ -278,58 +278,65 @@ function isOverridden(rid: RuleId): boolean {
 </template>
 
 <style scoped>
+/* Tokens (`--wp-*`) resolve from the globally-loaded theme.css `:root`
+   (plus the SPA's tokens.css) — deliberately NOT @imported here so the
+   cleaner CSS chunk stays out of the bundle-size gate. Every var below
+   carries a fallback chain for the cleaner-loaded-first edge case. */
+
+/* Flat layout — sits directly against the litegraph node body like
+   WP_ContextLoop, no outer card. Vertical rhythm comes from a flex
+   column + gap (matching .wp-loop) instead of per-section padding +
+   a bordered header bar. */
 .wp-cleaner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   color: var(--wp-text);
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius, 6px);
-  font-size: 12px;
+  font: 12px var(--wp-font-sans, sans-serif);
+  padding: 4px 0;
 }
 /* Match litegraph's native dim on muted (mode=2) + bypassed (mode=4) —
    parity with WP_Context / WP_Debug / WP_Injector widgets. */
 .wp-cleaner--skipped { opacity: 0.45; }
 
 .wp-cleaner__head {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--wp-border);
   display: flex; justify-content: space-between; align-items: center;
 }
 .wp-cleaner__mode { display: flex; gap: 4px; }
 .wp-cleaner__mode-btn {
-  font-size: 11px;
-  padding: 3px 10px;
-  background: transparent;
+  padding: 4px 10px;
+  background: var(--wp-bg-deep, var(--wp-bg));
   color: var(--wp-text-muted, var(--wp-text2));
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm, 4px);
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;
 }
-.wp-cleaner__mode-btn:hover { color: var(--wp-text); background: var(--wp-bg2, var(--wp-bg-2)); }
+.wp-cleaner__mode-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, var(--wp-border2)); }
 .wp-cleaner__mode-btn.is-active {
-  background: var(--wp-accent);
-  color: #fff;
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   border-color: var(--wp-accent);
+  color: var(--wp-accent-text, var(--wp-accent));
 }
 .wp-cleaner__counter {
-  font-size: 11px;
+  font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-dim, var(--wp-text3));
   font-variant-numeric: tabular-nums;
 }
 
-.wp-cleaner__section { padding: 8px 12px; }
+.wp-cleaner__section { display: flex; flex-direction: column; gap: 4px; }
 .wp-cleaner__section-head {
   display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 6px;
 }
 .wp-cleaner__section-label {
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font: 600 9px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--wp-text-muted, var(--wp-text2));
+  color: var(--wp-text-dim, var(--wp-text-muted, var(--wp-text2)));
 }
 
 .wp-cleaner__badge {
-  font-size: 9px;
+  font: 600 9px var(--wp-font-sans, sans-serif);
   letter-spacing: 0.08em;
   padding: 1px 6px;
   background: var(--wp-amber-bg, var(--wp-warn-bg, rgba(251, 191, 36, 0.16)));
@@ -343,27 +350,26 @@ function isOverridden(rid: RuleId): boolean {
   visibility: hidden;
 }
 
-.wp-cleaner__seg {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  background: var(--wp-bg2, var(--wp-bg-2));
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm, 4px);
-  padding: 2px;
-  gap: 2px;
-}
+/* Segmented control rendered as a flat chip row (matching
+   .wp-loop__chips) — no wrapping bordered box. Each chip carries its
+   own border so the group reads as three buttons against the node
+   body rather than a nested panel. */
+.wp-cleaner__seg { display: flex; gap: 4px; }
 .wp-cleaner__seg-btn {
-  font-size: 11px;
-  padding: 5px 6px;
-  background: transparent;
+  flex: 1;
+  padding: 4px 6px;
+  background: var(--wp-bg-deep, var(--wp-bg));
   color: var(--wp-text-muted, var(--wp-text2));
-  border: 0;
+  border: 1px solid var(--wp-border);
   border-radius: 3px;
+  font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;
 }
-.wp-cleaner__seg-btn:hover { color: var(--wp-text); }
+.wp-cleaner__seg-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, var(--wp-border2)); }
 .wp-cleaner__seg-btn.is-active {
-  background: var(--wp-accent);
-  color: #fff;
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  border-color: var(--wp-accent);
+  color: var(--wp-accent-text, var(--wp-accent));
 }
 
 .wp-cleaner__rules { display: grid; gap: 2px; }
@@ -377,12 +383,12 @@ function isOverridden(rid: RuleId): boolean {
   border: 0;
   padding: 3px 4px;
   cursor: pointer;
-  font-size: 11px;
-  color: var(--wp-text-dim, var(--wp-text3));
+  font: 10px var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-muted, var(--wp-text2));
   text-align: left;
   border-radius: 3px;
 }
-.wp-cleaner__rule:hover:not(.is-disabled) { background: var(--wp-bg2, var(--wp-bg-2)); color: var(--wp-text); }
+.wp-cleaner__rule:hover:not(.is-disabled) { background: var(--wp-row-hover, var(--wp-bg2)); color: var(--wp-text); }
 .wp-cleaner__rule.is-disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -415,27 +421,31 @@ function isOverridden(rid: RuleId): boolean {
   font-variant-numeric: tabular-nums;
 }
 
-.wp-cleaner__blocklist { padding: 4px 12px 8px; }
+/* Full-width dashed affordance — mirrors the Injector "add row"
+   button's family (dashed border, accent-tinted hover). No section
+   padding wrapper now that the root is a flat flex column. */
+.wp-cleaner__blocklist { display: flex; }
 .wp-cleaner__blocklist-btn {
-  font-size: 11px;
-  padding: 4px 8px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  border: 1px dashed var(--wp-border);
-  border-radius: var(--wp-radius-sm, 4px);
   width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--wp-text-dim, var(--wp-text3));
+  border: 1px dashed var(--wp-border2, var(--wp-border));
+  border-radius: var(--wp-radius-sm, 4px);
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px;
+  font: 600 10px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.02em;
   cursor: pointer;
 }
 .wp-cleaner__blocklist-btn:hover {
-  background: var(--wp-bg2, var(--wp-bg-2));
+  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
   color: var(--wp-text);
-  border-style: solid;
+  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border2, var(--wp-border)));
 }
 .wp-cleaner__blocklist-btn.has-entries {
-  background: var(--wp-accent-glow, color-mix(in srgb, var(--wp-accent) 18%, transparent));
-  color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent-text, var(--wp-accent));
   border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent);
 }
 .wp-cleaner__blocklist-meta {

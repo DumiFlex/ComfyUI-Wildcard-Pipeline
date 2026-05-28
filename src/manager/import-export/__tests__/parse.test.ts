@@ -80,6 +80,41 @@ describe("parsePayload", () => {
     }
   });
 
+  it("accepts a payload that omits the templates bucket (back-compat with old exports)", () => {
+    // Templates were added later; exports predating them lack the key and
+    // must still parse. The migration normalizer defaults templates to [].
+    const payload = { schema_version: 1, ...EMPTY_BUCKETS };
+    const result = parsePayload(JSON.stringify(payload));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.templates).toEqual([]);
+    }
+  });
+
+  it("accepts a payload that includes a templates array", () => {
+    const payload = {
+      schema_version: 1,
+      ...EMPTY_BUCKETS,
+      templates: [{ id: "t1", name: "hero", template_string: "$a" }],
+    };
+    const result = parsePayload(JSON.stringify(payload));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.templates).toHaveLength(1);
+    }
+  });
+
+  it("rejects a payload whose templates key is present but not an array", () => {
+    const payload = {
+      schema_version: 1,
+      ...EMPTY_BUCKETS,
+      templates: "not an array",
+    };
+    const result = parsePayload(JSON.stringify(payload));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/templates/);
+  });
+
   it("migrates v0 payload to v1", () => {
     const v0 = {
       schema_version: 0,

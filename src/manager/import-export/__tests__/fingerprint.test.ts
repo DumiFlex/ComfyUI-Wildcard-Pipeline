@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { moduleFingerprint, type ModuleRow } from "../fingerprint";
+import {
+  moduleFingerprint,
+  templateFingerprint,
+  type ModuleRow,
+  type TemplateRow,
+} from "../fingerprint";
 
 function row(parts: Partial<ModuleRow>): ModuleRow {
   return {
@@ -8,6 +13,17 @@ function row(parts: Partial<ModuleRow>): ModuleRow {
     description: "",
     tags: [],
     payload_hash: "deadbeef",
+    ...parts,
+  };
+}
+
+function tmpl(parts: Partial<TemplateRow>): TemplateRow {
+  return {
+    name: "x",
+    description: "",
+    tags: [],
+    template_string: "",
+    category_id: null,
     ...parts,
   };
 }
@@ -85,5 +101,52 @@ describe("null-safety", () => {
     const a = { type: "wildcard", name: "x", description: "", tags: [], payload_hash: "deadbeef" };
     const b = { type: "wildcard", name: "x", description: "", tags: null as unknown as string[], payload_hash: "deadbeef" };
     expect(moduleFingerprint(a)).toBe(moduleFingerprint(b));
+  });
+});
+
+describe("templateFingerprint", () => {
+  it("stable across calls with same input", () => {
+    const t = tmpl({ name: "hero", description: "Hero shot", tags: ["a", "b"], template_string: "$subject in $scene" });
+    expect(templateFingerprint(t)).toBe(templateFingerprint(t));
+  });
+
+  it("returns 8 lowercase hex chars", () => {
+    expect(templateFingerprint(tmpl({}))).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it("differs when name changes", () => {
+    expect(templateFingerprint(tmpl({ name: "a" }))).not.toBe(templateFingerprint(tmpl({ name: "b" })));
+  });
+
+  it("differs when description changes", () => {
+    expect(templateFingerprint(tmpl({ description: "a" }))).not.toBe(templateFingerprint(tmpl({ description: "b" })));
+  });
+
+  it("differs when template_string changes", () => {
+    expect(templateFingerprint(tmpl({ template_string: "$a" }))).not.toBe(templateFingerprint(tmpl({ template_string: "$b" })));
+  });
+
+  it("differs when tags differ", () => {
+    expect(templateFingerprint(tmpl({ tags: ["a"] }))).not.toBe(templateFingerprint(tmpl({ tags: ["b"] })));
+  });
+
+  it("tags are order-insensitive (set semantics)", () => {
+    expect(templateFingerprint(tmpl({ tags: ["x", "y"] }))).toBe(templateFingerprint(tmpl({ tags: ["y", "x"] })));
+  });
+
+  it("differs when category_id changes", () => {
+    expect(templateFingerprint(tmpl({ category_id: "c1" }))).not.toBe(templateFingerprint(tmpl({ category_id: "c2" })));
+  });
+
+  it("treats null category_id the same as omitted (both → '')", () => {
+    const withNull = tmpl({ category_id: null });
+    const omitted: TemplateRow = { name: "x", description: "", tags: [], template_string: "" };
+    expect(templateFingerprint(withNull)).toBe(templateFingerprint(omitted));
+  });
+
+  it("tolerates null tags without throwing", () => {
+    const t = { name: "x", description: "", tags: null as unknown as string[], template_string: "", category_id: null };
+    expect(() => templateFingerprint(t)).not.toThrow();
+    expect(templateFingerprint(t)).toMatch(/^[0-9a-f]{8}$/);
   });
 });

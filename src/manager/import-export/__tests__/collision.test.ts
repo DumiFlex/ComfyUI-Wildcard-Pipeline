@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { detectCollisions, type LibraryRow } from "../collision";
-import { moduleFingerprint, type ModuleRow } from "../fingerprint";
+import {
+  detectCollisions,
+  detectTemplateCollisions,
+  type LibraryRow,
+} from "../collision";
+import {
+  moduleFingerprint,
+  templateFingerprint,
+  type ModuleRow,
+  type TemplateRow,
+} from "../fingerprint";
 
 function modRow(parts: Partial<ModuleRow> & { id: string }): ModuleRow & { id: string } {
   return {
@@ -9,6 +18,17 @@ function modRow(parts: Partial<ModuleRow> & { id: string }): ModuleRow & { id: s
     description: "",
     tags: [],
     payload_hash: "deadbeef",
+    ...parts,
+  };
+}
+
+function tmplRow(parts: Partial<TemplateRow> & { id: string }): TemplateRow & { id: string } {
+  return {
+    name: "x",
+    description: "",
+    tags: [],
+    template_string: "",
+    category_id: null,
     ...parts,
   };
 }
@@ -93,5 +113,66 @@ describe("detectCollisions", () => {
     ]);
     const result = detectCollisions([constraint], library);
     expect(result["ccccdddd"]).toBe("silent-skip");
+  });
+});
+
+describe("detectTemplateCollisions", () => {
+  it("returns no-collision when id not in library", () => {
+    const incoming = [tmplRow({ id: "11111111" })];
+    const library = new Map<string, LibraryRow>();
+    const result = detectTemplateCollisions(incoming, library);
+    expect(result["11111111"]).toBe("no-collision");
+  });
+
+  it("returns silent-skip when id matches + template fingerprint matches", () => {
+    const incoming = tmplRow({ id: "11111111", name: "hero", template_string: "$a in $b" });
+    const fp = templateFingerprint(incoming);
+    const library = new Map<string, LibraryRow>([
+      ["11111111", { template_fingerprint: fp }],
+    ]);
+    const result = detectTemplateCollisions([incoming], library);
+    expect(result["11111111"]).toBe("silent-skip");
+  });
+
+  it("returns conflict when id matches + template fingerprint differs", () => {
+    const incoming = [tmplRow({ id: "11111111", name: "hero", template_string: "$a" })];
+    const library = new Map<string, LibraryRow>([
+      ["11111111", { template_fingerprint: "deadbeef" }],
+    ]);
+    const result = detectTemplateCollisions(incoming, library);
+    expect(result["11111111"]).toBe("conflict");
+  });
+
+  it("returns exists-unknown when library row has no template_fingerprint (defensive fallback)", () => {
+    const incoming = [tmplRow({ id: "11111111" })];
+    const library = new Map<string, LibraryRow>([["11111111", {}]]);
+    const result = detectTemplateCollisions(incoming, library);
+    expect(result["11111111"]).toBe("exists-unknown");
+  });
+
+  it("does NOT consult snapshot_fingerprint for templates", () => {
+    // A library row carrying only a module snapshot_fingerprint (no
+    // template_fingerprint) must fall to exists-unknown, never silent-skip
+    // — the two fingerprint spaces are distinct.
+    const incoming = [tmplRow({ id: "11111111", name: "hero" })];
+    const library = new Map<string, LibraryRow>([
+      ["11111111", { snapshot_fingerprint: "anything" }],
+    ]);
+    const result = detectTemplateCollisions(incoming, library);
+    expect(result["11111111"]).toBe("exists-unknown");
+  });
+
+  it("classifies multiple incoming templates independently", () => {
+    const a = tmplRow({ id: "aaaaaaaa", name: "a", template_string: "ta" });
+    const b = tmplRow({ id: "bbbbbbbb", name: "b", template_string: "tb" });
+    const c = tmplRow({ id: "cccccccc", name: "c", template_string: "tc" });
+    const library = new Map<string, LibraryRow>([
+      ["aaaaaaaa", { template_fingerprint: templateFingerprint(a) }],
+      ["bbbbbbbb", { template_fingerprint: "different" }],
+    ]);
+    const result = detectTemplateCollisions([a, b, c], library);
+    expect(result["aaaaaaaa"]).toBe("silent-skip");
+    expect(result["bbbbbbbb"]).toBe("conflict");
+    expect(result["cccccccc"]).toBe("no-collision");
   });
 });

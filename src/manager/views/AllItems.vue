@@ -358,7 +358,7 @@ function refresh() {
     :loading="loading"
     :load-error="loadErr.error.value"
     :filter="filter"
-    :mid-cols="2"
+    :mid-cols="3"
     empty-message="Library is empty"
     :page="urlState.page"
     :page-size="urlState.pageSize"

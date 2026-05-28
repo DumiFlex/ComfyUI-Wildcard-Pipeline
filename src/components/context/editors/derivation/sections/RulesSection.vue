@@ -319,7 +319,7 @@ function opUsesValue(op: string | undefined): boolean {
 
     <div v-else class="rules__list">
       <div
-        v-for="rule in orderedRules"
+        v-for="(rule, ruleIdx) in orderedRules"
         :key="rule.id"
         class="rule-card"
         :class="{
@@ -359,7 +359,7 @@ function opUsesValue(op: string | undefined): boolean {
             <i :class="['pi', isRuleEnabled(rule) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
           </span>
 
-          <span class="rule-head__num">Rule {{ rule.id }}</span>
+          <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
 
           <span class="rule-head__summary" :data-test="`rule-summary-${rule.id}`">
             <template v-if="rule.branches && rule.branches.length > 0">

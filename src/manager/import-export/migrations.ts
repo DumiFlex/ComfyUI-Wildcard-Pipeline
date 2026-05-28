@@ -18,9 +18,9 @@ export interface MigrationOk<T> {
   migrated: T;
   /**
    * Total count of ENTITIES (bundles + wildcards + fixed_values + combines +
-   * derivations + constraints + categories) that passed through ANY migration
-   * step. A single 10-entity payload going through 1 step → 10. A 5-entity
-   * payload going through 2 steps → 10.
+   * derivations + constraints + categories + templates) that passed through
+   * ANY migration step. A single 10-entity payload going through 1 step → 10.
+   * A 5-entity payload going through 2 steps → 10.
    */
   migratedEntityCount: number;
 }
@@ -42,6 +42,7 @@ export interface RawPayload {
   derivations: Array<Record<string, unknown>>;
   constraints: Array<Record<string, unknown>>;
   categories: Array<Record<string, unknown>>;
+  templates: Array<Record<string, unknown>>;
 }
 
 type VersionMigration = (payload: RawPayload) => RawPayload;
@@ -51,8 +52,8 @@ function migrateV0ToV1(payload: RawPayload): RawPayload {
   return {
     ...payload,
     schema_version: 1,
-    // NOTE: explicitly enumerates all seven known entity arrays. If a future
-    // schema version adds an eighth entity array to RawPayload, update both
+    // NOTE: explicitly enumerates all eight known entity arrays. If a future
+    // schema version adds a ninth entity array to RawPayload, update both
     // RawPayload AND every migration in the chain to tag the new array.
     // Otherwise migrations will silently pass the new array through untagged.
     bundles: payload.bundles.map(tag),
@@ -62,6 +63,7 @@ function migrateV0ToV1(payload: RawPayload): RawPayload {
     derivations: payload.derivations.map(tag),
     constraints: payload.constraints.map(tag),
     categories: payload.categories.map(tag),
+    templates: payload.templates.map(tag),
   };
 }
 
@@ -88,6 +90,9 @@ export function migratePayload(payload: Partial<RawPayload>): MigrationResult<Ra
     derivations: payload.derivations ?? [],
     constraints: payload.constraints ?? [],
     categories: payload.categories ?? [],
+    // Back-compat: pre-templates exports lack this key entirely; default
+    // to [] so the migration chain + downstream picker treat it as empty.
+    templates: payload.templates ?? [],
   };
   let migratedEntityCount = 0;
   while (current.schema_version < CURRENT_SCHEMA_VERSION) {
@@ -102,7 +107,8 @@ export function migratePayload(payload: Partial<RawPayload>): MigrationResult<Ra
       current.combines.length +
       current.derivations.length +
       current.constraints.length +
-      current.categories.length;
+      current.categories.length +
+      current.templates.length;
     current = fn(current);
     migratedEntityCount += entitiesBefore;
   }

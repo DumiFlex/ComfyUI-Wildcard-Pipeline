@@ -23,7 +23,12 @@
  * collision detection separately if needed.
  */
 
-import { moduleFingerprint, type ModuleRow } from "./fingerprint";
+import {
+  moduleFingerprint,
+  templateFingerprint,
+  type ModuleRow,
+  type TemplateRow,
+} from "./fingerprint";
 
 export type CollisionState =
   | "no-collision"
@@ -33,6 +38,14 @@ export type CollisionState =
 
 export interface LibraryRow {
   snapshot_fingerprint?: string;
+  /**
+   * Template content fingerprint (djb2 over the template's literal
+   * fields; see `templateFingerprint`). Templates carry no
+   * `snapshot_fingerprint`, so the orchestrator stamps this on the live
+   * row and `detectTemplateCollisions` compares it against the incoming
+   * row's recomputed fingerprint.
+   */
+  template_fingerprint?: string;
 }
 
 export function detectCollisions(
@@ -55,6 +68,45 @@ export function detectCollisions(
       continue;
     }
     const incomingFp = moduleFingerprint(entity);
+    result[id] = incomingFp === libFp ? "silent-skip" : "conflict";
+  }
+  return result;
+}
+
+/**
+ * Template collision classifier. Same state machine as
+ * `detectCollisions`, but templates collide on `id` and compare the
+ * NEW `templateFingerprint` (computed on both sides) instead of the
+ * server-supplied `snapshot_fingerprint`:
+ *
+ *   no-collision   — id absent from receiver library.
+ *   silent-skip    — id matches AND template fingerprints match. True dup.
+ *   conflict       — id matches AND fingerprints differ. User picks
+ *                    Skip / Replace / Import as new.
+ *   exists-unknown — id matches but the library row carries no
+ *                    `template_fingerprint`. Defensive fallback only —
+ *                    the orchestrator always stamps one, so this should
+ *                    not arise in normal flow; badged EXISTING rather
+ *                    than overclaiming MODIFIED.
+ */
+export function detectTemplateCollisions(
+  incoming: Array<TemplateRow & { id: string }>,
+  library: Map<string, LibraryRow>,
+): Record<string, CollisionState> {
+  const result: Record<string, CollisionState> = {};
+  for (const entity of incoming) {
+    const id = entity.id;
+    const libRow = library.get(id);
+    if (!libRow) {
+      result[id] = "no-collision";
+      continue;
+    }
+    const libFp = libRow.template_fingerprint;
+    if (!libFp) {
+      result[id] = "exists-unknown";
+      continue;
+    }
+    const incomingFp = templateFingerprint(entity);
     result[id] = incomingFp === libFp ? "silent-skip" : "conflict";
   }
   return result;

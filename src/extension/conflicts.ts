@@ -220,14 +220,20 @@ export function scanInjectorConflicts(
 
   for (const row of value.rows) {
     if (!row.enabled) continue;
+    const isGeneral = row.kind === "general";
     const binding = row.binding.trim();
     if (!binding) {
-      // Distinct from injector_input_disconnected (severed socket) —
-      // here the socket IS linked but the user hasn't typed a binding
-      // name yet. Badge reads "no binding", not "no link".
+      // General rows: a fresh general row starts blank; flagging it the
+      // moment the user adds it (before they've typed anything) is noisy.
+      // Only flag a general row missing a binding once it has a template
+      // (= the user clearly intends a write but forgot to name it). For
+      // socket rows the socket IS linked but the user hasn't typed a
+      // binding yet — badge reads "no binding", not "no link".
+      if (isGeneral && !(row.template ?? "").trim()) continue;
       out.push({
         moduleId: row._uid,
-        variable: row.slot_name,
+        // General rows have no slot; surface a generic identifier.
+        variable: isGeneral ? "template row" : row.slot_name,
         type: "injector_binding_missing",
         severity: "warning",
       });

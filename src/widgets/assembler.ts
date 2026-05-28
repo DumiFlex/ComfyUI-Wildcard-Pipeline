@@ -12,6 +12,7 @@ import {
   type LiteNodeLike,
 } from "../extension/graph";
 import { reactiveFromGraph } from "../extension/reactive";
+import { pushToast } from "../components/shared/toast-store";
 
 const PREVIEW_SEED = 42;
 
@@ -524,6 +525,7 @@ export function mountHelper(node: AssemblerNode) {
                 const ref = { id: row.id, name: row.name };
                 setLoadedTemplateRef(node, ref);
                 loadedRef.value = ref;
+                pushToast(`Loaded template “${row.name}”`, { severity: "success" });
               };
               // Confirm only when overwriting non-empty work; loading
               // onto an empty template applies immediately.

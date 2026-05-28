@@ -6,6 +6,7 @@ vi.mock("../../api/client", () => ({
     modules: { list: vi.fn() },
     bundles: { list: vi.fn() },
     categories: { list: vi.fn() },
+    templates: { list: vi.fn() },
     importExport: { build: vi.fn() },
   },
   ApiError: class ApiError extends Error {
@@ -29,7 +30,7 @@ import ExportTab from "../ExportTab.vue";
 import PickerRow from "../PickerRow.vue";
 import { api, ApiError } from "../../api/client";
 import * as toastModule from "../../composables/useToast";
-import type { ModuleRow, BundleRow, CategoryRow } from "../../api/types";
+import type { ModuleRow, BundleRow, CategoryRow, TemplateRow } from "../../api/types";
 
 /**
  * Expand a collapsed PickerSection so its rows render. Sections are
@@ -51,6 +52,7 @@ const apiAny = api as unknown as {
   modules: { list: ReturnType<typeof vi.fn> };
   bundles: { list: ReturnType<typeof vi.fn> };
   categories: { list: ReturnType<typeof vi.fn> };
+  templates: { list: ReturnType<typeof vi.fn> };
   importExport: { build: ReturnType<typeof vi.fn> };
 };
 
@@ -91,6 +93,19 @@ function mkCategory(over: Partial<CategoryRow> & Pick<CategoryRow, "id" | "name"
   return { color: null, icon: null, sort_order: 0, ...over } as CategoryRow;
 }
 
+function mkTemplate(over: Partial<TemplateRow> & Pick<TemplateRow, "id" | "name">): TemplateRow {
+  return {
+    description: "",
+    category_id: null,
+    tags: [],
+    is_favorite: false,
+    template_string: "",
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    ...over,
+  } as TemplateRow;
+}
+
 function seedLibrary() {
   apiAny.modules.list.mockResolvedValue({
     items: [
@@ -109,11 +124,12 @@ function seedLibrary() {
   apiAny.categories.list.mockResolvedValue({
     items: [mkCategory({ id: "cat1", name: "Cat1" })],
   });
+  apiAny.templates.list.mockResolvedValue({ items: [], total: 0 });
   apiAny.importExport.build.mockResolvedValue({
     schema_version: 1,
     exported_at: "2026-05-22T00:00:00Z",
     bundles: [], wildcards: [], fixed_values: [], combines: [],
-    derivations: [], constraints: [], categories: [],
+    derivations: [], constraints: [], categories: [], templates: [],
   });
 }
 
@@ -121,6 +137,7 @@ beforeEach(() => {
   apiAny.modules.list.mockReset();
   apiAny.bundles.list.mockReset();
   apiAny.categories.list.mockReset();
+  apiAny.templates.list.mockReset();
   apiAny.importExport.build.mockReset();
   pushMock.mockReset();
   seedLibrary();
@@ -186,11 +203,11 @@ describe("ExportTab.vue", () => {
     expect(counter2.text()).toMatch(/^\s*1\s+of\s+7\s+selected\s*$/);
   });
 
-  it("renders all 7 section headers", async () => {
+  it("renders all 8 section headers", async () => {
     const wrap = mount(ExportTab);
     await flushPromises();
     const text = wrap.text();
-    for (const label of ["Bundles", "Wildcards", "Fixed values", "Combines", "Derivations", "Constraints", "Categories"]) {
+    for (const label of ["Bundles", "Wildcards", "Fixed values", "Combines", "Derivations", "Constraints", "Categories", "Templates"]) {
       expect(text).toContain(label);
     }
   });
@@ -246,7 +263,7 @@ describe("ExportTab.vue", () => {
     }
   });
 
-  it("export POSTs a 7-bucket body matching the picked uuids", async () => {
+  it("export POSTs an 8-bucket body matching the picked uuids", async () => {
     const wrap = mount(ExportTab);
     await flushPromises();
     await expandSection(wrap, "wildcard");
@@ -259,7 +276,7 @@ describe("ExportTab.vue", () => {
 
     expect(apiAny.importExport.build).toHaveBeenCalledTimes(1);
     const body = apiAny.importExport.build.mock.calls[0]![0];
-    // All 7 expected keys present, no `variable_uuids`.
+    // All 8 expected keys present, no `variable_uuids`.
     expect(Object.keys(body).sort()).toEqual([
       "bundle_uuids",
       "category_uuids",
@@ -267,6 +284,7 @@ describe("ExportTab.vue", () => {
       "constraint_uuids",
       "derivation_uuids",
       "fixed_values_uuids",
+      "template_uuids",
       "wildcard_uuids",
     ]);
     expect(body.wildcard_uuids).toEqual(["w1"]);
@@ -276,7 +294,58 @@ describe("ExportTab.vue", () => {
     expect(body.derivation_uuids).toEqual([]);
     expect(body.constraint_uuids).toEqual([]);
     expect(body.category_uuids).toEqual([]);
+    expect(body.template_uuids).toEqual([]);
     expect(body).not.toHaveProperty("variable_uuids");
+  });
+
+  it("renders a Templates section + lands template_uuids in the build request", async () => {
+    apiAny.modules.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+    apiAny.templates.list.mockResolvedValue({
+      items: [
+        mkTemplate({ id: "t1", name: "Hero", template_string: "$subject" }),
+        mkTemplate({ id: "t2", name: "Scene", template_string: "$scene" }),
+      ],
+      total: 2,
+    });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    // Section header present.
+    expect(wrap.find('[data-test="export-tab-section-template"]').exists()).toBe(true);
+    // Expand + pick t1.
+    await expandSection(wrap, "template");
+    const row = wrap.get('[data-test="export-tab-row-template-t1"]');
+    expect(row.findComponent(PickerRow).props("kind")).toBe("template");
+    await row.get('button[role="checkbox"]').trigger("click");
+    await flushPromises();
+    await wrap.get('[data-test="export-tab-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(apiAny.importExport.build).toHaveBeenCalledTimes(1);
+    const body = apiAny.importExport.build.mock.calls[0]![0];
+    expect(body.template_uuids).toEqual(["t1"]);
+  });
+
+  it("'Full library' preset selects templates too", async () => {
+    apiAny.modules.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.bundles.list.mockResolvedValue({ items: [], total: 0 });
+    apiAny.categories.list.mockResolvedValue({ items: [] });
+    apiAny.templates.list.mockResolvedValue({
+      items: [mkTemplate({ id: "t1", name: "Hero" })],
+      total: 1,
+    });
+
+    const wrap = mount(ExportTab);
+    await flushPromises();
+    await wrap.get('[data-test="preset-full"]').trigger("click");
+    await flushPromises();
+    await expandSection(wrap, "template");
+    expect(
+      wrap.get('[data-test="export-tab-row-template-t1"] button[role="checkbox"]')
+        .attributes("aria-checked"),
+    ).toBe("true");
   });
 
   it("triggers a browser download with Blob + createObjectURL + click + revoke", async () => {
@@ -463,13 +532,13 @@ describe("ExportTab.vue", () => {
 
   // ---------- Polish B: collapsed-by-default sections ----------
 
-  it("all 7 sections render collapsed by default", async () => {
+  it("all 8 sections render collapsed by default", async () => {
     const wrap = mount(ExportTab);
     await flushPromises();
     // Every section header is present.
     for (const key of [
       "bundle", "wildcard", "fixed_values",
-      "combine", "derivation", "constraint", "category",
+      "combine", "derivation", "constraint", "category", "template",
     ]) {
       expect(wrap.find(`[data-test="export-tab-section-${key}"]`).exists()).toBe(true);
     }

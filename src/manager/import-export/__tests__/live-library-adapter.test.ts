@@ -45,7 +45,7 @@ function mkCategory(
 }
 
 describe("liveLibraryToRawPayload", () => {
-  it("returns empty 7-bucket payload with schema_version=1 when library is empty", () => {
+  it("returns empty 8-bucket payload with schema_version=1 when library is empty", () => {
     const out = liveLibraryToRawPayload([], [], []);
     expect(out).toEqual({
       schema_version: 1,
@@ -56,6 +56,7 @@ describe("liveLibraryToRawPayload", () => {
       derivations: [],
       constraints: [],
       categories: [],
+      templates: [],
     });
   });
 

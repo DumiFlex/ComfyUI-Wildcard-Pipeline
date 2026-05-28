@@ -174,7 +174,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
     :loading="store.loading"
     :load-error="loadErr.error.value"
     :filter="filter"
-    :mid-cols="2"
+    :mid-cols="3"
     empty-message="No derivations yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"

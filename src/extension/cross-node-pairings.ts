@@ -51,7 +51,13 @@ function widgetValue(node: LiteNodeLike, name: string): unknown {
 }
 
 function extractModules(node: LiteNodeLike): ModuleEntry[] {
-  const raw = widgetValue(node, "modules");
+  // Widget was renamed to `wp_modules` during the `wp_`-prefix sweep
+  // (CLAUDE.md "Custom widget types"). Reading the legacy name returns
+  // undefined, the walker sees zero modules, computePairings returns
+  // an empty map, and every PairBadge `v-if` skips → no badges anywhere
+  // even when the constraint + target wildcard are both present. Keep
+  // this in sync with the schema literal in `wp_nodes/context_node.py`.
+  const raw = widgetValue(node, "wp_modules");
   const v = parseWidgetJson<ContextWidgetValue>(
     typeof raw === "string" ? raw : "",
     { version: 1, modules: [] },

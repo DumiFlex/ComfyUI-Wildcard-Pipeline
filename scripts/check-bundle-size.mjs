@@ -103,7 +103,48 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // SaveTemplateModal gains the push-to-library layout (category select +
 // Update-existing / Save-as-new dual action). ~3 KB net gzip across the
 // two lazy assembler modal chunks; entry stays put.
-const TOTAL_LIMIT = 385 * 1024;     // 385 KB
+// NOTE: this gate measures the EXTENSION bundle (`js/`, from
+// build:extension) only — NOT the manager SPA (`web_dist/`). The 2026-05-27
+// Documentation tab lives entirely in src/manager → web_dist, so it does
+// not affect this budget; no bump was needed for it.
+// Bumped 385 -> 387 KB on 2026-05-28 for the injector two-tier row model.
+// Adds the durable general-template row to the InjectorWidget lazy chunk:
+// the inline binding+template editor + refs hint in InjectorRow.vue, the
+// `kind` discriminator + addGeneralRow + general-aware reconcile in
+// InjectorWidget.vue, and the general-row branch in the conflict scanner.
+// ~1.5 KB net gzip in the lazy InjectorWidget chunk (baseline was already
+// at 393968/394240 — only 272 B free — so the bump is required); entry
+// stays put.
+// Bumped 387 -> 388 KB on 2026-05-28 for the kind-aware RefChip. Engine
+// warnings like `constraint_never_applied` wrap NON-wildcard ids (the
+// constraint module's own id + the target wildcard id) as `@{uuid}` in
+// the message text. Pre-fix, RefChip painted every `@{uuid}` as a
+// wildcard chip — the constraint id fell through as a red `?` because
+// the resolver only consulted the wildcard catalog. Adds the
+// `moduleKind` prop + `--wp-refchip-tone` inline style + per-kind
+// PrimeIcon switch in RefChip.vue, the `resolveModuleChip` library-
+// wide search in resolveChip.ts, a `uuidToKind` prop on RichTextPreview
+// wiring through the preview-resolver `kind` field, and a trace-derived
+// `uuidToKindMap` in DebugViewer. ~0.3 KB net gzip across the lazy
+// DebugViewer + _shared + preview-resolver chunks; entry stays put.
+// Bumped 388 -> 393 KB on 2026-05-28 for the WP_SeedList DOM widget.
+// Replaces the three stock widgets (strategy Combo + 2× Boolean
+// override toggles) with a single socketless DOM widget owning the
+// strategy chip group + both override toggles inside one SFC. Adds
+// the SeedListWidget Vue chunk (~4.2 KB gzip) + the seed_list glue
+// chunk (~0.7 KB gzip) for a ~4.9 KB total bump; entry stays put.
+// Same cycle also prefixed every custom DOM widget input name with
+// `wp_*` (modules → wp_modules, rows → wp_rows, viewer → wp_viewer,
+// etc.) so the canvas socket labels read as branded WP widgets — no
+// bundle impact from the rename alone.
+// 2026-05-28: bumped 393 -> 395 KB for the SeedListWidget override
+// lock UI (disabled-attr on strategy chips + `--locked` wrapper class +
+// strategyLocked computed + two new lock-state Vitest cases). Plus the
+// host glue (`setStockWidgetDisabled` + `syncStockWidgetGates` callers
+// in onUpdate/onValueRestored/microtask). Net ~0.5 KB gzip; 2 KB
+// headroom buffer to avoid the "17 bytes from budget" tightness from
+// the previous bump.
+const TOTAL_LIMIT = 395 * 1024;     // 395 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

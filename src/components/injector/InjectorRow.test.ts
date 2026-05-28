@@ -204,6 +204,19 @@ describe("InjectorRow — data-type attribute (Phase C.1a)", () => {
   });
 });
 
+describe("InjectorRow — data-kind attribute (group-local reorder)", () => {
+  it("socket rows carry data-kind='socket' (read by the list-level drag clamp)", () => {
+    const w = mount(InjectorRow, { props: { row: makeRow() } });
+    expect(w.find(".wp-inj-row").attributes("data-kind")).toBe("socket");
+  });
+  it("general (template) rows carry data-kind='general'", () => {
+    const w = mount(InjectorRow, {
+      props: { row: makeRow({ kind: "general", slot_name: "", binding: "combo", template: "$a" }) },
+    });
+    expect(w.find(".wp-inj-row").attributes("data-kind")).toBe("general");
+  });
+});
+
 describe("InjectorRow — right-click context menu (Phase 4)", () => {
   it("emits row-contextmenu with idx + event on right click", async () => {
     const w = mount(InjectorRow, { props: { row: makeRow(), index: 3 } });
@@ -282,6 +295,55 @@ describe("InjectorRow — collapse / summary (Phase 5)", () => {
     expect(w.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(false);
     const w2 = mount(InjectorRow, { props: { row: makeRow({ template: null }) } });
     expect(w2.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(false);
+  });
+});
+
+describe("InjectorRow — general (template) row", () => {
+  function generalRow(over: Partial<RowType> = {}): RowType {
+    return makeRow({ kind: "general", slot_name: "", binding: "combo", template: "$input_0 by $test", ...over });
+  }
+
+  it("renders no slot chip — shows a 'template' tag instead", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find('[data-test="inj-row-slot"]').exists()).toBe(false);
+    expect(w.find('[data-test="inj-row-general-tag"]').text()).toBe("template");
+  });
+
+  it("does not render the socket type chip for a general row", () => {
+    const w = mount(InjectorRow, {
+      props: { row: generalRow(), valueType: "STRING" },
+    });
+    expect(w.find('[data-test="inj-row-type"]').exists()).toBe(false);
+  });
+
+  it("renders the binding input inline (template moved to the edit modal)", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find<HTMLInputElement>('[data-test="inj-row-binding"]').element.value).toBe("combo");
+  });
+
+  it("no longer renders an inline template editor — that lives in the modal", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find('[data-test="inj-row-general-template"]').exists()).toBe(false);
+    expect(w.find('[data-test="inj-row-general-refs"]').exists()).toBe(false);
+    expect(w.find('[data-test="inj-row-general-refs-empty"]').exists()).toBe(false);
+  });
+
+  it("summary shows the template and the tpl badge", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find('[data-test="inj-row-summary-template"]').text()).toBe("$input_0 by $test");
+    expect(w.find('[data-test="inj-row-tpl-badge"]').exists()).toBe(true);
+  });
+
+  it("trash button reads as Delete (not Disconnect) for a general row", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find('[data-test="inj-row-remove"]').attributes("title")).toBe(
+      "Delete this template row",
+    );
+  });
+
+  it("carries the wp-inj-row--general modifier class", () => {
+    const w = mount(InjectorRow, { props: { row: generalRow() } });
+    expect(w.find(".wp-inj-row").classes()).toContain("wp-inj-row--general");
   });
 });
 

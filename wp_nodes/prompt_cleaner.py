@@ -47,16 +47,26 @@ class WPPromptCleaner(io.ComfyNode):
             display_name="WP Prompt Cleaner",
             category="wildcard-pipeline",
             inputs=[
-                io.String.Input("prompt", multiline=True, default=""),
-                CleanerWidgetInput.Input("cleaner", socketless=True, default="{}"),
+                io.String.Input(
+                    "prompt",
+                    multiline=True,
+                    default="",
+                    tooltip=(
+                        "Prompt text to clean up. Wire from an upstream "
+                        "WP Prompt Assembler (or any other string source) "
+                        "and the configured rules — punctuation, weights, "
+                        "duplicates, blocklist — apply on top."
+                    ),
+                ),
+                CleanerWidgetInput.Input("wp_cleaner", socketless=True, default="{}"),
             ],
             outputs=[io.String.Output("prompt")],
             not_idempotent=True,
         )
 
     @classmethod
-    def execute(cls, prompt, cleaner="{}"):
-        cfg = _parse_config(cleaner)
+    def execute(cls, prompt, wp_cleaner="{}"):
+        cfg = _parse_config(wp_cleaner)
         result = PromptCleaner().run(prompt, cfg)
         text = result["text"]
         ui_payload = {

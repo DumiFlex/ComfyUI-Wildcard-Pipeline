@@ -21,15 +21,36 @@ class WPVarToFloat(io.ComfyNode):
             display_name="WP Var → Float",
             category="wildcard-pipeline",
             inputs=[
-                PipelineContext.Input("context"),
-                VarPickerInput.Input("var_name", socketless=True),
-                io.Int.Input("index", default=0, min=0, max=999),
+                PipelineContext.Input(
+                    "context",
+                    tooltip=(
+                        "The resolved $variable context from any upstream "
+                        "WP Context / Loop / Injector chain. Required — "
+                        "without it the node has no variables to read."
+                    ),
+                ),
+                VarPickerInput.Input("wp_var_name", socketless=True),
+                io.Int.Input(
+                    "index",
+                    default=0,
+                    min=0,
+                    max=999,
+                    tooltip=(
+                        "Which number in the value to extract when multiple "
+                        "are present (0 = first)."
+                    ),
+                ),
                 io.Float.Input(
                     "default",
                     default=0.0,
                     min=-1.0e38,
                     max=1.0e38,
                     step=0.01,
+                    tooltip=(
+                        "Value to use when the variable is missing or the "
+                        "index is out of range. The node never errors — it "
+                        "falls back to this."
+                    ),
                 ),
             ],
             outputs=[io.Float.Output("value")],
@@ -37,8 +58,8 @@ class WPVarToFloat(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, context, var_name, index, default):
-        text = lookup_var(context, var_name)
+    def execute(cls, context, wp_var_name, index, default):
+        text = lookup_var(context, wp_var_name)
         value = parse_float(text, index, default)
         a = parse_float(text, index, 0.0)
         b = parse_float(text, index, 1.0)

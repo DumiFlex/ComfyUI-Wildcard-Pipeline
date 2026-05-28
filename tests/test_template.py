@@ -85,11 +85,21 @@ class TestResolveVariables:
         assert resolve_variables(template, _ctx(name="Alice")) == expected
 
 
-def test_resolve_variables_supports_inline_pick():
+def test_resolve_variables_leaves_inline_pick_literal_on_assembler():
+    # The assembler surface is seedless (always rolls from seed 0), so an
+    # inline pick there would freeze deterministically — misleading. Engine
+    # policy: render `{a|b}` verbatim and let the user produce the random
+    # value in a seeded module, referencing its $var. $var substitution
+    # still happens, so only the brace block stays literal.
     ctx = {"__wp_rng__": random.Random(42), "__wp_warnings__": [], "color": "red"}
     out = resolve_variables("$color {a|b}", ctx)
-    assert out.startswith("red ")
-    assert out[-1] in ("a", "b")
+    assert out == "red {a|b}"
+
+
+def test_resolve_variables_leaves_multi_pick_literal_on_assembler():
+    # Same rule for the multi-pick `{N$$sep$$...}` form.
+    ctx = {"__wp_rng__": random.Random(42), "__wp_warnings__": []}
+    assert resolve_variables("{2$$, $$a|b|c}", ctx) == "{2$$, $$a|b|c}"
 
 
 def test_resolve_variables_legacy_dollar_var_unchanged():

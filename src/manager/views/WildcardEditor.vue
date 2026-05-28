@@ -13,7 +13,7 @@
 import { computed, onMounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
@@ -53,6 +53,7 @@ import type { ResolveWarning } from "../utils/resolveTokens";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
+const route = useRoute();
 const moduleStore = useModuleStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
@@ -269,6 +270,16 @@ onMounted(async () => {
       toast.push({ severity: "error", summary: "Wildcard not found" });
       router.replace("/wildcards");
     }
+  } else if (route.query.starter === "subject") {
+    // Quick-create starter: pre-fill a ready-to-save "subject" wildcard so a
+    // brand-new user lands in an editor with something concrete to tweak + save.
+    name.value = "subject";
+    varBinding.value = "subject";
+    options.value = [
+      { id: _newOptionId(), value: "a cat", weight: 1 },
+      { id: _newOptionId(), value: "a dog", weight: 1 },
+      { id: _newOptionId(), value: "a fox", weight: 1 },
+    ];
   }
   baseline.value = snapshot();
 });

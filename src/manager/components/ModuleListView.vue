@@ -291,6 +291,15 @@ const showPagination = computed(
       Math.min(...PAGE_SIZE_OPTIONS.map((o) => o.value)),
 );
 
+// True only while the single empty-state row is the table's body (no data rows,
+// not showing skeletons). Mirrors the `v-if`/`v-else-if` chain in the body so we
+// can flag the table `height: 100%` to fill the scroll container — see the
+// `.wp-table--empty` rule below. Skeleton rows fill the table on their own, so
+// we must NOT stretch then.
+const showEmptyRow = computed(
+  () => !(props.loading && !props.items.length) && !paged.value.length,
+);
+
 const allSelected = computed({
   get(): boolean {
     return paged.value.length > 0 && paged.value.every((r) => selected.value.has(r.id));
@@ -836,7 +845,7 @@ defineExpose({
 
     <!-- Table -->
     <div class="wp-table-wrap wp-table-wrap--scroll">
-      <table class="wp-table wp-table--sticky-head">
+      <table class="wp-table wp-table--sticky-head" :class="{ 'wp-table--empty': showEmptyRow }">
         <thead>
           <tr>
             <th scope="col" class="wp-table__select">
@@ -959,8 +968,8 @@ defineExpose({
               </td>
             </tr>
           </template>
-          <tr v-else-if="!paged.length">
-            <td :colspan="totalCols">
+          <tr v-else-if="!paged.length" class="wp-table__empty-row">
+            <td :colspan="totalCols" class="wp-table__empty-cell">
               <slot v-if="!hasActiveFilters" name="empty">
                 <EmptyState
                   icon="pi-inbox"
@@ -1144,6 +1153,21 @@ defineExpose({
  * attribute. Without it, the highlight only paints scoped cells and the
  * selected-row tint stops mid-table. */
 :deep(.wp-table__row--selected) > td { background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent) !important; }
+
+/* Empty-state fill. An earlier pass forced `<table>` to `height: 100%` of
+ * its scroll wrap and propagated that down through tbody / empty row /
+ * empty cell so EmptyState (also `height: 100%`) absorbed the whole list
+ * body. The chain compounded `<thead>`'s natural height with a `<tbody>`
+ * already claiming 100% of the wrap, so total table height exceeded the
+ * wrap by the thead height and surfaced a permanent vertical scrollbar on
+ * every empty list. The cell now sizes to EmptyState's content + its
+ * `min-height: max(60vh, 360px)` floor (see ui/EmptyState.vue) — that
+ * covers "most of the viewport" without exceeding it. The `wp-table--empty`
+ * class is kept so future styling can hook the empty case without
+ * resurrecting the broken 100% chain. */
+.wp-table__empty-cell {
+  vertical-align: middle;
+}
 
 .wp-row-expand-btn {
   background: transparent;

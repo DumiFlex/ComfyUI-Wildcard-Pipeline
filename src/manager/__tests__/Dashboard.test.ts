@@ -93,7 +93,7 @@ describe("Dashboard.vue", () => {
     const wrap = mountView();
     await flushPromises();
     expect(wrap.find('[data-test="dashboard-getting-started"]').exists()).toBe(true);
-    expect(wrap.text()).toContain("Get started in three steps");
+    expect(wrap.text()).toContain("New here?");
     // Recents tabs are hidden in the empty state.
     expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(false);
   });

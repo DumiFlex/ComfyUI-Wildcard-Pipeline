@@ -1,0 +1,266 @@
+<script setup lang="ts">
+/**
+ * SeedListWidget — DOM widget for WP_SeedList.
+ *
+ * Owns the strategy chips + the three independent override toggles
+ * (seed / count / strategy). `base_seed` and `count` are stock
+ * ComfyUI Int widgets (native control_after_generate + min/max
+ * validation respectively) so they stay outside this SFC.
+ *
+ * Value contract: `modelValue` is a `SeedListConfig` object; emit
+ * `update:modelValue` with the full new config on any change. The
+ * host glue (`src/widgets/seed_list.ts`) serializes to JSON and
+ * pushes via `host.setValue` so ComfyUI's widget value matches.
+ */
+import { computed } from "vue";
+import type { SeedListConfig, SeedListStrategy } from "./types";
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: SeedListConfig;
+    /** Litegraph mode: 0 = ALWAYS (live), 2 = NEVER (muted), 4 = BYPASS.
+     *  Drives the dim overlay so canvas-side mute/bypass reads visually. */
+    nodeMode?: number;
+  }>(),
+  { nodeMode: 0 },
+);
+
+const emit = defineEmits<{ "update:modelValue": [next: SeedListConfig] }>();
+
+const STRATEGIES: { id: SeedListStrategy; label: string; hint: string }[] = [
+  { id: "hash_index", label: "hash", hint: "Independent per-iteration; recommended for varied results." },
+  { id: "sequential", label: "sequential", hint: "base, base+1, base+2, … Predictable diffs." },
+  { id: "prime_stride", label: "stride", hint: "base + i × 1,000,003. Wide spread, deterministic." },
+];
+
+const OVERRIDE_SEED_TOOLTIP =
+  "When ON and a WP Context Loop is wired into loop_config, this node uses " +
+  "the loop's base_seed instead of the local base_seed widget. The local " +
+  "value stays as the fallback for when the wire is missing.";
+
+const OVERRIDE_COUNT_TOOLTIP =
+  "When ON and a WP Context Loop is wired into loop_config, this node uses " +
+  "the loop's count instead of the local count widget. The local value " +
+  "stays as the fallback for when the wire is missing.";
+
+const OVERRIDE_STRATEGY_TOOLTIP =
+  "When ON and a WP Context Loop is wired into loop_config, this node uses " +
+  "the loop's strategy instead of the local chips. The local value stays " +
+  "as the fallback for when the wire is missing.";
+
+const STRATEGY_LOCKED_TOOLTIP =
+  "Strategy is sourced from the wired Loop config — turn off " +
+  "'Override strategy from loop' to edit locally.";
+
+const isMuted = computed<boolean>(() => props.nodeMode === 2);
+const isBypassed = computed<boolean>(() => props.nodeMode === 4);
+
+/** True while strategy comes from the upstream loop_config wire.
+ *  Mirrors what `setStockWidgetDisabled("count", ...)` does for the count
+ *  stock widget in the host glue — chips can't live as a stock widget so
+ *  the lock is handled inside the SFC via class + handler guard. */
+const strategyLocked = computed<boolean>(() => props.modelValue.override_strategy);
+
+function pickStrategy(s: SeedListStrategy): void {
+  if (strategyLocked.value) return;
+  if (props.modelValue.strategy === s) return;
+  emit("update:modelValue", { ...props.modelValue, strategy: s });
+}
+
+function toggleOverrideSeed(): void {
+  emit("update:modelValue", {
+    ...props.modelValue,
+    override_seed: !props.modelValue.override_seed,
+  });
+}
+
+function toggleOverrideCount(): void {
+  emit("update:modelValue", {
+    ...props.modelValue,
+    override_count: !props.modelValue.override_count,
+  });
+}
+
+function toggleOverrideStrategy(): void {
+  emit("update:modelValue", {
+    ...props.modelValue,
+    override_strategy: !props.modelValue.override_strategy,
+  });
+}
+</script>
+
+<template>
+  <div
+    class="wp-seedlist"
+    :class="{
+      'wp-seedlist--muted': isMuted,
+      'wp-seedlist--bypassed': isBypassed,
+    }"
+  >
+    <div class="wp-seedlist__section">
+      <div class="wp-seedlist__label">strategy</div>
+      <div
+        class="wp-seedlist__chips"
+        :class="{ 'wp-seedlist__chips--locked': strategyLocked }"
+        :title="strategyLocked ? STRATEGY_LOCKED_TOOLTIP : undefined"
+        :aria-disabled="strategyLocked"
+        role="radiogroup"
+        aria-label="seed strategy"
+      >
+        <button
+          v-for="s in STRATEGIES"
+          :key="s.id"
+          type="button"
+          class="wp-seedlist__chip"
+          :class="{ 'wp-seedlist__chip--active': modelValue.strategy === s.id }"
+          :data-test="`seedlist-strategy-${s.id}`"
+          :title="strategyLocked ? STRATEGY_LOCKED_TOOLTIP : s.hint"
+          :disabled="strategyLocked"
+          role="radio"
+          :aria-checked="modelValue.strategy === s.id"
+          @click="pickStrategy(s.id)"
+        >
+          {{ s.label }}
+        </button>
+      </div>
+    </div>
+
+    <div class="wp-seedlist__row" :title="OVERRIDE_SEED_TOOLTIP">
+      <span class="wp-seedlist__row-label">Override base seed from loop</span>
+      <button
+        type="button"
+        class="wp-seedlist__switch"
+        :class="{ 'wp-seedlist__switch--on': modelValue.override_seed }"
+        data-test="seedlist-override-seed-toggle"
+        :aria-pressed="modelValue.override_seed"
+        :aria-label="`Override base seed: ${modelValue.override_seed ? 'on' : 'off'}`"
+        :title="OVERRIDE_SEED_TOOLTIP"
+        @click="toggleOverrideSeed"
+      >
+        <span class="wp-seedlist__switch-thumb" />
+      </button>
+    </div>
+
+    <div class="wp-seedlist__row" :title="OVERRIDE_COUNT_TOOLTIP">
+      <span class="wp-seedlist__row-label">Override count from loop</span>
+      <button
+        type="button"
+        class="wp-seedlist__switch"
+        :class="{ 'wp-seedlist__switch--on': modelValue.override_count }"
+        data-test="seedlist-override-count-toggle"
+        :aria-pressed="modelValue.override_count"
+        :aria-label="`Override count: ${modelValue.override_count ? 'on' : 'off'}`"
+        :title="OVERRIDE_COUNT_TOOLTIP"
+        @click="toggleOverrideCount"
+      >
+        <span class="wp-seedlist__switch-thumb" />
+      </button>
+    </div>
+
+    <div class="wp-seedlist__row" :title="OVERRIDE_STRATEGY_TOOLTIP">
+      <span class="wp-seedlist__row-label">Override strategy from loop</span>
+      <button
+        type="button"
+        class="wp-seedlist__switch"
+        :class="{ 'wp-seedlist__switch--on': modelValue.override_strategy }"
+        data-test="seedlist-override-strategy-toggle"
+        :aria-pressed="modelValue.override_strategy"
+        :aria-label="`Override strategy: ${modelValue.override_strategy ? 'on' : 'off'}`"
+        :title="OVERRIDE_STRATEGY_TOOLTIP"
+        @click="toggleOverrideStrategy"
+      >
+        <span class="wp-seedlist__switch-thumb" />
+      </button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+@import "../shared/theme.css";
+
+.wp-seedlist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font: 11px var(--wp-font-mono, monospace);
+  color: var(--wp-text);
+  padding: 4px 0;
+}
+.wp-seedlist__section { display: flex; flex-direction: column; gap: 4px; }
+.wp-seedlist__label {
+  font: 600 9px var(--wp-font-sans, sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+}
+
+.wp-seedlist__chips { display: flex; gap: 4px; }
+.wp-seedlist__chip {
+  flex: 1;
+  padding: 4px 6px;
+  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
+  border: 1px solid var(--wp-border, #353841);
+  border-radius: 3px;
+  color: var(--wp-text-muted, #aeb1bb);
+  font: 600 10px var(--wp-font-sans, sans-serif);
+  cursor: pointer;
+}
+.wp-seedlist__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
+.wp-seedlist__chip--active {
+  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
+  border-color: var(--wp-accent, #c4b5fd);
+  color: var(--wp-accent, #c4b5fd);
+}
+.wp-seedlist__chip:disabled { cursor: not-allowed; }
+/* Wrapper dims so the lock reads at a glance. Click blocking is the
+ * `:disabled` attribute on each chip (pointer-events:none here would
+ * suppress the hover-tooltip and the cursor change). */
+.wp-seedlist__chips--locked { opacity: 0.45; }
+
+.wp-seedlist__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.wp-seedlist__row-label {
+  font: 10px var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-muted, #aeb1bb);
+  flex: 1;
+}
+
+.wp-seedlist__switch {
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
+  border: 1px solid var(--wp-border, #353841);
+  position: relative;
+  padding: 0;
+  cursor: pointer;
+  transition: background var(--wp-motion-hover, 120ms) ease, border-color var(--wp-motion-hover, 120ms) ease;
+}
+.wp-seedlist__switch-thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  background: var(--wp-text-dim, #7a7d88);
+  border-radius: 50%;
+  transition: left var(--wp-motion-hover, 120ms) ease, background var(--wp-motion-hover, 120ms) ease;
+}
+.wp-seedlist__switch--on {
+  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 22%, transparent);
+  border-color: var(--wp-accent, #c4b5fd);
+}
+.wp-seedlist__switch--on .wp-seedlist__switch-thumb {
+  left: 15px;
+  background: var(--wp-accent, #c4b5fd);
+}
+
+/* Mute / bypass dim — same convention as WP_VarTo* and WP_ContextLoop. */
+.wp-seedlist--muted { opacity: 0.45; pointer-events: none; }
+.wp-seedlist--bypassed { opacity: 0.65; }
+</style>

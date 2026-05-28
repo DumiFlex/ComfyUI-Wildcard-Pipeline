@@ -86,7 +86,7 @@ def test_picks_carried_via_internals_field():
     inside the run's transient ctx and never crossed the socket."""
     out = WPContext.execute(
         seed=0,
-        modules=_modules_json([_hair_module()]),
+        wp_modules=_modules_json([_hair_module()]),
         upstream=None,
     )
     payload: ContextPayload = out.values[0]
@@ -103,7 +103,7 @@ def test_constraints_carried_via_internals_field():
     handler, surfaces on the next-node-visible internals field."""
     out = WPContext.execute(
         seed=0,
-        modules=_modules_json([_hair_x_mood_constraint()]),
+        wp_modules=_modules_json([_hair_x_mood_constraint()]),
         upstream=None,
     )
     payload: ContextPayload = out.values[0]
@@ -123,7 +123,7 @@ def test_three_node_chain_constraint_actually_constrains_target():
     # Run Context A — hair picks "long flowing" (sub_category "long").
     a_out = WPContext.execute(
         seed=1,
-        modules=_modules_json([_hair_module()]),
+        wp_modules=_modules_json([_hair_module()]),
         upstream=None,
     )
     a_payload: ContextPayload = a_out.values[0]
@@ -132,7 +132,7 @@ def test_three_node_chain_constraint_actually_constrains_target():
     # Run Context B with A as upstream — constraint registers.
     b_out = WPContext.execute(
         seed=2,
-        modules=_modules_json([_hair_x_mood_constraint()]),
+        wp_modules=_modules_json([_hair_x_mood_constraint()]),
         upstream=a_payload,
     )
     b_payload: ContextPayload = b_out.values[0]
@@ -148,7 +148,7 @@ def test_three_node_chain_constraint_actually_constrains_target():
     for seed in range(20):
         c_out = WPContext.execute(
             seed=seed,
-            modules=_modules_json([_mood_module()]),
+            wp_modules=_modules_json([_mood_module()]),
             upstream=b_payload,
         )
         c_payload: ContextPayload = c_out.values[0]
@@ -167,17 +167,17 @@ def test_three_node_chain_short_hair_excludes_positive_mood():
         {"id": "h2", "value": "buzz cut", "weight": 1, "sub_category": "short"},
     ]
     a_out = WPContext.execute(
-        seed=1, modules=_modules_json([short_hair]), upstream=None,
+        seed=1, wp_modules=_modules_json([short_hair]), upstream=None,
     )
     b_out = WPContext.execute(
         seed=2,
-        modules=_modules_json([_hair_x_mood_constraint()]),
+        wp_modules=_modules_json([_hair_x_mood_constraint()]),
         upstream=a_out.values[0],
     )
     for seed in range(20):
         c_out = WPContext.execute(
             seed=seed,
-            modules=_modules_json([_mood_module()]),
+            wp_modules=_modules_json([_mood_module()]),
             upstream=b_out.values[0],
         )
         c_payload: ContextPayload = c_out.values[0]

@@ -14,7 +14,12 @@ import json
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine.seed_derive import derive_loop_seeds
-from wp_nodes.types import ContextLoopConfigInput, ContextPayload, PipelineContext
+from wp_nodes.types import (
+    ContextLoopConfigInput,
+    ContextLoopWidgetInput,
+    ContextPayload,
+    PipelineContext,
+)
 
 _STRATEGIES = {"sequential", "hash_index", "prime_stride"}
 
@@ -32,8 +37,8 @@ def _parse_config(raw: str) -> dict[str, object]:
         "override_seed": False,
         "iteration_var_name": "iteration",
         "bypass": False,
-        "iteration_internal": False,
-        "total_internal": False,
+        "iteration_internal": True,
+        "total_internal": True,
     }
     if not raw or not isinstance(raw, str):
         return defaults
@@ -51,8 +56,8 @@ def _parse_config(raw: str) -> dict[str, object]:
     if isinstance(name, str) and name.strip():
         out["iteration_var_name"] = name.strip()
     out["bypass"] = bool(parsed.get("bypass", False))
-    out["iteration_internal"] = bool(parsed.get("iteration_internal", False))
-    out["total_internal"] = bool(parsed.get("total_internal", False))
+    out["iteration_internal"] = bool(parsed.get("iteration_internal", True))
+    out["total_internal"] = bool(parsed.get("total_internal", True))
     return out
 
 
@@ -72,15 +77,35 @@ class WPContextLoop(io.ComfyNode):
                     min=0,
                     max=0xFFFFFFFFFFFFFFFF,
                     control_after_generate=True,
+                    tooltip=(
+                        "Starting point for randomisation. Change for a different "
+                        "roll; keep the same to reproduce. Right-click → Convert "
+                        "widget to input to drive from another seed node."
+                    ),
                 ),
                 io.Int.Input(
                     "count",
                     default=1,
                     min=1,
                     max=999,
+                    tooltip=(
+                        "How many iterations the series runs (1–999). Set to 1 "
+                        "to disable looping without removing the node."
+                    ),
                 ),
-                ContextLoopConfigInput.Input(
-                    "config",
+                # Widget-only TYPE (`WP_CONTEXT_LOOP_WIDGET`), distinct
+                # from the wire-payload type (`WP_CONTEXT_LOOP_CONFIG`)
+                # used on the output below + on WP_SeedList's
+                # `loop_config` socket. Separating the two types lets the
+                # `getCustomWidgets` factory register against the widget
+                # type only — the wire type has NO factory, so ComfyUI
+                # renders consumers (SeedList) as plain sockets and
+                # Loop's own input stays a DOM widget. The previous
+                # single-type design forced an `inputName` gate in
+                # main.ts that ended up hiding SeedList's socket
+                # entirely.
+                ContextLoopWidgetInput.Input(
+                    "wp_context_loop_config",
                     socketless=True,
                     default="{}",
                 ),
@@ -91,13 +116,20 @@ class WPContextLoop(io.ComfyNode):
                 # (that was wrong — stub accepted any kwarg, real API
                 # rejects). See `comfy_api/latest/_io.py:Output.__init__`.
                 PipelineContext.Output("context", is_output_list=True),
+                # Single-value side output: the resolved config payload
+                # so sibling helpers (WP_SeedList etc.) can mirror the
+                # loop's count / strategy / base_seed without the user
+                # double-wiring widgets. Plain (non-list) — receiving
+                # nodes get one dict per graph run regardless of the
+                # context-fan-out happening on the first output.
+                ContextLoopConfigInput.Output("loop_config"),
             ],
             not_idempotent=False,
         )
 
     @classmethod
-    def execute(cls, seed, count, config):
-        cfg = _parse_config(config)
+    def execute(cls, seed, count, wp_context_loop_config):
+        cfg = _parse_config(wp_context_loop_config)
         override_seed = bool(cfg["override_seed"])
         strategy = cfg["strategy"]
         iteration_var_name = cfg["iteration_var_name"]
@@ -114,6 +146,18 @@ class WPContextLoop(io.ComfyNode):
             derive_loop_seeds(int(seed), effective_count, strategy)
             if has_override else None
         )
+        # Build the loop_config payload once so the same dict drives both
+        # the per-iteration internals AND the side output. `count` here
+        # is the EFFECTIVE count (post-bypass) so downstream sees what
+        # the loop is actually running, not the raw widget value.
+        # `base_seed` carries the user's `seed` input verbatim so
+        # WP_SeedList can re-derive the same series locally.
+        loop_config_payload: dict[str, object] = {
+            "count": effective_count,
+            "strategy": strategy,
+            "base_seed": int(seed),
+            "override_seed": has_override,
+        }
 
         # Build the internal-flags map once — same across iterations
         # (per-iteration values differ but their internal-ness doesn't).
@@ -158,4 +202,4 @@ class WPContextLoop(io.ComfyNode):
                 debug={},
                 internals=internals,
             ))
-        return io.NodeOutput(payloads)
+        return io.NodeOutput(payloads, loop_config_payload)

@@ -27,6 +27,48 @@ export function resolveWildcardChip(uuid: string, lib: LibraryFixture): ChipReso
   return { name: wc.name, missing: false };
 }
 
+/** Module kind set used by the kind-aware chip resolver. Mirrors
+ *  `IncomingRef.from_kind` plus `wildcard` (which lives outside the
+ *  incoming-ref index because the index walks FROM wildcards). */
+export type ModuleKind =
+  | "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle";
+
+export type ModuleChipResolution =
+  | { name: string; kind: ModuleKind; resolved: true }
+  | { resolved: false };
+
+/**
+ * Kind-aware chip resolver — search EVERY library collection for a uuid
+ * match and report back the matched module's display name + kind. Used
+ * by RichTextPreview / DebugViewer so a `@{uuid}` token that points at
+ * a non-wildcard module (e.g. the constraint id embedded in the
+ * `constraint_never_applied` warning, where the engine wraps both the
+ * CONSTRAINT id AND the target wildcard id as `@{uuid}` refs) renders
+ * as a colored chip matching its kind instead of falling through as an
+ * unresolved wildcard.
+ *
+ * Search order: wildcards → fixed_values → combines → derivations →
+ * constraints → bundles. First match wins. Order matters only as a
+ * tiebreaker for the (in practice impossible) collision across kinds —
+ * uuids are 8-hex-char short ids minted via Python `secrets.token_hex(4)`,
+ * collision-free within a library at write time.
+ */
+export function resolveModuleChip(uuid: string, lib: LibraryFixture): ModuleChipResolution {
+  const wc = lib.wildcards.find((w) => w.id === uuid);
+  if (wc) return { name: wc.name, kind: "wildcard", resolved: true };
+  const fv = lib.fixed_values.find((m) => m.id === uuid);
+  if (fv) return { name: fv.name, kind: "fixed_values", resolved: true };
+  const cb = lib.combines.find((m) => m.id === uuid);
+  if (cb) return { name: cb.name, kind: "combine", resolved: true };
+  const dv = lib.derivations.find((m) => m.id === uuid);
+  if (dv) return { name: dv.name, kind: "derivation", resolved: true };
+  const ct = lib.constraints.find((m) => m.id === uuid);
+  if (ct) return { name: ct.name, kind: "constraint", resolved: true };
+  const bd = lib.bundles.find((m) => m.id === uuid);
+  if (bd) return { name: bd.name, kind: "bundle", resolved: true };
+  return { resolved: false };
+}
+
 export function resolveOptionChip(
   wildcardId: string,
   optionId: string,

@@ -17,8 +17,15 @@ class WPDebug(io.ComfyNode):
             display_name="WP Debug",
             category="wildcard-pipeline",
             inputs=[
-                PipelineContext.Input("context"),
-                DebugViewerInput.Input("viewer", socketless=True),
+                PipelineContext.Input(
+                    "context",
+                    tooltip=(
+                        "The resolved $variable context from any upstream "
+                        "WP Context / Loop / Injector chain. Required — "
+                        "without it the node has nothing to inspect."
+                    ),
+                ),
+                DebugViewerInput.Input("wp_viewer", socketless=True),
             ],
             outputs=[],
             is_output_node=True,
@@ -26,8 +33,8 @@ class WPDebug(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, context, viewer):
-        del viewer  # accepted for widget binding parity; no runtime use
+    def execute(cls, context, wp_viewer):
+        del wp_viewer  # accepted for widget binding parity; no runtime use
 
         # Flatten the typed ContextPayload into a single dict the
         # frontend `DebugViewer.vue` consumes. User-facing variables

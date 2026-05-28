@@ -191,14 +191,18 @@ const KIND_ICON: Record<string, string> = {
   constraint:   "pi pi-filter",
 };
 
-/** Resolved frame color — same fallback rule the Context widget uses
- *  for unconfigured bundles. Indigo (`#6366f1`) matches the
- *  `--wp-bundle-default` token the canvas paints with when an
- *  instance has no explicit color. Previously fell back to gray
- *  (`#46566B`), so the list swatch and the canvas frame disagreed
- *  for every bundle that hadn't picked an explicit color. */
+/** Resolved frame color — same fallback rule the Context widget +
+ *  Dashboard swatch use for unconfigured bundles. Routes "no color
+ *  picked" through the `--wp-bundle-default` CSS token so the list
+ *  swatch, the canvas frame, the dashboard swatch, and the editor
+ *  picker all paint the same slate when the user hasn't picked an
+ *  explicit color. Token currently resolves to slate-700 (dark) /
+ *  slate-500 (light) per `tokens.css`; change there to retheme
+ *  every surface in one go. */
 function frameColor(row: BundleRow): string {
-  return row.color && row.color.length ? row.color : "#6366f1";
+  return row.color && row.color.length
+    ? row.color
+    : "var(--wp-bundle-default, #334155)";
 }
 </script>
 
@@ -215,7 +219,7 @@ function frameColor(row: BundleRow): string {
     :loading="store.loading"
     :load-error="loadErr.error.value"
     :filter="filter"
-    :mid-cols="3"
+    :mid-cols="4"
     empty-message="No bundles yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"
@@ -341,7 +345,7 @@ function frameColor(row: BundleRow): string {
         <span
           class="wp-bundle-swatch"
           :style="{ background: frameColor(row) }"
-          :title="frameColor(row)"
+          :title="row.color && row.color.length ? row.color : 'Default (bundle token)'"
           aria-hidden="true"
         />
       </td>

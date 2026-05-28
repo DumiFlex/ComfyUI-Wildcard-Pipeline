@@ -211,13 +211,13 @@ export const api = {
     });
   },
   /**
-   * Import/export endpoints. `build` assembles a 7-bucket export payload
+   * Import/export endpoints. `build` assembles an 8-bucket export payload
    * from picked UUIDs; `commit` lands an import via the picker → modal
    * → orchestrator pipeline; `undo` reverses the most recent commit.
    */
   importExport: {
     /**
-     * POST /wp/api/export/build — assemble a 7-bucket export payload from
+     * POST /wp/api/export/build — assemble an 8-bucket export payload from
      * picked UUIDs. Response is the payload itself (no `{ok, payload}`
      * wrapper); the shared `request<T>` helper already throws ApiError on
      * non-2xx so callers can treat the resolved value as success.
@@ -255,10 +255,11 @@ export const api = {
 
 /**
  * Request body for POST /wp/api/export/build. Every key is optional on
- * the wire (default `[]`) but the picker always sends all seven so the
- * intent is unambiguous. Bucket names match the engine's 7-bucket schema
+ * the wire (default `[]`) but the picker always sends all eight so the
+ * intent is unambiguous. Bucket names match the engine's 8-bucket schema
  * — wildcards/fixed_values/combines/derivations/constraints are five
- * separate module-type buckets, NOT a flat "variables" array.
+ * separate module-type buckets, NOT a flat "variables" array; templates
+ * are the eighth first-class entity.
  */
 export interface ExportBuildRequest {
   bundle_uuids: string[];
@@ -268,6 +269,7 @@ export interface ExportBuildRequest {
   derivation_uuids: string[];
   constraint_uuids: string[];
   category_uuids: string[];
+  template_uuids: string[];
 }
 
 /**
@@ -288,4 +290,5 @@ export interface RawExportPayload {
   derivations: Array<Record<string, unknown>>;
   constraints: Array<Record<string, unknown>>;
   categories: Array<Record<string, unknown>>;
+  templates: Array<Record<string, unknown>>;
 }

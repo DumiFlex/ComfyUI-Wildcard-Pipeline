@@ -88,13 +88,14 @@ describe("AppSidebar.vue", () => {
 
   it("renders external links as anchors with target=_blank", async () => {
     const { wrap } = await mountSidebar();
-    const docs = wrap
+    // Documentation is now an in-app route (button); Wiki is the external anchor.
+    const wiki = wrap
       .findAll("a.wp-nav")
-      .find((a) => a.text().includes("Documentation"));
-    if (!docs) throw new Error("Documentation link not found");
-    expect(docs.attributes("target")).toBe("_blank");
-    expect(docs.attributes("rel")).toContain("noopener");
-    expect(docs.attributes("href")).toMatch(/^https?:\/\//);
+      .find((a) => a.text().includes("Wiki"));
+    if (!wiki) throw new Error("Wiki link not found");
+    expect(wiki.attributes("target")).toBe("_blank");
+    expect(wiki.attributes("rel")).toContain("noopener");
+    expect(wiki.attributes("href")).toMatch(/^https?:\/\//);
   });
 
   it("hides section labels when sidebar is collapsed", async () => {

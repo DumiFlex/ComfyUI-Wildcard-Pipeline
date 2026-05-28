@@ -21,10 +21,11 @@ Commit payload shape (received)::
     }
 
 ``kind`` is one of: ``wildcard``, ``fixed_values``, ``combine``,
-``derivation``, ``constraint``, ``bundle``, ``category``. The first
-five are dispatched to the ``modules`` table (discriminated by the
-``type`` column). Categories appear only in ``adds`` (name-based merge,
-no replace/rename concept).
+``derivation``, ``constraint``, ``bundle``, ``category``, ``template``.
+The first five are dispatched to the ``modules`` table (discriminated by
+the ``type`` column). Templates have their own ``templates`` table and
+support add/replace/rename like bundles. Categories appear only in
+``adds`` (name-based merge, no replace/rename concept).
 
 Undo metadata shape (persisted in ``import_undo`` row)::
 
@@ -327,6 +328,91 @@ def _fetch_bundle_row(
     }
 
 
+def _insert_template(
+    conn: sqlite3.Connection, entity: dict[str, Any], *,
+    target_id: str | None = None,
+) -> str:
+    """INSERT a template row using raw SQL. Returns the inserted id.
+
+    Mirrors `_insert_bundle` but for the templates table — no
+    `payload_hash` / `version` columns (templates can't drift). The
+    rename path passes ``target_id`` (only `name` required); the add
+    path uses ``entity["id"]`` verbatim (`name` + `id` required).
+    """
+    required = ("name",) if target_id else ("name", "id")
+    op_label = "rename" if target_id else "add"
+    _require_entity_fields("template", op_label, entity, required)
+    tid = target_id or entity["id"]
+    now = now_iso()
+    conn.execute(
+        "INSERT INTO templates("
+        "id, name, description, category_id, tags, "
+        "is_favorite, template_string, created_at, updated_at"
+        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        (
+            tid, entity["name"], entity.get("description", ""),
+            entity.get("category_id"),
+            json.dumps(entity.get("tags") or []),
+            int(entity.get("is_favorite", False)),
+            entity.get("template_string", ""),
+            entity.get("created_at", now),
+            entity.get("updated_at", now),
+        ),
+    )
+    return tid
+
+
+def _update_template(
+    conn: sqlite3.Connection, tid: str, content: dict[str, Any],
+) -> None:
+    """UPDATE the templates row identified by `tid` to mirror `content`.
+
+    Stamps `updated_at`; no `version` bump (templates have no version
+    column).
+    """
+    _require_entity_fields("template", "replace", content, ("name",))
+    now = now_iso()
+    conn.execute(
+        "UPDATE templates SET "
+        "name = ?, description = ?, category_id = ?, tags = ?, "
+        "is_favorite = ?, template_string = ?, updated_at = ? "
+        "WHERE id = ?;",
+        (
+            content["name"], content.get("description", ""),
+            content.get("category_id"),
+            json.dumps(content.get("tags") or []),
+            int(content.get("is_favorite", False)),
+            content.get("template_string", ""),
+            now, tid,
+        ),
+    )
+
+
+def _template_exists(conn: sqlite3.Connection, tid: str) -> bool:
+    row = conn.execute("SELECT 1 FROM templates WHERE id = ?;", (tid,)).fetchone()
+    return row is not None
+
+
+def _fetch_template_row(
+    conn: sqlite3.Connection, tid: str,
+) -> dict[str, Any] | None:
+    """Read a templates row as a plain dict (JSON columns deserialised)."""
+    row = conn.execute("SELECT * FROM templates WHERE id = ?;", (tid,)).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "category_id": row["category_id"],
+        "tags": json.loads(row["tags"]),
+        "is_favorite": bool(row["is_favorite"]),
+        "template_string": row["template_string"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
 def commit_import(
     conn: sqlite3.Connection, payload: dict[str, Any],
 ) -> dict[str, Any]:
@@ -408,6 +494,18 @@ def commit_import(
                     _insert_bundle(conn, entity)
                     imported_records.append({"kind": "bundle", "id": bid})
 
+                elif kind == "template":
+                    _require_entity_fields(
+                        "template", "add", entity, ("id", "name"),
+                    )
+                    tid = entity["id"]
+                    if _template_exists(conn, tid):
+                        raise _ImporterContractError(
+                            f"template id collision on add: {tid!r}",
+                        )
+                    _insert_template(conn, entity)
+                    imported_records.append({"kind": "template", "id": tid})
+
                 elif _is_module_kind(kind or ""):
                     _require_entity_fields(
                         kind, "add", entity, ("id", "name"),  # type: ignore[arg-type]
@@ -443,6 +541,14 @@ def commit_import(
                         )
                     replaced_snapshots[rid] = {"kind": "bundle", "row": existing}
                     _update_bundle(conn, rid, new_content)
+                elif kind == "template":
+                    existing = _fetch_template_row(conn, rid)
+                    if existing is None:
+                        raise _ImporterContractError(
+                            f"template replace target {rid!r} not found",
+                        )
+                    replaced_snapshots[rid] = {"kind": "template", "row": existing}
+                    _update_template(conn, rid, new_content)
                 elif _is_module_kind(kind or ""):
                     existing = _fetch_module_row(conn, rid)
                     if existing is None:
@@ -485,6 +591,14 @@ def commit_import(
                         )
                     _insert_bundle(conn, content, target_id=new_id)
                     imported_records.append({"kind": "bundle", "id": new_id})
+                    rename_map[old_id] = new_id
+                elif kind == "template":
+                    if _template_exists(conn, new_id):
+                        raise _ImporterContractError(
+                            f"template new_id collision on rename: {new_id!r}",
+                        )
+                    _insert_template(conn, content, target_id=new_id)
+                    imported_records.append({"kind": "template", "id": new_id})
                     rename_map[old_id] = new_id
                 elif _is_module_kind(kind or ""):
                     if _module_exists(conn, new_id):
@@ -610,6 +724,25 @@ def undo_import(
                             row["created_at"], row["updated_at"], rid,
                         ),
                     )
+                elif kind == "template":
+                    # Restore literal columns to the pre-replace state.
+                    # Templates have no version / payload_hash columns,
+                    # so the snapshot is just the metadata + string.
+                    conn.execute(
+                        "UPDATE templates SET "
+                        "name = ?, description = ?, category_id = ?, "
+                        "tags = ?, is_favorite = ?, template_string = ?, "
+                        "created_at = ?, updated_at = ? "
+                        "WHERE id = ?;",
+                        (
+                            row["name"], row["description"],
+                            row["category_id"],
+                            json.dumps(row["tags"]),
+                            int(row["is_favorite"]),
+                            row["template_string"],
+                            row["created_at"], row["updated_at"], rid,
+                        ),
+                    )
                 elif _is_module_kind(kind):
                     conn.execute(
                         "UPDATE modules SET "
@@ -641,6 +774,10 @@ def undo_import(
                 if kind == "bundle":
                     conn.execute(
                         "DELETE FROM bundles WHERE id = ?;", (rec_id,),
+                    )
+                elif kind == "template":
+                    conn.execute(
+                        "DELETE FROM templates WHERE id = ?;", (rec_id,),
                     )
                 elif kind == "category":
                     conn.execute(

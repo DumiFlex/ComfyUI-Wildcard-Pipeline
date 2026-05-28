@@ -38,6 +38,9 @@ export function liveLibraryToRawPayload(
     derivations: [],
     constraints: [],
     categories: [],
+    // Templates don't participate in the dep graph (no refs, no children)
+    // — always empty here; the adapter only feeds buildDepGraph.
+    templates: [],
   };
 
   for (const m of modules) {

@@ -24,18 +24,44 @@ class WPVarToBool(io.ComfyNode):
             display_name="WP Var → Bool",
             category="wildcard-pipeline",
             inputs=[
-                PipelineContext.Input("context"),
-                VarPickerInput.Input("var_name", socketless=True),
-                io.Int.Input("index", default=0, min=0, max=999),
-                io.Boolean.Input("default", default=False),
+                PipelineContext.Input(
+                    "context",
+                    tooltip=(
+                        "The resolved $variable context from any upstream "
+                        "WP Context / Loop / Injector chain. Required — "
+                        "without it the node has no variables to read."
+                    ),
+                ),
+                VarPickerInput.Input("wp_var_name", socketless=True),
+                io.Int.Input(
+                    "index",
+                    default=0,
+                    min=0,
+                    max=999,
+                    tooltip=(
+                        "Which boolean token in the value to extract when "
+                        "multiple are present (0 = first). Non-boolean "
+                        "tokens (e.g. numbers) are skipped without "
+                        "consuming an index slot."
+                    ),
+                ),
+                io.Boolean.Input(
+                    "default",
+                    default=False,
+                    tooltip=(
+                        "Value to use when the variable is missing or no "
+                        "matching boolean token is found. The node never "
+                        "errors — it falls back to this."
+                    ),
+                ),
             ],
             outputs=[io.Boolean.Output("value")],
             not_idempotent=False,
         )
 
     @classmethod
-    def execute(cls, context, var_name, index, default):
-        text = lookup_var(context, var_name)
+    def execute(cls, context, wp_var_name, index, default):
+        text = lookup_var(context, wp_var_name)
         value = parse_bool(text, index, default)
         a = parse_bool(text, index, True)
         b = parse_bool(text, index, False)
