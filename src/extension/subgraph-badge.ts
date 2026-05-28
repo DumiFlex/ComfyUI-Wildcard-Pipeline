@@ -184,7 +184,12 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
   const out: Conflict[] = [];
   for (const { node } of walkAllNodes(subgraph)) {
     if (node.type === "WP_Context") {
-      const v = parseWidgetJson<ContextWidgetValue>(widgetValue(node, "modules"), { version: 1, modules: [] });
+      // Widget was renamed to `wp_modules` during the `wp_`-prefix sweep
+      // (see CLAUDE.md "Custom widget types"). Reading the legacy name
+      // returns "", the subgraph badge then never sees any inner WP_Context
+      // modules, and the badge stays mute even when the subgraph contains
+      // a missing variable / orphan constraint that should surface.
+      const v = parseWidgetJson<ContextWidgetValue>(widgetValue(node, "wp_modules"), { version: 1, modules: [] });
       const upstream = collectUpstreamVariables(rootGraph, node);
       // scanConflicts internally gates via isModuleEffectivelyEnabled
       // (covers both child.enabled=false AND bundle.enabled=false). Pre-
