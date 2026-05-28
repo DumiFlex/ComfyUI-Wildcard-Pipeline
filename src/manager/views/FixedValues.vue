@@ -150,7 +150,7 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
     :loading="store.loading"
     :load-error="loadErr.error.value"
     :filter="filter"
-    :mid-cols="2"
+    :mid-cols="3"
     empty-message="No fixed values yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"

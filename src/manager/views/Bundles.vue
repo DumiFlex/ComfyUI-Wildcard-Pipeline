@@ -215,7 +215,7 @@ function frameColor(row: BundleRow): string {
     :loading="store.loading"
     :load-error="loadErr.error.value"
     :filter="filter"
-    :mid-cols="3"
+    :mid-cols="4"
     empty-message="No bundles yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"

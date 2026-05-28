@@ -175,7 +175,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
     :loading="store.loading"
     :load-error="loadErr.error.value"
     :filter="filter"
-    :mid-cols="3"
+    :mid-cols="4"
     empty-message="No combines yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"

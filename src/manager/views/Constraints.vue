@@ -212,7 +212,7 @@ function formatFactor(f: number): string {
     :loading="store.loading"
     :load-error="loadErr.error.value"
     :filter="filter"
-    :mid-cols="4"
+    :mid-cols="5"
     empty-message="No constraints yet"
     :page="urlState.page"
     :page-size="urlState.pageSize"
