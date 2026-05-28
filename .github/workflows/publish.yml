@@ -4,6 +4,16 @@ name: Publish to ComfyUI Registry
 # every published GitHub release so the registry listing stays in sync
 # with semantic-release tags. Manual dispatch left available for
 # re-publishing if a release ever needs to be force-pushed.
+#
+# Calls `comfy node publish` directly (via comfy-cli) instead of the
+# wrapper `Comfy-Org/publish-node-action@main`. The wrapper runs its
+# own internal `actions/checkout@v4` step before zipping, which wipes
+# the working directory back to a fresh git state — and since `js/`
+# and `web/` are gitignored build outputs, they get nuked between our
+# `pnpm run build` step and the zip step. The result was a published
+# zip with empty js/ + web/ directories (canvas widgets + manager SPA
+# never loaded for end users). Calling comfy-cli directly preserves
+# the build artifacts on disk into the publish call.
 
 on:
   release:
@@ -13,8 +23,6 @@ on:
 permissions:
   contents: read
 
-# Opt every JS-based action into the Node 24 runner; matches ci.yml +
-# release.yml so we don't get deprecation noise on pnpm/action-setup.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -24,21 +32,34 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # publish-node-action reads pyproject.toml + builds the ship
-          # tree from the working dir. Shallow checkout is enough — the
-          # release tag is already created, we don't need history.
           fetch-depth: 1
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # Full build = extension chunk (js/) + manager SPA (web_dist/).
-      # publish-node-action zips the working tree so both build outputs
-      # need to be on disk before it runs.
-      - run: pnpm run build
-      - name: Publish to ComfyUI Registry
-        uses: Comfy-Org/publish-node-action@main
+      - uses: actions/setup-python@v5
         with:
-          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          python-version: "3.10"
+      - run: pnpm install --frozen-lockfile
+      # Full build = extension chunk (js/) + manager SPA (web/).
+      # Both directories must be on disk before `comfy node publish`
+      # runs so the registry archive ships actual frontend code instead
+      # of empty stubs. [tool.comfy].includes = ["js", "web"] in
+      # pyproject.toml force-includes them past .gitignore.
+      - run: pnpm run build
+      # Sanity gate — fail fast if build didn't actually produce the
+      # shippable trees. Without this guard a broken build would
+      # silently push empty directories to the registry (we already
+      # shipped one such broken release; this prevents repeats).
+      - name: Verify build output
+        run: |
+          test -d js && test "$(ls -A js)" || (echo "::error::js/ is empty after build" && exit 1)
+          test -d web && test "$(ls -A web)" || (echo "::error::web/ is empty after build" && exit 1)
+          echo "js/ contents:" && ls -la js/
+          echo "web/ contents:" && ls -la web/
+      - run: pip install comfy-cli
+      - name: Publish to ComfyUI Registry
+        run: |
+          comfy --skip-prompt --no-enable-telemetry node publish \
+            --token ${{ secrets.REGISTRY_ACCESS_TOKEN }}
