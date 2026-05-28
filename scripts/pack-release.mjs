@@ -14,7 +14,7 @@
  *   - wp_nodes/             (V3 node definitions)
  *   - wp_api/               (HTTP routes the SPA hits)
  *   - js/                   (built extension chunk + lazy chunks)
- *   - web_dist/             (built manager SPA)
+ *   - web/             (built manager SPA)
  *   - public/               (favicons + doc images referenced by the SPA)
  *   - docs/help/            (per-node help markdown the canvas reads)
  *   - README.md
@@ -56,18 +56,18 @@ const SHIP_PATHS = [
   "wp_nodes",
   "wp_api",
   "js",
-  "web_dist",
+  "web",
   "public",
   "docs/help",
 ];
 
-// Sanity: every path must exist before zipping. If `js/` or `web_dist/`
+// Sanity: every path must exist before zipping. If `js/` or `web/`
 // is missing the release would ship a broken bundle — catch here so the
 // release workflow fails fast rather than uploading a half-baked zip.
 for (const p of SHIP_PATHS) {
   if (!existsSync(join(root, p))) {
     console.error(`pack-release: required path missing — ${p}`);
-    console.error("Did the build step run? Expected `pnpm build` to populate js/ + web_dist/.");
+    console.error("Did the build step run? Expected `pnpm build` to populate js/ + web/.");
     process.exit(1);
   }
 }

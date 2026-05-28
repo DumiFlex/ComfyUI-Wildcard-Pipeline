@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 600" role="img" aria-label="Wildcard Pipeline — modular procedural prompt generation for ComfyUI">
+  <style><![CDATA[
+    .bg              { fill: #0e1015; }
+    .panel           { fill: #1a1d2a; }
+    .border-cyan     { stroke: #3a8fb7; }
+    .border-violet   { stroke: #7c6ad6; }
+    .border-neutral  { stroke: #6a6a6a; }
+    .ico-cyan        { fill: #7ec8e3; }
+    .ico-violet      { fill: #c4b5fd; }
+    .ico-neutral     { fill: #aab; }
+    .name            { fill: #d6d8e0; font: 600 18px 'Inter', system-ui, sans-serif; }
+    .sub             { fill: #6f7384; font: 400 12px ui-monospace, monospace; }
+    .title           { fill: #e8eaf2; font: 700 56px 'Inter', system-ui, sans-serif; letter-spacing: -0.5px; }
+    .tagline         { fill: #aab2c0; font: 500 22px 'Inter', system-ui, sans-serif; }
+    .badge           { font: 600 13px 'Inter', system-ui, sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+    .badge-wc        { fill: #b29cf2; }
+    .badge-fv        { fill: #2dd4bf; }
+    .badge-cb        { fill: #6ad28b; }
+    .badge-dv        { fill: #f4a261; }
+    .badge-cs        { fill: #ec96b8; }
+    .arrow-lbl       { fill: #6f7384; font: 600 12px 'Inter', system-ui, sans-serif; letter-spacing: 1.2px; text-transform: uppercase; }
+    .arrow-line      { stroke: #4a4d55; stroke-width: 2; fill: none; }
+    .arrow-head      { fill: #4a4d55; }
+    .var-pill        { fill: #c4b5fd; fill-opacity: 0.12; stroke: #c4b5fd; stroke-width: 1; }
+    .var-text        { fill: #c4b5fd; font: 500 14px 'Inter', system-ui, sans-serif; }
+    .pill            { fill-opacity: 0.12; stroke-width: 1; }
+    .pill-stroke-wc  { stroke: #b29cf2; }
+    .pill-stroke-fv  { stroke: #2dd4bf; }
+    .pill-stroke-cb  { stroke: #6ad28b; }
+    .pill-stroke-dv  { stroke: #f4a261; }
+    .pill-stroke-cs  { stroke: #ec96b8; }
+    .glow            { filter: drop-shadow(0 0 14px rgba(124, 106, 214, 0.18)); }
+  ]]></style>
+
+  <!-- Background -->
+  <rect class="bg" width="1400" height="600" rx="0" />
+
+  <!-- Subtle decorative grid (very dim, evokes ComfyUI canvas) -->
+  <g opacity="0.06" stroke="#3a8fb7" stroke-width="1">
+    <line x1="0"    y1="100" x2="1400" y2="100" />
+    <line x1="0"    y1="200" x2="1400" y2="200" />
+    <line x1="0"    y1="300" x2="1400" y2="300" />
+    <line x1="0"    y1="400" x2="1400" y2="400" />
+    <line x1="0"    y1="500" x2="1400" y2="500" />
+    <line x1="200"  y1="0"   x2="200"  y2="600" />
+    <line x1="400"  y1="0"   x2="400"  y2="600" />
+    <line x1="600"  y1="0"   x2="600"  y2="600" />
+    <line x1="800"  y1="0"   x2="800"  y2="600" />
+    <line x1="1000" y1="0"   x2="1000" y2="600" />
+    <line x1="1200" y1="0"   x2="1200" y2="600" />
+  </g>
+
+  <!-- ===== Left half: branding ===== -->
+
+  <!-- Title -->
+  <text class="title" x="70" y="180">Wildcard</text>
+  <text class="title" x="70" y="248">Pipeline</text>
+
+  <!-- Underline accent -->
+  <rect x="70" y="270" width="120" height="4" rx="2" fill="#7c6ad6" />
+
+  <!-- Tagline -->
+  <text class="tagline" x="70" y="320">Modular procedural prompt</text>
+  <text class="tagline" x="70" y="350">generation for ComfyUI</text>
+
+  <!-- Module-kind badges as a feature row -->
+  <g transform="translate(70, 410)">
+    <rect class="pill pill-stroke-wc" x="0"   y="0" width="88" height="28" rx="14" fill="#b29cf2" />
+    <text class="badge badge-wc" x="44"  y="19" text-anchor="middle">Wildcard</text>
+    <rect class="pill pill-stroke-fv" x="98"  y="0" width="80" height="28" rx="14" fill="#2dd4bf" />
+    <text class="badge badge-fv" x="138" y="19" text-anchor="middle">Fixed</text>
+    <rect class="pill pill-stroke-cb" x="188" y="0" width="98" height="28" rx="14" fill="#6ad28b" />
+    <text class="badge badge-cb" x="237" y="19" text-anchor="middle">Combine</text>
+  </g>
+  <g transform="translate(70, 446)">
+    <rect class="pill pill-stroke-dv" x="0"   y="0" width="108" height="28" rx="14" fill="#f4a261" />
+    <text class="badge badge-dv" x="54"  y="19" text-anchor="middle">Derivation</text>
+    <rect class="pill pill-stroke-cs" x="118" y="0" width="110" height="28" rx="14" fill="#ec96b8" />
+    <text class="badge badge-cs" x="173" y="19" text-anchor="middle">Constraint</text>
+  </g>
+
+  <!-- Footnote -->
+  <text class="sub" x="70" y="525">wildcards · constraints · loops · per-iteration seeds · library</text>
+
+  <!-- ===== Right half: flow diagram ===== -->
+
+  <g class="glow" transform="translate(620, 0)">
+    <!-- Layout budget on the right half:
+         Context (180) + EMITS (90) + Vars (130) + FILLS (90) + Assembler (210)
+         = 700 px → fits within (1400 - 620) = 780 px viewBox with 80 px margin -->
+
+    <!-- WP Context box -->
+    <g transform="translate(0, 220)">
+      <rect class="panel border-cyan" x="0" y="0" width="180" height="140" rx="12" stroke-width="2" />
+      <text class="ico-cyan" x="90" y="42" text-anchor="middle" font-size="28">⌬</text>
+      <text class="name" x="90" y="80" text-anchor="middle">WP Context</text>
+      <text class="sub"  x="90" y="105" text-anchor="middle">rolls + resolves</text>
+    </g>
+
+    <!-- EMITS arrow -->
+    <g transform="translate(190, 290)">
+      <text class="arrow-lbl" x="40" y="-16" text-anchor="middle">Emits</text>
+      <line class="arrow-line" x1="0" y1="0" x2="76" y2="0" />
+      <polygon class="arrow-head" points="76,-6 86,0 76,6" />
+    </g>
+
+    <!-- Resolved vars cluster -->
+    <g transform="translate(290, 260)">
+      <rect class="var-pill" x="0"  y="0"   width="84"  height="28" rx="14" />
+      <text class="var-text" x="42" y="19"  text-anchor="middle">$subject</text>
+      <rect class="var-pill" x="92" y="0"   width="62"  height="28" rx="14" />
+      <text class="var-text" x="123" y="19" text-anchor="middle">$style</text>
+      <rect class="var-pill" x="35"  y="38" width="86"  height="28" rx="14" />
+      <text class="var-text" x="78"  y="57" text-anchor="middle">$lighting</text>
+    </g>
+
+    <!-- FILLS arrow -->
+    <g transform="translate(460, 290)">
+      <text class="arrow-lbl" x="35" y="-16" text-anchor="middle">Fills</text>
+      <line class="arrow-line" x1="0" y1="0" x2="66" y2="0" />
+      <polygon class="arrow-head" points="66,-6 76,0 66,6" />
+    </g>
+
+    <!-- Prompt Assembler -->
+    <g transform="translate(550, 220)">
+      <rect class="panel border-violet" x="0" y="0" width="210" height="140" rx="12" stroke-width="2" />
+      <text class="ico-violet" x="105" y="42" text-anchor="middle" font-size="28">≡</text>
+      <text class="name" x="105" y="80" text-anchor="middle">Prompt Assembler</text>
+      <text class="sub"  x="105" y="105" text-anchor="middle">"a $style portrait…"</text>
+    </g>
+  </g>
+
+  <!-- favicon-ish sparkle marks in the corners (decorative) -->
+  <g opacity="0.5" fill="#7c6ad6">
+    <circle cx="40"   cy="40"  r="2" />
+    <circle cx="1360" cy="40"  r="2" />
+    <circle cx="40"   cy="560" r="2" />
+    <circle cx="1360" cy="560" r="2" />
+  </g>
+</svg>

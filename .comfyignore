@@ -1,0 +1,65 @@
+# .comfyignore — files we KEEP in git but don't want shipped to the
+# ComfyUI Registry archive. Layers on top of .gitignore (anything
+# already gitignored is excluded automatically).
+#
+# Syntax matches .gitignore (gitignore-style globs).
+# Anything listed under [tool.comfy].includes in pyproject.toml is
+# force-included even if it matches here.
+
+# --- dev-only source ---
+# The frontend Vite source is huge and irrelevant to registry users
+# (they only need the built artifacts under js/ + web/, which
+# [tool.comfy].includes force-includes).
+src/
+
+# --- tests ---
+tests/
+conftest.py
+pytest.ini
+
+# --- repo plumbing ---
+.github/
+.husky/
+.vscode/
+.idea/
+.tmp/
+
+# --- design docs + per-contributor specs ---
+docs/superpowers/
+docs/wiki-staging/
+
+# --- screenshots that bloat the archive ---
+# Only the per-node help docs under docs/help/ (force-included via
+# pyproject) actually need to ship. Everything else under public/
+# is used by the SPA build and gets baked into web/.
+public/images/docs/
+
+# --- frontend config + tooling ---
+vite.config.mts
+vitest.config.ts
+tsconfig*.json
+eslint.config.*
+.eslintrc*
+.editorconfig
+.prettierrc*
+package-lock.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+.npmrc
+.nvmrc
+
+# --- semantic-release + commitlint plumbing ---
+.releaserc.*
+release.config.*
+commitlint.config.*
+config/
+
+# --- repo metadata ---
+CHANGELOG.md
+CONTRIBUTING.md
+CODEOWNERS
+CODE_OF_CONDUCT.md
+SECURITY.md
+
+# --- node helper scripts (not run at install time) ---
+scripts/

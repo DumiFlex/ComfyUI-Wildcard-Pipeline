@@ -33,7 +33,29 @@ Issues = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues"
 [tool.comfy]
 PublisherId = "dumiflex"
 DisplayName = "Wildcard Pipeline"
-Icon = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/js/images/favicon.svg"
+# Square node icon shown next to the listing in the ComfyUI Manager.
+# Max 400×400 per the Registry spec. SVG so it scales without the
+# Manager refetching at higher DPI.
+Icon = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/favicon.svg"
+# Wide promotional banner — 21:9 spec. Our SVG is 1400×600 (≈2.33:1)
+# which renders crisp on the registry listing card. Local file at
+# public/images/comfy-banner.svg, served by GitHub raw so the
+# Registry resolves a stable URL between releases.
+Banner = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/comfy-banner.svg"
+
+# ComfyUI version floor. The pack uses the V3 io.* schema (custom
+# types via @comfytype, ComfyTypeIO subclasses, NodeOutput / io.Schema
+# class-based handlers) — landed in ComfyUI ≥0.3.36 per the
+# release notes. Pin to that floor so the Manager warns users on
+# older runtimes instead of installing then crashing at import.
+requires-comfyui = ">=0.3.36"
+
+# Force-include built artifacts that are gitignored so the publish
+# action's "everything git tracks" default would otherwise drop them.
+# js/ + web/ are the Vite output trees that the extension + manager
+# SPA load at runtime; without them the canvas widgets fail to mount
+# and the sidebar SPA route 404s.
+includes = ["js", "web"]
 
 [tool.ruff]
 line-length = 100

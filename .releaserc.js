@@ -68,6 +68,26 @@ export default {
             { type: "chore",    hidden: true },
           ],
         },
+        writerOpts: {
+          // headerPartial puts a fixed "TL;DR + useful links" block at
+          // the very top of every release body, so the first ~600
+          // chars GitHub renders above the "Read more" fold on the
+          // releases list view stay useful no matter how long the
+          // changelog gets. {{version}} expands to the new tag.
+          headerPartial:
+            "## 🎉 Wildcard Pipeline {{version}}\n\n" +
+            "📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · " +
+            "💬 [Discord](https://discord.gg/BFYR9WQdVR) · " +
+            "📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · " +
+            "🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)\n\n" +
+            "<details>\n" +
+            "<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>\n\n",
+          // footerPartial closes the <details> wrapper so the wall of
+          // commits stays collapsed by default. GitHub renders
+          // <details> natively in markdown — readers click to expand
+          // when they actually need the per-commit log.
+          footerPartial: "\n</details>",
+        },
       },
     ],
     [
