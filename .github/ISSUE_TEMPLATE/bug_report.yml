@@ -1,0 +1,138 @@
+name: 🐛 Bug report
+description: Something broke or misbehaves — repro + expected vs actual.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing! A clean repro saves us hours. Fill out what
+        applies — fields marked optional really are optional.
+
+        **Before you file:** check the [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki)
+        and [open issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues?q=is%3Aissue).
+        For quick questions, [Discord](https://discord.gg/BFYR9WQdVR) is faster.
+
+  - type: input
+    id: version
+    attributes:
+      label: Wildcard Pipeline version
+      description: Check the manager sidebar header, the `vX.Y.Z` chip next to the logo.
+      placeholder: "v1.8.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does it break?
+      description: Pick the surface where the misbehaviour shows up.
+      multiple: true
+      options:
+        - WP Context (canvas widget)
+        - WP Context Loop
+        - WP Context Injector
+        - WP Seed List
+        - WP Prompt Assembler
+        - WP Prompt Cleaner
+        - WP Debug
+        - WP Var → Int / Float / Bool
+        - Manager SPA — Library list views
+        - Manager SPA — Module editor (wildcard / fixed / combine / derivation / constraint)
+        - Manager SPA — Bundle editor
+        - Manager SPA — Test Runner
+        - Manager SPA — Import / Export
+        - Manager SPA — Documentation tab
+        - Engine (runtime — pure-Python resolution)
+        - Build / install (manual install path)
+        - Other (describe in repro)
+    validations:
+      required: true
+
+  - type: input
+    id: comfyui_version
+    attributes:
+      label: ComfyUI version
+      description: Found in the ComfyUI About panel or the terminal banner on startup.
+      placeholder: "0.3.x · commit deadbeef"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: "`python --version` in your ComfyUI venv."
+      placeholder: "3.12.10"
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact clicks / keystrokes / wiring — assume the reader has the pack installed but knows nothing about your workflow.
+      placeholder: |
+        1. Drop a WP Context node, add a starter `subject` wildcard.
+        2. Wire `context` into a WP Prompt Assembler with template `a $subject`.
+        3. Press Queue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: "Each Generate rolls a fresh `$subject` and the assembler renders `a <subject>`."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      placeholder: "Assembler renders `a $subject` literally — the variable doesn't resolve."
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Error traceback (if any)
+      description: Paste the full Python or browser-console traceback. Auto-formatted as a shell block.
+      render: shell
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow JSON (if applicable)
+      description: A minimal repro workflow if the bug only shows up in a specific wiring. Drag the workflow tab → Save (API Format) or paste the JSON. Auto-formatted.
+      render: json
+
+  - type: textarea
+    id: warnings
+    attributes:
+      label: WP Debug warnings (if any)
+      description: Wire a WP Debug node to the affected Context output, run, and paste the Warnings tab contents.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Sanity checks
+      options:
+        - label: I'm on the latest release (or specified the exact version above).
+          required: true
+        - label: I checked the wiki + existing issues before filing.
+          required: true
+        - label: I included steps to reproduce.
+          required: true

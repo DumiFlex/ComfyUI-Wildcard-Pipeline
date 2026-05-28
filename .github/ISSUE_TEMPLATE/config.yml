@@ -1,0 +1,29 @@
+# GitHub Issue Form chooser.
+#
+# `blank_issues_enabled: false` forces users through one of the
+# structured forms below — the bug-report / feature-request forms
+# both gather the right context up-front so triage isn't a back-and-
+# forth conversation. The `contact_links` give an off-ramp for
+# questions / discussions that aren't really issues.
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: 💬 Discord — chat + show-and-tell + quick questions
+    url: https://discord.gg/BFYR9WQdVR
+    about: |
+      Fastest path to a response for "how do I…" questions, prompt
+      sharing, brainstorming. The issue tracker is for things that
+      need an action (bug fix, feature implementation).
+
+  - name: 💭 GitHub Discussions — long-form questions + design threads
+    url: https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/discussions
+    about: |
+      Better than an issue when you want to think out loud or pitch
+      something without committing to a feature request yet.
+
+  - name: 📖 Wiki — Quick Start / Nodes / Modules / Concepts
+    url: https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki
+    about: |
+      Check the wiki first — most "how does X work" questions are
+      already answered there.

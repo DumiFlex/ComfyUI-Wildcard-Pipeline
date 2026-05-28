@@ -1,0 +1,94 @@
+name: ✨ Feature request
+description: A capability that's missing — propose what + why.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pitch what you want and what problem it solves. Concrete user
+        stories beat abstract wishes — "I'm building X and currently
+        have to Y because Z doesn't exist" lands faster than "it would
+        be nice if…".
+
+        **Before you file:** check existing [issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues?q=is%3Aissue+label%3Aenhancement)
+        and [discussions](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/discussions)
+        — somebody may already be proposing the same thing.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: The current pain point. Skip if you're proposing a brand-new capability with no current workaround.
+      placeholder: |
+        I'm building a portrait workflow where the mood needs to match
+        the lighting. Constraints handle this in one direction, but I
+        can't make the mood react to BOTH lighting AND time-of-day at
+        the same time — only one source per constraint.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should happen? A rough sketch is fine — implementation details are not your job.
+      placeholder: |
+        Constraint module accepts multiple source wildcards (AND logic
+        by default). Matrix becomes Source1 × Source2 → target weights.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else could solve the underlying problem? Workarounds you've tried?
+      placeholder: |
+        - Chain two constraints (only one fires — second is consumed already).
+        - Derivation reading both vars (works but loses the per-option-weight precision constraints give).
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which surface does this affect?
+      multiple: true
+      options:
+        - New node (WP_*)
+        - New module type
+        - WP Context (canvas widget)
+        - Constraint matrix / pairing
+        - Loop / Seed List / iteration vars
+        - Library / manager SPA
+        - Bundles
+        - Templates
+        - Import / Export
+        - Documentation
+        - Other / cross-cutting
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Concrete example (workflow or pseudo-code)
+      description: What would using this look like in practice? A mock prompt / module config / wired graph helps a lot.
+
+  - type: dropdown
+    id: importance
+    attributes:
+      label: How important is it?
+      options:
+        - Nice to have — would polish a workflow
+        - Important — currently working around it with ugly hacks
+        - Blocker — can't ship the workflow I want without it
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Sanity checks
+      options:
+        - label: I checked existing issues + discussions before filing.
+          required: true
+        - label: I described the underlying problem, not just the solution.
+          required: true

@@ -1,0 +1,44 @@
+name: Publish to ComfyUI Registry
+
+# Mirrors what the ComfyUI Manager search results read from. Fires on
+# every published GitHub release so the registry listing stays in sync
+# with semantic-release tags. Manual dispatch left available for
+# re-publishing if a release ever needs to be force-pushed.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Opt every JS-based action into the Node 24 runner; matches ci.yml +
+# release.yml so we don't get deprecation noise on pnpm/action-setup.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # publish-node-action reads pyproject.toml + builds the ship
+          # tree from the working dir. Shallow checkout is enough — the
+          # release tag is already created, we don't need history.
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Full build = extension chunk (js/) + manager SPA (web_dist/).
+      # publish-node-action zips the working tree so both build outputs
+      # need to be on disk before it runs.
+      - run: pnpm run build
+      - name: Publish to ComfyUI Registry
+        uses: Comfy-Org/publish-node-action@main
+        with:
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
