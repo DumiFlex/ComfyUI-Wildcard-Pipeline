@@ -53,7 +53,7 @@ const instanceOptions = [
       <DocImage
         src="images/docs/derivation.png"
         ratio="16 / 7"
-        caption="A Derivation rule card open in the editor: an IF branch checking '$subject equals ocean' with an Append action on $mood, and an ELSE branch that does nothing."
+        caption="The Starter accent Derivation modal — a single Rule 1 condition reading '$mood = dramatic → $accent = cinematic lighting' (the engine falls through to the rule's else branch when $mood resolves to anything else). Footer carries Lock seed + Hide from prompt toggles. Behind the modal: a WP Context with Starter scene + Starter accent stacked, the accent row's orange left-border matching the derivation kind colour."
       />
     </DocSection>
 

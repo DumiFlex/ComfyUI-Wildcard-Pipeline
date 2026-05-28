@@ -102,7 +102,7 @@ const modes = [
       <DocImage
         src="images/docs/constraints-matrix.png"
         ratio="16 / 7"
-        caption="The constraint matrix editor open on a Constraint module, showing source subcategory rows, target subcategory columns, and mode/factor cells being filled in."
+        caption="The SPA's full Edit constraint page for the Starter pairing entry (breadcrumb Library › Constraints › Starter pairing, Unsaved badge). Wildcards section pins Starter subject as source + Starter mood as target. Rule matrix grids feline/canine × calm/intense with feline×intense + canine×calm at ↑×3 and the mismatched diagonals at ↓×0.3. Exceptions table below carries one row: tiger → sleepy · Exclude · — — the EXTRA exception wins over the matrix when both apply."
       />
     </DocSection>
 

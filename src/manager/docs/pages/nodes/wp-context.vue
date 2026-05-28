@@ -40,7 +40,7 @@ const ports = [
       <DocImage
         src="images/docs/wp-context.png"
         ratio="16 / 6"
-        caption="A WP Context node showing the module-stack widget with a wildcard, a fixed value, and a combine module. Its context output connects to a WP Prompt Assembler."
+        caption="A WP Context with three modules in its stack (Starter subject wildcard, Starter scene combine flagged orange MISSING VAR because $mood isn't published, Starter style fixed) wired into a WP Prompt Assembler. The assembler chip strip lists the three upstream $vars; the resolved preview shows 'cat, oil painting,, masterpiece, highly detailed' — the empty slot where $scene would have rendered makes the missing-var warning concrete."
       />
     </DocSection>
 

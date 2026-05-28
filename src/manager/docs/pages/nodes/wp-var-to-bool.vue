@@ -37,7 +37,7 @@ const controls = [
       <DocImage
         src="images/docs/wp-var-to-bool.png"
         ratio="16 / 5"
-        caption="The WP Var → Bool node with its var_name picker showing a $hires_fix variable. Its BOOLEAN output connects to the enabled input of an upscaler node."
+        caption="WP Var → Bool reading $true_or_false, picker dropdown open over upstream chips ($subject, $mood, $style, $resolution, $cfg, $true_or_false-highlighted, $scene, $accent). Index 0, default false. Last execute → True 'parsed from yes' — the parser accepts yes/no/on/off/1/0/true/false. BOOL output feeds a comfyui-kjnodes BOOL Constant; a Show Any prints True to confirm."
       />
     </DocSection>
 

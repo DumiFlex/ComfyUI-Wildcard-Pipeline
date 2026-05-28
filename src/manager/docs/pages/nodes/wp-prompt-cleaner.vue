@@ -40,7 +40,7 @@ const presets = [
       <DocImage
         src="images/docs/wp-prompt-cleaner.png"
         ratio="16 / 5"
-        caption="A before-and-after view: the raw assembled prompt on the left shows duplicate tags and stray commas; the cleaned output on the right has them removed."
+        caption="WP Prompt Cleaner fed a deliberately messy 40-word / 297-char tag dump (duplicate 'highly detailed', orphan '!!' + '---' punctuation, near-duplicates like 'ultra realistic' vs 'ultra-realistic', blocklist hits watermark / low quality / bad anatomy / signature). Mode = tags · Intensity = aggressive. Rules pane lists hits per family — whitespace 3 · punctuation 6 · tag dedupe 3 · fuzzy dedupe 3 · blocklist 4 — plus a 'Blocklist · 4 entries · list' button. The Show Any node on the right renders the cleaned single-line output."
       />
     </DocSection>
 

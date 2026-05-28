@@ -37,7 +37,7 @@ const controls = [
       <DocImage
         src="images/docs/wp-var-to-float.png"
         ratio="16 / 5"
-        caption="The WP Var → Float node with its var_name picker open. Its FLOAT output connects to the cfg input of a KSampler node."
+        caption="WP Var → Float reading $cfg, picker dropdown open over upstream chips ($subject, $mood, $style, $resolution, $cfg-highlighted, $scene, $accent). Index 0, default 0.00, last execute → 7.5 'parsed from 7.5'. The FLOAT output wires into the cfg input on a KSampler (steps 20, sampler_name euler, scheduler simple) sitting alongside it; a Show Any node renders 7.5 to confirm."
       />
     </DocSection>
 

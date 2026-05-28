@@ -2,6 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -56,11 +57,55 @@ const strategies = [
       </DocCallout>
     </DocSection>
 
+    <DocSection title="The flow">
+      <DocFlow
+        :stages="[
+          { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'emits N', tone: 'node' },
+          { icon: 'pi pi-sitemap', name: 'WP Context', sub: 'fresh roll each pass', tone: 'node' },
+          { icon: 'pi pi-align-left', name: 'Prompt Assembler', sub: 'N prompts', tone: 'node' },
+        ]"
+        :arrows="['iteration 1…N', '$vars']"
+        caption="The loop fans the chain out into N passes — one resolved prompt per iteration."
+      />
+    </DocSection>
+
+    <DocSection title="Sampler seeds inside a loop">
+      <p>
+        The loop emits a <b>list of prompts</b> — one per iteration — and ComfyUI runs the
+        downstream sampler once per prompt. But a standard <b>KSampler</b> takes a single INT
+        seed, not a list, so every iteration would be sampled with that same seed. If two
+        iterations happen to roll the exact same prompt (e.g. your wildcards landed on the same
+        options twice), the sampler produces the <em>same image</em> for both.
+      </p>
+      <p>
+        The cleanest fix is to also emit a list of seeds. Drop a <b>WP Seed List</b> between the
+        loop and your sampler:
+      </p>
+      <DocFlow
+        :stages="[
+          { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'N prompts', tone: 'node' },
+          { icon: 'pi pi-clone', name: 'WP Seed List', sub: 'N seeds', tone: 'node' },
+          { icon: 'pi pi-image', name: 'KSampler', sub: 'N unique images', tone: 'neutral' },
+        ]"
+        :arrows="['loop_config', 'paired by index']"
+        caption="Wire the loop's loop_config side-output into the Seed List; downstream the prompt list and seed list pair up by index so each iteration gets its own seed."
+      />
+      <p style="margin-top: 14px;">
+        Connecting <code>loop_config</code> auto-matches the seed list's count + strategy to the
+        loop's, so the two lists stay the same length without manual setup. Two other workarounds
+        work too: bake <VarToken>$iteration</VarToken> into the prompt template (the prompt text
+        itself never repeats), or wire <VarToken>$iteration</VarToken> through a
+        <b>WP Var → Int</b> into the sampler's seed input — both fine for simple cases, but the
+        Seed List scales better when you want a deterministic, reproducible series.
+      </p>
+    </DocSection>
+
     <DocSection title="WP Context Loop">
       <p>
-        Add a <b>WP Context Loop</b> before your WP Context and one Generate produces N images in
-        a single run — each with its own seed. The <b>Variation strategy</b> controls how those
-        seeds are spread:
+        Add a <b>WP Context Loop</b> before your WP Context and one Generate runs the whole chain
+        N times in a single click — each iteration with its own seed and its own fresh roll of
+        your wildcards. The <b>Variation strategy</b> controls how those per-iteration seeds are
+        spread:
       </p>
       <DocKeyList :items="strategies" />
       <p style="margin-top: 14px;">
@@ -89,7 +134,7 @@ const strategies = [
       <p>
         By default both are hidden from the rendered prompt. You can turn off the
         <b>internal</b> flag for either one in the loop settings if you want them to appear in the
-        output text — for example to caption images "frame 1 of 4".
+        output text — for example to label each iteration's output as "frame 1 of 4".
       </p>
       <DocCallout variant="warn">
         These variables are injected as internal by default, so they will not appear in your prompt
@@ -116,6 +161,7 @@ const strategies = [
       <CrossLinks
         :links="[
           { id: 'wp-context-loop', label: 'WP Context Loop', icon: 'pi pi-replay', tone: 'node' },
+          { id: 'wp-seed-list', label: 'WP Seed List', icon: 'pi pi-clone', tone: 'node' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
         ]"
       />

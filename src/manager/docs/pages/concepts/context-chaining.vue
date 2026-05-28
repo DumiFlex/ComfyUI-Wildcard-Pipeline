@@ -3,6 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocFlow from "../../../components/docs/DocFlow.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 </script>
@@ -15,6 +16,18 @@ import VarToken from "../../../components/docs/VarToken.vue";
     tone="neutral"
     blurb="Layer multiple Contexts together — each one inherits the upstream map and overrides what it needs. Last write wins."
   >
+    <DocSection title="The flow">
+      <DocFlow
+        :stages="[
+          { icon: 'pi pi-sitemap', name: 'WP Context A', sub: 'rolls $vars', tone: 'node' },
+          { icon: 'pi pi-sitemap', name: 'WP Context B', sub: 'adds / overrides', tone: 'node' },
+          { icon: 'pi pi-align-left', name: 'Prompt Assembler', sub: 'fills template', tone: 'node' },
+        ]"
+        :arrows="['feeds', 'merged $vars']"
+        caption="Each Context inherits the upstream map; the last write for any $var wins."
+      />
+    </DocSection>
+
     <DocSection title="How chaining works">
       <p>
         A <b>WP Context</b> node has an optional upstream input. When you connect one Context into
@@ -37,7 +50,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <DocImage
         src="images/docs/context-chaining.png"
         ratio="16 / 7"
-        caption="Two WP Context nodes chained: the first sets $subject and $style; the second overrides only $style. Show the PIPELINE_CONTEXT wire connecting them and the final $style value reaching the Assembler."
+        caption="Two WP Context nodes chained into a Prompt Assembler. Upstream Context publishes Starter subject + Starter style. Downstream Context adds an Override style row (orange MOD-flagged border) plus its own Starter subject — last-write-wins, so the assembler reads the override $style while $subject still flows through unchanged. Right pane shows the assembler resolving 'a picture of a cat, in the style of bold ink art' from those two upstream chips."
       />
     </DocSection>
 

@@ -33,7 +33,7 @@ const tabs = [
       <DocImage
         src="images/docs/wp-debug-viewer.png"
         ratio="16 / 8"
-        caption="The WP Debug viewer open on the Snapshot tab, showing a list of resolved $variables and their values. The tab strip shows Snapshot, Trace, Picks, and Warnings tabs."
+        caption="A WP Context expanding the Starter set bundle (6 modules) into a WP Debug. Debug's Snapshot tab is selected from the four-tab strip (Snapshot / Trace / Picks / Warnings) and the JSON pane lists this run's resolved $vars: subject=tiger, mood=dramatic, style=oil painting, scene=dramatic tiger, accent=cinematic lighting — exactly what every downstream Assembler will see."
       />
     </DocSection>
 
@@ -55,7 +55,7 @@ const tabs = [
       <DocImage
         src="images/docs/wp-debug-two.png"
         ratio="16 / 5"
-        caption="A workflow with two WP Debug nodes — one wired after the first WP Context and one after the second — showing how each captures the pipeline state at that point."
+        caption="Two debug points on the same workflow. Left pair: WP Context with the Starter set bundle expanded → WP Debug snapshot reads subject=wolf, mood=dramatic, style=oil painting, scene=dramatic wolf, accent=cinematic lighting. Right pair: a downstream WP Context layering the Alt starter set bundle on top (Alt style / scene / accent rows carry green OVERRIDE pills) → its WP Debug snapshot reads the same wolf + dramatic but with style=concept art …, scene=golden hour cargo dirigible, accent=atmospheric haze, plus the alt-bundle's $vehicle + $weather. Same workflow, two snapshots, one per chain stage."
       />
     </DocSection>
 

@@ -40,7 +40,7 @@ function createStarterWildcard(): void {
       <DocImage
         src="images/docs/quick-start-starter.png"
         ratio="16 / 7"
-        caption="The wildcard editor pre-filled with the 'subject' starter: name, $variable binding, and three options ready to save."
+        caption="The SPA's New wildcard form pre-filled by the starter button. Identity: name 'subject', category None, variable binding $subject. Description + Tags + Sub-categories sections sit empty (no groupings yet). Options table at the bottom carries three rows — 'a cat' / 'a dog' / 'a fox' — each at weight 1, sub-category (none), probability 33%. Cancel / Save sticky at the bottom right; nothing commits until you press Save."
       />
       <DocCallout variant="tip">
         You can rename the wildcard, change the options, and add or remove rows
@@ -79,9 +79,9 @@ function createStarterWildcard(): void {
         </li>
       </ol>
       <DocImage
-        src="images/docs/quick-start-graph.png"
+        src="images/docs/introduction-graph.png"
         ratio="16 / 6"
-        caption="The finished three-node graph: WP Context → WP Prompt Assembler → CLIP Text Encode, with the subject wildcard loaded in the context widget."
+        caption="The finished four-node chain on the canvas. WP Context carries one Starter subject row, output wires into WP Prompt Assembler (template 'a $subject', resolved preview 'a cat'), prompt feeds CLIP Text Encode (Prompt), CONDITIONING wires onward into KSampler. Press Queue and each run rolls a fresh subject through the same skeleton."
       />
     </DocSection>
 

@@ -41,7 +41,7 @@ const instanceOptions = [
       <DocImage
         src="images/docs/wildcard-editor.png"
         ratio="16 / 7"
-        caption="The wildcard option-pool editor open on a wildcard called $subject, showing three options ('a cat', 'a dog', 'a fox') each with a weight field and a sub-category chip."
+        caption="The Starter subject wildcard modal open on the $subject variable. Two sub-category chips (feline · 2, canine · 2) sit above a four-row pool: cat + tiger tagged FELINE, dog + wolf tagged CANINE, each row showing a 25% probability bar and a weight of 1. Footer carries the Lock pick + Hide from prompt runtime toggles plus the Save to library / Save split."
       />
     </DocSection>
 
@@ -71,7 +71,7 @@ const instanceOptions = [
       <DocImage
         src="images/docs/wildcard-constraint-order.png"
         ratio="16 / 6"
-        caption="A module stack showing a $weather wildcard, then a Constraint module, then a $mood wildcard. The Constraint sits between its source and target."
+        caption="A WP Context node showing the canonical source → constraint → target stack: Starter subject ($subject · 4 options), Starter pairing (#1 $subject → $mood · 2×2 matrix), Starter mood ($mood · 4 options). The pink left-border on the constraint + target row visually pairs them; the constraint claims the first instance of $mood downstream of itself."
       />
     </DocSection>
 

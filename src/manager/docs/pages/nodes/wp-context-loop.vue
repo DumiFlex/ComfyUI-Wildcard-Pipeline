@@ -27,15 +27,17 @@ const controls = [
   >
     <DocSection title="What it's for">
       <p>
-        Normally one Generate makes one image. Put a <b>WP Context Loop</b> in front of your
-        WP Context and one Generate makes several images instead — each with a fresh roll of your
-        wildcards. Set the count to 8, press Generate once, and compare eight variations. No
-        repeated queueing, no batch node to wire.
+        Normally one Generate runs the whole chain once — one WP Context, one resolved prompt.
+        Put a <b>WP Context Loop</b> in front of your WP Context and a single Generate re-runs the
+        chain N times instead, re-rolling your wildcards each pass, so one click yields N different
+        Contexts and prompts (and whatever your sampler renders downstream from each). Set the count
+        to 8, press Generate once, and compare eight variations. No repeated queueing, no batch node
+        to wire.
       </p>
       <DocImage
         src="images/docs/wp-context-loop-graph.png"
         ratio="16 / 6"
-        caption="The WP Context Loop node wired in front of a WP Context → WP Prompt Assembler → KSampler chain, with its count set to 4. Show the node and its widget clearly."
+        caption="WP Context Loop (seed 42 fixed, count 4, hash strategy, $iteration var) → WP Context (Starter subject + Starter style) → WP Prompt Assembler with template '$iteration of $iteration_total: A picture of a $subject, in the style of $style' → Show Any. Show Any prints four numbered lines side-by-side: '1 of 4: A picture of a cat, in the style of oil painting', dog, dog, wolf — one resolved prompt per loop pass before the chain hands them downstream to a sampler."
       />
     </DocSection>
 
@@ -66,7 +68,7 @@ const controls = [
       <DocImage
         src="images/docs/wp-context-loop-grid.png"
         ratio="16 / 7"
-        caption="A 2×2 grid of four generated images, each captioned “frame 1 of 4” … “frame 4 of 4”, showing $iteration count up while the rest of the prompt stays constant."
+        caption="The full looped workflow rendered: WP Context Loop + WP Context + WP Prompt Assembler + a KSampler chain produce a 2×2 grid of four images, each labelled 'iteration 1 of 4' through 'iteration 4 of 4'. Subject + style vary per pass while the iteration counter increments — every image lands as a unique (prompt, seed) pair when a WP Seed List is wired alongside."
       />
     </DocSection>
 
@@ -76,12 +78,36 @@ const controls = [
         iteration. Useful for holding one thing steady (say, the art style) while everything else
         varies across the batch.
       </DocCallout>
+      <DocCallout variant="warn">
+        The loop emits a <b>list of prompts</b> — one per iteration. Downstream samplers run once
+        per prompt, but a standard <b>KSampler</b> takes a <em>single</em> seed (not a list), so
+        every iteration is sampled with that same seed. If two iterations happen to roll the exact
+        same prompt string (e.g. your wildcards landed on the same options twice), the sampler
+        produces the <em>same image</em> for both. Three ways to keep every output distinct:
+        <ul style="margin-top: 8px; margin-bottom: 0;">
+          <li>
+            Drop a <b>WP Seed List</b> between the loop and your sampler (cleanest). It emits
+            a list of N seeds — one per iteration — that pairs with the loop's prompts so each
+            (prompt, seed) combination is unique. Wire its <code>loop_config</code> input from
+            the loop's side output and it auto-matches the loop's count + strategy.
+          </li>
+          <li>
+            Bake <VarToken>$iteration</VarToken> into the prompt template — it never repeats,
+            so the prompt text is always unique.
+          </li>
+          <li>
+            Wire <VarToken>$iteration</VarToken> through a <b>WP Var → Int</b> into the
+            sampler's seed input so each iteration also gets its own seed.
+          </li>
+        </ul>
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Works with">
       <CrossLinks
         :links="[
           { id: 'seeds-and-loops', label: 'Seeds &amp; loops', icon: 'pi pi-share-alt', tone: 'neutral' },
+          { id: 'wp-seed-list', label: 'WP Seed List', icon: 'pi pi-clone', tone: 'node' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
           { id: 'wp-prompt-assembler', label: 'WP Prompt Assembler', icon: 'pi pi-align-left', tone: 'node' },
         ]"

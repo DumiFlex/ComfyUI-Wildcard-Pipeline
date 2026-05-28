@@ -6,6 +6,7 @@ import DocFigure from "../../../components/docs/DocFigure.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import PipelineDiagram from "../../../components/docs/PipelineDiagram.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 </script>
@@ -75,11 +76,11 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         produces (or shapes) one <VarToken>$variable</VarToken> in the context:
       </p>
       <ul>
-        <li><b>Wildcard</b> — a list of options; one is picked at random each run.</li>
-        <li><b>Fixed Values</b> — always outputs the same value.</li>
-        <li><b>Combine</b> — joins several variables into one string.</li>
-        <li><b>Derivation</b> — transforms an existing variable into a new one.</li>
-        <li><b>Constraint</b> — forces a wildcard to pick a specific option when another variable has a certain value.</li>
+        <li><DocRef id="wildcard" /> — a list of options; one is picked at random each run.</li>
+        <li><DocRef id="fixed-values" /> — always outputs the same value.</li>
+        <li><DocRef id="combine" /> — joins several variables into one string.</li>
+        <li><DocRef id="derivation" /> — transforms an existing variable into a new one.</li>
+        <li><DocRef id="constraint" /> — forces a wildcard to pick a specific option when another variable has a certain value.</li>
       </ul>
       <DocCallout variant="tip">
         You create and edit modules here in the manager. You then add them to a
@@ -91,7 +92,7 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
       <DocImage
         src="images/docs/introduction-graph.png"
         ratio="16 / 6"
-        caption="A minimal finished graph: WP Context (with a subject wildcard) → WP Prompt Assembler → CLIP Text Encode → KSampler."
+        caption="The smallest working pipeline, end to end. WP Context with one Starter subject wildcard → WP Prompt Assembler holding template 'a $subject' (resolved preview shows 'a cat') → CLIP Text Encode (Prompt) → KSampler. Four nodes, one wildcard, one prompt: everything else in the docs is variations on this skeleton."
       />
     </DocSection>
 

@@ -56,12 +56,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
           <tr>
             <td><VarToken kind="inline">{a|b|c}</VarToken></td>
             <td>all text fields</td>
-            <td>Randomly picks one of the alternatives.</td>
+            <td>Randomly picks one of the alternatives — except in the Assembler, which has no seed and leaves it literal.</td>
           </tr>
           <tr>
             <td><VarToken kind="inline">{N$$sep$$a|b|c}</VarToken></td>
             <td>all text fields</td>
-            <td>Picks N alternatives, joined by <em>sep</em>.</td>
+            <td>Picks N alternatives, joined by <em>sep</em> — also left literal in the Assembler.</td>
           </tr>
           <tr>
             <td><VarToken kind="inline">$$</VarToken></td>
@@ -89,7 +89,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <ul>
         <li><VarToken>$var</VarToken> works in <b>combine</b>, <b>derivation</b>, and <b>assembler</b> templates.</li>
         <li><VarToken kind="ref">@{uuid}</VarToken> works in <b>wildcard option text</b> only — it lets one wildcard pull in the result of another.</li>
-        <li><VarToken kind="inline">{a|b|c}</VarToken> and multi-pick forms work everywhere text is resolved.</li>
+        <li><VarToken kind="inline">{a|b|c}</VarToken> and multi-pick forms resolve everywhere text is <em>rolled</em> — wildcard options, fixed values, combine, derivation. The <b>Assembler</b> has no seed, so it leaves them literal; roll the value upstream and reference its <VarToken>$var</VarToken>.</li>
       </ul>
       <DocCallout variant="warn">
         Wildcards and fixed values are <b>producers</b> — their option text doesn't read

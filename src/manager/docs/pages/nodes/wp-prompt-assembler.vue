@@ -35,7 +35,7 @@ const ports = [
       <DocImage
         src="images/docs/wp-prompt-assembler.png"
         ratio="16 / 7"
-        caption="The WP Prompt Assembler node showing the template field with $variable placeholders, the variable chip strip below it with each upstream binding listed, and the resolved preview text."
+        caption="WP Prompt Assembler with template '$mood, $subject, $style, $accent, masterpiece, highly detailed'. The variables strip below the template lists 3 upstream chips ($style, $scene, $accent) on the left + 2 dashed-orange missing chips ($mood, $subject) on the right, with a hover tooltip 'Click to remove $mood from template · Right-click for more'. Header counters read '3 upstream · 2 missing'. Resolved preview shows the upstream chips filled in ('oil painting', 'cinematic lighting') while the missing slots stay literal as '$mood, $subject' so the gap is obvious."
       />
     </DocSection>
 
@@ -45,7 +45,7 @@ const ports = [
 
     <DocSection title="Writing templates">
       <p>
-        The template field supports several ways to write dynamic content:
+        The Assembler's one job is to drop <VarToken>$variable</VarToken> values into your text:
       </p>
       <ul>
         <li>
@@ -54,16 +54,20 @@ const ports = [
           highlights it with an amber underline so you can spot the gap before running.
         </li>
         <li>
-          <VarToken kind="inline">{a|b|c}</VarToken> — picks one option at random each run,
-          independent of the Context.
-        </li>
-        <li>
-          <code>$$</code> — a literal dollar sign, in case you need one in the output text.
+          <VarToken kind="inline">$$</VarToken> — a literal dollar sign, in case you need one in the output text.
         </li>
       </ul>
+      <DocCallout variant="warn">
+        Inline picks like <VarToken kind="inline">{a|b|c}</VarToken> are <b>not</b> rolled here.
+        The Assembler has no seed of its own, so a pick would freeze on the same branch every
+        run — instead it leaves the <VarToken kind="inline">{a|b|c}</VarToken> in the prompt
+        verbatim. To get a real random pick, produce the value in a <em>seeded</em> module — a
+        <b>Wildcard</b>, <b>Combine</b>, or <b>Derivation</b> inside a WP Context — and reference
+        its <VarToken>$variable</VarToken> in the template instead.
+      </DocCallout>
       <DocCallout variant="tip">
         The <b>Variables</b> strip below the template lists every upstream binding — click any
-        chip to insert <code>$name</code> at the cursor position rather than typing it by hand.
+        chip to insert <VarToken>$name</VarToken> at the cursor position rather than typing it by hand.
       </DocCallout>
     </DocSection>
 

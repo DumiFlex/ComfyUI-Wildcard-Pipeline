@@ -37,7 +37,7 @@ const instanceOptions = [
       <DocImage
         src="images/docs/combine.png"
         ratio="16 / 7"
-        caption="The Combine editor showing a template field containing '$style portrait of $subject, $mood lighting', the detected $var chips listed below it, and the output variable set to $prompt_fragment."
+        caption="The Starter scene Combine modal binding to $prompt_fragment. Template reads '$style portrait of $subject, $mood lighting' with the three detected vars listed below ($style $subject $mood). Preview replays the template verbatim; Resolved swaps in static picks → 'oil painting portrait of cat, serene lighting'. Footer carries Lock seed + Hide from prompt runtime toggles."
       />
     </DocSection>
 
@@ -52,7 +52,7 @@ const instanceOptions = [
           Good for small variations you don't need a full wildcard for.
         </li>
         <li>
-          <code>$$</code> — a literal <code>$</code> character in the output (escape if you need
+          <VarToken kind="inline">$$</VarToken> — a literal <code>$</code> character in the output (escape if you need
           to write a dollar sign that shouldn't be treated as a variable).
         </li>
       </ul>

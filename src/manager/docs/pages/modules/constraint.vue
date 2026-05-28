@@ -3,6 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -40,7 +41,19 @@ const reweightModes = [
       <DocImage
         src="images/docs/constraint-matrix.png"
         ratio="16 / 7"
-        caption="The constraint matrix editor with a $weather wildcard as the source and $mood as the target. Cells in the grid show Boost, Reduce, Allow, or Exclude for each source-option / target-option pair."
+        caption="The Starter pairing constraint modal — source Starter subject (feline/canine sub-categories) → target Starter mood (calm/intense). The 2×2 rule matrix boosts feline×intense + canine×calm by ×3.0 and reduces the mismatched diagonals to ×0.3. One Exceptions row below overrides tiger → sleepy to EXCLUDE so the EXTRA-tagged exception wins over the matrix boost when both apply."
+      />
+    </DocSection>
+
+    <DocSection title="The flow">
+      <DocFlow
+        :stages="[
+          { icon: 'pi pi-sparkles', name: 'Source wildcard', sub: 'its pick', tone: 'wildcard' },
+          { icon: 'pi pi-filter', name: 'Constraint', sub: 'reweights', tone: 'constraint' },
+          { icon: 'pi pi-sparkles', name: 'Target wildcard', sub: 'picks to match', tone: 'wildcard' },
+        ]"
+        :arrows="['if it lands on X', 'limits']"
+        caption="The constraint fires on the first target instance downstream, nudging its odds — it sets no $vars itself."
       />
     </DocSection>
 

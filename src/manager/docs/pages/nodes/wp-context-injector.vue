@@ -3,6 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -51,7 +52,19 @@ const rowOptions = [
       <DocImage
         src="images/docs/wp-context-injector.png"
         ratio="16 / 6"
-        caption="A WP Context Injector with two rows visible in the widget, each named and wired to an input socket. The context output connects to a WP Prompt Assembler."
+        caption="A String (Multiline) node feeding a long template into WP Context Injector. The injector widget shows two binding rows (template_subject + subject) wired to the multiline String output. Its context output flows into WP Prompt Assembler ($subject variable chip lit) and a Show Any node renders the assembled prompt downstream."
+      />
+    </DocSection>
+
+    <DocSection title="The flow">
+      <DocFlow
+        :stages="[
+          { icon: 'pi pi-sign-in', name: 'External node', sub: 'any output', tone: 'neutral' },
+          { icon: 'pi pi-bolt', name: 'WP Context Injector', sub: 'names it $var', tone: 'node' },
+          { icon: 'pi pi-sitemap', name: 'WP Context', sub: 'merged in', tone: 'node' },
+        ]"
+        :arrows="['wire', '$variable']"
+        caption="The injector lifts an outside value into a named $variable the rest of the pipeline can use."
       />
     </DocSection>
 
@@ -77,9 +90,11 @@ const rowOptions = [
     <DocSection title="Good to know">
       <DocCallout variant="tip">
         To combine two sockets without an extra Combine module, click <b>Add template row</b>
-        and set a template like <VarToken>$input_0 by $input_1</VarToken>. A template row runs
-        after every socket row, so it can also reference the variables those rows produce (for
-        example <VarToken>$test</VarToken>) — and it sticks around even if you re-wire the
+        and set a template like <VarToken>$input_0 by $input_1</VarToken>. You name the row's
+        <VarToken>$variable</VarToken> inline in its header and set that template from the row's
+        edit panel (right-click the row → Edit) — the same edit panel socket rows use. A template
+        row runs after every socket row, so it can also reference the variables those rows produce
+        (for example <VarToken>$test</VarToken>) — and it sticks around even if you re-wire the
         inputs. A socket row's own template can only use its own socket.
       </DocCallout>
       <DocCallout variant="tip">

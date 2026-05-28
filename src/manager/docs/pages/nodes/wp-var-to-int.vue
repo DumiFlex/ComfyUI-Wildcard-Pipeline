@@ -37,7 +37,7 @@ const controls = [
       <DocImage
         src="images/docs/wp-var-to-int.png"
         ratio="16 / 5"
-        caption="The WP Var → Int node with its var_name picker open, showing the list of available $variables. Its INT output connects to the width input of an Empty Latent Image node."
+        caption="Two WP Var → Int nodes both reading the same $resolution variable, picker dropdown open showing the upstream Context's available chips ($subject, $mood, $style, $resolution-highlighted, $scene, $accent). The first node uses index 0 — last execute lands on 1344, 'parsed from 1344×768' — wired into Empty Latent Image's width. The second node uses index 1 — last execute lands on 768 — wired into height. Two Show Any nodes print 1344 and 768 to confirm the round-trip."
       />
     </DocSection>
 

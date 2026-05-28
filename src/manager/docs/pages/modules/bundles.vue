@@ -29,7 +29,7 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
       <DocImage
         src="images/docs/bundles.png"
         ratio="16 / 6"
-        caption="A Context widget stack showing a collapsed bundle row labeled 'Portrait lighting kit' with a disclosure arrow. Below it, the same bundle expanded to reveal three child module rows inside."
+        caption="A WP Context with two expanded bundles side by side. 'Starter set' (orange MODIFIED chip · 7 mods) wraps Starter subject + pairing + mood. 'Alt starter set' (blue frame, ‌drop-target highlighted) holds Alt subject + pairing + weather + style + scene + accent. Below the bundles, three loose DUPLICATE-flagged rows (Starter style / scene / accent) show how the canvas warns when modules already live inside a bundle above."
       />
     </DocSection>
 

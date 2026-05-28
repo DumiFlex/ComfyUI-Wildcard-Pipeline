@@ -59,7 +59,7 @@ const commonFlags = [
       <DocImage
         src="images/docs/conflicts-warning.png"
         ratio="16 / 6"
-        caption="A WP Context node in the canvas showing an advisory warning badge, and the WP Debug Warnings tab open alongside it listing the same warning with its message."
+        caption="A four-node chain illustrating both sides of the warning system. WP Context (Starter subject + Starter style + Starter pairing, the pairing row carrying an orange CONFLICT badge) → WP Debug with the Warnings tab open showing the constraint-orphan-target message in plain English → WP Prompt Assembler resolving the prompt around the unmet constraint without aborting."
       />
     </DocSection>
 

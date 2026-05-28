@@ -43,7 +43,7 @@ const instanceOptions = [
       <DocImage
         src="images/docs/fixed-values.png"
         ratio="16 / 6"
-        caption="The Fixed Values editor showing two rows: 'style = oil painting' and 'quality = 8k, masterpiece', each with a name field, a value field, and an enable toggle."
+        caption="The Starter style Fixed Values modal — two name → value rows ($style = oil painting, $quality = 8k, masterpiece) each with their own enable checkbox, footer reading '2 of 2 enabled · 1 added' to flag the instance-added row over the library baseline. Lock seed + Hide from prompt runtime toggles below. Behind the modal: a WP Context stack with Starter style (MOD-flagged orange border), Starter scene, Starter accent."
       />
     </DocSection>
 

@@ -29,7 +29,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <DocImage
         src="images/docs/bundles-concept.png"
         ratio="16 / 6"
-        caption="A collapsed bundle row in the module stack, showing its name and child count. The expand arrow reveals the individual modules inside."
+        caption="Three nodes side-by-side. Left WP Context shows the Starter set bundle expanded — six child rows (Starter subject, pairing, mood, style, scene, accent) nested under the bundle frame. Middle WP Context shows the same bundle COLLAPSED into a single row. Right WP Prompt Assembler reads the resolved $vars from either Context the same way — the bundle is transparent at runtime."
       />
     </DocSection>
 
