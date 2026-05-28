@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 240" role="img" aria-label="WP Context Loop emits N prompts and feeds WP Seed List N seeds; both fan out into KSampler in lockstep">
+  <style><![CDATA[
+    .bg     { fill: #14161e; }
+    .panel  { fill: #1a1d2a; }
+    .border-loop    { stroke: #7c6ad6; }
+    .border-ctx     { stroke: #3a8fb7; }
+    .border-asm     { stroke: #7c6ad6; }
+    .border-seed    { stroke: #3a8fb7; }
+    .border-k       { stroke: #6a6a6a; }
+    .ico-loop       { fill: #c4b5fd; }
+    .ico-ctx        { fill: #7ec8e3; }
+    .ico-asm        { fill: #c4b5fd; }
+    .ico-seed       { fill: #7ec8e3; }
+    .ico-k          { fill: #aab; }
+    .name           { fill: #d6d8e0; font: 600 13px 'Inter', system-ui, sans-serif; }
+    .sub            { fill: #6f7384; font: 400 10px ui-monospace, monospace; }
+    .arrow-lbl      { fill: #6f7384; font: 600 10px 'Inter', system-ui, sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+    .arrow-line     { stroke: #4a4d55; stroke-width: 2; fill: none; }
+    .arrow-line-dim { stroke: #353841; stroke-width: 2; fill: none; stroke-dasharray: 5 4; }
+    .arrow-head     { fill: #4a4d55; }
+    .caption        { fill: #6f7384; font: 500 11px 'Inter', system-ui, sans-serif; }
+  ]]></style>
+
+  <rect class="bg" width="980" height="240" rx="8" />
+
+  <!-- WP Context Loop -->
+  <g transform="translate(30, 70)">
+    <rect class="panel border-loop" x="0" y="0" width="160" height="100" rx="10" stroke-width="2" />
+    <text class="ico-loop" x="80" y="32" text-anchor="middle" font-size="20">↺</text>
+    <text class="name" x="80" y="58" text-anchor="middle">WP Context Loop</text>
+    <text class="sub"  x="80" y="78" text-anchor="middle">N prompts</text>
+  </g>
+
+  <!-- Loop splits into TWO lanes -->
+
+  <!-- Lane A: loop_config → Seed List → seed[] -->
+  <g transform="translate(200, 60)">
+    <text class="arrow-lbl" x="50" y="-6" text-anchor="middle">loop_config</text>
+    <line class="arrow-line" x1="0" y1="6" x2="92" y2="6" />
+    <polygon class="arrow-head" points="92,1 100,6 92,11" />
+  </g>
+  <g transform="translate(310, 30)">
+    <rect class="panel border-seed" x="0" y="0" width="160" height="80" rx="10" stroke-width="2" />
+    <text class="ico-seed" x="80" y="28" text-anchor="middle" font-size="18">#</text>
+    <text class="name" x="80" y="50" text-anchor="middle">WP Seed List</text>
+    <text class="sub"  x="80" y="68" text-anchor="middle">N seeds</text>
+  </g>
+
+  <!-- Lane B: context → WP Context -->
+  <g transform="translate(200, 160)">
+    <text class="arrow-lbl" x="50" y="-6" text-anchor="middle">context</text>
+    <line class="arrow-line" x1="0" y1="6" x2="92" y2="6" />
+    <polygon class="arrow-head" points="92,1 100,6 92,11" />
+  </g>
+  <g transform="translate(310, 130)">
+    <rect class="panel border-ctx" x="0" y="0" width="160" height="80" rx="10" stroke-width="2" />
+    <text class="ico-ctx" x="80" y="28" text-anchor="middle" font-size="18">⌬</text>
+    <text class="name" x="80" y="50" text-anchor="middle">WP Context</text>
+    <text class="sub"  x="80" y="68" text-anchor="middle">module stack</text>
+  </g>
+
+  <!-- WP Context → Prompt Assembler -->
+  <g transform="translate(480, 160)">
+    <line class="arrow-line" x1="0" y1="6" x2="62" y2="6" />
+    <polygon class="arrow-head" points="62,1 70,6 62,11" />
+  </g>
+
+  <!-- Prompt Assembler -->
+  <g transform="translate(560, 130)">
+    <rect class="panel border-asm" x="0" y="0" width="160" height="80" rx="10" stroke-width="2" />
+    <text class="ico-asm" x="80" y="28" text-anchor="middle" font-size="18">≡</text>
+    <text class="name" x="80" y="50" text-anchor="middle">Prompt Assembler</text>
+    <text class="sub"  x="80" y="68" text-anchor="middle">N prompts</text>
+  </g>
+
+  <!-- Seed List → KSampler (top lane) -->
+  <g transform="translate(480, 60)">
+    <text class="arrow-lbl" x="180" y="-6" text-anchor="middle">seed[]</text>
+    <path class="arrow-line" d="M 0 6 L 360 6 L 360 64" />
+    <polygon class="arrow-head" points="355,59 360,67 365,59" />
+  </g>
+
+  <!-- Assembler → KSampler (bottom lane joining top arrow at sampler) -->
+  <g transform="translate(730, 160)">
+    <text class="arrow-lbl" x="40" y="-6" text-anchor="middle">prompt[]</text>
+    <line class="arrow-line" x1="0" y1="6" x2="62" y2="6" />
+    <polygon class="arrow-head" points="62,1 70,6 62,11" />
+  </g>
+
+  <!-- KSampler -->
+  <g transform="translate(810, 130)">
+    <rect class="panel border-k" x="0" y="0" width="140" height="80" rx="10" stroke-width="2" />
+    <text class="ico-k" x="70" y="28" text-anchor="middle" font-size="18">⚡</text>
+    <text class="name" x="70" y="50" text-anchor="middle">KSampler</text>
+    <text class="sub"  x="70" y="68" text-anchor="middle">N unique images</text>
+  </g>
+
+  <!-- Caption -->
+  <text class="caption" x="490" y="225" text-anchor="middle">
+    Loop emits N prompts · Seed List emits N seeds · both lists fan out into the sampler in lockstep — iteration N's prompt pairs with seed N
+  </text>
+</svg>

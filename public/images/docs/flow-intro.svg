@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 280" role="img" aria-label="WP Context emits resolved variables, Prompt Assembler fills them, CLIP Encode produces conditioning">
+  <style><![CDATA[
+    .bg     { fill: #14161e; }
+    .panel  { fill: #1a1d2a; }
+    .border-cyan      { stroke: #3a8fb7; }
+    .border-violet    { stroke: #7c6ad6; }
+    .border-neutral   { stroke: #6a6a6a; }
+    .border-dim       { stroke: #353841; }
+    .ico-cyan         { fill: #7ec8e3; }
+    .ico-violet       { fill: #c4b5fd; }
+    .ico-neutral      { fill: #aab; }
+    .name             { fill: #d6d8e0; font: 600 13px 'Inter', system-ui, sans-serif; }
+    .sub              { fill: #6f7384; font: 400 10px ui-monospace, monospace; }
+    .arrow-lbl        { fill: #6f7384; font: 600 10px 'Inter', system-ui, sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+    .arrow-line       { stroke: #4a4d55; stroke-width: 2; fill: none; }
+    .arrow-head       { fill: #4a4d55; }
+    .modules-header   { fill: #6f7384; font: 600 10px 'Inter', system-ui, sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+    .pill-bg          { fill: #1a1d2a; }
+    .pill-stroke-wc   { stroke: #b29cf2; }
+    .pill-stroke-fv   { stroke: #2dd4bf; }
+    .pill-stroke-cb   { stroke: #6ad28b; }
+    .pill-stroke-dv   { stroke: #f4a261; }
+    .pill-stroke-cs   { stroke: #ec96b8; }
+    .pill-stroke-var  { stroke: #c4b5fd; }
+    .pill-text-wc     { fill: #b29cf2; }
+    .pill-text-fv     { fill: #2dd4bf; }
+    .pill-text-cb     { fill: #6ad28b; }
+    .pill-text-dv     { fill: #f4a261; }
+    .pill-text-cs     { fill: #ec96b8; }
+    .pill-text-var    { fill: #c4b5fd; }
+    .pill-text        { font: 500 10px 'Inter', system-ui, sans-serif; }
+    .pill             { fill-opacity: 0.12; stroke-width: 1; }
+    .resolved         { fill: #6f7384; font: 600 9.5px 'Inter', system-ui, sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+    .down-arrow       { stroke: #4a4d55; stroke-width: 1.5; fill: none; }
+  ]]></style>
+
+  <rect class="bg" width="980" height="280" rx="8" />
+
+  <!-- MODULES INSIDE THE CONTEXT header -->
+  <text class="modules-header" x="490" y="28" text-anchor="middle">Modules inside the context</text>
+
+  <!-- Module kind pills row -->
+  <g transform="translate(245, 42)">
+    <!-- Wildcard -->
+    <rect class="pill pill-stroke-wc" x="0"   y="0" width="76" height="22" rx="11" fill="#b29cf2" />
+    <text class="pill-text pill-text-wc" x="38"  y="15" text-anchor="middle">✦ Wildcard</text>
+    <!-- Fixed Values -->
+    <rect class="pill pill-stroke-fv" x="84"  y="0" width="92" height="22" rx="11" fill="#2dd4bf" />
+    <text class="pill-text pill-text-fv" x="130" y="15" text-anchor="middle">⌘ Fixed Values</text>
+    <!-- Combine -->
+    <rect class="pill pill-stroke-cb" x="184" y="0" width="76" height="22" rx="11" fill="#6ad28b" />
+    <text class="pill-text pill-text-cb" x="222" y="15" text-anchor="middle">⇄ Combine</text>
+    <!-- Derivation -->
+    <rect class="pill pill-stroke-dv" x="268" y="0" width="84" height="22" rx="11" fill="#f4a261" />
+    <text class="pill-text pill-text-dv" x="310" y="15" text-anchor="middle">⇆ Derivation</text>
+    <!-- Constraint -->
+    <rect class="pill pill-stroke-cs" x="360" y="0" width="84" height="22" rx="11" fill="#ec96b8" />
+    <text class="pill-text pill-text-cs" x="402" y="15" text-anchor="middle">⊥ Constraint</text>
+  </g>
+
+  <!-- Down arrow indicating these go INTO the Context -->
+  <path class="down-arrow" d="M 490 78 L 490 96 M 484 90 L 490 96 L 496 90" />
+
+  <!-- ===== Main flow row at y≈170 ===== -->
+
+  <!-- WP Context box -->
+  <g transform="translate(40, 130)">
+    <rect class="panel border-cyan" x="0" y="0" width="160" height="100" rx="10" stroke-width="2" />
+    <text class="ico-cyan" x="80" y="32" text-anchor="middle" font-size="20">⌬</text>
+    <text class="name"  x="80" y="58" text-anchor="middle">WP Context</text>
+    <text class="sub"   x="80" y="78" text-anchor="middle">rolls + resolves</text>
+  </g>
+
+  <!-- EMITS arrow -->
+  <g transform="translate(210, 180)">
+    <text class="arrow-lbl" x="50" y="-12" text-anchor="middle">Emits</text>
+    <line class="arrow-line" x1="0" y1="0" x2="92" y2="0" />
+    <polygon class="arrow-head" points="92,-5 100,0 92,5" />
+  </g>
+
+  <!-- Resolved vars cluster (no box; chips on transparent) -->
+  <g transform="translate(320, 160)">
+    <!-- $subject -->
+    <rect class="pill pill-stroke-var" x="0"  y="0"  width="68" height="22" rx="11" fill="#c4b5fd" />
+    <text class="pill-text pill-text-var" x="34" y="15" text-anchor="middle">$subject</text>
+    <!-- $style -->
+    <rect class="pill pill-stroke-var" x="76" y="0"  width="52" height="22" rx="11" fill="#c4b5fd" />
+    <text class="pill-text pill-text-var" x="102" y="15" text-anchor="middle">$style</text>
+    <!-- $lighting (second row, centered) -->
+    <rect class="pill pill-stroke-var" x="32" y="30" width="72" height="22" rx="11" fill="#c4b5fd" />
+    <text class="pill-text pill-text-var" x="68" y="45" text-anchor="middle">$lighting</text>
+    <!-- RESOLVED $VARS caption -->
+    <text class="resolved" x="64" y="72" text-anchor="middle">Resolved $vars</text>
+  </g>
+
+  <!-- FILLS arrow -->
+  <g transform="translate(465, 180)">
+    <text class="arrow-lbl" x="50" y="-12" text-anchor="middle">Fills</text>
+    <line class="arrow-line" x1="0" y1="0" x2="92" y2="0" />
+    <polygon class="arrow-head" points="92,-5 100,0 92,5" />
+  </g>
+
+  <!-- Prompt Assembler box -->
+  <g transform="translate(575, 130)">
+    <rect class="panel border-violet" x="0" y="0" width="184" height="100" rx="10" stroke-width="2" />
+    <text class="ico-violet" x="92" y="32" text-anchor="middle" font-size="20">≡</text>
+    <text class="name"  x="92" y="58" text-anchor="middle">Prompt Assembler</text>
+    <text class="sub"   x="92" y="78" text-anchor="middle">"a $style portrait…"</text>
+  </g>
+
+  <!-- PROMPT arrow -->
+  <g transform="translate(770, 180)">
+    <text class="arrow-lbl" x="40" y="-12" text-anchor="middle">Prompt</text>
+    <line class="arrow-line" x1="0" y1="0" x2="72" y2="0" />
+    <polygon class="arrow-head" points="72,-5 80,0 72,5" />
+  </g>
+
+  <!-- CLIP Encode box -->
+  <g transform="translate(860, 130)">
+    <rect class="panel border-neutral" x="0" y="0" width="88" height="100" rx="10" stroke-width="2" />
+    <text class="ico-neutral" x="44" y="32" text-anchor="middle" font-size="20">⚡</text>
+    <text class="name"  x="44" y="58" text-anchor="middle">CLIP</text>
+    <text class="sub"   x="44" y="78" text-anchor="middle">conditioning</text>
+  </g>
+
+  <!-- Caption -->
+  <text class="resolved" x="490" y="260" text-anchor="middle" style="text-transform:none; letter-spacing:0;">
+    Modules resolve inside WP Context → named $variables → WP Prompt Assembler → CLIP
+  </text>
+</svg>
