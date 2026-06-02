@@ -8,6 +8,7 @@ not exceptions, so the API layer can pass results through verbatim.
 from __future__ import annotations
 
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -135,4 +136,75 @@ def gather_info(
             "page_count": _pragma_int(conn, "page_count"),
             "freelist_count": _pragma_int(conn, "freelist_count"),
         },
+    }
+
+
+def _db_filename(conn: sqlite3.Connection) -> str | None:
+    """Return the on-disk filename for the main DB attached to this
+    connection, or None if it's an in-memory / un-attached connection.
+
+    Uses ``PRAGMA database_list`` which returns one row per attached
+    DB; the ``main`` one is what we care about. The third column is the
+    absolute file path (empty string for ``:memory:``)."""
+    try:
+        for row in conn.execute("PRAGMA database_list"):
+            # row order: seq, name, file
+            if row[1] == "main":
+                fname = row[2]
+                return fname if fname else None
+    except sqlite3.OperationalError:
+        return None
+    return None
+
+
+def _file_size(conn: sqlite3.Connection) -> int:
+    """Return current DB file size from the filesystem. Falls back to
+    page_size * page_count (logical size) when the connection is
+    in-memory or the file can't be stat'd."""
+    fname = _db_filename(conn)
+    if fname:
+        try:
+            return Path(fname).stat().st_size
+        except OSError:
+            pass
+    page_size = _pragma_int(conn, "page_size")
+    page_count = _pragma_int(conn, "page_count")
+    return page_size * page_count
+
+
+def vacuum(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Run VACUUM. Returns {ok, op, duration_ms, bytes_reclaimed}.
+
+    bytes_reclaimed is the on-disk size delta of the main DB file. In
+    WAL mode pending writes live in the ``-wal`` sidecar until a
+    checkpoint flushes them into the main DB, so we issue a TRUNCATE
+    checkpoint BOTH before VACUUM (so ``size_before`` reflects the real
+    occupied size including the freelist we're about to reclaim) and
+    after VACUUM (so ``size_after`` reflects the post-vacuum shrinkage
+    immediately rather than waiting for the next automatic checkpoint).
+    """
+    t0 = time.monotonic()
+    try:
+        # Pre-checkpoint: flush any pending WAL writes into the main DB
+        # file so size_before captures the true on-disk footprint.
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        size_before = _file_size(conn)
+        conn.execute("VACUUM")
+        conn.commit()
+        # Post-checkpoint: VACUUM itself writes via the WAL; flush again
+        # so the shrinkage is reflected on the main DB file right now.
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.OperationalError as e:
+        return {
+            "ok": False,
+            "op": "vacuum",
+            "duration_ms": int((time.monotonic() - t0) * 1000),
+            "error": str(e),
+        }
+    size_after = _file_size(conn)
+    return {
+        "ok": True,
+        "op": "vacuum",
+        "duration_ms": int((time.monotonic() - t0) * 1000),
+        "bytes_reclaimed": max(0, size_before - size_after),
     }

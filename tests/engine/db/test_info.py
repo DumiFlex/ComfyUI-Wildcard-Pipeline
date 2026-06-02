@@ -93,3 +93,42 @@ def test_gather_info_default_source_is_unknown(fresh_db):
     conn, db_path = fresh_db
     info = gather_info(conn, db_path)
     assert info["source"] == "unknown"
+
+
+def test_vacuum_returns_ok_and_duration(fresh_db):
+    from engine.db.info import vacuum
+    conn, _ = fresh_db
+    result = vacuum(conn)
+    assert result["ok"] is True
+    assert result["op"] == "vacuum"
+    assert "duration_ms" in result
+    assert "bytes_reclaimed" in result
+    assert result["duration_ms"] >= 0
+
+
+def test_vacuum_reclaims_freelist_after_delete(fresh_db, tmp_path):
+    from engine.db.info import vacuum
+    conn, db_path = fresh_db
+    # Pad the DB with bulk inserts then delete to grow the freelist.
+    for i in range(500):
+        conn.execute(
+            "INSERT INTO modules (id, type, name, payload, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (f"{i:08x}", "wildcard", f"pad{i}", '{"x":"' + ("y" * 200) + '"}',
+             "2026-01-01", "2026-01-01"),
+        )
+    conn.commit()
+    conn.execute("DELETE FROM modules WHERE name LIKE 'pad%'")
+    conn.commit()
+    # WAL mode keeps pending writes in the -wal sidecar; force a
+    # checkpoint so the main DB file reflects the inflated post-delete
+    # state before we measure size_before. Without this, the main file
+    # stays at one page (4096 bytes) until the next auto-checkpoint
+    # and the test's shrinkage invariant can't hold.
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    size_before = db_path.stat().st_size
+    result = vacuum(conn)
+    size_after = db_path.stat().st_size
+    assert result["ok"] is True
+    assert result["bytes_reclaimed"] == size_before - size_after
+    assert size_after < size_before
