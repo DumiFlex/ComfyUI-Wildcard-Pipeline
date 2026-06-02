@@ -71,36 +71,40 @@ def _legacy_home_path() -> Path:
     return Path.home() / ".comfyui" / DB_FILENAME
 
 
-def resolve_db_path() -> Path:
-    # 1. Explicit override.
+def resolve_db_path_with_source() -> tuple[Path, str]:
+    """Like ``resolve_db_path`` but also reports which resolver rule won.
+
+    Source values:
+      - "WP_DB_PATH"        — explicit env override
+      - "COMFYUI_USER_DIR"  — env user-dir
+      - "comfyui_user_dir"  — detected via folder_paths API or path traversal
+      - "legacy"            — fell through to ~/.comfyui/wildcard-pipeline.db
+                              (also returned when ComfyUI user dir exists but
+                              the legacy file was used because the new
+                              location had no DB yet)
+    """
     override = os.environ.get("WP_DB_PATH")
     if override:
-        return Path(override)
+        return Path(override), "WP_DB_PATH"
 
-    # 2. COMFYUI_USER_DIR env var. Honour even when the directory
-    # doesn't exist yet — get_connection() will mkdir before opening.
     user_dir_env = os.environ.get("COMFYUI_USER_DIR")
     if user_dir_env:
-        return Path(user_dir_env) / DB_FILENAME
+        return Path(user_dir_env) / DB_FILENAME, "COMFYUI_USER_DIR"
 
-    # 3. ComfyUI user dir via API or path traversal. Both detectors
-    # return None if they can't find a usable directory; we fall
-    # through to the legacy path in that case.
     comfy_user = _comfyui_user_dir_from_api() or _comfyui_user_dir_from_path()
     if comfy_user is not None:
         new_path = comfy_user / DB_FILENAME
-        # 4. Backward-compat: if the new ComfyUI-user location has no
-        # DB yet but the legacy ~/.comfyui location does, prefer the
-        # legacy file so existing installs keep their data without a
-        # silent reset. Users can copy the file across (or set
-        # WP_DB_PATH) when they're ready to migrate.
         legacy = _legacy_home_path()
         if not new_path.exists() and legacy.exists():
-            return legacy
-        return new_path
+            return legacy, "legacy"
+        return new_path, "comfyui_user_dir"
 
-    # 5. Standalone / no-ComfyUI fallback.
-    return _legacy_home_path()
+    return _legacy_home_path(), "legacy"
+
+
+def resolve_db_path() -> Path:
+    """Path-only convenience wrapper — preserved for all existing callers."""
+    return resolve_db_path_with_source()[0]
 
 
 def get_connection(path: Path | None = None) -> sqlite3.Connection:
