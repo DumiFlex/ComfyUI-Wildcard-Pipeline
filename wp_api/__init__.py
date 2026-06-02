@@ -7,6 +7,7 @@ from aiohttp import web
 
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
+from engine.db.pending_move import execute_pending_move
 from wp_api import bundles as _bundles
 from wp_api import cascade as _cascade
 from wp_api import categories as _categories
@@ -32,6 +33,14 @@ def _ensure_db_migrated() -> None:
 
 def register_routes(app: web.Application) -> None:
     """Mount all /wp + /wp/api/* routes on the given app."""
+    # Pending-move runs FIRST: the file operation must complete before
+    # any DB connection opens, otherwise the migration step below would
+    # operate on the wrong file (or an empty new file while the user's
+    # data still sits at the old location).
+    try:
+        execute_pending_move()
+    except Exception:  # noqa: BLE001 - never crash ComfyUI on pending-move failure
+        logger.exception("wildcard-pipeline: pending db move failed")
     try:
         _ensure_db_migrated()
     except Exception:  # noqa: BLE001 - never crash ComfyUI on migration failure
