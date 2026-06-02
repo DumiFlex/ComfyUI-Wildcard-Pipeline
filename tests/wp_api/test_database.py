@@ -11,7 +11,7 @@ async def test_get_info_returns_200_with_expected_shape(wp_client):
     assert "path" in body
     assert "source" in body
     assert body["source"] in {"WP_DB_PATH", "COMFYUI_USER_DIR",
-                              "comfyui_user_dir", "legacy"}
+                              "user", "global", "root"}
     assert "size_bytes" in body
     assert "mtime_iso" in body
     assert "counts" in body

@@ -386,8 +386,9 @@ export interface EmbedBundle {
 export type DatabasePathSource =
   | "WP_DB_PATH"
   | "COMFYUI_USER_DIR"
-  | "comfyui_user_dir"
-  | "legacy"
+  | "user"
+  | "global"
+  | "root"
   | "unknown";
 
 export interface DatabaseAppliedMigration {

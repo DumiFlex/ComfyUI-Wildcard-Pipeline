@@ -14,7 +14,7 @@ vi.mock("../../../api/client", () => ({
 
 const sampleInfo: DatabaseInfo = {
   path: "/Users/test/.comfyui/wildcard-pipeline.db",
-  source: "legacy",
+  source: "global",
   size_bytes: 1024 * 1024,
   mtime_iso: "2026-06-02T14:23:11+00:00",
   counts: {
@@ -41,7 +41,7 @@ describe("DatabaseCard", () => {
     await wrapper.vm.$nextTick();
     const text = wrapper.text();
     expect(text).toContain("wildcard-pipeline.db");
-    expect(text).toContain("legacy");
+    expect(text).toContain("global");
     expect(text).toContain("5"); // wildcards count
     expect(text).toContain("11"); // migration version
   });

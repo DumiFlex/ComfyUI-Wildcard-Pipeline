@@ -104,7 +104,13 @@ def _applied_migrations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def gather_info(
     conn: sqlite3.Connection, db_path: Path, *, source: str = "unknown"
 ) -> dict[str, Any]:
-    """Return a read-only snapshot of the DB suitable for the SPA card."""
+    """Return a read-only snapshot of the DB suitable for the SPA card.
+
+    ``source`` is passed through verbatim. The resolver in
+    ``engine.db.connection`` produces one of:
+    ``"WP_DB_PATH" | "COMFYUI_USER_DIR" | "user" | "global" | "root"``.
+    ``"unknown"`` is reserved for callers that don't have a real source
+    (e.g. engine unit tests that build a connection directly)."""
     counts: dict[str, int] = {}
     for ui_name, type_value in _KIND_TYPES.items():
         counts[ui_name] = _count_modules_by_type(conn, type_value)
