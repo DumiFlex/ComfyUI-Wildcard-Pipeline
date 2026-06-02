@@ -382,3 +382,71 @@ export interface EmbedBundle {
   pickOrder: string[];
   walkOverflow: WalkOverflow[];
 }
+
+export type DatabasePathSource =
+  | "WP_DB_PATH"
+  | "COMFYUI_USER_DIR"
+  | "comfyui_user_dir"
+  | "legacy"
+  | "unknown";
+
+export interface DatabaseAppliedMigration {
+  version: number;
+  name: string;
+  applied_at: string;
+}
+
+export interface DatabasePragma {
+  journal_mode: string;
+  foreign_keys: number;
+  page_size: number;
+  page_count: number;
+  freelist_count: number;
+}
+
+export interface DatabaseInfo {
+  path: string;
+  source: DatabasePathSource;
+  size_bytes: number;
+  mtime_iso: string;
+  counts: Record<string, number>;
+  migration: {
+    current_version: number;
+    applied: DatabaseAppliedMigration[];
+  };
+  pragma: DatabasePragma;
+}
+
+export type MaintenanceOp = "vacuum" | "integrity" | "analyze" | "migrate";
+
+export type MaintenanceResult =
+  | {
+      ok: true;
+      op: "vacuum";
+      duration_ms: number;
+      bytes_reclaimed: number;
+    }
+  | {
+      ok: true;
+      op: "integrity";
+      duration_ms: number;
+      output: string[];
+    }
+  | {
+      ok: true;
+      op: "analyze";
+      duration_ms: number;
+    }
+  | {
+      ok: true;
+      op: "migrate";
+      duration_ms: number;
+      applied: number[];
+    }
+  | {
+      ok: false;
+      op: MaintenanceOp;
+      duration_ms: number;
+      error?: string;
+      output?: string[];
+    };

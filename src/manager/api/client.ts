@@ -2,6 +2,7 @@ import type { CommitOk, CommitPayload } from "../import-export/commit";
 import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
+  DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
   MatchRequest, MatchResponse,
   ModuleCreateInput, ModuleListResponse, ModuleRow, ModuleUpdateInput,
@@ -183,6 +184,17 @@ export const api = {
     },
     delete(id: string) {
       return request<void>(`/wp/api/categories/${id}`, { method: "DELETE" });
+    },
+  },
+  database: {
+    info() {
+      return request<DatabaseInfo>("/wp/api/database/info", { method: "GET" });
+    },
+    maintenance(op: MaintenanceOp) {
+      return request<MaintenanceResult>("/wp/api/database/maintenance", {
+        method: "POST",
+        body: JSON.stringify({ op }),
+      });
     },
   },
   test(body: TestRequest) {
