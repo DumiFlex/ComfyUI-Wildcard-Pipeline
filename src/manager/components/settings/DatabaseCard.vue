@@ -9,6 +9,7 @@ import { computed, onMounted, ref } from "vue";
 import Button from "../ui/Button.vue";
 import Card from "../ui/Card.vue";
 import Icon from "../ui/Icon.vue";
+import LocationSection from "./LocationSection.vue";
 import MaintenanceOpModal from "./MaintenanceOpModal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
@@ -104,7 +105,10 @@ function formatDate(iso: string): string {
   }
 }
 
-onMounted(() => { void store.fetchInfo(); });
+onMounted(() => {
+  void store.fetchInfo();
+  void store.fetchConfig();
+});
 </script>
 
 <template>
@@ -141,6 +145,8 @@ onMounted(() => { void store.fetchInfo(); });
           <div class="wp-db__row"><dt>Last modified</dt><dd>{{ formatDate(store.info.mtime_iso) }}</dd></div>
         </dl>
       </section>
+
+      <LocationSection />
 
       <section class="wp-db__section">
         <h3 class="wp-db__section-title">Row counts</h3>
