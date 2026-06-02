@@ -10,6 +10,7 @@ from engine.db.migrations import migrate
 from wp_api import bundles as _bundles
 from wp_api import cascade as _cascade
 from wp_api import categories as _categories
+from wp_api import database as _database
 from wp_api import import_export as _import_export
 from wp_api import modules as _modules
 from wp_api import preview as _preview
@@ -40,6 +41,7 @@ def register_routes(app: web.Application) -> None:
     _bundles.register(app.router)
     _templates.register(app.router)
     _categories.register(app.router)
+    _database.register(app.router)
     _test_runner.register(app.router)
     _import_export.register(app.router)
     _cascade.register(app.router)
