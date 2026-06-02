@@ -251,3 +251,30 @@ def analyze(conn: sqlite3.Connection) -> dict[str, Any]:
         "op": "analyze",
         "duration_ms": int((time.monotonic() - t0) * 1000),
     }
+
+
+def run_migrations(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Force-run pending migrations. Returns the list of versions applied
+    (empty when the DB was already up to date)."""
+    from engine.db.migrations import migrate  # local import to keep top-level clean
+
+    before = current_version(conn)
+    t0 = time.monotonic()
+    try:
+        migrate(conn)
+    except Exception as e:  # noqa: BLE001 — surface to UI as a structured failure
+        return {
+            "ok": False,
+            "op": "migrate",
+            "duration_ms": int((time.monotonic() - t0) * 1000),
+            "error": str(e),
+            "applied": [],
+        }
+    after = current_version(conn)
+    applied = list(range(before + 1, after + 1)) if after > before else []
+    return {
+        "ok": True,
+        "op": "migrate",
+        "duration_ms": int((time.monotonic() - t0) * 1000),
+        "applied": applied,
+    }

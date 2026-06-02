@@ -151,3 +151,14 @@ def test_analyze_runs_without_error(fresh_db):
     assert result["ok"] is True
     assert result["op"] == "analyze"
     assert result["duration_ms"] >= 0
+
+
+def test_run_migrations_is_idempotent_on_migrated_db(fresh_db):
+    from engine.db.info import run_migrations
+    conn, _ = fresh_db
+    # fresh_db fixture already migrated; second call should apply nothing.
+    result = run_migrations(conn)
+    assert result["ok"] is True
+    assert result["op"] == "migrate"
+    assert result["applied"] == []
+    assert result["duration_ms"] >= 0
