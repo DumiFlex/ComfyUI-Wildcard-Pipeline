@@ -1,7 +1,12 @@
 """Tests for resolve_db_path_with_source — the source-aware resolver."""
 from __future__ import annotations
 
-from engine.db.connection import resolve_db_path_with_source
+from engine.db.connection import (
+    global_location_path,
+    resolve_db_path_with_source,
+    root_location_path,
+    user_location_path,
+)
 
 
 def test_env_override_returns_source_wp_db_path(monkeypatch, tmp_path):
@@ -90,3 +95,46 @@ def test_env_wins_over_sidecar(monkeypatch, tmp_path):
     monkeypatch.setattr("engine.db.connection._load_sidecar", lambda: {"preference": "global"})
     path, source = resolve_db_path_with_source()
     assert source == "WP_DB_PATH"
+
+
+# ---------------------------------------------------------------------------
+# Location path helpers — exposed for the SPA Settings API so the frontend
+# can list all three potential DB locations regardless of which one wins
+# resolution. They take no args and never read env vars / sidecar.
+# ---------------------------------------------------------------------------
+
+
+def test_user_location_path_returns_path_when_detected(monkeypatch, tmp_path):
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+    monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_api", lambda: user_dir)
+    monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_path", lambda: None)
+    assert user_location_path() == user_dir / "wildcard-pipeline.db"
+
+
+def test_user_location_path_falls_back_to_path_detector(monkeypatch, tmp_path):
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+    monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_api", lambda: None)
+    monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_path", lambda: user_dir)
+    assert user_location_path() == user_dir / "wildcard-pipeline.db"
+
+
+def test_user_location_path_returns_none_when_undetected(monkeypatch):
+    monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_api", lambda: None)
+    monkeypatch.setattr("engine.db.connection._comfyui_user_dir_from_path", lambda: None)
+    assert user_location_path() is None
+
+
+def test_global_location_path_under_home_dot_comfyui():
+    path = global_location_path()
+    assert path.name == "wildcard-pipeline.db"
+    assert path.parent.name == ".comfyui"
+
+
+def test_root_location_path_under_plugin_db_dir():
+    path = root_location_path()
+    assert path.name == "wildcard-pipeline.db"
+    assert path.parent.name == "db"
+    # Sanity: the parent of <plugin>/db/ must be the plugin root.
+    assert (path.parent.parent / "engine").is_dir()

@@ -102,6 +102,30 @@ def _load_sidecar() -> dict:
     return dict(load())
 
 
+def user_location_path() -> Path | None:
+    """Return the ``user`` preference target path, or ``None`` if the
+    ComfyUI user dir can't be detected.
+
+    Same detector chain that ``resolve_db_path_with_source`` uses for the
+    ``user`` branch. Exposed for the SPA Settings API so the frontend can
+    list all three potential locations regardless of which one is
+    currently active (or whether one is detectable at all)."""
+    comfy_user = _comfyui_user_dir_from_api() or _comfyui_user_dir_from_path()
+    return (comfy_user / DB_FILENAME) if comfy_user else None
+
+
+def global_location_path() -> Path:
+    """Return the ``global`` preference target — ``~/.comfyui/wildcard-pipeline.db``.
+
+    Always available regardless of host detection (just ``Path.home()``)."""
+    return _legacy_home_path()
+
+
+def root_location_path() -> Path:
+    """Return the ``root`` preference target — ``<plugin>/db/wildcard-pipeline.db``."""
+    return _plugin_root_db_path()
+
+
 def resolve_db_path_with_source() -> tuple[Path, str]:
     """Like ``resolve_db_path`` but also reports which resolver rule won.
 
