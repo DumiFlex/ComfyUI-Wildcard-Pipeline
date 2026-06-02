@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useDatabaseStore } from "../databaseStore";
-import type { DatabaseInfo, MaintenanceResult } from "../../api/types";
+import type { DatabaseConfig, DatabaseInfo, MaintenanceResult } from "../../api/types";
 
 const sampleInfo: DatabaseInfo = {
   path: "/tmp/wp.db",
@@ -23,11 +23,25 @@ const vacuumOk: MaintenanceResult = {
   ok: true, op: "vacuum", duration_ms: 10, bytes_reclaimed: 0,
 };
 
+const sampleConfig: DatabaseConfig = {
+  preference: null,
+  pending_move: null,
+  locations: {
+    user:   { path: "/comfy/user/wildcard-pipeline.db", exists: true, size_bytes: 1024 },
+    global: { path: "/home/.comfyui/wildcard-pipeline.db", exists: true, size_bytes: 2048 },
+    root:   { path: "/plugin/db/wildcard-pipeline.db", exists: false, size_bytes: null },
+  },
+  env_locked: false,
+};
+
 vi.mock("../../api/client", () => ({
   api: {
     database: {
       info: vi.fn(),
       maintenance: vi.fn(),
+      config: vi.fn(),
+      setConfig: vi.fn(),
+      clearPendingMove: vi.fn(),
     },
   },
   ApiError: class ApiError extends Error {
@@ -97,5 +111,57 @@ describe("databaseStore", () => {
     expect(result.ok).toBe(false);
     expect(api.database.info).not.toHaveBeenCalled();
     expect(store.runningOp).toBeNull();
+  });
+
+  it("fetchConfig populates config and toggles configLoading", async () => {
+    (api.database.config as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(sampleConfig);
+    const store = useDatabaseStore();
+    expect(store.configLoading).toBe(false);
+    const promise = store.fetchConfig();
+    expect(store.configLoading).toBe(true);
+    await promise;
+    expect(store.configLoading).toBe(false);
+    expect(store.config).toEqual(sampleConfig);
+    expect(store.configError).toBeNull();
+  });
+
+  it("fetchConfig records configError on failure", async () => {
+    (api.database.config as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("boom"),
+    );
+    const store = useDatabaseStore();
+    await store.fetchConfig();
+    expect(store.configError).toBe("boom");
+    expect(store.config).toBeNull();
+  });
+
+  it("setConfig sends update and stores result", async () => {
+    const updated: DatabaseConfig = { ...sampleConfig, preference: "global" };
+    (api.database.setConfig as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(updated);
+    const store = useDatabaseStore();
+    const result = await store.setConfig({ preference: "global" });
+    expect(api.database.setConfig).toHaveBeenCalledWith({ preference: "global" });
+    expect(result).toEqual(updated);
+    expect(store.config?.preference).toBe("global");
+  });
+
+  it("setConfig records configError and returns null on failure", async () => {
+    (api.database.setConfig as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("nope"),
+    );
+    const store = useDatabaseStore();
+    const result = await store.setConfig({ preference: "user" });
+    expect(result).toBeNull();
+    expect(store.configError).toBe("nope");
+  });
+
+  it("cancelPendingMove updates store via DELETE endpoint", async () => {
+    const after: DatabaseConfig = { ...sampleConfig, pending_move: null };
+    (api.database.clearPendingMove as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(after);
+    const store = useDatabaseStore();
+    await store.cancelPendingMove();
+    expect(api.database.clearPendingMove).toHaveBeenCalled();
+    expect(store.config?.pending_move).toBeNull();
   });
 });
