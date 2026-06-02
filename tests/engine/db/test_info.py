@@ -142,3 +142,12 @@ def test_integrity_check_passes_clean_db(fresh_db):
     assert result["op"] == "integrity"
     assert result["output"] == ["ok"]
     assert result["duration_ms"] >= 0
+
+
+def test_analyze_runs_without_error(fresh_db):
+    from engine.db.info import analyze
+    conn, _ = fresh_db
+    result = analyze(conn)
+    assert result["ok"] is True
+    assert result["op"] == "analyze"
+    assert result["duration_ms"] >= 0

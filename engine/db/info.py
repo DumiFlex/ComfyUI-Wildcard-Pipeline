@@ -231,3 +231,23 @@ def integrity_check(conn: sqlite3.Connection) -> dict[str, Any]:
         "duration_ms": int((time.monotonic() - t0) * 1000),
         "output": output,
     }
+
+
+def analyze(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Run ANALYZE to refresh the query planner's statistics tables."""
+    t0 = time.monotonic()
+    try:
+        conn.execute("ANALYZE")
+        conn.commit()
+    except sqlite3.OperationalError as e:
+        return {
+            "ok": False,
+            "op": "analyze",
+            "duration_ms": int((time.monotonic() - t0) * 1000),
+            "error": str(e),
+        }
+    return {
+        "ok": True,
+        "op": "analyze",
+        "duration_ms": int((time.monotonic() - t0) * 1000),
+    }
