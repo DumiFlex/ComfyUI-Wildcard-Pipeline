@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from engine.db.migrations import migrate
 
 
 @pytest.fixture
-def fresh_db(tmp_path) -> tuple[sqlite3.Connection, Path]:
+def fresh_db(tmp_path: Path) -> Iterator[tuple[sqlite3.Connection, Path]]:
     db_path = tmp_path / "wp.db"
     conn = get_connection(db_path)
     migrate(conn)
