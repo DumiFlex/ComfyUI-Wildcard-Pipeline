@@ -5,19 +5,60 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Settings from "../views/Settings.vue";
 import { useUiStore } from "../stores/uiStore";
 
+// DatabaseCard onMounted calls databaseStore.fetchInfo(), which hits
+// api.database.info(). Stub the client so Settings tests don't depend
+// on a real /wp/api/database/info endpoint.
+vi.mock("../api/client", () => ({
+  api: {
+    database: { info: vi.fn().mockResolvedValue(null), maintenance: vi.fn() },
+  },
+  ApiError: class ApiError extends Error {},
+}));
+
+const reloadMock = vi.fn();
+
 beforeEach(() => {
   setActivePinia(createPinia());
+  reloadMock.mockClear();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { ...window.location, reload: reloadMock },
+  });
 });
 afterEach(() => vi.clearAllMocks());
 
 describe("Settings.vue", () => {
-  it("renders About / Theme / Storage cards", () => {
+  it("renders About / Theme / Browser preferences / Database cards", () => {
     const wrap = mount(Settings);
     const text = wrap.text();
     expect(text).toContain("Settings");
     expect(text).toContain("About");
     expect(text).toContain("Theme");
-    expect(text).toContain("Storage");
+    expect(text).toContain("Browser preferences");
+    expect(text).toContain("Database");
+  });
+
+  it("mounts BrowserPrefsCard and DatabaseCard", () => {
+    const wrap = mount(Settings);
+    expect(wrap.findComponent({ name: "BrowserPrefsCard" }).exists()).toBe(true);
+    expect(wrap.findComponent({ name: "DatabaseCard" }).exists()).toBe(true);
+  });
+
+  it("clearing preferences removes wp.releaseCheck (regression for dot-prefix bug)", async () => {
+    localStorage.setItem("wp.releaseCheck", '{"v":"1.0"}');
+    localStorage.setItem("wp-theme-mode", "dark");
+    localStorage.setItem("Comfy.unrelated", "keep-me");
+    const wrap = mount(Settings, { attachTo: document.body });
+    const bp = wrap.findComponent({ name: "BrowserPrefsCard" });
+    await bp.find("[data-test='browser-prefs-reset']").trigger("click");
+    const dialog = bp.findComponent({ name: "ConfirmDialog" });
+    dialog.vm.$emit("confirm");
+    await wrap.vm.$nextTick();
+    expect(localStorage.getItem("wp.releaseCheck")).toBeNull();
+    expect(localStorage.getItem("wp-theme-mode")).toBeNull();
+    // Non-WP keys must survive
+    expect(localStorage.getItem("Comfy.unrelated")).toBe("keep-me");
+    wrap.unmount();
   });
 
   it("clicking a theme chip swaps uiStore.themeMode", async () => {

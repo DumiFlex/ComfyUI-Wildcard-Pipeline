@@ -2,14 +2,19 @@
 /**
  * Settings — port of `SettingsScreen` in
  * `docs/design-handoff/wildcard-pipeline/project/screens/utilities.jsx`.
- * About / Theme / Storage cards using the local ui/* primitives.
+ * About / Theme / Display / Browser preferences / Database / Wildcard
+ * cards using the local ui/* primitives. The legacy inline Storage card
+ * has been split into BrowserPrefsCard (per-device localStorage reset
+ * with dot-prefix fix) and DatabaseCard (server-side SQLite info +
+ * maintenance ops).
  */
-import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import Field from "../components/ui/Field.vue";
 import Icon from "../components/ui/Icon.vue";
 import Input from "../components/ui/Input.vue";
 import Toggle from "../components/ui/Toggle.vue";
+import BrowserPrefsCard from "../components/settings/BrowserPrefsCard.vue";
+import DatabaseCard from "../components/settings/DatabaseCard.vue";
 import { useUiStore, type ThemeMode } from "../stores/uiStore";
 import { GITHUB_REPO } from "../config/links";
 
@@ -32,21 +37,6 @@ const THEMES: ThemeOption[] = [
 
 function setTheme(mode: ThemeMode) {
   uiStore.setThemeMode(mode);
-}
-
-function resetPreferences() {
-  // Best-effort — clear the manager's localStorage namespace + reload.
-  try {
-    const toClear: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith("wp-")) toClear.push(key);
-    }
-    for (const k of toClear) localStorage.removeItem(k);
-  } catch {
-    /* ignore */
-  }
-  window.location.reload();
 }
 </script>
 
@@ -112,19 +102,9 @@ function resetPreferences() {
       </Field>
     </Card>
 
-    <Card title="Storage">
-      <p class="wp-dim wp-settings__hint">
-        Preferences (theme, sidebar state, last filters) are persisted in your
-        browser's <span class="wp-mono">localStorage</span>. Modules + categories
-        are stored server-side in SQLite.
-      </p>
-      <Button
-        variant="ghost"
-        icon="pi-refresh"
-        data-test="settings-reset"
-        @click="resetPreferences"
-      >Reset preferences</Button>
-    </Card>
+    <BrowserPrefsCard />
+
+    <DatabaseCard />
 
     <Card title="Wildcard">
       <Field
