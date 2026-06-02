@@ -19,6 +19,13 @@ def db_conn(tmp_path):
 @pytest.fixture
 def wp_app(tmp_path, monkeypatch):
     monkeypatch.setenv("WP_DB_PATH", str(tmp_path / "api.db"))
+    # Isolate the sidecar so PUT/DELETE config tests don't touch the real
+    # <plugin>/db-config.json. Patch BEFORE register_routes() runs because
+    # register_routes() calls execute_pending_move() which reads the sidecar.
+    monkeypatch.setattr(
+        "engine.db.config.SIDECAR_PATH",
+        tmp_path / "db-config.json",
+    )
     conn = get_connection()
     migrate(conn)
     conn.close()

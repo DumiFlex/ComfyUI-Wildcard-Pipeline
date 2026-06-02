@@ -46,9 +46,21 @@ def _read_raw(path: Path) -> dict[str, Any]:
         return {}
 
 
-def load(path: Path = SIDECAR_PATH) -> DbConfig:
+def _resolve_sidecar(path: Path | None) -> Path:
+    """Resolve the effective sidecar path.
+
+    Reads ``SIDECAR_PATH`` from this module dynamically when ``path`` is
+    ``None`` so tests can ``monkeypatch.setattr("engine.db.config.SIDECAR_PATH", ...)``
+    and have all three of ``load``/``save``/``clear_pending_move`` honor
+    the override. Using a default argument like ``path = SIDECAR_PATH``
+    captures the value at function-definition time, which breaks
+    monkeypatching the module attribute."""
+    return path if path is not None else SIDECAR_PATH
+
+
+def load(path: Path | None = None) -> DbConfig:
     """Return the sidecar config or {} if absent / unreadable / invalid."""
-    raw = _read_raw(path)
+    raw = _read_raw(_resolve_sidecar(path))
     out: DbConfig = {}
     pref = raw.get("preference")
     if isinstance(pref, str) and pref in _VALID_PREFERENCES:
@@ -64,8 +76,9 @@ def load(path: Path = SIDECAR_PATH) -> DbConfig:
     return out
 
 
-def save(config: DbConfig, path: Path = SIDECAR_PATH) -> None:
+def save(config: DbConfig, path: Path | None = None) -> None:
     """Atomically write the sidecar (write-temp + rename)."""
+    path = _resolve_sidecar(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Strip any unknown keys; only persist the validated shape.
     out: dict[str, Any] = {}
@@ -85,8 +98,9 @@ def save(config: DbConfig, path: Path = SIDECAR_PATH) -> None:
         raise
 
 
-def clear_pending_move(path: Path = SIDECAR_PATH) -> None:
+def clear_pending_move(path: Path | None = None) -> None:
     """Remove just the pending_move field; preserve preference."""
+    path = _resolve_sidecar(path)
     cfg = load(path)
     if "pending_move" in cfg:
         cfg.pop("pending_move", None)
