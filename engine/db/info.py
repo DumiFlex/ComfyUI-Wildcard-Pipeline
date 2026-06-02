@@ -208,3 +208,26 @@ def vacuum(conn: sqlite3.Connection) -> dict[str, Any]:
         "duration_ms": int((time.monotonic() - t0) * 1000),
         "bytes_reclaimed": max(0, size_before - size_after),
     }
+
+
+def integrity_check(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Run PRAGMA integrity_check. ``ok=True`` iff output is exactly ['ok']."""
+    t0 = time.monotonic()
+    try:
+        rows = conn.execute("PRAGMA integrity_check").fetchall()
+    except sqlite3.OperationalError as e:
+        return {
+            "ok": False,
+            "op": "integrity",
+            "duration_ms": int((time.monotonic() - t0) * 1000),
+            "output": [],
+            "error": str(e),
+        }
+    output = [str(r[0]) for r in rows]
+    is_ok = output == ["ok"]
+    return {
+        "ok": is_ok,
+        "op": "integrity",
+        "duration_ms": int((time.monotonic() - t0) * 1000),
+        "output": output,
+    }

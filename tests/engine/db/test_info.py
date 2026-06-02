@@ -132,3 +132,13 @@ def test_vacuum_reclaims_freelist_after_delete(fresh_db, tmp_path):
     assert result["ok"] is True
     assert result["bytes_reclaimed"] == size_before - size_after
     assert size_after < size_before
+
+
+def test_integrity_check_passes_clean_db(fresh_db):
+    from engine.db.info import integrity_check
+    conn, _ = fresh_db
+    result = integrity_check(conn)
+    assert result["ok"] is True
+    assert result["op"] == "integrity"
+    assert result["output"] == ["ok"]
+    assert result["duration_ms"] >= 0
