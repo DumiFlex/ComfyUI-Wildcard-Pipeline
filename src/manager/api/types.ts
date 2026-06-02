@@ -451,3 +451,38 @@ export type MaintenanceResult =
       error?: string;
       output?: string[];
     };
+
+export type DatabasePreference = "user" | "global" | "root";
+export type MoveMode = "copy" | "move";
+
+export interface PendingMove {
+  from: string;
+  to: string;
+  mode: MoveMode;
+}
+
+export interface DatabaseLocationEntry {
+  path: string | null;
+  exists: boolean;
+  size_bytes: number | null;
+}
+
+export interface DatabaseLocations {
+  user: DatabaseLocationEntry;
+  global: DatabaseLocationEntry;
+  root: DatabaseLocationEntry;
+}
+
+export interface DatabaseConfig {
+  preference: DatabasePreference | null;
+  pending_move: PendingMove | null;
+  locations: DatabaseLocations;
+  env_locked: boolean;
+}
+
+export interface DatabaseConfigUpdate {
+  /** Omit to leave unchanged; pass `null` to explicitly clear. */
+  preference?: DatabasePreference | null;
+  /** Omit to leave unchanged; pass `null` to explicitly clear. */
+  pending_move?: PendingMove | null;
+}
