@@ -26,10 +26,12 @@ import Button from "../ui/Button.vue";
 import Icon from "../ui/Icon.vue";
 import Modal from "../ui/Modal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
+import { useSystemStore } from "../../stores/systemStore";
 import { useToast } from "../../composables/useToast";
 import type { DatabasePreference, MoveMode } from "../../api/types";
 
 const store = useDatabaseStore();
+const system = useSystemStore();
 const toast = useToast();
 
 interface LocationOption {
@@ -181,8 +183,18 @@ function fmtBytes(n: number | null): string {
         Restart ComfyUI to apply.
       </span>
       <Button
-        variant="link"
+        v-if="system.canRestart"
+        variant="primary"
+        size="sm"
+        icon="pi-power-off"
+        :loading="system.restarting"
         :disabled="store.savingConfig"
+        data-test="location-restart-now"
+        @click="() => system.restart()"
+      >Restart now</Button>
+      <Button
+        variant="link"
+        :disabled="store.savingConfig || system.restarting"
         data-test="location-cancel-pending"
         @click="onCancelPending"
       >Cancel</Button>

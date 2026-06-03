@@ -12,6 +12,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
 import { useStaleStore } from "../stores/staleStore";
+import { useSystemStore } from "../stores/systemStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
@@ -29,6 +30,7 @@ const ui = useUiStore();
 const commandIndex = useCommandIndex();
 const recent = useRecentStore();
 const stale = useStaleStore();
+const system = useSystemStore();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
@@ -137,6 +139,10 @@ onMounted(() => {
   document.addEventListener("visibilitychange", onVisibilityChange);
   // Kick off the heartbeat. visibilitychange controls pause/resume.
   if (document.visibilityState === "visible") startStalePoll();
+  // One-shot detection of ComfyUI Manager's reboot endpoint so banners
+  // know whether to surface a "Restart ComfyUI" button alongside their
+  // existing reload/cancel actions.
+  void system.detectRestartCapability();
   // Eager-fetch the three library stores so sidebar count badges,
   // Cmd+K palette index, and Recents section have real data on cold
   // load. Dashboard fetches via api.* directly and does not touch

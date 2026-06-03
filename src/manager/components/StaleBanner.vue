@@ -10,8 +10,10 @@
 import Button from "./ui/Button.vue";
 import Icon from "./ui/Icon.vue";
 import { useStaleStore } from "../stores/staleStore";
+import { useSystemStore } from "../stores/systemStore";
 
 const stale = useStaleStore();
+const system = useSystemStore();
 </script>
 
 <template>
@@ -34,6 +36,15 @@ const stale = useStaleStore();
         data-test="stale-reload"
         @click="() => stale.reload()"
       >Reload page</Button>
+      <Button
+        v-if="system.canRestart"
+        variant="secondary"
+        size="sm"
+        icon="pi-power-off"
+        :loading="system.restarting"
+        data-test="stale-restart"
+        @click="() => system.restart()"
+      >Restart ComfyUI</Button>
     </div>
   </Transition>
 </template>
