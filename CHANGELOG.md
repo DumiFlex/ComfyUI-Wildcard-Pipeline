@@ -1,3 +1,46 @@
+## 🎉 Wildcard Pipeline 2.1.0
+
+📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
+
+<details>
+<summary><b>📋 Full changelog</b> — click to expand the per-commit list</summary>
+
+
+* feat(api): add GET /wp/api/database/info ([dc839bf](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/dc839bf))
+* feat(api): add POST /wp/api/database/maintenance ([0909817](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/0909817))
+* feat(api): expose db config get/put endpoints with pending-move ([04d3795](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/04d3795))
+* feat(api): run pending db move before migration on startup ([00b0c73](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/00b0c73))
+* feat(engine): add analyze maintenance op ([d39add1](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d39add1))
+* feat(engine): add gather_info DB introspection ([2b5f2b7](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/2b5f2b7))
+* feat(engine): add integrity_check maintenance op ([7f12575](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7f12575))
+* feat(engine): add run_migrations maintenance op ([5a62929](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/5a62929))
+* feat(engine): add sidecar db-config.json reader/writer ([069527a](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/069527a))
+* feat(engine): add user/global/root location path helpers ([747a84a](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/747a84a))
+* feat(engine): add vacuum maintenance op ([4abe679](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/4abe679))
+* feat(engine): execute pending db moves at plugin load ([52966e6](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/52966e6))
+* feat(engine): expose db path resolution source ([7e12626](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7e12626))
+* feat(engine): honor sidecar preference and add root db location ([c03fc07](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c03fc07))
+* feat(manager): add always-visible restart comfyui row to maintenance section ([c6a1030](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/c6a1030))
+* feat(manager): add database API client + types ([f20a9e3](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/f20a9e3))
+* feat(manager): add database card with info and maintenance ([df7eb75](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/df7eb75))
+* feat(manager): add databaseStore Pinia store ([2003f38](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/2003f38))
+* feat(manager): add db config types and api client methods ([8c760f2](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8c760f2))
+* feat(manager): add location selector with copy or move flow ([eb48d7f](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/eb48d7f))
+* feat(manager): add maintenance op three-phase modal ([7cfe29b](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7cfe29b))
+* feat(manager): add restart comfyui button via manager reboot endpoint ([02c8300](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/02c8300))
+* feat(manager): browser preferences card with full prefix coverage ([b2b75d4](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/b2b75d4))
+* feat(manager): detect server restart and prompt stale page reload ([7102057](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/7102057))
+* feat(manager): extend database store with config and pending move actions ([8eb5967](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/8eb5967))
+* feat(manager): fade routes on tab switch with reduced-motion fallback ([9a053e8](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/9a053e8))
+* feat(manager): heartbeat poll every 30s so stale banner appears without tab switch ([efb38ff](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/efb38ff))
+* feat(manager): replace storage card with browser prefs and database cards ([885a2d0](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/885a2d0))
+* fix(manager): flex-based row layout for database info, wrap long paths ([a89bf7d](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/a89bf7d))
+* fix(manager): probe manager via get /manager/version instead of head reboot ([843a679](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/843a679))
+* chore: ignore db-config.json sidecar and root db dir ([d23a728](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/d23a728))
+* chore(tests): fix fresh_db fixture return type annotation ([ecdbf6c](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/commit/ecdbf6c))
+
+</details>
+
 ## 🎉 Wildcard Pipeline 2.0.1
 
 📖 [Docs (wiki)](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) · 💬 [Discord](https://discord.gg/BFYR9WQdVR) · 📦 [Install via ComfyUI Manager](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start) · 🐛 [Issues](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/issues)
