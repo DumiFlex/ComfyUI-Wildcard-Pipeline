@@ -12,6 +12,7 @@ import Icon from "../ui/Icon.vue";
 import LocationSection from "./LocationSection.vue";
 import MaintenanceOpModal from "./MaintenanceOpModal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
+import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
 
 interface OpSpec {
@@ -56,6 +57,7 @@ const OPS: OpSpec[] = [
 ];
 
 const store = useDatabaseStore();
+const system = useSystemStore();
 
 const activeSpec = ref<OpSpec | null>(null);
 type Phase = "confirm" | "loading" | "result-ok" | "result-error";
@@ -183,6 +185,22 @@ onMounted(() => {
               :loading="store.runningOp === spec.op"
               @click="startOp(spec)"
             >Run</Button>
+          </div>
+          <div v-if="system.canRestart" class="wp-db__op-row" data-test="database-restart-row">
+            <div class="wp-db__op-info">
+              <p class="wp-db__op-name"><Icon name="pi-power-off" />Restart ComfyUI</p>
+              <p class="wp-db__op-desc">
+                Restart the host process via ComfyUI Manager. Required to apply pending DB moves.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              icon="pi-power-off"
+              :loading="system.restarting"
+              :disabled="!!store.runningOp"
+              data-test="database-restart"
+              @click="() => system.restart()"
+            >Restart</Button>
           </div>
         </div>
       </section>
