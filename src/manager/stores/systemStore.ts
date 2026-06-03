@@ -4,10 +4,14 @@ import { ref } from "vue";
 /**
  * Detects + drives the ComfyUI Manager `/manager/reboot` endpoint.
  *
- * Detection: a single HEAD probe at app mount. Manager's `/manager/reboot`
- * accepts GET; we use HEAD (Manager's aiohttp route accepts it implicitly
- * when GET is registered) so the probe itself never triggers a restart.
- * The resulting status is cached in `canRestart` for the rest of the session.
+ * Detection: a single GET probe at `/manager/version` (a harmless
+ * read-only endpoint Manager exposes for build identification). Used
+ * instead of HEAD'ing `/manager/reboot` directly because the reboot
+ * route is registered POST-only — aiohttp's response to HEAD on a
+ * POST-only path is server/middleware-dependent (404 in our setup).
+ * `version` is always there when Manager is, and harmless either way.
+ * The resulting status is cached in `canRestart` for the rest of the
+ * session.
  *
  * Restart flow:
  *   1. Set `restarting = true`.
@@ -31,9 +35,8 @@ export const useSystemStore = defineStore("system", () => {
   async function detectRestartCapability(): Promise<void> {
     if (canRestart.value !== null) return;  // probe once per session
     try {
-      const resp = await fetch("/manager/reboot", { method: "HEAD" });
-      // 2xx, 3xx, or 405 (method allowed on path but not for HEAD) — Manager present.
-      canRestart.value = resp.status < 400 || resp.status === 405;
+      const resp = await fetch("/manager/version", { method: "GET" });
+      canRestart.value = resp.ok;
     } catch {
       canRestart.value = false;
     }

@@ -23,14 +23,7 @@ describe("systemStore", () => {
     vi.stubGlobal("fetch", fetchMock);
     const store = useSystemStore();
     await store.detectRestartCapability();
-    expect(fetchMock).toHaveBeenCalledWith("/manager/reboot", { method: "HEAD" });
-    expect(store.canRestart).toBe(true);
-  });
-
-  it("detectRestartCapability treats 405 as Manager present", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response("", { status: 405 })));
-    const store = useSystemStore();
-    await store.detectRestartCapability();
+    expect(fetchMock).toHaveBeenCalledWith("/manager/version", { method: "GET" });
     expect(store.canRestart).toBe(true);
   });
 
