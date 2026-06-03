@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
+import StaleBanner from "../components/StaleBanner.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
 import CommandPalette from "../components/CommandPalette.vue";
@@ -10,11 +11,13 @@ import ShortcutsHelp from "../components/ShortcutsHelp.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
+import { useStaleStore } from "../stores/staleStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useCascadeStore } from "../cascade/cascade-store";
+import { api } from "../api/client";
 import {
   hashes as libraryHashes,
   bundleHashes as libraryBundleHashes,
@@ -25,6 +28,7 @@ import {
 const ui = useUiStore();
 const commandIndex = useCommandIndex();
 const recent = useRecentStore();
+const stale = useStaleStore();
 const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
@@ -88,8 +92,24 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+function onServerRestarted(): void {
+  stale.markStale();
+}
+
+/** Cheap ping on tab focus so we detect restart even when the user
+ *  isn't actively clicking around. Database config is the smallest
+ *  always-available endpoint. Failures are ignored — they'll surface
+ *  through other mechanisms. */
+function onVisibilityChange(): void {
+  if (document.visibilityState !== "visible") return;
+  if (stale.isStale) return;  // already flagged, no need to re-poll
+  void api.database.config().catch(() => undefined);
+}
+
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("wp:server-restarted", onServerRestarted);
+  document.addEventListener("visibilitychange", onVisibilityChange);
   // Eager-fetch the three library stores so sidebar count badges,
   // Cmd+K palette index, and Recents section have real data on cold
   // load. Dashboard fetches via api.* directly and does not touch
@@ -156,6 +176,8 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("wp:server-restarted", onServerRestarted);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
   unsubscribeDrift();
 });
 </script>
@@ -163,6 +185,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="wp-app">
     <a href="#wp-main" class="wp-skip-link">Skip to main content</a>
+    <StaleBanner />
     <AppTopbar />
     <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
       <AppSidebar />

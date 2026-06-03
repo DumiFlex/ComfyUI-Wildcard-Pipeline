@@ -18,12 +18,38 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Backend tags every response with `X-WP-Startup-Id` (a UUID generated
+ * once per ComfyUI process). We cache the first value seen and dispatch
+ * a `wp:server-restarted` window event on mismatch. The staleStore
+ * listens and flips its flag, surfacing a "page out of date" banner.
+ *
+ * Lives at module scope (not inside a store) because every fetch goes
+ * through `request()` regardless of which composable kicked it off,
+ * and we want a single cache.
+ */
+let cachedStartupId: string | null = null;
+
+function checkStartupId(resp: Response): void {
+  const sid = resp.headers.get("X-WP-Startup-Id");
+  if (!sid) return;
+  if (cachedStartupId === null) {
+    cachedStartupId = sid;
+    return;
+  }
+  if (sid !== cachedStartupId) {
+    cachedStartupId = sid;
+    window.dispatchEvent(new CustomEvent("wp:server-restarted"));
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     ...(init.headers as Record<string, string> | undefined ?? {}),
   };
   if (init.body !== undefined) headers["content-type"] = "application/json";
   const resp = await fetch(path, { ...init, headers });
+  checkStartupId(resp);
   if (resp.status === 204) return undefined as T;
   let body: unknown;
   try { body = await resp.json(); } catch { body = null; }

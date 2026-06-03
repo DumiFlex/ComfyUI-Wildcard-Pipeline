@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 from aiohttp import web
 
@@ -20,6 +21,22 @@ from wp_api import templates as _templates
 from wp_api import test_runner as _test_runner
 
 logger = logging.getLogger(__name__)
+
+# Generated once per process import. Survives reloads of the same process
+# (which don't happen in ComfyUI's normal lifecycle anyway) but flips on
+# every fresh ComfyUI start. The SPA caches the first value it sees and
+# compares on every subsequent response; mismatch = restart happened =
+# show "page is stale, refresh" banner.
+STARTUP_ID = uuid.uuid4().hex
+
+
+@web.middleware
+async def _startup_id_middleware(request: web.Request, handler):
+    """Tag every /wp/api/* response with X-WP-Startup-Id."""
+    response = await handler(request)
+    if isinstance(response, web.StreamResponse):
+        response.headers["X-WP-Startup-Id"] = STARTUP_ID
+    return response
 
 
 def _ensure_db_migrated() -> None:
@@ -45,6 +62,17 @@ def register_routes(app: web.Application) -> None:
         _ensure_db_migrated()
     except Exception:  # noqa: BLE001 - never crash ComfyUI on migration failure
         logger.exception("wildcard-pipeline: db migration failed")
+
+    # Tag every response with the process startup id so the SPA can
+    # detect a ComfyUI restart and prompt the user to refresh stale tabs.
+    # ``app.middlewares`` is an aiohttp FrozenList — mutable until the
+    # app starts. Best-effort try/except so we degrade quietly if the
+    # host has already frozen it (we lose the banner, not the API).
+    try:
+        app.middlewares.append(_startup_id_middleware)
+    except RuntimeError:
+        logger.warning("wildcard-pipeline: app middlewares already frozen, "
+                       "stale-page detection disabled")
 
     _modules.register(app.router)
     _bundles.register(app.router)
