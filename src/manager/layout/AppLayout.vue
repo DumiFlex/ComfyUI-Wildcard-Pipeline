@@ -96,20 +96,47 @@ function onServerRestarted(): void {
   stale.markStale();
 }
 
-/** Cheap ping on tab focus so we detect restart even when the user
- *  isn't actively clicking around. Database config is the smallest
- *  always-available endpoint. Failures are ignored — they'll surface
- *  through other mechanisms. */
-function onVisibilityChange(): void {
-  if (document.visibilityState !== "visible") return;
-  if (stale.isStale) return;  // already flagged, no need to re-poll
+/** How often to ping for restart-detection while the tab is visible.
+ *  30s is a balance — fast enough that a user staring at the page
+ *  notices the banner soon after restart, slow enough to be invisible
+ *  in DevTools/network panels. */
+const STALE_POLL_MS = 30_000;
+let stalePollHandle: ReturnType<typeof setInterval> | null = null;
+
+function pingForRestart(): void {
+  if (stale.isStale) return;  // already flagged, no point re-polling
   void api.database.config().catch(() => undefined);
+}
+
+function startStalePoll(): void {
+  if (stalePollHandle !== null) return;
+  stalePollHandle = setInterval(pingForRestart, STALE_POLL_MS);
+}
+
+function stopStalePoll(): void {
+  if (stalePollHandle === null) return;
+  clearInterval(stalePollHandle);
+  stalePollHandle = null;
+}
+
+/** Pause polling when tab hidden, resume on focus. Also fire one
+ *  immediate ping on focus so we don't have to wait the full
+ *  interval after the user returns. */
+function onVisibilityChange(): void {
+  if (document.visibilityState === "visible") {
+    pingForRestart();
+    startStalePoll();
+  } else {
+    stopStalePoll();
+  }
 }
 
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("wp:server-restarted", onServerRestarted);
   document.addEventListener("visibilitychange", onVisibilityChange);
+  // Kick off the heartbeat. visibilitychange controls pause/resume.
+  if (document.visibilityState === "visible") startStalePoll();
   // Eager-fetch the three library stores so sidebar count badges,
   // Cmd+K palette index, and Recents section have real data on cold
   // load. Dashboard fetches via api.* directly and does not touch
@@ -178,6 +205,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   window.removeEventListener("wp:server-restarted", onServerRestarted);
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  stopStalePoll();
   unsubscribeDrift();
 });
 </script>
