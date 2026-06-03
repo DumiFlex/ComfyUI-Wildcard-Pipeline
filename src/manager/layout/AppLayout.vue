@@ -210,3 +210,28 @@ onBeforeUnmount(() => {
     <ShortcutsHelp v-model:open="shortcutsOpen" />
   </div>
 </template>
+
+<!--
+  Route-fade transition classes — UNSCOPED on purpose. Vue Transition
+  injects `.route-fade-*` classes onto the routed component's root
+  element, which carries its OWN scope attr (not AppLayout's). Scoped
+  CSS here would never match. Prefix `route-fade-` is unique enough to
+  not collide with anything else in the global namespace.
+-->
+<style>
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 160ms ease;
+}
+.route-fade-enter-from { opacity: 0; transform: translateY(6px); }
+.route-fade-leave-to { opacity: 0; transform: translateY(-4px); }
+.route-fade-leave-active { transition-duration: 100ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .route-fade-enter-active,
+  .route-fade-leave-active { transition: none; }
+  .route-fade-enter-from,
+  .route-fade-leave-to { transform: none; }
+}
+</style>
