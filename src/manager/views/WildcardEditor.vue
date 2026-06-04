@@ -71,6 +71,57 @@ const cascadeDialogProps = ref<{
   extra?: Record<string, unknown>;
 } | null>(null);
 
+// Inbound refs to THIS wildcard (constraints + derivations that point
+// at its id). Drives the entity-delete dialog: when refs > 0 the user
+// confirms a cascade; when 0 the editor goes straight to apply.
+const entityCascadeRefs = computed(() => {
+  if (!props.id) return [];
+  return cascade.refsTo("wildcard", props.id);
+});
+
+async function onEntityDeleteClick(): Promise<void> {
+  if (!props.id) return;
+  // Same shape as ConstraintEditor.onEntityDeleteClick — no-refs path
+  // goes straight through cascadeApply.apply, refs path opens the
+  // dialog which runs a dry-run scan first. Shared
+  // onCascadeDialogConfirmed handles the success toast + nav.
+  if (entityCascadeRefs.value.length === 0) {
+    const result = await cascadeApply.apply({
+      kind: "wildcard", id: props.id, action: "delete",
+    });
+    if (result.ok) {
+      moduleStore.remove(props.id);
+      const undoId = result.undo_entry_id;
+      toast.push({
+        severity: "success",
+        summary: `"${name.value}" deleted`,
+        life: 5000,
+        action: {
+          label: "Undo",
+          run: async () => {
+            const undoResult = await cascadeApply.undo(undoId);
+            if (!undoResult.ok) {
+              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+            } else {
+              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
+            }
+          },
+        },
+      });
+      router.push(resolveReturnTo("/wildcards"));
+    } else {
+      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
+    }
+    return;
+  }
+  cascadeDialogProps.value = {
+    kind: "wildcard",
+    id: props.id,
+    action: "delete",
+  };
+  cascadeDialogOpen.value = true;
+}
+
 // Rename dialog for sub-category pills
 const subcatRenameOpen = ref(false);
 const subcatRenameTarget = ref<string>("");
@@ -386,6 +437,29 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
 
+  if (dialogProps.kind === "wildcard") {
+    // Whole-entity delete confirmed from the cascade dialog.
+    moduleStore.remove(dialogProps.id);
+    toast.push({
+      severity: "success",
+      summary: `"${name.value}" deleted`,
+      detail: count > 0 ? `Updated ${count} reference${count === 1 ? "" : "s"}` : undefined,
+      life: 5000,
+      action: {
+        label: "Undo",
+        run: async () => {
+          const undoResult = await cascadeApply.undo(undoId);
+          if (!undoResult.ok) {
+            toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
+          } else {
+            toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
+          }
+        },
+      },
+    });
+    router.push(resolveReturnTo("/wildcards"));
+    return;
+  }
   if (dialogProps.kind === "option") {
     const rowIdx = dialogProps.extra?._row_idx as number | undefined;
     const optionId = dialogProps.id;
@@ -772,6 +846,15 @@ defineExpose({ historyEntries, applyRestore, options });
     @cancel="cancel"
     @restore="applyRestore"
   >
+    <template v-if="isEdit" #footer-left>
+      <Button
+        variant="ghost"
+        icon="pi-trash"
+        class="wp-btn--danger"
+        data-test="wc-delete-btn"
+        @click="onEntityDeleteClick"
+      >Delete</Button>
+    </template>
     <template #draft-banner>
       <DraftBanner
         :has-draft="draft.hasDraft.value"
