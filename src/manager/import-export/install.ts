@@ -82,6 +82,40 @@ function countBucket(rows: Array<{ kind: EntityKind }>): Record<EntityKind, numb
 }
 
 /**
+ * Engine importer commits expect every entity to carry top-level
+ * `name`. Engine EXPORTS (and therefore community uploads round-
+ * tripped through the export envelope) park the name on `meta.name`
+ * instead — the on-disk wire shape and the importer's required-fields
+ * shape differ by one nesting level. Lift `meta.name` to the top so
+ * the commit doesn't fail with "missing required field(s): ['name']".
+ *
+ * Idempotent: if `entity.name` is already a string, leave it. If both
+ * are missing, fall back to the entity's short id so the commit gets
+ * a non-empty value — the user can rename inside the runtime after.
+ */
+function normalizeEntity(
+  raw: Record<string, unknown>,
+): Record<string, unknown> & { id: string } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const id = (raw as { id?: unknown }).id;
+  if (typeof id !== "string") return null;
+
+  const out = { ...raw } as Record<string, unknown> & { id: string };
+  if (typeof out.name !== "string" || !out.name.length) {
+    const meta = (raw as { meta?: unknown }).meta;
+    const metaName =
+      meta && typeof meta === "object"
+        ? (meta as Record<string, unknown>).name
+        : undefined;
+    out.name =
+      typeof metaName === "string" && metaName.length
+        ? metaName
+        : id.slice(0, 8);
+  }
+  return out;
+}
+
+/**
  * Stamp every entity in a `RawPayload` bucket with a ``decision: "add"``
  * wrapper so it can flow through ``buildCommitPayload``. The runtime
  * id stays untouched — collision detection happens server-side, and
@@ -92,9 +126,8 @@ function wrapAdds(
   rows: Array<Record<string, unknown>>,
 ): ResolvedEntity[] {
   return rows
-    .filter((r): r is Record<string, unknown> & { id: string } =>
-      typeof r === "object" && r !== null && typeof (r as { id?: unknown }).id === "string",
-    )
+    .map(normalizeEntity)
+    .filter((r): r is Record<string, unknown> & { id: string } => r !== null)
     .map((entity) => ({ entity, decision: { kind: "add" as const } }));
 }
 
@@ -102,9 +135,8 @@ function wrapCategoryAdds(
   rows: Array<Record<string, unknown>>,
 ): ResolvedCategoryEntity[] {
   return rows
-    .filter((r): r is Record<string, unknown> & { id: string } =>
-      typeof r === "object" && r !== null && typeof (r as { id?: unknown }).id === "string",
-    )
+    .map(normalizeEntity)
+    .filter((r): r is Record<string, unknown> & { id: string } => r !== null)
     .map((entity) => ({ entity, decision: { kind: "add" as const } }));
 }
 
