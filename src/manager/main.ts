@@ -12,8 +12,13 @@ import { api as managerApi } from "./api/client";
 import {
   CURRENT_SCHEMA_VERSION,
   installEnvelope,
+  type CollisionDecision,
+  type InstallCollision,
   type InstallResult,
+  type LibrarySnapshot,
 } from "./import-export/install";
+import { useModuleStore } from "./stores/moduleStore";
+import { useBundleStore } from "./stores/bundleStore";
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -56,15 +61,52 @@ declare global {
     __wpcRuntime?: {
       abi: number;
       schemaVersion: number;
-      install: (envelope: unknown) => Promise<InstallResult>;
+      install: (
+        envelope: unknown,
+        opts?: {
+          /** Called when client-side collision detection finds duplicates.
+           *  Receives one row per conflict. Returning null cancels the
+           *  install. The embed wires this to its own modal. */
+          resolveCollisions?: (
+            rows: InstallCollision[],
+          ) => Promise<Record<string, CollisionDecision> | null>;
+        },
+      ) => Promise<InstallResult>;
     };
   }
 }
+
+/**
+ * Snapshot Pinia stores into the LibrarySnapshot shape installEnvelope
+ * expects. Called fresh per `install()` invocation so a long-lived
+ * embed picks up library state mutations between installs.
+ */
+function snapshotLibrary(): LibrarySnapshot {
+  const moduleStore = useModuleStore();
+  const bundleStore = useBundleStore();
+  const modules = new Map<string, { id: string; name: string }>();
+  for (const m of moduleStore.catalog) {
+    modules.set(m.id, { id: m.id, name: m.name });
+  }
+  const bundles = new Map<string, { id: string; name: string }>();
+  for (const b of bundleStore.catalog) {
+    bundles.set(b.id, { id: b.id, name: b.name });
+  }
+  return { modules, bundles };
+}
+
 window.__wpcRuntime = {
+  // ABI stays at 1: the install signature only gained an optional 2nd
+  // argument, which old callers passing a single argument continue to
+  // satisfy. Bump only if a future change removes/renames a field.
   abi: 1,
   schemaVersion: CURRENT_SCHEMA_VERSION,
-  install: (envelope) => installEnvelope(
+  install: (envelope, opts) => installEnvelope(
     { envelope },
-    { importExport: managerApi.importExport },
+    {
+      importExport: managerApi.importExport,
+      library: snapshotLibrary(),
+      ...(opts?.resolveCollisions ? { resolveCollisions: opts.resolveCollisions } : {}),
+    },
   ),
 };
