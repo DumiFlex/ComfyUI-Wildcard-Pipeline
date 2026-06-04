@@ -82,52 +82,25 @@ function countBucket(rows: Array<{ kind: EntityKind }>): Record<EntityKind, numb
 }
 
 /**
- * Engine importer commits expect every entity to carry top-level
- * `name`. Engine EXPORTS (and therefore community uploads round-
- * tripped through the export envelope) park the name on `meta.name`
- * instead — the on-disk wire shape and the importer's required-fields
- * shape differ by one nesting level. Lift `meta.name` to the top so
- * the commit doesn't fail with "missing required field(s): ['name']".
- *
- * Idempotent: if `entity.name` is already a string, leave it. If both
- * are missing, fall back to the entity's short id so the commit gets
- * a non-empty value — the user can rename inside the runtime after.
- */
-function normalizeEntity(
-  raw: Record<string, unknown>,
-): Record<string, unknown> & { id: string } | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const id = (raw as { id?: unknown }).id;
-  if (typeof id !== "string") return null;
-
-  const out = { ...raw } as Record<string, unknown> & { id: string };
-  if (typeof out.name !== "string" || !out.name.length) {
-    const meta = (raw as { meta?: unknown }).meta;
-    const metaName =
-      meta && typeof meta === "object"
-        ? (meta as Record<string, unknown>).name
-        : undefined;
-    out.name =
-      typeof metaName === "string" && metaName.length
-        ? metaName
-        : id.slice(0, 8);
-  }
-  return out;
-}
-
-/**
  * Stamp every entity in a `RawPayload` bucket with a ``decision: "add"``
- * wrapper so it can flow through ``buildCommitPayload``. The runtime
- * id stays untouched — collision detection happens server-side, and
- * the embed lets the user choose how to resolve via a future picker
- * prompt rather than silently renaming here.
+ * wrapper so it can flow through ``buildCommitPayload``.
+ *
+ * Community uploads are engine-row shaped (top-level ``name`` /
+ * ``type``, type-specific fields nested under ``payload``) — the same
+ * format the runtime's exporter produces. The community web side is
+ * the transport layer, not the schema authority; if a payload lands
+ * here without ``name`` it's the engine importer's job to reject,
+ * not ours to silently patch. Lifting ``meta.name`` here used to
+ * mask shape drift, which papered over the seed bug rather than
+ * forcing the seed to mirror reality.
  */
 function wrapAdds(
   rows: Array<Record<string, unknown>>,
 ): ResolvedEntity[] {
   return rows
-    .map(normalizeEntity)
-    .filter((r): r is Record<string, unknown> & { id: string } => r !== null)
+    .filter((r): r is Record<string, unknown> & { id: string } =>
+      typeof r === "object" && r !== null && typeof (r as { id?: unknown }).id === "string",
+    )
     .map((entity) => ({ entity, decision: { kind: "add" as const } }));
 }
 
@@ -135,8 +108,9 @@ function wrapCategoryAdds(
   rows: Array<Record<string, unknown>>,
 ): ResolvedCategoryEntity[] {
   return rows
-    .map(normalizeEntity)
-    .filter((r): r is Record<string, unknown> & { id: string } => r !== null)
+    .filter((r): r is Record<string, unknown> & { id: string } =>
+      typeof r === "object" && r !== null && typeof (r as { id?: unknown }).id === "string",
+    )
     .map((entity) => ({ entity, decision: { kind: "add" as const } }));
 }
 
