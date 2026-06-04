@@ -25,6 +25,36 @@ import Modal from "./ui/Modal.vue";
 import Select from "./ui/Select.vue";
 import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
+import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
+
+const communityUpdates = useCommunityUpdateStore();
+
+/** Title for the update-available pill. Built as a function instead
+ *  of inline template-string so vue-tsc's template parser doesn't
+ *  choke on nested optional chaining inside attribute interpolation. */
+function updatePillTitle(rowId: string): string {
+  const e = communityUpdates.entryFor(rowId);
+  if (!e) return "";
+  return `Update available - v${e.latest_version} (${e.post_slug})`;
+}
+function updatePillLatest(rowId: string): number | string {
+  return communityUpdates.entryFor(rowId)?.latest_version ?? "?";
+}
+
+interface CommunityOrigin {
+  community_post_slug?: string | null;
+  community_version_number?: number | null;
+}
+function communityOriginSlug(row: T): string | null {
+  const r = row as T & CommunityOrigin;
+  return r.community_post_slug ?? null;
+}
+function communityPillTitle(row: T): string {
+  const r = row as T & CommunityOrigin;
+  const slug = r.community_post_slug ?? "";
+  const ver = r.community_version_number ?? "?";
+  return `Installed from community - ${slug} v${ver}`;
+}
 
 interface Filter {
   q?: string;
@@ -917,6 +947,33 @@ defineExpose({
                 <slot name="name" :row="row">
                   <div class="wp-row-name">
                     <span class="wp-row-name__text">{{ row.name }}</span>
+                    <!-- Community-origin pill. Only renders when the
+                         engine stamped `community_post_slug` on this
+                         row at install time (migration 013). Locally
+                         authored rows have NULL here and stay
+                         unmarked. The badge links nowhere yet — once
+                         the update-check service lands it'll grow a
+                         click handler that opens the post detail. -->
+                    <span
+                      v-if="communityOriginSlug(row)"
+                      class="wp-row-community-pill"
+                      :title="communityPillTitle(row)"
+                    >
+                      <i class="pi pi-globe" />community
+                    </span>
+                    <!-- Update-available indicator. Distinct pill so
+                         the user can tell at a glance which rows are
+                         actually behind, not just which rows came
+                         from community. Click target wires up in
+                         a follow-up; for now title carries the
+                         version delta + slug for manual install. -->
+                    <span
+                      v-if="communityUpdates.entryFor(row.id)"
+                      class="wp-row-community-pill wp-row-community-pill--update"
+                      :title="updatePillTitle(row.id)"
+                    >
+                      <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
+                    </span>
                     <span class="wp-id">{{ row.id }}</span>
                   </div>
                 </slot>
@@ -1202,6 +1259,30 @@ defineExpose({
 }
 .wp-row-name__text {
   font-weight: 500;
+}
+.wp-row-community-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 6px 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--wp-accent) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent) 32%, transparent);
+  color: var(--wp-accent-text);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.wp-row-community-pill .pi {
+  font-size: 9px;
+}
+.wp-row-community-pill--update {
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 42%, transparent);
+  color: var(--wp-warn, #f59e0b);
 }
 .wp-row-tags {
   display: flex;

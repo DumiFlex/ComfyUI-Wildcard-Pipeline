@@ -30,8 +30,8 @@ def test_migrate_records_version(tmp_path):
     conn = get_connection(tmp_path / "v2.db")
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
-    # ``engine/db/migrations_sql``. (012_templates.sql is current head.)
-    assert current_version(conn) == 12
+    # ``engine/db/migrations_sql``. (013_community_origin.sql is current head.)
+    assert current_version(conn) == 13
     conn.close()
 
 
@@ -51,6 +51,8 @@ def test_migrate_creates_bundles_table_with_expected_columns(tmp_path):
         "id", "name", "description", "color", "category_id",
         "tags", "is_favorite", "children", "payload_hash",
         "version", "created_at", "updated_at",
+        # Migration 013 — community install origin.
+        "community_post_slug", "community_version_number",
     }
     conn.close()
 
@@ -116,6 +118,8 @@ def test_modules_table_has_expected_columns(tmp_path):
         "id", "type", "name", "description", "category_id",
         "tags", "is_favorite", "payload", "snapshot_fingerprint",
         "version", "created_at", "updated_at",
+        # Migration 013 — community install origin.
+        "community_post_slug", "community_version_number",
     }
     conn.close()
 
@@ -267,7 +271,7 @@ def test_004_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 12
+    assert current_version(conn) == 13
     conn.close()
 
 

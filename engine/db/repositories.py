@@ -55,6 +55,19 @@ class ModuleNotFound(LookupError):
 
 def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
     payload = json.loads(row["payload"])
+    # Community origin columns (migration 013) — NULL for any row that
+    # didn't come from a community install. Surfaced verbatim so the
+    # SPA can render an "installed from community" badge + drive
+    # update-available checks.
+    try:
+        community_post_slug = row["community_post_slug"]
+        community_version_number = row["community_version_number"]
+    except (IndexError, KeyError):
+        # Defensive: a connection opened against a DB that hasn't run
+        # migration 013 yet (e.g. mid-rollout, test fixtures) won't
+        # have these columns. Treat absence as NULL.
+        community_post_slug = None
+        community_version_number = None
     return {
         "id": row["id"],
         "type": row["type"],
@@ -69,6 +82,8 @@ def _row_to_module(row: sqlite3.Row) -> dict[str, Any]:
         "version": row["version"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "community_post_slug": community_post_slug,
+        "community_version_number": community_version_number,
     }
 
 
@@ -481,6 +496,12 @@ def _row_to_bundle(row: sqlite3.Row) -> dict[str, Any]:
     intentionally frozen — the saved hash is the source of truth for
     insert-time `inserted_at_hash` capture + library-drift detection.
     """
+    try:
+        community_post_slug = row["community_post_slug"]
+        community_version_number = row["community_version_number"]
+    except (IndexError, KeyError):
+        community_post_slug = None
+        community_version_number = None
     return {
         "id": row["id"],
         "name": row["name"],
@@ -494,6 +515,8 @@ def _row_to_bundle(row: sqlite3.Row) -> dict[str, Any]:
         "version": row["version"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "community_post_slug": community_post_slug,
+        "community_version_number": community_version_number,
     }
 
 
