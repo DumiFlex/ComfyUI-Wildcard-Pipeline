@@ -14,6 +14,7 @@ import {
   installEnvelope,
   type CollisionDecision,
   type InstallCollision,
+  type InstallOrigin,
   type InstallResult,
   type LibrarySnapshot,
 } from "./import-export/install";
@@ -70,6 +71,12 @@ declare global {
           resolveCollisions?: (
             rows: InstallCollision[],
           ) => Promise<Record<string, CollisionDecision> | null>;
+          /** Tag every inserted entity with this community origin so
+           *  the SPA can surface "installed from @author/pack" + drive
+           *  update-available checks. Embed passes {post_slug,
+           *  version_number} when invoking install via the community
+           *  Install / Install vN buttons. */
+          origin?: InstallOrigin;
         },
       ) => Promise<InstallResult>;
     };
@@ -107,6 +114,7 @@ window.__wpcRuntime = {
       importExport: managerApi.importExport,
       library: snapshotLibrary(),
       ...(opts?.resolveCollisions ? { resolveCollisions: opts.resolveCollisions } : {}),
+      ...(opts?.origin ? { origin: opts.origin } : {}),
     },
   ),
 };

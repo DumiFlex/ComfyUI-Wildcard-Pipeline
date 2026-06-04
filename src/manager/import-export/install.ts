@@ -75,10 +75,27 @@ export type CollisionDecision =
   | { kind: "replace" }
   | { kind: "rename"; new_name: string };
 
+/**
+ * Tags every entity inserted in this install with the community post
+ * + version it originated from. Stamped onto the row at insert time
+ * (engine columns added in migration 013) so the SPA can later show
+ * "installed from @author/pack" badges and surface "v2 available"
+ * notifications when the post's latest_version_number drifts above
+ * the locally-stored version_number.
+ */
+export interface InstallOrigin {
+  post_slug: string;
+  version_number: number;
+}
+
 export interface InstallOptions {
   /** Used to POST the assembled commit. Defaults to the shared
    *  manager `api` const; tests inject a fake. */
   importExport: ImportExportApi;
+  /** Tag every inserted entity with this community origin. Omitted
+   *  for non-community installs (Import-tab file pick, starter set,
+   *  etc.) so those rows stay NULL on the new columns. */
+  origin?: InstallOrigin;
   /**
    * Snapshot of the live library at install time. Provided by the
    * host bridge so installEnvelope can detect collisions client-side
@@ -337,6 +354,21 @@ export async function installEnvelope(
   }
 
   const selection = buildSelection(parsed.payload);
+
+  // Stamp community origin onto every module + bundle entity going
+  // in. The engine's _insert_module / _insert_bundle paths pick these
+  // fields off the entity dict and write them to the new
+  // community_post_slug / community_version_number columns (migration
+  // 013). Origin-less installs (Import tab, starter set) leave the
+  // columns NULL.
+  if (opts.origin) {
+    for (const bucket of [...MODULE_BUCKETS, "bundles"] as const) {
+      for (const row of selection[bucket]) {
+        row.entity.community_post_slug = opts.origin.post_slug;
+        row.entity.community_version_number = opts.origin.version_number;
+      }
+    }
+  }
 
   // Client-side collision pre-check. Only fires when both a library
   // snapshot and a resolveCollisions callback are wired — otherwise

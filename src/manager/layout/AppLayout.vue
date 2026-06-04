@@ -18,6 +18,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { api } from "../api/client";
 import {
@@ -36,6 +37,7 @@ const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
+const communityUpdateStore = useCommunityUpdateStore();
 const cascadeStore = useCascadeStore();
 
 const paletteOpen = ref(false);
@@ -163,6 +165,14 @@ onMounted(() => {
     cascadeStore.rebuildFromCatalogs(
       moduleStore.catalog, bundleStore.catalog, categoryStore.items,
     );
+    // Cross-check community-installed rows against the community
+    // for newer versions. Runs after the library snapshot is in
+    // place; failures (offline, CORS, server down) clear the
+    // store quietly so we never block the UI on the embed host.
+    void communityUpdateStore.check({
+      modules: moduleStore.catalog,
+      bundles: bundleStore.catalog,
+    });
   }).catch(() => undefined);
 
   // Live-refresh sidebar count badges + catalogs whenever the drift

@@ -154,8 +154,9 @@ def _insert_module(
         "INSERT INTO modules("
         "id, type, name, description, category_id, tags, "
         "is_favorite, payload, snapshot_fingerprint, version, "
-        "created_at, updated_at"
-        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        "created_at, updated_at, "
+        "community_post_slug, community_version_number"
+        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
         (
             mid, kind, entity["name"], entity.get("description", ""),
             entity.get("category_id"),
@@ -166,6 +167,12 @@ def _insert_module(
             entity.get("version", 1),
             entity.get("created_at", now),
             entity.get("updated_at", now),
+            # Community origin — only set when the install bridge stamps
+            # them on the entity (see manager/main.ts snapshotLibrary +
+            # the embed's install call). Local Create/Import-from-file
+            # paths leave these NULL so the row stays "locally authored".
+            entity.get("community_post_slug"),
+            entity.get("community_version_number"),
         ),
     )
     return mid
@@ -193,8 +200,9 @@ def _insert_bundle(
         "INSERT INTO bundles("
         "id, name, description, color, category_id, tags, "
         "is_favorite, children, payload_hash, version, "
-        "created_at, updated_at"
-        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        "created_at, updated_at, "
+        "community_post_slug, community_version_number"
+        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
         (
             bid, entity["name"], entity.get("description", ""),
             entity.get("color"),
@@ -206,6 +214,9 @@ def _insert_bundle(
             entity.get("version", 1),
             entity.get("created_at", now),
             entity.get("updated_at", now),
+            # Community origin — see _insert_module comment above.
+            entity.get("community_post_slug"),
+            entity.get("community_version_number"),
         ),
     )
     return bid

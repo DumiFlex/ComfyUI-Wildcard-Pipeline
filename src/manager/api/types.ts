@@ -159,6 +159,16 @@ export interface ModuleRow {
   version: number;
   created_at: string;
   updated_at: string;
+  /**
+   * Community origin (engine migration 013). Stamped on rows that
+   * were installed via the community embed's host-bridge install
+   * call with `origin: { post_slug, version_number }`. Drives the
+   * "installed from community" badge + the update-available check
+   * that compares `community_version_number` against the post's
+   * current `latest_version_number`. Null on locally-authored rows.
+   */
+  community_post_slug?: string | null;
+  community_version_number?: number | null;
 }
 
 /**
@@ -227,6 +237,9 @@ export interface BundleRow {
   version: number;
   created_at: string;
   updated_at: string;
+  /** See ModuleRow.community_post_slug — same semantics for bundles. */
+  community_post_slug?: string | null;
+  community_version_number?: number | null;
 }
 
 export interface BundleListResponse {
