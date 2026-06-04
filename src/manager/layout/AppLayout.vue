@@ -4,6 +4,7 @@ import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
 import StaleBanner from "../components/StaleBanner.vue";
+import ErrorBoundary from "../components/ErrorBoundary.vue";
 import ToastHost from "../components/ui/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
 import CommandPalette from "../components/CommandPalette.vue";
@@ -224,18 +225,20 @@ onBeforeUnmount(() => {
     <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
       <AppSidebar />
       <main id="wp-main" class="wp-content" tabindex="-1">
-        <RouterView v-slot="{ Component, route }">
-          <Transition name="route-fade" mode="out-in">
-            <!-- Key by `route.meta.layoutKey` when set so a view that backs
-                 several param routes (e.g. Docs.vue across /docs/:page) stays
-                 mounted across those navigations — its sub-nav keeps scroll
-                 position. Falls back to route.path for every other view. -->
-            <component
-              :is="Component"
-              :key="typeof route.meta.layoutKey === 'string' ? route.meta.layoutKey : route.path"
-            />
-          </Transition>
-        </RouterView>
+        <ErrorBoundary>
+          <RouterView v-slot="{ Component, route }">
+            <Transition name="route-fade" mode="out-in">
+              <!-- Key by `route.meta.layoutKey` when set so a view that backs
+                   several param routes (e.g. Docs.vue across /docs/:page) stays
+                   mounted across those navigations — its sub-nav keeps scroll
+                   position. Falls back to route.path for every other view. -->
+              <component
+                :is="Component"
+                :key="typeof route.meta.layoutKey === 'string' ? route.meta.layoutKey : route.path"
+              />
+            </Transition>
+          </RouterView>
+        </ErrorBoundary>
       </main>
     </div>
     <ToastHost />
