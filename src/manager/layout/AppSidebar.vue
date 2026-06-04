@@ -353,7 +353,7 @@ const countByKey = computed<Record<string, number>>(() => {
   align-items: center;
   gap: var(--wp-space-2);
   padding: var(--wp-space-3) var(--wp-space-4);
-  margin-bottom: var(--wp-space-3);
+  margin: var(--wp-space-3) 0;
   background: var(--wp-bg-2);
   border-radius: var(--wp-radius-sm);
   border: 1px solid var(--wp-border);

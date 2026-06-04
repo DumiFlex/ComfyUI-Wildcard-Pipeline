@@ -66,35 +66,11 @@ const cascadeRefs = computed(() => {
 
 async function onEntityDeleteClick(): Promise<void> {
   if (!props.id) return;
-  if (cascadeRefs.value.length === 0) {
-    const result = await cascadeApply.apply({
-      kind: "constraint", id: props.id, action: "delete",
-    });
-    if (result.ok) {
-      moduleStore.remove(props.id);
-      const undoId = result.undo_entry_id;
-      toast.push({
-        severity: "success",
-        summary: `"${name.value}" deleted`,
-        life: 5000,
-        action: {
-          label: "Undo",
-          run: async () => {
-            const undoResult = await cascadeApply.undo(undoId);
-            if (!undoResult.ok) {
-              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
-            } else {
-              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
-            }
-          },
-        },
-      });
-      router.push(resolveReturnTo("/constraints"));
-    } else {
-      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
-    }
-    return;
-  }
+  // Always open the cascade dialog — earlier the no-refs branch went
+  // straight to cascadeApply.apply without any confirm prompt, which
+  // surprised users editing freshly-installed entities. The dialog's
+  // own dry-run handles 0 refs cleanly (empty affected list, Delete
+  // still front-and-center).
   cascadeDialogOpen.value = true;
 }
 
