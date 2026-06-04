@@ -12,6 +12,12 @@ node_modules/
 pnpm-debug.log
 .pnpm-store/
 
+# Vite per-contributor env overrides (e.g. VITE_WPC_API_URL pointing
+# at a dev community host). Never commit — leaks dev URLs into the
+# tree and makes `pnpm build` produce divergent bundles per checkout.
+.env.local
+.env.*.local
+
 # Build outputs
 js/
 web/
