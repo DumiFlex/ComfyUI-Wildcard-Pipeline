@@ -26,6 +26,7 @@ import ExportDepWarningModal from "./ExportDepWarningModal.vue";
 import type { ExportDepWarningRow } from "./ExportDepWarningModal.vue";
 import { liveLibraryToRawPayload } from "./live-library-adapter";
 import { buildDepGraph, transitiveClosure } from "./dep-graph";
+import { WPC_API_URL } from "../config/links";
 
 const toast = useToast();
 
@@ -524,6 +525,107 @@ async function onDepWarningExportAnyway(): Promise<void> {
   await performExport();
 }
 
+// ---------- Publish to community ----------
+//
+// Single-row deeplink to the community web's /upload?from=spa flow. The
+// SPA payload is the source of truth — we ship the row's engine-row JSON
+// verbatim through the URL hash so the community PublishView can prefill
+// payload + name + description. Hash (not query) avoids both Edge's
+// ~2KB address-bar limit and any chance of the payload being captured by
+// the server's request log on the way in.
+//
+// Enabled only when EXACTLY ONE module or bundle is selected and nothing
+// else — single-row publish is the only flow the community currently
+// supports (each post is one entity).
+
+interface SingleSelected {
+  kind: "module" | "bundle";
+  payload: Record<string, unknown>;
+  name: string;
+  description: string;
+}
+
+/**
+ * Detect whether the current selection is a single publishable entity.
+ * Single publishable = exactly one module OR exactly one bundle, and
+ * every other bucket empty (including categories + templates, which
+ * the community can't host yet).
+ */
+const singleSelected = computed<SingleSelected | null>(() => {
+  let total = 0;
+  let kind: "module" | "bundle" | null = null;
+  let id: string | null = null;
+  for (const b of BUCKETS) {
+    const sz = selection.value[b.key].size;
+    total += sz;
+    if (sz === 1) {
+      kind = b.key === "bundle" ? "bundle" : (b.key === "category" || b.key === "template" ? null : "module");
+      id = [...selection.value[b.key]][0] ?? null;
+    }
+  }
+  if (total !== 1 || !kind || !id) return null;
+  if (kind === "bundle") {
+    const row = bundles.value.find((b) => b.id === id);
+    if (!row) return null;
+    // Engine-row bundle shape (no `type`, no nested `payload`; `children`
+    // carry the module rows verbatim). Strip server-side bookkeeping
+    // (payload_hash, version, timestamps) — community assigns its own.
+    const payload: Record<string, unknown> = {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      color: row.color,
+      category_id: row.category_id,
+      tags: row.tags,
+      is_favorite: row.is_favorite,
+      children: row.children,
+    };
+    return { kind: "bundle", payload, name: row.name, description: row.description };
+  }
+  const mod = modules.value.find((m) => m.id === id);
+  if (!mod) return null;
+  // Engine-row module shape — keep `type` + nested `payload` so the
+  // community validator's `derive_kind_from_payload` reads it correctly.
+  const payload: Record<string, unknown> = {
+    id: mod.id,
+    type: mod.type,
+    name: mod.name,
+    description: mod.description,
+    category_id: mod.category_id,
+    tags: mod.tags,
+    is_favorite: mod.is_favorite,
+    payload: mod.payload,
+  };
+  return { kind: "module", payload, name: mod.name, description: mod.description };
+});
+
+/**
+ * utf8-safe base64 (mirror of `b64ToText` on the community web side).
+ * btoa() only handles latin-1, so we run the JSON through TextEncoder
+ * first to handle non-ASCII names / descriptions cleanly.
+ */
+function textToB64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+function publishToCommunity() {
+  const sel = singleSelected.value;
+  if (!sel) return;
+  const b64 = textToB64(JSON.stringify(sel.payload));
+  const url = new URL(`${WPC_API_URL}/upload`);
+  url.searchParams.set("from", "spa");
+  // Hash, not query — see comment above on size + transmission concerns.
+  const hash = new URLSearchParams();
+  hash.set("payload", b64);
+  if (sel.name) hash.set("name", sel.name);
+  if (sel.description) hash.set("description", sel.description);
+  const full = `${url.toString()}#${hash.toString()}`;
+  window.open(full, "_blank", "noopener");
+}
+
 function clearAll() {
   selection.value = {
     bundle:       new Set(),
@@ -686,6 +788,15 @@ function presetFavoritesOnly(): void {
         class="wp-picker-footer__counter"
         data-test="export-tab-counter"
       ><strong>{{ totalSelected }}</strong> of {{ totalRowsCount }} selected</span>
+      <Button
+        variant="secondary"
+        size="sm"
+        icon="pi-share-alt"
+        :disabled="!singleSelected"
+        :title="singleSelected ? 'Open the community Publish form pre-filled with this entity' : 'Select exactly one module or bundle to publish'"
+        data-test="export-tab-publish-community"
+        @click="publishToCommunity"
+      >Publish to community</Button>
       <Button
         variant="primary"
         icon="pi-download"
