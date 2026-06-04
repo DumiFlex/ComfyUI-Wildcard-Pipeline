@@ -19,7 +19,13 @@ export class EmbedLoadError extends Error {
     public readonly cause: unknown,
     public readonly url: string,
   ) {
-    super(`Failed to load community embed from ${url}`);
+    const detail =
+      cause instanceof Error
+        ? cause.message
+        : typeof cause === "string"
+          ? cause
+          : "unknown error";
+    super(`Failed to load community embed from ${url} — ${detail}`);
     this.name = "EmbedLoadError";
   }
 }
