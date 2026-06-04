@@ -57,7 +57,12 @@ const routes: RouteRecordRaw[] = [
       { path: "community/:rest(.*)*", name: "community-deep", component: () => import("../views/Community.vue"), meta: { layoutKey: "community" } },
     ],
   },
-  { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
+  // Unknown URL surfaces a 404 instead of hard-redirecting to
+  // /dashboard. The previous redirect silently swallowed typos +
+  // dead links — users assumed nothing was wrong because they
+  // landed home. NotFound.vue makes the failure visible + gives
+  // them a clear path back.
+  { path: "/:pathMatch(.*)*", name: "not-found", component: () => import("../views/NotFound.vue") },
 ];
 
 export default createRouter({ history: createWebHistory("/wp/"), routes });
