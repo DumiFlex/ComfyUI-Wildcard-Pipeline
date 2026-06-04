@@ -40,12 +40,14 @@ const routes: RouteRecordRaw[] = [
       // scroll position); only the content pane swaps reactively.
       { path: "docs", name: "documentation", component: () => import("../views/Docs.vue"), meta: { layoutKey: "docs" } },
       { path: "docs/:page", name: "documentation-page", component: () => import("../views/Docs.vue"), props: true, meta: { layoutKey: "docs" } },
-      // Community hub is on `feat/community-tab` while it bakes; main ships
-      // a WIP placeholder so the sidebar entry has somewhere to land. The
-      // catch-all `community/:rest(.*)?` swallows any deep-links saved from
-      // the old routes (/community/discover, /community/m/:id, etc.).
-      { path: "community", name: "community", component: () => import("../views/CommunityWip.vue") },
-      { path: "community/:rest(.*)*", redirect: "/community" },
+      // Community tab dynamically loads the wpc-embed bundle from
+      // WPC_API_URL. The `:rest(.*)*` catch-all lets the embed
+      // surface its own deep-link routes (/community/p/owner/name,
+      // /community/u/username) without forcing a separate route per
+      // shape. Community.vue parses the rest segment and forwards
+      // to the embed's navigate(target).
+      { path: "community", name: "community", component: () => import("../views/Community.vue") },
+      { path: "community/:rest(.*)*", name: "community-deep", component: () => import("../views/Community.vue") },
     ],
   },
   { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
