@@ -46,8 +46,15 @@ const routes: RouteRecordRaw[] = [
       // /community/u/username) without forcing a separate route per
       // shape. Community.vue parses the rest segment and forwards
       // to the embed's navigate(target).
-      { path: "community", name: "community", component: () => import("../views/Community.vue") },
-      { path: "community/:rest(.*)*", name: "community-deep", component: () => import("../views/Community.vue") },
+      //
+      // Both records share `layoutKey: "community"` so AppLayout's
+      // keyed <RouterView> does NOT re-mount the host when navigating
+      // between /community and /community/p/... — otherwise the embed
+      // bundle would tear down + re-mount on every internal nav, and
+      // the first click on a card would silently re-mount instead of
+      // navigating (only the second click would land).
+      { path: "community", name: "community", component: () => import("../views/Community.vue"), meta: { layoutKey: "community" } },
+      { path: "community/:rest(.*)*", name: "community-deep", component: () => import("../views/Community.vue"), meta: { layoutKey: "community" } },
     ],
   },
   { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
