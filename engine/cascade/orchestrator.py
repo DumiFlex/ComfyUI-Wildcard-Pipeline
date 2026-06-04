@@ -202,16 +202,46 @@ def apply_cascade(conn: sqlite3.Connection, req: dict[str, Any]) -> dict[str, An
                 touched_before, diff = fix_option_delete(
                     conn, extra.get("wildcard_id", ""), target_id,
                 )
+            elif action == "delete" and kind in (
+                "fixed_values",
+                "combine",
+                "derivation",
+                "constraint",
+            ):
+                # These module types are leaves from a reverse-ref
+                # perspective: nothing in another row's payload points
+                # at them by id the way `option.id` is referenced from
+                # constraint matrices or `wildcard.id` is referenced
+                # from constraint source/target. A whole-entity delete
+                # is just a row drop + undo snapshot — no fix step,
+                # no diff entries.
+                #
+                # Caveat: combine.output_var IS referenced by name
+                # from downstream payloads, but the cascade pipeline
+                # treats that as a "rename" concern (already wired as
+                # combine_output_var/rename above). Deleting a combine
+                # leaves any consumer referencing the output_var with
+                # an unresolved variable, surfaced separately by the
+                # integrity/broken-refs scan.
+                touched_before, diff = [], []
             else:
                 return {
                     "ok": False,
                     "error": f"unsupported (kind, action) pair: ({kind}, {action})",
                 }
 
-            # Delete target entity for whole-entity delete ops.
-            # Subcategory deletes are NOT in this set — the fixer already
-            # mutated the source wildcard's payload; there is no separate row.
-            if action == "delete" and kind in ("wildcard", "category", "bundle"):
+            # Delete target entity for whole-entity delete ops. Module
+            # subtypes route through ModuleRepository via _delete_target
+            # (the else-branch of its dispatch).
+            if action == "delete" and kind in (
+                "wildcard",
+                "category",
+                "bundle",
+                "fixed_values",
+                "combine",
+                "derivation",
+                "constraint",
+            ):
                 target_snapshot = _delete_target(conn, kind, target_id)
                 touched_before.append(target_snapshot)
                 diff.append({"entity_id": target_id, "removed": True})
