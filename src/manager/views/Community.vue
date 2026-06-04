@@ -42,9 +42,16 @@ const loading = ref(true);
 // `/community` → browse, `/community/p/owner/name` → detail,
 // `/community/u/username` → profile. Everything else falls through
 // to browse so the embed doesn't 404 on a stale deep-link.
+//
+// vue-router 4's `:rest(.*)*` matcher hands back an ARRAY of segments
+// (one per `/` between the catch-all and the end of the URL) — NOT a
+// pre-joined string. `String(arr)` then comma-joins, which made
+// parseRoute always return browse and triggered an immediate
+// router.replace back to `/community` after every detail navigation
+// (URL flickered, first click visibly bounced).
 function parseRoute(): EmbedNavigateTarget {
-  const rest = String(route.params.rest ?? "");
-  const parts = rest.split("/").filter(Boolean);
+  const raw = route.params.rest;
+  const parts = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(Boolean);
   if (parts[0] === "p" && parts[1] && parts[2]) {
     return { view: "detail", slug: `${parts[1]}/${parts[2]}` };
   }
