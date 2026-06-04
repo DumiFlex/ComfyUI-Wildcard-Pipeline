@@ -31,16 +31,73 @@ import { parsePayload, type IntegrityWarning } from "./parse";
 import {
   buildCommitPayload,
   type CommitOk,
+  type Decision,
   type EntityKind,
   type ResolvedCategoryEntity,
   type ResolvedEntity,
   type ResolvedSelection,
 } from "./commit";
+import { newShortId } from "../utils/ids";
+
+/**
+ * Library snapshot used by the install collision pre-check. Modules
+ * and bundles are looked up by `id`; the lookup payload is small
+ * (just `name`) so the caller can construct the maps cheaply from
+ * Pinia stores. Missing entries are taken as "no collision".
+ */
+export interface LibrarySnapshot {
+  modules: Map<string, { id: string; name: string }>;
+  bundles: Map<string, { id: string; name: string }>;
+}
+
+/**
+ * A row in the live library that an incoming entity collides with.
+ * Passed to `resolveCollisions` so the UI can render "X already
+ * exists" with both names side-by-side.
+ */
+export interface InstallCollision {
+  kind: EntityKind;
+  id: string;
+  incomingName: string;
+  existingName: string;
+}
+
+/**
+ * Per-entity decision returned from `resolveCollisions`:
+ *   - `skip` drops the entity from the commit entirely.
+ *   - `replace` overwrites the existing live-DB row with the
+ *     incoming payload.
+ *   - `rename` mints a fresh id + user-supplied name; the original
+ *     library row is untouched and the incoming entity lands beside it.
+ */
+export type CollisionDecision =
+  | { kind: "skip" }
+  | { kind: "replace" }
+  | { kind: "rename"; new_name: string };
 
 export interface InstallOptions {
   /** Used to POST the assembled commit. Defaults to the shared
    *  manager `api` const; tests inject a fake. */
   importExport: ImportExportApi;
+  /**
+   * Snapshot of the live library at install time. Provided by the
+   * host bridge so installEnvelope can detect collisions client-side
+   * before the commit roundtrip. Optional for back-compat — when
+   * absent, the function falls through to the original "everything
+   * as add" behaviour and the server surfaces conflicts as 4xx.
+   */
+  library?: LibrarySnapshot;
+  /**
+   * Resolver callback invoked when client-side collision detection
+   * finds duplicates. Receives one row per conflict; returns a map
+   * keyed by id with the user's per-row decision. Returning `null`
+   * (or an empty map) cancels the install. Required for the conflict
+   * UX to fire; when absent we skip the pre-check entirely and let
+   * the server reject as before.
+   */
+  resolveCollisions?: (
+    rows: InstallCollision[],
+  ) => Promise<Record<string, CollisionDecision> | null>;
 }
 
 export interface InstallResult {
@@ -128,6 +185,124 @@ function buildSelection(payload: RawPayload): ResolvedSelection {
 }
 
 /**
+ * The five module subtypes share one table on the server, so an id
+ * collision is detected against a single map. Bundles use their own
+ * map. Categories merge by name server-side — no client-side collision
+ * concept — so they never appear here.
+ */
+const MODULE_BUCKETS: Array<keyof Omit<ResolvedSelection, "categories" | "bundles" | "templates">> = [
+  "wildcards",
+  "fixed_values",
+  "combines",
+  "derivations",
+  "constraints",
+];
+
+const BUCKET_TO_KIND: Record<string, EntityKind> = {
+  bundles: "bundle",
+  wildcards: "wildcard",
+  fixed_values: "fixed_values",
+  combines: "combine",
+  derivations: "derivation",
+  constraints: "constraint",
+  templates: "template",
+};
+
+/**
+ * Walk the resolved selection and surface every id that already
+ * exists in the live library. Modules + bundles only; categories and
+ * templates have their own merge semantics handled elsewhere. The
+ * incoming `name` is the raw payload field, falling back to the id
+ * if a row arrived nameless (which the engine validator would reject
+ * anyway — but defensively we don't want the modal to render
+ * "undefined").
+ */
+function detectInstallCollisions(
+  selection: ResolvedSelection,
+  library: LibrarySnapshot,
+): InstallCollision[] {
+  const out: InstallCollision[] = [];
+  for (const bucket of MODULE_BUCKETS) {
+    for (const row of selection[bucket]) {
+      const existing = library.modules.get(row.entity.id);
+      if (existing) {
+        out.push({
+          kind: BUCKET_TO_KIND[bucket as string]!,
+          id: row.entity.id,
+          incomingName: String(row.entity.name ?? row.entity.id),
+          existingName: existing.name,
+        });
+      }
+    }
+  }
+  for (const row of selection.bundles) {
+    const existing = library.bundles.get(row.entity.id);
+    if (existing) {
+      out.push({
+        kind: "bundle",
+        id: row.entity.id,
+        incomingName: String(row.entity.name ?? row.entity.id),
+        existingName: existing.name,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Mutate `selection` in place, applying the user's per-id decision
+ * to every matching entity row. Skip → drop the row. Replace →
+ * change the decision wrapper. Rename → mint a fresh id, swap the
+ * entity's id field, set the rename decision carrying the new id +
+ * user-supplied new name.
+ */
+function applyCollisionDecisions(
+  selection: ResolvedSelection,
+  decisions: Record<string, CollisionDecision>,
+): void {
+  const buckets: Array<keyof Omit<ResolvedSelection, "categories">> = [
+    "bundles",
+    ...MODULE_BUCKETS,
+    "templates",
+  ];
+  for (const bucket of buckets) {
+    const rows = selection[bucket];
+    const next: ResolvedEntity[] = [];
+    for (const row of rows) {
+      const d = decisions[row.entity.id];
+      if (!d) {
+        // No decision recorded — entity wasn't a collision, keep as `add`.
+        next.push(row);
+        continue;
+      }
+      if (d.kind === "skip") {
+        continue;
+      }
+      if (d.kind === "replace") {
+        next.push({ entity: row.entity, decision: { kind: "replace" } as Decision });
+        continue;
+      }
+      // Rename: mint a new id, rewrite the entity's id field, and
+      // emit a `rename` decision carrying old_id + new_id + new_name.
+      const newId = newShortId();
+      const renamedEntity: Record<string, unknown> & { id: string } = {
+        ...row.entity,
+        id: newId,
+      };
+      next.push({
+        entity: renamedEntity,
+        decision: { kind: "rename" as const, new_id: newId, new_name: d.new_name },
+      });
+    }
+    // Re-assign to preserve the typed shape (the buckets above all
+    // resolve to ResolvedEntity[] in their declared types). The
+    // ResolvedSelection's `categories` field is a different row type
+    // but the `buckets` array above excludes it, so the cast is sound.
+    (selection as unknown as Record<string, ResolvedEntity[]>)[bucket] = next;
+  }
+}
+
+/**
  * Install a fully-validated community payload into the live library.
  *
  * Pipeline:
@@ -162,11 +337,39 @@ export async function installEnvelope(
   }
 
   const selection = buildSelection(parsed.payload);
+
+  // Client-side collision pre-check. Only fires when both a library
+  // snapshot and a resolveCollisions callback are wired — otherwise
+  // we fall through and let the server's commit endpoint surface the
+  // conflict as a 4xx, preserving the original behaviour for callers
+  // that haven't opted in to the new UX.
+  if (opts.library && opts.resolveCollisions) {
+    const collisions = detectInstallCollisions(selection, opts.library);
+    if (collisions.length > 0) {
+      const decisions = await opts.resolveCollisions(collisions);
+      if (!decisions || Object.keys(decisions).length === 0) {
+        return {
+          ok: false,
+          installed: { ...EMPTY_COUNTS },
+          warnings: parsed.integrityWarnings,
+          migratedEntityCount: parsed.migratedEntityCount,
+          error: { code: "cancelled", message: "Install cancelled by user." },
+        };
+      }
+      applyCollisionDecisions(selection, decisions);
+    }
+  }
+
   const commitPayload = buildCommitPayload(selection);
 
   // Pre-compute counts off the commit payload so the caller sees
-  // exactly what the server is about to write.
-  const installed = countBucket(commitPayload.adds);
+  // exactly what the server is about to write. `installed` covers
+  // adds + renames + replaces — every entity that actually lands.
+  const installed = countBucket([
+    ...commitPayload.adds,
+    ...commitPayload.renames.map((r) => ({ kind: r.kind })),
+    ...commitPayload.replaces.map((r) => ({ kind: r.kind })),
+  ]);
 
   try {
     const result = await opts.importExport.commit(commitPayload);
