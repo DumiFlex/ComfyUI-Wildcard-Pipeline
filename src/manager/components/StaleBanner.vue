@@ -7,13 +7,28 @@
  * Mounted unconditionally in AppLayout. The store flag controls
  * visibility; transition fades it in/out.
  */
+import { ref } from "vue";
 import Button from "./ui/Button.vue";
 import Icon from "./ui/Icon.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 import { useStaleStore } from "../stores/staleStore";
 import { useSystemStore } from "../stores/systemStore";
 
 const stale = useStaleStore();
 const system = useSystemStore();
+
+// Restart confirm prompt — kicking ComfyUI's process is destructive
+// enough (running workflows + queues get interrupted) that the user
+// should explicitly confirm rather than fire on a single click.
+const restartConfirmOpen = ref(false);
+function askRestart() { restartConfirmOpen.value = true; }
+function onRestartConfirmed() {
+  restartConfirmOpen.value = false;
+  void system.restart();
+}
+function onRestartCancelled() {
+  restartConfirmOpen.value = false;
+}
 </script>
 
 <template>
@@ -43,10 +58,20 @@ const system = useSystemStore();
         icon="pi-power-off"
         :loading="system.restarting"
         data-test="stale-restart"
-        @click="() => system.restart()"
+        @click="askRestart"
       >Restart ComfyUI</Button>
     </div>
   </Transition>
+
+  <ConfirmDialog
+    :visible="restartConfirmOpen"
+    title="Restart ComfyUI?"
+    body="This kicks the running ComfyUI process. Any in-flight workflows and queued prompts will be interrupted. The page will reload automatically once the server is back."
+    confirm-label="Restart"
+    variant="danger"
+    @confirm="onRestartConfirmed"
+    @cancel="onRestartCancelled"
+  />
 </template>
 
 <style scoped>

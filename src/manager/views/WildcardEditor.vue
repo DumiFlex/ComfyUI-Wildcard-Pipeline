@@ -71,49 +71,15 @@ const cascadeDialogProps = ref<{
   extra?: Record<string, unknown>;
 } | null>(null);
 
-// Inbound refs to THIS wildcard (constraints + derivations that point
-// at its id). Drives the entity-delete dialog: when refs > 0 the user
-// confirms a cascade; when 0 the editor goes straight to apply.
-const entityCascadeRefs = computed(() => {
-  if (!props.id) return [];
-  return cascade.refsTo("wildcard", props.id);
-});
-
 async function onEntityDeleteClick(): Promise<void> {
   if (!props.id) return;
-  // Same shape as ConstraintEditor.onEntityDeleteClick — no-refs path
-  // goes straight through cascadeApply.apply, refs path opens the
-  // dialog which runs a dry-run scan first. Shared
-  // onCascadeDialogConfirmed handles the success toast + nav.
-  if (entityCascadeRefs.value.length === 0) {
-    const result = await cascadeApply.apply({
-      kind: "wildcard", id: props.id, action: "delete",
-    });
-    if (result.ok) {
-      moduleStore.remove(props.id);
-      const undoId = result.undo_entry_id;
-      toast.push({
-        severity: "success",
-        summary: `"${name.value}" deleted`,
-        life: 5000,
-        action: {
-          label: "Undo",
-          run: async () => {
-            const undoResult = await cascadeApply.undo(undoId);
-            if (!undoResult.ok) {
-              toast.push({ severity: "error", summary: "Undo failed", detail: undoResult.error, life: 4000 });
-            } else {
-              toast.push({ severity: "info", summary: `"${name.value}" restored`, life: 3000 });
-            }
-          },
-        },
-      });
-      router.push(resolveReturnTo("/wildcards"));
-    } else {
-      toast.push({ severity: "error", summary: "Delete failed", detail: (result as { ok: false; error: string }).error, life: 4000 });
-    }
-    return;
-  }
+  // Always go through the cascade dialog — even when there are no
+  // inbound refs. Earlier the no-refs branch deleted directly without
+  // any prompt; that bit users who clicked the editor's Delete pill
+  // by accident on a freshly-installed entity. The dialog runs its
+  // own dry-run, so 0 refs just shows an empty "affected" list with
+  // the Delete button still front-and-center — adds a 100ms scan but
+  // guarantees confirm-before-destroy on every editor.
   cascadeDialogProps.value = {
     kind: "wildcard",
     id: props.id,
