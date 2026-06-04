@@ -82,10 +82,13 @@ export function createWpcTokenStore(apiBaseUrl: string): WpcTokenStore {
     const current = readPair();
     if (!current) return null;
     try {
-      const res = await fetch(`${base}/api/v1/auth/refresh`, {
+      // Backend route is /auth/token/refresh per
+      // api/app/routers/auth.py:425 — was hitting /auth/refresh which
+      // 404'd silently and forced a re-login every access-token TTL.
+      const res = await fetch(`${base}/api/v1/auth/token/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: current.refresh }),
+        body: JSON.stringify({ refresh: current.refresh }),
       });
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) wipe();
