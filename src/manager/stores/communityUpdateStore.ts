@@ -107,6 +107,19 @@ export const useCommunityUpdateStore = defineStore("communityUpdates", () => {
         }
       }
 
+      // Diagnostic: when no rows carry community origin (the typical
+       // failure mode is "nothing was installed since migration 013
+       // ran" or "the install bridge dropped origin"), surface that
+       // explicitly so a user wondering why no update pills show up
+       // can confirm the candidate set in DevTools instead of poking
+       // around the UI. Only logs ONCE per check.
+      // eslint-disable-next-line no-console
+      console.info(
+        "[wpc-update-check] modules=%d bundles=%d candidates=%d",
+        input.modules.length,
+        input.bundles.length,
+        candidates.length,
+      );
       if (candidates.length === 0) {
         updatesByEntityId.value = new Map();
         return;
@@ -169,6 +182,12 @@ export const useCommunityUpdateStore = defineStore("communityUpdates", () => {
       }
       updatesByEntityId.value = next;
       lastCheckedAt.value = Date.now();
+      // eslint-disable-next-line no-console
+      console.info(
+        "[wpc-update-check] fetched=%d updates=%d",
+        latestBySlug.size,
+        next.size,
+      );
     } catch {
       // Defensive: any unexpected error path clears stale entries so
       // we don't render a misleading "v2 available" pill against a
