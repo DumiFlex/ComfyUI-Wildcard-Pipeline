@@ -26,8 +26,18 @@ import Select from "./ui/Select.vue";
 import RelativeDate from "./RelativeDate.vue";
 import EmptyState from "./ui/EmptyState.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
+import type { UpdateEntry } from "../stores/communityUpdateStore";
+import CommunityUpdateDialog from "./CommunityUpdateDialog.vue";
 
 const communityUpdates = useCommunityUpdateStore();
+const updateDialogEntry = ref<UpdateEntry | null>(null);
+function openUpdateDialog(rowId: string) {
+  const e = communityUpdates.entryFor(rowId);
+  if (e) updateDialogEntry.value = e;
+}
+function closeUpdateDialog() {
+  updateDialogEntry.value = null;
+}
 
 /** Title for the update-available pill. Built as a function instead
  *  of inline template-string so vue-tsc's template parser doesn't
@@ -967,13 +977,15 @@ defineExpose({
                          from community. Click target wires up in
                          a follow-up; for now title carries the
                          version delta + slug for manual install. -->
-                    <span
+                    <button
                       v-if="communityUpdates.entryFor(row.id)"
-                      class="wp-row-community-pill wp-row-community-pill--update"
+                      type="button"
+                      class="wp-row-community-pill wp-row-community-pill--update wp-row-community-pill--button"
                       :title="updatePillTitle(row.id)"
+                      @click.stop="openUpdateDialog(row.id)"
                     >
                       <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
-                    </span>
+                    </button>
                     <span class="wp-id">{{ row.id }}</span>
                   </div>
                 </slot>
@@ -1097,6 +1109,16 @@ defineExpose({
         />
       </div>
     </div>
+
+    <!-- Mounted once at the list level (not once per row) so a single
+         active dialog doesn't get stuck behind a re-render of its
+         host row's chrome. The pill's @click stores the entry; the
+         dialog reads + drives the action. -->
+    <CommunityUpdateDialog
+      :open="updateDialogEntry !== null"
+      :entry="updateDialogEntry"
+      @close="closeUpdateDialog"
+    />
   </div>
 </template>
 
@@ -1283,6 +1305,15 @@ defineExpose({
   background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent);
   border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 42%, transparent);
   color: var(--wp-warn, #f59e0b);
+}
+.wp-row-community-pill--button {
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.wp-row-community-pill--button:hover {
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 28%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 60%, transparent);
 }
 .wp-row-tags {
   display: flex;
