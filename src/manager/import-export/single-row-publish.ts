@@ -20,6 +20,9 @@
 
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
+import { CURRENT_SCHEMA_VERSION } from "./migrations";
+import { getValidator, type ModuleSubtype } from "@/validators";
+import { version as ENGINE_VERSION } from "../../../package.json";
 
 export interface PublishablePayload {
   /** Engine-row shape ready to ship: `{id, type?, name, payload|children, …}` */
@@ -28,6 +31,57 @@ export interface PublishablePayload {
   name: string;
   /** Optional human description (prefilled on the community publish form). */
   description: string;
+}
+
+export interface PublishBody {
+  name: string;
+  description: string;
+  payload: Record<string, unknown>;
+  schema_version: number;
+  producer_engine_version: string;
+  changelog?: string;
+}
+
+/**
+ * Build the publish body shape with stamped schema_version +
+ * producer_engine_version, after structurally validating the payload
+ * against sister's CURRENT validator.
+ *
+ * Per spec §5f, the same validator code runs at install-time strict
+ * validation on any consumer at the same CURRENT — a bug has to exist
+ * in BOTH producer + consumer simultaneously to slip past, which makes
+ * it a generic validator bug, not a vendor-drift one.
+ *
+ * Throws if the payload fails strict validation at CURRENT (per spec
+ * §2 #1's authoritative-on-sister rule).
+ */
+export function buildPublishBody(input: {
+  payload: Record<string, unknown>;
+  name: string;
+  description: string;
+  changelog?: string;
+}): PublishBody {
+  const kind = typeof input.payload.children !== "undefined" ? "bundle" : "module";
+  const subtype = kind === "module" ? (input.payload.type as ModuleSubtype) : undefined;
+
+  const validator = getValidator(
+    kind === "module"
+      ? { kind: "module", subtype: subtype!, version: CURRENT_SCHEMA_VERSION, mode: "strict" }
+      : { kind: "bundle", version: CURRENT_SCHEMA_VERSION, mode: "strict" },
+  );
+  const result = validator.safeParse(input.payload);
+  if (!result.success) {
+    throw new Error(`structural validation failed: ${result.error.message}`);
+  }
+
+  return {
+    name: input.name,
+    description: input.description,
+    payload: input.payload,
+    schema_version: CURRENT_SCHEMA_VERSION,
+    producer_engine_version: ENGINE_VERSION,
+    changelog: input.changelog ?? "",
+  };
 }
 
 /**
@@ -97,6 +151,17 @@ export function publishToCommunity(
   pub: PublishablePayload,
   router: Router,
 ): void {
+  // Validate before navigation — same validator that consumers run at
+  // install-time strict validation (spec §5f). Throws if invalid.
+  buildPublishBody({
+    payload: pub.payload,
+    name: pub.name,
+    description: pub.description,
+  });
+  // (We discard the body since the actual POST happens in EmbedPublish
+  // after the user fills the form. The validation side-effect is the
+  // point — fail fast at click time, not after navigation.)
+
   const b64 = textToB64(JSON.stringify(pub.payload));
   const hash = new URLSearchParams();
   hash.set("payload", b64);
