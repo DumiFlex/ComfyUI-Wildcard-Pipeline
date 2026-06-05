@@ -58,6 +58,13 @@ function parseRoute(): EmbedNavigateTarget {
   if (parts[0] === "u" && parts[1]) {
     return { view: "profile", username: parts[1] };
   }
+  // /community/publish — per-row Upload buttons land here with the
+  // engine-row payload encoded into window.location.hash. The embed
+  // bundle's EmbedPublish component reads the hash on mount and
+  // hydrates the form (single-row-publish.ts is the producer).
+  if (parts[0] === "publish") {
+    return { view: "publish" };
+  }
   return { view: "browse" };
 }
 

@@ -12,6 +12,7 @@
  * actions-column convention (the trash icon at the row's right
  * edge). Sized small so they don't dominate the row.
  */
+import { useRouter } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import Button from "./ui/Button.vue";
 import { useToast } from "../composables/useToast";
@@ -37,6 +38,7 @@ interface Props {
 }
 const props = defineProps<Props>();
 const toast = useToast();
+const router = useRouter();
 
 function publishablePayload() {
   if (props.kind === "bundle") {
@@ -46,7 +48,7 @@ function publishablePayload() {
 }
 
 function onPublish() {
-  publishToCommunity(publishablePayload());
+  publishToCommunity(publishablePayload(), router);
 }
 
 async function onCopy() {
