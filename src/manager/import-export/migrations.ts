@@ -1,14 +1,27 @@
 /**
  * Versioned migration chain for import payloads.
  *
- * Each version delta has a single function. The dispatcher walks from
- * payload's schema_version up to CURRENT_SCHEMA_VERSION, applying each
- * delta in turn. Lossy migrations short-circuit with reason.
+ * Two distinct migration domains live in this file:
+ *
+ *   1. `migrateImportEnvelope` — operates on the FULL multi-row import
+ *      envelope (`RawPayload` with `bundles[]`, `wildcards[]`, etc).
+ *      Used by the manual JSON-paste importer in `parse.ts`.
+ *
+ *   2. `migratePayload` — operates on a SINGLE ROW (a module or bundle
+ *      dict). Per spec §2: forward-only chain with registry-keyed
+ *      dispatch by (kind, fromVersion); context is opt-in via
+ *      `requiresContext`; bundle migrators recurse into children via
+ *      the `applyModuleStep` helper enforcing the
+ *      single-version-per-root invariant.
  *
  * Adding a new schema version:
  *   1. Bump CURRENT_SCHEMA_VERSION below.
- *   2. Add a function `migrateVNToVN_plus_1` operating on entity-shape payloads.
- *   3. Register it in MIGRATION_CHAIN below.
+ *   2. For envelope-shape entities, add a function `migrateVNToVN_plus_1`
+ *      and register it in MIGRATION_CHAIN.
+ *   3. For per-row migrations (modules / bundles), call `registerMigrator`
+ *      with a `MigratorDefinition` for each (kind, fromVersion) interval.
+ *      Bundle migrators must recurse into children via
+ *      `ctx.applyModuleStep` rather than re-dispatching `migratePayload`.
  */
 
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -71,7 +84,7 @@ const MIGRATION_CHAIN: Record<number, VersionMigration> = {
   0: migrateV0ToV1,
 };
 
-export function migratePayload(payload: Partial<RawPayload>): MigrationResult<RawPayload> {
+export function migrateImportEnvelope(payload: Partial<RawPayload>): MigrationResult<RawPayload> {
   if (typeof payload.schema_version !== "number") {
     return { ok: false, reason: "payload missing schema_version field" };
   }
@@ -113,4 +126,83 @@ export function migratePayload(payload: Partial<RawPayload>): MigrationResult<Ra
     migratedEntityCount += entitiesBefore;
   }
   return { ok: true, migrated: current, migratedEntityCount };
+}
+
+// === Per-row migration API (spec §2) ===
+
+export interface MigrationContext {
+  categoryTree?: { lookup: (id: string) => string };
+  /** Bundle migrators call this to recurse into children — see spec
+   * §2 single-version-per-root invariant. The bundle migrator owns
+   * its tree; children never carry an independent schema_version. */
+  applyModuleStep: (child: Record<string, unknown>, fromVersion: number) => Record<string, unknown>;
+}
+
+export interface MigratorDefinition {
+  kind: "module" | "bundle";
+  fromVersion: number;
+  requiresContext?: (keyof MigrationContext)[];
+  migrate: (
+    payload: Record<string, unknown>,
+    context: MigrationContext,
+  ) => Record<string, unknown>;
+}
+
+const ROW_REGISTRY: Map<string, MigratorDefinition> = new Map();
+
+function rowKey(kind: "module" | "bundle", fromVersion: number): string {
+  return `${kind}:${fromVersion}`;
+}
+
+export function registerMigrator(def: MigratorDefinition): void {
+  ROW_REGISTRY.set(rowKey(def.kind, def.fromVersion), def);
+}
+
+/** Test-only: clear the registry between tests. */
+export function _resetRegistryForTests(): void {
+  ROW_REGISTRY.clear();
+}
+
+/**
+ * Per-row migration chain dispatcher.
+ *
+ * See spec §2. Forward-only; pure-by-default with declared context
+ * injection. Bundle migrators MUST recurse into children via the
+ * `applyModuleStep` helper on the injected context.
+ */
+export function migratePayload(
+  payload: Record<string, unknown>,
+  kind: "module" | "bundle",
+  fromVersion: number,
+  toVersion: number,
+  context: Partial<MigrationContext> = {},
+): Record<string, unknown> {
+  let current = payload;
+  for (let v = fromVersion; v < toVersion; v++) {
+    const migrator = ROW_REGISTRY.get(rowKey(kind, v));
+    if (!migrator) {
+      throw new Error(`no migrator for ${kind} ${v}->${v + 1}`);
+    }
+    for (const req of migrator.requiresContext ?? []) {
+      if (!(req in context)) {
+        throw new Error(
+          `migrator ${kind} ${v}->${v + 1} requires context: ${req}`,
+        );
+      }
+    }
+    const fullContext: MigrationContext = {
+      ...context,
+      applyModuleStep: (child, childFromVersion) => {
+        const childMigrator = ROW_REGISTRY.get(rowKey("module", childFromVersion));
+        if (!childMigrator) {
+          throw new Error(
+            `bundle recursion: no module migrator for ${childFromVersion}->${childFromVersion + 1}`,
+          );
+        }
+        return childMigrator.migrate(child, { ...fullContext });
+      },
+    };
+    current = migrator.migrate(current, fullContext);
+  }
+  return current;
 }

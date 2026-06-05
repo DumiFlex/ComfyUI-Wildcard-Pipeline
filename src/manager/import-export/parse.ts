@@ -10,7 +10,7 @@
  *      against payload's stamped snapshot_fingerprint when present)
  */
 
-import { migratePayload, type RawPayload } from "./migrations";
+import { migrateImportEnvelope, type RawPayload } from "./migrations";
 import { moduleFingerprint, type ModuleRow } from "./fingerprint";
 
 export type WarningField = "bundle" | "wildcard" | "fixed_value" | "combine" | "derivation" | "constraint" | "category" | "template";
@@ -30,7 +30,7 @@ export interface ParseOk {
   payload: RawPayload;
   /** Total entity count across all migration steps (NOT distinct entity count).
    *  A 5-entity v0 payload passing through 1 step returns 5; through 2 steps
-   *  returns 10. Matches `migratePayload.migratedEntityCount` semantics. */
+   *  returns 10. Matches `migrateImportEnvelope.migratedEntityCount` semantics. */
   migratedEntityCount: number;
   integrityWarnings: IntegrityWarning[];
 }
@@ -103,7 +103,7 @@ export function parsePayload(raw: string): ParseResult {
   if (obj.templates !== undefined && !Array.isArray(obj.templates)) {
     return { ok: false, reason: "'templates' must be an array" };
   }
-  const migrationResult = migratePayload(obj as Partial<RawPayload>);
+  const migrationResult = migrateImportEnvelope(obj as Partial<RawPayload>);
   if (!migrationResult.ok) return { ok: false, reason: migrationResult.reason };
   const { migrated, migratedEntityCount } = migrationResult;
 
