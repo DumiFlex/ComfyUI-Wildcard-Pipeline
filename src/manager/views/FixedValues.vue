@@ -7,6 +7,7 @@ import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeModuleStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { validateModule } from "../utils/validateModule";
 import Button from "../components/ui/Button.vue";
@@ -279,6 +280,7 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
       <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
+      <CommunityRowActions :row="row" kind="module" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
 

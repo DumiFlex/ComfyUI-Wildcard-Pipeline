@@ -26,7 +26,12 @@ import ExportDepWarningModal from "./ExportDepWarningModal.vue";
 import type { ExportDepWarningRow } from "./ExportDepWarningModal.vue";
 import { liveLibraryToRawPayload } from "./live-library-adapter";
 import { buildDepGraph, transitiveClosure } from "./dep-graph";
-import { WPC_API_URL } from "../config/links";
+import {
+  buildBundlePublishable,
+  buildModulePublishable,
+  publishToCommunity as publishToCommunityShared,
+  type PublishablePayload,
+} from "./single-row-publish";
 
 const toast = useToast();
 
@@ -538,20 +543,15 @@ async function onDepWarningExportAnyway(): Promise<void> {
 // else — single-row publish is the only flow the community currently
 // supports (each post is one entity).
 
-interface SingleSelected {
-  kind: "module" | "bundle";
-  payload: Record<string, unknown>;
-  name: string;
-  description: string;
-}
-
 /**
  * Detect whether the current selection is a single publishable entity.
  * Single publishable = exactly one module OR exactly one bundle, and
  * every other bucket empty (including categories + templates, which
- * the community can't host yet).
+ * the community can't host yet). Returns the engine-row payload via
+ * the shared `single-row-publish` helpers so per-row buttons on
+ * ModuleListView / editors emit byte-for-byte the same shape.
  */
-const singleSelected = computed<SingleSelected | null>(() => {
+const singleSelected = computed<PublishablePayload | null>(() => {
   let total = 0;
   let kind: "module" | "bundle" | null = null;
   let id: string | null = null;
@@ -566,64 +566,14 @@ const singleSelected = computed<SingleSelected | null>(() => {
   if (total !== 1 || !kind || !id) return null;
   if (kind === "bundle") {
     const row = bundles.value.find((b) => b.id === id);
-    if (!row) return null;
-    // Engine-row bundle shape (no `type`, no nested `payload`; `children`
-    // carry the module rows verbatim). Strip server-side bookkeeping
-    // (payload_hash, version, timestamps) — community assigns its own.
-    const payload: Record<string, unknown> = {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      color: row.color,
-      category_id: row.category_id,
-      tags: row.tags,
-      is_favorite: row.is_favorite,
-      children: row.children,
-    };
-    return { kind: "bundle", payload, name: row.name, description: row.description };
+    return row ? buildBundlePublishable(row) : null;
   }
   const mod = modules.value.find((m) => m.id === id);
-  if (!mod) return null;
-  // Engine-row module shape — keep `type` + nested `payload` so the
-  // community validator's `derive_kind_from_payload` reads it correctly.
-  const payload: Record<string, unknown> = {
-    id: mod.id,
-    type: mod.type,
-    name: mod.name,
-    description: mod.description,
-    category_id: mod.category_id,
-    tags: mod.tags,
-    is_favorite: mod.is_favorite,
-    payload: mod.payload,
-  };
-  return { kind: "module", payload, name: mod.name, description: mod.description };
+  return mod ? buildModulePublishable(mod) : null;
 });
 
-/**
- * utf8-safe base64 (mirror of `b64ToText` on the community web side).
- * btoa() only handles latin-1, so we run the JSON through TextEncoder
- * first to handle non-ASCII names / descriptions cleanly.
- */
-function textToB64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
-}
-
 function publishToCommunity() {
-  const sel = singleSelected.value;
-  if (!sel) return;
-  const b64 = textToB64(JSON.stringify(sel.payload));
-  const url = new URL(`${WPC_API_URL}/upload`);
-  url.searchParams.set("from", "spa");
-  // Hash, not query — see comment above on size + transmission concerns.
-  const hash = new URLSearchParams();
-  hash.set("payload", b64);
-  if (sel.name) hash.set("name", sel.name);
-  if (sel.description) hash.set("description", sel.description);
-  const full = `${url.toString()}#${hash.toString()}`;
-  window.open(full, "_blank", "noopener");
+  if (singleSelected.value) publishToCommunityShared(singleSelected.value);
 }
 
 function clearAll() {
