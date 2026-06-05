@@ -72,7 +72,13 @@ async function onCopy() {
 </script>
 
 <template>
-  <template v-if="labeled">
+  <!-- Labeled mode wraps the two pills in a single flex container so
+       hosts that flex-distribute their children (editor header-extra
+       uses justify-content: space-between) keep the two buttons
+       grouped instead of splitting Publish to the middle and Copy
+       to the far right. Icon-only mode stays as a fragment because
+       row-action cells expect each button as a sibling flex item. -->
+  <div v-if="labeled" class="wpc-row-actions-labeled">
     <Button
       variant="secondary"
       size="sm"
@@ -89,7 +95,7 @@ async function onCopy() {
       :title="`Copy ${row.name} payload to clipboard`"
       @click="onCopy"
     >Copy</Button>
-  </template>
+  </div>
   <template v-else>
     <Button
       variant="ghost"
@@ -109,3 +115,11 @@ async function onCopy() {
     />
   </template>
 </template>
+
+<style scoped>
+.wpc-row-actions-labeled {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+}
+</style>
