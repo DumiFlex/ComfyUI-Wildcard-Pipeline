@@ -18,8 +18,8 @@
  * its own.
  */
 
+import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
-import { WPC_API_URL } from "../config/links";
 
 export interface PublishablePayload {
   /** Engine-row shape ready to ship: `{id, type?, name, payload|children, …}` */
@@ -81,24 +81,28 @@ function textToB64(text: string): string {
 }
 
 /**
- * Open the community web's /upload page with the payload pre-filled
- * via the URL hash. Hash (not query) keeps the payload off the
- * request log and sidesteps Edge's ~2KB address-bar limit on bundle
- * exports.
+ * Navigate the extension to the Community tab's publish view with the
+ * payload pre-filled via the URL hash. The community embed's
+ * EmbedPublish reads `window.location.hash` on mount + hydrates the
+ * form — same b64 contract the community web's PublishView already
+ * understood. Hash (not query) keeps the payload off the request log
+ * and sidesteps Edge's ~2KB address-bar limit on bundle exports.
  *
- * Window.open uses `noopener` so the new tab can't reach back into
- * our document via `window.opener`.
+ * Replaces the prior `window.open(WPC_API_URL/upload)` flow: opening
+ * the browser threw away the in-extension bearer token (different
+ * origin storage) and forced a fresh device-flow login. Routing
+ * inside the SPA keeps auth alive + the user inside ComfyUI.
  */
-export function publishToCommunity(pub: PublishablePayload): void {
+export function publishToCommunity(
+  pub: PublishablePayload,
+  router: Router,
+): void {
   const b64 = textToB64(JSON.stringify(pub.payload));
-  const url = new URL(`${WPC_API_URL}/upload`);
-  url.searchParams.set("from", "spa");
   const hash = new URLSearchParams();
   hash.set("payload", b64);
   if (pub.name) hash.set("name", pub.name);
   if (pub.description) hash.set("description", pub.description);
-  const full = `${url.toString()}#${hash.toString()}`;
-  window.open(full, "_blank", "noopener");
+  router.push({ path: "/community/publish", hash: `#${hash.toString()}` });
 }
 
 /**

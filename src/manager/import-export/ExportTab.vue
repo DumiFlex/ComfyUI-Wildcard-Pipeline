@@ -15,6 +15,7 @@
  * keys (`*_uuids`) match the Python endpoint exactly.
  */
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import { useToast } from "../composables/useToast";
 import { api, ApiError, type ExportBuildRequest } from "../api/client";
@@ -34,6 +35,7 @@ import {
 } from "./single-row-publish";
 
 const toast = useToast();
+const router = useRouter();
 
 /**
  * Bucket key — matches the 8-bucket schema. `wildcard`, `fixed_values`,
@@ -573,7 +575,7 @@ const singleSelected = computed<PublishablePayload | null>(() => {
 });
 
 function publishToCommunity() {
-  if (singleSelected.value) publishToCommunityShared(singleSelected.value);
+  if (singleSelected.value) publishToCommunityShared(singleSelected.value, router);
 }
 
 function clearAll() {
