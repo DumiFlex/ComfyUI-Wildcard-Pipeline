@@ -18,6 +18,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Chip from "../components/ui/Chip.vue";
@@ -61,6 +62,18 @@ const recent = useRecentStore();
 const { resolveReturnTo } = useReturnTo();
 const cascade = useCascadeStore();
 const cascadeApply = useCascadeApply();
+
+/**
+ * Live library row for the entity being edited. Resolves through
+ * `moduleStore.catalog` so per-row footer actions (publish to
+ * community, copy payload) get the same engine-row shape every
+ * other code path uses. Null on create or when the row hasn't yet
+ * hydrated.
+ */
+const currentRow = computed(() => {
+  if (!props.id) return null;
+  return moduleStore.catalog.find((m) => m.id === props.id) ?? null;
+});
 const resolveWarnings = useResolveWarnings();
 
 const cascadeDialogOpen = ref(false);
@@ -813,6 +826,12 @@ defineExpose({ historyEntries, applyRestore, options });
     @restore="applyRestore"
   >
     <template v-if="isEdit" #footer-left>
+      <CommunityRowActions
+        v-if="currentRow"
+        :row="currentRow"
+        kind="module"
+        labeled
+      />
       <Button
         variant="ghost"
         icon="pi-trash"

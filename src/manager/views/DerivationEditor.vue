@@ -14,6 +14,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
@@ -44,6 +45,9 @@ import type {
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
 const moduleStore = useModuleStore();
+const currentRow = computed(() =>
+  props.id ? moduleStore.catalog.find((m) => m.id === props.id) ?? null : null,
+);
 const { resolveReturnTo } = useReturnTo();
 const categoryStore = useCategoryStore();
 const toast = useToast();
@@ -401,6 +405,12 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       </span>
     </template>
     <template v-if="isEdit" #footer-left>
+      <CommunityRowActions
+        v-if="currentRow"
+        :row="currentRow"
+        kind="module"
+        labeled
+      />
       <Button
         variant="ghost"
         icon="pi-trash"
