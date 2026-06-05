@@ -31,6 +31,10 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { WPC_API_URL } from "../config/links";
 
+/** localStorage key for user-dismissed (slug → version) pairs.
+ *  Synced with CommunityUpdateDialog.onDismiss — keep in lockstep. */
+const DISMISS_KEY = "wpc.community-update-dismissed";
+
 /**
  * One pending update entry. Keyed by entity id internally so the
  * per-row badge lookup is O(1); the post slug field carries the
@@ -135,18 +139,33 @@ export const useCommunityUpdateStore = defineStore("communityUpdates", () => {
         }
       }
 
+      // User-dismissed (slug, version) pairs — see
+      // CommunityUpdateDialog's onDismiss. Survives reloads; we read
+      // it fresh per check so a dismissal in one tab affects the
+      // next check in another.
+      let dismissedMap: Record<string, number> = {};
+      try {
+        const raw = window.localStorage.getItem(DISMISS_KEY);
+        if (raw) dismissedMap = JSON.parse(raw) as Record<string, number>;
+      } catch {
+        // localStorage denied / malformed — treat as empty.
+      }
+
       const next = new Map<string, UpdateEntry>();
       for (const c of candidates) {
         const latest = latestBySlug.get(c.post_slug);
-        if (typeof latest === "number" && latest > c.installed_version) {
-          next.set(c.entity_id, {
-            entity_id: c.entity_id,
-            entity_kind: c.entity_kind,
-            post_slug: c.post_slug,
-            installed_version: c.installed_version,
-            latest_version: latest,
-          });
-        }
+        if (typeof latest !== "number" || latest <= c.installed_version) continue;
+        // Skip if the user already dismissed this exact post version.
+        // A newer version drops past the dismissal (we compare against
+        // the dismissed number, not the slug alone).
+        if ((dismissedMap[c.post_slug] ?? 0) >= latest) continue;
+        next.set(c.entity_id, {
+          entity_id: c.entity_id,
+          entity_kind: c.entity_kind,
+          post_slug: c.post_slug,
+          installed_version: c.installed_version,
+          latest_version: latest,
+        });
       }
       updatesByEntityId.value = next;
       lastCheckedAt.value = Date.now();

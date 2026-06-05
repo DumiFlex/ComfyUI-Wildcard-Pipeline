@@ -230,50 +230,101 @@ def _update_module(
     Preserves `mid` and the row's `type` (the kind dispatch already
     routed us here so type is implied). Bumps `version` and stamps
     `updated_at` like `ModuleRepository.update`.
+
+    Community origin (migration 013) is rewritten ONLY when the new
+    content explicitly carries it — a community Update-in-place
+    install stamps both fields on the entity, while a vanilla Import
+    tab replace leaves them absent and the row keeps its prior
+    community_* values (or NULL for locally-authored rows).
     """
     _require_entity_fields(kind, "replace", content, ("name",))
     now = now_iso()
     fp = _module_fp_for_entity({**content, "type": kind})
-    conn.execute(
-        "UPDATE modules SET "
-        "name = ?, description = ?, category_id = ?, tags = ?, "
-        "is_favorite = ?, payload = ?, snapshot_fingerprint = ?, "
-        "version = version + 1, updated_at = ? "
-        "WHERE id = ?;",
-        (
-            content["name"], content.get("description", ""),
-            content.get("category_id"),
-            json.dumps(content.get("tags") or []),
-            int(content.get("is_favorite", False)),
-            json.dumps(content.get("payload") or {}),
-            fp, now, mid,
-        ),
-    )
+    if "community_post_slug" in content or "community_version_number" in content:
+        conn.execute(
+            "UPDATE modules SET "
+            "name = ?, description = ?, category_id = ?, tags = ?, "
+            "is_favorite = ?, payload = ?, snapshot_fingerprint = ?, "
+            "version = version + 1, updated_at = ?, "
+            "community_post_slug = ?, community_version_number = ? "
+            "WHERE id = ?;",
+            (
+                content["name"], content.get("description", ""),
+                content.get("category_id"),
+                json.dumps(content.get("tags") or []),
+                int(content.get("is_favorite", False)),
+                json.dumps(content.get("payload") or {}),
+                fp, now,
+                content.get("community_post_slug"),
+                content.get("community_version_number"),
+                mid,
+            ),
+        )
+    else:
+        conn.execute(
+            "UPDATE modules SET "
+            "name = ?, description = ?, category_id = ?, tags = ?, "
+            "is_favorite = ?, payload = ?, snapshot_fingerprint = ?, "
+            "version = version + 1, updated_at = ? "
+            "WHERE id = ?;",
+            (
+                content["name"], content.get("description", ""),
+                content.get("category_id"),
+                json.dumps(content.get("tags") or []),
+                int(content.get("is_favorite", False)),
+                json.dumps(content.get("payload") or {}),
+                fp, now, mid,
+            ),
+        )
 
 
 def _update_bundle(
     conn: sqlite3.Connection, bid: str, content: dict[str, Any],
 ) -> None:
-    """UPDATE the bundles row identified by `bid` to mirror `content`."""
+    """UPDATE the bundles row identified by `bid` to mirror `content`.
+
+    See _update_module for the community_* rewrite semantics.
+    """
     _require_entity_fields("bundle", "replace", content, ("name",))
     children_blob = list(content.get("children") or [])
     ph = payload_hash({"children": children_blob})
     now = now_iso()
-    conn.execute(
-        "UPDATE bundles SET "
-        "name = ?, description = ?, color = ?, category_id = ?, "
-        "tags = ?, is_favorite = ?, children = ?, payload_hash = ?, "
-        "version = version + 1, updated_at = ? "
-        "WHERE id = ?;",
-        (
-            content["name"], content.get("description", ""),
-            content.get("color"),
-            content.get("category_id"),
-            json.dumps(content.get("tags") or []),
-            int(content.get("is_favorite", False)),
-            json.dumps(children_blob), ph, now, bid,
-        ),
-    )
+    if "community_post_slug" in content or "community_version_number" in content:
+        conn.execute(
+            "UPDATE bundles SET "
+            "name = ?, description = ?, color = ?, category_id = ?, "
+            "tags = ?, is_favorite = ?, children = ?, payload_hash = ?, "
+            "version = version + 1, updated_at = ?, "
+            "community_post_slug = ?, community_version_number = ? "
+            "WHERE id = ?;",
+            (
+                content["name"], content.get("description", ""),
+                content.get("color"),
+                content.get("category_id"),
+                json.dumps(content.get("tags") or []),
+                int(content.get("is_favorite", False)),
+                json.dumps(children_blob), ph, now,
+                content.get("community_post_slug"),
+                content.get("community_version_number"),
+                bid,
+            ),
+        )
+    else:
+        conn.execute(
+            "UPDATE bundles SET "
+            "name = ?, description = ?, color = ?, category_id = ?, "
+            "tags = ?, is_favorite = ?, children = ?, payload_hash = ?, "
+            "version = version + 1, updated_at = ? "
+            "WHERE id = ?;",
+            (
+                content["name"], content.get("description", ""),
+                content.get("color"),
+                content.get("category_id"),
+                json.dumps(content.get("tags") or []),
+                int(content.get("is_favorite", False)),
+                json.dumps(children_blob), ph, now, bid,
+            ),
+        )
 
 
 def _module_exists(conn: sqlite3.Connection, mid: str) -> bool:
