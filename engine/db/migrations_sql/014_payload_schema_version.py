@@ -38,6 +38,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from engine.db.migrations_sql._014_helpers import run_bulk_lazy
+
 
 def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
     cur = conn.execute(f"PRAGMA table_info({table});")
@@ -75,3 +77,10 @@ def up(conn: sqlite3.Connection) -> None:
             )
         if not _has_column(conn, "bundles", "schema_migrated_at"):
             conn.execute("ALTER TABLE bundles ADD COLUMN schema_migrated_at TEXT;")
+
+    # Bulk run: at the time 014 ships, CURRENT_SCHEMA_VERSION is still 1, so
+    # every existing row is already at CURRENT and the bulk is a no-op pass.
+    # We invoke it anyway to exercise + validate the wiring on first run.
+    # FUTURE: when a bump migration 015 ships, it ALSO calls run_bulk_lazy
+    # with the new CURRENT and the bump's migrators.
+    run_bulk_lazy(conn, current_version=1, migrators={}, validators={}, tolerant_strip={})
