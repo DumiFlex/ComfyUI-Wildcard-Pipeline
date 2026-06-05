@@ -11,6 +11,7 @@ import Card from "../ui/Card.vue";
 import Icon from "../ui/Icon.vue";
 import LocationSection from "./LocationSection.vue";
 import MaintenanceOpModal from "./MaintenanceOpModal.vue";
+import ConfirmDialog from "../../../components/shared/ConfirmDialog.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
@@ -89,6 +90,19 @@ function closeModal(): void {
 function refresh(): void {
   if (store.runningOp) return;
   void store.fetchInfo();
+}
+
+// Restart confirm — kicking ComfyUI interrupts running workflows
+// and queued prompts, so users should explicitly confirm. Mirrors
+// the same gate StaleBanner uses for its Restart pill.
+const restartConfirmOpen = ref(false);
+function askRestart(): void { restartConfirmOpen.value = true; }
+function onRestartConfirmed(): void {
+  restartConfirmOpen.value = false;
+  void system.restart();
+}
+function onRestartCancelled(): void {
+  restartConfirmOpen.value = false;
 }
 
 function formatBytes(n: number): string {
@@ -199,7 +213,7 @@ onMounted(() => {
               :loading="system.restarting"
               :disabled="!!store.runningOp"
               data-test="database-restart"
-              @click="() => system.restart()"
+              @click="askRestart"
             >Restart</Button>
           </div>
         </div>
@@ -218,6 +232,16 @@ onMounted(() => {
       @confirm="confirmOp"
       @close="closeModal"
       @update:open="(v) => { if (!v) closeModal(); }"
+    />
+
+    <ConfirmDialog
+      :visible="restartConfirmOpen"
+      title="Restart ComfyUI?"
+      body="This kicks the running ComfyUI process. Any in-flight workflows and queued prompts will be interrupted. The page will reload automatically once the server is back."
+      confirm-label="Restart"
+      variant="danger"
+      @confirm="onRestartConfirmed"
+      @cancel="onRestartCancelled"
     />
   </Card>
 </template>
