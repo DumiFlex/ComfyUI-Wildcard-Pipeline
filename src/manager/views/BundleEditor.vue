@@ -630,14 +630,14 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
-    </template>
-    <template v-if="isEdit" #footer-left>
       <CommunityRowActions
         v-if="currentRow"
         :row="currentRow"
         kind="bundle"
         labeled
       />
+    </template>
+    <template v-if="isEdit" #footer-left>
       <Button
         variant="ghost"
         icon="pi-trash"

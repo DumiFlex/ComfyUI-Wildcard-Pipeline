@@ -825,13 +825,10 @@ defineExpose({ historyEntries, applyRestore, options });
     @cancel="cancel"
     @restore="applyRestore"
   >
+    <template v-if="isEdit && currentRow" #header-extra>
+      <CommunityRowActions :row="currentRow" kind="module" labeled />
+    </template>
     <template v-if="isEdit" #footer-left>
-      <CommunityRowActions
-        v-if="currentRow"
-        :row="currentRow"
-        kind="module"
-        labeled
-      />
       <Button
         variant="ghost"
         icon="pi-trash"
