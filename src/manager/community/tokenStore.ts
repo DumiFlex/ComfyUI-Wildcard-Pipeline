@@ -85,10 +85,14 @@ export function createWpcTokenStore(apiBaseUrl: string): WpcTokenStore {
       // Backend route is /auth/token/refresh per
       // api/app/routers/auth.py:425 — was hitting /auth/refresh which
       // 404'd silently and forced a re-login every access-token TTL.
+      // Body field MUST be `refresh_token` — backend's RefreshRequest
+      // uses Pydantic `extra="forbid"`, so a stray `refresh` key gets
+      // rejected with 422 (not 401), the wipe path never fires, and
+      // the embed silently loses auth on the next access-token expiry.
       const res = await fetch(`${base}/api/v1/auth/token/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh: current.refresh }),
+        body: JSON.stringify({ refresh_token: current.refresh }),
       });
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) wipe();

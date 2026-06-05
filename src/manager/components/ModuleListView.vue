@@ -954,41 +954,43 @@ defineExpose({
                 <slot name="favorite" :row="row" />
               </td>
               <td>
-                <slot name="name" :row="row">
-                  <div class="wp-row-name">
-                    <span class="wp-row-name__text">{{ row.name }}</span>
-                    <!-- Community-origin pill. Only renders when the
-                         engine stamped `community_post_slug` on this
-                         row at install time (migration 013). Locally
-                         authored rows have NULL here and stay
-                         unmarked. The badge links nowhere yet — once
-                         the update-check service lands it'll grow a
-                         click handler that opens the post detail. -->
-                    <span
-                      v-if="communityOriginSlug(row)"
-                      class="wp-row-community-pill"
-                      :title="communityPillTitle(row)"
-                    >
-                      <i class="pi pi-globe" />community
-                    </span>
-                    <!-- Update-available indicator. Distinct pill so
-                         the user can tell at a glance which rows are
-                         actually behind, not just which rows came
-                         from community. Click target wires up in
-                         a follow-up; for now title carries the
-                         version delta + slug for manual install. -->
-                    <button
-                      v-if="communityUpdates.entryFor(row.id)"
-                      type="button"
-                      class="wp-row-community-pill wp-row-community-pill--update wp-row-community-pill--button"
-                      :title="updatePillTitle(row.id)"
-                      @click.stop="openUpdateDialog(row.id)"
-                    >
-                      <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
-                    </button>
-                    <span class="wp-id">{{ row.id }}</span>
-                  </div>
-                </slot>
+                <!-- Slot + pills wrapped in one flex line. Every list view
+                     overrides #name, so pills rendered ONLY inside the
+                     slot fallback would never appear. Render them
+                     alongside the slot output so they stay visible
+                     regardless of the override's markup. -->
+                <div class="wp-row-name-wrap">
+                  <slot name="name" :row="row">
+                    <div class="wp-row-name">
+                      <span class="wp-row-name__text">{{ row.name }}</span>
+                      <span class="wp-id">{{ row.id }}</span>
+                    </div>
+                  </slot>
+                  <!-- Community-origin pill. Only renders when the
+                       engine stamped `community_post_slug` on this
+                       row at install time (migration 013). Locally
+                       authored rows have NULL here and stay
+                       unmarked. -->
+                  <span
+                    v-if="communityOriginSlug(row)"
+                    class="wp-row-community-pill"
+                    :title="communityPillTitle(row)"
+                  >
+                    <i class="pi pi-globe" />community
+                  </span>
+                  <!-- Update-available indicator. Distinct pill so the
+                       user can tell which rows are behind, not just
+                       which rows came from community. -->
+                  <button
+                    v-if="communityUpdates.entryFor(row.id)"
+                    type="button"
+                    class="wp-row-community-pill wp-row-community-pill--update wp-row-community-pill--button"
+                    :title="updatePillTitle(row.id)"
+                    @click.stop="openUpdateDialog(row.id)"
+                  >
+                    <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
+                  </button>
+                </div>
               </td>
               <slot name="columns" :row="row" />
               <td v-if="showTags" @click.stop>
@@ -1274,6 +1276,17 @@ defineExpose({
 .wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
 .wp-row-fav-btn .pi { font-size: var(--wp-text-base); }
 
+.wp-row-name-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-2);
+  min-width: 0;
+}
+.wp-row-name-wrap > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .wp-row-name {
   display: flex;
   flex-direction: column;
