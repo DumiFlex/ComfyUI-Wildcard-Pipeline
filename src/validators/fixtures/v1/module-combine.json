@@ -1,0 +1,14 @@
+{
+  "id": "cb-001abc",
+  "type": "combine",
+  "name": "starter-prompt",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "template": "$mood, $seed",
+    "output_var": "prompt",
+    "input_vars": ["mood", "seed"]
+  }
+}

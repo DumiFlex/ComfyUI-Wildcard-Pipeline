@@ -1,0 +1,15 @@
+{
+  "id": "cn-001abc",
+  "type": "constraint",
+  "name": "starter-constraint",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "source_wildcard_id": "wc-001abc",
+    "target_wildcard_id": "wc-002def",
+    "exceptions": [],
+    "matrix": {}
+  }
+}

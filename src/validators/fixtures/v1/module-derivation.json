@@ -1,0 +1,18 @@
+{
+  "id": "dr-001abc",
+  "type": "derivation",
+  "name": "starter-derive",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "rules": [
+      {
+        "id": "rule-001",
+        "branches": [{ "if": { "var": "mood", "eq": "serene" }, "then": "calm" }],
+        "else": { "value": "default" }
+      }
+    ]
+  }
+}
