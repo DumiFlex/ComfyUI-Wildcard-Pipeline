@@ -19,6 +19,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
@@ -46,6 +47,9 @@ const props = defineProps<{ id?: string }>();
 const router = useRouter();
 const { resolveReturnTo } = useReturnTo();
 const store = useBundleStore();
+const currentRow = computed(() =>
+  props.id ? store.catalog.find((b) => b.id === props.id) ?? null : null,
+);
 const categoryStore = useCategoryStore();
 const moduleStore = useModuleStore();
 const toast = useToast();
@@ -628,6 +632,12 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       </span>
     </template>
     <template v-if="isEdit" #footer-left>
+      <CommunityRowActions
+        v-if="currentRow"
+        :row="currentRow"
+        kind="bundle"
+        labeled
+      />
       <Button
         variant="ghost"
         icon="pi-trash"

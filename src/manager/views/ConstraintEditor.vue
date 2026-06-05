@@ -16,6 +16,7 @@ import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
+import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
@@ -51,6 +52,9 @@ const props = defineProps<{ id?: string }>();
 const router = useRouter();
 const { resolveReturnTo } = useReturnTo();
 const moduleStore = useModuleStore();
+const currentRow = computed(() =>
+  props.id ? moduleStore.catalog.find((m) => m.id === props.id) ?? null : null,
+);
 const categoryStore = useCategoryStore();
 const toast = useToast();
 const recent = useRecentStore();
@@ -677,6 +681,12 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
       </span>
     </template>
     <template v-if="isEdit" #footer-left>
+      <CommunityRowActions
+        v-if="currentRow"
+        :row="currentRow"
+        kind="module"
+        labeled
+      />
       <Button
         variant="ghost"
         icon="pi-trash"
