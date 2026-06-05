@@ -38,6 +38,7 @@ import {
   type ResolvedSelection,
 } from "./commit";
 import { newShortId } from "../utils/ids";
+import type { SchemaCatalogEntry } from "@/api/types";
 
 /**
  * Library snapshot used by the install collision pre-check. Modules
@@ -427,3 +428,55 @@ export async function installEnvelope(
 /** Re-exported so the host-bridge global can advertise the runtime's
  *  current schema number alongside the install function. */
 export { CURRENT_SCHEMA_VERSION };
+
+// ---------------------------------------------------------------------------
+// Install path decision (spec §4 Flow 3)
+// ---------------------------------------------------------------------------
+
+export interface InstallDecisionInput {
+  payloadVersion: number;
+  currentVersion: number;
+  catalog: SchemaCatalogEntry[];
+}
+
+export type InstallPath =
+  | { path: "install_direct" }
+  | { path: "install_with_chain"; fromVersion: number; toVersion: number }
+  | { path: "install_tolerant" }
+  | { path: "refuse"; reason: string };
+
+/**
+ * Decide which install branch applies. See spec §4 Flow 3.
+ *
+ * Path 3a (payload_v ≤ CURRENT):
+ *   - Equal → install_direct
+ *   - Less  → install_with_chain (forward migrate)
+ *
+ * Path 3b (payload_v > CURRENT):
+ *   - AND-fold over (CURRENT, payload_v]: any breaking → refuse
+ *   - All additive → install_tolerant (strip + persist original verbatim)
+ *
+ * The AND-fold over the WHOLE interval is critical: it's not enough
+ * to check `catalog[payload_v].is_breaking_from_previous` — a breaking
+ * step earlier in the interval would still poison everything after.
+ */
+export function decideInstallPath(input: InstallDecisionInput): InstallPath {
+  const { payloadVersion, currentVersion, catalog } = input;
+
+  if (payloadVersion <= currentVersion) {
+    return payloadVersion === currentVersion
+      ? { path: "install_direct" }
+      : { path: "install_with_chain", fromVersion: payloadVersion, toVersion: currentVersion };
+  }
+
+  // AND-fold check (spec §3 #1): fold over WHOLE interval (CURRENT, payload_v]
+  const breakingInInterval = catalog
+    .filter((row) => row.version > currentVersion && row.version <= payloadVersion)
+    .some((row) => row.is_breaking_from_previous);
+
+  if (breakingInInterval) {
+    return { path: "refuse", reason: "breaking schema bump in interval" };
+  }
+
+  return { path: "install_tolerant" };
+}
