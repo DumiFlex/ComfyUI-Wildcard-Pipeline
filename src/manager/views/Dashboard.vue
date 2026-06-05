@@ -490,7 +490,12 @@ onMounted(refresh);
 
     <!-- Recent / Favorites -->
     <Card v-if="!showGettingStarted" padding>
-      <template #actions>
+      <!-- Tabs sit at the top-LEFT of the card body now, not in the
+           Card's right-aligned #actions slot. The View-all link stays
+           on the right via wp-spacer so the row balances. Earlier
+           layout pushed both to the right which left the entire
+           left half empty. -->
+      <div class="wp-recent__head">
         <div class="wp-tabs wp-recent__tabs">
           <button
             type="button"
@@ -519,13 +524,14 @@ onMounted(refresh);
           >
             <Icon name="pi-star-fill" /> Favorites
           </button>
-          <a
-            class="dashboard__view-all"
-            href="#"
-            @click.prevent="router.push('/all')"
-          >View all <Icon name="pi-arrow-right" :size="ICON_SM" /></a>
         </div>
-      </template>
+        <span class="wp-spacer" />
+        <a
+          class="dashboard__view-all"
+          href="#"
+          @click.prevent="router.push('/all')"
+        >View all <Icon name="pi-arrow-right" :size="ICON_SM" /></a>
+      </div>
       <div v-if="visibleItems.length" class="wp-list wp-recent">
         <div
           v-for="row in visibleItems"
@@ -712,6 +718,13 @@ onMounted(refresh);
 .dashboard__start-body strong { font-weight: 600; }
 .dashboard__start-body p { margin: 2px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 
+.wp-recent__head {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-bottom: var(--wp-space-4);
+}
+.wp-recent__head .wp-spacer { flex: 1; }
 .wp-recent__tabs {
   display: flex;
   align-items: center;
