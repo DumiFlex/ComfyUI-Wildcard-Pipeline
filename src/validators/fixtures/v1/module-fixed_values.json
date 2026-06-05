@@ -1,0 +1,14 @@
+{
+  "id": "fv-001abc",
+  "type": "fixed_values",
+  "name": "starter-seed",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "entries": [
+      { "variable_name": "seed", "value": "42" }
+    ]
+  }
+}
