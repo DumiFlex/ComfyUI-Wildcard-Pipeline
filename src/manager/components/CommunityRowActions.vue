@@ -16,11 +16,13 @@ import { useRouter } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import Button from "./ui/Button.vue";
 import { useToast } from "../composables/useToast";
+import { useModuleStore } from "../stores/moduleStore";
 import {
   buildBundlePublishable,
   buildModulePublishable,
   copyPayloadToClipboard,
   publishToCommunity,
+  type PublishablePayload,
 } from "../import-export/single-row-publish";
 
 interface Props {
@@ -39,20 +41,45 @@ interface Props {
 const props = defineProps<Props>();
 const toast = useToast();
 const router = useRouter();
+const moduleStore = useModuleStore();
 
-function publishablePayload() {
+/**
+ * Build the publishable payload. For bundles, each child is normalized
+ * to the canonical module-row shape by resolving it against the live
+ * module catalog (stored children are widget-context snapshots). The
+ * catalog is fetched first if empty so the resolver can hit -- without
+ * it every child would fall back to a best-effort flatten that may not
+ * match the schema.
+ */
+async function publishablePayload(): Promise<PublishablePayload> {
   if (props.kind === "bundle") {
-    return buildBundlePublishable(props.row as BundleRow);
+    if (moduleStore.catalog.length === 0) {
+      await moduleStore.fetchCatalog();
+    }
+    const byId = new Map(moduleStore.catalog.map((m) => [m.id, m]));
+    return buildBundlePublishable(
+      props.row as BundleRow,
+      (id) => byId.get(id),
+    );
   }
   return buildModulePublishable(props.row as ModuleRow);
 }
 
-function onPublish() {
-  publishToCommunity(publishablePayload(), router);
+async function onPublish() {
+  try {
+    publishToCommunity(await publishablePayload(), router);
+  } catch (e) {
+    toast.push({
+      severity: "error",
+      summary: "Can't publish",
+      detail: e instanceof Error ? e.message : String(e),
+      life: 5000,
+    });
+  }
 }
 
 async function onCopy() {
-  const ok = await copyPayloadToClipboard(publishablePayload());
+  const ok = await copyPayloadToClipboard(await publishablePayload());
   if (ok) {
     toast.push({
       severity: "success",

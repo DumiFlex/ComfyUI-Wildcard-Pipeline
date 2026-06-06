@@ -568,7 +568,15 @@ const singleSelected = computed<PublishablePayload | null>(() => {
   if (total !== 1 || !kind || !id) return null;
   if (kind === "bundle") {
     const row = bundles.value.find((b) => b.id === id);
-    return row ? buildBundlePublishable(row) : null;
+    // Resolve bundle children against the loaded module list so each
+    // child normalizes to the canonical module-row shape (stored
+    // children are widget-context snapshots). modules.value is the
+    // already-fetched catalog backing the Export tab's module buckets.
+    return row
+      ? buildBundlePublishable(row, (cid) =>
+          modules.value.find((m) => m.id === cid),
+        )
+      : null;
   }
   const mod = modules.value.find((m) => m.id === id);
   return mod ? buildModulePublishable(mod) : null;
