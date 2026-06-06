@@ -427,21 +427,6 @@ function moveFocus(delta: number) {
   void nextTick(focusFocusedRow);
 }
 
-/**
- * Fires when the <tbody> itself receives focus (Tab into the list, or a
- * click that misses a row) — NOT when a child row is focused (rows set
- * `focusedRowId` through their own @focus). Seed the roving focus to the
- * first row when nothing is focused yet, then hand DOM focus to it so the
- * very next ArrowDown/Up moves from a real anchor instead of doing
- * nothing (#8 — previously you had to click a row first).
- */
-function onTableFocus() {
-  if (!focusedRowId.value) {
-    focusedRowId.value = paged.value[0]?.id ?? null;
-  }
-  void nextTick(focusFocusedRow);
-}
-
 function onTableKeydown(e: KeyboardEvent) {
   switch (e.key) {
     case "ArrowDown":
@@ -946,7 +931,7 @@ defineExpose({
             <th scope="col" class="wp-table__actions-col" style="text-align:right">Actions</th>
           </tr>
         </thead>
-        <tbody ref="tbodyEl" tabindex="0" @keydown="onTableKeydown" @focus="onTableFocus">
+        <tbody ref="tbodyEl" tabindex="0" @keydown="onTableKeydown">
           <template v-for="row in paged" :key="row.id">
             <tr
               :tabindex="focusedRowId === row.id ? 0 : -1"
@@ -1440,12 +1425,14 @@ defineExpose({
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-/* Reveal row actions on hover / focus-within / when the row is keyboard-focused.
- * data-focused="true" comes from the keyboard-nav state in Task 3.7 — so a row
- * with focus ring also shows its actions. */
+/* Reveal row actions on hover (mouse) or keyboard focus only. We use
+ * :focus-visible (not :focus-within / the data-focused state) so a row
+ * the mouse merely CLICKED doesn't keep showing its actions after the
+ * pointer leaves — actions track the pointer or the keyboard cursor,
+ * never a stale selection. Keyboard nav DOM-focuses the row
+ * (focusFocusedRow), so :focus-visible lights up the right one. */
 .wp-table tbody tr:hover .wp-row-actions,
-.wp-table tbody tr:focus-within .wp-row-actions,
-.wp-table tbody tr[data-focused="true"] .wp-row-actions {
+.wp-table tbody tr:focus-visible .wp-row-actions {
   opacity: 1;
 }
 /* Always visible on touch (no hover capability). */
@@ -1507,12 +1494,15 @@ defineExpose({
   border-left: 2px solid var(--wp-warn, #f7b955);
 }
 
-/* Focused-row marker (keyboard-nav) — subtle accent stripe on the left. Separate
- * from selected (checkbox) and hover. Outline appears via :focus-visible. */
-.wp-table__row--focused > td:first-child {
+/* Keyboard-nav focus marker. Driven by :focus-visible only (NOT the
+ * focusedRowId state) so a mouse click never leaves a row looking
+ * "active" after the pointer moves on — only real keyboard focus shows
+ * the accent stripe + outline. focusFocusedRow() moves DOM focus with the
+ * arrow keys, so the marker follows the cursor. */
+.wp-table tr:focus { outline: none; }
+.wp-table tbody tr:focus-visible > td:first-child {
   box-shadow: inset 2px 0 0 var(--wp-accent-500);
 }
-.wp-table tr:focus { outline: none; }
 .wp-table tr:focus-visible {
   outline: 2px solid var(--wp-accent-500);
   outline-offset: -2px;
