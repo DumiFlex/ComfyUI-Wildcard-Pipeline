@@ -60,7 +60,7 @@ const mode = ref<Mode>("export");
 // separate templateFingerprint path. Categories aren't fetched here —
 // they merge by name server-side and never produce a collision badge.
 
-interface LibraryModule { id: string; snapshot_fingerprint?: string }
+interface LibraryModule { id: string; type?: string; snapshot_fingerprint?: string }
 interface LibraryBundle { id: string; snapshot_fingerprint?: string }
 /** Templates carry no snapshot_fingerprint; the orchestrator computes a
  *  `templateFingerprint` from these literal fields for collision detection. */
@@ -193,7 +193,7 @@ function hasStringId(row: Record<string, unknown>): row is Record<string, unknow
 function buildLibraryMap(): Map<string, LibraryRow> {
   const m = new Map<string, LibraryRow>();
   for (const row of localModules.value) {
-    m.set(row.id, { snapshot_fingerprint: row.snapshot_fingerprint });
+    m.set(row.id, { type: row.type, snapshot_fingerprint: row.snapshot_fingerprint });
   }
   for (const row of localBundles.value) {
     m.set(row.id, { snapshot_fingerprint: row.snapshot_fingerprint });
@@ -377,6 +377,7 @@ function buildBatchConflicts(selected: SelectedEntity[]): BatchConflict[] {
       s.collision !== "conflict"
       && s.collision !== "exists-unknown"
       && s.collision !== "silent-skip"
+      && s.collision !== "type-conflict"
     ) continue;
     out.push({
       kind: s.kind,
@@ -419,9 +420,15 @@ function partitionSelection(
       if (pd.kind === "skip") {
         decision = null;
       } else if (pd.kind === "replace") {
-        decision = { kind: "replace" };
+        // A cross-kind id clash can never replace (would clobber a
+        // different-kind live row) — coerce to install-as-new.
+        decision = s.collision === "type-conflict"
+          ? mintRenameDecision(s.entity)
+          : { kind: "replace" };
       } else if (pd.kind === "accept") {
-        if (
+        if (s.collision === "type-conflict") {
+          decision = mintRenameDecision(s.entity); // install-as-new; never clobber
+        } else if (
           s.collision === "conflict"
           || s.collision === "exists-unknown"
           || s.collision === "silent-skip"
@@ -444,6 +451,10 @@ function partitionSelection(
         `[import-commit] no decision recorded for per-item issue ${s.entity.id}; dropping`,
       );
       decision = null;
+    } else if (s.collision === "type-conflict") {
+      // Clash batch default: install-as-new (or skip). Never replace/add —
+      // both would clobber or hard-fail against the different-kind live row.
+      decision = resolution.batchDefault === "skip" ? null : mintRenameDecision(s.entity);
     } else if (s.collision === "conflict" || s.collision === "exists-unknown") {
       if (resolution.batchDefault === "replace") {
         decision = { kind: "replace" };

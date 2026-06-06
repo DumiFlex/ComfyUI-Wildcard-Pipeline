@@ -71,7 +71,7 @@ export interface BatchConflict {
   kind: EntityKind;
   id: string;
   entity: Record<string, unknown>;
-  collisionState?: "conflict" | "exists-unknown" | "silent-skip";
+  collisionState?: "conflict" | "exists-unknown" | "silent-skip" | "type-conflict";
 }
 
 /**

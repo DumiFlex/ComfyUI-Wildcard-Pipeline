@@ -75,6 +75,21 @@ afterEach(() => {
 });
 
 describe("ConflictModal.vue", () => {
+  it("renders a CLASH badge for a type-conflict batch row", async () => {
+    const wrap = mountModal({
+      batchConflicts: [
+        makeBatchConflict({ id: "w1", entity: { id: "w1", name: "a" }, collisionState: "type-conflict" }),
+      ],
+    });
+    // Per-conflict override list (with the badges) is collapsed by default.
+    $('[data-test="batch-override-toggle"]').click();
+    await flushPromises();
+    const badge = $(`[data-test="batch-override-badge-w1"]`);
+    expect(badge.textContent).toBe("CLASH");
+    expect(badge.className).toContain("wp-mod-badge--clash");
+    wrap.unmount();
+  });
+
   it("renders count summary with both batch + per-item counts", () => {
     const wrap = mountModal({
       batchConflicts: [
