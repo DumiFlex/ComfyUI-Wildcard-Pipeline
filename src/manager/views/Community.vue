@@ -29,9 +29,11 @@ import {
   type EmbedNavigateTarget,
 } from "../community/embedLoader";
 import { createWpcTokenStore } from "../community/tokenStore";
+import { useUiStore } from "../stores/uiStore";
 
 const route = useRoute();
 const router = useRouter();
+const ui = useUiStore();
 
 const containerEl = ref<HTMLDivElement | null>(null);
 const handle = ref<EmbedHandle | null>(null);
@@ -93,7 +95,12 @@ async function tryMount() {
       ...(target.username ? { initialUsername: target.username } : {}),
       apiBaseUrl: WPC_API_URL,
       tokenStore: createWpcTokenStore(WPC_API_URL),
-      theme: "auto",
+      // Forward the manager's current theme MODE (not the resolved
+      // colour). The embed resolves "auto" via its own
+      // prefers-color-scheme @media, so passing the raw mode keeps both
+      // in lockstep — including OS flips while on auto. A live watch
+      // below pushes subsequent toggles through handle.setTheme.
+      theme: ui.themeMode,
       onNavigate: (next) => {
         // Mirror the embed's internal nav into the extension router
         // so the URL bar reflects state + the back button works. Each
@@ -146,6 +153,17 @@ watch(
       handle.value.navigate(parseRoute());
     }
   },
+);
+
+// Mirror the manager's theme into the embed live. Without this the
+// embed froze on its mount-time theme and ignored the manager's
+// light/dark toggle. Forwarding the raw mode (see mount note) lets the
+// embed's own auto-resolution stay in sync with the manager.
+watch(
+  () => ui.themeMode,
+  // Double optional-chain: handle may be null (pre-mount), and setTheme
+  // may be absent on an older deployed embed bundle (version skew).
+  (mode) => handle.value?.setTheme?.(mode),
 );
 
 onMounted(tryMount);

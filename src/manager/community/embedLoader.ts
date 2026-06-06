@@ -57,6 +57,18 @@ export interface EmbedMountOptions {
 export interface EmbedHandle {
   unmount(): void;
   navigate(target: EmbedNavigateTarget): void;
+  /**
+   * Push a live theme change. The community embed reads `theme` once at
+   * mount; calling this re-skins it without a remount. We own the theme
+   * toggle (uiStore), so Community.vue watches it and forwards changes
+   * here. Mirrors the community-side EmbedHandle.setTheme.
+   *
+   * OPTIONAL on purpose: the bundle loads at runtime from the community
+   * host, which (community-first deploy ordering) may be an older build
+   * without setTheme. unmount/navigate have shipped since day one so
+   * they're guaranteed; this one isn't — callers must guard.
+   */
+  setTheme?(theme: "auto" | "dark" | "light"): void;
 }
 
 interface EmbedModule {
