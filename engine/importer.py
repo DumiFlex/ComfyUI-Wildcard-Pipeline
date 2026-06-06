@@ -155,8 +155,9 @@ def _insert_module(
         "id, type, name, description, category_id, tags, "
         "is_favorite, payload, snapshot_fingerprint, version, "
         "created_at, updated_at, "
-        "community_post_slug, community_version_number"
-        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        "community_post_slug, community_version_number, "
+        "content_rating"
+        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
         (
             mid, kind, entity["name"], entity.get("description", ""),
             entity.get("category_id"),
@@ -167,12 +168,17 @@ def _insert_module(
             entity.get("version", 1),
             entity.get("created_at", now),
             entity.get("updated_at", now),
-            # Community origin — only set when the install bridge stamps
+            # Community origin -- only set when the install bridge stamps
             # them on the entity (see manager/main.ts snapshotLibrary +
             # the embed's install call). Local Create/Import-from-file
             # paths leave these NULL so the row stays "locally authored".
             entity.get("community_post_slug"),
             entity.get("community_version_number"),
+            # content_rating defaults to 'safe' when the entity carries
+            # no value -- migration 015 stamps the same default. Community
+            # install passes 'nsfw' through via the entity when the post
+            # carries content_rating='nsfw'.
+            entity.get("content_rating", "safe"),
         ),
     )
     return mid
@@ -201,8 +207,9 @@ def _insert_bundle(
         "id, name, description, color, category_id, tags, "
         "is_favorite, children, payload_hash, version, "
         "created_at, updated_at, "
-        "community_post_slug, community_version_number"
-        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        "community_post_slug, community_version_number, "
+        "content_rating"
+        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
         (
             bid, entity["name"], entity.get("description", ""),
             entity.get("color"),
@@ -214,9 +221,11 @@ def _insert_bundle(
             entity.get("version", 1),
             entity.get("created_at", now),
             entity.get("updated_at", now),
-            # Community origin — see _insert_module comment above.
+            # Community origin -- see _insert_module comment above.
             entity.get("community_post_slug"),
             entity.get("community_version_number"),
+            # content_rating -- see _insert_module comment above.
+            entity.get("content_rating", "safe"),
         ),
     )
     return bid
@@ -241,12 +250,16 @@ def _update_module(
     now = now_iso()
     fp = _module_fp_for_entity({**content, "type": kind})
     if "community_post_slug" in content or "community_version_number" in content:
+        # `content_rating` uses COALESCE so missing key preserves the
+        # existing value -- community-update installs that only bump
+        # the version don't accidentally wipe a user-set NSFW flag.
         conn.execute(
             "UPDATE modules SET "
             "name = ?, description = ?, category_id = ?, tags = ?, "
             "is_favorite = ?, payload = ?, snapshot_fingerprint = ?, "
             "version = version + 1, updated_at = ?, "
-            "community_post_slug = ?, community_version_number = ? "
+            "community_post_slug = ?, community_version_number = ?, "
+            "content_rating = COALESCE(?, content_rating) "
             "WHERE id = ?;",
             (
                 content["name"], content.get("description", ""),
@@ -257,6 +270,7 @@ def _update_module(
                 fp, now,
                 content.get("community_post_slug"),
                 content.get("community_version_number"),
+                content.get("content_rating"),
                 mid,
             ),
         )
@@ -265,7 +279,8 @@ def _update_module(
             "UPDATE modules SET "
             "name = ?, description = ?, category_id = ?, tags = ?, "
             "is_favorite = ?, payload = ?, snapshot_fingerprint = ?, "
-            "version = version + 1, updated_at = ? "
+            "version = version + 1, updated_at = ?, "
+            "content_rating = COALESCE(?, content_rating) "
             "WHERE id = ?;",
             (
                 content["name"], content.get("description", ""),
@@ -273,7 +288,9 @@ def _update_module(
                 json.dumps(content.get("tags") or []),
                 int(content.get("is_favorite", False)),
                 json.dumps(content.get("payload") or {}),
-                fp, now, mid,
+                fp, now,
+                content.get("content_rating"),
+                mid,
             ),
         )
 
@@ -295,7 +312,8 @@ def _update_bundle(
             "name = ?, description = ?, color = ?, category_id = ?, "
             "tags = ?, is_favorite = ?, children = ?, payload_hash = ?, "
             "version = version + 1, updated_at = ?, "
-            "community_post_slug = ?, community_version_number = ? "
+            "community_post_slug = ?, community_version_number = ?, "
+            "content_rating = COALESCE(?, content_rating) "
             "WHERE id = ?;",
             (
                 content["name"], content.get("description", ""),
@@ -306,6 +324,7 @@ def _update_bundle(
                 json.dumps(children_blob), ph, now,
                 content.get("community_post_slug"),
                 content.get("community_version_number"),
+                content.get("content_rating"),
                 bid,
             ),
         )
@@ -314,7 +333,8 @@ def _update_bundle(
             "UPDATE bundles SET "
             "name = ?, description = ?, color = ?, category_id = ?, "
             "tags = ?, is_favorite = ?, children = ?, payload_hash = ?, "
-            "version = version + 1, updated_at = ? "
+            "version = version + 1, updated_at = ?, "
+            "content_rating = COALESCE(?, content_rating) "
             "WHERE id = ?;",
             (
                 content["name"], content.get("description", ""),
@@ -322,7 +342,9 @@ def _update_bundle(
                 content.get("category_id"),
                 json.dumps(content.get("tags") or []),
                 int(content.get("is_favorite", False)),
-                json.dumps(children_blob), ph, now, bid,
+                json.dumps(children_blob), ph, now,
+                content.get("content_rating"),
+                bid,
             ),
         )
 

@@ -30,8 +30,8 @@ def test_migrate_records_version(tmp_path):
     conn = get_connection(tmp_path / "v2.db")
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
-    # ``engine/db/migrations_sql``. (014_payload_schema_version.py is current head.)
-    assert current_version(conn) == 14
+    # ``engine/db/migrations_sql``. (015_content_rating.py is current head.)
+    assert current_version(conn) == 15
     conn.close()
 
 
@@ -56,6 +56,8 @@ def test_migrate_creates_bundles_table_with_expected_columns(tmp_path):
         # Migration 014 — payload schema_version + verbatim-local mirror.
         "schema_version", "original_payload_json",
         "tolerant_drift_status", "schema_migrated_at",
+        # Migration 015 — NSFW flag.
+        "content_rating",
     }
     conn.close()
 
@@ -126,6 +128,8 @@ def test_modules_table_has_expected_columns(tmp_path):
         # Migration 014 — payload schema_version + verbatim-local mirror.
         "schema_version", "original_payload_json",
         "tolerant_drift_status", "schema_migrated_at",
+        # Migration 015 — NSFW flag.
+        "content_rating",
     }
     conn.close()
 
@@ -277,7 +281,7 @@ def test_004_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 14
+    assert current_version(conn) == 15
     conn.close()
 
 
