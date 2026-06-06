@@ -24,18 +24,18 @@ from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng as _derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+from engine.syntax.subcat_filter import (
+    matches as _subcat_matches,
+)
+from engine.syntax.subcat_filter import (
+    parse as _parse_subcat,
+)
+from engine.syntax.subcat_filter import (
+    validate_subcat_name,
+)
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _MAX_IDENT_LEN = 64
-
-# Characters reserved by the nested-ref grammar `@{uuid[#name][:subcat,subcat...]}`.
-# Forbidden in:
-#   - wildcard `meta.name` / library `name` (the `#name` segment)
-#   - wildcard `payload.sub_categories[*]` (the `:subcat` segment)
-# Comma is in here because subcat lists are comma-separated; the other
-# chars are structural delimiters of the ref grammar. Mirror in
-# `src/manager/utils/validateName.ts` so the editor + API agree.
-_REF_FORBIDDEN_CHARS = frozenset("{}:#@,")
 
 # `_derive_module_rng` lifted to engine/modules/_seed.py so combine +
 # fixed_values handlers share the same helper (Phase: combine v2 +
@@ -69,8 +69,11 @@ def _apply_constraint_to_options(
     already-picked source option.
 
     Two layers, in order:
-      1. Matrix lookup keyed by `(source.sub_category, target.sub_category)`.
-         Bulk rule expressing "long hair allows positive moods" etc.
+      1. Matrix lookup keyed by `(source.sub_category, target.sub_category)`,
+         where an option's "sub_category" is its PRIMARY tag
+         (`sub_categories[0]`, or None when untagged). SP1 stopgap — true
+         multi-tag matrix matching (an option on N rows → multiply) is
+         SP3. Bulk rule expressing "long hair allows positive moods" etc.
       2. Exception lookup keyed by the literal `(source.value, target.value)`
          pair. Overrides the matrix cell when present — narrower rule wins.
 
@@ -88,7 +91,9 @@ def _apply_constraint_to_options(
     matrix = constraint.get("matrix") or {}
     exceptions = constraint.get("exceptions") or []
     src_value = str(source_pick.get("value", ""))
-    src_sub = source_pick.get("sub_category")
+    # Primary tag = first of sub_categories (SP1 stopgap; SP3 multiplies).
+    src_subs = source_pick.get("sub_categories") or []
+    src_sub = src_subs[0] if src_subs else None
 
     # Index exceptions by (source_value, target_value) for O(1) lookup.
     # Empty string is a valid key — it's the null-option marker (a
@@ -111,7 +116,8 @@ def _apply_constraint_to_options(
     adjusted: list[dict[str, Any]] = []
     for opt in options:
         opt_value = str(opt.get("value", ""))
-        opt_sub = opt.get("sub_category")
+        opt_subs = opt.get("sub_categories") or []
+        opt_sub = opt_subs[0] if opt_subs else None
         weight = float(opt.get("weight", 1))
 
         # Exception layer (specific value pair) wins over matrix layer.
@@ -164,7 +170,7 @@ def _apply_constraint_to_options(
 def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
     """Stash the picked option dict in `ctx["__wp_picks__"][module_id]` so a
     downstream constraint-aware wildcard can look up its source's value +
-    sub_category. Keyed by the active module id (set by pipeline.py).
+    sub_categories. Keyed by the active module id (set by pipeline.py).
     """
     module_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
     if not module_id:
@@ -173,13 +179,39 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
     if isinstance(bucket, dict):
         bucket[module_id] = {
             "value": chosen.get("value"),
-            "sub_category": chosen.get("sub_category"),
+            "sub_categories": chosen.get("sub_categories", []),
             "id": chosen.get("id"),
         }
 
 
 class WildcardHandler(ModuleHandler):
     type_id = "wildcard"
+
+    @staticmethod
+    def _apply_pool_filter(
+        options: list[dict[str, Any]],
+        expr: str,
+        *,
+        exclude_null: bool,
+    ) -> list[dict[str, Any]]:
+        """Narrow an option pool by a boolean sub-category expression.
+
+        `expr` is parsed via the shared subcat_filter matcher and tested
+        against each non-null option's tag set (`sub_categories`). Empty
+        / whitespace `expr` ⇒ no tag filtering. The null option
+        (`is_null`) is governed solely by `exclude_null`; the expression
+        never applies to it (spec §3.4).
+        """
+        ast = _parse_subcat(expr) if isinstance(expr, str) else None
+        out: list[dict[str, Any]] = []
+        for o in options:
+            if o.get("is_null"):
+                if not exclude_null:
+                    out.append(o)
+                continue
+            if _subcat_matches(ast, set(o.get("sub_categories") or [])):
+                out.append(o)
+        return out
 
     @classmethod
     def validate_payload(cls, payload: dict[str, Any]) -> None:
@@ -188,6 +220,56 @@ class WildcardHandler(ModuleHandler):
         options = payload.get("options")
         if not isinstance(options, list):
             raise ValueError("wildcard payload.options must be a list")
+
+        # Sub-category registry — the allowed tag names. Validated first
+        # so each option's membership + tag_groups can be checked against
+        # it. `validate_subcat_name` enforces the §3.6 name rules (single
+        # token; no whitespace / boolean-grammar / ref chars; not a
+        # reserved word incl. `null`).
+        registry_list = payload.get("sub_categories", [])
+        if not isinstance(registry_list, list):
+            raise ValueError("wildcard payload.sub_categories must be a list")
+        registry: set[str] = set()
+        for i, sc in enumerate(registry_list):
+            if not isinstance(sc, str):
+                raise ValueError(
+                    f"wildcard payload.sub_categories[{i}] must be a string"
+                )
+            name_err = validate_subcat_name(sc)
+            if name_err:
+                raise ValueError(
+                    f"wildcard payload.sub_categories[{i}]: {name_err}"
+                )
+            registry.add(sc)
+
+        # Optional UI-only grouping of registry tags into named axes. The
+        # engine ignores it at resolve time; validate the shape, that
+        # every member is a registry tag, and that a tag lives in at most
+        # one group.
+        tag_groups = payload.get("tag_groups")
+        if tag_groups is not None:
+            if not isinstance(tag_groups, dict):
+                raise ValueError("wildcard payload.tag_groups must be an object")
+            seen_grouped: set[str] = set()
+            for gname, members in tag_groups.items():
+                if not isinstance(gname, str) or not isinstance(members, list):
+                    raise ValueError(
+                        "wildcard payload.tag_groups entries must be "
+                        "name -> string[]"
+                    )
+                for mem in members:
+                    if mem not in registry:
+                        raise ValueError(
+                            f"wildcard payload.tag_groups[{gname!r}]: {mem!r} "
+                            f"not in sub_categories registry"
+                        )
+                    if mem in seen_grouped:
+                        raise ValueError(
+                            f"wildcard payload.tag_groups: {mem!r} appears in "
+                            f"more than one group"
+                        )
+                    seen_grouped.add(mem)
+
         seen_ids: set[str] = set()
         null_count = 0
         for i, opt in enumerate(options):
@@ -220,12 +302,12 @@ class WildcardHandler(ModuleHandler):
                         f"wildcard payload.options[{i}] null option "
                         f"{opt_id!r} must have empty value (got {value!r})"
                     )
-                sub_null = opt.get("sub_category")
-                if sub_null is not None and sub_null != "":
+                null_subs = opt.get("sub_categories", [])
+                if null_subs:
                     raise ValueError(
                         f"wildcard payload.options[{i}] null option "
-                        f"{opt_id!r} must have no sub_category (got "
-                        f"{sub_null!r})"
+                        f"{opt_id!r} must have no sub_categories (got "
+                        f"{null_subs!r})"
                     )
             else:
                 if not isinstance(value, str) or value == "":
@@ -242,11 +324,22 @@ class WildcardHandler(ModuleHandler):
                 raise ValueError(
                     f"wildcard payload.options[{i}].weight must not be negative"
                 )
-            sub_cat = opt.get("sub_category")
-            if sub_cat is not None and not isinstance(sub_cat, str):
+            subs = opt.get("sub_categories", [])
+            if not isinstance(subs, list):
                 raise ValueError(
-                    f"wildcard payload.options[{i}].sub_category must be a string"
+                    f"wildcard payload.options[{i}].sub_categories must be a list"
                 )
+            for s in subs:
+                if not isinstance(s, str):
+                    raise ValueError(
+                        f"wildcard payload.options[{i}].sub_categories must be "
+                        f"strings"
+                    )
+                if s not in registry:
+                    raise ValueError(
+                        f"wildcard payload.options[{i}].sub_categories: {s!r} "
+                        f"not in sub_categories registry"
+                    )
         if null_count > 1:
             raise ValueError(
                 f"wildcard payload may have at most one null option "
@@ -276,35 +369,6 @@ class WildcardHandler(ModuleHandler):
             if not _IDENT_RE.match(binding):
                 raise ValueError(
                     f"wildcard payload.var_binding {binding!r} is not a valid identifier"
-                )
-        sub_categories = payload.get("sub_categories", [])
-        if not isinstance(sub_categories, list):
-            raise ValueError("wildcard payload.sub_categories must be a list")
-        for i, sc in enumerate(sub_categories):
-            if not isinstance(sc, str):
-                raise ValueError(
-                    f"wildcard payload.sub_categories[{i}] must be a string"
-                )
-            # `null` is a reserved keyword in the nested-ref filter
-            # syntax — `@{uuid:warm,null}` opts the null option into
-            # the pool. Forbid sub_category names colliding with it.
-            if sc == "null":
-                raise ValueError(
-                    f"wildcard payload.sub_categories[{i}] 'null' is reserved "
-                    f"(used by the nested ref filter syntax)"
-                )
-            # Sub-category name must not contain characters used by the
-            # nested-ref grammar: `,` (subcat list separator), `:`
-            # (subcat segment opener), `}` (ref terminator), `#` (name
-            # segment opener), `@` / `{` (ref-prefix collision risk).
-            # Editor + API guard against this so the regex never sees
-            # ambiguous input.
-            bad = set(sc) & _REF_FORBIDDEN_CHARS
-            if bad:
-                raise ValueError(
-                    f"wildcard payload.sub_categories[{i}] {sc!r} contains "
-                    f"forbidden characters {sorted(bad)} "
-                    f"(would break the @{{uuid:subcat}} syntax)"
                 )
 
     @classmethod
@@ -342,21 +406,23 @@ class WildcardHandler(ModuleHandler):
                 return {binding: resolve_text(value, resolve_ctx)}
             # else: pinned target is missing — fall through to random.
 
-        # `category_filter` narrows the option pool to entries whose
-        # `sub_category` is in the chosen list. Empty list / None = no
-        # filter (all sub-categories eligible). Options with a `None`
-        # / missing sub_category are excluded by an explicit filter
-        # (they're "unsorted" and the user opted into a curated set) —
-        # EXCEPT the null option (`is_null: True`), which is an
-        # orthogonal "no-output" slot and survives every category
-        # filter. See docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md.
+        # `category_filter` narrows the option pool to entries whose tag
+        # set (`sub_categories`) satisfies a boolean expression
+        # (`and`/`or`/`not`/parens; comma=or). Empty / missing = no tag
+        # filter. `exclude_null` is a separate flag: when true the null
+        # option is dropped, otherwise it is an orthogonal "no-output"
+        # slot that survives every filter (the expression never applies
+        # to it). Untagged non-null options bypass the expression unless
+        # a bare tag term excludes them (spec §3.4). See the shared
+        # matcher in engine/syntax/subcat_filter.py.
         category_filter = instance.get("category_filter")
-        if isinstance(category_filter, list) and category_filter:
-            allowed_cats = set(category_filter)
-            options = [
-                o for o in options
-                if o.get("is_null") or o.get("sub_category") in allowed_cats
-            ]
+        exclude_null = bool(instance.get("exclude_null", False))
+        if (isinstance(category_filter, str) and category_filter.strip()) or exclude_null:
+            options = cls._apply_pool_filter(
+                options,
+                category_filter if isinstance(category_filter, str) else "",
+                exclude_null=exclude_null,
+            )
 
         enabled = instance.get("enabled_options")
         if enabled is not None:

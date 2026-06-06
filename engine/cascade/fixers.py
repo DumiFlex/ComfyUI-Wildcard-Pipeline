@@ -193,11 +193,12 @@ def fix_subcat_delete(
                     s for s in declared if s != subcat_name
                 ]
                 changed = True
-            # Per-option singular assignment — null out options pointing at
-            # the deleted subcat (preserves the option, releases the link)
+            # Per-option membership — drop the deleted subcat from each
+            # option's sub_categories list (preserves the option).
             for opt in new_payload.get("options") or []:
-                if opt.get("sub_category") == subcat_name:
-                    opt["sub_category"] = None
+                subs = opt.get("sub_categories")
+                if isinstance(subs, list) and subcat_name in subs:
+                    opt["sub_categories"] = [s for s in subs if s != subcat_name]
                     changed = True
 
         elif t == "constraint":
@@ -270,10 +271,13 @@ def fix_subcat_rename(
                     new_name if s == old_name else s for s in declared
                 ]
                 changed = True
-            # Per-option singular assignment (`opt.sub_category`, not plural)
+            # Per-option membership list (`opt.sub_categories`)
             for opt in new_payload.get("options") or []:
-                if opt.get("sub_category") == old_name:
-                    opt["sub_category"] = new_name
+                subs = opt.get("sub_categories")
+                if isinstance(subs, list) and old_name in subs:
+                    opt["sub_categories"] = [
+                        new_name if s == old_name else s for s in subs
+                    ]
                     changed = True
 
         elif t == "constraint":

@@ -1,11 +1,11 @@
 """Real-shape fixture tests for subcategory rename + delete fixers.
 
-The pre-existing test suite for fixers passes the wrong field name
-(`opt["sub_categories"]` — plural array) which masked a schema bug
-where the fixers silently no-op'd against real runtime data. These
-tests construct wildcards via `ModuleRepository.create` so the data
-matches what the server actually stores (singular `opt.sub_category`
-plus top-level `payload.sub_categories` list).
+These tests construct wildcards via `ModuleRepository.create` so the
+data matches what the server actually stores under the SP1 multi-tag
+model: each option carries a `sub_categories` membership list plus a
+top-level `payload.sub_categories` declared list. A subcat rename
+rewrites the matching entry inside each option's list; a delete strips
+it from the list (the option itself is preserved).
 
 Regression: 2026-05-24 live QA on cascade-edit-indicators v1.
 """
@@ -45,8 +45,8 @@ def test_subcat_rename_updates_top_level_list(conn):
         "mood",
         sub_categories=["positive", "negative"],
         options=[
-            {"value": "serene", "weight": 1, "sub_category": "positive", "probability": 1.0},
-            {"value": "tense", "weight": 1, "sub_category": "negative", "probability": 1.0},
+            {"value": "serene", "weight": 1, "sub_categories": ["positive"], "probability": 1.0},
+            {"value": "tense", "weight": 1, "sub_categories": ["negative"], "probability": 1.0},
         ],
     )
     res = apply_cascade(conn, {
@@ -67,8 +67,8 @@ def test_subcat_rename_updates_option_assignments(conn):
         "mood",
         sub_categories=["positive", "negative"],
         options=[
-            {"value": "serene", "weight": 1, "sub_category": "positive", "probability": 1.0},
-            {"value": "tense", "weight": 1, "sub_category": "negative", "probability": 1.0},
+            {"value": "serene", "weight": 1, "sub_categories": ["positive"], "probability": 1.0},
+            {"value": "tense", "weight": 1, "sub_categories": ["negative"], "probability": 1.0},
         ],
     )
     apply_cascade(conn, {
@@ -78,8 +78,8 @@ def test_subcat_rename_updates_option_assignments(conn):
     })
 
     updated = ModuleRepository(conn).get(w["id"])
-    assignments = [o["sub_category"] for o in updated["payload"]["options"]]
-    assert assignments == ["good", "negative"]
+    assignments = [o["sub_categories"] for o in updated["payload"]["options"]]
+    assert assignments == [["good"], ["negative"]]
 
 
 def test_subcat_delete_removes_from_top_level_and_options(conn):
@@ -88,8 +88,8 @@ def test_subcat_delete_removes_from_top_level_and_options(conn):
         "mood",
         sub_categories=["positive", "negative"],
         options=[
-            {"value": "serene", "weight": 1, "sub_category": "positive", "probability": 1.0},
-            {"value": "tense", "weight": 1, "sub_category": "negative", "probability": 1.0},
+            {"value": "serene", "weight": 1, "sub_categories": ["positive"], "probability": 1.0},
+            {"value": "tense", "weight": 1, "sub_categories": ["negative"], "probability": 1.0},
         ],
     )
     res = apply_cascade(conn, {
@@ -100,8 +100,8 @@ def test_subcat_delete_removes_from_top_level_and_options(conn):
 
     updated = ModuleRepository(conn).get(w["id"])
     assert updated["payload"]["sub_categories"] == ["negative"]
-    assignments = [o["sub_category"] for o in updated["payload"]["options"]]
-    assert assignments == [None, "negative"]
+    assignments = [o["sub_categories"] for o in updated["payload"]["options"]]
+    assert assignments == [[], ["negative"]]
 
 
 def test_subcat_rename_optout_updates_source_only(conn):
@@ -110,7 +110,7 @@ def test_subcat_rename_optout_updates_source_only(conn):
         "mood",
         sub_categories=["positive", "negative"],
         options=[
-            {"value": "serene", "weight": 1, "sub_category": "positive", "probability": 1.0},
+            {"value": "serene", "weight": 1, "sub_categories": ["positive"], "probability": 1.0},
         ],
     )
     res = apply_cascade(conn, {
@@ -122,4 +122,4 @@ def test_subcat_rename_optout_updates_source_only(conn):
 
     updated = ModuleRepository(conn).get(w["id"])
     assert updated["payload"]["sub_categories"] == ["good", "negative"]
-    assert updated["payload"]["options"][0]["sub_category"] == "good"
+    assert updated["payload"]["options"][0]["sub_categories"] == ["good"]

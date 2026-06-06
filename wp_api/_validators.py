@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine.syntax.subcat_filter import validate_subcat_name
+
 # ─── Length caps ─────────────────────────────────────────────────────
 MAX_NAME_LEN = 200
 MAX_DESC_LEN = 4000
@@ -33,13 +35,12 @@ MAX_BODY_BYTES = 5 * 1024 * 1024
 # see CLAUDE.md and engine/modules/types.py:strip_internals).
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
-# Characters reserved by the nested-ref grammar `@{uuid[#name][:subcat[,subcat...]]}`.
-# Wildcard `name` becomes the `#name` segment and subcategory names sit
-# in the comma-separated `:subcat` list. Letting either contain these
-# chars would let users author refs the regex can't parse back
-# unambiguously. Mirror in `engine/modules/wildcard_handler.py` and
-# the SPA validator so editor + API + engine agree.
-REF_GRAMMAR_FORBIDDEN_CHARS = frozenset("{}:#@,")
+# Characters reserved by the nested-ref grammar `@{uuid[#name][:expr][!null]}`.
+# A wildcard `name` becomes the `#name` segment, so it must not contain
+# the segment delimiters `# : } @ { !` (comma kept forbidden for
+# continuity). Sub-category NAMES follow stricter §3.6 rules (the boolean
+# grammar) and are validated via the shared `validate_subcat_name`.
+REF_GRAMMAR_FORBIDDEN_CHARS = frozenset("{}:#@,!")
 
 
 def validate_wildcard_name(name: str) -> str | None:
@@ -69,17 +70,11 @@ def validate_wildcard_subcats(payload: Any) -> str | None:
     for i, sc in enumerate(subs):
         if not isinstance(sc, str):
             return f"sub_categories[{i}] must be a string"
-        if sc == "null":
-            return (
-                f"sub_categories[{i}] 'null' is reserved by the "
-                f"@{{uuid:subcat}} filter syntax"
-            )
-        bad = sorted(set(sc) & REF_GRAMMAR_FORBIDDEN_CHARS)
-        if bad:
-            return (
-                f"sub_categories[{i}] {sc!r} must not contain {bad!r} — "
-                f"reserved by the @{{uuid#name:subcat}} ref grammar"
-            )
+        # Shared §3.6 name rules (single token; no whitespace /
+        # boolean-grammar / ref chars; not a reserved word incl. `null`).
+        err = validate_subcat_name(sc)
+        if err:
+            return f"sub_categories[{i}]: {err}"
     return None
 
 

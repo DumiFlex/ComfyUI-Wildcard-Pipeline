@@ -22,7 +22,12 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "variable_binding": "string",
         "enabled_options": "list[string]",
         "option_weights": "dict[string,number]",
-        "category_filter": "list[string]",
+        # `category_filter` is a boolean sub-category expression string
+        # (SP1). The separate `exclude_null` instance flag is declared
+        # here + in the TS `_shell.ts` twin together in the SP1 UI chunk
+        # (keeps the parity guard green); the engine resolver already
+        # reads it directly.
+        "category_filter": "string",
         "locked_seed": "number",
         "internal": "boolean",
         # `mode` and `pinned_option_id` removed in v2 — resolve mode is

@@ -63,7 +63,7 @@ def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
                 "id": "o",
                 "value": "v",
                 "weight": 1,
-                "sub_category": "warm",
+                "sub_categories": ["warm"],
             }],
         },
     )
@@ -79,7 +79,7 @@ def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
                 "id": "o2",
                 "value": "v",
                 "weight": 1,
-                "sub_category": "a",
+                "sub_categories": ["a"],
             }],
         },
     )
@@ -107,7 +107,7 @@ def test_fix_subcat_delete_strips_matrix_keys_and_source_subcats(wp_db):
     assert "cool" in c_after["payload"]["matrix"]
     wc_after = mod.get(wc["id"])
     assert wc_after["payload"]["sub_categories"] == ["cool"]
-    assert wc_after["payload"]["options"][0]["sub_category"] is None
+    assert wc_after["payload"]["options"][0]["sub_categories"] == []
     # Verify diff shape: constraint + wildcard mutations
     assert any(
         d.get("entity_id") == c["id"]
@@ -135,7 +135,7 @@ def test_fix_subcat_delete_strips_text_refs(wp_db):
                 "id": "o1",
                 "value": "red",
                 "weight": 1,
-                "sub_category": "warm",
+                "sub_categories": ["warm"],
             }],
         },
     )
@@ -183,7 +183,7 @@ def test_fix_subcat_rename_rewrites_matrix_keys_and_text_refs(wp_db):
                 "id": "o",
                 "value": "v",
                 "weight": 1,
-                "sub_category": "warm",
+                "sub_categories": ["warm"],
             }],
         },
     )
@@ -209,7 +209,7 @@ def test_fix_subcat_rename_rewrites_matrix_keys_and_text_refs(wp_db):
 
     wc_after = mod.get(wc["id"])
     assert wc_after["payload"]["sub_categories"] == ["hot"]
-    assert wc_after["payload"]["options"][0]["sub_category"] == "hot"
+    assert wc_after["payload"]["options"][0]["sub_categories"] == ["hot"]
     referrer_after = mod.get(referrer["id"])
     assert ":hot}" in referrer_after["payload"]["options"][0]["value"]
     assert ":warm}" not in referrer_after["payload"]["options"][0]["value"]

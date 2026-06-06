@@ -57,14 +57,14 @@ def test_wildcard_pick_recorded_in_ctx_picks():
     to act on."""
     ctx = _run([
         _wildcard("aaaa1111", "hair", [
-            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+            {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
         ]),
     ])
     picks = ctx.get("__wp_picks__")
     assert isinstance(picks, dict)
     assert "aaaa1111" in picks
     assert picks["aaaa1111"]["value"] == "long"
-    assert picks["aaaa1111"]["sub_category"] == "long"
+    assert picks["aaaa1111"]["sub_categories"] == ["long"]
 
 
 # ── Matrix application — sub_category × sub_category bulk rule ───────
@@ -74,11 +74,11 @@ def test_constraint_matrix_excludes_target_options_by_subcategory():
     options whose sub_category is "formal" should drop out of the pool.
     Other sub_categories pass through with weights intact."""
     src = _wildcard("aaaa1111", "hair", [
-        {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+        {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
     ])
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "kimono", "weight": 1, "sub_category": "formal"},
-        {"id": "o2", "value": "tshirt", "weight": 1, "sub_category": "casual"},
+        {"id": "o1", "value": "kimono", "weight": 1, "sub_categories": ["formal"]},
+        {"id": "o2", "value": "tshirt", "weight": 1, "sub_categories": ["casual"]},
     ])
     constraint = _constraint(
         "aaaa1111", "bbbb2222",
@@ -95,11 +95,11 @@ def test_constraint_matrix_boosts_target_subcategory():
     boost on "casual" and equal library weights, "casual" should
     dominate picks across many seeds."""
     src = _wildcard("aaaa1111", "hair", [
-        {"id": "h1", "value": "short", "weight": 1, "sub_category": "short"},
+        {"id": "h1", "value": "short", "weight": 1, "sub_categories": ["short"]},
     ])
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "suit", "weight": 1, "sub_category": "formal"},
-        {"id": "o2", "value": "tshirt", "weight": 1, "sub_category": "casual"},
+        {"id": "o1", "value": "suit", "weight": 1, "sub_categories": ["formal"]},
+        {"id": "o2", "value": "tshirt", "weight": 1, "sub_categories": ["casual"]},
     ])
     constraint = _constraint(
         "aaaa1111", "bbbb2222",
@@ -122,11 +122,11 @@ def test_constraint_exception_excludes_specific_value_pair():
     source picked long. Plain matrix "long" → "formal" allow stays
     intact for non-kimono formal options."""
     src = _wildcard("aaaa1111", "hair", [
-        {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+        {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
     ])
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "kimono", "weight": 1, "sub_category": "formal"},
-        {"id": "o2", "value": "suit", "weight": 1, "sub_category": "formal"},
+        {"id": "o1", "value": "kimono", "weight": 1, "sub_categories": ["formal"]},
+        {"id": "o2", "value": "suit", "weight": 1, "sub_categories": ["formal"]},
     ])
     constraint = _constraint(
         "aaaa1111", "bbbb2222",
@@ -145,10 +145,10 @@ def test_constraint_exception_overrides_matrix_when_both_apply():
     boosts a value within that sub_category, the exception wins
     (narrower-rule precedence)."""
     src = _wildcard("aaaa1111", "hair", [
-        {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+        {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
     ])
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "kimono", "weight": 1, "sub_category": "formal"},
+        {"id": "o1", "value": "kimono", "weight": 1, "sub_categories": ["formal"]},
     ])
     constraint = _constraint(
         "aaaa1111", "bbbb2222",
@@ -170,7 +170,7 @@ def test_constraint_with_unpicked_source_emits_warning():
     the constraint, picks normally, and the engine emits an
     `unknown_constraint_source` warning so the user gets a signal."""
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "suit", "weight": 1, "sub_category": "formal"},
+        {"id": "o1", "value": "suit", "weight": 1, "sub_categories": ["formal"]},
     ])
     # Note source wildcard NOT included — constraint references a
     # source that never runs.
@@ -192,10 +192,10 @@ def test_factor_ignored_on_allow_emits_warning():
     user expects weight × factor, engine semantics ignore the factor
     entirely. Surface a warning so the discrepancy is visible."""
     src = _wildcard("aaaa1111", "hair", [
-        {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+        {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
     ])
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "kimono", "weight": 1, "sub_category": "formal"},
+        {"id": "o1", "value": "kimono", "weight": 1, "sub_categories": ["formal"]},
     ])
     constraint = _constraint(
         "aaaa1111", "bbbb2222",
@@ -217,11 +217,11 @@ def test_constraint_excludes_all_options_emits_warning():
     sees the over-narrowed pool instead of debugging "why does this
     always pick the first option" blind."""
     src = _wildcard("aaaa1111", "hair", [
-        {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+        {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
     ])
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "a", "weight": 1, "sub_category": "formal"},
-        {"id": "o2", "value": "b", "weight": 1, "sub_category": "formal"},
+        {"id": "o1", "value": "a", "weight": 1, "sub_categories": ["formal"]},
+        {"id": "o2", "value": "b", "weight": 1, "sub_categories": ["formal"]},
     ])
     constraint = _constraint(
         "aaaa1111", "bbbb2222",
@@ -237,7 +237,7 @@ def test_wildcard_runs_unchanged_when_no_constraints_present():
     like pre-integration. Pin so future refactors of the constraint
     branch don't accidentally alter the default pick path."""
     target = _wildcard("bbbb2222", "outfit", [
-        {"id": "o1", "value": "kimono", "weight": 1, "sub_category": "formal"},
+        {"id": "o1", "value": "kimono", "weight": 1, "sub_categories": ["formal"]},
     ])
     ctx = _run([target], seed=0)
     assert strip_internals(ctx)["outfit"] == "kimono"

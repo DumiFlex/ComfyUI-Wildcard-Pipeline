@@ -53,9 +53,7 @@ def _rename_subcat_target_only(
     """Rename a subcat inside the source wildcard ONLY (no cascade to refs).
 
     Touches both the top-level `payload.sub_categories` declared list and
-    each option's singular `sub_category` field. The plural-array shape
-    that the prior version operated on does not exist in real data — see
-    `engine/modules/wildcard_handler.py:206` for the actual schema.
+    each option's `sub_categories` membership list (SP1 multi-tag shape).
     """
     mod = ModuleRepository(conn)
     wc = mod.get(wildcard_id)
@@ -71,8 +69,11 @@ def _rename_subcat_target_only(
     new_options = []
     for opt in payload.get("options") or []:
         new_opt = dict(opt)
-        if new_opt.get("sub_category") == old_name:
-            new_opt["sub_category"] = new_name
+        subs = new_opt.get("sub_categories")
+        if isinstance(subs, list) and old_name in subs:
+            new_opt["sub_categories"] = [
+                new_name if s == old_name else s for s in subs
+            ]
         new_options.append(new_opt)
     payload["options"] = new_options
 

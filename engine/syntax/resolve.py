@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 
+from engine.syntax.subcat_filter import matches as _subcat_matches
+from engine.syntax.subcat_filter import parse as _parse_subcat
 from engine.syntax.tokenize import tokenize_text
 from engine.syntax.types import (
     CycleDetectedError,
@@ -375,22 +377,22 @@ def _resolve_ref(
     # silently falling through to the unfiltered list.
     #
     # Null semantics (inverted 2026-05-25): the wildcard's `is_null`
-    # option is INCLUDED by default — alongside whatever sub-cats the
-    # filter lists. The reserved keyword `"null"` in the filter list
-    # EXCLUDES the null option from the pool. So:
+    # option is INCLUDED by default. The `!null` marker EXCLUDES it.
+    # `:expr` is a boolean over the target option's tag set
+    # (`sub_categories`), parsed by the shared subcat_filter matcher —
+    # same semantics as instance.category_filter. The expression never
+    # applies to the null option; an untagged non-null option bypasses a
+    # bare-tag term but is kept by `not <tag>` (spec §3.4). So:
     #   `@{uuid}`              → all options (incl. null)
     #   `@{uuid:warm}`         → warm options + null
-    #   `@{uuid:warm,null}`    → warm options, null excluded
-    #   `@{uuid:null}`         → all non-null options (filter-only-null
-    #                             = "exclude null, no sub-cat filter")
-    # Sub-category names called literally `"null"` are forbidden by
-    # WildcardHandler.validate_payload so the keyword can never clash
-    # with a real sub-cat.
-    sub_filter = tok.meta.get("sub_categories")
-    if isinstance(sub_filter, list) and sub_filter:
-        allowed_subs = set(sub_filter)
-        exclude_null = "null" in allowed_subs
-        allowed_subs.discard("null")
+    #   `@{uuid:warm!null}`    → warm options, null excluded
+    #   `@{uuid!null}`         → all non-null options
+    # Reserved words (incl. `null`) can't be real sub-cat names —
+    # WildcardHandler.validate_payload rejects them.
+    filter_expr = tok.meta.get("filter_expr")
+    exclude_null = bool(tok.meta.get("exclude_null"))
+    if (isinstance(filter_expr, str) and filter_expr.strip()) or exclude_null:
+        ast = _parse_subcat(filter_expr) if isinstance(filter_expr, str) else None
         options = [
             o for o in options
             if isinstance(o, dict)
@@ -398,7 +400,7 @@ def _resolve_ref(
                 (o.get("is_null") and not exclude_null)
                 or (
                     not o.get("is_null")
-                    and (not allowed_subs or o.get("sub_category") in allowed_subs)
+                    and _subcat_matches(ast, set(o.get("sub_categories") or []))
                 )
             )
         ]
@@ -411,9 +413,14 @@ def _resolve_ref(
                 source_field="",
                 position=tok.start,
                 token_index=None,
-                detail={"uuid": uuid, "sub_categories": list(sub_filter)},
+                detail={
+                    "uuid": uuid,
+                    "filter_expr": filter_expr,
+                    "exclude_null": exclude_null,
+                },
                 message=(
-                    f"@{{{uuid}:{','.join(sub_filter)}}} matched no options"
+                    f"@{{{uuid}:{filter_expr or ''}"
+                    f"{'!null' if exclude_null else ''}}} matched no options"
                 ),
             )
             return ""

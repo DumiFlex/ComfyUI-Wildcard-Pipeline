@@ -320,16 +320,16 @@ def test_resolve_option_weights_override_skips_non_numeric_value():
 
 
 def test_resolve_category_filter_keeps_only_matching_options():
-    """instance.category_filter narrows the pool by `sub_category`."""
+    """instance.category_filter narrows the pool by `sub_categories`."""
     ctx = _ctx(seed=0)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
-        {"id": "b", "value": "beta",  "weight": 1, "sub_category": "cool"},
-        {"id": "c", "value": "gamma", "weight": 1, "sub_category": "warm"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
+        {"id": "b", "value": "beta",  "weight": 1, "sub_categories": ["cool"]},
+        {"id": "c", "value": "gamma", "weight": 1, "sub_categories": ["warm"]},
     ])
     out = WildcardHandler.resolve(
         payload,
-        instance={"variable_binding": "$x", "category_filter": ["warm"]},
+        instance={"variable_binding": "$x", "category_filter": "warm"},
         ctx=ctx,
     )
     # Pool is now {alpha, gamma} — both weight=1. With per-module
@@ -345,12 +345,12 @@ def test_resolve_category_filter_excludes_options_without_sub_category():
     """Options missing sub_category get dropped by an explicit filter."""
     ctx = _ctx(seed=0)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
         {"id": "b", "value": "beta",  "weight": 1},  # no sub_category
     ])
     out = WildcardHandler.resolve(
         payload,
-        instance={"variable_binding": "$x", "category_filter": ["warm"]},
+        instance={"variable_binding": "$x", "category_filter": "warm"},
         ctx=ctx,
     )
     assert out == {"$x": "alpha"}
@@ -360,12 +360,12 @@ def test_resolve_category_filter_empty_list_falls_through():
     """Empty list = no filter, same as None."""
     ctx = _ctx(seed=1)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
-        {"id": "b", "value": "beta",  "weight": 1, "sub_category": "cool"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
+        {"id": "b", "value": "beta",  "weight": 1, "sub_categories": ["cool"]},
     ])
     out = WildcardHandler.resolve(
         payload,
-        instance={"variable_binding": "$x", "category_filter": []},
+        instance={"variable_binding": "$x", "category_filter": ""},
         ctx=ctx,
     )
     # Empty filter = no filtering; seed=1 → alpha at 50/50.
@@ -376,15 +376,15 @@ def test_resolve_category_filter_combines_with_enabled_options():
     """Both filters apply — category narrows first, then enable list."""
     ctx = _ctx(seed=0)
     payload = _payload([
-        {"id": "a", "value": "alpha", "weight": 1, "sub_category": "warm"},
-        {"id": "b", "value": "beta",  "weight": 1, "sub_category": "warm"},
-        {"id": "c", "value": "gamma", "weight": 1, "sub_category": "cool"},
+        {"id": "a", "value": "alpha", "weight": 1, "sub_categories": ["warm"]},
+        {"id": "b", "value": "beta",  "weight": 1, "sub_categories": ["warm"]},
+        {"id": "c", "value": "gamma", "weight": 1, "sub_categories": ["cool"]},
     ])
     out = WildcardHandler.resolve(
         payload,
         instance={
             "variable_binding": "$x",
-            "category_filter": ["warm"],
+            "category_filter": "warm",
             "enabled_options": ["b", "c"],  # c excluded by category
         },
         ctx=ctx,

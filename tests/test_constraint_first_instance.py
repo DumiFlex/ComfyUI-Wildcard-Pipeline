@@ -74,7 +74,7 @@ def test_constraint_consumed_after_first_target_instance():
 
     ctx = _empty_ctx()
     consumed = ctx["__wp_consumed_constraints__"]
-    src_pick = {"value": "rain", "sub_category": "wet"}
+    src_pick = {"value": "rain", "sub_categories": ["wet"]}
     ctx["__wp_picks__"]["wc_src"] = src_pick
     constraints = [{
         "source_wildcard_id": "wc_src",
@@ -84,7 +84,7 @@ def test_constraint_consumed_after_first_target_instance():
         "__constraint_module_id__": "cn_aa",
     }]
 
-    options_1 = [{"id": "a", "value": "red", "weight": 1, "sub_category": "warm"}]
+    options_1 = [{"id": "a", "value": "red", "weight": 1, "sub_categories": ["warm"]}]
     out_1, applied_1 = apply_constraints_for_target(
         options_1, "wc_tgt", constraints,
         ctx["__wp_picks__"], ctx["__wp_warnings__"],
@@ -95,7 +95,7 @@ def test_constraint_consumed_after_first_target_instance():
     assert "cn_aa" in consumed
 
     # Second target instance — same constraint should NOT re-fire.
-    options_2 = [{"id": "b", "value": "linen", "weight": 1, "sub_category": "warm"}]
+    options_2 = [{"id": "b", "value": "linen", "weight": 1, "sub_categories": ["warm"]}]
     out_2, applied_2 = apply_constraints_for_target(
         options_2, "wc_tgt", constraints,
         ctx["__wp_picks__"], ctx["__wp_warnings__"],
@@ -113,7 +113,7 @@ def test_multiple_constraints_claim_in_chain_order():
 
     ctx = _empty_ctx()
     consumed = ctx["__wp_consumed_constraints__"]
-    ctx["__wp_picks__"]["wc_src"] = {"value": "rain", "sub_category": "wet"}
+    ctx["__wp_picks__"]["wc_src"] = {"value": "rain", "sub_categories": ["wet"]}
     constraints = [
         {
             "source_wildcard_id": "wc_src",
@@ -131,7 +131,7 @@ def test_multiple_constraints_claim_in_chain_order():
         },
     ]
 
-    options_1 = [{"id": "a", "value": "red", "weight": 1, "sub_category": "warm"}]
+    options_1 = [{"id": "a", "value": "red", "weight": 1, "sub_categories": ["warm"]}]
     out_1, _ = apply_constraints_for_target(
         options_1, "wc_tgt", constraints,
         ctx["__wp_picks__"], ctx["__wp_warnings__"],
@@ -141,7 +141,7 @@ def test_multiple_constraints_claim_in_chain_order():
     assert out_1[0]["weight"] == 3
     assert consumed == {"c1"}
 
-    options_2 = [{"id": "b", "value": "blue", "weight": 1, "sub_category": "warm"}]
+    options_2 = [{"id": "b", "value": "blue", "weight": 1, "sub_categories": ["warm"]}]
     out_2, _ = apply_constraints_for_target(
         options_2, "wc_tgt", constraints,
         ctx["__wp_picks__"], ctx["__wp_warnings__"],
@@ -163,8 +163,8 @@ def test_three_nested_refs_in_one_option_consume_one_constraint():
         # Two options — one weighted exclude target, one allowed.
         # Constraint excludes the warm-tagged option on FIRST roll;
         # subsequent rolls pick from the full pool.
-        {"id": "ex", "value": "BAD", "weight": 1, "sub_category": "warm"},
-        {"id": "ok", "value": "ok", "weight": 9, "sub_category": "neutral"},
+        {"id": "ex", "value": "BAD", "weight": 1, "sub_categories": ["warm"]},
+        {"id": "ok", "value": "ok", "weight": 9, "sub_categories": ["neutral"]},
     ]
     target = {
         "id": target_uuid,
@@ -191,7 +191,7 @@ def test_three_nested_refs_in_one_option_consume_one_constraint():
             "exceptions": [],
             "__constraint_module_id__": "c1",
         }],
-        "__wp_picks__": {source_uuid: {"value": "rain", "sub_category": "wet"}},
+        "__wp_picks__": {source_uuid: {"value": "rain", "sub_categories": ["wet"]}},
         "__wp_consumed_constraints__": set(),
     }
     out = WildcardHandler.resolve(
@@ -211,7 +211,7 @@ def test_unfired_constraint_emits_never_applied_warning():
 
     src = _wildcard(
         "aabbccdd", "src",
-        [{"id": "s1", "value": "rain", "weight": 1, "sub_category": "wet"}],
+        [{"id": "s1", "value": "rain", "weight": 1, "sub_categories": ["wet"]}],
     )
     constraint = _constraint("ee11ff22", "aabbccdd", "deadbeef")  # ghost target uuid
     modules = [src, constraint]
@@ -238,8 +238,8 @@ def test_constraint_fires_on_ref_inside_nested_wildcard():
         "type": "wildcard",
         "var_binding": "mood",
         "options": [
-            {"id": "ex", "value": "BAD", "weight": 1, "sub_category": "warm"},
-            {"id": "ok", "value": "ok", "weight": 9, "sub_category": "neutral"},
+            {"id": "ex", "value": "BAD", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "ok", "value": "ok", "weight": 9, "sub_categories": ["neutral"]},
         ],
     }
     moodref = {
@@ -263,7 +263,7 @@ def test_constraint_fires_on_ref_inside_nested_wildcard():
             "exceptions": [],
             "__constraint_module_id__": "c1",
         }],
-        "__wp_picks__": {source_uuid: {"value": "rain", "sub_category": "wet"}},
+        "__wp_picks__": {source_uuid: {"value": "rain", "sub_categories": ["wet"]}},
         "__wp_consumed_constraints__": set(),
     }
     out = WildcardHandler.resolve(
@@ -280,7 +280,7 @@ def test_constraint_skipped_when_id_already_consumed():
 
     ctx = _empty_ctx()
     consumed = {"cn_aa"}
-    ctx["__wp_picks__"]["wc_src"] = {"value": "rain", "sub_category": "wet"}
+    ctx["__wp_picks__"]["wc_src"] = {"value": "rain", "sub_categories": ["wet"]}
     constraints = [{
         "source_wildcard_id": "wc_src",
         "target_wildcard_id": "wc_tgt",
@@ -288,7 +288,7 @@ def test_constraint_skipped_when_id_already_consumed():
         "exceptions": [],
         "__constraint_module_id__": "cn_aa",
     }]
-    options = [{"id": "a", "value": "red", "weight": 1, "sub_category": "warm"}]
+    options = [{"id": "a", "value": "red", "weight": 1, "sub_categories": ["warm"]}]
     out, applied = apply_constraints_for_target(
         options, "wc_tgt", constraints,
         ctx["__wp_picks__"], ctx["__wp_warnings__"],

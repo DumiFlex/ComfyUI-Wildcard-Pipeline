@@ -83,20 +83,20 @@ def _build_catalog():
     other wildcard so the constraint sources are findable."""
     return {
         HAIR_STYLE: _wildcard(HAIR_STYLE, "hair_style", [
-            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
-            {"id": "h2", "value": "short", "weight": 1, "sub_category": "short"},
+            {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
+            {"id": "h2", "value": "short", "weight": 1, "sub_categories": ["short"]},
         ]),
         SHIRT: _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
-            {"id": "s2", "value": "blouse", "weight": 1, "sub_category": "formal"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
+            {"id": "s2", "value": "blouse", "weight": 1, "sub_categories": ["formal"]},
         ]),
         MOOD: _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_categories": ["cool"]},
         ]),
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
         BACKDROP: _wildcard(BACKDROP, "backdrop", [
             # Carrier option — references BOTH nested wildcards in one
@@ -114,10 +114,10 @@ def _build_modules():
     """Flat module list — same order as user's WP_Context view."""
     return [
         _wildcard(HAIR_STYLE, "hair_style", [
-            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+            {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
         ]),
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
         _constraint(
             CN_HAIR_X_MOOD_1, HAIR_STYLE, MOOD,
@@ -139,8 +139,8 @@ def _build_modules():
             matrix={"long": {"warm": {"mode": "exclude", "factor": 1}}},
         ),
         _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "BAD_warm", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "ok_cool", "weight": 1, "sub_categories": ["cool"]},
         ]),
         _wildcard(OUTFIT, "outfit", [
             {"id": "o1", "value": "jacket", "weight": 1},
@@ -281,7 +281,7 @@ def test_carrier_claims_constraint_no_spill_to_later_instance():
     CN = "cc222222"
     modules = [
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
         _constraint(
             CN, SHIRT, COLOR,
@@ -297,14 +297,14 @@ def test_carrier_claims_constraint_no_spill_to_later_instance():
         ]),
         # Top-level color AFTER backdrop — should NOT be constrained.
         _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     ]
     catalog = {
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
     # Across seeds the top-level color should sometimes roll warm_red —
@@ -342,7 +342,7 @@ def test_carrier_claims_on_null_empty_pick():
     CN = "cc222222"
     modules = [
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
         _constraint(
             CN, SHIRT, COLOR,
@@ -357,8 +357,8 @@ def test_carrier_claims_on_null_empty_pick():
     ]
     catalog = {
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "warm_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "warm_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "cool_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
     for seed in (0, 1, 7, 42, 99):
@@ -392,7 +392,7 @@ def test_sibling_constraints_same_library_uuid_are_independent_oneshots():
     LIB_CID = "e41f5bc4"  # shared library uuid for both hair_x_mood
     modules = [
         _wildcard(HAIR, "hair_style", [
-            {"id": "h1", "value": "long", "weight": 1, "sub_category": "long"},
+            {"id": "h1", "value": "long", "weight": 1, "sub_categories": ["long"]},
         ]),
         # Two instances, SAME library id, distinct _uid.
         _constraint(
@@ -412,14 +412,14 @@ def test_sibling_constraints_same_library_uuid_are_independent_oneshots():
         ]),
         # Top-level mood AFTER backdrop — must be constrained by uid B.
         _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_categories": ["cool"]},
         ]),
     ]
     catalog = {
         MOOD: _wildcard(MOOD, "mood", [
-            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_category": "warm"},
-            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_category": "cool"},
+            {"id": "m1", "value": "warm_bad", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "m2", "value": "cool_ok", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
     for seed in range(15):
@@ -466,7 +466,7 @@ def test_carrier_claim_noop_when_source_not_picked():
             {"id": "bd2", "value": f"with @{{{COLOR}}}", "weight": 0},
         ]),
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": "tee", "weight": 1, "sub_category": "casual"},
+            {"id": "s1", "value": "tee", "weight": 1, "sub_categories": ["casual"]},
         ]),
     ]
     ctx = {"__wp_catalog__": {}}
@@ -485,7 +485,7 @@ def test_never_applied_message_distinguishes_present_vs_absent():
     GHOST = "deadbeef"
     modules_absent = [
         _wildcard("11111111", "src", [
-            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+            {"id": "s1", "value": "a", "weight": 1, "sub_categories": ["x"]},
         ]),
         _constraint("22222222", "11111111", GHOST),
     ]
@@ -501,10 +501,10 @@ def test_never_applied_message_distinguishes_present_vs_absent():
     TGT = "33333333"
     modules_present = [
         _wildcard(TGT, "tgt", [
-            {"id": "t1", "value": "early", "weight": 1, "sub_category": "warm"},
+            {"id": "t1", "value": "early", "weight": 1, "sub_categories": ["warm"]},
         ]),
         _wildcard("11111111", "src", [
-            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+            {"id": "s1", "value": "a", "weight": 1, "sub_categories": ["x"]},
         ]),
         _constraint("22222222", "11111111", TGT),
     ]
@@ -545,7 +545,7 @@ def test_end_of_run_dedupes_warnings_by_cid():
     modules = [
         # Source for both — needs to roll so source_pick exists.
         _wildcard("11111111", "src", [
-            {"id": "s1", "value": "a", "weight": 1, "sub_category": "x"},
+            {"id": "s1", "value": "a", "weight": 1, "sub_categories": ["x"]},
         ]),
         # Two sibling constraints, same library uuid → same
         # `__constraint_module_id__`.
@@ -611,7 +611,10 @@ def test_constraint_targets_next_color_not_source_nested():
     CN = "cc222222"
     modules = [
         _wildcard(SHIRT, "shirt", [
-            {"id": "s1", "value": f"@{{{COLOR}}} t-shirt", "weight": 1, "sub_category": "casual"},
+            {
+                "id": "s1", "value": f"@{{{COLOR}}} t-shirt", "weight": 1,
+                "sub_categories": ["casual"],
+            },
         ]),
         _constraint(
             CN, SHIRT, COLOR,
@@ -623,8 +626,8 @@ def test_constraint_targets_next_color_not_source_nested():
     ]
     catalog = {
         COLOR: _wildcard(COLOR, "color", [
-            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_category": "warm"},
-            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_category": "cool"},
+            {"id": "c1", "value": "BAD_red", "weight": 1, "sub_categories": ["warm"]},
+            {"id": "c2", "value": "ok_blue", "weight": 1, "sub_categories": ["cool"]},
         ]),
     }
     for seed in (0, 1, 7, 42, 99):

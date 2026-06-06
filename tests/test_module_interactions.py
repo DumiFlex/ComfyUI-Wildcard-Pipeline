@@ -741,10 +741,10 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
-                    {"id": "c2", "value": "yellow", "weight": 1, "sub_category": "warm"},
-                    {"id": "c3", "value": "blue", "weight": 1, "sub_category": "cool"},
-                    {"id": "c4", "value": "green", "weight": 1, "sub_category": "cool"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c2", "value": "yellow", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c3", "value": "blue", "weight": 1, "sub_categories": ["cool"]},
+                    {"id": "c4", "value": "green", "weight": 1, "sub_categories": ["cool"]},
                 ],
             },
         }
@@ -768,9 +768,9 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
-                    {"id": "c2", "value": "blue", "weight": 1, "sub_category": "cool"},
-                    {"id": "c3", "value": "green", "weight": 1, "sub_category": "earth"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c2", "value": "blue", "weight": 1, "sub_categories": ["cool"]},
+                    {"id": "c3", "value": "green", "weight": 1, "sub_categories": ["earth"]},
                 ],
             },
         }
@@ -793,7 +793,7 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
                 ],
             },
         }
@@ -816,7 +816,7 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
                 ],
             },
         }
@@ -837,9 +837,9 @@ class TestNestedSubcategoryFilter:
                 "type": "wildcard",
                 "var_binding": "color",
                 "options": [
-                    {"id": "c1", "value": "red", "weight": 1, "sub_category": "warm"},
-                    {"id": "c2", "value": "yellow", "weight": 1, "sub_category": "warm"},
-                    {"id": "c3", "value": "blue", "weight": 1, "sub_category": "cool"},
+                    {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c2", "value": "yellow", "weight": 1, "sub_categories": ["warm"]},
+                    {"id": "c3", "value": "blue", "weight": 1, "sub_categories": ["cool"]},
                 ],
             },
         }

@@ -24,8 +24,10 @@ from engine.modules.wildcard_handler import _apply_constraint_to_options
 
 # Mirror of `engine.syntax.tokenize._REF_RE` (kept local to avoid
 # importing a private symbol across the module boundary). Captures the
-# 8-hex uuid; the optional `#name` / `:subcat` segments are skipped.
-_REF_RE = re.compile(r"@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}")
+# 8-hex uuid; the optional `#name` / `:expr` / `!null` segments are skipped.
+_REF_RE = re.compile(
+    r"@\{([0-9a-f]{8})(?:#[^#:}@{!]*)?(?::[^}!]*)?(?:![^}]*)?\}"
+)
 
 
 def claim_carrier_constraints(

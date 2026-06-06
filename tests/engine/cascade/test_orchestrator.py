@@ -91,7 +91,7 @@ def test_subcat_delete_does_not_delete_wildcard_target(wp_db):
                     payload={
                         "sub_categories": ["warm", "cool"],
                         "options": [{"id": "o", "value": "v", "weight": 1,
-                                     "sub_category": "warm"}],
+                                     "sub_categories": ["warm"]}],
                     })
 
     resp = apply_cascade(wp_db, {
@@ -103,7 +103,7 @@ def test_subcat_delete_does_not_delete_wildcard_target(wp_db):
     # Wildcard still exists — only the subcat was stripped.
     wc_after = mod.get(wc["id"])
     assert wc_after["payload"]["sub_categories"] == ["cool"]
-    assert wc_after["payload"]["options"][0]["sub_category"] is None
+    assert wc_after["payload"]["options"][0]["sub_categories"] == []
 
 
 def test_subcat_rename_with_cascade_false_returns_broken_refs(wp_db):
@@ -112,7 +112,7 @@ def test_subcat_rename_with_cascade_false_returns_broken_refs(wp_db):
                     payload={
                         "sub_categories": ["warm"],
                         "options": [{"id": "o", "value": "v", "weight": 1,
-                                     "sub_category": "warm"}],
+                                     "sub_categories": ["warm"]}],
                     })
     other = mod.create(type="wildcard", name="y", description="", category_id=None, tags=[],
                        payload={"options": []})
@@ -135,7 +135,7 @@ def test_subcat_rename_with_cascade_false_returns_broken_refs(wp_db):
     # Wildcard's own subcat WAS renamed though.
     wc_after = mod.get(wc["id"])
     assert wc_after["payload"]["sub_categories"] == ["hot"]
-    assert wc_after["payload"]["options"][0]["sub_category"] == "hot"
+    assert wc_after["payload"]["options"][0]["sub_categories"] == ["hot"]
 
 
 def test_category_delete_removes_category_and_nulls_refs(wp_db):

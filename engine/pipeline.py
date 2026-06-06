@@ -20,11 +20,14 @@ from engine.modules.snapshot import coerce_legacy_module
 
 logger = logging.getLogger(__name__)
 
-# `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE.
-# Used by the never_applied warning classifier to tell "target has a
-# carrier/instance somewhere in the chain" apart from "target uuid is
-# nowhere to be found".
-_PIPELINE_REF_RE = re.compile(r"@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}")
+# `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE
+# (4-segment: uuid + optional #name / :expr / !null; only the uuid is
+# captured here). Used by the never_applied warning classifier to tell
+# "target has a carrier/instance somewhere in the chain" apart from
+# "target uuid is nowhere to be found".
+_PIPELINE_REF_RE = re.compile(
+    r"@\{([0-9a-f]{8})(?:#[^#:}@{!]*)?(?::[^}!]*)?(?:![^}]*)?\}"
+)
 
 
 def _module_field(module: Any, key: str) -> Any:
