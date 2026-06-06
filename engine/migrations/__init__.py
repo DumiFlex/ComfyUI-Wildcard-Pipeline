@@ -10,11 +10,13 @@ from __future__ import annotations
 from typing import Any
 
 from engine.migrations.v0_to_v1 import migrate_v0_to_v1
+from engine.migrations.v1_to_v2 import migrate_v1_to_v2
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 _CHAIN = {
     0: migrate_v0_to_v1,
+    1: migrate_v1_to_v2,
 }
 
 

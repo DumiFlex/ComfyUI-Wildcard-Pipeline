@@ -30,8 +30,9 @@ def test_migrate_records_version(tmp_path):
     conn = get_connection(tmp_path / "v2.db")
     migrate(conn)
     # Keep this assertion in sync with the highest-numbered migration in
-    # ``engine/db/migrations_sql``. (015_content_rating.py is current head.)
-    assert current_version(conn) == 15
+    # ``engine/db/migrations_sql``. (016_wildcard_multi_subcategory_v2.py
+    # is current head.)
+    assert current_version(conn) == 16
     conn.close()
 
 
@@ -281,7 +282,7 @@ def test_004_is_idempotent(tmp_path):
     conn = get_connection(tmp_path / "i.db")
     migrate(conn)
     migrate(conn)  # second call should be a no-op
-    assert current_version(conn) == 15
+    assert current_version(conn) == 16
     conn.close()
 
 

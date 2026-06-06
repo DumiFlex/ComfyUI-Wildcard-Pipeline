@@ -47,7 +47,7 @@ async def test_build_returns_seven_bucket_payload_with_wildcard(wp_client):
     })
     assert resp.status == 200
     body = await resp.json()
-    assert body["schema_version"] == 1
+    assert body["schema_version"] == 2
     assert isinstance(body["exported_at"], str)
     assert body["exported_at"] != ""
     # All 8 buckets present.
@@ -66,7 +66,7 @@ async def test_build_with_empty_body_returns_empty_buckets(wp_client):
     resp = await wp_client.post("/wp/api/export/build", json={})
     assert resp.status == 200
     body = await resp.json()
-    assert body["schema_version"] == 1
+    assert body["schema_version"] == 2
     for key in (
         "bundles", "wildcards", "fixed_values", "combines",
         "derivations", "constraints", "categories", "templates",

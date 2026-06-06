@@ -37,7 +37,8 @@ def test_walks_chain_to_current():
     assert result["ok"] is True
     assert result["migrated"]["schema_version"] == CURRENT_SCHEMA_VERSION
     assert result["migrated"]["wildcards"][0]["migrated_from"] == 0
-    assert result["migrated_entity_count"] == 1
+    # 2 chain steps (v0->v1, v1->v2) each pass the 1 wildcard => count 2.
+    assert result["migrated_entity_count"] == 2
 
 
 def test_walks_chain_on_empty_payload():
@@ -80,7 +81,8 @@ def test_sums_all_7_arrays_for_migrated_entity_count():
     }
     result = migrate_payload(v0_payload)
     assert result["ok"] is True
-    assert result["migrated_entity_count"] == 7
+    # 7 entities x 2 chain steps (v0->v1, v1->v2) = 14.
+    assert result["migrated_entity_count"] == 14
 
 
 def test_defaults_missing_arrays_to_empty():
