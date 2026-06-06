@@ -47,7 +47,7 @@ import type { SchemaCatalogEntry } from "@/api/types";
  * Pinia stores. Missing entries are taken as "no collision".
  */
 export interface LibrarySnapshot {
-  modules: Map<string, { id: string; name: string }>;
+  modules: Map<string, { id: string; name: string; type?: string }>;
   bundles: Map<string, { id: string; name: string }>;
 }
 
@@ -61,6 +61,10 @@ export interface InstallCollision {
   id: string;
   incomingName: string;
   existingName: string;
+  /** True when the live row at this id is a DIFFERENT module kind than the
+   *  incoming entity (the 8-hex id-space is shared across all 5 kinds).
+   *  Replace would clobber an unrelated item, so install-as-new is forced. */
+  typeConflict: boolean;
 }
 
 /**
@@ -243,7 +247,7 @@ const BUCKET_TO_KIND: Record<string, EntityKind> = {
  * anyway — but defensively we don't want the modal to render
  * "undefined").
  */
-function detectInstallCollisions(
+export function detectInstallCollisions(
   selection: ResolvedSelection,
   library: LibrarySnapshot,
 ): InstallCollision[] {
@@ -252,11 +256,14 @@ function detectInstallCollisions(
     for (const row of selection[bucket]) {
       const existing = library.modules.get(row.entity.id);
       if (existing) {
+        const incomingKind = BUCKET_TO_KIND[bucket as string]!;
         out.push({
-          kind: BUCKET_TO_KIND[bucket as string]!,
+          kind: incomingKind,
           id: row.entity.id,
           incomingName: String(row.entity.name ?? row.entity.id),
           existingName: existing.name,
+          // Cross-kind id clash: the live row is a DIFFERENT module kind.
+          typeConflict: existing.type !== undefined && existing.type !== incomingKind,
         });
       }
     }
@@ -269,6 +276,8 @@ function detectInstallCollisions(
         id: row.entity.id,
         incomingName: String(row.entity.name ?? row.entity.id),
         existingName: existing.name,
+        // Bundles live in their own table — no cross-kind id-space.
+        typeConflict: false,
       });
     }
   }
@@ -326,6 +335,28 @@ function applyCollisionDecisions(
     // but the `buckets` array above excludes it, so the cast is sound.
     (selection as unknown as Record<string, ResolvedEntity[]>)[bucket] = next;
   }
+}
+
+/**
+ * Safety backstop for the shared id-space: a cross-kind id clash
+ * (`typeConflict`) must NEVER resolve to `replace` — replacing the live
+ * row would clobber an unrelated, different-kind item. Regardless of what
+ * the resolveCollisions UI returned (it may not yet know about clashes —
+ * e.g. the community embed modal), coerce any `replace` on a clash to
+ * `rename` (install-as-new). UI-agnostic; the last line of defense.
+ *
+ * Mutates + returns `decisions` for caller convenience.
+ */
+export function enforceClashSafety(
+  collisions: InstallCollision[],
+  decisions: Record<string, CollisionDecision>,
+): Record<string, CollisionDecision> {
+  for (const c of collisions) {
+    if (c.typeConflict && decisions[c.id]?.kind === "replace") {
+      decisions[c.id] = { kind: "rename", new_name: c.incomingName };
+    }
+  }
+  return decisions;
 }
 
 /**
@@ -404,7 +435,7 @@ export async function installEnvelope(
           error: { code: "cancelled", message: "Install cancelled by user." },
         };
       }
-      applyCollisionDecisions(selection, decisions);
+      applyCollisionDecisions(selection, enforceClashSafety(collisions, decisions));
     }
   }
 

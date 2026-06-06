@@ -106,9 +106,9 @@ declare global {
 function snapshotLibrary(): LibrarySnapshot {
   const moduleStore = useModuleStore();
   const bundleStore = useBundleStore();
-  const modules = new Map<string, { id: string; name: string }>();
+  const modules = new Map<string, { id: string; name: string; type?: string }>();
   for (const m of moduleStore.catalog) {
-    modules.set(m.id, { id: m.id, name: m.name });
+    modules.set(m.id, { id: m.id, name: m.name, type: m.type });
   }
   const bundles = new Map<string, { id: string; name: string }>();
   for (const b of bundleStore.catalog) {

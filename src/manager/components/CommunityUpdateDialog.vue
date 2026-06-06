@@ -96,8 +96,8 @@ async function fetchLatestPayload(slug: string): Promise<{ payload: Record<strin
  * tabs / pages between mount and update click).
  */
 function snapshotLibrary() {
-  const modules = new Map<string, { id: string; name: string }>();
-  for (const m of moduleStore.catalog) modules.set(m.id, { id: m.id, name: m.name });
+  const modules = new Map<string, { id: string; name: string; type?: string }>();
+  for (const m of moduleStore.catalog) modules.set(m.id, { id: m.id, name: m.name, type: m.type });
   const bundles = new Map<string, { id: string; name: string }>();
   for (const b of bundleStore.catalog) bundles.set(b.id, { id: b.id, name: b.name });
   return { modules, bundles };
