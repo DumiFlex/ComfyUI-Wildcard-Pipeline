@@ -65,6 +65,64 @@ ruff check .           # Python lint
 - **Reactivity** `extension/reactive.ts:reactiveFromGraph` — wires `onConnectionsChange` chain + 400ms polling fallback + `afterConfigureGraph` re-sync so widgets recompute on graph edits + workflow loads without flashing stale state.
 - **Adding new widget**: (1) write SFC under `src/components/<name>/`, (2) add `src/widgets/<name>.ts` exposing `create(node, inputName)` that return `createDomWidgetHost(...)`, (3) wire in `src/main.ts` — either as `getCustomWidgets` entry (for inputs declared with matching widget-type) or via `beforeRegisterNodeDef → onNodeCreated` (for free-floating helpers). Use `import("./widgets/<name>")` so stay out of entry chunk + size gate keep holding.
 
+## Schema versioning + lazy migration machine
+
+Spec: `D:\Desktop\Wildcard-Pipeline-Community\docs\superpowers\specs\2026-06-05-schema-versioning-migration-design.md` (cross-repo lock; read before bumping).
+
+**Three axes** every payload + library row carries:
+
+1. **`schema_version`** (per row, engine column added in migration 014): which payload shape this row's `payload` is in. Single version per payload root — bundles' children inherit the bundle's `schema_version`.
+2. **`producer_engine_version`** (per published community version, server-side only): diagnostic. Never load-bearing.
+3. **`version_number`** (per community post, server-side): the user-facing 1/2/3 publish revision. Unrelated to schema_version.
+
+**Engine row columns** (migration 014):
+- `schema_version INTEGER NOT NULL DEFAULT 1` — current shape this row targets.
+- `original_payload_json TEXT` — verbatim local mirror of the payload as it arrived from community (or import). Lazy migrator reads from here, never from the live `payload` field. Lets us re-project from the original if a migrator chain gets fixed retroactively.
+- `tolerant_drift_status TEXT` — `none` | `tolerant` | `strict`. Set by parseTolerantAsCurrentShape during install.
+- `schema_migrated_at TEXT` — wall-clock stamp of last lazy migration step.
+
+**The machine**:
+
+- **Validator registry** (`src/manager/import-export/validators/`): one Zod validator per known `schema_version`. Strict at `≤ CURRENT_SCHEMA_VERSION`; future versions go through `parseTolerantAsCurrentShape` (additive-strip).
+- **`parseTolerantAsCurrentShape(raw, currentVersion)`** (`src/manager/import-export/tolerant-parse.ts`): strips fields the current shape doesn't know, returns the projection that matches `currentVersion`. Used at install when source `schema_version > CURRENT`.
+- **`migratePayload(payload, from, to)`** (`src/manager/import-export/migration-machine.ts`): forward-only chain. Each step is a registered function in the migrators map. `from > to` is illegal — no downgrades.
+- **`lazy_migrate_row(row, currentVersion, migrators, validators)`** (`engine/db/lazy_migrate.py`): reads `original_payload_json` (or `payload` if absent), walks the migrator chain to `currentVersion`, validates, writes back. Bulk-at-boot runner is eager iteration of this routine.
+- **Install decision tree** (`src/manager/import-export/install.ts`): branches on `source_schema_version` vs `CURRENT_SCHEMA_VERSION`:
+  - `=`: strict validate + insert.
+  - `<`: migratePayload then strict validate + insert.
+  - `>` and tolerant-only diff: parseTolerantAsCurrentShape, mark `tolerant_drift_status='tolerant'`, insert.
+  - `>` and breaking-future diff (per catalog `is_breaking_from_previous` AND-fold across the interval): refuse install with a clear error.
+
+**Server probe**: `engine-export-wrap.ts:ENGINE_SCHEMA_VERSION` is the sister's pinned CURRENT — it ships in the sister bundle, not fetched from server. The host bridge install path reads it from `window.__wpcRuntime.schemaVersion`. Server-first deploy ordering (see community CLAUDE.md) means the community catalog always reflects shapes ≥ sister's CURRENT.
+
+### Bumping `schema_version` (the proper way)
+
+When a payload shape change lands (not a row-column change — those don't bump schema):
+
+1. **Add the new shape's validator.** New file under `src/manager/import-export/validators/v<N>.ts` exporting a Zod schema. Register in `validators/index.ts`.
+2. **Add the migrator step.** In `src/manager/import-export/migration-machine.ts`, register `migrators[N-1 → N]: (payload) => ...`. Forward-only. The function is pure — no side effects.
+3. **Add fixtures.** `src/manager/__tests__/import-export/fixtures/v<N>/` — at minimum: a `valid-strict.json`, a `from-v<N-1>-migrated.json` round-trip case, and one `breaking-shape.json` if the bump is breaking.
+4. **Bump the constant.** `CURRENT_SCHEMA_VERSION` lives in the validator registry. Bump it to `N`. Also bump `ENGINE_SCHEMA_VERSION` in `src/manager/components/engine-export-wrap.ts`.
+5. **Write the migration test.** `tests/engine/db/test_lazy_migrate.py` should cover v<N-1>→v<N> round-trip + the breaking-future path if applicable.
+6. **Run `pytest tests/engine/ -q && pnpm test` until green.** Sister pre-commit hook (~2 min) also runs lint + typecheck + build + size; expect that wait.
+7. **Coordinate the community-side catalog row.** Community web's `schema_catalog` table gets the matching `(version, is_breaking_from_previous, notes)` row + a deploy that lands BEFORE sister's PR merges. See community CLAUDE.md "Bumping the schema" for the server side.
+8. **Sister deploys after server.** Once catalog HEAD ≥ sister's CURRENT, sister can safely refuse breaking-future shapes.
+
+### Row-level column changes (no schema_version bump needed)
+
+The most recent example is **migration 015 (`content_rating` column)**. Adding a column to `modules` or `bundles` is just an Alembic-style SQLite migration — no payload-shape change, no validator update, no migrator chain. Procedure:
+
+1. **New file** `engine/db/migrations_sql/<NNN>_<name>.py` mirroring 013/015 shape: `_has_column` gate + `with conn: conn.execute("ALTER TABLE … ADD COLUMN …")` for both `modules` and `bundles` if the field applies to both.
+2. **Update `_row_to_module` / `_row_to_bundle`** in `engine/db/repositories.py` — wrap the new column read in `try/except (IndexError, KeyError)` so pre-migration fixtures don't blow up.
+3. **Update `ModuleRepository.create/update` + `BundleRepository.create/update`** to accept the new field as a kwarg.
+4. **Update `_insert_module` / `_insert_bundle` (+ `_update_module` / `_update_bundle` if needed)** in `engine/importer.py` to pass the field through from the entity dict. Use `COALESCE(?, col)` on the UPDATE side when you want missing-in-content to preserve existing value (NOT overwrite to NULL).
+5. **Update `wp_api/modules.py` + `wp_api/bundles.py`**: add the field to `_UPDATABLE_FIELDS` + plumb into the create handlers.
+6. **TS types**: extend `ModuleRow` / `BundleRow` + `*CreateInput` / `*UpdateInput` in `src/manager/api/types.ts`.
+7. **Bump the head-migration test**: `tests/engine/db/test_migrations.py:test_migrate_records_version` asserts the head version — update to `<NNN>`. Same for the expected-columns set tests.
+8. **Write a migration test** at `tests/engine/db/test_migration_<NNN>.py` — column exists, default backfill correct, idempotent rerun, accepts the new values.
+
+If the column also flows through the host-bridge install seam (community origin metadata), extend `InstallOrigin` in `src/manager/import-export/install.ts` AND the embed's `HostInstallOpts.origin` in `web/src/embed/EmbedDetail.vue` (community web repo). Map community-side naming → engine-side naming at the seam if they differ (e.g. `'sfw'` → `'safe'`).
+
 ## Anti-patterns (inherited from reference project `ComfyUI-Wildcard-Pipeline`)
 
 - Never use V1 `NODE_CLASS_MAPPINGS` / `EXTENSION_WEB_DIRS`.
