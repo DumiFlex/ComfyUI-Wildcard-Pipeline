@@ -200,7 +200,20 @@ export function publishToCommunity(
   if (pub.community_post_slug) {
     hash.set("origin_slug", pub.community_post_slug);
   }
-  router.push({ path: "/community/publish", hash: `#${hash.toString()}` });
+  // Navigate via the router first, then set the hash directly via
+  // window.location.hash. Passing the hash through router.push lets
+  // vue-router 4 percent-encode any `%` in the value (including the
+  // `%2C` that URLSearchParams.toString() emits for commas, or the
+  // `%2B` for `+` in base64). Reading back, URLSearchParams decodes
+  // only once -- consumers ended up with literal `%2C` in tags and
+  // broken b64 in payload. Setting `window.location.hash` directly
+  // bypasses the second encode pass; EmbedPublish picks up the
+  // change via its `hashchange` listener.
+  router
+    .push({ path: "/community/publish" })
+    .then(() => {
+      window.location.hash = hash.toString();
+    });
 }
 
 /**
