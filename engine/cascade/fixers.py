@@ -37,6 +37,8 @@ import sqlite3
 from typing import Any
 
 from engine.db.repositories import BundleRepository, ModuleRepository
+from engine.syntax.subcat_filter import parse as _parse_subcat
+from engine.syntax.subcat_filter import reads_as as _reads_as
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -59,24 +61,94 @@ def _rewrite_var_in_string(s: str, old_name: str, new_name: str) -> str:
     return pattern.sub(f"${new_name}", s)
 
 
+def _map_tags(ast: dict[str, Any] | None, fn) -> dict[str, Any] | None:
+    """Apply *fn* to each tag leaf of a parsed sub-category expression;
+    drop tags *fn* maps to ``None`` and collapse the now-childless
+    operator (a one-child and/or becomes that child). Returns ``None``
+    when the whole expression empties. Mirror of TS `mapTags`
+    (src/manager/cascade/subcatExprCascade.ts)."""
+    if ast is None:
+        return None
+    if "tag" in ast:
+        v = fn(ast["tag"])
+        return None if v is None else {"tag": v}
+    if ast["op"] == "not":
+        x = _map_tags(ast["x"], fn)
+        return {"op": "not", "x": x} if x is not None else None
+    kids = [k for k in (_map_tags(c, fn) for c in ast["kids"]) if k is not None]
+    if not kids:
+        return None
+    return kids[0] if len(kids) == 1 else {"op": ast["op"], "kids": kids}
+
+
+def _expr_tags(ast: dict[str, Any] | None) -> set[str]:
+    out: set[str] = set()
+
+    def walk(n: dict[str, Any] | None) -> None:
+        if n is None:
+            return
+        if "tag" in n:
+            out.add(n["tag"])
+            return
+        if n["op"] == "not":
+            walk(n["x"])
+            return
+        for k in n["kids"]:
+            walk(k)
+
+    walk(ast)
+    return out
+
+
+def _ref_expr_pattern(wildcard_id: str) -> re.Pattern[str]:
+    # 4-segment ref to a specific wildcard: groups = (#name, :expr, !null).
+    return re.compile(
+        r"@\{" + re.escape(wildcard_id)
+        + r"(?:#([^#:}@{!]*))?(?::([^}!]*))?(?:!([^}]*))?\}"
+    )
+
+
+def _rewrite_ref_expr(s: str, wildcard_id: str, target: str, fn) -> str:
+    """Rewrite the boolean ``:expr`` of every ``@{wildcard_id...}`` ref
+    whose expression contains *target*, mapping its tags via *fn*
+    (rename, or remove + collapse). Refs that don't mention *target* are
+    left verbatim — no cosmetic re-serialization. ``#name`` + ``!null``
+    are preserved; an expression that empties drops the ``:expr``
+    segment, collapsing ``@{uuid:cold}`` to a bare ``@{uuid}``."""
+    pattern = _ref_expr_pattern(wildcard_id)
+
+    def repl(m: re.Match[str]) -> str:
+        name, expr, null = m.group(1), m.group(2), m.group(3)
+        if expr is None or not expr.strip():
+            return m.group(0)
+        ast = _parse_subcat(expr)
+        if target not in _expr_tags(ast):
+            return m.group(0)
+        new_expr = _reads_as(_map_tags(ast, fn))
+        out = "@{" + wildcard_id + (f"#{name}" if name else "")
+        if new_expr:
+            out += ":" + new_expr
+        if null == "null":
+            out += "!null"
+        return out + "}"
+
+    return pattern.sub(repl, s)
+
+
 def _rewrite_subcat_ref_in_string(
     s: str,
     wildcard_id: str,
     old_subcat: str,
     new_subcat: str,
 ) -> str:
-    """Replace ``@{wildcard_id[#name]:old_subcat}`` →
-    ``@{wildcard_id[#name]:new_subcat}``. Preserves any optional
-    ``#name`` segment so a subcat rename doesn't strip the wildcard's
-    cached display name from refs."""
-    pattern = re.compile(
-        r"@\{" + re.escape(wildcard_id)
-        + r"(#[^#:}@{]*)?:" + re.escape(old_subcat) + r"\}"
+    """Rename ``old_subcat`` -> ``new_subcat`` inside every
+    ``@{wildcard_id...}`` ref's boolean expression (e.g.
+    ``@{u:warm or cold}`` -> ``@{u:warm or chilly}``). Structure,
+    ``#name``, and ``!null`` are preserved."""
+    return _rewrite_ref_expr(
+        s, wildcard_id, old_subcat,
+        lambda t: new_subcat if t == old_subcat else t,
     )
-    def repl(m: re.Match[str]) -> str:
-        name_seg = m.group(1) or ""
-        return f"@{{{wildcard_id}{name_seg}:{new_subcat}}}"
-    return pattern.sub(repl, s)
 
 
 def _strip_subcat_ref_in_string(
@@ -84,13 +156,15 @@ def _strip_subcat_ref_in_string(
     wildcard_id: str,
     subcat_name: str,
 ) -> str:
-    """Remove ``@{wildcard_id[#name]:subcat_name}`` occurrences from
-    *s*. Matches with or without the optional ``#name`` segment."""
-    pattern = re.compile(
-        r"@\{" + re.escape(wildcard_id)
-        + r"(?:#[^#:}@{]*)?:" + re.escape(subcat_name) + r"\}"
+    """Remove ``subcat_name`` from every ``@{wildcard_id...}`` ref's
+    expression, collapsing operators (``@{u:warm or cold}`` ->
+    ``@{u:warm}``); a ref whose expression empties collapses to the bare
+    ``@{wildcard_id}`` (the nested insertion survives, only its filter
+    is dropped)."""
+    return _rewrite_ref_expr(
+        s, wildcard_id, subcat_name,
+        lambda t: None if t == subcat_name else t,
     )
-    return pattern.sub("", s)
 
 
 def _rewrite_ref_name_in_string(
