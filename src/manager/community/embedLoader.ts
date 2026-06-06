@@ -31,14 +31,14 @@ export class EmbedLoadError extends Error {
 }
 
 export interface EmbedNavigateTarget {
-  view: "browse" | "detail" | "profile" | "auth" | "bundles" | "library" | "publish";
+  view: "browse" | "detail" | "profile" | "auth" | "bundles" | "library" | "deleted" | "publish";
   slug?: string;
   username?: string;
 }
 
 export interface EmbedMountOptions {
   containerEl: HTMLElement;
-  view: "browse" | "detail" | "profile" | "auth" | "bundles" | "library" | "publish";
+  view: "browse" | "detail" | "profile" | "auth" | "bundles" | "library" | "deleted" | "publish";
   initialSlug?: string;
   initialUsername?: string;
   apiBaseUrl: string;

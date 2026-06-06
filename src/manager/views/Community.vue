@@ -65,6 +65,14 @@ function parseRoute(): EmbedNavigateTarget {
   if (parts[0] === "publish") {
     return { view: "publish" };
   }
+  // The remaining top-level embed views each get their own URL segment
+  // so the host round-trip (onNavigate → router.replace → this parse)
+  // preserves them. Without these they fell through to browse, which
+  // collapsed every Bundles / My library / Deleted click — and every
+  // in-embed Back to one of those — straight back to Browse.
+  if (parts[0] === "bundles") return { view: "bundles" };
+  if (parts[0] === "library") return { view: "library" };
+  if (parts[0] === "deleted") return { view: "deleted" };
   return { view: "browse" };
 }
 
@@ -88,11 +96,22 @@ async function tryMount() {
       theme: "auto",
       onNavigate: (next) => {
         // Mirror the embed's internal nav into the extension router
-        // so the URL bar reflects state + the back button works.
+        // so the URL bar reflects state + the back button works. Each
+        // view needs its own URL segment; anything mapped to the bare
+        // /community (browse) here would be clobbered back to browse on
+        // the parseRoute round-trip. `publish` is intentionally NOT
+        // mirrored -- it's host-initiated with a payload hash that
+        // router.replace would strip (see handle.navigate note).
         if (next.view === "detail" && next.slug) {
           router.replace(`/community/p/${next.slug}`);
         } else if (next.view === "profile" && next.username) {
           router.replace(`/community/u/${next.username}`);
+        } else if (next.view === "bundles") {
+          router.replace("/community/bundles");
+        } else if (next.view === "library") {
+          router.replace("/community/library");
+        } else if (next.view === "deleted") {
+          router.replace("/community/deleted");
         } else {
           router.replace("/community");
         }
