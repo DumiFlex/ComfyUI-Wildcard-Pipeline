@@ -21,13 +21,19 @@ const moduleRowBase = z.object({
 export const wildcardV1 = moduleRowBase.extend({
   type: z.literal("wildcard"),
   payload: z.object({
-    var_binding: z.string(),
-    sub_categories: z.array(z.string()),
+    // var_binding + sub_categories are engine-optional (wildcard_handler
+    // reads them via .get with defaults). `is_null` is a real option
+    // field (null-option contract) the original schema omitted -- strip
+    // would have dropped it, producing an empty-value option the
+    // consumer's engine rejects on install.
+    var_binding: z.string().optional(),
+    sub_categories: z.array(z.string()).optional(),
     options: z.array(z.object({
       id: z.string(),
       value: z.string(),
       weight: z.number(),
-      sub_category: z.string().nullable(),
+      sub_category: z.string().nullable().optional(),
+      is_null: z.boolean().optional(),
     })),
   }),
 }).strict();
@@ -53,7 +59,8 @@ export const combineV1 = moduleRowBase.extend({
   payload: z.object({
     template: z.string(),
     output_var: z.string(),
-    input_vars: z.array(z.string()),
+    // engine-optional (combine_handler reads input_vars via .get([]))
+    input_vars: z.array(z.string()).optional(),
   }),
 }).strict();
 
@@ -71,9 +78,11 @@ export const derivationV1 = moduleRowBase.extend({
 export const constraintV1 = moduleRowBase.extend({
   type: z.literal("constraint"),
   payload: z.object({
-    source_wildcard_id: z.string(),
-    target_wildcard_id: z.string(),
-    exceptions: z.array(z.unknown()),
-    matrix: z.record(z.unknown()),
+    // engine reads source/target via .get (a freshly-created constraint
+    // may not have wired them yet); matrix/exceptions default to {}/[].
+    source_wildcard_id: z.string().optional(),
+    target_wildcard_id: z.string().optional(),
+    exceptions: z.array(z.unknown()).optional(),
+    matrix: z.record(z.unknown()).optional(),
   }),
 }).strict();

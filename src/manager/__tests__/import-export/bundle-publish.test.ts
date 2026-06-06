@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   buildBundlePublishable,
   buildModulePublishable,
@@ -7,29 +7,10 @@ import {
 } from "@/manager/import-export/single-row-publish";
 import type { BundleRow, ModuleRow } from "@/manager/api/types";
 
-// A live library wildcard row, as the module catalog would hold it.
-const liveWildcard = {
-  id: "wc001abc",
-  type: "wildcard",
-  name: "starter-mood",
-  description: "",
-  category_id: null,
-  tags: [],
-  is_favorite: false,
-  payload: {
-    var_binding: "mood",
-    sub_categories: [],
-    options: [{ id: "opt001a", value: "serene", weight: 1, sub_category: null }],
-  },
-  payload_hash: "h".repeat(64),
-  version: 1,
-  created_at: "2026-01-01",
-  updated_at: "2026-01-01",
-  content_rating: "safe" as const,
-} as unknown as ModuleRow;
-
-// The SAME child as stored inside a bundle: WP_Context widget shape --
-// name under `meta`, widget-shaped extras, no top-level is_favorite.
+// A bundle child as the engine stores it: WP_Context widget snapshot --
+// name under `meta`, payload in widget form, a local `history` sidecar,
+// plus widget-only extras. It ships verbatim (history stripped); the
+// community treats it opaquely.
 const storedWidgetChild: Record<string, unknown> = {
   id: "wc001abc",
   type: "wildcard",
@@ -38,55 +19,30 @@ const storedWidgetChild: Record<string, unknown> = {
   meta: { name: "starter-mood", description: "", category_id: null, tags: [] },
   instance: {},
   payload_hash: "h".repeat(64),
-  payload: { stale: "widget shape" },
+  payload: {
+    var_binding: "mood",
+    sub_categories: [],
+    options: [{ id: "opt001a", value: "serene", weight: 1, sub_category: null }],
+    history: [{ saved_at: "2026-06-06T00:00:00Z", name: "x", payload: {} }],
+  },
 };
 
-const resolve = (id: string) => (id === liveWildcard.id ? liveWildcard : undefined);
-
 describe("normalizeBundleChild", () => {
-  it("resolves a widget-shape child to its live module row shape", () => {
-    const out = normalizeBundleChild(storedWidgetChild, resolve);
-    // Lifted to top-level + payload taken from the LIVE module (not the
-    // stale widget payload).
-    expect(out.name).toBe("starter-mood");
-    expect(out.is_favorite).toBe(false);
-    expect(out).not.toHaveProperty("meta");
-    expect(out).not.toHaveProperty("instance");
-    expect(out).not.toHaveProperty("enabled");
-    expect((out.payload as Record<string, unknown>).options).toBeDefined();
-    expect((out.payload as Record<string, unknown>).stale).toBeUndefined();
+  it("ships the widget snapshot verbatim, preserving meta.name", () => {
+    const out = normalizeBundleChild(storedWidgetChild);
+    // The whole point of the fix: meta (where the name lives) survives,
+    // so an installed bundle round-trips to named children -- not the
+    // "(unnamed)" the flatten approach produced.
+    expect((out.meta as Record<string, unknown>).name).toBe("starter-mood");
+    expect(out.type).toBe("wildcard");
+    expect(out.instance).toBeDefined();
   });
 
-  it("flattens the snapshot when the source module is absent", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const out = normalizeBundleChild(storedWidgetChild, () => undefined);
-    expect(out.name).toBe("starter-mood"); // lifted from meta
-    expect(out.is_favorite).toBe(false);
-    expect(out).not.toHaveProperty("meta");
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
-  });
-
-  it("passes through an already-canonical child", () => {
-    const canonical: Record<string, unknown> = {
-      id: "fv001abc",
-      type: "fixed_values",
-      name: "constants",
-      description: "",
-      category_id: null,
-      tags: [],
-      is_favorite: false,
-      payload: { values: [{ id: "v1", name: "x", value: "y" }] },
-    };
-    const out = normalizeBundleChild(canonical, () => undefined);
-    expect(out.name).toBe("constants");
-    expect(out).not.toHaveProperty("meta");
-  });
-
-  it("throws on a nested bundle child", () => {
-    expect(() =>
-      normalizeBundleChild({ id: "bd1", type: "bundle" }, resolve),
-    ).toThrow(/nested bundles/i);
+  it("strips the local history sidecar from the child payload", () => {
+    const out = normalizeBundleChild(storedWidgetChild);
+    const payload = out.payload as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("history");
+    expect(payload.options).toBeDefined();
   });
 });
 
@@ -107,11 +63,11 @@ describe("buildBundlePublishable", () => {
     content_rating: "safe" as const,
   } as unknown as BundleRow;
 
-  it("produces children that pass strict bundle validation", () => {
-    const pub = buildBundlePublishable(bundleRow, resolve);
-    // The whole point: the normalized payload survives the same strict
-    // validator the publish endpoint runs. Pre-fix, the widget-shape
-    // children failed with dozens of name/Unrecognized-key errors.
+  it("ships widget children that pass strict bundle validation", () => {
+    const pub = buildBundlePublishable(bundleRow);
+    // Widget-shaped children (meta/instance/enabled) now validate
+    // against the loose bundleV1Child. Pre-fix they failed with dozens
+    // of "name Required" + "Unrecognized key" errors.
     expect(() =>
       buildPublishBody({
         payload: pub.payload,
@@ -119,6 +75,8 @@ describe("buildBundlePublishable", () => {
         description: pub.description,
       }),
     ).not.toThrow();
+    const child = (pub.payload.children as Record<string, unknown>[])[0];
+    expect((child.meta as Record<string, unknown>).name).toBe("starter-mood");
   });
 });
 

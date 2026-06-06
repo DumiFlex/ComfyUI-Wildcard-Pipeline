@@ -140,94 +140,36 @@ export function buildModulePublishable(row: ModuleRow): PublishablePayload {
   };
 }
 
-/** Resolve a module id to its live library row, or undefined. The
- *  bundle publish path uses this to convert a stored child snapshot
- *  into the canonical module-row shape the community validator wants. */
-export type ModuleResolver = (id: string) => ModuleRow | undefined;
-
 /**
- * Normalize ONE stored bundle child into the engine-row module shape
- * the community bundle validator expects (`{id, type, name,
- * description, category_id, tags, is_favorite, payload}`).
+ * Normalize ONE stored bundle child for publish.
  *
- * Bundles created in-app store children in the WP_Context widget shape
- * (`{id, type, meta:{name,...}, payload, instance, enabled, collapsed,
- * payload_hash}`) -- name lives under `meta`, the payload is in the
- * widget shape (e.g. fixed_values uses `values` / a top-level `entries`
- * rather than the library `payload.entries`), and there are extra keys.
- * Passing that verbatim fails strict validation (the symptom: dozens of
- * "children[N].name Required" + "Unrecognized key" errors).
- *
- * Strategy, most-correct first:
- *  1. Already module-row shaped (community-installed bundle) -> reuse
- *     buildModulePublishable for a clean re-stamp.
- *  2. Resolve the live library module by id -> its payload is
- *     guaranteed validator-correct (it's the same row buildModulePublishable
- *     ships for a standalone module).
- *  3. Fallback: flatten the snapshot's own fields. Best-effort -- the
- *     payload may still be widget-shaped, so we warn. Only hit when the
- *     child's source module isn't in the local library.
+ * Bundle children are the engine's frozen WIDGET snapshots
+ * (`{id, type, meta:{name,...}, payload, instance, enabled, collapsed}`)
+ * -- NOT standalone module rows. They ship verbatim so the community
+ * carries them losslessly and an installed bundle round-trips back to a
+ * working sister bundle (name lives under `meta`; flattening it away
+ * was what produced "(unnamed)" children). The only transform is
+ * stripping the local `history` sidecar from the child's payload.
  */
 export function normalizeBundleChild(
   child: Record<string, unknown>,
-  resolve: ModuleResolver,
 ): Record<string, unknown> {
-  if (child.type === "bundle") {
-    throw new Error(
-      "This bundle contains another bundle as a child. Nested bundles " +
-        "can't be published to the community yet -- flatten it first.",
-    );
+  const out = { ...child };
+  if (out.payload && typeof out.payload === "object") {
+    out.payload = stripHistory(out.payload as Record<string, unknown>);
   }
-  const id = typeof child.id === "string" ? child.id : "";
-
-  // (1) Already canonical: top-level string name + object payload, no
-  // `meta` wrapper. Re-stamp through buildModulePublishable.
-  if (
-    typeof child.name === "string" &&
-    typeof child.payload === "object" &&
-    child.payload !== null &&
-    child.meta === undefined
-  ) {
-    return buildModulePublishable(child as unknown as ModuleRow).payload;
-  }
-
-  // (2) Resolve the live library module for a guaranteed-correct shape.
-  const live = id ? resolve(id) : undefined;
-  if (live) {
-    return buildModulePublishable(live).payload;
-  }
-
-  // (3) Fallback flatten from the snapshot.
-  const meta = (child.meta ?? {}) as Record<string, unknown>;
-  console.warn(
-    `[publish] bundle child ${id || "(no id)"} not found in the local ` +
-      "library; flattening its snapshot. Payload may not match the " +
-      "current schema -- re-save the bundle if publish is rejected.",
-  );
-  return {
-    id,
-    type: child.type,
-    name: (meta.name as string) ?? (child.name as string) ?? "",
-    description: (meta.description as string) ?? "",
-    category_id: (meta.category_id ?? meta.category ?? null) as string | null,
-    tags: Array.isArray(meta.tags) ? (meta.tags as string[]) : [],
-    is_favorite: false,
-    payload: stripHistory(child.payload as Record<string, unknown>),
-  };
+  return out;
 }
 
 /**
- * Build the engine-row payload for a bundle library row. Each child is
- * normalized into the canonical module-row shape via `resolve` (see
- * normalizeBundleChild). The community importer recurses on these at
- * install time, so they MUST be module rows, not widget snapshots.
+ * Build the engine-row payload for a bundle library row. Children are
+ * carried verbatim as widget snapshots (history stripped) -- the
+ * community treats them opaquely + the importer stores them so the
+ * round-trip is lossless.
  */
-export function buildBundlePublishable(
-  row: BundleRow,
-  resolve: ModuleResolver,
-): PublishablePayload {
+export function buildBundlePublishable(row: BundleRow): PublishablePayload {
   const children = (row.children ?? []).map((c) =>
-    normalizeBundleChild(c as Record<string, unknown>, resolve),
+    normalizeBundleChild(c as Record<string, unknown>),
   );
   const payload: Record<string, unknown> = {
     id: row.id,

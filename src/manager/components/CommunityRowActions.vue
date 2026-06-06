@@ -16,7 +16,6 @@ import { useRouter } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import Button from "./ui/Button.vue";
 import { useToast } from "../composables/useToast";
-import { useModuleStore } from "../stores/moduleStore";
 import {
   buildBundlePublishable,
   buildModulePublishable,
@@ -41,33 +40,19 @@ interface Props {
 const props = defineProps<Props>();
 const toast = useToast();
 const router = useRouter();
-const moduleStore = useModuleStore();
 
-/**
- * Build the publishable payload. For bundles, each child is normalized
- * to the canonical module-row shape by resolving it against the live
- * module catalog (stored children are widget-context snapshots). The
- * catalog is fetched first if empty so the resolver can hit -- without
- * it every child would fall back to a best-effort flatten that may not
- * match the schema.
- */
-async function publishablePayload(): Promise<PublishablePayload> {
+/** Build the publishable payload. Bundle children ship as verbatim
+ *  widget snapshots (history stripped); modules ship as engine rows. */
+function publishablePayload(): PublishablePayload {
   if (props.kind === "bundle") {
-    if (moduleStore.catalog.length === 0) {
-      await moduleStore.fetchCatalog();
-    }
-    const byId = new Map(moduleStore.catalog.map((m) => [m.id, m]));
-    return buildBundlePublishable(
-      props.row as BundleRow,
-      (id) => byId.get(id),
-    );
+    return buildBundlePublishable(props.row as BundleRow);
   }
   return buildModulePublishable(props.row as ModuleRow);
 }
 
-async function onPublish() {
+function onPublish() {
   try {
-    publishToCommunity(await publishablePayload(), router);
+    publishToCommunity(publishablePayload(), router);
   } catch (e) {
     toast.push({
       severity: "error",
@@ -79,7 +64,7 @@ async function onPublish() {
 }
 
 async function onCopy() {
-  const ok = await copyPayloadToClipboard(await publishablePayload());
+  const ok = await copyPayloadToClipboard(publishablePayload());
   if (ok) {
     toast.push({
       severity: "success",
