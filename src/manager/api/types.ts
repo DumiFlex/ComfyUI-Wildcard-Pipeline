@@ -169,6 +169,13 @@ export interface ModuleRow {
    */
   community_post_slug?: string | null;
   community_version_number?: number | null;
+  /**
+   * NSFW flag (engine migration 015). 'safe' by default; flipped to
+   * 'nsfw' by the IdentityCard toggle in any editor or auto-stamped
+   * at install time when a community post carried content_rating='nsfw'.
+   * Drives the `18+` pill on ModuleListView.
+   */
+  content_rating?: "safe" | "nsfw";
 }
 
 /**
@@ -201,6 +208,7 @@ export interface ModuleCreateInput {
   tags?: string[];
   payload: Record<string, unknown>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface ModuleUpdateInput {
@@ -210,6 +218,7 @@ export interface ModuleUpdateInput {
   tags?: string[];
   payload?: Record<string, unknown>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface CategoryRow {
@@ -240,6 +249,8 @@ export interface BundleRow {
   /** See ModuleRow.community_post_slug — same semantics for bundles. */
   community_post_slug?: string | null;
   community_version_number?: number | null;
+  /** See ModuleRow.content_rating — same semantics for bundles. */
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface BundleListResponse {
@@ -255,6 +266,7 @@ export interface BundleCreateInput {
   tags?: string[];
   children?: Array<Record<string, unknown>>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface BundleUpdateInput {
@@ -265,6 +277,7 @@ export interface BundleUpdateInput {
   tags?: string[];
   children?: Array<Record<string, unknown>>;
   is_favorite?: boolean;
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface TemplateRow {

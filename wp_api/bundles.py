@@ -19,7 +19,7 @@ from wp_api.modules import _hydrate_constraint_exceptions
 
 _UPDATABLE_FIELDS = (
     "name", "description", "color", "category_id", "tags",
-    "children", "is_favorite",
+    "children", "is_favorite", "content_rating",
 )
 
 
@@ -414,6 +414,7 @@ async def create_bundle(request: web.Request) -> web.Response:
                 tags=body.get("tags", []),
                 children=children,
                 is_favorite=bool(body.get("is_favorite", False)),
+                content_rating=body.get("content_rating", "safe"),
             )
             row["children"] = _expand_bundle_children(row.get("children") or [], repo)
     except ValueError as e:

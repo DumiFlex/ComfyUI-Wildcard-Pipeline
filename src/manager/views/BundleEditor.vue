@@ -147,6 +147,7 @@ const description = ref("");
 const color = ref<string>(defaultColor.value);
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 
 /** Mutable local copy of bundle children. Edits in the row stack
  *  (and the side pane in Task 3) update this; Save persists it via PUT. */
@@ -339,6 +340,7 @@ onMounted(async () => {
     color.value = row.color || defaultColor.value;
     categoryId.value = row.category_id;
     tags.value = [...(row.tags ?? [])];
+    contentRating.value = row.content_rating ?? "safe";
     children.value = Array.isArray(row.children)
       ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
       : [];
@@ -390,6 +392,7 @@ async function save() {
       category_id: categoryId.value,
       tags: [...tags.value],
       children: stripBundleChildrenForSave(children.value),
+      content_rating: contentRating.value,
     });
     original.value = updated;
     children.value = Array.isArray(updated.children)
@@ -666,7 +669,9 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
           @update:name="(v) => (name = v)"
           @update:description="(v) => (description = v)"
           @update:category-id="(v) => (categoryId = v)"
+          :content-rating="contentRating"
           @update:tags="(v) => (tags = v)"
+          @update:content-rating="(v) => (contentRating = v)"
         >
           <template #nameLeading>
             <ColorPicker

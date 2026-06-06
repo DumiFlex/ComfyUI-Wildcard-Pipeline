@@ -106,6 +106,7 @@ def _validate_payload_for_type(type_id: str, payload: dict) -> str | None:
 
 _UPDATABLE_FIELDS = (
     "name", "description", "tags", "payload", "is_favorite", "category_id",
+    "content_rating",
 )
 
 
@@ -227,6 +228,7 @@ async def create_module(request: web.Request) -> web.Response:
                 tags=body.get("tags", []),
                 payload=body["payload"],
                 is_favorite=bool(body.get("is_favorite", False)),
+                content_rating=body.get("content_rating", "safe"),
             )
     except ValueError as e:
         return json_error(str(e), status=400)
@@ -293,6 +295,7 @@ async def import_from_workflow(request: web.Request) -> web.Response:
                 tags=body.get("tags", []),
                 payload=body["payload"],
                 is_favorite=bool(body.get("is_favorite", False)),
+                content_rating=body.get("content_rating", "safe"),
             )
     except ValueError as e:
         return json_error(str(e), status=400)

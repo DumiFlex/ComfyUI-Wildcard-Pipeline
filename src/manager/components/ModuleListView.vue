@@ -66,6 +66,14 @@ function communityPillTitle(row: T): string {
   return `Installed from community - ${slug} v${ver}`;
 }
 
+interface ContentRated {
+  content_rating?: "safe" | "nsfw";
+}
+function isNsfw(row: T): boolean {
+  const r = row as T & ContentRated;
+  return r.content_rating === "nsfw";
+}
+
 interface Filter {
   q?: string;
   favorites?: boolean;
@@ -992,6 +1000,14 @@ defineExpose({
                   >
                     <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
                   </button>
+                  <!-- NSFW pill (engine migration 015). Stamped by the
+                       IdentityCard NSFW toggle or auto-stamped at
+                       community install time from `opts.origin.content_rating`. -->
+                  <span
+                    v-if="isNsfw(row)"
+                    class="wp-row-community-pill wp-row-community-pill--nsfw"
+                    title="NSFW content"
+                  >18+</span>
                 </div>
               </td>
               <slot name="columns" :row="row" />
@@ -1334,6 +1350,13 @@ defineExpose({
 .wp-row-community-pill--button:hover {
   background: color-mix(in oklab, var(--wp-warn, #f59e0b) 22%, transparent);
   border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
+}
+.wp-row-community-pill--nsfw {
+  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 28%, transparent);
+  color: var(--wp-danger, #ef4444);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 .wp-row-tags {
   display: flex;

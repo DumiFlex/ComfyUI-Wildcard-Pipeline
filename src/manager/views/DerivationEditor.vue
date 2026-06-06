@@ -97,6 +97,7 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 const rules = ref<DerivationRule[]>([]);
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
@@ -259,6 +260,7 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
+      contentRating.value = row.content_rating ?? "safe";
       const p = row.payload as Partial<DerivationPayload>;
       const incoming = Array.isArray(p.rules) ? p.rules : [];
       rules.value = incoming.length ? incoming.map(migrateRule) : [];
@@ -325,6 +327,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
@@ -338,6 +341,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: newPayload,
       });
     }
@@ -427,7 +431,9 @@ defineExpose({ rules, addRule, removeRule, applyRestore });
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
+      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
+      @update:content-rating="(v) => (contentRating = v)"
     />
 
     <Card :title="`Rules (${rules.length})`">

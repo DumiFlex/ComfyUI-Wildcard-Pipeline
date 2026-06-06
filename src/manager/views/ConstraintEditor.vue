@@ -113,6 +113,7 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 const sourceWildcardId = ref<string | null>(null);
 const targetWildcardId = ref<string | null>(null);
 const matrix = ref<ConstraintMatrix>({});
@@ -464,6 +465,7 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
+      contentRating.value = row.content_rating ?? "safe";
       const p = row.payload as Partial<ConstraintPayload>;
       sourceWildcardId.value = p.source_wildcard_id ?? null;
       targetWildcardId.value = p.target_wildcard_id ?? null;
@@ -586,6 +588,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
@@ -599,6 +602,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: newPayload,
       });
     }
@@ -712,7 +716,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, matrix, exceptions, applyRest
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
+        :content-rating="contentRating"
         @update:tags="(v) => (tags = v)"
+        @update:content-rating="(v) => (contentRating = v)"
       />
     </div>
 

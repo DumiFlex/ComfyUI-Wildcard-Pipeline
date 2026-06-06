@@ -126,6 +126,7 @@ function cancel() {
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
+        :show-content-rating="false"
         @update:tags="(v) => (tags = v)"
       />
       <Card>

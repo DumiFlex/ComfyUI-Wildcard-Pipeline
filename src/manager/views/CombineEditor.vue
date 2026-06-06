@@ -167,6 +167,7 @@ async function onOutputVarRenameConfirmed(result: {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: { ...(payload as unknown as Record<string, unknown>), history: historyNext },
       });
       historyEntries.value = historyNext;
@@ -197,6 +198,7 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 const template = ref("");
 const outputVar = ref("");
 const outputVarTouched = ref(false);
@@ -321,6 +323,7 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
+      contentRating.value = row.content_rating ?? "safe";
       const p = row.payload as Partial<CombinePayload>;
       template.value = p.template ?? "";
       const o = (p.output_var ?? "").replace(/^\$+/, "");
@@ -424,6 +427,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: { ...newPayload, history: nextHistory },
       });
       historyEntries.value = nextHistory;
@@ -437,6 +441,7 @@ async function save() {
         description: description.value,
         category_id: categoryId.value,
         tags: tags.value,
+        content_rating: contentRating.value,
         payload: newPayload,
       });
     }
@@ -524,7 +529,9 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
+      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
+      @update:content-rating="(v) => (contentRating = v)"
     />
 
     <Card title="Template & Output">

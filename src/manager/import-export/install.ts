@@ -87,6 +87,14 @@ export type CollisionDecision =
 export interface InstallOrigin {
   post_slug: string;
   version_number: number;
+  /**
+   * Content rating from the community post detail (engine migration
+   * 015). When supplied, every entity in the install gets its
+   * `content_rating` stamped here so the local row renders the `18+`
+   * pill without an extra fetch. Omitting it preserves the row's
+   * existing flag via the COALESCE in `_update_module/_bundle`.
+   */
+  content_rating?: "safe" | "nsfw";
 }
 
 export interface InstallOptions {
@@ -367,6 +375,13 @@ export async function installEnvelope(
       for (const row of selection[bucket]) {
         row.entity.community_post_slug = opts.origin.post_slug;
         row.entity.community_version_number = opts.origin.version_number;
+        // Stamp content_rating from the community post detail so the
+        // installed row carries the `18+` pill without a follow-up
+        // fetch. Omitting the field leaves the engine's COALESCE
+        // preserve-prior path in charge (migration 015).
+        if (opts.origin.content_rating !== undefined) {
+          row.entity.content_rating = opts.origin.content_rating;
+        }
       }
     }
   }

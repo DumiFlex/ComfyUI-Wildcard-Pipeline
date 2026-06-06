@@ -109,6 +109,7 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 const varBinding = ref("");
 const varBindingError = ref("");
 const subCategories = ref<string[]>([]);
@@ -290,6 +291,7 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
+      contentRating.value = row.content_rating ?? "safe";
       const p = row.payload as Partial<WildcardPayload>;
       options.value = (p.options ?? []).map((o) => ({ ...o }));
       subCategories.value = [...(p.sub_categories ?? [])];
@@ -710,6 +712,7 @@ async function save() {
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value,
         payload: { ...newPayload, history: nextHistory },
+        content_rating: contentRating.value,
       });
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "wildcard", name: name.value });
@@ -722,6 +725,7 @@ async function save() {
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value,
         payload: newPayload,
+        content_rating: contentRating.value,
       });
     }
     draft.discard();
@@ -856,7 +860,9 @@ defineExpose({ historyEntries, applyRestore, options });
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
+        :content-rating="contentRating"
         @update:tags="(v) => (tags = v)"
+        @update:content-rating="(v) => (contentRating = v)"
         @update:var-binding="(v) => (varBinding = v)"
       />
     </div>

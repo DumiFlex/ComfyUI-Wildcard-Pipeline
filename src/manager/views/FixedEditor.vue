@@ -93,6 +93,7 @@ const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
+const contentRating = ref<"safe" | "nsfw">("safe");
 const values = ref<NamedValue[]>([
   { id: `val_${Math.random().toString(16).slice(2, 8)}`, name: "", value: "" },
   { id: `val_${Math.random().toString(16).slice(2, 8)}`, name: "", value: "" },
@@ -168,6 +169,7 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = row.tags;
+      contentRating.value = row.content_rating ?? "safe";
       const rows = (row.payload as { values?: NamedValue[] }).values ?? [];
       values.value = rows.map((v) => ({
         id: v.id,
@@ -268,6 +270,7 @@ async function save() {
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value,
         payload: { ...payload, history: nextHistory },
+        content_rating: contentRating.value,
       });
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "fixed_values", name: name.value });
@@ -278,6 +281,7 @@ async function save() {
         type: "fixed_values",
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value, payload,
+        content_rating: contentRating.value,
       });
     }
     draft.discard();
@@ -361,10 +365,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       :description="description"
       :category-id="categoryId"
       :tags="tags"
+      :content-rating="contentRating"
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
       @update:tags="(v) => (tags = v)"
+      @update:content-rating="(v) => (contentRating = v)"
     />
 
     <Card :title="`Values (${values.length})`" :padding="false">
