@@ -108,6 +108,29 @@ When a payload shape change lands (not a row-column change — those don't bump 
 7. **Coordinate the community-side catalog row.** Community web's `schema_catalog` table gets the matching `(version, is_breaking_from_previous, notes)` row + a deploy that lands BEFORE sister's PR merges. See community CLAUDE.md "Bumping the schema" for the server side.
 8. **Sister deploys after server.** Once catalog HEAD ≥ sister's CURRENT, sister can safely refuse breaking-future shapes.
 
+### Validator ↔ engine parity (DON'T skip)
+
+The community TS validators in `src/validators/` are a hand-authored
+re-implementation of the engine's payload shapes, and re-implementations
+drift — fixed_values shipped for weeks as `entries/{variable_name}` when
+the engine has always used `values/{id,name,value}`. The guard against
+this:
+
+- `scripts/dump_engine_shapes.py` builds one sample payload per subtype,
+  validates each against that subtype's **own engine `Handler.validate_payload`**
+  (the authority — raises if not engine-valid), and writes the engine-row
+  shape to `src/validators/fixtures/engine-parity/*.json`.
+- `src/validators/__tests__/engine-parity.test.ts` asserts the **strict**
+  community validator accepts every one of those fixtures.
+
+**Any time you change an engine module payload shape** (a `*_handler.py`
+`validate_payload`, or what the editor stores), run
+`python scripts/dump_engine_shapes.py` and commit the regenerated
+fixtures. If the sample no longer validates against the handler, the
+script fails — update the sample. If the TS validator then rejects the
+new shape, the parity test fails — update the validator. Either failure
+means the two have diverged; fix it before publish breaks for a user.
+
 ### Row-level column changes (no schema_version bump needed)
 
 The most recent example is **migration 015 (`content_rating` column)**. Adding a column to `modules` or `bundles` is just an Alembic-style SQLite migration — no payload-shape change, no validator update, no migrator chain. Procedure:

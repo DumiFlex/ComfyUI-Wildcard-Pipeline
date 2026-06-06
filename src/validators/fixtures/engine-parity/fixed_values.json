@@ -1,0 +1,18 @@
+{
+  "id": "parityfi",
+  "type": "fixed_values",
+  "name": "parity-fixed_values",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "values": [
+      {
+        "id": "val00001",
+        "name": "style",
+        "value": "oil painting"
+      }
+    ]
+  }
+}

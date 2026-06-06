@@ -1,0 +1,37 @@
+{
+  "id": "parityde",
+  "type": "derivation",
+  "name": "parity-derivation",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "rules": [
+      {
+        "id": "rule0001",
+        "branches": [
+          {
+            "condition": {
+              "var": "mood",
+              "op": "equals",
+              "value": "dramatic"
+            },
+            "action": {
+              "target_var": "accent",
+              "mode": "replace",
+              "value": "cinematic lighting"
+            }
+          }
+        ],
+        "else": {
+          "action": {
+            "target_var": "accent",
+            "mode": "replace",
+            "value": "soft lighting"
+          }
+        }
+      }
+    ]
+  }
+}

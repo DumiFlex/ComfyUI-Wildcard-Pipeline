@@ -1,0 +1,31 @@
+{
+  "id": "paritywi",
+  "type": "wildcard",
+  "name": "parity-wildcard",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "var_binding": "mood",
+    "sub_categories": [
+      "soft",
+      "bold"
+    ],
+    "options": [
+      {
+        "id": "opt00001",
+        "value": "serene",
+        "weight": 1,
+        "sub_category": "soft"
+      },
+      {
+        "id": "opt00002",
+        "value": "",
+        "weight": 1,
+        "sub_category": null,
+        "is_null": true
+      }
+    ]
+  }
+}

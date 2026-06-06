@@ -1,0 +1,22 @@
+{
+  "id": "parityco",
+  "type": "constraint",
+  "name": "parity-constraint",
+  "description": "",
+  "category_id": null,
+  "tags": [],
+  "is_favorite": false,
+  "payload": {
+    "source_wildcard_id": "src00001",
+    "target_wildcard_id": "tgt00001",
+    "exceptions": [],
+    "matrix": {
+      "soft": {
+        "bold": {
+          "mode": "boost",
+          "factor": 3
+        }
+      }
+    }
+  }
+}
