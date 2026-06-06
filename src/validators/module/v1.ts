@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 
-const moduleRowBase = z.object({
+export const moduleRowBase = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string(),

@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { wildcardV1, fixedValuesV1, combineV1, derivationV1, constraintV1 } from "./module/v1";
+import { wildcardV2, fixedValuesV2, combineV2, derivationV2, constraintV2 } from "./module/v2";
 import { bundleV1 } from "./bundle/v1";
 
 export type ModuleSubtype =
@@ -41,6 +42,15 @@ const REGISTRY: Record<string, z.ZodTypeAny> = {
   "module:derivation:1": derivationV1,
   "module:constraint:1": constraintV1,
   "bundle::1": bundleV1,
+  // v2 (SP1 multi-tag): only the wildcard shape changed; other subtypes
+  // re-register the v1 schema. Bundle children are validated opaquely, so
+  // the bundle root schema is version-agnostic.
+  "module:wildcard:2": wildcardV2,
+  "module:fixed_values:2": fixedValuesV2,
+  "module:combine:2": combineV2,
+  "module:derivation:2": derivationV2,
+  "module:constraint:2": constraintV2,
+  "bundle::2": bundleV1,
 };
 
 export function getValidator(spec: ValidatorSpec): z.ZodTypeAny {

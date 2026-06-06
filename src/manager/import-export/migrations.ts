@@ -24,7 +24,9 @@
  *      `ctx.applyModuleStep` rather than re-dispatching `migratePayload`.
  */
 
-export const CURRENT_SCHEMA_VERSION = 1;
+import { RESERVED } from "../parsing/subcatFilter";
+
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface MigrationOk<T> {
   ok: true;
@@ -80,8 +82,156 @@ function migrateV0ToV1(payload: RawPayload): RawPayload {
   };
 }
 
+// === v1 -> v2 (SP1 multi-tag) — mirror of engine/migrations/v1_to_v2.py ===
+// option sub_category -> sub_categories[]; sub-category names slugified
+// (whitespace/grammar chars -> `_`, reserved suffixed, de-duped, cascaded);
+// instance category_filter list -> boolean-expr string + exclude_null;
+// nested @{uuid:a,b,null} refs -> @{uuid:a or b!null}. Idempotent.
+const _BAD = /[\s()!,#:}@{$]+/gu;
+const _REF = /@\{([0-9a-f]{8})(#[^:}]*)?(:[^}]*)?\}/g;
+
+function _slug(name: string): string {
+  return name.replace(_BAD, "_").replace(/^_+|_+$/g, "") || "_";
+}
+
+function _nameMap(registry: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const used = new Set<string>();
+  for (const raw of registry) {
+    let s = _slug(raw);
+    if (RESERVED.has(s.toLowerCase())) s = `${s}_1`;
+    const base = s;
+    let n = 1;
+    while (used.has(s)) { n += 1; s = `${base}_${n}`; }
+    used.add(s);
+    out.set(raw, s);
+  }
+  return out;
+}
+
+function _rewriteRefs(s: string): string {
+  return s.replace(_REF, (full, uuid: string, nameSeg: string | undefined, tail: string | undefined) => {
+    if (tail === undefined) return full;
+    const lst = tail.slice(1); // strip leading ':'
+    const hasComma = lst.includes(",");
+    const parts = lst.split(",").map((x) => x.trim());
+    const hasNull = parts.includes("null");
+    if (!hasComma && !hasNull) return full; // single tag / v2 expr — leave
+    const expr = parts.filter((p) => p && p !== "null").join(" or ");
+    let out = "@{" + uuid + (nameSeg ?? "");
+    if (expr) out += ":" + expr;
+    if (hasNull) out += "!null";
+    return out + "}";
+  });
+}
+
+function _strArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
+}
+
+function _isWildcardPayload(p: unknown): p is Record<string, unknown> {
+  if (typeof p !== "object" || p === null) return false;
+  const o = p as Record<string, unknown>;
+  if (!Array.isArray(o.options)) return false;
+  if ("sub_categories" in o) return true;
+  return o.options.some((opt) => typeof opt === "object" && opt !== null && "sub_category" in opt);
+}
+
+function _applyWildcardPayload(
+  p: Record<string, unknown>,
+  nmap?: Map<string, string>,
+): Record<string, unknown> {
+  const reg = _strArray(p.sub_categories);
+  const map = nmap ?? _nameMap(reg);
+  const opts = Array.isArray(p.options) ? p.options : [];
+  const out: Record<string, unknown> = {
+    ...p,
+    sub_categories: reg.map((s) => map.get(s) ?? _slug(s)),
+    options: opts.map((raw) => {
+      if (typeof raw !== "object" || raw === null) return raw;
+      const o = { ...(raw as Record<string, unknown>) };
+      if (Array.isArray(o.sub_categories)) {
+        o.sub_categories = o.sub_categories.map((t) => (typeof t === "string" ? (map.get(t) ?? _slug(t)) : t));
+      } else {
+        const sc = o.sub_category;
+        delete o.sub_category;
+        o.sub_categories = typeof sc === "string" && sc ? [map.get(sc) ?? _slug(sc)] : [];
+      }
+      if (typeof o.value === "string") o.value = _rewriteRefs(o.value);
+      return o;
+    }),
+  };
+  if (typeof p.tag_groups === "object" && p.tag_groups !== null) {
+    const tg: Record<string, unknown> = {};
+    for (const [g, mem] of Object.entries(p.tag_groups as Record<string, unknown>)) {
+      tg[g] = Array.isArray(mem)
+        ? mem.map((m) => (typeof m === "string" ? (map.get(m) ?? _slug(m)) : m))
+        : mem;
+    }
+    out.tag_groups = tg;
+  }
+  return out;
+}
+
+function _migrateInstance(inst: Record<string, unknown>, nmap: Map<string, string>): Record<string, unknown> {
+  if (!Array.isArray(inst.category_filter)) return inst;
+  const cf = inst.category_filter;
+  const out = { ...inst };
+  out.category_filter = cf
+    .filter((c): c is string => typeof c === "string" && !!c && c !== "null")
+    .map((c) => nmap.get(c) ?? _slug(c))
+    .join(" or ");
+  out.exclude_null = Boolean(out.exclude_null) || cf.includes("null");
+  return out;
+}
+
+function _deepMigrate(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(_deepMigrate);
+  if (typeof obj === "object" && obj !== null) {
+    if (_isWildcardPayload(obj)) return _applyWildcardPayload(obj as Record<string, unknown>);
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[k] = _deepMigrate(v);
+    return out;
+  }
+  if (typeof obj === "string") return _rewriteRefs(obj);
+  return obj;
+}
+
+function _migrateWildcardEntry(w: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...w };
+  let nmap = new Map<string, string>();
+  const p = w.payload;
+  if (typeof p === "object" && p !== null && !Array.isArray(p)) {
+    nmap = _nameMap(_strArray((p as Record<string, unknown>).sub_categories));
+    out.payload = _applyWildcardPayload(p as Record<string, unknown>, nmap);
+  }
+  const inst = w.instance;
+  if (typeof inst === "object" && inst !== null && !Array.isArray(inst)) {
+    out.instance = _migrateInstance(inst as Record<string, unknown>, nmap);
+  }
+  return out;
+}
+
+function migrateV1ToV2(payload: RawPayload): RawPayload {
+  const deep = (arr: Array<Record<string, unknown>>) =>
+    arr.map((e) => _deepMigrate(e) as Record<string, unknown>);
+  return {
+    ...payload,
+    schema_version: 2,
+    wildcards: payload.wildcards.map((w) => _migrateWildcardEntry(w)),
+    bundles: deep(payload.bundles),
+    fixed_values: deep(payload.fixed_values),
+    combines: deep(payload.combines),
+    derivations: deep(payload.derivations),
+    constraints: deep(payload.constraints),
+    categories: deep(payload.categories),
+    templates: deep(payload.templates),
+  };
+}
+
 const MIGRATION_CHAIN: Record<number, VersionMigration> = {
   0: migrateV0ToV1,
+  1: migrateV1ToV2,
 };
 
 export function migrateImportEnvelope(payload: Partial<RawPayload>): MigrationResult<RawPayload> {

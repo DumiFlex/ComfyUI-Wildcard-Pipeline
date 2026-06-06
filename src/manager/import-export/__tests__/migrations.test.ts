@@ -43,7 +43,8 @@ describe("migrateImportEnvelope", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.migrated.schema_version).toBe(CURRENT_SCHEMA_VERSION);
-      expect(result.migratedEntityCount).toBe(1);  // 1 wildcard entity migrated
+      // 2 chain steps (v0->v1, v1->v2) each pass the 1 wildcard => 2.
+      expect(result.migratedEntityCount).toBe(2);
     }
   });
 
@@ -109,7 +110,8 @@ describe("migrateImportEnvelope", () => {
     const result = migrateImportEnvelope(v0Payload);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.migratedEntityCount).toBe(7);
+      // 7 entities x 2 chain steps (v0->v1, v1->v2) = 14.
+      expect(result.migratedEntityCount).toBe(14);
     }
   });
 
@@ -162,7 +164,8 @@ describe("migrateImportEnvelope", () => {
     const result = migrateImportEnvelope(v0Payload);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.migratedEntityCount).toBe(2);
+      // 2 templates x 2 chain steps (v0->v1, v1->v2) = 4.
+      expect(result.migratedEntityCount).toBe(4);
     }
   });
 });

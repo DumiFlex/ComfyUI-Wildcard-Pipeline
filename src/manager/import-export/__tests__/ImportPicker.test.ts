@@ -217,7 +217,7 @@ describe("ImportPicker.vue", () => {
     await expandSection(wrap, "wildcards");
     const row1 = wrap.get('[data-test="import-picker-row-w1"]');
     // Phase 2 label includes the source → current schema version pair.
-    expect(row1.text()).toContain("MIGRATED v0→1");
+    expect(row1.text()).toContain("MIGRATED v0→2");
     // Shared `wp-mod-badge--migrated` primitive — blue/info tint.
     expect(row1.find(".wp-mod-badge.wp-mod-badge--migrated").exists()).toBe(true);
     const row2 = wrap.get('[data-test="import-picker-row-w2"]');
@@ -796,7 +796,7 @@ describe("ImportPicker.vue", () => {
     const badges = row.props("statusBadges") as Array<{ label: string; variant: string }>;
     expect(badges).toHaveLength(2);
     expect(badges[0]!.variant).toBe("migrated");
-    expect(badges[0]!.label).toBe("MIGRATED v0→1");
+    expect(badges[0]!.label).toBe("MIGRATED v0→2");
     expect(badges[1]!.variant).toBe("mod");
     expect(badges[1]!.label).toBe("MODIFIED");
   });

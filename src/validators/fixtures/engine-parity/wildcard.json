@@ -17,13 +17,15 @@
         "id": "opt00001",
         "value": "serene",
         "weight": 1,
-        "sub_category": "soft"
+        "sub_categories": [
+          "soft"
+        ]
       },
       {
         "id": "opt00002",
         "value": "",
         "weight": 1,
-        "sub_category": null,
+        "sub_categories": [],
         "is_null": true
       }
     ]

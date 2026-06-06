@@ -14,7 +14,7 @@ import type { RawPayload } from "../migrations";
  */
 function makeValidPayloadJson(): string {
   return JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     bundles: [],
     wildcards: [],
     fixed_values: [],
@@ -25,9 +25,10 @@ function makeValidPayloadJson(): string {
   });
 }
 
-/** Make a v0 payload — parser will migrate it to v1 and stamp every
- *  entity with `migrated_from: 0`. We use this to exercise the
- *  `migratedEntityCount > 0` branch in the migration-note UX. */
+/** Make a v0 payload — parser will migrate it to the current schema
+ *  version and stamp every entity with `migrated_from: 0`. We use this
+ *  to exercise the `migratedEntityCount > 0` branch in the
+ *  migration-note UX. */
 function makeV0PayloadJson(): string {
   return JSON.stringify({
     schema_version: 0,
@@ -70,7 +71,7 @@ describe("ImportTab.vue", () => {
     // Three args: payload (RawPayload), migratedCount, integrityWarnings.
     expect(firstCall).toHaveLength(3);
     const payload = firstCall[0] as RawPayload;
-    expect(payload.schema_version).toBe(1);
+    expect(payload.schema_version).toBe(2);
     expect(payload.bundles).toEqual([]);
     expect(payload.wildcards).toEqual([]);
     expect(payload.fixed_values).toEqual([]);
@@ -142,7 +143,7 @@ describe("ImportTab.vue", () => {
     expect(firstCall).toBeDefined();
     if (!firstCall) return;
     const payload = firstCall[0] as RawPayload;
-    expect(payload.schema_version).toBe(1);
+    expect(payload.schema_version).toBe(2);
   });
 
   it("paste cancel closes the pane without emitting", async () => {
@@ -171,12 +172,13 @@ describe("ImportTab.vue", () => {
     const firstCall = emitted?.[0];
     expect(firstCall).toBeDefined();
     if (!firstCall) return;
-    // Two wildcards migrated through one step → migratedEntityCount = 2.
-    expect(firstCall[1]).toBe(2);
+    // CURRENT_SCHEMA_VERSION === 2: v0 migrates v0->v1->v2 (two steps).
+    // Two wildcards counted once per step → 2 * 2 = 4.
+    expect(firstCall[1]).toBe(4);
 
     const note = wrap.find("[data-test='import-tab-migration-note']");
     expect(note.exists()).toBe(true);
-    expect(note.text()).toMatch(/migrated 2 entities/i);
+    expect(note.text()).toMatch(/migrated 4 entities/i);
   });
 
   // ---------- Phase 5: compact loaded-state bar ----------
