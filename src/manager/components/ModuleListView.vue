@@ -970,13 +970,15 @@ defineExpose({
                        engine stamped `community_post_slug` on this
                        row at install time (migration 013). Locally
                        authored rows have NULL here and stay
-                       unmarked. -->
+                       unmarked. Icon-only — the globe glyph carries
+                       the meaning; redundant "community" text was
+                       removed when the pill system was harmonized. -->
                   <span
                     v-if="communityOriginSlug(row)"
                     class="wp-row-community-pill"
                     :title="communityPillTitle(row)"
                   >
-                    <i class="pi pi-globe" />community
+                    <i class="pi pi-globe" />
                   </span>
                   <!-- Update-available indicator. Distinct pill so the
                        user can tell which rows are behind, not just
@@ -1295,28 +1297,33 @@ defineExpose({
 .wp-row-name__text {
   font-weight: 500;
 }
+/* Row-level metadata pills. One canonical shape (bordered 4px rect,
+ * 18px tall, 10px label) shared across community-origin and
+ * update-available variants. Future variants (e.g. nsfw, once the
+ * data is plumbed) plug into the same primitive. */
 .wp-row-community-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  align-self: flex-start;
-  margin-top: 2px;
-  padding: 1px 6px 1px 5px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--wp-accent) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-accent) 32%, transparent);
-  color: var(--wp-accent-text);
-  font-size: 10.5px;
+  align-self: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in oklab, #06b6d4 12%, transparent);
+  border: 1px solid color-mix(in oklab, #06b6d4 24%, transparent);
+  color: #67e8f9;
+  font-size: 10px;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1;
   white-space: nowrap;
 }
 .wp-row-community-pill .pi {
   font-size: 9px;
 }
 .wp-row-community-pill--update {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 42%, transparent);
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 16%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 30%, transparent);
   color: var(--wp-warn, #f59e0b);
 }
 .wp-row-community-pill--button {
@@ -1325,8 +1332,8 @@ defineExpose({
   transition: background 0.12s, border-color 0.12s;
 }
 .wp-row-community-pill--button:hover {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 28%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 60%, transparent);
+  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
 }
 .wp-row-tags {
   display: flex;
