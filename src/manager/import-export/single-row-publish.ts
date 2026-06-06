@@ -31,6 +31,15 @@ export interface PublishablePayload {
   name: string;
   /** Optional human description (prefilled on the community publish form). */
   description: string;
+  /** Engine-side content_rating (migration 015). Mapped to community's
+   *  `'sfw' | 'nsfw'` at the embed seam -- engine 'safe' → embed 'sfw'. */
+  content_rating: "safe" | "nsfw";
+  /** Tags carried into the publish-form prefill. */
+  tags: string[];
+  /** Existing community origin slug if this row was installed from
+   *  community. Lets the embed publish form detect re-publish (own
+   *  post = version bump; foreign post = fork prompt). */
+  community_post_slug: string | null;
 }
 
 export interface PublishBody {
@@ -100,7 +109,14 @@ export function buildModulePublishable(row: ModuleRow): PublishablePayload {
     is_favorite: row.is_favorite,
     payload: row.payload,
   };
-  return { payload, name: row.name, description: row.description };
+  return {
+    payload,
+    name: row.name,
+    description: row.description,
+    content_rating: row.content_rating ?? "safe",
+    tags: row.tags ?? [],
+    community_post_slug: row.community_post_slug ?? null,
+  };
 }
 
 /**
@@ -119,7 +135,14 @@ export function buildBundlePublishable(row: BundleRow): PublishablePayload {
     is_favorite: row.is_favorite,
     children: row.children,
   };
-  return { payload, name: row.name, description: row.description };
+  return {
+    payload,
+    name: row.name,
+    description: row.description,
+    content_rating: row.content_rating ?? "safe",
+    tags: row.tags ?? [],
+    community_post_slug: row.community_post_slug ?? null,
+  };
 }
 
 /**
@@ -167,6 +190,16 @@ export function publishToCommunity(
   hash.set("payload", b64);
   if (pub.name) hash.set("name", pub.name);
   if (pub.description) hash.set("description", pub.description);
+  // Engine stores 'safe'/'nsfw'; community publish form takes 'sfw'/'nsfw'.
+  // Map at the seam so the radio button selects correctly on hydrate.
+  hash.set("content_rating", pub.content_rating === "nsfw" ? "nsfw" : "sfw");
+  if (pub.tags.length > 0) hash.set("tags", pub.tags.join(","));
+  // Re-publish detection: embed reads this + the current user's
+  // username to decide between "create new post", "update version",
+  // and "fork foreign post" flows.
+  if (pub.community_post_slug) {
+    hash.set("origin_slug", pub.community_post_slug);
+  }
   router.push({ path: "/community/publish", hash: `#${hash.toString()}` });
 }
 
