@@ -200,9 +200,20 @@ onMounted(() => {
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
       moduleStore.fetchCatalog()
-        .then(() => cascadeStore.rebuildFromCatalogs(
-          moduleStore.catalog, bundleStore.catalog, categoryStore.items,
-        ))
+        .then(() => {
+          cascadeStore.rebuildFromCatalogs(
+            moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+          );
+          // Library changed (insert / delete / edit, from ANY surface) —
+          // re-run the community update check so per-row pills track
+          // reality without a manual refresh: a pill clears after an
+          // in-place update, and reappears after the user deletes an
+          // install-as-new copy of a post (#4 / #6).
+          void communityUpdateStore.check({
+            modules: moduleStore.catalog,
+            bundles: bundleStore.catalog,
+          });
+        })
         .catch(() => undefined);
     },
   );
@@ -211,9 +222,17 @@ onMounted(() => {
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
       bundleStore.fetchCatalog()
-        .then(() => cascadeStore.rebuildFromCatalogs(
-          moduleStore.catalog, bundleStore.catalog, categoryStore.items,
-        ))
+        .then(() => {
+          cascadeStore.rebuildFromCatalogs(
+            moduleStore.catalog, bundleStore.catalog, categoryStore.items,
+          );
+          // See the module-hash watch above — same recheck, for bundle
+          // inserts / deletes / edits (#4 / #6).
+          void communityUpdateStore.check({
+            modules: moduleStore.catalog,
+            bundles: bundleStore.catalog,
+          });
+        })
         .catch(() => undefined);
     },
   );

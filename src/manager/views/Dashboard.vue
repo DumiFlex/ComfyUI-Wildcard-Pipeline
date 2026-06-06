@@ -115,6 +115,38 @@ const totalItems = computed<number>(() =>
 );
 const showGettingStarted = computed<boolean>(() => totalItems.value < 3);
 
+// "New here?" intro card dismissal. The card used to REPLACE the recents
+// list (mutually-exclusive v-if), so a user who'd made a module or two
+// but not run the tutorial lost their recents behind the intro. Now the
+// recents card always renders and the intro sits ABOVE it with an X.
+// Dismissal is persisted (mirrors useRecentStore's localStorage guard:
+// storage can throw in private mode / on quota, so every access is
+// wrapped) so closing it sticks across visits.
+const ONBOARDING_DISMISS_KEY = "wp-onboarding-dismissed";
+function readOnboardingDismissed(): boolean {
+  try {
+    return localStorage.getItem(ONBOARDING_DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+const onboardingDismissed = ref<boolean>(readOnboardingDismissed());
+function dismissOnboarding() {
+  onboardingDismissed.value = true;
+  try {
+    localStorage.setItem(ONBOARDING_DISMISS_KEY, "1");
+  } catch {
+    // Storage unavailable — the ref still hides it this session; it just
+    // reappears next load. Acceptable for a non-critical intro card.
+  }
+}
+// Show only for genuinely-new libraries (< 3 items) AND only until the
+// user closes it. Established users (≥ 3 items) never see it, so they
+// never need to dismiss.
+const showOnboardingCard = computed<boolean>(
+  () => showGettingStarted.value && !onboardingDismissed.value,
+);
+
 /** Health issues derived from the live catalog. Lightweight checks
  *  surfaced as a single advisory card — runtime conflicts (missing
  *  $vars, etc.) are the extension's domain; this card focuses on
@@ -472,7 +504,7 @@ onMounted(refresh);
          essentially empty (< 3 items across all kinds). Auto-collapses
          into the regular Recents tabs as soon as the user creates a
          few things, so it never gets in the way of returning users. -->
-    <Card v-if="showGettingStarted" data-test="dashboard-getting-started">
+    <Card v-if="showOnboardingCard" data-test="dashboard-getting-started">
       <template #default>
         <div class="dashboard__start-head">
           <Icon name="pi-compass" />
@@ -480,6 +512,15 @@ onMounted(refresh);
             <h3 class="dashboard__start-title">New here?</h3>
             <p class="dashboard__start-sub">Start with the introduction — it shows how the pieces fit together. From there, the Quick start gets you a runnable graph in a couple of minutes.</p>
           </div>
+          <Button
+            class="dashboard__start-dismiss"
+            variant="ghost"
+            icon="pi-times"
+            aria-label="Dismiss intro"
+            title="Dismiss — the docs stay in the sidebar"
+            data-test="dashboard-getting-started-dismiss"
+            @click="dismissOnboarding"
+          />
         </div>
         <div class="dashboard__start-cta">
           <Button variant="primary" icon="pi-compass" @click="router.push('/docs/introduction')">Read the introduction</Button>
@@ -488,8 +529,10 @@ onMounted(refresh);
       </template>
     </Card>
 
-    <!-- Recent / Favorites -->
-    <Card v-if="!showGettingStarted" padding>
+    <!-- Recent / Favorites — always rendered now. The intro card above
+         no longer hides it; an empty library just shows the empty-state
+         line under the tabs. -->
+    <Card padding>
       <!-- Tabs sit at the top-LEFT of the card body now, not in the
            Card's right-aligned #actions slot. The View-all link stays
            on the right via wp-spacer so the row balances. Earlier
@@ -668,7 +711,11 @@ onMounted(refresh);
   gap: var(--wp-space-4);
   margin-bottom: var(--wp-space-5);
 }
-.dashboard__start-head .pi { color: var(--wp-accent-500); font-size: 22px; margin-top: 2px; }
+/* Only the lead compass icon (direct child) gets the accent treatment —
+   NOT the dismiss button's nested pi-times, which would otherwise inherit
+   the 22px accent size. */
+.dashboard__start-head > .pi { color: var(--wp-accent-500); font-size: 22px; margin-top: 2px; }
+.dashboard__start-dismiss { margin-left: auto; flex: none; }
 .dashboard__start-title { margin: 0; font-size: var(--wp-text-lg); font-weight: 600; }
 .dashboard__start-sub { margin: 2px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .dashboard__start-list {

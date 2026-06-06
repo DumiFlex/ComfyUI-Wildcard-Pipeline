@@ -164,10 +164,28 @@ export const useCommunityUpdateStore = defineStore("communityUpdates", () => {
         // localStorage denied / malformed — treat as empty.
       }
 
+      // Slugs the user ALREADY holds at latest locally. "Install as
+      // new" clones the post at vN into a fresh row beside the old
+      // vN-1 row, both stamped with the same slug — so the newest
+      // payload is already in the library and nagging the old row to
+      // update is noise. Suppress the pill on every sibling of such a
+      // slug. Deleting the newer copy drops the slug from this set on
+      // the next check(), so the pill correctly returns on the old row.
+      const haveLatestForSlug = new Set<string>();
+      for (const c of candidates) {
+        const latest = latestBySlug.get(c.post_slug);
+        if (typeof latest === "number" && c.installed_version >= latest) {
+          haveLatestForSlug.add(c.post_slug);
+        }
+      }
+
       const next = new Map<string, UpdateEntry>();
       for (const c of candidates) {
         const latest = latestBySlug.get(c.post_slug);
         if (typeof latest !== "number" || latest <= c.installed_version) continue;
+        // The latest payload is already installed under another row
+        // (install-as-new) — don't nag the older sibling.
+        if (haveLatestForSlug.has(c.post_slug)) continue;
         // Skip if the user already dismissed this exact post version.
         // A newer version drops past the dismissal (we compare against
         // the dismissed number, not the slug alone).

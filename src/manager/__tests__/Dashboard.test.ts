@@ -28,6 +28,9 @@ const apiBundles = api.bundles as unknown as Record<string, ReturnType<typeof vi
 
 beforeEach(() => {
   setActivePinia(createPinia());
+  // The intro card persists dismissal in localStorage — clear it so one
+  // test's dismissal can't leak into another's "card is shown" assertion.
+  try { localStorage.clear(); } catch { /* no storage in env */ }
   Object.values(apiMod).forEach((fn) => fn.mockReset());
   Object.values(apiBundles).forEach((fn) => fn.mockReset());
   apiBundles.list.mockResolvedValue({ items: [], total: 0 });
@@ -88,14 +91,27 @@ describe("Dashboard.vue", () => {
     expect(text).toContain("Bundles");
   });
 
-  it("renders the getting-started checklist when the library is empty", async () => {
+  it("shows the intro card ABOVE the recents (both visible) when the library is empty", async () => {
     apiMod.list.mockResolvedValue({ items: [], total: 0 });
     const wrap = mountView();
     await flushPromises();
     expect(wrap.find('[data-test="dashboard-getting-started"]').exists()).toBe(true);
     expect(wrap.text()).toContain("New here?");
-    // Recents tabs are hidden in the empty state.
-    expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(false);
+    // Recents now render alongside the intro card instead of being
+    // replaced by it — a user with a couple of items keeps their list.
+    expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(true);
+  });
+
+  it("dismissing the intro card hides it (persisted) but keeps the recents", async () => {
+    apiMod.list.mockResolvedValue({ items: [], total: 0 });
+    const wrap = mountView();
+    await flushPromises();
+    expect(wrap.find('[data-test="dashboard-getting-started"]').exists()).toBe(true);
+    await wrap.get('[data-test="dashboard-getting-started-dismiss"]').trigger("click");
+    expect(wrap.find('[data-test="dashboard-getting-started"]').exists()).toBe(false);
+    // Recents stay put, and the dismissal is persisted for next visit.
+    expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(true);
+    expect(localStorage.getItem("wp-onboarding-dismissed")).toBe("1");
   });
 
   it("renders the Recents tabs when the library has items", async () => {

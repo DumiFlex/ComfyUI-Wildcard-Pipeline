@@ -92,6 +92,14 @@ interface LibraryRow {
   tags: string[];
   updated_at: string;
   description: string;
+  // Community-origin + content-rating markers. ModuleListView's
+  // pill helpers (`communityOriginSlug`, `isNsfw`) read these straight
+  // off the row, so the aggregate view has to forward them through the
+  // mappers below or the globe / 18+ pills silently never render here
+  // (they DO on the per-kind lists).
+  community_post_slug: string | null;
+  community_version_number: number | null;
+  content_rating: "safe" | "nsfw";
   source: ModuleRow | BundleRow;
 }
 
@@ -156,6 +164,9 @@ function moduleToRow(m: ModuleRow): LibraryRow {
     tags: m.tags ?? [],
     updated_at: m.updated_at ?? "",
     description: m.description ?? "",
+    community_post_slug: m.community_post_slug ?? null,
+    community_version_number: m.community_version_number ?? null,
+    content_rating: m.content_rating ?? "safe",
     source: m,
   };
 }
@@ -170,6 +181,9 @@ function bundleToRow(b: BundleRow): LibraryRow {
     tags: b.tags ?? [],
     updated_at: b.updated_at ?? "",
     description: b.description ?? "",
+    community_post_slug: b.community_post_slug ?? null,
+    community_version_number: b.community_version_number ?? null,
+    content_rating: b.content_rating ?? "safe",
     source: b,
   };
 }

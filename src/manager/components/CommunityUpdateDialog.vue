@@ -212,10 +212,12 @@ async function onUpdateInPlace() {
 /**
  * Install as new entry: route through installEnvelope with a rename
  * decision baked in. The new row gets a fresh id, the user-supplied
- * suffix appended to the name, and the same community_post_slug —
- * tracking now points to the new row (and the old row keeps its
- * pre-update tracking, so the update pill keeps surfacing on the OLD
- * row until the user explicitly updates or dismisses it).
+ * suffix appended to the name, and the same community_post_slug. Both
+ * the old and new rows now carry that slug; the new row is stamped at
+ * the latest version. The update store suppresses the pill on any row
+ * whose slug already has a sibling at latest (see
+ * communityUpdateStore.check), so the OLD row's pill clears once this
+ * succeeds — and reappears if the user later deletes the new copy.
  */
 async function onInstallAsNew() {
   if (!props.entry || acting.value) return;

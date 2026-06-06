@@ -383,6 +383,10 @@ function isExpanded(id: string): boolean {
 }
 
 const focusedRowId = ref<string | null>(null);
+// The <tbody> is the keyboard entry point. We move REAL DOM focus onto
+// rows so :focus-visible tracks our roving-tabindex state (see
+// focusFocusedRow) — that needs a handle to query the live <tr>s.
+const tbodyEl = ref<HTMLElement | null>(null);
 
 // Reset focus when paged content changes — focused row may have scrolled out
 // (filter change, page change, sort, etc.). Snap to first row on new page.
@@ -397,6 +401,21 @@ function focusedIndex(): number {
   return paged.value.findIndex((r) => r.id === focusedRowId.value);
 }
 
+/**
+ * Push real DOM focus onto the row `focusedRowId` points at. Keyboard
+ * nav only mutates `focusedRowId` (the reactive source of truth); the
+ * browser's focus would otherwise stay on whatever row the user first
+ * clicked, leaving that row outlined via :focus-visible while the accent
+ * stripe moves elsewhere — two rows look active at once. Driving focus
+ * from state keeps a single highlight (#7) and lets arrow keys work the
+ * moment the list is focused (#8).
+ */
+function focusFocusedRow() {
+  tbodyEl.value
+    ?.querySelector<HTMLElement>('tr[data-focused="true"]')
+    ?.focus();
+}
+
 function moveFocus(delta: number) {
   const list = paged.value;
   if (list.length === 0) return;
@@ -405,6 +424,22 @@ function moveFocus(delta: number) {
   if (i < 0) next = delta > 0 ? 0 : list.length - 1;
   else next = Math.max(0, Math.min(list.length - 1, i + delta));
   focusedRowId.value = list[next].id;
+  void nextTick(focusFocusedRow);
+}
+
+/**
+ * Fires when the <tbody> itself receives focus (Tab into the list, or a
+ * click that misses a row) — NOT when a child row is focused (rows set
+ * `focusedRowId` through their own @focus). Seed the roving focus to the
+ * first row when nothing is focused yet, then hand DOM focus to it so the
+ * very next ArrowDown/Up moves from a real anchor instead of doing
+ * nothing (#8 — previously you had to click a row first).
+ */
+function onTableFocus() {
+  if (!focusedRowId.value) {
+    focusedRowId.value = paged.value[0]?.id ?? null;
+  }
+  void nextTick(focusFocusedRow);
 }
 
 function onTableKeydown(e: KeyboardEvent) {
@@ -416,10 +451,12 @@ function onTableKeydown(e: KeyboardEvent) {
     case "Home":
       e.preventDefault();
       focusedRowId.value = paged.value[0]?.id ?? null;
+      void nextTick(focusFocusedRow);
       return;
     case "End":
       e.preventDefault();
       focusedRowId.value = paged.value[paged.value.length - 1]?.id ?? null;
+      void nextTick(focusFocusedRow);
       return;
     case " ": {
       if (!focusedRowId.value) return;
@@ -909,7 +946,7 @@ defineExpose({
             <th scope="col" class="wp-table__actions-col" style="text-align:right">Actions</th>
           </tr>
         </thead>
-        <tbody @keydown="onTableKeydown">
+        <tbody ref="tbodyEl" tabindex="0" @keydown="onTableKeydown" @focus="onTableFocus">
           <template v-for="row in paged" :key="row.id">
             <tr
               :tabindex="focusedRowId === row.id ? 0 : -1"
