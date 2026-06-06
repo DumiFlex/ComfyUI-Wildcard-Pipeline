@@ -617,12 +617,19 @@ async def list_hashes(request: web.Request) -> web.Response:
     workflow load without measurable cost."""
     with db_session(request) as conn:
         rows = ModuleRepository(conn).list()
-    # Post-migration-004 the row's `id` IS the 8-hex uuid that the
-    # tokenizer's `@{8hex}` ref captures; the published `hashes` map
-    # keys remain `uuid`-named on the wire so existing SPA consumers
-    # don't need to relabel.
+    # Wire key stays "hashes" (value string -> object) to avoid relabeling
+    # consumers. `type` enables cross-kind id-clash detection; `fingerprint`
+    # is the stored snapshot_fingerprint (may be NULL for legacy rows ->
+    # client surfaces `exists-unknown`). Post-migration-004 the row's `id`
+    # IS the 8-hex uuid the tokenizer's `@{8hex}` ref captures.
     return json_ok({
-        "hashes": {row["id"]: row["payload_hash"] for row in rows},
+        "hashes": {
+            row["id"]: {
+                "type": row["type"],
+                "fingerprint": row["snapshot_fingerprint"],
+            }
+            for row in rows
+        },
     })
 
 

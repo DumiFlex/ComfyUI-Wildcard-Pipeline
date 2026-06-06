@@ -104,15 +104,18 @@ async def test_embed_bundle_rejects_non_list_uuids(aiohttp_client, app_with_db):
     assert resp.status == 400
 
 
-async def test_hashes_endpoint_returns_id_hash_map_for_every_kind(
+async def test_hashes_endpoint_returns_type_and_fingerprint_for_every_kind(
     aiohttp_client, app_with_db,
 ):
-    """Drift-detection primitive. Returns `{hashes: {id: hash}}` keyed
-    by the 8-hex module id for EVERY kind in the library. Pre-5.5.6
-    the endpoint hard-coded `type="wildcard"`, but the in-graph
-    WP_Context now embeds non-wildcard kinds too — without their
-    hashes the missing-dot predicate flagged every freshly-picked
-    combine / derivation / constraint / fixed_values as missing."""
+    """Drift/identity primitive. Returns `{hashes: {id: {type, fingerprint}}}`
+    for EVERY module kind. `type` lets consumers detect a cross-kind id
+    clash (the 8-hex id-space is shared across all 5 kinds); `fingerprint`
+    is the stored snapshot_fingerprint (djb2 of
+    [type,name,description,tags,payload_hash]) the client recomputes to
+    detect drift. Pre-5.5.6 the endpoint hard-coded `type="wildcard"`;
+    the in-graph WP_Context now embeds non-wildcard kinds too."""
+    from engine._fingerprint import module_fingerprint
+
     app, conn = app_with_db
     repo = ModuleRepository(conn)
     wc = repo.create(
@@ -127,10 +130,12 @@ async def test_hashes_endpoint_returns_id_hash_map_for_every_kind(
     resp = await client.get("/wp/api/modules/hashes")
     assert resp.status == 200
     body = await resp.json()
-    assert wc["id"] in body["hashes"]
-    assert cb["id"] in body["hashes"]  # every kind included
-    assert body["hashes"][wc["id"]] == wc["payload_hash"]
-    assert body["hashes"][cb["id"]] == cb["payload_hash"]
+    assert body["hashes"][wc["id"]]["type"] == "wildcard"
+    assert body["hashes"][cb["id"]]["type"] == "combine"  # every kind included
+    # Endpoint surfaces the stored fingerprint, which equals a fresh
+    # module_fingerprint over the row — guards endpoint<->column parity.
+    assert body["hashes"][wc["id"]]["fingerprint"] == module_fingerprint(wc)
+    assert body["hashes"][cb["id"]]["fingerprint"] == cb["snapshot_fingerprint"]
 
 
 # ── ModuleRow shape (spec §4.2) ──────────────────────────────────────
