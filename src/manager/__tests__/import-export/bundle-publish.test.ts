@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   buildBundlePublishable,
+  buildModulePublishable,
   buildPublishBody,
   normalizeBundleChild,
 } from "@/manager/import-export/single-row-publish";
@@ -75,7 +76,7 @@ describe("normalizeBundleChild", () => {
       category_id: null,
       tags: [],
       is_favorite: false,
-      payload: { entries: [{ variable_name: "x", value: "y" }] },
+      payload: { values: [{ id: "v1", name: "x", value: "y" }] },
     };
     const out = normalizeBundleChild(canonical, () => undefined);
     expect(out.name).toBe("constants");
@@ -111,6 +112,49 @@ describe("buildBundlePublishable", () => {
     // The whole point: the normalized payload survives the same strict
     // validator the publish endpoint runs. Pre-fix, the widget-shape
     // children failed with dozens of name/Unrecognized-key errors.
+    expect(() =>
+      buildPublishBody({
+        payload: pub.payload,
+        name: pub.name,
+        description: pub.description,
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("buildModulePublishable", () => {
+  // A real edited fixed_values row: payload.values (NOT entries) plus a
+  // local `history` sidecar that must not be published.
+  const editedFixedValues = {
+    id: "fv77abcd",
+    type: "fixed_values",
+    name: "Starter style",
+    description: "nice description",
+    category_id: null,
+    tags: [],
+    is_favorite: false,
+    payload: {
+      values: [{ id: "79243931", name: "style", value: "oil painting" }],
+      history: [
+        { saved_at: "2026-06-06T06:17:32.383Z", name: "Starter style", payload: {} },
+      ],
+    },
+    payload_hash: "h".repeat(64),
+    version: 2,
+    created_at: "2026-01-01",
+    updated_at: "2026-01-01",
+    content_rating: "safe" as const,
+  } as unknown as ModuleRow;
+
+  it("strips the local history sidecar from the published payload", () => {
+    const pub = buildModulePublishable(editedFixedValues);
+    const inner = pub.payload.payload as Record<string, unknown>;
+    expect(inner).not.toHaveProperty("history");
+    expect(inner.values).toBeDefined();
+  });
+
+  it("a fixed_values row (values shape, history stripped) passes strict validation", () => {
+    const pub = buildModulePublishable(editedFixedValues);
     expect(() =>
       buildPublishBody({
         payload: pub.payload,

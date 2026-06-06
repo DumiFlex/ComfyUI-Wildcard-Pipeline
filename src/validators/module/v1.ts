@@ -34,9 +34,15 @@ export const wildcardV1 = moduleRowBase.extend({
 
 export const fixedValuesV1 = moduleRowBase.extend({
   type: z.literal("fixed_values"),
+  // Real engine shape (engine/modules/fixed_values_handler.py): the
+  // payload carries `values: [{id, name, value}]`. The original v1
+  // schema guessed `entries: [{variable_name, value}]` and was never
+  // exercised against a real fixed_values row, so every publish of one
+  // failed strict validation on payload.entries.
   payload: z.object({
-    entries: z.array(z.object({
-      variable_name: z.string(),
+    values: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
       value: z.string(),
     })),
   }),

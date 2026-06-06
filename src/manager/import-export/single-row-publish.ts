@@ -94,9 +94,30 @@ export function buildPublishBody(input: {
 }
 
 /**
+ * Strip the local-only `history` sidecar from a module payload.
+ *
+ * `payload.history` is a per-module edit-history list (max 3 entries,
+ * see utils/history.ts) kept for the local undo affordance. It is NOT
+ * part of the published shape -- the strict v1 validators reject it as
+ * an unrecognized key, and shipping a module's edit history to the
+ * community would leak prior values + bloat the payload. Both publish
+ * AND copy-to-clipboard go through buildModulePublishable, so stripping
+ * here covers both.
+ */
+function stripHistory(
+  payload: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!payload || typeof payload !== "object") return {};
+  const copy = { ...payload };
+  delete copy.history;
+  return copy;
+}
+
+/**
  * Build the engine-row payload for a module library row. Strips
- * server-stamped lifecycle fields — community + the user's clipboard
- * both want a fresh row that they can re-stamp.
+ * server-stamped lifecycle fields + the local `history` sidecar —
+ * community + the user's clipboard both want a fresh, history-free row
+ * that they can re-stamp.
  */
 export function buildModulePublishable(row: ModuleRow): PublishablePayload {
   const payload: Record<string, unknown> = {
@@ -107,7 +128,7 @@ export function buildModulePublishable(row: ModuleRow): PublishablePayload {
     category_id: row.category_id,
     tags: row.tags,
     is_favorite: row.is_favorite,
-    payload: row.payload,
+    payload: stripHistory(row.payload as Record<string, unknown>),
   };
   return {
     payload,
@@ -191,7 +212,7 @@ export function normalizeBundleChild(
     category_id: (meta.category_id ?? meta.category ?? null) as string | null,
     tags: Array.isArray(meta.tags) ? (meta.tags as string[]) : [],
     is_favorite: false,
-    payload: (child.payload ?? {}) as Record<string, unknown>,
+    payload: stripHistory(child.payload as Record<string, unknown>),
   };
 }
 

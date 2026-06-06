@@ -7,8 +7,8 @@
   "tags": [],
   "is_favorite": false,
   "payload": {
-    "entries": [
-      { "variable_name": "seed", "value": "42" }
+    "values": [
+      { "id": "v-001abc", "name": "seed", "value": "42" }
     ]
   }
 }
