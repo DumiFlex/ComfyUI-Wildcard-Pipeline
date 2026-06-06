@@ -79,6 +79,21 @@ declare global {
           origin?: InstallOrigin;
         },
       ) => Promise<InstallResult>;
+      /** Publish-writeback. The embed calls this AFTER it successfully
+       *  creates a community post (or new version) from a local row,
+       *  so the row gets linked back to the post: community pill shows,
+       *  update-available checker tracks it, and a re-publish is seen
+       *  as a version bump not a fresh post. Optional on the bridge
+       *  (added after `install`); the embed guards on its presence, so
+       *  no ABI bump -- old hosts simply don't writeback. Resolves
+       *  false if the local row id is unknown (e.g. row deleted between
+       *  publish + writeback) rather than throwing into the embed. */
+      markPublished?: (
+        localId: string,
+        kind: "module" | "bundle",
+        postSlug: string,
+        versionNumber: number,
+      ) => Promise<boolean>;
     };
   }
 }
@@ -103,9 +118,9 @@ function snapshotLibrary(): LibrarySnapshot {
 }
 
 window.__wpcRuntime = {
-  // ABI stays at 1: the install signature only gained an optional 2nd
-  // argument, which old callers passing a single argument continue to
-  // satisfy. Bump only if a future change removes/renames a field.
+  // ABI stays at 1: install only gained an optional 2nd arg, and
+  // markPublished is a brand-new optional method the embed guards on.
+  // Adding fields/methods is non-breaking; bump only on remove/rename.
   abi: 1,
   schemaVersion: CURRENT_SCHEMA_VERSION,
   install: (envelope, opts) => installEnvelope(
@@ -117,4 +132,27 @@ window.__wpcRuntime = {
       ...(opts?.origin ? { origin: opts.origin } : {}),
     },
   ),
+  markPublished: async (localId, kind, postSlug, versionNumber) => {
+    try {
+      if (kind === "bundle") {
+        await managerApi.bundles.setCommunityOrigin(localId, {
+          post_slug: postSlug, version_number: versionNumber,
+        });
+      } else {
+        await managerApi.modules.setCommunityOrigin(localId, {
+          post_slug: postSlug, version_number: versionNumber,
+        });
+      }
+      // Refresh the catalogs so the just-published row immediately
+      // shows its community pill without a manual reload.
+      await useModuleStore().fetchCatalog();
+      await useBundleStore().fetchCatalog();
+      return true;
+    } catch {
+      // Row id unknown (deleted mid-publish) or transient API error.
+      // The post still published fine; we just couldn't link locally.
+      // Non-fatal -- the embed shows publish success regardless.
+      return false;
+    }
+  },
 };

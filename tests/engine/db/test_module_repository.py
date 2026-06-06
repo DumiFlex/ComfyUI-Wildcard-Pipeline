@@ -431,3 +431,48 @@ def test_update_without_content_rating_preserves_existing(wp_db):
     after = repo.update(row["id"], name="renamed")
     assert after["content_rating"] == "nsfw"
     assert after["name"] == "renamed"
+
+
+# ─── set_community_origin (publish writeback) ─────────────────────
+
+
+def test_set_community_origin_stamps_slug_and_version(wp_db):
+    """After publishing, the local row gets linked to its community
+    post so the SPA renders the pill + tracks updates."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+    )
+    assert row["community_post_slug"] is None
+    stamped = repo.set_community_origin(
+        row["id"], post_slug="alice/m", version_number=1,
+    )
+    assert stamped["community_post_slug"] == "alice/m"
+    assert stamped["community_version_number"] == 1
+
+
+def test_set_community_origin_no_version_bump(wp_db):
+    """Origin metadata is not runtime-affecting -- stamping must NOT
+    bump the row version or it would falsely signal library drift to
+    inserted workflow instances."""
+    repo = ModuleRepository(wp_db)
+    row = repo.create(
+        type="wildcard", name="m", description="",
+        category_id=None, tags=[], payload=_new_payload(),
+    )
+    before_version = row["version"]
+    before_fp = row["snapshot_fingerprint"]
+    stamped = repo.set_community_origin(
+        row["id"], post_slug="alice/m", version_number=1,
+    )
+    assert stamped["version"] == before_version
+    assert stamped["snapshot_fingerprint"] == before_fp
+
+
+def test_set_community_origin_missing_row_raises(wp_db):
+    repo = ModuleRepository(wp_db)
+    with pytest.raises(ModuleNotFound):
+        repo.set_community_origin(
+            "deadbeef", post_slug="alice/x", version_number=1,
+        )

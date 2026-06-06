@@ -132,6 +132,14 @@ export const api = {
         "/wp/api/modules/hashes", { method: "GET" },
       );
     },
+    setCommunityOrigin(
+      id: string,
+      body: { post_slug: string; version_number: number },
+    ) {
+      return request<ModuleRow>(`/wp/api/modules/${id}/community-origin`, {
+        method: "POST", body: JSON.stringify(body),
+      });
+    },
   },
   bundles: {
     list(params: ListParams = {}) {
@@ -162,6 +170,14 @@ export const api = {
     },
     favorite(id: string) {
       return request<BundleRow>(`/wp/api/bundles/${id}/favorite`, { method: "POST" });
+    },
+    setCommunityOrigin(
+      id: string,
+      body: { post_slug: string; version_number: number },
+    ) {
+      return request<BundleRow>(`/wp/api/bundles/${id}/community-origin`, {
+        method: "POST", body: JSON.stringify(body),
+      });
     },
   },
   templates: {

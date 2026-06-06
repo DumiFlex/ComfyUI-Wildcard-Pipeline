@@ -321,6 +321,33 @@ class ModuleRepository:
             )
         return self.get(module_id)
 
+    def set_community_origin(
+        self, module_id: str, *, post_slug: str, version_number: int,
+    ) -> dict[str, Any]:
+        """Stamp community origin on an existing row WITHOUT a version
+        bump or fingerprint change.
+
+        Used by the publish-writeback path (host bridge
+        ``markPublished``): after a row is published to community, the
+        local row gets linked to the resulting post so the SPA renders
+        the community pill, the update-available checker tracks it, and
+        a future re-publish detects "this is my own post" (version bump
+        vs fork). Origin metadata is NOT runtime-affecting, so unlike
+        ``update`` this neither bumps ``version`` nor recomputes the
+        snapshot fingerprint -- a published row stays byte-identical to
+        what consumers already installed.
+        """
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE modules SET "
+                "community_post_slug = ?, community_version_number = ? "
+                "WHERE id = ?;",
+                (post_slug, version_number, module_id),
+            )
+        if cur.rowcount == 0:
+            raise ModuleNotFound(module_id)
+        return self.get(module_id)
+
     def delete(self, module_id: str) -> None:
         with self._conn:
             cur = self._conn.execute("DELETE FROM modules WHERE id = ?;", (module_id,))
@@ -695,6 +722,23 @@ class BundleRepository:
                     new["content_rating"], bundle_id,
                 ),
             )
+        return self.get(bundle_id)
+
+    def set_community_origin(
+        self, bundle_id: str, *, post_slug: str, version_number: int,
+    ) -> dict[str, Any]:
+        """Stamp community origin on a bundle row WITHOUT a version bump
+        or payload-hash change. See ModuleRepository.set_community_origin
+        for the rationale -- origin metadata is not runtime-affecting."""
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE bundles SET "
+                "community_post_slug = ?, community_version_number = ? "
+                "WHERE id = ?;",
+                (post_slug, version_number, bundle_id),
+            )
+        if cur.rowcount == 0:
+            raise BundleNotFound(bundle_id)
         return self.get(bundle_id)
 
     def delete(self, bundle_id: str) -> None:
