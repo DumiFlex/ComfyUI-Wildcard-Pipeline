@@ -913,8 +913,17 @@ defineExpose({
       </div>
     </Transition>
 
-    <!-- Table -->
-    <div class="wp-table-wrap wp-table-wrap--scroll">
+    <!-- Table. Keyboard nav lives on the SCROLL WRAPPER, not the <tbody>:
+         clicking a row focuses one of its cell buttons (select / expand /
+         tag / pill), never the tbody, so a tbody-scoped @keydown never
+         fired. The wrapper is a common ancestor — keydown from any focused
+         descendant bubbles here — and is itself focusable so Tab / a click
+         in the gutter lands keyboard nav. -->
+    <div
+      class="wp-table-wrap wp-table-wrap--scroll"
+      tabindex="0"
+      @keydown="onTableKeydown"
+    >
       <table class="wp-table wp-table--sticky-head" :class="{ 'wp-table--empty': showEmptyRow }">
         <thead>
           <tr>
@@ -931,7 +940,7 @@ defineExpose({
             <th scope="col" class="wp-table__actions-col" style="text-align:right">Actions</th>
           </tr>
         </thead>
-        <tbody ref="tbodyEl" tabindex="0" @keydown="onTableKeydown">
+        <tbody ref="tbodyEl">
           <template v-for="row in paged" :key="row.id">
             <tr
               :tabindex="focusedRowId === row.id ? 0 : -1"

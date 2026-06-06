@@ -725,6 +725,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
           </div>
           <BundleChildPane
             :child="selectedChild"
+            :sibling-modules="children"
             @update="onPaneUpdate"
             @close="onPaneClose"
           />
