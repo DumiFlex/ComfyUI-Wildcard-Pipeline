@@ -104,18 +104,16 @@ async def test_embed_bundle_rejects_non_list_uuids(aiohttp_client, app_with_db):
     assert resp.status == 400
 
 
-async def test_hashes_endpoint_returns_type_and_fingerprint_for_every_kind(
+async def test_hashes_endpoint_returns_type_and_payload_hash_for_every_kind(
     aiohttp_client, app_with_db,
 ):
-    """Drift/identity primitive. Returns `{hashes: {id: {type, fingerprint}}}`
+    """Drift/identity primitive. Returns `{hashes: {id: {type, payload_hash}}}`
     for EVERY module kind. `type` lets consumers detect a cross-kind id
-    clash (the 8-hex id-space is shared across all 5 kinds); `fingerprint`
-    is the stored snapshot_fingerprint (djb2 of
-    [type,name,description,tags,payload_hash]) the client recomputes to
-    detect drift. Pre-5.5.6 the endpoint hard-coded `type="wildcard"`;
-    the in-graph WP_Context now embeds non-wildcard kinds too."""
-    from engine._fingerprint import module_fingerprint
-
+    clash (the 8-hex id-space is shared across all 5 kinds); `payload_hash`
+    is the existing drift signal the in-graph WP_Context compares against
+    its embedded snapshot. Pre-5.5.6 the endpoint hard-coded
+    `type="wildcard"`; the in-graph WP_Context now embeds non-wildcard
+    kinds too."""
     app, conn = app_with_db
     repo = ModuleRepository(conn)
     wc = repo.create(
@@ -132,10 +130,8 @@ async def test_hashes_endpoint_returns_type_and_fingerprint_for_every_kind(
     body = await resp.json()
     assert body["hashes"][wc["id"]]["type"] == "wildcard"
     assert body["hashes"][cb["id"]]["type"] == "combine"  # every kind included
-    # Endpoint surfaces the stored fingerprint, which equals a fresh
-    # module_fingerprint over the row — guards endpoint<->column parity.
-    assert body["hashes"][wc["id"]]["fingerprint"] == module_fingerprint(wc)
-    assert body["hashes"][cb["id"]]["fingerprint"] == cb["snapshot_fingerprint"]
+    assert body["hashes"][wc["id"]]["payload_hash"] == wc["payload_hash"]
+    assert body["hashes"][cb["id"]]["payload_hash"] == cb["payload_hash"]
 
 
 # ── ModuleRow shape (spec §4.2) ──────────────────────────────────────

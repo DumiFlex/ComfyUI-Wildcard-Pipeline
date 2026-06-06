@@ -14,7 +14,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-        return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-a", bbbbbbbb: "h-b" } }), { status: 200 });
+        return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "h-a" }, bbbbbbbb: { type: "wildcard", payload_hash: "h-b" } } }), { status: 200 });
       }
       return new Response("{}", { status: 200 });
     }),
@@ -32,7 +32,7 @@ describe("drift-store: subscribe/unsubscribe", () => {
     expect(hashes.value).toBeNull();
     subscribe();
     await vi.advanceTimersByTimeAsync(0);
-    expect(hashes.value).toEqual({ aaaaaaaa: "h-a", bbbbbbbb: "h-b" });
+    expect(hashes.value).toEqual({ aaaaaaaa: { type: "wildcard", payload_hash: "h-a" }, bbbbbbbb: { type: "wildcard", payload_hash: "h-b" } });
     unsubscribe();
   });
 });
@@ -82,7 +82,7 @@ describe("drift-store: forceRefresh", () => {
 
 import type { ModuleEntry } from "../../widgets/_shared";
 import type { SnapshotEntry } from "./drift-store";
-import { refreshMany } from "./drift-store";
+import { refreshMany, mergeRefresh } from "./drift-store";
 
 function mkEntry(over: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -250,7 +250,8 @@ describe("setLibraryHash — direct hash update without re-fetch", () => {
     setLibraryHash("abc123", "newhash456");
     expect(hashes.value).not.toBeNull();
     if (hashes.value) {
-      expect(hashes.value["abc123"]).toBe("newhash456");
+      // Optimistic entry stores { payload_hash } (type filled by next poll).
+      expect(hashes.value["abc123"]).toEqual({ payload_hash: "newhash456" });
     }
   });
 
@@ -258,6 +259,43 @@ describe("setLibraryHash — direct hash update without re-fetch", () => {
     setLibraryHash("a", "ha");
     setLibraryHash("b", "hb");
     setLibraryHash("a", "ha-updated");
-    expect(hashes.value).toEqual({ a: "ha-updated", b: "hb" });
+    expect(hashes.value).toEqual({
+      a: { payload_hash: "ha-updated" },
+      b: { payload_hash: "hb" },
+    });
+  });
+});
+
+describe("drift-store: mergeRefresh type-guard", () => {
+  it("throws when the live snapshot is a DIFFERENT kind than the embedded row", () => {
+    const embedded = mkEntry({ id: "aabbccdd", type: "constraint" });
+    const live: SnapshotEntry = {
+      snapshot_version: 1,
+      uuid: "aabbccdd",
+      type: "wildcard",
+      name: "w",
+      payload: {},
+      payload_hash: "h2",
+      source: { kind: "user" },
+    };
+    // A same-id, different-kind library row must never merge over the
+    // embedded item — it would silently change the item's kind.
+    expect(() => mergeRefresh(embedded, live)).toThrow(/type mismatch/i);
+  });
+
+  it("merges normally when the kinds match", () => {
+    const embedded = mkEntry({ id: "aabbccdd", type: "wildcard" });
+    const live: SnapshotEntry = {
+      snapshot_version: 1,
+      uuid: "aabbccdd",
+      type: "wildcard",
+      name: "w2",
+      payload: { options: [] },
+      payload_hash: "h2",
+      source: { kind: "user" },
+    };
+    const merged = mergeRefresh(embedded, live);
+    expect(merged.type).toBe("wildcard");
+    expect(merged.payload_hash).toBe("h2");
   });
 });

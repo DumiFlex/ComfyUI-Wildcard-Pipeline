@@ -171,7 +171,7 @@ describe("ContextWidget drift dot", () => {
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
           // Live hash differs from embedded → drift.
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-LIVE" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "h-LIVE" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -215,7 +215,7 @@ describe("ContextWidget bulk refresh", () => {
       "fetch",
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "h-A", bbbbbbbb: "h-B" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "h-A" }, bbbbbbbb: { type: "wildcard", payload_hash: "h-B" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -251,7 +251,7 @@ describe("ContextWidget bulk refresh", () => {
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
           // Both embedded hashes differ from live → both drifted.
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A", bbbbbbbb: "live-B" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live-A" }, bbbbbbbb: { type: "wildcard", payload_hash: "live-B" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -292,7 +292,7 @@ describe("ContextWidget bulk refresh", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live-A" } } }), { status: 200 });
         }
         if (typeof url === "string" && url.endsWith("/embed-bundle")) {
           const body = JSON.parse(String(init?.body ?? "{}")) as { uuids: string[] };
@@ -402,7 +402,7 @@ describe("ContextWidget bulk refresh", () => {
       "fetch",
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live-A" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live-A" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -1120,7 +1120,7 @@ describe("ContextWidget status badges", () => {
       "fetch",
       vi.fn(async (url: string) => {
         if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
-          return new Response(JSON.stringify({ hashes: { aaaaaaaa: "live" } }), { status: 200 });
+          return new Response(JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live" } } }), { status: 200 });
         }
         return new Response("{}", { status: 200 });
       }),
@@ -1182,6 +1182,49 @@ describe("ContextWidget status badges", () => {
       expect(badge.exists()).toBe(true);
       expect(badge.text()).toBe("missing");
     });
+    wrapper.unmount();
+  });
+
+  it("renders 'clash' badge when the library row at this id is a different kind", async () => {
+    resetDriftStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/wp/api/modules/hashes")) {
+          // Same id, DIFFERENT kind in library (wildcard) than the embedded
+          // constraint → type-conflict, not drift/missing.
+          return new Response(
+            JSON.stringify({ hashes: { aaaaaaaa: { type: "wildcard", payload_hash: "live" } } }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 802,
+        initialJson: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "aaaaaaaa", type: "constraint", enabled: true, meta: { name: "c" }, entries: [], payload: {}, payload_hash: "embedded" },
+          ],
+        }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+
+    await vi.waitFor(() => {
+      const badge = wrapper.find(".wp-mod-badge--clash");
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toBe("clash");
+    });
+    // type-conflict is mutually exclusive with drift + missing.
+    expect(wrapper.find(".wp-mod-badge--drift").exists()).toBe(false);
+    expect(wrapper.find(".wp-mod-badge--missing").exists()).toBe(false);
     wrapper.unmount();
   });
 });

@@ -17,6 +17,9 @@ export interface ModuleRowCtx {
   isModified: (m: ModuleEntry) => boolean;
   isDrifted: (m: ModuleEntry) => boolean;
   isMissingFromLibrary: (m: ModuleEntry) => boolean;
+  /** Live library row at this id is a DIFFERENT kind (shared id-space
+   *  clash). Mutually exclusive with drift/missing. */
+  isTypeConflict: (m: ModuleEntry) => boolean;
   severityFor: (id: string) => string | null | undefined;
   conflictTooltip: (id: string) => string;
   conflictBadgeText: (id: string) => string | null;

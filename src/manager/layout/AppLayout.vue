@@ -60,11 +60,18 @@ function isTypingTarget(t: EventTarget | null): boolean {
  *  Changes when ANY key is added, removed, or its hash flips. Returns
  *  empty string while the polled map is still null (first fetch in
  *  flight) so the watcher doesn't fire on transition-to-loaded. */
-function hashesFingerprint(map: Record<string, string> | null): string {
+function hashesFingerprint(
+  map: Record<string, string | { type?: string; payload_hash: string }> | null,
+): string {
   if (map === null) return "";
   const keys = Object.keys(map).sort();
   if (keys.length === 0) return "empty";
-  return keys.map((k) => `${k}:${map[k]}`).join("|");
+  // Handles both the module map ({type, payload_hash}) and the bundle map
+  // (flat payload_hash strings) — both feed this watcher.
+  return keys.map((k) => {
+    const v = map[k];
+    return typeof v === "string" ? `${k}:${v}` : `${k}:${v.type ?? ""}:${v.payload_hash}`;
+  }).join("|");
 }
 
 function onKeydown(e: KeyboardEvent) {

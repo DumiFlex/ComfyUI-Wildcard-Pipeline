@@ -61,30 +61,43 @@ export interface LibraryRow {
 }
 
 /**
+ * Library-side row for `classifyOne`: the entity `type` plus an opaque
+ * `contentKey`. The key is whatever the CALLER compares — the import
+ * picker passes the module `snapshot_fingerprint`; the in-graph workflow
+ * drift path passes the `payload_hash`. `classifyOne` never interprets
+ * the key, it only checks equality, so a single verdict serves both.
+ */
+export interface ClassifyRow {
+  type?: string;
+  contentKey?: string | null;
+}
+
+/**
  * Classify ONE entity against its (optional) live-library row. The shared
  * identity verdict used by the import picker, the install collision
  * pre-check, and the in-graph workflow drift/missing path.
  *
- * Ordered — `type` gates BEFORE the fingerprint check, so a cross-kind id
+ * Ordered — `type` gates BEFORE the content-key check, so a cross-kind id
  * clash can never be mislabeled as content drift. The type gate runs
- * independently of fingerprint availability (a null/empty fingerprint
- * never masks a type clash). `incomingFingerprint` is the caller's
- * already-computed content fingerprint (`moduleFingerprint`).
+ * independently of content-key availability (a null/empty key never masks
+ * a type clash). `incomingContentKey` is the caller's content key for the
+ * incoming entity (fingerprint or payload_hash — must match what it stores
+ * in `ClassifyRow.contentKey`).
  */
 export function classifyOne(
   incomingType: string,
-  incomingFingerprint: string,
-  libRow: LibraryRow | undefined,
+  incomingContentKey: string,
+  libRow: ClassifyRow | undefined,
 ): CollisionState {
   if (!libRow) return "no-collision";
   if (libRow.type !== undefined && libRow.type !== incomingType) return "type-conflict";
-  const libFp = libRow.snapshot_fingerprint;
-  if (!libFp) {
-    // Library row exists but we have no fingerprint to compare. Surface
+  const libKey = libRow.contentKey;
+  if (!libKey) {
+    // Library row exists but we have no content key to compare. Surface
     // the presence-only state instead of falsely promising "MODIFIED".
     return "exists-unknown";
   }
-  return incomingFingerprint === libFp ? "silent-skip" : "conflict";
+  return incomingContentKey === libKey ? "silent-skip" : "conflict";
 }
 
 export function detectCollisions(
@@ -93,10 +106,11 @@ export function detectCollisions(
 ): Record<string, CollisionState> {
   const result: Record<string, CollisionState> = {};
   for (const entity of incoming) {
+    const libRow = library.get(entity.id);
     result[entity.id] = classifyOne(
       entity.type,
       moduleFingerprint(entity),
-      library.get(entity.id),
+      libRow ? { type: libRow.type, contentKey: libRow.snapshot_fingerprint } : undefined,
     );
   }
   return result;

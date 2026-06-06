@@ -153,21 +153,26 @@ describe("detectCollisions", () => {
 
 describe("classifyOne", () => {
   it("no library row -> no-collision", () => {
-    expect(classifyOne("wildcard", "fp", undefined)).toBe("no-collision");
+    expect(classifyOne("wildcard", "k", undefined)).toBe("no-collision");
   });
-  it("type differs -> type-conflict (ignores fingerprint)", () => {
-    expect(classifyOne("constraint", "fp", { type: "wildcard", snapshot_fingerprint: "fp" }))
+  it("type differs -> type-conflict (ignores content key)", () => {
+    expect(classifyOne("constraint", "k", { type: "wildcard", contentKey: "k" }))
       .toBe("type-conflict");
   });
-  it("type matches, no fp -> exists-unknown", () => {
-    expect(classifyOne("wildcard", "fp", { type: "wildcard" })).toBe("exists-unknown");
+  it("type matches, no content key -> exists-unknown", () => {
+    expect(classifyOne("wildcard", "k", { type: "wildcard" })).toBe("exists-unknown");
   });
-  it("type + fp match -> silent-skip", () => {
-    expect(classifyOne("wildcard", "fp", { type: "wildcard", snapshot_fingerprint: "fp" }))
+  it("type + content key match -> silent-skip", () => {
+    expect(classifyOne("wildcard", "k", { type: "wildcard", contentKey: "k" }))
       .toBe("silent-skip");
   });
-  it("type matches, fp differs -> conflict", () => {
-    expect(classifyOne("wildcard", "fpA", { type: "wildcard", snapshot_fingerprint: "fpB" }))
+  it("type matches, content key differs -> conflict", () => {
+    expect(classifyOne("wildcard", "kA", { type: "wildcard", contentKey: "kB" }))
+      .toBe("conflict");
+  });
+  it("content key is opaque — works with a payload_hash just as well", () => {
+    // workflow path passes payload_hash as the key; import passes fingerprint
+    expect(classifyOne("wildcard", "ph-LIVE", { type: "wildcard", contentKey: "ph-OLD" }))
       .toBe("conflict");
   });
 });

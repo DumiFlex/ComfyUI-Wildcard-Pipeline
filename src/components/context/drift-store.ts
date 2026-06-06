@@ -20,16 +20,18 @@ export interface RefreshResult {
   failed: { id: string; reason: string }[];
 }
 
-/** Live-library hashes keyed by uuid. `null` while the first fetch is in
+/** Live-library identity map keyed by uuid: each value carries the row's
+ *  `{type, payload_hash}`. `type` enables cross-kind id-clash detection;
+ *  `payload_hash` is the drift signal. `null` while the first fetch is in
  *  flight — predicates downstream use this to avoid flashing "missing" /
  *  "drift" before we know the truth.
  *
- *  Invariant: values are always non-empty strings once the map is non-null.
- *  Consumers may assume `live === undefined` is equivalent to `!(uuid in
- *  hashes.value)` — the API never emits explicit-undefined entries. If this
- *  ever changes, both `isMissingFromLibrary` and `isDrifted` in
- *  `ContextWidget.vue` need to be tightened together. */
-export const hashes: Ref<Record<string, string> | null> = ref(null);
+ *  `type` is optional because the optimistic `setLibraryHash` writes a
+ *  payload_hash-only entry (the 5s poll fills `type` shortly after).
+ *  Consumers run `classifyOne` (import-export/collision) against these
+ *  entries: `live === undefined` ≡ `!(uuid in hashes.value)` — the API
+ *  never emits explicit-undefined entries. */
+export const hashes: Ref<Record<string, { type?: string; payload_hash: string }> | null> = ref(null);
 
 /** Same shape as `hashes` but keyed by bundle library uuid. Polled
  *  in parallel with module hashes so bundle drift detection
@@ -94,13 +96,35 @@ function sameHashes(
   return true;
 }
 
+/** Object-aware sibling of `sameHashes` for the module map, whose values
+ *  are `{type, payload_hash}` rather than flat strings. Same purpose: gate
+ *  `hashes.value` reassignment so the 5s poll doesn't mint a new ref (and
+ *  fire reactivity) when nothing changed. */
+function sameModuleHashes(
+  a: Record<string, { type?: string; payload_hash: string }> | null,
+  b: Record<string, { type?: string; payload_hash: string }>,
+): boolean {
+  if (a === null) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const k of keysA) {
+    const va = a[k];
+    const vb = b[k];
+    if (!vb || va.type !== vb.type || va.payload_hash !== vb.payload_hash) return false;
+  }
+  return true;
+}
+
 async function fetchModuleHashes(): Promise<void> {
   try {
     const res = await fetch("/wp/api/modules/hashes");
     if (!res.ok) return;
-    const body = (await res.json()) as { hashes?: Record<string, string> };
+    const body = (await res.json()) as {
+      hashes?: Record<string, { type?: string; payload_hash: string }>;
+    };
     if (body && body.hashes && typeof body.hashes === "object") {
-      if (!sameHashes(hashes.value, body.hashes)) {
+      if (!sameModuleHashes(hashes.value, body.hashes)) {
         hashes.value = body.hashes;
       }
     }
@@ -189,6 +213,15 @@ export async function refreshMany(modules: ModuleEntry[]): Promise<RefreshResult
  * actually move.
  */
 export function mergeRefresh(m: ModuleEntry, live: SnapshotEntry): ModuleEntry {
+  if (m.type !== live.type) {
+    // Defense-in-depth: a same-id, DIFFERENT-kind library row must never be
+    // merged over an embedded item (it would silently change the item's
+    // kind). The UI suppresses Refresh for type-conflict rows; this guards
+    // the path even if a caller bypasses that.
+    throw new Error(
+      `refresh type mismatch: embedded ${m.type} vs library ${live.type} at id ${m.id}`,
+    );
+  }
   const merged: ModuleEntry & { bundle_origin?: string } = {
     type: live.type,
     meta: {
@@ -220,8 +253,12 @@ export function mergeRefresh(m: ModuleEntry, live: SnapshotEntry): ModuleEntry {
  *
  *  See: docs/superpowers/specs/2026-05-07-instance-overrides-modal-design.md §8.5
  */
-export function setLibraryHash(id: string, hash: string): void {
-  hashes.value = { ...(hashes.value ?? {}), [id]: hash };
+export function setLibraryHash(id: string, payloadHash: string): void {
+  // Optimistic entry — `type` omitted (the 5s poll fills it). Enough to
+  // clear the missing/drift dot immediately: classifyOne sees the id
+  // present + payload_hash match → silent-skip. A type-conflict can't
+  // arise here (you're saving your own entry), so omitting type is safe.
+  hashes.value = { ...(hashes.value ?? {}), [id]: { payload_hash: payloadHash } };
 }
 
 /** Test-only — reset internal counters between cases. */

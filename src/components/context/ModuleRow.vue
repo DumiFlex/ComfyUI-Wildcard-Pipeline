@@ -14,7 +14,7 @@ if (!ctx) throw new Error("ModuleRow: missing moduleRowCtx provider");
 const {
   KIND_TITLE, kindIcon, kindChipModifier, varColorClass,
   isCollapsed, isLocked, isInternal, isSeedLockable,
-  isModified, isDrifted, isMissingFromLibrary,
+  isModified, isDrifted, isMissingFromLibrary, isTypeConflict,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
   rowGap,
@@ -109,6 +109,10 @@ const {
           title="Drifted — library has a newer version. Right-click → Refresh from library." aria-hidden="true"></span>
         <span v-if="isDrifted(module)" class="wp-mod-badge wp-mod-badge--drift"
           title="Drifted — library has a newer version. Right-click → Refresh from library.">drift</span>
+        <span v-if="isTypeConflict(module)" class="wp-mod-dot wp-mod-dot--clash"
+          title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry." aria-hidden="true"></span>
+        <span v-if="isTypeConflict(module)" class="wp-mod-badge wp-mod-badge--clash"
+          title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry.">clash</span>
         <span v-if="isMissingFromLibrary(module)" class="wp-mod-dot wp-mod-dot--missing"
           title="Not in library — right-click → Save to library to add it" aria-hidden="true"></span>
         <span v-if="isMissingFromLibrary(module)" class="wp-mod-badge wp-mod-badge--missing"

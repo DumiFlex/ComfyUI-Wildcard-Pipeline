@@ -342,7 +342,8 @@
 }
 .wp-mod-badge--mod,
 .wp-mod-badge--drift,
-.wp-mod-badge--missing {
+.wp-mod-badge--missing,
+.wp-mod-badge--clash {
   flex-shrink: 0;
 }
 .wp-mod-badge--mod {
@@ -356,6 +357,13 @@
 .wp-mod-badge--missing {
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
   color: var(--wp-danger);
+}
+/* `--clash` variant: id reused by a DIFFERENT kind (shared id-space).
+ * Violet (--wp-accent) — distinct from MOD orange / DRIFT amber / MISSING
+ * red so a cross-kind collision is unmistakable. */
+.wp-mod-badge--clash {
+  background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
+  color: var(--wp-accent);
 }
 
 /* `--new` variant: incoming entity with no UUID collision (import side).

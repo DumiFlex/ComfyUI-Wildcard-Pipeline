@@ -128,7 +128,7 @@ export const api = {
       });
     },
     hashes() {
-      return request<{ hashes: Record<string, string> }>(
+      return request<{ hashes: Record<string, { type: string; payload_hash: string }> }>(
         "/wp/api/modules/hashes", { method: "GET" },
       );
     },

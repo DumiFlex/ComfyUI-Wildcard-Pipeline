@@ -84,6 +84,7 @@ import {
   subscribe as subscribeDrift,
   unsubscribe as unsubscribeDrift,
 } from "./drift-store";
+import { classifyOne, type CollisionState } from "../../manager/import-export/collision";
 import {
   getBundleCollapsedByDefault,
   getConfirmDestructiveBundle,
@@ -2140,25 +2141,47 @@ function conflictTooltip(id: string): string {
  * Returns false until `libraryHashes` first loads so we don't flash
  * "missing" everywhere while the initial fetch is in flight.
  */
+/**
+ * Identity verdict of an embedded row against the live library — or null
+ * until the first poll lands / for local-only rows (no payload_hash).
+ * Single source for the card dots. Content key is `payload_hash`, so
+ * drift semantics match the historical behavior (content-only); the
+ * `type` gate is the new cross-kind clash detector. Shared verdict logic
+ * lives in `classifyOne` (import-export/collision).
+ */
+function matchStateOf(m: ModuleEntry): CollisionState | null {
+  if (!m.payload_hash) return null;
+  if (libraryHashes.value === null) return null;
+  const live = libraryHashes.value[m.id];
+  return classifyOne(
+    m.type,
+    m.payload_hash,
+    live ? { type: live.type, contentKey: live.payload_hash } : undefined,
+  );
+}
+
 function isMissingFromLibrary(m: ModuleEntry): boolean {
-  if (!m.payload_hash) return false;
-  if (libraryHashes.value === null) return false;
-  return !(m.id in libraryHashes.value);
+  return matchStateOf(m) === "no-collision";
 }
 
 /**
- * Drift = library still has this uuid, but the live `payload_hash`
- * differs from what was embedded into the workflow at pick time.
- * Independent of `isModified` (user overrides) and `isMissingFromLibrary`
- * (uuid gone). Reads `false` until the store's first fetch lands so we
- * don't flash drift before we know the truth.
+ * Drift = library still has this uuid (SAME kind), but the live
+ * `payload_hash` differs from what was embedded at pick time. Independent
+ * of `isModified` (user overrides). Mutually exclusive with the clash
+ * state below — a different-kind row is `type-conflict`, not drift.
  */
 function isDrifted(m: ModuleEntry): boolean {
-  if (!m.payload_hash) return false;
-  if (libraryHashes.value === null) return false;
-  const live = libraryHashes.value[m.id];
-  if (live === undefined) return false;       // covered by isMissingFromLibrary
-  return live !== m.payload_hash;
+  return matchStateOf(m) === "conflict";
+}
+
+/**
+ * Type clash = the live library row at this uuid is a DIFFERENT kind (the
+ * 8-hex id-space is shared across all 5 kinds). Refresh / Push-update
+ * would clobber an unrelated item, so the card offers neither — only
+ * "Push to library…" as a fresh entry.
+ */
+function isTypeConflict(m: ModuleEntry): boolean {
+  return matchStateOf(m) === "type-conflict";
 }
 
 /** Per-card refresh — replace one drifted entry with the live snapshot.
@@ -4593,7 +4616,7 @@ const moduleRowCtx: ModuleRowCtx = {
   KIND_TITLE,
   kindIcon, kindChipModifier, varColorClass,
   isCollapsed, isLocked, isInternal, isSeedLockable,
-  isModified, isDrifted, isMissingFromLibrary,
+  isModified, isDrifted, isMissingFromLibrary, isTypeConflict,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
   rowGap, draggingModuleUid, recentDropUids, pulseDelayFor,
@@ -5699,6 +5722,12 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 .wp-mod-dot--missing {
   background:   color-mix(in oklab, var(--wp-danger) 14%, transparent);
   border-color: var(--wp-danger);
+}
+/* clash → --wp-accent (violet): id reused by a DIFFERENT kind. Distinct
+ * from modified/drift/missing so a cross-kind collision reads at a glance. */
+.wp-mod-dot--clash {
+  background:   color-mix(in oklab, var(--wp-accent) 14%, transparent);
+  border-color: var(--wp-accent);
 }
 
 /* ── Sibling badge ──────────────────────────────────────────────────────

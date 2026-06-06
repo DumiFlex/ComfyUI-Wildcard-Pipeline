@@ -618,15 +618,15 @@ async def list_hashes(request: web.Request) -> web.Response:
     with db_session(request) as conn:
         rows = ModuleRepository(conn).list()
     # Wire key stays "hashes" (value string -> object) to avoid relabeling
-    # consumers. `type` enables cross-kind id-clash detection; `fingerprint`
-    # is the stored snapshot_fingerprint (may be NULL for legacy rows ->
-    # client surfaces `exists-unknown`). Post-migration-004 the row's `id`
-    # IS the 8-hex uuid the tokenizer's `@{8hex}` ref captures.
+    # consumers. `type` enables cross-kind id-clash detection; `payload_hash`
+    # is the existing drift signal the in-graph WP_Context compares against
+    # its embedded snapshot. Post-migration-004 the row's `id` IS the 8-hex
+    # uuid the tokenizer's `@{8hex}` ref captures.
     return json_ok({
         "hashes": {
             row["id"]: {
                 "type": row["type"],
-                "fingerprint": row["snapshot_fingerprint"],
+                "payload_hash": row["payload_hash"],
             }
             for row in rows
         },
