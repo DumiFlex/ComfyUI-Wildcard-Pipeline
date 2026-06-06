@@ -14,6 +14,7 @@ import ConflictModal from "../import-export/ConflictModal.vue";
 import {
   detectCollisions,
   detectTemplateCollisions,
+  type CollisionState,
   type LibraryRow,
 } from "../import-export/collision";
 import { templateFingerprint } from "../import-export/fingerprint";
@@ -148,7 +149,7 @@ interface ImportState {
 interface SelectedEntity {
   kind: EntityKind;
   entity: Record<string, unknown> & { id: string };
-  collision: "no-collision" | "silent-skip" | "conflict" | "exists-unknown";
+  collision: CollisionState;
 }
 
 const importState = ref<ImportState | null>(null);
