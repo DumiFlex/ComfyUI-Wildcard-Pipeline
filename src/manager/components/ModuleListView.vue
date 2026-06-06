@@ -80,7 +80,17 @@ interface Filter {
   category?: string | null;
   tags?: string[];
   sortBy?: string;
+  /** Content-rating filter. Undefined / "all" shows everything; "sfw"
+   *  and "nsfw" narrow by the row's content_rating. Client-side — the
+   *  rows already carry content_rating (it drives the 18+ pill). */
+  nsfw?: "all" | "sfw" | "nsfw";
 }
+
+const NSFW_FILTER_OPTIONS: { value: "all" | "sfw" | "nsfw"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "sfw", label: "SFW" },
+  { value: "nsfw", label: "18+" },
+];
 
 interface ExtraFilter<R> {
   key: string;
@@ -250,6 +260,7 @@ const activeFilterCount = computed(() => {
   if (props.filter.category) n++;
   n += props.filter.tags?.length ?? 0;
   n += activeExtras.value.length;
+  if (props.filter.nsfw === "sfw" || props.filter.nsfw === "nsfw") n++;
   return n;
 });
 
@@ -271,6 +282,10 @@ const filteredItems = computed(() => {
   if (extras.length > 0) {
     out = out.filter((m) => extras.every((f) => f.check(m)));
   }
+
+  // Content-rating filter (client-side; content_rating is on the rows).
+  if (props.filter.nsfw === "nsfw") out = out.filter((m) => isNsfw(m));
+  else if (props.filter.nsfw === "sfw") out = out.filter((m) => !isNsfw(m));
 
   switch (props.filter.sortBy) {
     case "name-asc":
@@ -299,6 +314,7 @@ watch(
     props.filter.tags?.length ?? 0,
     activeExtras.value.length,
     props.filter.sortBy,
+    props.filter.nsfw,
     pageSize.value,
   ],
   () => {
@@ -475,6 +491,7 @@ function clearFilters() {
   props.filter.favorites = false;
   props.filter.category = null;
   props.filter.tags = [];
+  props.filter.nsfw = "all";
   clearExtraActive();
   // Fire `clear` so parents can wipe view-specific URL state that the
   // shared filter object doesn't know about (e.g. AllItems' kinds[]).
@@ -704,6 +721,20 @@ defineExpose({
                 {{ ef.label }}
                 <span class="wp-dim wp-chip__count">{{ matchCount(ef) }}</span>
               </button>
+            </div>
+          </div>
+          <!-- Content-rating filter (shared across every list view).
+               Tri-state: All / SFW / 18+. Client-side over content_rating. -->
+          <div class="wp-filter-panel__extra">
+            <span class="wp-filter-panel__extra-label">Content</span>
+            <div class="wp-filter-panel__extra-chips">
+              <button
+                v-for="opt in NSFW_FILTER_OPTIONS" :key="opt.value"
+                type="button"
+                class="wp-chip wp-chip--toggle"
+                :data-active="(filter.nsfw ?? 'all') === opt.value ? '' : null"
+                @click="filter.nsfw = opt.value"
+              >{{ opt.label }}</button>
             </div>
           </div>
           <div v-if="hasActiveFilters" class="wp-filter-panel__footer">

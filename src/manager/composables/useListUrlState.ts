@@ -15,6 +15,9 @@ interface BaseShape {
   favorites: boolean;
   tags: string[];
   sortBy: string;
+  /** Content-rating filter shared by every list view (+ All items):
+   *  "all" (default) / "sfw" / "nsfw". Client-side over content_rating. */
+  nsfw: string;
   page: number;
   pageSize: number;
 }
@@ -29,6 +32,7 @@ export const BASE_LIST_SCHEMA: UrlSchema<BaseShape> = {
   favorites: { type: "bool",           default: false,          urlKey: "fav" },
   tags:      { type: "csv",            default: [],             urlKey: "tag" },
   sortBy:    { type: "string",         default: "updated-desc", urlKey: "sort" },
+  nsfw:      { type: "string",         default: "all",          urlKey: "nsfw" },
   page:      { type: "int",            default: 1 },
   pageSize:  { type: "int",            default: 15,             urlKey: "ps" },
 };
