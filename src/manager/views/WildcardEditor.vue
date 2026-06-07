@@ -1612,4 +1612,352 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 .wc-opt-row--null {
   background: color-mix(in srgb, var(--wp-text) 2%, transparent);
 }
+
+/* ── Sub-category group boxes (H1) ───────────────────────────────── */
+.subcat-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-4);
+}
+.subcat-group {
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  background: var(--wp-bg-2);
+  padding: var(--wp-space-4);
+}
+.subcat-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  margin-bottom: var(--wp-space-3);
+}
+.subcat-group__name {
+  font-size: var(--wp-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wp-text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--wp-radius-sm);
+  padding: 3px 6px;
+  min-width: 0;
+  max-width: 220px;
+}
+.subcat-group__name:hover,
+.subcat-group__name:focus-visible {
+  border-color: var(--wp-border);
+  background: var(--wp-bg-1);
+  color: var(--wp-text);
+  outline: none;
+}
+.subcat-group__name--other {
+  font-style: italic;
+  padding-left: 0;
+  cursor: default;
+}
+.subcat-group__ungroup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--wp-text-dim);
+  border-radius: var(--wp-radius-sm);
+}
+.subcat-group__ungroup:hover {
+  color: var(--wp-text);
+  background: var(--wp-bg-3);
+}
+.subcat-group__pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-3);
+}
+
+/* Pill: ⠿ name (count) ⋯ — tinted by its axis hue (--chip-hue). */
+.subcat-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--chip-hue) 45%, var(--wp-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chip-hue) 12%, var(--wp-bg-1));
+  font-size: var(--wp-text-sm);
+  line-height: 1;
+}
+.subcat-pill__grip {
+  color: var(--wp-text-dim);
+  cursor: grab;
+  font-size: 11px;
+}
+.subcat-pill__name {
+  color: var(--wp-text);
+  font-weight: 500;
+}
+.subcat-pill__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chip-hue) 22%, var(--wp-bg-3));
+  color: var(--wp-text-muted);
+  font-size: var(--wp-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.subcat-pill__kebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--wp-text-dim);
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1;
+}
+.subcat-pill__kebab:hover {
+  color: var(--wp-text);
+  background: var(--wp-bg-3);
+}
+
+/* Kebab dropdown menu. */
+.subcat-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--wp-space-2);
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  box-shadow: var(--wp-shadow-lg);
+}
+.subcat-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--wp-text);
+  font-size: var(--wp-text-sm);
+  text-align: left;
+  border-radius: var(--wp-radius-sm);
+}
+.subcat-menu__item:hover {
+  background: var(--wp-bg-3);
+}
+.subcat-menu__item .pi {
+  font-size: 12px;
+  color: var(--wp-text-dim);
+}
+.subcat-menu__item--sub {
+  padding-left: var(--wp-space-5);
+}
+.subcat-menu__item--danger {
+  color: var(--wp-danger-text, var(--wp-danger));
+}
+.subcat-menu__item--danger .pi {
+  color: inherit;
+}
+.subcat-menu__sub {
+  display: flex;
+  flex-direction: column;
+  margin: 2px 0 2px var(--wp-space-3);
+  padding-left: var(--wp-space-2);
+  border-left: 1px solid var(--wp-border);
+}
+
+/* Inline "+ tag" (per group) + "+ Group". */
+.subcat-addtag__open,
+.subcat-add-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px dashed var(--wp-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-sm);
+}
+.subcat-addtag__open:hover,
+.subcat-add-group:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-accent-500);
+}
+.subcat-add-group {
+  margin-top: var(--wp-space-3);
+  align-self: flex-start;
+}
+.subcat-addtag__input {
+  padding: 3px 10px;
+  width: 130px;
+  border: 1px solid var(--wp-accent-500);
+  border-radius: 999px;
+  background: var(--wp-bg-1);
+  color: var(--wp-text);
+  font-size: var(--wp-text-sm);
+  outline: none;
+}
+.subcat-addtag__input--invalid {
+  border-color: var(--wp-danger);
+}
+.subcat-addtag__error {
+  margin: var(--wp-space-2) 0 0;
+  color: var(--wp-danger-text, var(--wp-danger));
+  font-size: var(--wp-text-xs);
+}
+
+/* ── Per-option grouped multi-select (H2) ────────────────────────── */
+.opt-tags {
+  position: relative;
+}
+.opt-tags__control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.opt-tags__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--chip-hue) 45%, var(--wp-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chip-hue) 12%, var(--wp-bg-1));
+  color: var(--wp-text);
+  font-size: var(--wp-text-xs);
+  line-height: 1.4;
+}
+.opt-tags__chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--wp-text-dim);
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+}
+.opt-tags__chip-x:hover {
+  color: var(--wp-text);
+  background: var(--wp-bg-3);
+}
+.opt-tags__placeholder {
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-xs);
+  font-style: italic;
+}
+.opt-tags__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  background: var(--wp-bg-1);
+  cursor: pointer;
+  color: var(--wp-text-dim);
+  font-size: 11px;
+}
+.opt-tags__chevron:hover {
+  color: var(--wp-text);
+  border-color: var(--wp-border-strong);
+}
+.opt-tags__chevron--open {
+  color: var(--wp-accent-text);
+  border-color: var(--wp-accent-500);
+}
+
+.opt-tags__picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 210px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-3);
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius);
+  box-shadow: var(--wp-shadow-lg);
+}
+.opt-tags__empty {
+  margin: 0;
+  color: var(--wp-text-dim);
+  font-size: var(--wp-text-xs);
+}
+.opt-tags__section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.opt-tags__section-name {
+  font-size: var(--wp-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wp-text-dim);
+  padding: 0 4px 2px;
+}
+.opt-tags__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-3);
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--wp-text);
+  font-size: var(--wp-text-sm);
+  text-align: left;
+  border-radius: var(--wp-radius-sm);
+}
+.opt-tags__toggle:hover {
+  background: var(--wp-bg-3);
+}
+.opt-tags__toggle-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border: 1.5px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border-strong));
+  border-radius: 4px;
+  color: var(--chip-hue);
+}
+.opt-tags__toggle.is-on .opt-tags__toggle-box {
+  background: color-mix(in srgb, var(--chip-hue) 22%, transparent);
+  border-color: var(--chip-hue);
+}
 </style>
