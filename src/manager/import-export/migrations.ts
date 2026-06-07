@@ -117,7 +117,9 @@ function _rewriteRefs(s: string): string {
     const parts = lst.split(",").map((x) => x.trim());
     const hasNull = parts.includes("null");
     if (!hasComma && !hasNull) return full; // single tag / v2 expr — leave
-    const expr = parts.filter((p) => p && p !== "null").join(" or ");
+    // Slug each tag so a cross-wildcard ref tracks the target's renamed
+    // registry entry (deterministic — same _slug the target applies).
+    const expr = parts.filter((p) => p && p !== "null").map(_slug).join(" or ");
     let out = "@{" + uuid + (nameSeg ?? "");
     if (expr) out += ":" + expr;
     if (hasNull) out += "!null";

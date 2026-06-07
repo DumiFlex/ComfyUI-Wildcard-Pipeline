@@ -72,7 +72,9 @@ def _rewrite_ref(m: re.Match[str]) -> str:
         # Single tag OR an already-v2 boolean expression — leave as-is so
         # the rewrite is idempotent and never corrupts a v2 ref.
         return m.group(0)
-    tags = [p for p in parts if p and p != "null"]
+    # Slug each tag so a cross-wildcard ref tracks the target's renamed
+    # registry entry (deterministic — same _slug the target applies).
+    tags = [_slug(p) for p in parts if p and p != "null"]
     expr = " or ".join(tags)
     out = "@{" + uuid + name_seg
     if expr:
