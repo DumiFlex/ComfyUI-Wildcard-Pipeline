@@ -56,8 +56,8 @@ describe("starter-recipe — wildcard payloads", () => {
     expect(p.var_binding).toBe("subject");
     expect(p.sub_categories).toEqual(["feline", "canine"]);
     expect(p.options.map((o) => o.value)).toEqual(["cat", "tiger", "dog", "wolf"]);
-    expect(p.options.map((o) => o.sub_category)).toEqual([
-      "feline", "feline", "canine", "canine",
+    expect(p.options.map((o) => o.sub_categories)).toEqual([
+      ["feline"], ["feline"], ["canine"], ["canine"],
     ]);
     expect(p.options.every((o) => o.weight === 1)).toBe(true);
     // Each option carries a fresh 8-hex id.
@@ -69,7 +69,7 @@ describe("starter-recipe — wildcard payloads", () => {
     expect(p.var_binding).toBe("mood");
     expect(p.sub_categories).toEqual(["calm", "intense"]);
     expect(p.options.map((o) => o.value)).toEqual(["serene", "sleepy", "fierce", "dramatic"]);
-    expect(p.options.map((o) => o.sub_category)).toEqual(["calm", "calm", "intense", "intense"]);
+    expect(p.options.map((o) => o.sub_categories)).toEqual([["calm"], ["calm"], ["intense"], ["intense"]]);
   });
 
   it("mints fresh, unique option ids on each build", () => {

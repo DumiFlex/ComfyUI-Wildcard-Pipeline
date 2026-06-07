@@ -22,7 +22,7 @@ const storedWidgetChild: Record<string, unknown> = {
   payload: {
     var_binding: "mood",
     sub_categories: [],
-    options: [{ id: "opt001a", value: "serene", weight: 1, sub_category: null }],
+    options: [{ id: "opt001a", value: "serene", weight: 1, sub_categories: [] }],
     history: [{ saved_at: "2026-06-06T00:00:00Z", name: "x", payload: {} }],
   },
 };

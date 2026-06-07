@@ -33,7 +33,7 @@ function makeWildcard(
         id: o.id ?? `o${i}`,
         value: o.value,
         weight: o.weight,
-        sub_category: o.sub_category ?? null,
+        sub_categories: o.sub_categories ?? [],
       })),
       sub_categories: extras.sub_categories ?? [],
       var_binding: extras.var_binding,
@@ -52,8 +52,8 @@ describe("pickWeightedOption", () => {
 
   it("returns roughly proportional picks across many trials", () => {
     const opts: WildcardOption[] = [
-      { id: "a", value: "a", weight: 10 },
-      { id: "b", value: "b", weight: 1 },
+      { id: "a", value: "a", weight: 10, sub_categories: [] },
+      { id: "b", value: "b", weight: 1, sub_categories: [] },
     ];
     let aHits = 0;
     const N = 4000;
@@ -68,8 +68,8 @@ describe("pickWeightedOption", () => {
 
   it("falls back to first when all weights are zero", () => {
     const opts: WildcardOption[] = [
-      { id: "a", value: "a", weight: 0 },
-      { id: "b", value: "b", weight: 0 },
+      { id: "a", value: "a", weight: 0, sub_categories: [] },
+      { id: "b", value: "b", weight: 0, sub_categories: [] },
     ];
     expect(pickWeightedOption(opts)?.value).toBe("a");
   });
@@ -192,11 +192,11 @@ describe("fillTemplate", () => {
 describe("applyConstraint", () => {
   it("zeroes excluded options and boosts boosted ones", () => {
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
-      { value: "tux",   weight: 1, sub_category: "formal" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
+      { value: "tux",   weight: 1, sub_categories: ["formal"] },
     ], { id: "wc_target", sub_categories: ["casual", "formal"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -217,10 +217,10 @@ describe("applyConstraint", () => {
     // Matrix says casual = exclude → weight 0. Exception says
     // (rain, linen) = allow → exception wins, original weight survives.
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -236,10 +236,10 @@ describe("applyConstraint", () => {
 
   it("exception overrides a matrix BOOST — reduce exception applies its own factor", () => {
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -260,10 +260,10 @@ describe("applyConstraint", () => {
     // The SPA test runner must too — otherwise users see exceptions
     // appearing to be ignored when they're actually applied at runtime.
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",
@@ -282,11 +282,11 @@ describe("applyConstraint", () => {
     // Two options under the same sub_cat — matrix excludes both; only
     // the specifically-exception'd one survives.
     const target = makeWildcard("Outfit", [
-      { value: "linen", weight: 2, sub_category: "casual" },
-      { value: "denim", weight: 2, sub_category: "casual" },
+      { value: "linen", weight: 2, sub_categories: ["casual"] },
+      { value: "denim", weight: 2, sub_categories: ["casual"] },
     ], { id: "wc_target", sub_categories: ["casual"] });
     const source = makeWildcard("Weather", [
-      { value: "rain", weight: 1, sub_category: "wet" },
+      { value: "rain", weight: 1, sub_categories: ["wet"] },
     ], { id: "wc_source", sub_categories: ["wet"] });
     const cn: ConstraintPayload = {
       source_wildcard_id: "wc_source",

@@ -11,12 +11,21 @@ export interface WildcardOption {
   id: string;
   value: string;
   weight: number;
-  sub_category?: string | null;
+  /** Multi-tag membership (SP1). Which registry sub-categories this
+   * option belongs to — a subset of `WildcardPayload.sub_categories`.
+   * Replaces the pre-SP1 singular `sub_category?: string | null`.
+   * Defaults to `[]` (untagged: bypasses every tag filter). The null
+   * option always carries `[]`. The boolean filter expression
+   * (`@{uuid:expr}` + instance `category_filter`) is matched against
+   * this set; the constraint matrix uses the PRIMARY tag
+   * (`sub_categories[0]`) as an SP1 stopgap (SP3 multiplies). Mirrors
+   * engine `engine/modules/wildcard_handler.py:validate_payload`. */
+  sub_categories: string[];
   /** Exactly one option per wildcard may be flagged `is_null: true`.
-   * The null option carries `value: ""` and no `sub_category`. When
+   * The null option carries `value: ""` and `sub_categories: []`. When
    * picked, the wildcard resolves to the empty string — a
    * probabilistic "no output" slot that bypasses the constraint matrix
-   * (which is keyed by sub_category) but can still be targeted by
+   * (which is keyed by the primary tag) but can still be targeted by
    * constraint exceptions (keyed by the empty-string value). Validated
    * server-side in `engine/modules/wildcard_handler.py:validate_payload`.
    * See `docs/superpowers/specs/2026-05-24-null-wildcard-option-design.md`. */
@@ -26,6 +35,16 @@ export interface WildcardOption {
 export interface WildcardPayload {
   options: WildcardOption[];
   sub_categories: string[];
+  /**
+   * Optional UI-only grouping of registry `sub_categories` into named
+   * axes (SP1). Axis name → member tags; each member must be in
+   * `sub_categories`, and a tag may appear in at most one axis.
+   * **The engine ignores it** — only the editors use it to render
+   * grouped chips/pills and to colour tags per axis. Travels in the
+   * payload so grouping survives sharing. Ungrouped tags render in a
+   * default "ungrouped/other" box. See design §2.2 / §4.3.
+   */
+  tag_groups?: Record<string, string[]>;
   /**
    * The `$varname` other modules use to read this wildcard's resolved value.
    * Optional — defaults to `slug(name)` when missing/blank. User-editable so

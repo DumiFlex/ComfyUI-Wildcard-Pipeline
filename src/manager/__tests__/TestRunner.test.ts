@@ -13,8 +13,8 @@ vi.mock("../api/client", () => {
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         options: [
-          { id: "o1", value: "auburn",  weight: 2, sub_category: "warm" },
-          { id: "o2", value: "blonde",  weight: 1, sub_category: "cool" },
+          { id: "o1", value: "auburn",  weight: 2, sub_categories: ["warm"] },
+          { id: "o2", value: "blonde",  weight: 1, sub_categories: ["cool"] },
         ],
         sub_categories: ["warm", "cool"],
         var_binding: "hair_color",
@@ -27,7 +27,7 @@ vi.mock("../api/client", () => {
       description: "", category_id: null, tags: [], is_favorite: false,
       payload: {
         options: [
-          { id: "o1", value: "{linen|cotton} dress", weight: 2, sub_category: null },
+          { id: "o1", value: "{linen|cotton} dress", weight: 2, sub_categories: [] },
         ],
         sub_categories: [],
       },

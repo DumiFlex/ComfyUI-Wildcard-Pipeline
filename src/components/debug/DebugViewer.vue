@@ -692,7 +692,16 @@ const pickRows = computed<PickRow[]>(() => {
     if (opt && typeof opt === "object") {
       const o = opt as Record<string, unknown>;
       value = formatValue(o.value);
-      subCategory = typeof o.sub_category === "string" ? o.sub_category : "";
+      // SP1: the pick record now stashes `sub_categories: string[]`
+      // (engine `_record_pick`). Render the membership as a comma list.
+      // Fall back to the legacy singular `sub_category` string so an
+      // older cached snapshot (or a not-yet-restarted Python process)
+      // still surfaces its tag in this column.
+      if (Array.isArray(o.sub_categories)) {
+        subCategory = o.sub_categories.filter((s): s is string => typeof s === "string").join(", ");
+      } else if (typeof o.sub_category === "string") {
+        subCategory = o.sub_category;
+      }
     } else {
       value = formatValue(opt);
     }

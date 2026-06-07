@@ -102,10 +102,10 @@ export function buildSubjectPayload(): WildcardPayload {
     var_binding: "subject",
     sub_categories: ["feline", "canine"],
     options: [
-      { id: newShortId(), value: "cat", weight: 1, sub_category: "feline" },
-      { id: newShortId(), value: "tiger", weight: 1, sub_category: "feline" },
-      { id: newShortId(), value: "dog", weight: 1, sub_category: "canine" },
-      { id: newShortId(), value: "wolf", weight: 1, sub_category: "canine" },
+      { id: newShortId(), value: "cat", weight: 1, sub_categories: ["feline"] },
+      { id: newShortId(), value: "tiger", weight: 1, sub_categories: ["feline"] },
+      { id: newShortId(), value: "dog", weight: 1, sub_categories: ["canine"] },
+      { id: newShortId(), value: "wolf", weight: 1, sub_categories: ["canine"] },
     ],
   };
 }
@@ -116,10 +116,10 @@ export function buildMoodPayload(): WildcardPayload {
     var_binding: "mood",
     sub_categories: ["calm", "intense"],
     options: [
-      { id: newShortId(), value: "serene", weight: 1, sub_category: "calm" },
-      { id: newShortId(), value: "sleepy", weight: 1, sub_category: "calm" },
-      { id: newShortId(), value: "fierce", weight: 1, sub_category: "intense" },
-      { id: newShortId(), value: "dramatic", weight: 1, sub_category: "intense" },
+      { id: newShortId(), value: "serene", weight: 1, sub_categories: ["calm"] },
+      { id: newShortId(), value: "sleepy", weight: 1, sub_categories: ["calm"] },
+      { id: newShortId(), value: "fierce", weight: 1, sub_categories: ["intense"] },
+      { id: newShortId(), value: "dramatic", weight: 1, sub_categories: ["intense"] },
     ],
   };
 }

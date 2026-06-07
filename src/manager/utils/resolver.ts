@@ -229,7 +229,11 @@ export function applyConstraint(
   const sSubs = sourcePayload.sub_categories ?? [];
   const tSubs = targetPayload.sub_categories ?? [];
   const sourceOpt = sourceOptions.find((o) => o.value === sourceValue);
-  const sSub = sourceOpt?.sub_category ?? "";
+  // SP1 primary-tag stopgap: the matrix is keyed on a single tag, so we
+  // use the option's PRIMARY tag (`sub_categories[0]`, "" when untagged).
+  // Mirrors engine `_apply_constraint_to_options` (SP3 will multiply over
+  // every tag instead of just the first). See design §3.4.
+  const sSub = sourceOpt?.sub_categories?.[0] ?? "";
   const sCol = sSubs.indexOf(sSub);
   const matrix: ConstraintMatrix = cn.matrix ?? {};
 
@@ -240,7 +244,8 @@ export function applyConstraint(
   };
 
   return targetOptions.map((opt): AdjustedOption => {
-    const tSub = opt.sub_category ?? "";
+    // Primary tag for the target option (SP1 stopgap, see above).
+    const tSub = opt.sub_categories?.[0] ?? "";
     const tRow = tSubs.indexOf(tSub);
     let mode: AdjustedOption["_mode"] = "allow";
     let factor = 1;

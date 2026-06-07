@@ -6,7 +6,7 @@ import { _resetForTests, _setForTests } from "../../extension/preview-resolver";
 const SAMPLE_SNAPSHOT = JSON.stringify({
   hair_style: "long flowing",
   mood: "joyful",
-  __wp_picks__: { abc12345: { value: "long flowing", sub_category: "long" } },
+  __wp_picks__: { abc12345: { value: "long flowing", sub_categories: ["long"] } },
   __wp_constraints__: [{ source: "abc12345", target: "def67890" }],
   // Trace entry includes `writes[].variable` so the picks-tab lookup
   // can re-key `abc12345 → $hair_style` instead of showing the raw uuid.
@@ -266,7 +266,7 @@ describe("DebugViewer", () => {
       __wp_picks__: {
         backdrop1: {
           value: "minimal interior with @{a361dbdc} accents",
-          sub_category: "indoor",
+          sub_categories: ["indoor"],
         },
       },
       __wp_trace__: [
@@ -909,7 +909,7 @@ describe("DebugViewer", () => {
         { id: "w1", type: "wildcard", status: "ok", writes: [{ variable: "color", value: "blue" }] },
       ],
       __wp_picks__: {
-        w1: { value: "blue", sub_category: "primary" },
+        w1: { value: "blue", sub_categories: ["primary"] },
       },
     });
     const wrapper = mount(DebugViewer, {

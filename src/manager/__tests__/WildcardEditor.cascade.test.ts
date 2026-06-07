@@ -126,7 +126,7 @@ describe("WildcardEditor cascade store integration", () => {
         {
           id: "11111111", name: "hair",
           payload: { sub_categories: [], options: [
-            { id: "opt_aaaa", value: "buzz", sub_category: null },
+            { id: "opt_aaaa", value: "buzz", sub_categories: [] },
           ] },
         },
       ],

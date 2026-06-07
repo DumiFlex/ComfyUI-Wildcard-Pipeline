@@ -80,7 +80,7 @@ describe("reverse-dep-index", () => {
       wildcards: [{
         id: "11111111", name: "hair",
         payload: { sub_categories: [], options: [
-          { id: "opt_aaaa", value: "buzz", sub_category: null },
+          { id: "opt_aaaa", value: "buzz", sub_categories: [] },
         ] },
       }],
       constraints: [{
@@ -111,7 +111,7 @@ describe("reverse-dep-index", () => {
       wildcards: [{
         id: "11111111", name: "hair",
         payload: { sub_categories: [], options: [
-          { id: "opt_aaaa", value: "buzz", sub_category: null },
+          { id: "opt_aaaa", value: "buzz", sub_categories: [] },
         ] },
       }],
       constraints: [{

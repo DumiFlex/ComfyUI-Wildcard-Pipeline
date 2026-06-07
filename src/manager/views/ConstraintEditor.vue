@@ -103,7 +103,7 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
   router.push(resolveReturnTo("/constraints"));
 }
 
-interface WildcardOption { id: string; value: string; weight: number; sub_category?: string | null; }
+interface WildcardOption { id: string; value: string; weight: number; sub_categories?: string[]; }
 interface WildcardPayloadShape {
   options?: WildcardOption[];
   sub_categories?: string[];

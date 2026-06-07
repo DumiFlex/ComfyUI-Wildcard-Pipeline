@@ -14,8 +14,8 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
       var_binding: "outfit",
       sub_categories: ["warm", "cool"],
       options: [
-        { id: "o1", value: "red", weight: 1, sub_category: "warm" },
-        { id: "o2", value: "blue", weight: 1, sub_category: "cool" },
+        { id: "o1", value: "red", weight: 1, sub_categories: ["warm"] },
+        { id: "o2", value: "blue", weight: 1, sub_categories: ["cool"] },
       ],
     },
     instance: {},
