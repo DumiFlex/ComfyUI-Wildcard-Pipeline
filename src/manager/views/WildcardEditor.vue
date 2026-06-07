@@ -12,7 +12,7 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
@@ -136,6 +136,14 @@ const openKebab = ref<string | null>(null);
 const moveMenuFor = ref<string | null>(null);
 /** Which option row's tag picker is expanded (option id), H2. */
 const openOptTagPicker = ref<string | null>(null);
+/** When a menu opens too close to the viewport bottom we flip it to open
+ *  upward so it isn't clipped off the end of the page (bugs #1/#4). */
+const kebabDropUp = ref(false);
+const pickerDropUp = ref(false);
+/** Drag-and-drop state: which pill tag is being dragged + which group box
+ *  it's currently hovering, for the drop highlight (bug #2). */
+const draggedTag = ref<string | null>(null);
+const dragOverAxis = ref<string | null>(null);
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
 const saveError = ref<string>("");
@@ -363,15 +371,53 @@ function kebabKey(axis: string, tag: string): string {
   return `${axis}::${tag}`;
 }
 
-function toggleKebab(axis: string, tag: string): void {
+/** True when the trigger that fired `ev` sits within `menuPx` of the
+ *  viewport bottom — i.e. a downward menu would be clipped, so flip up. */
+function shouldDropUp(ev: MouseEvent | undefined, menuPx: number): boolean {
+  const el = ev?.currentTarget as HTMLElement | null;
+  const r = el?.getBoundingClientRect();
+  return !!r && window.innerHeight - r.bottom < menuPx;
+}
+
+function toggleKebab(axis: string, tag: string, ev?: MouseEvent): void {
   const key = kebabKey(axis, tag);
-  openKebab.value = openKebab.value === key ? null : key;
+  const opening = openKebab.value !== key;
+  openKebab.value = opening ? key : null;
   moveMenuFor.value = null;
+  if (opening) kebabDropUp.value = shouldDropUp(ev, 200);
 }
 
 function closeMenus(): void {
   openKebab.value = null;
   moveMenuFor.value = null;
+}
+
+/** Close every transient overlay: kebab + its submenu, the inline add-tag
+ *  input, and the per-option tag picker. Used by the document-level
+ *  outside-click + Escape handlers (bug #3). */
+function closeAllMenus(): void {
+  closeMenus();
+  cancelAddTag();
+  openOptTagPicker.value = null;
+}
+
+/** Outside-click: any pointer landing outside an open menu / its trigger
+ *  dismisses everything. Clicks inside these regions are handled by their
+ *  own (`@click.stop`) handlers, so we bail when the target is within one. */
+function onDocPointerDown(e: MouseEvent): void {
+  const t = e.target as HTMLElement | null;
+  if (
+    t?.closest(
+      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags",
+    )
+  ) {
+    return;
+  }
+  closeAllMenus();
+}
+
+function onDocKeydown(e: KeyboardEvent): void {
+  if (e.key === "Escape") closeAllMenus();
 }
 
 /* ── Inline "+ tag" per group ──────────────────────────────────────── */
@@ -477,14 +523,49 @@ function moveTagToGroup(tag: string, targetAxis: string): void {
   closeMenus();
 }
 
+/* ── Drag-and-drop pills between group boxes (bug #2) ───────────────── */
+
+function onPillDragStart(tag: string, e: DragEvent): void {
+  draggedTag.value = tag;
+  closeMenus();
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", tag);
+  }
+}
+
+function onPillDragEnd(): void {
+  draggedTag.value = null;
+  dragOverAxis.value = null;
+}
+
+function onGroupDragOver(axis: string): void {
+  if (draggedTag.value !== null) dragOverAxis.value = axis;
+}
+
+function onGroupDragLeave(axis: string): void {
+  if (dragOverAxis.value === axis) dragOverAxis.value = null;
+}
+
+/** Drop a dragged pill into `axis` (OTHER_AXIS box = ungroup). Reuses the
+ *  same move routine the kebab "Move to group…" submenu calls. */
+function onGroupDrop(axis: string): void {
+  const tag = draggedTag.value;
+  draggedTag.value = null;
+  dragOverAxis.value = null;
+  if (tag !== null) moveTagToGroup(tag, axis);
+}
+
 /* ── Per-option grouped multi-select (§4.3, H2) ─────────────────────── */
 
 /** Box model for the option tag picker — same axis grouping as the
  *  registry boxes but used to render the grouped checkbox sections. */
 const optionTagGroups = computed<SubcatGroup[]>(() => subcatGroups.value);
 
-function toggleOptTagPicker(optionId: string): void {
-  openOptTagPicker.value = openOptTagPicker.value === optionId ? null : optionId;
+function toggleOptTagPicker(optionId: string, ev?: MouseEvent): void {
+  const opening = openOptTagPicker.value !== optionId;
+  openOptTagPicker.value = opening ? optionId : null;
+  if (opening) pickerDropUp.value = shouldDropUp(ev, 280);
 }
 
 function optionHasTag(o: WildcardOption, tag: string): boolean {
@@ -548,7 +629,15 @@ function serializeTagGroups(): Record<string, string[]> | null {
   return Object.keys(out).length > 0 ? out : null;
 }
 
+onUnmounted(() => {
+  document.removeEventListener("click", onDocPointerDown);
+  document.removeEventListener("keydown", onDocKeydown);
+});
+
 onMounted(async () => {
+  // Outside-click + Escape dismissal for all transient menus (bug #3).
+  document.addEventListener("click", onDocPointerDown);
+  document.addEventListener("keydown", onDocKeydown);
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
     try {
@@ -1177,7 +1266,11 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             v-for="group in subcatGroups"
             :key="group.axis"
             class="subcat-group"
+            :class="{ 'subcat-group--drop': dragOverAxis === group.axis && draggedTag !== null }"
             data-test="subcat-group"
+            @dragover.prevent="onGroupDragOver(group.axis)"
+            @dragleave="onGroupDragLeave(group.axis)"
+            @drop.prevent="onGroupDrop(group.axis)"
           >
             <header class="subcat-group__head">
               <input
@@ -1206,7 +1299,11 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 v-for="tag in group.tags"
                 :key="tag"
                 class="subcat-pill"
+                :class="{ 'subcat-pill--dragging': draggedTag === tag }"
                 :style="chipStyle(tag)"
+                draggable="true"
+                @dragstart="onPillDragStart(tag, $event)"
+                @dragend="onPillDragEnd"
               >
                 <span class="subcat-pill__grip" aria-hidden="true">⠿</span>
                 <span class="subcat-pill__name">{{ tag }}</span>
@@ -1217,7 +1314,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                   :aria-label="`Actions for ${tag}`"
                   :aria-expanded="openKebab === kebabKey(group.axis, tag)"
                   :data-test="`subcat-kebab-${tag}`"
-                  @click.stop="toggleKebab(group.axis, tag)"
+                  @click.stop="toggleKebab(group.axis, tag, $event)"
                 >⋯</button>
 
                 <!-- Kebab menu: Rename / Move to group… / Delete. Rename
@@ -1225,6 +1322,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 <div
                   v-if="openKebab === kebabKey(group.axis, tag)"
                   class="subcat-menu"
+                  :class="{ 'subcat-menu--up': kebabDropUp }"
                   role="menu"
                   @click.stop
                 >
@@ -1410,7 +1508,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                     :aria-label="`Edit sub-categories for option`"
                     :aria-expanded="openOptTagPicker === o.id"
                     :data-test="`opt-tags-${o.id}`"
-                    @click.stop="toggleOptTagPicker(o.id)"
+                    @click.stop="toggleOptTagPicker(o.id, $event)"
                   ><i class="pi pi-chevron-down" aria-hidden="true" /></button>
                 </div>
 
@@ -1419,6 +1517,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 <div
                   v-if="openOptTagPicker === o.id"
                   class="opt-tags__picker"
+                  :class="{ 'opt-tags__picker--up': pickerDropUp }"
                   role="menu"
                   @click.stop
                 >
@@ -1624,6 +1723,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border-radius: var(--wp-radius);
   background: var(--wp-bg-2);
   padding: var(--wp-space-4);
+  transition: border-color 0.12s, background 0.12s;
+}
+/* Highlight a group box while a dragged pill hovers over it (bug #2). */
+.subcat-group--drop {
+  border-color: var(--wp-accent-500);
+  background: color-mix(in srgb, var(--wp-accent-500) 8%, var(--wp-bg-2));
 }
 .subcat-group__head {
   display: flex;
@@ -1692,6 +1797,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   font-size: var(--wp-text-sm);
   line-height: 1;
 }
+.subcat-pill[draggable="true"] {
+  cursor: grab;
+}
+.subcat-pill--dragging {
+  opacity: 0.45;
+}
 .subcat-pill__grip {
   color: var(--wp-text-dim);
   cursor: grab;
@@ -1747,6 +1858,11 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
+}
+/* Flip the kebab menu above its trigger near the page bottom (bug #1). */
+.subcat-menu--up {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 .subcat-menu__item {
   display: flex;
@@ -1910,6 +2026,11 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   box-shadow: var(--wp-shadow-lg);
+}
+/* Flip the option tag picker above its trigger near the page bottom (#4). */
+.opt-tags__picker--up {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 .opt-tags__empty {
   margin: 0;

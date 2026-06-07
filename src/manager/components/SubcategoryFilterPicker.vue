@@ -257,12 +257,12 @@ function onApply(): void {
 
 <style scoped>
 .wp-subcat-picker {
-  padding: 10px 12px;
+  padding: 14px 16px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-accent);
   border-radius: 6px;
-  min-width: 240px;
-  max-width: 320px;
+  min-width: 340px;
+  max-width: 460px;
 }
 .wp-subcat-picker__null-row {
   display: flex;
@@ -289,12 +289,12 @@ function onApply(): void {
 .wp-subcat-picker__input {
   width: 100%;
   box-sizing: border-box;
-  padding: 5px 8px;
+  padding: 9px 11px;
   border-radius: 4px;
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2, var(--wp-bg));
   color: var(--wp-text, var(--wp-text1));
-  font: 12px var(--wp-font-mono);
+  font: 13px/1.4 var(--wp-font-mono);
   outline: none;
 }
 .wp-subcat-picker__input:focus {
@@ -364,8 +364,8 @@ function onApply(): void {
   border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
 }
 .wp-subcat-chip {
-  padding: 3px 9px;
-  border-radius: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
   border: 1px solid var(--wp-border);
   background: transparent;
   color: var(--wp-text-muted, var(--wp-text2));
@@ -384,5 +384,11 @@ function onApply(): void {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+/* Shrink the Delete/Skip/Apply buttons — the default .wp-btn size was too
+ *  bulky for this compact popover (bug #5). */
+.wp-subcat-picker__actions .wp-btn {
+  padding: 4px 12px;
+  font-size: 12px;
 }
 </style>

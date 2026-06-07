@@ -154,4 +154,26 @@ describe("WildcardEditor sub-categories", () => {
     };
     expect(call.payload.tag_groups).toEqual({ fam: ["a", "b"] });
   });
+
+  it("clicking outside closes an open kebab menu", async () => {
+    const w = await mountSeeded();
+    await w.get('[data-test="subcat-kebab-a"]').trigger("click");
+    expect(w.find(".subcat-menu").exists()).toBe(true);
+    // A click anywhere outside a pill / menu dismisses it (document-level
+    // handler). Dispatch on body — outside the editor's detached subtree.
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushPromises();
+    expect(w.find(".subcat-menu").exists()).toBe(false);
+  });
+
+  it("dragging a pill onto another box re-homes the tag", async () => {
+    const w = await mountSeeded();
+    const vm = w.vm as unknown as { tagGroups: Record<string, string[]> };
+    expect(vm.tagGroups.fam).toEqual(["a", "b"]);
+    // First pill is "a" in the fam box; drop it on the ungrouped box (2nd).
+    await w.findAll(".subcat-pill")[0].trigger("dragstart");
+    await w.findAll('[data-test="subcat-group"]')[1].trigger("drop");
+    await flushPromises();
+    expect(vm.tagGroups.fam).toEqual(["b"]); // "a" left the axis
+  });
 });
