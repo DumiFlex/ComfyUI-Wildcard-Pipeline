@@ -2987,8 +2987,8 @@ function modifiedTooltip(m: ModuleEntry): string {
     case "wildcard":
       if (inst.mode === "pinned") bits.push("pinned");
       else if (inst.mode === "subcategory") bits.push("subset");
-      if (nonEmptyArr(inst.category_filter)) {
-        bits.push(`cats: ${(inst.category_filter as string[]).join(", ")}`);
+      if (inst.category_filter) {
+        bits.push(`cats: ${inst.category_filter}`);
       }
       if (Array.isArray(inst.enabled_options)) {
         bits.push(`${inst.enabled_options.length} option(s) enabled`);
@@ -4744,8 +4744,8 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         </div>
 
         <div
-          class="wp-modules-frame"
           ref="modulesContainer"
+          class="wp-modules-frame"
         >
         <div
           class="wp-modules"

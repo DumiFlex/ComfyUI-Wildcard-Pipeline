@@ -1,10 +1,12 @@
 // RichTextPreview — read-only chip renderer used by canvas modals,
 // TestRunner, and the SPA wildcard / combine editors. Pins two
 // behaviors that the constraint-modal QA caught regressions on:
-//   1. Nested-ref tokens written as `@{uuid:subcat}` MUST render with
-//      the sub-category suffix span. Dropping it would silently strip
-//      the chosen sub-cat from the chip even though the underlying
-//      value string still carries it.
+//   1. Nested-ref tokens written as `@{uuid:expr}` MUST surface their
+//      filter. Per SP1 §4.1 the expression is NOT inline (it can be
+//      long) — a funnel indicator (`refchip-filter`) marks "filtered"
+//      and the normalized "reads as" expression lives in the hover
+//      title. Dropping the indicator would silently hide that the chip
+//      is narrowed even though the value string still carries it.
 //   2. Refs whose name isn't in the caller-supplied `uuidToName` map
 //      fall through to the preview-resolver cache. Refs known to
 //      neither source render as the red "unresolved" chip; resolved
@@ -18,7 +20,10 @@ import { _resetForTests, _setForTests } from "../../extension/preview-resolver";
 describe("RichTextPreview", () => {
   beforeEach(() => _resetForTests());
 
-  it("renders a nested-ref chip with the sub-category suffix when the value carries `:subcat`", () => {
+  it("renders a nested-ref chip with the funnel filter indicator when the value carries `:expr` (not inline)", () => {
+    // SP1 (§4.1): the filter expression is NOT shown inline (it can be
+    // long) — a funnel indicator marks "filtered" and the expression
+    // lives in the hover title via "reads as".
     const w = mount(RichTextPreview, {
       props: {
         value: "i love @{c0f09840:test8}",
@@ -26,25 +31,28 @@ describe("RichTextPreview", () => {
       },
     });
     const label = w.find(".wp-refchip__label");
-    const suffix = w.find(".wp-refchip__suffix");
     expect(label.exists()).toBe(true);
     expect(label.text()).toBe("@test2");
-    expect(suffix.exists()).toBe(true);
-    expect(suffix.text()).toContain("test8");
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(w.find(".wp-refchip").text()).not.toContain("test8");
+    expect(w.find(".wp-refchip").attributes("title")).toContain("test8");
   });
 
-  it("renders multiple sub-categories joined by comma", () => {
+  it("surfaces a multi-term expression in the hover title (reads-as)", () => {
     const w = mount(RichTextPreview, {
       props: {
         value: "@{c0f09840:warm,bright}",
         uuidToName: new Map([["c0f09840", "color"]]),
       },
     });
-    expect(w.find(".wp-refchip__suffix").text()).toContain("warm");
-    expect(w.find(".wp-refchip__suffix").text()).toContain("bright");
+    // `warm,bright` (comma shorthand) reads as `warm or bright`.
+    const title = w.find(".wp-refchip").attributes("title") ?? "";
+    expect(title).toContain("warm");
+    expect(title).toContain("bright");
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
   });
 
-  it("omits the suffix span when the ref has no sub-category filter", () => {
+  it("omits the filter indicator when the ref has no sub-category filter", () => {
     const w = mount(RichTextPreview, {
       props: {
         value: "@{c0f09840}",
@@ -52,7 +60,7 @@ describe("RichTextPreview", () => {
       },
     });
     expect(w.find(".wp-refchip__label").text()).toBe("@test2");
-    expect(w.find(".wp-refchip__suffix").exists()).toBe(false);
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(false);
   });
 
   it("falls back to the preview-resolver cache when the uuid isn't in the caller map", () => {

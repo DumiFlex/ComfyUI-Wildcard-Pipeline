@@ -1,101 +1,235 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import {
+  parse,
+  matches,
+  readsAs,
+  validateExpression,
+} from "@/manager/parsing/subcatFilter";
 
 interface Props {
-  /** Sub-categories declared by the picked wildcard's payload. */
+  /** Sub-categories declared by the picked wildcard's payload. Used as
+   *  the known-term set for live validation and as the flat fallback
+   *  palette when no `tagGroups` axis covers a tag. */
   subCategories: string[];
-  /** Initial selection — empty for fresh insert, prepopulated for edit. */
-  initialSelection: string[];
+  /** Map axis-name → member sub-categories, for the grouped insert
+   *  palette. Tags not in any axis fall into an implicit "ungrouped"
+   *  cluster. */
+  tagGroups?: Record<string, string[]>;
+  /** Each entry is one option's tag set — drives the live "N of M
+   *  options match" count by running `matches(parse(expr), Set(tags))`. */
+  optionTagSets?: string[][];
+  /** Initial expression — empty for a fresh insert, prepopulated for edit. */
+  initialExpr?: string;
+  /** Initial exclude-null flag (inverted-null semantic: true = the
+   *  wildcard's null option is dropped from the resolved pool). */
+  initialExcludeNull?: boolean;
   /** "insert" hides the Delete button; "edit" shows it. */
   mode: "insert" | "edit";
-  /** True when the target wildcard carries a null option. Renders an
-   *  extra "Exclude null" checkbox row above the sub-cat chip grid.
-   *  Null is INCLUDED by default (alongside the listed sub-cats);
-   *  ticking the checkbox pushes the reserved keyword `"null"` into
-   *  the emitted filter list to opt the null option OUT of the pool.
-   *  See `engine/syntax/resolve.py:_resolve_ref` for the resolver
-   *  side of the inverted-null semantic (2026-05-25). */
+  /** True when the target wildcard carries a null option. Renders the
+   *  "Exclude null" toggle row above the expression editor. */
   hasNullOption?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  initialSelection: () => [],
+  tagGroups: () => ({}),
+  optionTagSets: () => [],
+  initialExpr: "",
+  initialExcludeNull: false,
   mode: "insert",
   hasNullOption: false,
 });
 
 const emit = defineEmits<{
-  /** User confirmed a filter selection (possibly empty). */
-  "apply": [subCategories: string[]];
-  /** User wants to insert / keep the ref WITHOUT a filter. */
+  /** User confirmed the filter. Carries the raw boolean expression and
+   *  the exclude-null flag as separate fields (§3.3 — null is a flag,
+   *  not a term inside the expression). */
+  "apply": [filter: { expr: string; excludeNull: boolean }];
+  /** Insert / keep the ref WITHOUT a filter. */
   "skip": [];
-  /** Edit mode only — user wants to remove the ref entirely. */
+  /** Edit mode only — remove the ref entirely. */
   "delete": [];
 }>();
 
-const selected = ref<Set<string>>(
-  new Set(props.initialSelection.filter((s) => s !== "null")),
-);
-// Inverted-null semantic (2026-05-25): the reserved `"null"` token in
-// the filter list means EXCLUDE the wildcard's null option. Default
-// (no `null` keyword) keeps the null option in the pool alongside the
-// listed sub-cats. UI checkbox state mirrors that — checked = exclude.
-const excludeNull = ref<boolean>(props.initialSelection.includes("null"));
+const expr = ref<string>(props.initialExpr);
+const excludeNull = ref<boolean>(props.initialExcludeNull);
+const inputEl = ref<HTMLInputElement | null>(null);
 
 // External prop changes (e.g. opening the picker on a different chip)
-// reset the local selection.
-watch(() => props.initialSelection, (next) => {
-  selected.value = new Set(next.filter((s) => s !== "null"));
-  excludeNull.value = next.includes("null");
+// reset the local state.
+watch(() => props.initialExpr, (next) => { expr.value = next; });
+watch(() => props.initialExcludeNull, (next) => { excludeNull.value = next; });
+
+const known = computed(() => new Set(props.subCategories));
+
+/** Live two-layer validation error (§3.7), or null when valid/empty. */
+const error = computed<string | null>(() =>
+  validateExpression(expr.value, known.value),
+);
+
+/** Parsed AST — null when empty or unparseable. Only consulted for the
+ *  reads-as preview + match count (both guard on `error`). */
+const ast = computed(() => {
+  try {
+    return parse(expr.value);
+  } catch {
+    return null;
+  }
 });
 
-function toggle(subcat: string): void {
-  if (selected.value.has(subcat)) selected.value.delete(subcat);
-  else selected.value.add(subcat);
-  // Trigger reactivity — Vue 3's reactive Set wrappers don't track .add/.delete
-  // on a plain Set referenced through ref(), so reassign.
-  selected.value = new Set(selected.value);
+/** Normalized "reads as" preview — empty string for an empty/invalid
+ *  expression. */
+const readsAsText = computed(() => (error.value ? "" : readsAs(ast.value)));
+
+/** Live "N of M options match" count. When the expression is invalid we
+ *  show 0 matches but keep the denominator so the user still sees scope. */
+const matchCount = computed(() => {
+  const total = props.optionTagSets.length;
+  if (error.value) return { matched: 0, total };
+  const a = ast.value;
+  const matched = props.optionTagSets.filter((tags) =>
+    matches(a, new Set(tags)),
+  ).length;
+  return { matched, total };
+});
+
+/** Apply is blocked only when the expression is BOTH non-empty AND
+ *  invalid — an empty expression is a valid "no filter". */
+const applyDisabled = computed(
+  () => expr.value.trim().length > 0 && error.value !== null,
+);
+
+const groups = computed<{ axis: string; tags: string[] }[]>(() => {
+  const out: { axis: string; tags: string[] }[] = [];
+  const claimed = new Set<string>();
+  for (const [axis, tags] of Object.entries(props.tagGroups)) {
+    const present = tags.filter((t) => props.subCategories.includes(t));
+    for (const t of present) claimed.add(t);
+    if (present.length > 0) out.push({ axis, tags: present });
+  }
+  const ungrouped = props.subCategories.filter((t) => !claimed.has(t));
+  if (ungrouped.length > 0) out.push({ axis: "", tags: ungrouped });
+  return out;
+});
+
+const OPERATORS = ["and", "or", "not", "(", ")"] as const;
+
+/** Insert `token` at the caret (or selection) inside the expression
+ *  input, padding with a single space so adjacent tokens stay parseable
+ *  (`warm` + `or` → `warm or`, not `warmor`). Re-focuses + restores the
+ *  caret after the inserted token. */
+function insertAtCursor(token: string): void {
+  const el = inputEl.value;
+  const current = expr.value;
+  const selStart = el?.selectionStart ?? current.length;
+  const selEnd = el?.selectionEnd ?? current.length;
+  const before = current.slice(0, selStart);
+  const after = current.slice(selEnd);
+  // Pad with a space on each side unless we're already at a space / edge.
+  const needLead = before.length > 0 && !/\s$/.test(before);
+  const needTrail = after.length > 0 && !/^\s/.test(after);
+  const insert = (needLead ? " " : "") + token + (needTrail ? " " : "");
+  const next = before + insert + after;
+  expr.value = next;
+  const caret = (before + insert).length;
+  void Promise.resolve().then(() => {
+    const e = inputEl.value;
+    if (!e) return;
+    e.focus();
+    e.setSelectionRange(caret, caret);
+  });
 }
 
 function onApply(): void {
-  // Preserve the input order of subCategories so applied output is stable.
-  const ordered = props.subCategories.filter((s) => selected.value.has(s));
-  if (excludeNull.value && props.hasNullOption) ordered.push("null");
-  emit("apply", ordered);
+  if (applyDisabled.value) return;
+  emit("apply", { expr: expr.value.trim(), excludeNull: excludeNull.value });
 }
 </script>
 
 <template>
   <div class="wp-subcat-picker" data-test="subcat-picker">
-    <div v-if="subCategories.length === 0 && !hasNullOption" class="wp-subcat-picker__hint">
-      This wildcard has no sub-categories declared — no filter possible.
+    <label
+      v-if="hasNullOption"
+      class="wp-subcat-picker__null-row"
+      data-test="subcat-exclude-null"
+    >
+      <input v-model="excludeNull" type="checkbox" />
+      <i class="pi pi-ban" aria-hidden="true" />
+      <span>Exclude null</span>
+    </label>
+
+    <!-- Expression input — source of truth. -->
+    <div class="wp-subcat-picker__field">
+      <label class="wp-subcat-picker__field-label">Expression</label>
+      <input
+        ref="inputEl"
+        v-model="expr"
+        type="text"
+        aria-label="Sub-category filter expression"
+        class="wp-subcat-picker__input"
+        :class="{ 'wp-subcat-picker__input--invalid': error !== null }"
+        data-test="expr-input"
+        placeholder="e.g. warm or cold"
+        spellcheck="false"
+        autocomplete="off"
+      />
     </div>
-    <template v-else>
-      <label
-        v-if="hasNullOption"
-        class="wp-subcat-picker__null-row"
-        data-test="subcat-exclude-null"
-      >
-        <input type="checkbox" v-model="excludeNull" />
-        <i class="pi pi-ban" aria-hidden="true" />
-        <span>Exclude null</span>
-      </label>
-      <div v-if="subCategories.length > 0" class="wp-subcat-picker__chips">
-        <button
-          v-for="sub in subCategories"
-          :key="sub"
-          type="button"
-          class="wp-subcat-chip"
-          :class="{ 'wp-subcat-chip--selected': selected.has(sub) }"
-          :data-test="'subcat-chip'"
-          :data-value="sub"
-          @click="toggle(sub)"
-        >
-          <span v-if="selected.has(sub)" aria-hidden="true">✓</span>
-          {{ sub }}
-        </button>
+
+    <!-- Inline validation error (§3.7). -->
+    <p v-if="error" class="wp-subcat-picker__error" data-test="expr-error">
+      {{ error }}
+    </p>
+
+    <!-- Reads-as normalized preview + live match count. -->
+    <div class="wp-subcat-picker__derived">
+      <div class="wp-subcat-picker__reads">
+        <span class="wp-subcat-picker__derived-label">Reads as</span>
+        <code class="wp-subcat-picker__reads-val" data-test="reads-as">{{
+          readsAsText || "—"
+        }}</code>
       </div>
-    </template>
+      <div
+        v-if="optionTagSets.length > 0"
+        class="wp-subcat-picker__match"
+        data-test="match-count"
+      >
+        {{ matchCount.matched }} of {{ matchCount.total }} options match
+      </div>
+    </div>
+
+    <!-- Insert-at-cursor palettes: grouped sub-categories + operators. -->
+    <div v-if="subCategories.length > 0" class="wp-subcat-picker__palette">
+      <div
+        v-for="g in groups"
+        :key="g.axis || '__ungrouped'"
+        class="wp-subcat-picker__group"
+      >
+        <span v-if="g.axis" class="wp-subcat-picker__group-name">{{ g.axis }}</span>
+        <div class="wp-subcat-picker__chips">
+          <button
+            v-for="sub in g.tags"
+            :key="sub"
+            type="button"
+            class="wp-subcat-chip"
+            data-test="subcat-chip"
+            :data-value="sub"
+            @click="insertAtCursor(sub)"
+          >{{ sub }}</button>
+        </div>
+      </div>
+    </div>
+    <div class="wp-subcat-picker__ops">
+      <button
+        v-for="op in OPERATORS"
+        :key="op"
+        type="button"
+        class="wp-subcat-chip wp-subcat-chip--op"
+        :data-test="'subcat-op'"
+        :data-value="op"
+        @click="insertAtCursor(op)"
+      >{{ op }}</button>
+    </div>
+
     <div class="wp-subcat-picker__actions">
       <button
         v-if="mode === 'edit'"
@@ -114,6 +248,7 @@ function onApply(): void {
         type="button"
         class="wp-btn wp-btn--primary"
         data-test="picker-apply"
+        :disabled="applyDisabled || undefined"
         @click="onApply"
       >Apply</button>
     </div>
@@ -126,7 +261,8 @@ function onApply(): void {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-accent);
   border-radius: 6px;
-  min-width: 200px;
+  min-width: 240px;
+  max-width: 320px;
 }
 .wp-subcat-picker__null-row {
   display: flex;
@@ -140,11 +276,92 @@ function onApply(): void {
   margin-bottom: 8px;
 }
 .wp-subcat-picker__null-row .pi { font-size: 11px; }
-.wp-subcat-picker__chips {
+
+.wp-subcat-picker__field { margin-bottom: 6px; }
+.wp-subcat-picker__field-label {
+  display: block;
+  font: 10px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wp-text-dim, var(--wp-text3));
+  margin-bottom: 3px;
+}
+.wp-subcat-picker__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--wp-border);
+  background: var(--wp-bg-2, var(--wp-bg));
+  color: var(--wp-text, var(--wp-text1));
+  font: 12px var(--wp-font-mono);
+  outline: none;
+}
+.wp-subcat-picker__input:focus {
+  border-color: var(--wp-accent);
+}
+.wp-subcat-picker__input--invalid {
+  border-color: var(--wp-danger, #ef4444);
+}
+.wp-subcat-picker__error {
+  margin: 0 0 8px;
+  font: 11px var(--wp-font-sans);
+  color: var(--wp-danger, #ef4444);
+}
+
+.wp-subcat-picker__derived {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.wp-subcat-picker__reads {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.wp-subcat-picker__derived-label {
+  font: 10px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wp-text-dim, var(--wp-text3));
+  flex: none;
+}
+.wp-subcat-picker__reads-val {
+  font: 11px var(--wp-font-mono);
+  color: var(--wp-text-muted, var(--wp-text2));
+  word-break: break-word;
+}
+.wp-subcat-picker__match {
+  font: 11px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+
+.wp-subcat-picker__palette {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.wp-subcat-picker__group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wp-subcat-picker__group-name {
+  font: 10px var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.wp-subcat-picker__chips,
+.wp-subcat-picker__ops {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.wp-subcat-picker__ops {
   margin-bottom: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
 }
 .wp-subcat-chip {
   padding: 3px 9px;
@@ -155,19 +372,17 @@ function onApply(): void {
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.wp-subcat-chip--selected {
-  background: color-mix(in srgb, #22c55e 25%, transparent);
-  border-color: color-mix(in srgb, #22c55e 60%, transparent);
-  color: #fff;
+.wp-subcat-chip:hover {
+  border-color: var(--wp-accent);
+  color: var(--wp-text, var(--wp-text1));
+}
+.wp-subcat-chip--op {
+  font-family: var(--wp-font-mono);
+  color: var(--wp-text-dim, var(--wp-text3));
 }
 .wp-subcat-picker__actions {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-}
-.wp-subcat-picker__hint {
-  font: 11px var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
-  padding: 4px 0;
 }
 </style>

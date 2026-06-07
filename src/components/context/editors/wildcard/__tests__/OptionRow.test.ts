@@ -1,23 +1,32 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
-import OptionRow from "./OptionRow.vue";
-import { _resetForTests, _setForTests } from "../../../../../extension/preview-resolver";
+import OptionRow from "../sections/OptionRow.vue";
+import { _resetForTests, _setForTests } from "@/extension/preview-resolver";
 
-const baseOption = { id: "o1", value: "red", weight: 1, sub_category: "warm" };
+const baseOption = { id: "o1", value: "red", weight: 1, sub_categories: ["warm"] };
 const allOptions = [
   baseOption,
-  { id: "o2", value: "blue", weight: 1, sub_category: "cool" },
+  { id: "o2", value: "blue", weight: 1, sub_categories: ["cool"] },
 ];
 
 describe("OptionRow", () => {
   beforeEach(() => _resetForTests());
 
-  it("renders option name + category label", () => {
+  it("renders option name + a category chip per sub-category", () => {
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: {} },
     });
     expect(w.find('[data-test="opt-name"]').text()).toBe("red");
-    expect(w.find('[data-test="opt-cat"]').text().toLowerCase()).toBe("warm");
+    const chip = w.find('[data-test="opt-cat-warm"]');
+    expect(chip.exists()).toBe(true);
+    expect(chip.text().toLowerCase()).toBe("warm");
+  });
+
+  it("renders multiple category chips for a multi-tag option", () => {
+    const opt = { id: "m", value: "lynx", weight: 1, sub_categories: ["feline", "warm"] };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find('[data-test="opt-cat-feline"]').exists()).toBe(true);
+    expect(w.find('[data-test="opt-cat-warm"]').exists()).toBe(true);
   });
 
   it("checkbox is checked when enabled_options is null (library default)", () => {
@@ -103,15 +112,15 @@ describe("OptionRow", () => {
 
   it("category-filtered row gets opt--filtered modifier class", () => {
     const w = mount(OptionRow, {
-      props: { option: baseOption, allOptions, instance: { category_filter: ["cool"] } },
+      props: { option: baseOption, allOptions, instance: { category_filter: "cool" } },
     });
-    // baseOption.sub_category = "warm", filter only allows "cool"
+    // baseOption.sub_categories = ["warm"], filter only allows "cool"
     expect(w.classes()).toContain("opt--filtered");
   });
 
   it("category-filtered row does NOT emit toggle on checkbox click", async () => {
     const w = mount(OptionRow, {
-      props: { option: baseOption, allOptions, instance: { category_filter: ["cool"] } },
+      props: { option: baseOption, allOptions, instance: { category_filter: "cool" } },
     });
     await w.find('[data-test="opt-check"]').trigger("click");
     expect(w.emitted("toggle")).toBeUndefined();
@@ -119,7 +128,7 @@ describe("OptionRow", () => {
 
   it("category-filtered row exposes aria-disabled=true on checkbox", () => {
     const w = mount(OptionRow, {
-      props: { option: baseOption, allOptions, instance: { category_filter: ["cool"] } },
+      props: { option: baseOption, allOptions, instance: { category_filter: "cool" } },
     });
     expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("true");
   });
@@ -142,9 +151,6 @@ describe("OptionRow", () => {
   });
 
   it("down spinner clamps weight to floor 0.01 (no zero/negative weights)", async () => {
-    // Weight 0 / negative never picks (probability normalises away),
-    // so the editor floors at 0.01. To disable an option entirely,
-    // use the per-row toggle — engine respects that.
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: { option_weights: { o1: 0 } } },
     });
@@ -163,40 +169,37 @@ describe("OptionRow", () => {
   });
 
   it("renders @{uuid} ref token with raw uuid form when name not yet cached", () => {
-    const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_category: "warm" };
+    const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
     expect(ref.exists()).toBe(true);
     expect(ref.attributes("data-uuid")).toBe("a361dbdc");
-    // Until preview-resolver lands the lookup, raw form is the fallback.
-    // Read the identity-text span so the chip icon prefix doesn't bleed in.
     expect(ref.find(".opt__tok-label").text()).toBe("@{a361dbdc}");
   });
 
   it("renders @{uuid} ref as @<varBinding> once resolver caches the entry", () => {
     _setForTests("a361dbdc", { name: "subject", varBinding: "subject_name" });
-    const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_category: "warm" };
+    const opt = { id: "o9", value: "city @{a361dbdc} dusk", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
     expect(ref.find(".opt__tok-label").text()).toBe("@subject_name");
   });
 
   it("renders {a|b|c} brace block as a brace token (warn colour)", () => {
-    const opt = { id: "o9", value: "color {a|b|c}", weight: 1, sub_category: "warm" };
+    const opt = { id: "o9", value: "color {a|b|c}", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     expect(w.find('[data-test="opt-name"] .opt__tok--brace').exists()).toBe(true);
   });
 
   it("renders {N$$,$$a|b|c} multi-pick block as a multi token (distinct from brace)", () => {
-    const opt = { id: "o10", value: "{2$$,$$silver|gold|pearl}", weight: 1, sub_category: "warm" };
+    const opt = { id: "o10", value: "{2$$,$$silver|gold|pearl}", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     expect(w.find('[data-test="opt-name"] .opt__tok--multi').exists()).toBe(true);
-    // Brace-class should NOT match — multi gets its own visual treatment.
     expect(w.find('[data-test="opt-name"] .opt__tok--brace').exists()).toBe(false);
   });
 
   it("renders $varname as a var token", () => {
-    const opt = { id: "o9", value: "uses $style here", weight: 1, sub_category: "warm" };
+    const opt = { id: "o9", value: "uses $style here", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     expect(w.find('[data-test="opt-name"] .opt__tok--var .opt__tok-label').text()).toBe("$style");
   });
@@ -206,7 +209,6 @@ describe("OptionRow", () => {
       props: { option: baseOption, allOptions, instance: { option_weights: { o1: 1.8 } } },
     });
     const input = w.find<HTMLInputElement>('[data-test="opt-weight"]');
-    // baseOption.weight = 1 — matching library default should drop override
     input.element.value = "1";
     await input.trigger("input");
     expect(w.emitted("weight")?.[0]).toEqual(["o1", null]);
@@ -225,12 +227,27 @@ describe("OptionRow", () => {
       props: { option: baseOption, allOptions, instance: { option_weights: { o1: 1.1 } } },
     });
     await w.find('[data-test="opt-weight-down"]').trigger("click");
-    // 1.1 - 0.1 = 1.0 = library default → cleared
     expect(w.emitted("weight")?.[0]).toEqual(["o1", null]);
   });
 
+  it("colors a category chip by its tag_groups axis when provided", () => {
+    const opt = { id: "m", value: "lynx", weight: 1, sub_categories: ["feline", "warm"] };
+    const w = mount(OptionRow, {
+      props: {
+        option: opt,
+        allOptions: [opt],
+        instance: {},
+        tagGroups: { family: ["feline"], temp: ["warm"] },
+      },
+    });
+    // Two distinct axes → the two chips carry different axis style hooks.
+    const feline = w.find('[data-test="opt-cat-feline"]');
+    const warm = w.find('[data-test="opt-cat-warm"]');
+    expect(feline.attributes("style")).not.toBe(warm.attributes("style"));
+  });
+
   describe("null option row", () => {
-    const nullOpt = { id: "n1", value: "", weight: 1, is_null: true } as typeof baseOption & { is_null: boolean };
+    const nullOpt = { id: "n1", value: "", weight: 1, is_null: true, sub_categories: [] };
 
     it("renders the pi-ban chip in place of tokens", () => {
       const w = mount(OptionRow, {
@@ -238,15 +255,14 @@ describe("OptionRow", () => {
       });
       expect(w.find(".opt__null-chip").exists()).toBe(true);
       expect(w.find(".opt__null-chip .pi-ban").exists()).toBe(true);
-      // Label literal "null" inside the chip.
       expect(w.find(".opt__null-chip").text()).toMatch(/null/i);
     });
 
-    it("sub-category cell is empty", () => {
+    it("category cell renders no sub-category chips", () => {
       const w = mount(OptionRow, {
         props: { option: nullOpt, allOptions: [nullOpt], instance: {} },
       });
-      expect(w.find('[data-test="opt-cat"]').text()).toBe("");
+      expect(w.findAll('[data-test^="opt-cat-"]')).toHaveLength(0);
     });
 
     it("weight + check still render", () => {
@@ -255,6 +271,13 @@ describe("OptionRow", () => {
       });
       expect(w.find('[data-test="opt-weight"]').exists()).toBe(true);
       expect(w.find('[data-test="opt-check"]').exists()).toBe(true);
+    });
+
+    it("null row is disabled (opt--off) when exclude_null is set", () => {
+      const w = mount(OptionRow, {
+        props: { option: nullOpt, allOptions: [nullOpt], instance: { exclude_null: true } },
+      });
+      expect(w.classes()).toContain("opt--off");
     });
   });
 });

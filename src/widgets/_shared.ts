@@ -588,13 +588,18 @@ export interface ModuleEntry {
      */
     option_weights?: Record<string, number> | null;
     /**
-     * Sub-category names allowed in the option pool. `null` / empty =
-     * no filter (every sub-category eligible). When set, only options
-     * whose `sub_category` field is in the list survive — options
-     * without a sub_category get excluded by an explicit filter.
-     * Combines with `enabled_options` (intersection).
+     * Boolean sub-category filter expression (SP1; `and`/`or`/`not`/
+     * parens, comma = or). `null` / empty = no filter (every option
+     * eligible). An option survives when its `sub_categories` tag set
+     * satisfies the expression. Combines with `enabled_options`
+     * (intersection).
      */
-    category_filter?: string[] | null;
+    category_filter?: string | null;
+    /**
+     * Exclude the null option from the pool (SP1). Separate flag — the
+     * `category_filter` expression never applies to the null option.
+     */
+    exclude_null?: boolean;
     /**
      * Pick mode for this instance:
      *   - `random` / unset — weighted RNG (library default).

@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
+import { parse, readsAs } from "@/manager/parsing/subcatFilter";
 
 /** Module kind for the `moduleKind` prop. Mirrors `ModuleKind` in
  *  `src/manager/cascade/resolveChip.ts` — duplicated as a local literal
@@ -18,7 +19,21 @@ interface Props {
   uuid?: string;
   /** True when the name resolved against the catalog / surface. False → render as red `?` chip. */
   resolved: boolean;
-  /** Sub-category filter (ref-kind only). Empty list = unfiltered. */
+  /** Boolean sub-category filter expression (ref-kind only). Empty /
+   *  undefined = no expression. The expression itself is NOT shown
+   *  inline (it can be long); a funnel indicator marks "filtered" and
+   *  the full normalized form ("reads as") lives in the hover title. */
+  expr?: string;
+  /** Exclude-null flag (ref-kind only). True drops the wildcard's null
+   *  option from the resolved pool (inverted-null semantic, 2026-05-25).
+   *  Surfaces alongside the funnel + in the hover title. */
+  excludeNull?: boolean;
+  /** @deprecated Legacy flat sub-category list (pre-SP1). Superseded by
+   *  the boolean `expr` + `excludeNull` pair. Still accepted so callers
+   *  that have not yet migrated keep compiling + showing a funnel; when
+   *  `expr` is empty this list is reconstructed into an effective
+   *  expression (comma = OR) and a trailing `"null"` token maps to
+   *  `excludeNull`. New callers should pass `expr` / `excludeNull`. */
   subCategories?: string[];
   /** Module kind the resolved uuid points at — drives the chip's color
    *  (CSS custom property `--wp-refchip-tone`) + the leading PrimeIcon.
@@ -31,6 +46,8 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   uuid: "",
+  expr: "",
+  excludeNull: false,
   subCategories: () => [],
   moduleKind: "wildcard",
 });
@@ -44,15 +61,60 @@ const emit = defineEmits<{
 }>();
 
 const isRef = computed(() => props.kind === "ref");
-const isFiltered = computed(() => isRef.value && props.subCategories.length > 0);
 
-/** Render the sub-category suffix list. The reserved `"null"` keyword
- *  means EXCLUDE the wildcard's null option (2026-05-25 inverted
- *  semantic). Render it as `!null` so the negation reads at a glance
- *  rather than looking like a sub-cat selection. */
-const subCategoriesLabel = computed(() =>
-  props.subCategories.map((s) => (s === "null" ? "!null" : s)).join(", "),
+/** Effective filter for the chip, resolving the canonical `expr` /
+ *  `excludeNull` props against the deprecated `subCategories` fallback.
+ *  When `expr` is empty, a legacy list is reconstructed (comma = OR) and
+ *  a trailing reserved `"null"` token maps to `excludeNull` — mirrors the
+ *  pre-SP1 inverted-null semantic so unmigrated callers keep working. */
+const filter = computed<{ expr: string; excludeNull: boolean }>(() => {
+  const rawExpr = props.expr.trim();
+  if (rawExpr.length > 0) {
+    return { expr: rawExpr, excludeNull: props.excludeNull };
+  }
+  if (props.subCategories.length > 0) {
+    const terms = props.subCategories.filter((s) => s !== "null");
+    return {
+      expr: terms.join(", "),
+      excludeNull: props.excludeNull || props.subCategories.includes("null"),
+    };
+  }
+  return { expr: "", excludeNull: props.excludeNull };
+});
+
+const hasExpr = computed(() => isRef.value && filter.value.expr.length > 0);
+/** A ref carries a filter when it has an expression OR opts the null
+ *  option out. Either drives the compact funnel indicator. */
+const isFiltered = computed(
+  () => isRef.value && (hasExpr.value || filter.value.excludeNull),
 );
+
+/** Normalized expression for the hover tooltip — the full expression is
+ *  NOT shown inline (it can be long), only on hover via "reads as".
+ *  Falls back to the raw expression if it doesn't parse (shouldn't
+ *  happen for serialized refs, but keeps a broken token legible). */
+const readsAsExpr = computed(() => {
+  if (!hasExpr.value) return "";
+  try {
+    return readsAs(parse(filter.value.expr));
+  } catch {
+    return filter.value.expr;
+  }
+});
+
+/** Hover title summarising the filter — `<reads-as>` plus a
+ *  " · null excluded" tail when the null option is dropped. Undefined
+ *  when there's nothing to describe (so no empty `title` attr renders). */
+const filterTitle = computed<string | undefined>(() => {
+  if (!isFiltered.value) return undefined;
+  const parts: string[] = [];
+  if (readsAsExpr.value) parts.push(readsAsExpr.value);
+  if (filter.value.excludeNull) parts.push("null excluded");
+  return parts.join(" · ");
+});
+
+/** Whether the exclude-null mark should render (effective flag). */
+const showNoNull = computed(() => isRef.value && filter.value.excludeNull);
 
 const label = computed(() => {
   if (!props.resolved) {
@@ -118,6 +180,7 @@ function onClick(ev: MouseEvent): void {
       'wp-refchip--filtered': isFiltered,
     }"
     :style="toneStyle"
+    :title="filterTitle"
     contenteditable="false"
     @click.stop="onClick"
   >
@@ -129,8 +192,18 @@ function onClick(ev: MouseEvent): void {
     ></i>
     <span v-else class="wp-refchip__icon" aria-hidden="true">{{ icon }}</span>
     <span class="wp-refchip__label">{{ label }}</span>
-    <span v-if="isFiltered" class="wp-refchip__suffix">
-      ·&nbsp;{{ subCategoriesLabel }}
+    <!-- Compact filter indicator. The funnel marks "an expression is
+         set" (the expression itself stays in the hover title — it can
+         be long). A separate ban mark calls out exclude-null so the
+         negation reads at a glance. -->
+    <span
+      v-if="isFiltered"
+      class="wp-refchip__filter"
+      data-test="refchip-filter"
+      aria-hidden="true"
+    >
+      <i v-if="hasExpr" class="pi pi-filter wp-refchip__funnel"></i>
+      <i v-if="showNoNull" class="pi pi-ban wp-refchip__nonull"></i>
     </span>
   </span>
 </template>
@@ -174,5 +247,18 @@ function onClick(ev: MouseEvent): void {
 .wp-refchip__icon { font-size: 8px; opacity: 0.75; }
 /* PrimeIcon variant (moduleKind set) — sized to align with the unicode glyph baseline. */
 .wp-refchip__icon--pi { font-size: 9px; line-height: 1; }
-.wp-refchip__suffix { color: var(--wp-status-modified, #fbbf24); font-size: 9px; opacity: 0.9; }
+/* Compact filter indicator — funnel (expression set) + optional ban
+ * (null excluded). Tinted with the "modified" status accent to read as
+ * "this ref is narrowed", and `cursor: help` mirrors the unresolved
+ * chip's hover affordance since the full filter lives in the title. */
+.wp-refchip__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 1px;
+  color: var(--wp-status-modified, #fbbf24);
+  cursor: help;
+}
+.wp-refchip__funnel { font-size: 8px; line-height: 1; }
+.wp-refchip__nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
 </style>

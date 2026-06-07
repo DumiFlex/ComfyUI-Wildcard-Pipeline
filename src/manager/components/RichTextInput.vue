@@ -25,14 +25,111 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import {
   parse,
   replaceAtom,
-  serialise,
   type Atom,
+  type RefAtom,
 } from "./atomicEditorModel";
 import { inlineTokenHtml } from "../../widgets/richTokenize";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
+
+// --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
+//
+// The canonical ref form is `@{uuid[#name][:expr][!null]}` — a boolean
+// sub-category EXPRESSION after `:` (not a comma list) plus a trailing
+// `!null` exclude-null marker. The shared `atomicEditorModel` /
+// `richTokenize` layer still models a ref's `:`-segment as the legacy
+// `subCategories: string[]` (comma-split). Rather than fork that shared
+// layer, RichTextInput owns the 4-segment view locally:
+//
+//   - The atom STREAM (text/var/ref boundaries) still comes from
+//     `atomicEditorModel.parse` — the legacy regex's `:` group is
+//     `[^}]*`, so it still captures the full `expr!null` body and the
+//     token boundary (`}`) stays correct. Only the INTERPRETATION of
+//     that body changed.
+//   - `refFilterOf` reconstructs the raw `:`-body from `subCategories`
+//     (join on `,` is loss-free for the comma-OR shorthand) and peels a
+//     trailing `!null` into the `excludeNull` flag, yielding `{expr,
+//     excludeNull}`. A freshly-applied filter stashes those on the atom
+//     directly (extra fields survive `replaceAtom`'s shallow clone), so
+//     the live edit round-trips without going through the lossy
+//     comma-split.
+//   - `serialiseAtomsLocal` emits the 4-segment form, omitting each
+//     segment when empty. It replaces `atomicEditorModel.serialise`
+//     everywhere RichTextInput needs raw text (emit value + caret-length
+//     math) so `!null` + multi-word expressions survive round-trips.
+
+/** A ref's filter, lifted out of the legacy `subCategories` list. */
+interface RefFilter {
+  /** Boolean sub-category expression (the `:` segment). Empty = none. */
+  expr: string;
+  /** Exclude-null flag (the trailing `!null` segment). */
+  excludeNull: boolean;
+}
+
+/** Ref atom augmented with the 4-segment filter view. The extra fields
+ *  are optional so a plain `RefAtom` (e.g. fresh from `atomicEditorModel
+ *  .parse`) is assignable; `refFilterOf` falls back to reconstructing
+ *  them from `subCategories` when absent. */
+type RefAtomX = RefAtom & Partial<RefFilter>;
+
+/** Peel a trailing `!null` marker off a raw `:`-segment body, returning
+ *  the pure expression + the exclude-null flag. `@{uuid:warm!null}` →
+ *  `{ expr: "warm", excludeNull: true }`. The `!null` must be the whole
+ *  trailing segment (the name/expr captures exclude `!`, so a `!` can
+ *  only introduce the null marker). */
+function splitColonBody(body: string): RefFilter {
+  const bang = body.lastIndexOf("!");
+  if (bang >= 0) {
+    return { expr: body.slice(0, bang).trim(), excludeNull: body.slice(bang + 1) === "null" };
+  }
+  return { expr: body.trim(), excludeNull: false };
+}
+
+/** The 4-segment filter for a ref atom. Prefers explicit `expr` /
+ *  `excludeNull` (set by a live picker apply); otherwise reconstructs
+ *  from the legacy `subCategories` body. */
+function refFilterOf(atom: RefAtomX): RefFilter {
+  if (atom.expr !== undefined || atom.excludeNull !== undefined) {
+    return { expr: atom.expr ?? "", excludeNull: atom.excludeNull ?? false };
+  }
+  if (atom.subCategories.length === 0) return { expr: "", excludeNull: false };
+  return splitColonBody(atom.subCategories.join(","));
+}
+
+/** Serialize one ref atom to the canonical `@{uuid[#name][:expr][!null]}`
+ *  form, omitting each absent segment. */
+function serialiseRefAtom(atom: RefAtomX): string {
+  let out = "@{" + atom.uuid;
+  if (atom.name && atom.name.length > 0) out += "#" + atom.name;
+  const { expr, excludeNull } = refFilterOf(atom);
+  if (expr.length > 0) out += ":" + expr;
+  if (excludeNull) out += "!null";
+  out += "}";
+  return out;
+}
+
+/** Local replacement for `atomicEditorModel.serialise` that emits the
+ *  4-segment ref form. Text / var atoms serialize identically. */
+function serialiseAtomsLocal(atoms: Atom[]): string {
+  let out = "";
+  for (const a of atoms) {
+    if (a.kind === "text") out += a.text;
+    else if (a.kind === "var") out += "$" + a.name;
+    else out += serialiseRefAtom(a);
+  }
+  return out;
+}
+
+/** Template-safe filter accessor: returns the `{expr, excludeNull}` for
+ *  a ref atom, or empty defaults for any other atom kind. Lets the
+ *  RefChip binding stay terse without narrowing the union inline. */
+function chipFilterOf(atom: Atom): RefFilter {
+  return atom.kind === "ref"
+    ? refFilterOf(atom)
+    : { expr: "", excludeNull: false };
+}
 
 interface Props {
   modelValue: string;
@@ -64,6 +161,13 @@ interface Props {
    *  the uuid so two same-named wildcards (e.g. duplicates from import)
    *  can be told apart at-a-glance. */
   uuidToOptionsCount?: Map<string, number>;
+  /** Map from wildcard UUID → each option's sub-category tag set. Feeds
+   *  the boolean-filter picker's live "N of M options match" count so
+   *  the user sees how many options the typed expression keeps. */
+  uuidToOptionTagSets?: Map<string, string[][]>;
+  /** Map from wildcard UUID → its `tag_groups` axes (axis → member
+   *  tags). Feeds the picker's grouped insert palette. */
+  uuidToTagGroups?: Map<string, Record<string, string[]>>;
   ariaLabel?: string;
   disabled?: boolean;
 }
@@ -87,6 +191,8 @@ const props = withDefaults(defineProps<Props>(), {
   uuidToSubCategories: () => new Map(),
   uuidToHasNull: () => new Map(),
   uuidToOptionsCount: () => new Map(),
+  uuidToOptionTagSets: () => new Map(),
+  uuidToTagGroups: () => new Map(),
   ariaLabel: undefined,
   disabled: false,
 });
@@ -142,7 +248,15 @@ const popupPos = ref<{ top: number; left: number; width: number; flipped: boolea
 // picker — `pickerMode` distinguishes them.
 const pickerOpen = ref(false);
 const pickerSubCats = ref<string[]>([]);
-const pickerInitial = ref<string[]>([]);
+// 4-segment filter seed for the boolean-expression picker (§4.1):
+// initial expression text + exclude-null flag, replacing the legacy
+// flat sub-category selection.
+const pickerInitialExpr = ref<string>("");
+const pickerInitialExcludeNull = ref<boolean>(false);
+// Per-option tag sets (match-count denominator) + tag-group axes
+// (grouped insert palette) for the picked wildcard.
+const pickerOptionTagSets = ref<string[][]>([]);
+const pickerTagGroups = ref<Record<string, string[]>>({});
 const pickerHasNull = ref<boolean>(false);
 const pickerMode = ref<"insert" | "edit">("insert");
 // The atom-index this picker is editing — null when inserting fresh.
@@ -229,6 +343,49 @@ function padAtoms(list: Atom[]): Atom[] {
  *
  *  Adjacent text atoms produced by the collapse are merged so the
  *  padAtoms invariant ("no adjacent text atoms") still holds. */
+/** Lift a freshly-parsed ref atom into the 4-segment view (§3.2).
+ *
+ *  The shared tokenizer (`richTokenize`) still models the ref body as
+ *  the legacy `subCategories` list and its name capture does not exclude
+ *  `!`. So for the exclude-null-only form `@{uuid#name!null}` the `!null`
+ *  leaks into `name` (no `:` to stop the name group), and for the
+ *  `:expr!null` form the marker lands at the tail of the (comma-joined)
+ *  body. Both are reconciled here: peel a trailing `!…` off whichever
+ *  segment carries it, yielding a clean `name` + explicit `{expr,
+ *  excludeNull}`. Storing the explicit fields means later `refFilterOf`
+ *  reads them directly rather than re-deriving from the lossy body. */
+function chipRefAtom(atom: RefAtom): RefAtomX {
+  let name = atom.name;
+  // Body the legacy parser captured for the `:` segment (loss-free for
+  // the comma-OR shorthand).
+  const body = atom.subCategories.join(",");
+  // Exclude-null marker leaked into the name (no `:expr` present).
+  if (body.length === 0 && name && name.includes("!")) {
+    const bang = name.indexOf("!");
+    const tail = name.slice(bang + 1);
+    name = name.slice(0, bang);
+    const cleaned: RefAtomX = {
+      kind: "ref",
+      uuid: atom.uuid,
+      subCategories: [],
+      expr: "",
+      excludeNull: tail === "null",
+    };
+    if (name.length > 0) cleaned.name = name;
+    return cleaned;
+  }
+  const { expr, excludeNull } = splitColonBody(body);
+  const cleaned: RefAtomX = {
+    kind: "ref",
+    uuid: atom.uuid,
+    subCategories: [],
+    expr,
+    excludeNull,
+  };
+  if (name && name.length > 0) cleaned.name = name;
+  return cleaned;
+}
+
 function parseForSurface(text: string): Atom[] {
   const atoms = parse(text);
   const collapseSet: Set<"var" | "ref"> =
@@ -241,17 +398,23 @@ function parseForSurface(text: string): Atom[] {
   for (const a of atoms) {
     if ((a.kind === "var" || a.kind === "ref") && collapseSet.has(a.kind)) {
       // Re-serialise back to raw text and merge into adjacent text.
-      const raw = a.kind === "var"
-        ? "$" + a.name
-        : (a.subCategories.length > 0
-            ? "@{" + a.uuid + ":" + a.subCategories.join(",") + "}"
-            : "@{" + a.uuid + "}");
+      // Refs use the 4-segment form so a collapsed-surface round-trip
+      // keeps `:expr` + `!null` intact (legacy comma body reconstructs
+      // loss-free via `refFilterOf`).
+      const raw = a.kind === "var" ? "$" + a.name : serialiseRefAtom(a);
       const last = out[out.length - 1];
       if (last && last.kind === "text") {
         out[out.length - 1] = { kind: "text", text: last.text + raw };
       } else {
         out.push({ kind: "text", text: raw });
       }
+      continue;
+    }
+    // Chipified ref → lift into the 4-segment `{expr, excludeNull}` view
+    // so the filter survives the next round-trip without re-deriving
+    // from the lossy legacy body.
+    if (a.kind === "ref") {
+      out.push(chipRefAtom(a));
       continue;
     }
     const last = out[out.length - 1];
@@ -320,15 +483,27 @@ function atomIsResolved(atom: Atom): boolean {
   return true;
 }
 
+/** Populate the picker's per-wildcard context (declared sub-cats, the
+ *  grouped palette axes, the match-count option tag sets, and the
+ *  null-option flag) from a target uuid. Shared by the insert + edit
+ *  entry points so both surfaces see the same data. */
+function loadPickerContext(uuid: string): void {
+  pickerSubCats.value = props.uuidToSubCategories.get(uuid) ?? [];
+  pickerOptionTagSets.value = props.uuidToOptionTagSets.get(uuid) ?? [];
+  pickerTagGroups.value = props.uuidToTagGroups.get(uuid) ?? {};
+  pickerHasNull.value = props.uuidToHasNull.get(uuid) ?? false;
+}
+
 function onChipClick(idx: number, ev?: MouseEvent): void {
   const atom = atoms.value[idx];
   if (!atom || atom.kind !== "ref") return;
   // Unresolved refs have no edit affordance — RefChip already gates the click
   // emit but be defensive in case a future caller routes here directly.
   if (!props.uuidToName.has(atom.uuid)) return;
-  pickerSubCats.value = props.uuidToSubCategories.get(atom.uuid) ?? [];
-  pickerInitial.value = atom.subCategories;
-  pickerHasNull.value = props.uuidToHasNull.get(atom.uuid) ?? false;
+  loadPickerContext(atom.uuid);
+  const { expr, excludeNull } = refFilterOf(atom);
+  pickerInitialExpr.value = expr;
+  pickerInitialExcludeNull.value = excludeNull;
   pickerMode.value = "edit";
   pickerTargetAtomIndex.value = idx;
   pendingInsert.value = null;
@@ -507,10 +682,10 @@ function applyAutocomplete(label: string | undefined): void {
       // No sub-categories declared AND no null option — insert plain
       // ref immediately. (When the target has a null option we still
       // open the picker so the user can opt the null option in.)
-      insertRefAtCursor(label, []);
+      insertRefAtCursor(label, { expr: "", excludeNull: false });
     } else {
-      // Open step-2 picker so the user can multi-select sub-categories
-      // and/or toggle the "Include null" checkbox.
+      // Open step-2 picker so the user can type a boolean filter
+      // expression and/or toggle the exclude-null flag.
       //
       // Snapshot the caret + acStart BEFORE opening the picker. The
       // picker popover steals focus from the contenteditable host;
@@ -523,9 +698,9 @@ function applyAutocomplete(label: string | undefined): void {
         acStart: acStart.value,
       };
       pendingInsert.value = { uuid: label };
-      pickerSubCats.value = subCats;
-      pickerInitial.value = [];
-      pickerHasNull.value = hasNull;
+      loadPickerContext(label);
+      pickerInitialExpr.value = "";
+      pickerInitialExcludeNull.value = false;
       pickerMode.value = "insert";
       pickerTargetAtomIndex.value = null;
       // Insert flow has no chip to anchor to yet — use the host's
@@ -570,7 +745,7 @@ function restoreCursorAtChar(targetChar: number): void {
         const idx = Number(el.getAttribute("data-atom-index"));
         const atom = atoms.value[idx];
         if (atom && atom.kind !== "text") {
-          meaningful.push({ el, len: serialise([atom]).length, kind: "chip" });
+          meaningful.push({ el, len: serialiseAtomsLocal([atom]).length, kind: "chip" });
         }
       }
     }
@@ -692,7 +867,7 @@ function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
     if (el.classList.contains("wp-refchip")) {
       const idx = Number(el.getAttribute("data-atom-index"));
       const atom = atoms.value[idx];
-      if (atom && atom.kind !== "text") return serialise([atom]).length;
+      if (atom && atom.kind !== "text") return serialiseAtomsLocal([atom]).length;
       return 0;
     }
     if (el.classList.contains("wp-rt__text")) {
@@ -897,19 +1072,25 @@ function insertChipAtCaret(
 
 function insertRefAtCursor(
   uuid: string,
-  subCategories: string[],
+  filter: RefFilter,
   caretOverride?: { caret: number; acStart: number },
 ): void {
   // Cache the wildcard's current display name in the ref so the chip
   // can render a label even when the library entry is later deleted.
   // Resolver matches on uuid only — the name is purely a fossil for
   // the UI. Missing-name fallback emits the bare-uuid form (legacy
-  // workflows stay parseable round-trip).
+  // workflows stay parseable round-trip). The expression + exclude-null
+  // flag serialize as the `:expr` + `!null` segments (§3.2).
   const name = props.uuidToName.get(uuid);
-  const namePart = name ? "#" + name : "";
-  const subPart = subCategories.length > 0 ? ":" + subCategories.join(",") : "";
-  const chipText = "@{" + uuid + namePart + subPart + "}";
-  insertChipAtCaret(chipText, caretOverride);
+  const refAtom: RefAtomX = {
+    kind: "ref",
+    uuid,
+    subCategories: [],
+    expr: filter.expr,
+    excludeNull: filter.excludeNull,
+    ...(name ? { name } : {}),
+  };
+  insertChipAtCaret(serialiseRefAtom(refAtom), caretOverride);
 }
 
 function insertVarAtCursor(name: string): void {
@@ -917,11 +1098,11 @@ function insertVarAtCursor(name: string): void {
 }
 
 // --- SubcategoryFilterPicker handlers ---
-function onPickerApply(subCats: string[]): void {
+function onPickerApply(filter: { expr: string; excludeNull: boolean }): void {
   if (pickerMode.value === "insert" && pendingInsert.value) {
     insertRefAtCursor(
       pendingInsert.value.uuid,
-      subCats,
+      filter,
       pendingInsertCaret.value ?? undefined,
     );
     pendingInsert.value = null;
@@ -930,15 +1111,20 @@ function onPickerApply(subCats: string[]): void {
     const target = atoms.value[pickerTargetAtomIndex.value];
     if (target && target.kind === "ref") {
       // Refresh the cached display name on edit — the library may
-      // have been renamed since this token was first written.
+      // have been renamed since this token was first written. Write the
+      // new `{expr, excludeNull}` onto the atom; clear the legacy
+      // `subCategories` so `refFilterOf` reads the explicit fields.
       const liveName = props.uuidToName.get(target.uuid);
-      const next = replaceAtom(atoms.value, pickerTargetAtomIndex.value, {
+      const nextAtom: RefAtomX = {
         ...target,
-        subCategories: subCats,
+        subCategories: [],
+        expr: filter.expr,
+        excludeNull: filter.excludeNull,
         ...(liveName ? { name: liveName } : {}),
-      });
+      };
+      const next = replaceAtom(atoms.value, pickerTargetAtomIndex.value, nextAtom);
       applyAtoms(next);
-      emitValue(serialise(atoms.value));
+      emitValue(serialiseAtomsLocal(atoms.value));
     }
   }
   pickerOpen.value = false;
@@ -948,7 +1134,7 @@ function onPickerSkip(): void {
   if (pickerMode.value === "insert" && pendingInsert.value) {
     insertRefAtCursor(
       pendingInsert.value.uuid,
-      [],
+      { expr: "", excludeNull: false },
       pendingInsertCaret.value ?? undefined,
     );
     pendingInsert.value = null;
@@ -962,7 +1148,7 @@ function onPickerDelete(): void {
     const idx = pickerTargetAtomIndex.value;
     const next = atoms.value.filter((_, i) => i !== idx);
     applyAtoms(next);
-    emitValue(serialise(atoms.value));
+    emitValue(serialiseAtomsLocal(atoms.value));
   }
   pickerOpen.value = false;
 }
@@ -1077,15 +1263,12 @@ function readHostAsText(): string {
       const atom = atoms.value[idx];
       if (!atom) continue;
       if (atom.kind === "ref") {
-        out += "@{" + atom.uuid;
-        // Preserve the cached `#name` segment so re-tokenization
-        // round-trips the display label intact. Without this, every
-        // host-input event (typing, focus changes, etc.) re-derives
-        // text-only refs as `@{uuid}` and broken chips lose their
-        // friendly fallback label.
-        if (atom.name && atom.name.length > 0) out += "#" + atom.name;
-        if (atom.subCategories.length > 0) out += ":" + atom.subCategories.join(",");
-        out += "}";
+        // Reconstruct the canonical 4-segment form (`@{uuid#name:expr
+        // !null}`). `serialiseRefAtom` preserves the cached `#name` so
+        // re-tokenization round-trips the display label, and reads the
+        // `{expr, excludeNull}` filter (explicit fields or reconstructed
+        // from the legacy `subCategories` body).
+        out += serialiseRefAtom(atom);
       } else if (atom.kind === "var") {
         out += "$" + atom.name;
       }
@@ -1153,7 +1336,7 @@ function settleAtomsFromHost(): void {
   // sub-span. Compare the user-typed text against the atoms' current
   // serialised form so we still skip true no-ops (e.g. typing a space
   // after a chip that was already settled).
-  const liveSerialised = serialise(atoms.value);
+  const liveSerialised = serialiseAtomsLocal(atoms.value);
   if (liveSerialised === text) return;
   applyAtoms(parsed);
   void nextTick(() => restoreCursorAtChar(caret));
@@ -1416,7 +1599,7 @@ function onHostBlur(): void {
   // enough. Mirrors `settleAtomsFromHost`'s "live text differs from
   // serialised atoms" check so a closed brace block re-colors on blur.
   const text = readHostAsText();
-  if (serialise(atoms.value) === text) return;
+  if (serialiseAtomsLocal(atoms.value) === text) return;
   applyAtoms(parseForSurface(text));
 }
 
@@ -1696,7 +1879,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
             ? atom.name
             : (uuidToName.get(atom.uuid) ?? atom.name ?? '')"
           :uuid="atom.kind === 'ref' ? atom.uuid : ''"
-          :sub-categories="atom.kind === 'ref' ? atom.subCategories : []"
+          :expr="atom.kind === 'ref' ? chipFilterOf(atom).expr : ''"
+          :exclude-null="atom.kind === 'ref' ? chipFilterOf(atom).excludeNull : false"
           :resolved="atomIsResolved(atom)"
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
@@ -1774,7 +1958,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
          clicked chip / host element via `pickerAnchor` — a popover,
          not a modal — so it feels like a contextual control on the
          element the user just touched. -->
-    <Teleport to="body" v-if="pickerOpen">
+    <Teleport v-if="pickerOpen" to="body">
       <div class="wp-subcat-picker__backdrop" @click="cancelPicker"></div>
       <div
         class="wp-subcat-picker__anchor"
@@ -1787,7 +1971,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
       >
         <SubcategoryFilterPicker
           :sub-categories="pickerSubCats"
-          :initial-selection="pickerInitial"
+          :tag-groups="pickerTagGroups"
+          :option-tag-sets="pickerOptionTagSets"
+          :initial-expr="pickerInitialExpr"
+          :initial-exclude-null="pickerInitialExcludeNull"
           :mode="pickerMode"
           :has-null-option="pickerHasNull"
           @apply="onPickerApply"

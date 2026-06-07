@@ -1,8 +1,61 @@
 import { mount } from "@vue/test-utils";
 import { describe, it, expect } from "vitest";
-import RefChip from "./RefChip.vue";
+import RefChip from "../RefChip.vue";
 
-describe("RefChip", () => {
+describe("RefChip filter indicator", () => {
+  it("shows a funnel + hover title with the expression, not inline text", () => {
+    const w = mount(RefChip, { props: { kind: "ref", name: "colors", uuid: "aabbccdd", resolved: true, expr: "warm or cold", excludeNull: true } });
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(w.text()).not.toContain("warm or cold");          // not inline
+    expect(w.attributes("title")).toContain("warm or cold");  // on hover
+    expect(w.attributes("title")).toMatch(/null/);
+  });
+
+  it("normalizes the expression in the hover title (reads-as)", () => {
+    // `warm,cold` (comma shorthand) reads as `warm or cold`.
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "c", uuid: "aabbccdd", resolved: true, expr: "warm,cold" },
+    });
+    expect(w.attributes("title")).toContain("warm or cold");
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(w.classes()).toContain("wp-refchip--filtered");
+  });
+
+  it("renders a funnel for exclude-null only (no expression)", () => {
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "c", uuid: "aabbccdd", resolved: true, excludeNull: true },
+    });
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(w.attributes("title")).toMatch(/null excluded/);
+  });
+
+  it("shows no filter indicator for an unfiltered ref", () => {
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "c", uuid: "aabbccdd", resolved: true },
+    });
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(false);
+    expect(w.attributes("title")).toBeUndefined();
+    expect(w.classes()).not.toContain("wp-refchip--filtered");
+  });
+
+  it("derives the funnel + title from the deprecated subCategories fallback", () => {
+    // Pre-SP1 callers pass a flat list (comma = OR); a trailing `null`
+    // token maps to exclude-null. Kept compiling + non-regressed until
+    // those callers migrate to `expr` / `excludeNull`.
+    const w = mount(RefChip, {
+      props: {
+        kind: "ref", name: "color", uuid: "aabbccdd", resolved: true,
+        subCategories: ["warm", "cool", "null"],
+      },
+    });
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(w.text()).not.toContain("warm");                  // not inline
+    expect(w.attributes("title")).toContain("warm or cool");  // reads-as
+    expect(w.attributes("title")).toMatch(/null excluded/);
+  });
+});
+
+describe("RefChip base rendering", () => {
   it("renders var kind with $name + green palette", () => {
     const wrap = mount(RefChip, {
       props: { kind: "var", name: "person", resolved: true },
@@ -19,17 +72,6 @@ describe("RefChip", () => {
     });
     expect(wrap.text()).toContain("@color");
     expect(wrap.classes()).toContain("wp-refchip--ref");
-  });
-
-  it("renders sub-category suffix when present", () => {
-    const wrap = mount(RefChip, {
-      props: {
-        kind: "ref", name: "color", uuid: "aabbccdd", resolved: true,
-        subCategories: ["warm", "cool"],
-      },
-    });
-    expect(wrap.text()).toMatch(/@color.*warm.*cool/);
-    expect(wrap.classes()).toContain("wp-refchip--filtered");
   });
 
   it("renders unresolved ref as red ? chip with uuid visible", () => {
@@ -56,52 +98,27 @@ describe("RefChip", () => {
     await wrap.trigger("click");
     expect(wrap.emitted("click")).toBeFalsy();
   });
+});
 
-  it("renders reserved `null` sub-cat keyword as `!null` to signal negation", () => {
-    // The reserved `"null"` token in a nested-ref filter EXCLUDES the
-    // wildcard's null option (2026-05-25 inverted semantic). Rendering
-    // it as `!null` lets the user read the negation at a glance instead
-    // of mistaking it for a sub-cat selection.
-    const wrap = mount(RefChip, {
-      props: {
-        kind: "ref", name: "color", uuid: "aabbccdd", resolved: true,
-        subCategories: ["warm", "null"],
-      },
-    });
-    const suffix = wrap.find(".wp-refchip__suffix");
-    expect(suffix.exists()).toBe(true);
-    expect(suffix.text()).toContain("warm");
-    expect(suffix.text()).toContain("!null");
-    expect(suffix.text()).not.toMatch(/[^!]null/);
-  });
-
-  // ── kind-aware (moduleKind prop) ───────────────────────────────────
-  // The `moduleKind` prop drives the chip's color via the `--wp-refchip-tone`
-  // CSS custom property AND swaps the leading ✦ glyph for the matching
-  // PrimeIcon from `KIND_ICON_MAP`. Unresolved chips stay red regardless.
-  // Var chips ignore the prop entirely.
-
+// ── kind-aware (moduleKind prop) ───────────────────────────────────
+// The `moduleKind` prop drives the chip's color via the `--wp-refchip-tone`
+// CSS custom property AND swaps the leading ✦ glyph for the matching
+// PrimeIcon from `KIND_ICON_MAP`. Unresolved chips stay red regardless.
+// Var chips ignore the prop entirely.
+describe("RefChip moduleKind", () => {
   it("default ref kind (no moduleKind) keeps legacy wildcard styling", () => {
     const wrap = mount(RefChip, {
       props: { kind: "ref", name: "color", uuid: "aabbccdd", resolved: true },
     });
     const chip = wrap.find(".wp-refchip");
-    // No `--kinded` modifier class, no inline tone — falls back to the
-    // legacy `var(--wp-kind-wildcard)` via the CSS rule's fallback
-    // inside `color-mix`.
-    // No kind-aware inline tone — relies on the legacy fallback.
     expect(chip.attributes("style") ?? "").not.toContain("--wp-refchip-tone");
-    // Glyph stays as the unicode ✦ — no PrimeIcon variant.
     expect(wrap.find(".wp-refchip__icon--pi").exists()).toBe(false);
   });
 
   it("moduleKind=wildcard explicitly is treated as default (no kind-aware styling)", () => {
-    // Wildcard is the legacy default — we don't want a redundant
-    // inline style or modifier class when the prop matches the default.
     const wrap = mount(RefChip, {
       props: { kind: "ref", name: "color", uuid: "aabbccdd", resolved: true, moduleKind: "wildcard" },
     });
-    // No kind-aware inline tone — relies on the legacy CSS fallback.
     expect(wrap.find(".wp-refchip").attributes("style") ?? "").not.toContain("--wp-refchip-tone");
     expect(wrap.find(".wp-refchip__icon--pi").exists()).toBe(false);
   });
@@ -119,14 +136,9 @@ describe("RefChip", () => {
         props: { kind: "ref", name: "n", uuid: "aabbccdd", resolved: true, moduleKind: kind },
       });
       const chip = wrap.find(".wp-refchip");
-      // Kind-aware tone is applied as an inline `--wp-refchip-tone`
-      // custom property — the CSS rule reads that with a fallback to
-      // `--wp-kind-wildcard`, so per-kind palette doesn't need a
-      // class-per-kind cascade.
       const style = chip.attributes("style") ?? "";
       expect(style).toContain("--wp-refchip-tone");
       expect(style).toContain(toneVar);
-      // Icon swapped from the unicode ✦ to the matching PrimeIcon.
       const iconEl = wrap.find(".wp-refchip__icon--pi");
       expect(iconEl.exists()).toBe(true);
       expect(iconEl.classes()).toContain(iconCls);
@@ -134,9 +146,6 @@ describe("RefChip", () => {
   }
 
   it("unresolved ref with moduleKind still renders as red `?` chip (kind ignored)", () => {
-    // The whole point of the unresolved chip is to flag "this id doesn't
-    // resolve" — kind data is irrelevant then. Stays in the danger palette
-    // with the `?` glyph regardless of moduleKind.
     const wrap = mount(RefChip, {
       props: { kind: "ref", name: "", uuid: "deadbeef", resolved: false, moduleKind: "constraint" },
     });
@@ -144,7 +153,6 @@ describe("RefChip", () => {
     expect(wrap.find(".wp-refchip").attributes("style") ?? "").not.toContain("--wp-refchip-tone");
     expect(wrap.text()).toContain("?");
     expect(wrap.text()).toContain("deadbeef");
-    // No PrimeIcon variant — the `?` glyph wins.
     expect(wrap.find(".wp-refchip__icon--pi").exists()).toBe(false);
   });
 
@@ -153,9 +161,7 @@ describe("RefChip", () => {
       props: { kind: "var", name: "person", resolved: true, moduleKind: "constraint" },
     });
     expect(wrap.classes()).toContain("wp-refchip--var");
-    // No kind-aware tone on var chips — moduleKind doesn't apply.
     expect(wrap.find(".wp-refchip").attributes("style") ?? "").not.toContain("--wp-refchip-tone");
-    // The unicode `⌘` glyph variant — no PrimeIcon swap.
     expect(wrap.find(".wp-refchip__icon--pi").exists()).toBe(false);
   });
 });

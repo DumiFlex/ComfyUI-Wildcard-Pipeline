@@ -461,13 +461,15 @@ describe("RichTextInput.vue", () => {
     expect(picker).not.toBeNull();
     // Edit-mode → delete button present.
     expect(document.querySelector('[data-test="picker-delete"]')).not.toBeNull();
-    // The "warm" subcat chip should be preselected.
-    const warmChip = document.querySelector('[data-test="subcat-chip"][data-value="warm"]');
-    expect(warmChip?.classList.contains("wp-subcat-chip--selected")).toBe(true);
+    // The boolean editor seeds its expression input from the ref's
+    // existing `:expr` segment.
+    const exprInput = document.querySelector('[data-test="expr-input"]') as HTMLInputElement;
+    expect(exprInput).not.toBeNull();
+    expect(exprInput.value).toBe("warm");
     wrap.unmount();
   });
 
-  it("apply in edit mode replaces the chip's subCategories in place", async () => {
+  it("apply in edit mode rewrites the chip's filter expression in place", async () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "hi @{aabbccdd:warm} foo",
@@ -478,15 +480,16 @@ describe("RichTextInput.vue", () => {
       attachTo: document.body,
     });
     await wrap.find(".wp-refchip--ref").trigger("click");
-    // Click "cool" to add it to selection.
-    const coolChip = document.querySelector('[data-test="subcat-chip"][data-value="cool"]') as HTMLElement;
-    coolChip.click();
+    // Type a new boolean expression into the editor.
+    const exprInput = document.querySelector('[data-test="expr-input"]') as HTMLInputElement;
+    exprInput.value = "warm or cool";
+    exprInput.dispatchEvent(new Event("input"));
     await flushPromises();
     // Apply.
     (document.querySelector('[data-test="picker-apply"]') as HTMLElement).click();
     await flushPromises();
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("hi @{aabbccdd#color:warm,cool} foo");
+    expect(events[events.length - 1]?.[0]).toBe("hi @{aabbccdd#color:warm or cool} foo");
     wrap.unmount();
   });
 
@@ -715,7 +718,11 @@ describe("RichTextPreview.vue", () => {
     expect(chips.length).toBe(2);
     expect(chips[0].text()).toContain("$person");
     expect(chips[1].text()).toContain("@color");
-    expect(chips[1].text()).toContain("warm");
+    // The filter expression is NOT shown inline (§4.1) — a funnel marks
+    // "filtered" and the expression lives in the hover title.
+    expect(chips[1].text()).not.toContain("warm");
+    expect(chips[1].find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(chips[1].attributes("title")).toContain("warm");
   });
 });
 

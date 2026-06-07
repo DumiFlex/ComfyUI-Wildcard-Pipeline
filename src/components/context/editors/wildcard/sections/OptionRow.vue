@@ -10,6 +10,7 @@ import {
 import { tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
 import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
+import { parse, matches } from "@/manager/parsing/subcatFilter";
 import PairBadge from "../../../PairBadge.vue";
 
 interface OptionFull extends WildcardOption {
@@ -25,8 +26,14 @@ const props = withDefaults(
      *  option's `@{uuid}` ref. Rendered as trailing `↪#N` chips at the
      *  end of the value cell. Empty when this option isn't a carrier. */
     pairBadges?: readonly PairingBadge[];
+    /** `payload.tag_groups` — axis name → member tags. Drives the
+     *  per-axis colour of the CATEGORY chips so a tag reads with the
+     *  same hue here as in the pool pills. Ungrouped tags fall back to
+     *  a neutral hue. Read-only on this surface (membership is edited
+     *  in the SPA library editor, §4.3). */
+    tagGroups?: Record<string, string[]>;
   }>(),
-  { pairBadges: () => [] },
+  { pairBadges: () => [], tagGroups: () => ({}) },
 );
 
 const emit = defineEmits<{
@@ -90,20 +97,53 @@ function refIsUnresolved(uuid: string | undefined): boolean {
 
 /** Distinguish two reasons a row might be disabled:
  *   - per-option toggle off (`enabled_options` array excludes this id)
- *   - sub-category filtered out (`category_filter` excludes this option's bucket)
+ *   - sub-category filtered out (`category_filter` boolean expression
+ *     excludes this option's tag set)
  *
  * Per-option toggle remains interactive (user can re-check).
- * Category-filtered rows are read-only — the sub-category chip is the
- * authority. Clicking the per-option checkbox while filtered would write
- * to `enabled_options` invisibly and surprise the user when they re-enable
- * the category. So we no-op the click in that case.
+ * Category-filtered rows are read-only — the pool pills / advanced
+ * expression are the authority. Clicking the per-option checkbox while
+ * filtered would write to `enabled_options` invisibly and surprise the
+ * user when they re-enable the category. So we no-op the click in that
+ * case. The null option is never category-filtered (its membership is
+ * governed by `exclude_null`, not the tag expression).
  */
 const filteredByCategory = computed(() => {
-  const filter = props.instance.category_filter;
-  if (!Array.isArray(filter) || filter.length === 0) return false;
-  if (!props.option.sub_category) return true;
-  return !filter.includes(props.option.sub_category);
+  if (props.option.is_null) return false;
+  const expr = (props.instance.category_filter ?? "").trim();
+  if (expr === "") return false;
+  return !matches(parse(expr), new Set(props.option.sub_categories ?? []));
 });
+
+/**
+ * Per-axis chip colour. Each `tag_groups` axis gets a stable hue from a
+ * small palette of graph-theme tokens so a tag reads with the same colour
+ * here as in the pool pills. Ungrouped tags fall back to a neutral hue.
+ * Returned as inline custom properties the scoped CSS consumes — keeps the
+ * palette out of per-tag class explosions.
+ */
+const AXIS_HUES = [
+  "var(--wp-kind-wildcard, #a78bfa)",
+  "var(--wp-teal, #33d6c6)",
+  "var(--wp-status-modified, #fb923c)",
+  "var(--wp-accent2, #a970ff)",
+  "var(--wp-success, #22c55e)",
+];
+
+function axisOf(tag: string): number {
+  // Index of the axis whose member list contains `tag`; -1 when ungrouped.
+  const axes = Object.keys(props.tagGroups);
+  for (let i = 0; i < axes.length; i++) {
+    if (props.tagGroups[axes[i]]?.includes(tag)) return i;
+  }
+  return -1;
+}
+
+function chipStyle(tag: string): Record<string, string> {
+  const idx = axisOf(tag);
+  if (idx < 0) return { "--chip-hue": "var(--wp-text-dim, var(--wp-text3))" };
+  return { "--chip-hue": AXIS_HUES[idx % AXIS_HUES.length] };
+}
 const probability = computed(() => probabilityFor(props.option, props.allOptions, props.instance));
 const weight = computed(() => effectiveWeight(props.option, props.instance));
 const overrideWeight = computed(
@@ -242,7 +282,7 @@ function fmtPct(p: number): string {
         <i class="pi pi-ban" aria-hidden="true" />
         <span>null</span>
       </span>
-      <template v-else v-for="(tok, idx) in tokens" :key="idx">
+      <template v-for="(tok, idx) in tokens" v-else :key="idx">
         <span
           v-if="tok.kind === 'ref'"
           class="opt__tok opt__tok--ref"
@@ -338,7 +378,15 @@ function fmtPct(p: number): string {
         </svg></button>
       </span>
     </span>
-    <span class="opt__cat" data-test="opt-cat">{{ option.is_null ? "" : (option.sub_category ?? "") }}</span>
+    <span class="opt__cat">
+      <span
+        v-for="tag in (option.is_null ? [] : (option.sub_categories ?? []))"
+        :key="tag"
+        class="opt__cat-chip"
+        :data-test="`opt-cat-${tag}`"
+        :style="chipStyle(tag)"
+      >{{ tag }}</span>
+    </span>
   </div>
 </template>
 
@@ -348,8 +396,10 @@ function fmtPct(p: number): string {
   /* Columns: check · option name (1fr — generous for long values) ·
    * probability (compact, ~110px is enough for a 50px bar + 32px %
    * label) · weight input · category. The earlier 1fr-on-probability
-   * stretched the bar past usefulness and squeezed the name. */
-  grid-template-columns: 22px 1fr 110px 64px 60px;
+   * stretched the bar past usefulness and squeezed the name. Category
+   * widened from 60px → 96px now that it holds multiple wrapping tag
+   * chips instead of one right-aligned label (§4.2). */
+  grid-template-columns: 22px 1fr 110px 64px 96px;
   align-items: center;
   gap: 12px;
   padding: 7px 10px;
@@ -617,11 +667,31 @@ function fmtPct(p: number): string {
   opacity: 0.4;
   background: transparent;
 }
+/* CATEGORY column — option's sub-category tags as small chips, one per
+ * axis-coloured tag. Wraps + right-aligns so multi-tag options stay
+ * readable in the narrow column. Read-only here (membership is edited in
+ * the SPA library editor, §4.3). */
 .opt__cat {
-  font: 9px var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: flex-end;
+  align-content: center;
+}
+.opt__cat-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font: 8px var(--wp-font-sans);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  text-align: right;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--chip-hue, var(--wp-text-dim, var(--wp-text3)));
+  border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-text3)) 45%, transparent);
+  background: color-mix(in srgb, var(--chip-hue, var(--wp-text3)) 13%, transparent);
+}
+.opt--off .opt__cat-chip {
+  opacity: 0.5;
 }
 </style>
