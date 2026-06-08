@@ -28,7 +28,7 @@ import {
   type Atom,
   type RefAtom,
 } from "./atomicEditorModel";
-import { inlineTokenHtml } from "../../widgets/richTokenize";
+import { inlineTokenHtml, splitRefFilter } from "../../widgets/richTokenize";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
@@ -80,11 +80,9 @@ type RefAtomX = RefAtom & Partial<RefFilter>;
  *  trailing segment (the name/expr captures exclude `!`, so a `!` can
  *  only introduce the null marker). */
 function splitColonBody(body: string): RefFilter {
-  const bang = body.lastIndexOf("!");
-  if (bang >= 0) {
-    return { expr: body.slice(0, bang).trim(), excludeNull: body.slice(bang + 1) === "null" };
-  }
-  return { expr: body.trim(), excludeNull: false };
+  // Delegate to the single-source peel in richTokenize so the editor,
+  // RefChip, and the canvas OptionRow can never drift on `!null` handling.
+  return splitRefFilter(body);
 }
 
 /** The 4-segment filter for a ref atom. Prefers explicit `expr` /

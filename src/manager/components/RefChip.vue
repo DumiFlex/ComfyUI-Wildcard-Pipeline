@@ -3,6 +3,7 @@
 import { computed } from "vue";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
 import { parse, readsAs } from "@/manager/parsing/subcatFilter";
+import { splitRefFilter } from "@/widgets/richTokenize";
 
 /** Module kind for the `moduleKind` prop. Mirrors `ModuleKind` in
  *  `src/manager/cascade/resolveChip.ts` — duplicated as a local literal
@@ -73,10 +74,19 @@ const filter = computed<{ expr: string; excludeNull: boolean }>(() => {
     return { expr: rawExpr, excludeNull: props.excludeNull };
   }
   if (props.subCategories.length > 0) {
+    // Two null conventions reach this legacy prop: a standalone "null"
+    // element (pre-SP1 inverted-null list) and a glued trailing `!null` on
+    // the v2 lexer's single-element body (the lexer comma-splits without
+    // peeling). Strip the standalone element, then peel any glued marker off
+    // the rejoined body so `["warm or intense!null"]` becomes
+    // `{ expr: "warm or intense", excludeNull: true }` rather than showing
+    // `warm or intense!null` raw in the hover title.
+    const standaloneNull = props.subCategories.includes("null");
     const terms = props.subCategories.filter((s) => s !== "null");
+    const peeled = splitRefFilter(terms.join(","));
     return {
-      expr: terms.join(", "),
-      excludeNull: props.excludeNull || props.subCategories.includes("null"),
+      expr: peeled.expr,
+      excludeNull: props.excludeNull || standaloneNull || peeled.excludeNull,
     };
   }
   return { expr: "", excludeNull: props.excludeNull };

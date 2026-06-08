@@ -185,6 +185,29 @@ describe("OptionRow", () => {
     expect(ref.find(".opt__tok-label").text()).toBe("@subject_name");
   });
 
+  it("renders a v2 boolean ref filter as funnel + ban, not inline !null text", () => {
+    _setForTests("a361dbdc", { name: "mood", varBinding: "mood" });
+    const opt = {
+      id: "o9",
+      value: "wolf @{a361dbdc:warm or intense!null}",
+      weight: 1,
+      sub_categories: ["canine"],
+    };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    const ref = w.find('[data-test="opt-name"] .opt__tok--ref');
+    expect(ref.exists()).toBe(true);
+    // The raw expression + `!null` marker must NOT appear inline anymore.
+    expect(ref.text()).not.toContain("!null");
+    expect(ref.text()).not.toContain("warm or intense");
+    // Compact indicators instead — funnel (expression) + ban (exclude-null),
+    // matching the SPA RefChip grammar.
+    expect(ref.find(".opt__tok-funnel").exists()).toBe(true);
+    expect(ref.find(".opt__tok-nonull").exists()).toBe(true);
+    // Full normalized expression lives in the hover title, `!null` peeled.
+    expect(ref.attributes("title")).toContain("warm or intense");
+    expect(ref.attributes("title")).not.toContain("!null");
+  });
+
   it("renders {a|b|c} brace block as a brace token (warn colour)", () => {
     const opt = { id: "o9", value: "color {a|b|c}", weight: 1, sub_categories: ["warm"] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });

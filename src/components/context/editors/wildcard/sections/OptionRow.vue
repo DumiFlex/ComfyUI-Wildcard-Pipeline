@@ -7,10 +7,10 @@ import {
   type InstanceLike,
   type WildcardOption,
 } from "../probability";
-import { tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
+import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
 import { cacheVersion, ensure, lookup } from "../../../../../extension/preview-resolver";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
-import { parse, matches } from "@/manager/parsing/subcatFilter";
+import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import PairBadge from "../../../PairBadge.vue";
 
 interface OptionFull extends WildcardOption {
@@ -93,6 +93,43 @@ function refIsUnresolved(uuid: string | undefined): boolean {
   // entry exists for this uuid (live name/varBinding either populated
   // now or already polled). Anything falsey reads as broken.
   return !lookup(uuid);
+}
+
+/** Compact filter indicators for a nested-ref token — mirrors the SPA
+ *  RefChip grammar so the canvas reads identically: a funnel when a
+ *  sub-category expression is set, a ban when the null option is excluded,
+ *  and the normalized expression ("reads as") + "null excluded" in the
+ *  hover title. The widget lexer comma-splits the raw `:`-body WITHOUT
+ *  peeling `!null`, so rejoin + `splitRefFilter` here rather than printing
+ *  the glued `sub_categories` inline. Memoized per token object so the
+ *  several template bindings don't each re-parse. */
+interface RefFilterInfo { hasExpr: boolean; excludeNull: boolean; isFiltered: boolean; title: string }
+const _refFilterMemo = new WeakMap<RichToken, RefFilterInfo>();
+function refFilter(tok: RichToken): RefFilterInfo {
+  const cached = _refFilterMemo.get(tok);
+  if (cached) return cached;
+  const subs = tok.meta?.sub_categories;
+  let info: RefFilterInfo;
+  if (!Array.isArray(subs) || subs.length === 0) {
+    info = { hasExpr: false, excludeNull: false, isFiltered: false, title: "" };
+  } else {
+    const { expr, excludeNull } = splitRefFilter(subs.join(","));
+    let reads = "";
+    if (expr) {
+      try { reads = readsAs(parse(expr)); } catch { reads = expr; }
+    }
+    const parts: string[] = [];
+    if (reads) parts.push(reads);
+    if (excludeNull) parts.push("null excluded");
+    info = {
+      hasExpr: expr.length > 0,
+      excludeNull,
+      isFiltered: expr.length > 0 || excludeNull,
+      title: parts.join(" · "),
+    };
+  }
+  _refFilterMemo.set(tok, info);
+  return info;
 }
 
 /** Distinguish two reasons a row might be disabled:
@@ -287,20 +324,27 @@ function fmtPct(p: number): string {
           v-if="tok.kind === 'ref'"
           class="opt__tok opt__tok--ref"
           :class="{
-            'opt__tok--filtered': Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0,
+            'opt__tok--filtered': refFilter(tok).isFiltered,
             'opt__tok--unresolved': refIsUnresolved(tok.meta?.uuid),
           }"
           :data-uuid="tok.meta?.uuid"
           :title="refIsUnresolved(tok.meta?.uuid)
             ? `Reference ${tok.meta?.uuid} not in library`
-            : undefined"
+            : (refFilter(tok).title || undefined)"
         >
           <span class="opt__tok-icon" aria-hidden="true">{{ refIsUnresolved(tok.meta?.uuid) ? '?' : '✦' }}</span>
           <span class="opt__tok-label">{{ refDisplay(tok.meta?.uuid, tok.meta?.name, tok.raw) }}</span>
+          <!-- Compact filter mark, matching SPA RefChip: funnel = expression
+               set (full expr in hover title), ban = null option excluded.
+               The expression is never printed inline (it can be long). -->
           <span
-            v-if="Array.isArray(tok.meta?.sub_categories) && tok.meta.sub_categories.length > 0"
-            class="opt__tok-suffix"
-          >·&nbsp;{{ tok.meta.sub_categories.join(", ") }}</span>
+            v-if="refFilter(tok).isFiltered"
+            class="opt__tok-filter"
+            aria-hidden="true"
+          >
+            <i v-if="refFilter(tok).hasExpr" class="pi pi-filter opt__tok-funnel"></i>
+            <i v-if="refFilter(tok).excludeNull" class="pi pi-ban opt__tok-nonull"></i>
+          </span>
         </span>
         <span
           v-else-if="tok.kind === 'var'"
@@ -505,11 +549,18 @@ function fmtPct(p: number): string {
   font: 10px/1.4 var(--wp-font-mono);
 }
 .opt__tok-icon { font-size: 8px; opacity: 0.75; }
-.opt__tok-suffix {
+/* Compact filter indicator — funnel (expression set) + optional ban
+ * (null excluded). Mirrors RefChip's `wp-refchip__filter` so the canvas
+ * + SPA chips read the same; full expression lives in the hover title. */
+.opt__tok-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
   color: var(--wp-status-modified, #fbbf24);
-  font-size: 9px;
-  opacity: 0.9;
 }
+.opt__tok-funnel { font-size: 8px; line-height: 1; }
+.opt__tok-nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
 .opt__tok--ref {
   background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 15%, transparent);
   border-color: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 50%, transparent);

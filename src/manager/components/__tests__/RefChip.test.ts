@@ -53,6 +53,24 @@ describe("RefChip filter indicator", () => {
     expect(w.attributes("title")).toContain("warm or cool");  // reads-as
     expect(w.attributes("title")).toMatch(/null excluded/);
   });
+
+  it("peels a glued !null marker out of the subCategories fallback", () => {
+    // The widget lexer comma-splits a v2 ref body WITHOUT peeling, so a
+    // single-element list like ["warm or intense!null"] reaches this legacy
+    // prop glued. RefChip must peel it — never show `!null` as text, surface
+    // the exclude-null ban, and normalize the expression in the title.
+    const w = mount(RefChip, {
+      props: {
+        kind: "ref", name: "mood", uuid: "aabbccdd", resolved: true,
+        subCategories: ["warm or intense!null"],
+      },
+    });
+    expect(w.find('[data-test="refchip-filter"]').exists()).toBe(true);
+    expect(w.text()).not.toContain("!null");                    // never inline
+    expect(w.attributes("title")).toContain("warm or intense");  // reads-as
+    expect(w.attributes("title")).not.toContain("!null");        // peeled in title too
+    expect(w.attributes("title")).toMatch(/null excluded/);      // ban semantics
+  });
 });
 
 describe("RefChip base rendering", () => {

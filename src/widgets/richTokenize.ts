@@ -64,6 +64,34 @@ export interface RichToken {
   meta?: TokenMeta;
 }
 
+/** Peeled view of a nested ref's `:`-filter body. */
+export interface RefFilterParts {
+  /** Boolean sub-category expression, with the `!null` marker removed. */
+  expr: string;
+  /** True when the body carried the trailing `!null` exclude-null marker. */
+  excludeNull: boolean;
+}
+
+/**
+ * Peel a trailing `!null` exclude marker off a ref's raw `:`-body, returning
+ * the pure boolean expression + the exclude-null flag:
+ *   `"warm or intense!null"` → `{ expr: "warm or intense", excludeNull: true }`
+ *   `"warm or cool"`         → `{ expr: "warm or cool",   excludeNull: false }`
+ *
+ * Sub-category names and the boolean expression never contain `!` (see the
+ * grammar in `subcatFilter.ts`), so the only `!` in a serialized body is the
+ * null marker. Single source for the peel that RefChip, the canvas OptionRow,
+ * and RichTextInput's editor model all need — keeps them from re-deriving it
+ * (and drifting) independently.
+ */
+export function splitRefFilter(body: string): RefFilterParts {
+  const bang = body.lastIndexOf("!");
+  if (bang >= 0) {
+    return { expr: body.slice(0, bang).trim(), excludeNull: body.slice(bang + 1) === "null" };
+  }
+  return { expr: body.trim(), excludeNull: false };
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers (mirrors Python engine/syntax/tokenize.py)
 // ---------------------------------------------------------------------------
