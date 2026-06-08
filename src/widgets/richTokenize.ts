@@ -212,12 +212,16 @@ export function tokenizeRich(text: string): RichToken[] {
       // Lone $ or $ not followed by ident -- fall through to text accumulation
     }
 
-    // -- Ref: @{8hex} or @{8hex:subcat[,subcat]} ----------------------------
-    // Optional `:subcat,subcat` filter restricts the nested wildcard's
-    // pick to options whose `sub_category` is in the list. Keeps one
-    // library wildcard reusable while letting each call site narrow
-    // surgically (e.g. `@{color:warm}` vs `@{color:cool}` referencing
-    // the same `color` wildcard). Empty filter → no filter.
+    // -- Ref: @{8hex} or @{8hex#name:expr!null} -----------------------------
+    // Optional `:expr` is an SP1 boolean sub-category filter (`warm or
+    // intense`, `not cool`, parens; comma = or) with an optional trailing
+    // `!null` exclude-null marker. The lexer does NOT parse the grammar — it
+    // just captures the raw `:`-body, comma-split into `sub_categories` for
+    // legacy callers. Downstream (RichTextInput, validateModule) rejoins on
+    // `,`, peels `!null`, and hands the rest to the shared subcat-filter
+    // parser. Keeps one library wildcard reusable while each call site
+    // narrows surgically (e.g. `@{color:warm}` vs `@{color:cool or warm}`).
+    // Empty filter → no filter.
     if (ch === "@") {
       // Groups: 1=uuid, 2=optional `#name` cache, 3=optional subcat filter.
       const refMatch = text.slice(i).match(/^@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/);

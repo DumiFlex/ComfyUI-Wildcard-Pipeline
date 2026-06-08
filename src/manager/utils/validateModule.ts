@@ -19,6 +19,7 @@
  */
 import type { BundleRow, ModuleRow } from "../api/types";
 import { tokenizeRich, type RichToken } from "../../widgets/richTokenize";
+import { validateExpression } from "../parsing/subcatFilter";
 
 export type ValidationSeverity = "error" | "warn";
 
@@ -70,21 +71,21 @@ function tokensFor(text: string): RichToken[] {
   }
 }
 
-function extractRefs(text: string): Array<{ uuid: string; subcat?: string; name?: string }> {
-  const out: Array<{ uuid: string; subcat?: string; name?: string }> = [];
+function extractRefs(text: string): Array<{ uuid: string; filter?: string; name?: string }> {
+  const out: Array<{ uuid: string; filter?: string; name?: string }> = [];
   for (const t of tokensFor(text)) {
     if (t.kind === "ref" && t.meta?.uuid) {
       const subs = t.meta.sub_categories;
       const cachedName = typeof t.meta.name === "string" && t.meta.name.length > 0
         ? t.meta.name
         : undefined;
-      if (Array.isArray(subs) && subs.length > 0) {
-        for (const sub of subs) {
-          out.push({ uuid: t.meta.uuid, subcat: sub, name: cachedName });
-        }
-      } else {
-        out.push({ uuid: t.meta.uuid, name: cachedName });
-      }
+      // The lexer comma-splits the raw `:`-body for legacy reasons; rejoin
+      // it into the canonical SP1 boolean filter (`warm or intense`, the
+      // `a,b` comma-OR shorthand, optionally a trailing `!null`). One entry
+      // per ref — carry the whole expression, not a per-tag fan-out.
+      const filter =
+        Array.isArray(subs) && subs.length > 0 ? subs.join(",") : undefined;
+      out.push({ uuid: t.meta.uuid, filter, name: cachedName });
     }
   }
   return out;
@@ -170,12 +171,21 @@ function validateWildcard(
         });
         continue;
       }
-      if (ref.subcat) {
-        const subs = idx.subcatsByWildcardId.get(ref.uuid);
-        if (!subs || !subs.has(ref.subcat)) {
+      if (ref.filter) {
+        // SP1 boolean filter: validate every *tag* in the expression
+        // against the target's sub-categories using the shared parser —
+        // the same check the picker runs inline, so list view and editor
+        // agree by construction. Peel the trailing `!null` exclude marker
+        // first: it governs the null option, it is not a tag. Names/expr
+        // atoms never contain `!`, so the only `!` is the null marker.
+        const subs = idx.subcatsByWildcardId.get(ref.uuid) ?? new Set<string>();
+        const bang = ref.filter.lastIndexOf("!");
+        const expr = bang >= 0 ? ref.filter.slice(0, bang) : ref.filter;
+        const err = validateExpression(expr, subs);
+        if (err) {
           issues.push({
             severity: "error",
-            message: `Option ${i + 1}: ${target.name} has no subcategory "${ref.subcat}"`,
+            message: `Option ${i + 1}: ${target.name} filter — ${err}`,
           });
         }
       }

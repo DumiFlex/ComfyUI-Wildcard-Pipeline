@@ -67,6 +67,35 @@ describe("validateModule - wildcards", () => {
     const issues = validateModule(referrer, [target, referrer]);
     expect(issues.some((i) => i.message.includes("notreal"))).toBe(true);
   });
+
+  it("flags an unknown tag inside a v2 boolean ref filter", () => {
+    // SP1: `:warm or intense!null` is a boolean expression, not a single
+    // sub-category named "warm or intense!null". The validator must parse
+    // the expression and check each *tag*: `warm` is fine, `intense` is not
+    // a sub-category of mood, and the trailing `!null` marker is not a tag.
+    const target = mkWildcard("bbbbbbbb", "mood", {
+      options: [], sub_categories: ["warm"],
+    });
+    const referrer = mkWildcard("aaaaaaaa", "ref", {
+      options: [{ id: "o1", value: "uses @{bbbbbbbb:warm or intense!null}", weight: 1 }],
+      sub_categories: [],
+    });
+    const issues = validateModule(referrer, [target, referrer]);
+    expect(
+      issues.some((i) => i.message.includes("Unknown sub-category: 'intense'")),
+    ).toBe(true);
+  });
+
+  it("accepts a valid v2 boolean ref filter and ignores the !null marker", () => {
+    const target = mkWildcard("bbbbbbbb", "mood", {
+      options: [], sub_categories: ["warm", "intense"],
+    });
+    const referrer = mkWildcard("aaaaaaaa", "ref", {
+      options: [{ id: "o1", value: "uses @{bbbbbbbb:warm or intense!null}", weight: 1 }],
+      sub_categories: [],
+    });
+    expect(validateModule(referrer, [target, referrer])).toEqual([]);
+  });
 });
 
 describe("validateModule - constraints", () => {
