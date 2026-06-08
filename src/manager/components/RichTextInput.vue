@@ -514,15 +514,21 @@ function onChipClick(idx: number, ev?: MouseEvent): void {
   clampPickerIntoView();
 }
 
-// Rough first-paint bounds; the precise size (which grows with the target's
-// sub-category palette) is measured + re-clamped in clampPickerIntoView().
+// Rough first-paint bounds for the flip decision; the precise size (which
+// grows with the target's palette) is measured in clampPickerIntoView(),
+// which then re-anchors the popover snug against the trigger.
 const PICKER_APPROX_H = 380;
 const PICKER_W = 440;
+// The trigger's rect (chip or host) captured at open, so the post-paint
+// re-clamp can hug it using the popover's real height instead of the
+// over-estimated APPROX_H (which floated it too far from the pill).
+let pickerTriggerRect: { top: number; bottom: number; left: number } | null = null;
 
 function setPickerAnchorFromElement(el: HTMLElement | null): void {
   const fallback = hostEl.value;
   const rect = (el ?? fallback)?.getBoundingClientRect();
   if (!rect) return;
+  pickerTriggerRect = { top: rect.top, bottom: rect.bottom, left: rect.left };
   const spaceBelow = window.innerHeight - rect.bottom;
   const flipped = spaceBelow < PICKER_APPROX_H && rect.top > spaceBelow;
   // Clamp horizontally so the picker doesn't run off the right edge.
@@ -534,25 +540,22 @@ function setPickerAnchorFromElement(el: HTMLElement | null): void {
   pickerAnchor.value = { top, left, flipped };
 }
 
-/** Once the popover has painted, measure its real box and nudge it fully
- *  into the viewport — the approximate constants can't know the exact
- *  height, so a tall picker near the bottom/right would otherwise clip
- *  off-screen. */
+/** Once the popover has painted, measure its real box and re-anchor it
+ *  tight against the trigger (6px gap), then clamp into the viewport. The
+ *  approximate constants can't know the exact height, so without this the
+ *  flipped popover floats far above the pill / clips off a short viewport. */
 function clampPickerIntoView(): void {
   void nextTick(() => {
     const el = document.querySelector(".wp-subcat-picker__anchor") as HTMLElement | null;
-    if (!el) return;
+    if (!el || !pickerTriggerRect) return;
     const r = el.getBoundingClientRect();
-    const pad = 8;
-    let { top, left } = pickerAnchor.value;
-    if (r.width > 0) {
-      if (r.right > window.innerWidth - pad) left = window.innerWidth - r.width - pad;
-      if (left < pad) left = pad;
-    }
-    if (r.height > 0) {
-      if (r.bottom > window.innerHeight - pad) top = window.innerHeight - r.height - pad;
-      if (top < pad) top = pad;
-    }
+    const gap = 6;
+    const t = pickerTriggerRect;
+    // Sit just above (flipped) or just below the trigger using the REAL height.
+    let top = pickerAnchor.value.flipped ? t.top - r.height - gap : t.bottom + gap;
+    let left = pickerAnchor.value.left;
+    if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
+    if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
     pickerAnchor.value = { ...pickerAnchor.value, top, left };
   });
 }

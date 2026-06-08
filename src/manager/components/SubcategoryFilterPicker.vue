@@ -234,7 +234,7 @@ function onApply(): void {
       <button
         v-if="mode === 'edit'"
         type="button"
-        class="wp-btn wp-btn--danger"
+        class="wp-btn wp-btn--danger wp-subcat-picker__delete"
         data-test="picker-delete"
         @click="emit('delete')"
       >Delete</button>
@@ -393,5 +393,9 @@ function onApply(): void {
   font-size: 11px;
   line-height: 1.6;
   border-radius: 5px;
+}
+/* Destructive action sits far left, separated from Skip/Apply on the right. */
+.wp-subcat-picker__delete {
+  margin-right: auto;
 }
 </style>
