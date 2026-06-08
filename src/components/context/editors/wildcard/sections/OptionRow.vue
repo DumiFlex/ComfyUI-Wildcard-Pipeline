@@ -45,7 +45,7 @@ const emit = defineEmits<{
   "weight": [optionId: string, weight: number | null];
 }>();
 
-const enabled = computed(() => isEnabled(props.option, props.instance));
+const enabled = computed(() => isEnabled(props.option, props.instance, props.multiActive === true));
 
 /**
  * Tokenize the option's `value` so nested `@{uuid}` refs render with
@@ -185,7 +185,9 @@ function chipStyle(tag: string): Record<string, string> {
   if (idx < 0) return { "--chip-hue": "var(--wp-text-dim, var(--wp-text3))" };
   return { "--chip-hue": AXIS_HUES[idx % AXIS_HUES.length] };
 }
-const probability = computed(() => probabilityFor(props.option, props.allOptions, props.instance));
+const probability = computed(() =>
+  probabilityFor(props.option, props.allOptions, props.instance, props.multiActive === true),
+);
 const weight = computed(() => effectiveWeight(props.option, props.instance));
 const overrideWeight = computed(
   () => typeof props.instance.option_weights?.[props.option.id] === "number",

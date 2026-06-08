@@ -36,6 +36,26 @@ describe("isEnabled multi-tag", () => {
     expect(isEnabled(nul, { enabled_options: ["other"], exclude_null: true })).toBe(false);
   });
 
+  it("drops the null option entirely in multi-pick, ignoring exclude_null (SP2a)", () => {
+    const nul = { id: "n", value: "", weight: 1, is_null: true, sub_categories: [] };
+    // single-pick: governed by exclude_null
+    expect(isEnabled(nul, { exclude_null: false })).toBe(true);
+    // multi-pick (3rd arg true): always dropped — the engine excludes it,
+    // "maybe nothing" is pick_min=0.
+    expect(isEnabled(nul, { exclude_null: false }, true)).toBe(false);
+  });
+
+  it("drops the null option from the probability denominator in multi-pick (SP2a)", () => {
+    const a = opt([], { id: "a" });
+    const nul = { id: "n", value: "", weight: 1, is_null: true, sub_categories: [] };
+    const opts = [nul, a];
+    // single-pick: null + a split the per-draw weight 50/50
+    expect(probabilityFor(a, opts, {})).toBeCloseTo(0.5, 2);
+    // multi-pick: null excluded → a takes 100% of the denominator, null is 0
+    expect(probabilityFor(a, opts, {}, true)).toBeCloseTo(1.0, 2);
+    expect(probabilityFor(nul, opts, {}, true)).toBe(0);
+  });
+
   it("matches a multi-tag option against an AND across axes", () => {
     // Option carries both tags → satisfies "feline and warm".
     expect(isEnabled(opt(["feline", "warm"]), { category_filter: "feline and warm" })).toBe(true);

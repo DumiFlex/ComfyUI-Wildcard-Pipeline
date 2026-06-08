@@ -59,6 +59,55 @@ describe("PoolSection pick-count (SP2a)", () => {
     expect(lastPatch(w).instance?.pick_max).toBe(3);
   });
 
+  it("clamps max UP to min when min is set above max (SP2a — no inverted range)", async () => {
+    const w = mount(PoolSection, {
+      props: { module: makeModule({ instance: { pick_min: 1, pick_max: 2 } } as Partial<ModuleEntry>) },
+    });
+    const min = w.get('[data-test="pool-pick-min"]');
+    (min.element as HTMLInputElement).value = "5";
+    await min.trigger("input");
+    const inst = lastPatch(w).instance;
+    expect(inst?.pick_min).toBe(5);
+    expect(inst?.pick_max).toBe(5);
+  });
+
+  it("clamps min DOWN to max when max is set below min (SP2a — no inverted range)", async () => {
+    const w = mount(PoolSection, {
+      props: { module: makeModule({ instance: { pick_min: 3, pick_max: 4 } } as Partial<ModuleEntry>) },
+    });
+    const max = w.get('[data-test="pool-pick-max"]');
+    (max.element as HTMLInputElement).value = "1";
+    await max.trigger("input");
+    const inst = lastPatch(w).instance;
+    expect(inst?.pick_max).toBe(1);
+    expect(inst?.pick_min).toBe(1);
+  });
+
+  it("min up-arrow button bumps pick_min by 1 (SP2a)", async () => {
+    const w = mount(PoolSection, {
+      props: { module: makeModule({ instance: { pick_min: 1, pick_max: 3 } } as Partial<ModuleEntry>) },
+    });
+    await w.get('[data-test="pool-pick-min-up"]').trigger("click");
+    expect(lastPatch(w).instance?.pick_min).toBe(2);
+  });
+
+  it("enabled count excludes the null option in multi-pick (SP2a)", () => {
+    const m = {
+      id: "x", type: "wildcard", enabled: true, meta: { name: "w" }, entries: [],
+      payload: {
+        var_binding: "w", sub_categories: [], tag_groups: {},
+        options: [
+          { id: "a", value: "cat", weight: 1, sub_categories: [] },
+          { id: "n", value: "", weight: 1, is_null: true, sub_categories: [] },
+        ],
+      },
+      instance: { pick_min: 1, pick_max: 3 },
+    } as unknown as ModuleEntry;
+    const w = mount(PoolSection, { props: { module: m } });
+    // Only "a" counts — null is dropped from the multi pool (was wrongly 2 of 2).
+    expect(w.find('[data-test="pool-summary"]').text()).toMatch(/1\s*of\s*2/);
+  });
+
   it("separator input appears only when max > 1", () => {
     const single = mount(PoolSection, { props: { module: makeModule() } });
     expect(single.find('[data-test="pool-pick-sep"]').exists()).toBe(false);

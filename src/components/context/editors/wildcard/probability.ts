@@ -42,14 +42,21 @@ export interface InstanceLike {
   exclude_null?: boolean;
 }
 
-export function isEnabled(option: WildcardOption, instance: InstanceLike): boolean {
+export function isEnabled(
+  option: WildcardOption,
+  instance: InstanceLike,
+  multiActive = false,
+): boolean {
   // Null option intentionally has no sub-categories. It's an orthogonal
   // "no-output" slot governed SOLELY by `exclude_null` — neither
   // `enabled_options` nor `category_filter` apply. Checked first so the
   // per-row checkbox and the "Exclude null" toggle read the same flag and
-  // stay linked (#3).
+  // stay linked (#3). SP2a: multi-pick ALWAYS drops the null option from the
+  // pool (the engine excludes it; "maybe nothing" is pick_min=0), so it is
+  // never enabled in multi mode regardless of exclude_null — keeps the
+  // enabled count + per-option probability honest.
   if (option.is_null) {
-    return !instance.exclude_null;
+    return !multiActive && !instance.exclude_null;
   }
   if (Array.isArray(instance.enabled_options) && !instance.enabled_options.includes(option.id)) {
     return false;
@@ -67,10 +74,11 @@ export function probabilityFor(
   option: WildcardOption,
   allOptions: readonly WildcardOption[],
   instance: InstanceLike,
+  multiActive = false,
 ): number {
-  if (!isEnabled(option, instance)) return 0;
+  if (!isEnabled(option, instance, multiActive)) return 0;
   const totalEnabledWeight = allOptions
-    .filter((o) => isEnabled(o, instance))
+    .filter((o) => isEnabled(o, instance, multiActive))
     .reduce((sum, o) => sum + effectiveWeight(o, instance), 0);
   if (totalEnabledWeight === 0) return 0;
   return effectiveWeight(option, instance) / totalEnabledWeight;

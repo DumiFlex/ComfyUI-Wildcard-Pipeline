@@ -261,11 +261,27 @@ const multiActive = computed(() => {
   const hi = Math.max(lo, pickMax.value);
   return !(lo === 1 && hi === 1);
 });
+function setPickRange(lo: number, hi: number): void {
+  // Enforce min <= max in ONE patch so a clamp never leaves an inverted
+  // range. Raising min above max pushes max up; lowering max below min pulls
+  // min down (setPickMin/setPickMax below).
+  const min = Math.max(0, Math.floor(lo));
+  const max = Math.max(min, Math.floor(hi));
+  emit("update", { instance: { ...(props.module.instance ?? {}), pick_min: min, pick_max: max } });
+}
 function setPickMin(next: number): void {
-  emit("update", patchInstance(props.module, "pick_min", Math.max(0, Math.floor(next || 0))));
+  const lo = Math.max(0, Math.floor(next || 0));
+  setPickRange(lo, Math.max(lo, pickMax.value));
 }
 function setPickMax(next: number): void {
-  emit("update", patchInstance(props.module, "pick_max", Math.max(0, Math.floor(next || 0))));
+  const hi = Math.max(0, Math.floor(next || 0));
+  setPickRange(Math.min(pickMin.value, hi), hi);
+}
+function bumpPickMin(dir: 1 | -1): void {
+  setPickMin(pickMin.value + dir);
+}
+function bumpPickMax(dir: 1 | -1): void {
+  setPickMax(pickMax.value + dir);
 }
 function setPickSeparator(next: string): void {
   emit("update", patchInstance(props.module, "pick_separator", next));
@@ -304,7 +320,7 @@ function onOptionWeight(optionId: string, weight: number | null): void {
 }
 
 const enabledCount = computed(
-  () => allOptions.value.filter((o) => isEnabled(o, instance.value)).length,
+  () => allOptions.value.filter((o) => isEnabled(o, instance.value, multiActive.value)).length,
 );
 const totalCount = computed(() => allOptions.value.length);
 const skewedTowards = computed(() => {
@@ -435,25 +451,53 @@ const skewedTowards = computed(() => {
          the separator joins them for a bare `$var`. -->
     <div class="pool__pick" data-test="pool-pick">
       <span class="pool__pick-label">Pick</span>
-      <input
-        class="pool__pick-num"
-        type="number"
-        min="0"
-        :value="pickMin"
-        data-test="pool-pick-min"
-        aria-label="Minimum picks"
-        @input="setPickMin(Number(($event.target as HTMLInputElement).value))"
-      />
+      <span class="pool__pick-wrap">
+        <input
+          class="pool__pick-num"
+          type="number"
+          min="0"
+          :value="pickMin"
+          data-test="pool-pick-min"
+          aria-label="Minimum picks"
+          @input="setPickMin(Number(($event.target as HTMLInputElement).value))"
+        />
+        <span class="pool__pick-spin">
+          <button
+            type="button" class="pool__pick-spin-btn" tabindex="-1"
+            data-test="pool-pick-min-up" aria-label="Increase minimum picks"
+            @click="bumpPickMin(1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
+          <button
+            type="button" class="pool__pick-spin-btn" tabindex="-1"
+            data-test="pool-pick-min-down" aria-label="Decrease minimum picks"
+            @click="bumpPickMin(-1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
+        </span>
+      </span>
       <span class="pool__pick-dash" aria-hidden="true">–</span>
-      <input
-        class="pool__pick-num"
-        type="number"
-        min="0"
-        :value="pickMax"
-        data-test="pool-pick-max"
-        aria-label="Maximum picks"
-        @input="setPickMax(Number(($event.target as HTMLInputElement).value))"
-      />
+      <span class="pool__pick-wrap">
+        <input
+          class="pool__pick-num"
+          type="number"
+          min="0"
+          :value="pickMax"
+          data-test="pool-pick-max"
+          aria-label="Maximum picks"
+          @input="setPickMax(Number(($event.target as HTMLInputElement).value))"
+        />
+        <span class="pool__pick-spin">
+          <button
+            type="button" class="pool__pick-spin-btn" tabindex="-1"
+            data-test="pool-pick-max-up" aria-label="Increase maximum picks"
+            @click="bumpPickMax(1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
+          <button
+            type="button" class="pool__pick-spin-btn" tabindex="-1"
+            data-test="pool-pick-max-down" aria-label="Decrease maximum picks"
+            @click="bumpPickMax(-1)"
+          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
+        </span>
+      </span>
       <input
         v-if="pickMax > 1"
         class="pool__pick-sep"
@@ -558,17 +602,28 @@ const skewedTowards = computed(() => {
   letter-spacing: 0.1em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.pool__pick-num {
-  /* Match the per-option weight stepper (.opt__weight): same height, border,
-   * radius + suppressed native spin arrows so the two number inputs read as
-   * one control family instead of a bare browser <input type=number>. */
-  width: 44px;
+/* Pick steppers — a composite that mirrors the per-option weight stepper
+ * (.opt__weight-wrap + .opt__spin): bordered wrap + borderless input with the
+ * native arrows suppressed + a custom up/down SVG spin column. So the two
+ * controls read as one family AND keep visible arrows. */
+.pool__pick-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  width: 56px;
   height: 22px;
-  padding: 0 6px;
-  font: 11px var(--wp-font-mono);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   border-radius: 2px;
+  overflow: hidden;
+}
+.pool__pick-wrap:focus-within { border-color: var(--wp-accent); }
+.pool__pick-num {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 0 6px;
+  font: 11px var(--wp-font-mono);
   color: var(--wp-text);
   text-align: right;
   -moz-appearance: textfield;
@@ -578,7 +633,30 @@ const skewedTowards = computed(() => {
   -webkit-appearance: none;
   margin: 0;
 }
-.pool__pick-num:focus { outline: none; border-color: var(--wp-accent); }
+.pool__pick-num:focus { outline: none; }
+.pool__pick-spin {
+  display: flex;
+  flex-direction: column;
+  width: 14px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--wp-border);
+  background: var(--wp-bg-deep, var(--wp-bg));
+}
+.pool__pick-spin-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+  line-height: 0;
+}
+.pool__pick-spin-btn + .pool__pick-spin-btn { border-top: 1px solid var(--wp-border); }
+.pool__pick-spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,0.10); }
 .pool__pick-dash { color: var(--wp-text-dim, var(--wp-text3)); }
 .pool__pick-sep {
   flex: 1;
