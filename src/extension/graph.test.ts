@@ -667,6 +667,39 @@ describe("collectLocalResolvedForModule", () => {
     expect(result.self).toBe("x");
   });
 
+  it("binds a multi-pick wildcard to a joined representative of the first N options (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        instance: { pick_min: 2, pick_max: 2, pick_separator: " / " },
+        payload: { var_binding: "mood", options: [
+          { id: "o1", value: "red" }, { id: "o2", value: "blue" }, { id: "o3", value: "green" },
+        ] },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // Static preview isn't seed-faithful — show the first N joined (runtime
+    // rolls a seeded N via the engine; the API preview shows the real roll).
+    expect(result.mood).toBe("red / blue");
+  });
+
+  it("resolves a $style.0 accessor in a combine template without leaking the .K literal (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        payload: { var_binding: "$style", options: [{ id: "o1", value: "moody" }] },
+      },
+      {
+        id: "cb000001", type: "combine", enabled: true, meta: { name: "" }, entries: [],
+        payload: { template: "$style.0 portrait", output_var: "result" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // `$style.0` against a plain-string ctx value resolves to the value (a
+    // string acts as a 1-element list); the literal ".0" must NOT survive.
+    expect(result.result).toBe("moody portrait");
+  });
+
   it("respects sibling fixed_values bindings", () => {
     const { ctx, graph } = singleNode([
       {

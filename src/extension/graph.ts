@@ -4,6 +4,7 @@ import {
   parseWidgetJson,
   type ContextWidgetValue,
 } from "../widgets/_shared";
+import { applyVarAccessor } from "../widgets/richTokenize";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -760,7 +761,9 @@ export function collectUpstreamKinds(
  * matching the runtime walker's `max_ref_depth`.
  * -------------------------------------------------------------------- */
 
-const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
+// SP2a: optional `.K` list accessor (group 2) so `$mood.0` is consumed whole
+// (no stranded ".0" literal) and the index drives applyVarAccessor below.
+const VAR_REF_RE = /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/g;
 const WC_REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 const MAX_REF_DEPTH = 8;
 
@@ -974,7 +977,31 @@ function writeBindings(
     const binding = (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
     const options = (p.options as Array<{ value?: string }> | undefined) ?? [];
     if (binding && options.length > 0) {
-      ctx[binding] = expandValue(String(options[0].value ?? ""), ctx, catalog, 0);
+      const inst = (m.instance ?? {}) as {
+        pick_min?: unknown; pick_max?: unknown; pick_separator?: unknown;
+      };
+      const coerce = (v: unknown, dflt: number): number => {
+        if (v == null) return dflt;
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : dflt;
+      };
+      const lo = coerce(inst.pick_min, 1);
+      const hi = Math.max(lo, coerce(inst.pick_max, lo));
+      if (lo === 1 && hi === 1) {
+        ctx[binding] = expandValue(String(options[0].value ?? ""), ctx, catalog, 0);
+      } else {
+        // SP2a multi-pick: the static resolver isn't seed-faithful (the engine
+        // rolls N at random), so show a representative join of the first N
+        // options to convey the list shape. The API-backed preview shows the
+        // real seeded roll.
+        const sep = typeof inst.pick_separator === "string" ? inst.pick_separator : ", ";
+        const n = Math.min(hi, options.length);
+        const items: string[] = [];
+        for (let i = 0; i < n; i++) {
+          items.push(expandValue(String(options[i].value ?? ""), ctx, catalog, 0));
+        }
+        ctx[binding] = items.join(sep);
+      }
     }
     return;
   }
@@ -1084,9 +1111,14 @@ function expandValue(
 ): string {
   if (!raw) return raw;
   if (depth > MAX_REF_DEPTH) return raw;
-  // 1. Substitute `$var` with ctx values, leave unknowns as `$name`.
-  let out = raw.replace(VAR_REF_RE, (_, name) =>
-    Object.prototype.hasOwnProperty.call(ctx, name) ? ctx[name] : `$${name}`,
+  // 1. Substitute `$var` (+ optional `.K` accessor) with ctx values; leave
+  //    unknowns (incl. their accessor) intact. ctx values are strings in this
+  //    static resolver, so applyVarAccessor treats `$s.0` as `$s` and `$s.K>0`
+  //    as "" — never leaking the literal ".K" into the preview.
+  let out = raw.replace(VAR_REF_RE, (full, name, idx) =>
+    Object.prototype.hasOwnProperty.call(ctx, name)
+      ? applyVarAccessor(ctx[name], idx != null ? parseInt(idx, 10) : undefined)
+      : full,
   );
   // 2. Substitute `@{8hex}` with the referenced wildcard's first option,
   //    recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")
