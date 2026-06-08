@@ -609,6 +609,15 @@ function probeAutocomplete(str: string, caret: number): {
   trigger: "$" | "@";
 } | null {
   let i = caret - 1;
+  // SP2a: skip a trailing `.K` list accessor (digits then ONE dot, only when a
+  // word char precedes the dot) so `$mood.0<caret>` still resolves back to the
+  // `$` trigger and keeps the popover open — otherwise Enter falls through to a
+  // stray newline on the multiline (combine) surface and splits the token.
+  let j = i;
+  while (j >= 0 && /[0-9]/.test(str[j])) j--;
+  if (j < i && j >= 1 && str[j] === "." && /[A-Za-z0-9_]/.test(str[j - 1])) {
+    i = j - 1;
+  }
   while (i >= 0 && /[a-zA-Z0-9_]/.test(str[i])) i--;
   if (i < 0) return null;
   const trigger = str[i];

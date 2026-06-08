@@ -114,6 +114,39 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("Enter after $mood.0 settles the var with no stray newline (multiline combine, SP2a)", async () => {
+    // Regression: probeAutocomplete stopped scanning back at `.`, so after
+    // `$mood.0` the popover was closed and Enter fell through to a newline on
+    // the multiline combine surface — splitting the token. The accessor-aware
+    // probe keeps the popover open so Enter chipifies the var instead.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.0";
+    // Caret at end so probeAutocomplete sees the `$mood.0` run.
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const tn = span.firstChild as Text;
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("input", { inputType: "insertText", data: "0" });
+    await host.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    const chips = wrap.findAll(".wp-refchip--var");
+    expect(chips.length).toBe(1);
+    expect(chips[0].text()).toContain("$mood.0");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const last = String(events[events.length - 1]?.[0] ?? "");
+    expect(last).toBe("$mood.0");        // no newline split
+    expect(last).not.toContain("\n");
+    wrap.unmount();
+  });
+
   it("multiline=true sets data-multiline + wp-rt--multi on the host (no textarea)", () => {
     // Multiline mode used to swap the input for a <textarea>; now it's a
     // single contenteditable host with a data attribute + size variant.
