@@ -61,6 +61,98 @@ def test_resolve_empty_options_returns_empty_string():
     assert out == {"$x": ""}
 
 
+# --- SP2a multi-select wildcards (Chunk D) ---
+
+_MULTI = [
+    {"id": "o1", "value": "red", "weight": 1, "sub_categories": []},
+    {"id": "o2", "value": "blue", "weight": 1, "sub_categories": []},
+    {"id": "o3", "value": "green", "weight": 1, "sub_categories": []},
+]
+
+
+def test_record_pick_multi_stores_values_and_union_tags():
+    from engine.modules.wildcard_handler import _record_pick_multi
+    ctx = {"__wp_current_module_id__": "m1"}
+    _record_pick_multi(ctx, [
+        {"value": "red", "sub_categories": ["warm"], "id": "o1"},
+        {"value": "blue", "sub_categories": ["cool"], "id": "o2"},
+    ], ", ")
+    rec = ctx["__wp_picks__"]["m1"]
+    assert rec["value"] == "red, blue"
+    assert rec["values"] == ["red", "blue"]
+    assert set(rec["sub_categories"]) == {"warm", "cool"}
+    assert rec["id"] == "o1"
+
+
+def test_multi_pick_binds_listvar_unique():
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 2, "pick_separator": ", "},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert len(out["c"].items) == 2
+    assert len(set(out["c"].items)) == 2
+
+
+def test_multi_pick_seed_deterministic():
+    a = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 3, "pick_separator": ", "},
+        ctx=_ctx(seed=9),
+    )
+    b = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 3, "pick_separator": ", "},
+        ctx=_ctx(seed=9),
+    )
+    assert list(a["c"].items) == list(b["c"].items)
+
+
+def test_single_pick_default_binds_string():
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c"},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out["c"], str)
+
+
+def test_multi_pick_min_zero_can_be_empty():
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 0, "pick_max": 0, "pick_separator": ", "},
+        ctx=_ctx(seed=1),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert out["c"].items == []
+
+
+def test_multi_pick_count_clamped_to_pool_unique():
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": 9, "pick_max": 9, "pick_separator": ", "},
+        ctx=_ctx(seed=1),
+    )
+    assert len(out["c"].items) == 3
+    assert len(set(out["c"].items)) == 3
+
+
+def test_multi_pick_excludes_null_option():
+    payload = _payload([
+        {"id": "o1", "value": "red", "weight": 1, "sub_categories": []},
+        {"id": "n", "value": "", "weight": 1, "is_null": True, "sub_categories": []},
+    ])
+    out = WildcardHandler.resolve(
+        payload,
+        instance={"variable_binding": "c", "pick_min": 2, "pick_max": 2},
+        ctx=_ctx(seed=1),
+    )
+    assert list(out["c"].items) == ["red"]
+
+
 def test_resolve_filters_by_enabled_options():
     # Only "b" is enabled; with seed=0 only option is beta → picks beta
     ctx = _ctx(seed=0)

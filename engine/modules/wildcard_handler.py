@@ -24,6 +24,7 @@ from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng as _derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+from engine.syntax.resolve import pick_k_unique
 from engine.syntax.subcat_filter import (
     matches as _subcat_matches,
 )
@@ -33,6 +34,7 @@ from engine.syntax.subcat_filter import (
 from engine.syntax.subcat_filter import (
     validate_subcat_name,
 )
+from engine.syntax.types import ListVar
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _MAX_IDENT_LEN = 64
@@ -182,6 +184,31 @@ def _record_pick(ctx: Any, chosen: dict[str, Any]) -> None:
             "sub_categories": chosen.get("sub_categories", []),
             "id": chosen.get("id"),
         }
+
+
+def _record_pick_multi(ctx: Any, chosen_list: list[dict[str, Any]], sep: str) -> None:
+    """Multi-select counterpart to `_record_pick` (SP2a). Stash the joined
+    value + the individual picked values + the union of their sub-categories,
+    so the debug Picks view can render the list. Single-pick records (via
+    `_record_pick`) keep their original shape."""
+    module_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
+    if not module_id:
+        return
+    bucket = ctx.setdefault("__wp_picks__", {})
+    if not isinstance(bucket, dict):
+        return
+    values = [str(c.get("value", "")) for c in chosen_list]
+    union: list[str] = []
+    for c in chosen_list:
+        for t in (c.get("sub_categories") or []):
+            if t not in union:
+                union.append(t)
+    bucket[module_id] = {
+        "value": sep.join(values),
+        "values": values,
+        "sub_categories": union,
+        "id": chosen_list[0].get("id") if chosen_list else None,
+    }
 
 
 class WildcardHandler(ModuleHandler):
@@ -499,6 +526,44 @@ class WildcardHandler(ModuleHandler):
         else:
             effective_seed = chain_seed
         rng = _derive_module_rng(effective_seed, binding)
+
+        # SP2a multi-select: a count range other than (1, 1) picks N options
+        # without replacement and binds a ListVar. The null option is never in
+        # the multi-pick pool (exclude_null is single-pick-only); "maybe
+        # nothing" is min=0. (1, 1) falls through to the single-pick path
+        # below unchanged — same RNG draws, so existing locked seeds reproduce.
+        raw_min = int(instance["pick_min"]) if instance.get("pick_min") is not None else 1
+        raw_max = int(instance["pick_max"]) if instance.get("pick_max") is not None else raw_min
+        lo = max(0, min(raw_min, raw_max))
+        hi = max(lo, raw_max)
+        if not (lo == 1 and hi == 1):
+            pool = [o for o in options if not o.get("is_null")]
+            weights = [max(0.0, float(o.get("weight", 1))) for o in pool]
+            pool_n = len(pool)
+            lo_c, hi_c = min(lo, pool_n), min(hi, pool_n)
+            count = lo_c if lo_c == hi_c else lo_c + int(rng.random() * (hi_c - lo_c + 1))
+            picks = pick_k_unique(pool, weights, count, rng)
+            sep = instance.get("pick_separator")
+            if not isinstance(sep, str):
+                sep = ", "
+            items: list[str] = []
+            saved_rng_multi = ctx.get("__wp_rng__")
+            ctx["__wp_rng__"] = rng
+            try:
+                multi_ctx = build_resolve_ctx(ctx, surface="wildcard")
+                for opt in picks:
+                    items.append(resolve_text(str(opt.get("value", "")), multi_ctx))
+            finally:
+                ctx["__wp_rng__"] = saved_rng_multi
+            _record_pick_multi(ctx, picks, sep)
+            from engine.modules._constraints import claim_carrier_constraints
+            claim_carrier_constraints(
+                options,
+                ctx.get("__wp_constraints__"),
+                ctx.get("__wp_picks__"),
+                ctx.get("__wp_consumed_constraints__"),
+            )
+            return {binding: ListVar(items, sep)}
 
         chosen = _pick_weighted(options, rng)
         if chosen is None:
