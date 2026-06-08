@@ -389,9 +389,11 @@ function onApply(): void {
 /* Shrink the Delete/Skip/Apply buttons — the default .wp-btn size reads
  *  as oversized inside this popover. Compact them to fit the density. */
 .wp-subcat-picker__actions .wp-btn {
-  padding: 3px 11px;
+  /* .wp-btn height is a fixed token (--wp-btn-h ~34px) — that, not padding,
+   * is what kept the buttons tall. Override it for the popover's density. */
+  height: 24px;
+  padding: 0 11px;
   font-size: 11px;
-  line-height: 1.6;
   border-radius: 5px;
 }
 /* Destructive action sits far left, separated from Skip/Apply on the right. */
