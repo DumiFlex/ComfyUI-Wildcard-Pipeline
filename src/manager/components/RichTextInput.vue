@@ -1065,6 +1065,116 @@ function applyAtoms(next: Atom[]): void {
   void nextTick(() => syncTextSpansToAtoms());
 }
 
+/** Live structure-aware read of the host as an `Atom[]` — the deletion-path
+ *  counterpart to `readHostAsText`. Walks the same `host.childNodes` but
+ *  PRESERVES the chip/text structure instead of flattening to a string, and
+ *  crucially does NOT tokenize:
+ *
+ *    - text spans become plain text atoms read from their LIVE `textContent`
+ *      (which `atoms.value` does NOT track during raw typing — see
+ *      `syncTextSpansToAtoms`), so a half-typed token like `$mood.` stays
+ *      plain text;
+ *    - chips are read from `atoms.value` via `data-atom-index` (chips only
+ *      mutate through programmatic ops, so the atom is authoritative there).
+ *
+ *  The Backspace/Delete handlers feed this into `deleteRawRange` so editing
+ *  never re-chipifies — chip formation stays on the commit paths only
+ *  (settle-delimiter / blur / autocomplete). Adjacent text is merged to keep
+ *  the list canonical. */
+function readHostAsAtoms(): Atom[] {
+  const host = hostEl.value;
+  if (!host) return [{ kind: "text", text: "" }];
+  const out: Atom[] = [];
+  const pushText = (t: string): void => {
+    if (t.length === 0) return;
+    const last = out[out.length - 1];
+    if (last && last.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: last.text + t };
+    } else {
+      out.push({ kind: "text", text: t });
+    }
+  };
+  for (const node of host.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      pushText((node.textContent ?? "").replace(ZWSP_RE, ""));
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = node as HTMLElement;
+    if (el.classList.contains("wp-refchip")) {
+      const atom = atoms.value[Number(el.getAttribute("data-atom-index"))];
+      if (atom && atom.kind !== "text") out.push(atom);
+      else if (atom && atom.kind === "text") pushText(atom.text);
+      continue;
+    }
+    // wp-rt__text spans + any defensive fallback: read live text.
+    pushText((el.textContent ?? "").replace(ZWSP_RE, ""));
+  }
+  return out.length > 0 ? out : [{ kind: "text", text: "" }];
+}
+
+/** Delete the raw-text span `[delStart, delEnd)` directly off a live atom
+ *  list — WITHOUT re-tokenizing. This is what keeps chip formation off the
+ *  delete path: text atoms are sliced char-exact; a chip is one cursor stop,
+ *  so any overlap removes the WHOLE chip (the span widens to chip
+ *  boundaries). No `parse`/`parseForSurface` runs, so raw text that merely
+ *  looks like a chip (`$mood`, `$mood.`) survives a Backspace as plain text.
+ *
+ *  Offsets are in the same serialised raw-text space `rangeOffsetToRaw`
+ *  produces (chip length = `serialiseAtomsLocal([atom]).length`), so the
+ *  caret arithmetic lines up. Returns the new atom list plus the caret
+ *  offset to restore (the start of the deleted span, widened to a chip
+ *  boundary when a chip was removed). */
+function deleteRawRange(
+  live: Atom[],
+  delStart: number,
+  delEnd: number,
+): { atoms: Atom[]; caret: number } {
+  const spans: { atom: Atom; start: number; end: number }[] = [];
+  let cursor = 0;
+  for (const atom of live) {
+    const len = serialiseAtomsLocal([atom]).length;
+    spans.push({ atom, start: cursor, end: cursor + len });
+    cursor += len;
+  }
+  // Widen the deletion span to fully cover any chip it partially intersects —
+  // chips can't be half-deleted.
+  let lo = delStart;
+  let hi = delEnd;
+  for (const s of spans) {
+    if (s.atom.kind === "text") continue;
+    if (s.start < hi && s.end > lo) {
+      lo = Math.min(lo, s.start);
+      hi = Math.max(hi, s.end);
+    }
+  }
+  const out: Atom[] = [];
+  const pushAtom = (a: Atom): void => {
+    const last = out[out.length - 1];
+    if (a.kind === "text" && last && last.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: last.text + a.text };
+    } else {
+      out.push(a);
+    }
+  };
+  for (const s of spans) {
+    const atom = s.atom;
+    if (s.end <= lo || s.start >= hi) {
+      pushAtom(atom); // fully outside the deletion span — keep as-is
+      continue;
+    }
+    if (atom.kind === "text") {
+      const cutFrom = Math.max(0, lo - s.start);
+      const cutTo = Math.min(atom.text.length, hi - s.start);
+      const kept = atom.text.slice(0, cutFrom) + atom.text.slice(cutTo);
+      if (kept.length > 0) pushAtom({ kind: "text", text: kept });
+      continue;
+    }
+    // Chip fully covered by [lo, hi) (widened above) — drop it.
+  }
+  return { atoms: out, caret: lo };
+}
+
 function insertChipAtCaret(
   chipText: string,
   caretOverride?: { caret: number; acStart: number },
@@ -1749,151 +1859,58 @@ function onHostKeydown(ev: KeyboardEvent): void {
     return;
   }
   if (ev.key === "Backspace") {
-    // Backspace right after a chip should remove the chip atomically.
-    // Work entirely in raw-text space: read the host's raw text + caret,
-    // peek at the chars immediately before the caret, and if they form
-    // a complete chip serialisation (`$name` / `@{uuid}` / `@{uuid:sub}`)
-    // delete that whole syntax in one keystroke.
+    // Atom-direct deletion — NEVER re-tokenize on delete, so editing can't
+    // chipify. We read the live atom structure (`readHostAsAtoms`: text from
+    // the DOM, chips from `atoms.value`), delete a raw-text span directly off
+    // those atoms via `deleteRawRange`, and re-apply. Chip formation stays on
+    // the commit paths (settle-delimiter / blur / autocomplete) ONLY —
+    // matching the rule that Backspace must never form a chip.
     //
-    // Earlier the handler diffed `currentCursor` (DOM atom indices) against
-    // `padAtoms(parse(liveText))` (re-parsed atom indices). Those two index
-    // spaces diverge whenever the user typed a fresh chip-able token (e.g.
-    // `$test`) into a text span since the last settle — parse adds new chip
-    // atoms that the DOM-derived cursor doesn't know about, so the wrong
-    // atom gets deleted. Raw-text space sidesteps the alignment problem.
-    const rawText = readHostAsText();
-    // Non-collapsed selection (e.g. Ctrl+A + Backspace, or any drag-select +
-    // Backspace) — delete the entire selected range as a raw-text slice. The
-    // native Backspace path corrupts the atom model because the browser
-    // collapses across `contenteditable=false` chip nodes and leaves orphan
-    // chip elements that re-render as zombie atoms. Handle it imperatively.
+    // A committed chip (a `.wp-refchip` element) is removed whole because
+    // `deleteRawRange` widens the span to chip boundaries; raw text that only
+    // LOOKS like a chip (`$mood`, `$mood.` mid-edit) is a plain text atom and
+    // loses exactly one char. The same path also handles non-collapsed
+    // selections (Ctrl+A, drag-select) — the whole selected raw span goes.
     const range = currentSelectionRangeRaw();
+    let delStart: number;
+    let delEnd: number;
     if (range.start !== range.end) {
-      ev.preventDefault();
-      const newText = rawText.slice(0, range.start) + rawText.slice(range.end);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      void nextTick(() => restoreCursorAtChar(range.start));
-      return;
+      delStart = range.start;
+      delEnd = range.end;
+    } else {
+      if (range.start === 0) return; // caret at start — nothing to delete
+      delStart = range.start - 1;
+      delEnd = range.start;
     }
-    const rawCaret = range.start;
-    if (rawCaret === 0) return;
-    const before = rawText.slice(0, rawCaret);
-    // SP2a: only atomic-delete a COMMITTED chip. A real (non-ZWSP) character
-    // immediately before the caret in a text node means the user is mid-typing
-    // raw text that merely LOOKS like a chip serialisation (`$mood`,
-    // `$mood.0` before it settles) — fall through to single-char delete rather
-    // than eating the whole token. A committed chip is a `.wp-refchip`
-    // element, so the caret lands at a text-node boundary (offset 0) or an
-    // element edge, never after a real text char.
-    const bsSel = window.getSelection();
-    const bsNode = bsSel?.focusNode;
-    const caretAfterRealChar = !!(
-      bsSel && bsSel.isCollapsed && bsNode && bsNode.nodeType === Node.TEXT_NODE &&
-      bsSel.focusOffset > 0 &&
-      (bsNode.textContent ?? "").charCodeAt(bsSel.focusOffset - 1) !== 0x200b
-    );
-    // Surface-gated chip detection: only patterns that ACTUALLY chipify
-    // on this surface qualify for atomic delete. Without this, `$name`
-    // in a wildcard option (where $ is plain text per surface contract)
-    // would be eaten whole by a single Backspace — user reported.
-    const chipRegex = props.surface === "wildcard"
-      ? /(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})$/
-      : /(\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?)$/;  // SP2a: `(?:\.\d+)?` = `.K` accessor
-    const chipMatch = caretAfterRealChar ? null : before.match(chipRegex);
-    if (chipMatch) {
-      // Escape-boundary guard: end-anchored regex scans backwards and
-      // would match `$cost` inside `$$cost` (the second `$` + ident).
-      // If the char immediately preceding the matched chip serialisation
-      // is the same trigger char, this is a literal escape (`$$cost`,
-      // `@@literal`) — let the browser handle native single-char delete.
-      const matchStart = before.length - chipMatch[0].length;
-      const trigger = chipMatch[0][0]; // '$' or '@'
-      const charBefore = matchStart > 0 ? before[matchStart - 1] : "";
-      if (charBefore === trigger) {
-        return;
-      }
-      ev.preventDefault();
-      const newText = before.slice(0, -chipMatch[0].length) + rawText.slice(rawCaret);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      const newCaret = before.length - chipMatch[0].length;
-      void nextTick(() => restoreCursorAtChar(newCaret));
-      return;
-    }
-    // No chip match — single-char delete imperatively. Relying on native
-    // browser Backspace here is the source of user-reported corruption:
-    // when the chip-flanking text span shrinks to empty, the browser may
-    // collapse the caret across a `contenteditable=false` chip into the
-    // wrong adjacent span, and Vue's v-for diff (index-keyed) can patch
-    // the wrong text node. Imperative slice → applyAtoms → restore caret
-    // keeps the atom model and DOM in lock-step.
     ev.preventDefault();
-    const newText = rawText.slice(0, rawCaret - 1) + rawText.slice(rawCaret);
-    applyAtoms(parseForSurface(newText));
-    emitValue(newText);
-    void nextTick(() => restoreCursorAtChar(rawCaret - 1));
+    const { atoms: nextAtoms, caret } = deleteRawRange(readHostAsAtoms(), delStart, delEnd);
+    applyAtoms(nextAtoms);
+    emitValue(serialiseAtomsLocal(atoms.value));
+    void nextTick(() => restoreCursorAtChar(caret));
     return;
   }
   if (ev.key === "Delete") {
-    // Forward-delete (key right of Backspace on most keyboards). Mirror
-    // the Backspace path but check the chars immediately AFTER the
-    // caret for a complete chip serialisation. Same atomic-removal
-    // contract so the user can't end up half-deleting a chip — AND
-    // same surface gate so `$name` in a wildcard-surface input
-    // forward-deletes one char at a time, not the whole serialisation.
-    const rawText = readHostAsText();
-    // Symmetric to Backspace: non-collapsed selection means range delete.
+    // Forward-delete — mirror of Backspace, atom-direct (no re-tokenize). The
+    // deletion span is the one char AFTER the caret (or the whole selection);
+    // `deleteRawRange` widens it to remove a committed chip whole.
+    const live = readHostAsAtoms();
     const range = currentSelectionRangeRaw();
+    let delStart: number;
+    let delEnd: number;
     if (range.start !== range.end) {
-      ev.preventDefault();
-      const newText = rawText.slice(0, range.start) + rawText.slice(range.end);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      void nextTick(() => restoreCursorAtChar(range.start));
-      return;
+      delStart = range.start;
+      delEnd = range.end;
+    } else {
+      const totalLen = serialiseAtomsLocal(live).length;
+      if (range.start >= totalLen) return; // caret at end — nothing forward
+      delStart = range.start;
+      delEnd = range.start + 1;
     }
-    const rawCaret = range.start;
-    if (rawCaret >= rawText.length) return;
-    const after = rawText.slice(rawCaret);
-    // SP2a (mirror of Backspace): a real (non-ZWSP) char immediately AFTER the
-    // caret in a text node is raw typed text, not a committed chip — delete
-    // one char instead of eating the whole serialisation.
-    const delSel = window.getSelection();
-    const delNode = delSel?.focusNode;
-    const caretBeforeRealChar = !!(
-      delSel && delSel.isCollapsed && delNode && delNode.nodeType === Node.TEXT_NODE &&
-      delSel.focusOffset < (delNode.textContent ?? "").length &&
-      (delNode.textContent ?? "").charCodeAt(delSel.focusOffset) !== 0x200b
-    );
-    const chipRegex = props.surface === "wildcard"
-      ? /^(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})/
-      : /^(\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?)/;  // SP2a: `(?:\.\d+)?` = `.K` accessor
-    const chipMatch = caretBeforeRealChar ? null : after.match(chipRegex);
-    if (chipMatch) {
-      // Escape-boundary guard (mirror of Backspace path): the chip
-      // serialisation is at offset `rawCaret`, immediately after the
-      // caret. If the char at `rawCaret - 1` is the SAME trigger, the
-      // pair is an escape sequence (`$$cost` / `@@literal`) — skip
-      // atomic delete, native single-char delete handles it.
-      const trigger = chipMatch[0][0]; // '$' or '@'
-      const charBefore = rawCaret > 0 ? rawText[rawCaret - 1] : "";
-      if (charBefore === trigger) {
-        return;
-      }
-      ev.preventDefault();
-      const newText = rawText.slice(0, rawCaret) + after.slice(chipMatch[0].length);
-      applyAtoms(parseForSurface(newText));
-      emitValue(newText);
-      void nextTick(() => restoreCursorAtChar(rawCaret));
-      return;
-    }
-    // Symmetric to Backspace: imperative single-char forward-delete.
     ev.preventDefault();
-    const newText = rawText.slice(0, rawCaret) + rawText.slice(rawCaret + 1);
-    applyAtoms(parseForSurface(newText));
-    emitValue(newText);
-    void nextTick(() => restoreCursorAtChar(rawCaret));
+    const { atoms: nextAtoms, caret } = deleteRawRange(live, delStart, delEnd);
+    applyAtoms(nextAtoms);
+    emitValue(serialiseAtomsLocal(atoms.value));
+    void nextTick(() => restoreCursorAtChar(caret));
     return;
   }
   // Arrow keys: defer to native browser handling. Modern browsers skip

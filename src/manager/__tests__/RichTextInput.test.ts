@@ -644,6 +644,71 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("raw-typed $mood.1 + Backspace deletes only the '1' to '$mood.', never chipifies (SP2a Wave5)", async () => {
+    // Headline Wave-5 bug: Backspace on raw `$mood.1` re-tokenized the
+    // remaining `$mood.` and chipified `$mood` (+ a stray `.` after it). Chip
+    // formation must NEVER fire on Backspace — only on settle/blur/autocomplete.
+    // The accessor digit is plain text mid-edit, so exactly one char goes and
+    // the rest stays raw text (no chip).
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.1";
+    await host.trigger("input");
+    const tn = span.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(String(events[events.length - 1]?.[0] ?? "")).toBe("$mood.");
+    // The remaining `$mood.` stays raw — Backspace must not have formed a chip.
+    expect(wrap.findAll(".wp-refchip--var").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("repeated Backspace through a raw-typed $mood.1 never forms a chip mid-edit (SP2a Wave5)", async () => {
+    // The principle, exhaustively: backspacing one char at a time through a
+    // raw token never chipifies any intermediate state. Each step deletes a
+    // single char and the surviving text stays raw until a real commit point.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const hostEl = host.element as HTMLElement;
+    const span = hostEl.querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.1";
+    await host.trigger("input");
+    const expectedAfter = ["$mood.", "$mood", "$moo", "$mo", "$m", "$", ""];
+    for (const expected of expectedAfter) {
+      // Re-place caret at content-end. Can't target a text node directly:
+      // an unsettled `$mood` re-renders into a colored sub-span, so the
+      // span's firstChild is an element. Anchoring the collapsed selection
+      // on the host (selectNodeContents + collapse-to-end) is sub-span
+      // agnostic — rangeOffsetToRaw special-cases host-anchored offsets.
+      const range = document.createRange();
+      range.selectNodeContents(hostEl);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      await host.trigger("keydown", { key: "Backspace" });
+      await flushPromises();
+      const events = wrap.emitted("update:modelValue") ?? [];
+      expect(String(events[events.length - 1]?.[0] ?? "")).toBe(expected);
+      expect(wrap.findAll(".wp-refchip--var").length).toBe(0);
+    }
+    wrap.unmount();
+  });
+
   it("typing $mood.0 does not chip prematurely on the dot; settles on the next boundary", async () => {
     // Symptom #1 regression: `.` was a settle delimiter, so `$mood` chipped
     // the instant the user typed `.`, stranding the accessor. `.` is no
