@@ -615,6 +615,35 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("Backspace on raw-typed $mood (not yet a chip) deletes ONE char, not the whole token (SP2a)", async () => {
+    // Raw `$mood` typed in a combine template hasn't settled into a chip atom.
+    // Backspace must delete one char — NOT atomic-delete the whole
+    // serialisation (regression: it ate the entire `$mood`/`$mood.0` text
+    // before any chip existed, because the chip regex matched raw text).
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood";
+    await host.trigger("input");
+    // Caret at the end of the raw text (a real char precedes it).
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const tn = span.firstChild as Text;
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    const events = wrap.emitted("update:modelValue") ?? [];
+    const last = String(events[events.length - 1]?.[0] ?? "");
+    expect(last).toBe("$moo");   // one char removed, NOT "" (whole token eaten)
+    wrap.unmount();
+  });
+
   it("typing $mood.0 does not chip prematurely on the dot; settles on the next boundary", async () => {
     // Symptom #1 regression: `.` was a settle delimiter, so `$mood` chipped
     // the instant the user typed `.`, stranding the accessor. `.` is no

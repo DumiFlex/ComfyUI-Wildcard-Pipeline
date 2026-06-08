@@ -1779,6 +1779,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const rawCaret = range.start;
     if (rawCaret === 0) return;
     const before = rawText.slice(0, rawCaret);
+    // SP2a: only atomic-delete a COMMITTED chip. A real (non-ZWSP) character
+    // immediately before the caret in a text node means the user is mid-typing
+    // raw text that merely LOOKS like a chip serialisation (`$mood`,
+    // `$mood.0` before it settles) — fall through to single-char delete rather
+    // than eating the whole token. A committed chip is a `.wp-refchip`
+    // element, so the caret lands at a text-node boundary (offset 0) or an
+    // element edge, never after a real text char.
+    const bsSel = window.getSelection();
+    const bsNode = bsSel?.focusNode;
+    const caretAfterRealChar = !!(
+      bsSel && bsSel.isCollapsed && bsNode && bsNode.nodeType === Node.TEXT_NODE &&
+      bsSel.focusOffset > 0 &&
+      (bsNode.textContent ?? "").charCodeAt(bsSel.focusOffset - 1) !== 0x200b
+    );
     // Surface-gated chip detection: only patterns that ACTUALLY chipify
     // on this surface qualify for atomic delete. Without this, `$name`
     // in a wildcard option (where $ is plain text per surface contract)
@@ -1786,7 +1800,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const chipRegex = props.surface === "wildcard"
       ? /(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})$/
       : /(\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?)$/;  // SP2a: `(?:\.\d+)?` = `.K` accessor
-    const chipMatch = before.match(chipRegex);
+    const chipMatch = caretAfterRealChar ? null : before.match(chipRegex);
     if (chipMatch) {
       // Escape-boundary guard: end-anchored regex scans backwards and
       // would match `$cost` inside `$$cost` (the second `$` + ident).
@@ -1842,10 +1856,20 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const rawCaret = range.start;
     if (rawCaret >= rawText.length) return;
     const after = rawText.slice(rawCaret);
+    // SP2a (mirror of Backspace): a real (non-ZWSP) char immediately AFTER the
+    // caret in a text node is raw typed text, not a committed chip — delete
+    // one char instead of eating the whole serialisation.
+    const delSel = window.getSelection();
+    const delNode = delSel?.focusNode;
+    const caretBeforeRealChar = !!(
+      delSel && delSel.isCollapsed && delNode && delNode.nodeType === Node.TEXT_NODE &&
+      delSel.focusOffset < (delNode.textContent ?? "").length &&
+      (delNode.textContent ?? "").charCodeAt(delSel.focusOffset) !== 0x200b
+    );
     const chipRegex = props.surface === "wildcard"
       ? /^(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})/
       : /^(\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?)/;  // SP2a: `(?:\.\d+)?` = `.K` accessor
-    const chipMatch = after.match(chipRegex);
+    const chipMatch = caretBeforeRealChar ? null : after.match(chipRegex);
     if (chipMatch) {
       // Escape-boundary guard (mirror of Backspace path): the chip
       // serialisation is at offset `rawCaret`, immediately after the
