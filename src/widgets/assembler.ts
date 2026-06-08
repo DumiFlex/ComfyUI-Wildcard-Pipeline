@@ -1,6 +1,7 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
+import { type ResolvedValue } from "./richTokenize";
 import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectUpstreamChain,
@@ -207,8 +208,8 @@ function relevantChain(chain: unknown[][]): unknown[][] {
  *  comparator avoids spurious re-renders when two distinct chains
  *  resolve to the same map (e.g. last_locked_seed-only edits). */
 function shallowEqualResolved(
-  a: Record<string, string> | null,
-  b: Record<string, string>,
+  a: Record<string, ResolvedValue> | null,
+  b: Record<string, ResolvedValue>,
 ): boolean {
   if (a === null) return false;
   if (a === b) return true;
@@ -338,7 +339,7 @@ export function mountHelper(node: AssemblerNode) {
       );
 
       // API-backed resolved map. Updates whenever `chainKey` shifts.
-      const apiResolved = ref<Record<string, string> | null>(null);
+      const apiResolved = ref<Record<string, ResolvedValue> | null>(null);
       const apiKey = ref<string>("");
       // Inflight de-dup so a slow fetch from the previous chain doesn't
       // overwrite a fast fetch from the current one.
@@ -360,7 +361,7 @@ export function mountHelper(node: AssemblerNode) {
           body: JSON.stringify({ chain, seed: PREVIEW_SEED }),
         })
           .then((r) => (r.ok ? r.json() : null))
-          .then((body: { resolved?: Record<string, string> } | null) => {
+          .then((body: { resolved?: Record<string, ResolvedValue> } | null) => {
             // Stale-response guard: if another fetch started after us,
             // drop ours so we don't clobber the newer state.
             if (inflightKey !== key) return;
@@ -416,7 +417,7 @@ export function mountHelper(node: AssemblerNode) {
         const fallback = snapshot.value.fallbackResolved;
         const api = apiResolved.value;
         const injectorKeys = snapshot.value.injectorKeys;
-        let fresh: Record<string, string>;
+        let fresh: Record<string, ResolvedValue>;
         if (api) {
           fresh = { ...fallback, ...api };
           for (const k of injectorKeys) {

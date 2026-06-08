@@ -183,6 +183,54 @@ describe("AssemblerHelper resolvedMap (#12 — boundary-disambiguation fix)", ()
   });
 });
 
+describe("AssemblerHelper resolvedMap (SP2a — list-valued vars + .K accessor)", () => {
+  it("joins a bare $mood (ListVar) and indexes $mood.0 / $mood.1", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["mood"],
+        templateVars: ["mood"],
+        template: "$mood.0, $mood.1, $mood",
+        resolvedMap: { mood: { items: ["sleepy", "serene", "dramatic"], sep: ", " } },
+      },
+    });
+    const preview = wrapper.find('[data-test="asm-preview"]');
+    const varSpans = preview.findAll("span.res");
+    expect(varSpans.length).toBe(3);
+    expect(varSpans[0].text()).toBe("sleepy");                    // $mood.0
+    expect(varSpans[1].text()).toBe("serene");                    // $mood.1
+    expect(varSpans[2].text()).toBe("sleepy, serene, dramatic");  // bare $mood → joined
+    // No stranded `.0` / `.1` accessor leaked into the literal spans.
+    expect(preview.text()).not.toContain(".0");
+    expect(preview.text()).not.toContain(".1");
+  });
+
+  it("renders an out-of-range $mood.5 as empty, not a leaked accessor", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["mood"],
+        templateVars: ["mood"],
+        template: "[$mood.5]",
+        resolvedMap: { mood: { items: ["a"], sep: ", " } },
+      },
+    });
+    const preview = wrapper.find('[data-test="asm-preview"]');
+    expect(preview.text()).toBe("[]");
+  });
+
+  it("keeps an unresolved $name.K accessor visible in the chip text", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: [],
+        templateVars: ["ghost"],
+        template: "$ghost.2",
+        resolvedMap: {},
+      },
+    });
+    const preview = wrapper.find('[data-test="asm-preview"]');
+    expect(preview.text()).toContain("$ghost.2");
+  });
+});
+
 describe("AssemblerHelper missing-chip click (#20 — autoremove regression)", () => {
   it("clicking a missing chip calls onRemoveVar with the var name", async () => {
     let removed = "";

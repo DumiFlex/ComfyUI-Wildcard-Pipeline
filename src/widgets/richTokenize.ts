@@ -67,6 +67,45 @@ export function varBaseName(raw: string): string {
   return raw.replace(/^\$/, "").replace(/\.\d+$/, "").trim();
 }
 
+/** SP2a: a resolved variable value as a TS preview surface sees it — a plain
+ *  string, or a list value `{items, sep}` mirroring the engine ListVar (the
+ *  /wp/api/preview/resolve endpoint emits the structured form for a
+ *  multi-pick var). */
+export interface ListVarValue {
+  items: string[];
+  sep: string;
+}
+export type ResolvedValue = string | ListVarValue;
+
+/** True when `v` is the structured list-value shape (vs a plain string). */
+export function isListVarValue(v: unknown): v is ListVarValue {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    Array.isArray((v as { items?: unknown }).items)
+  );
+}
+
+/** SP2a: render a resolved var value to a string, honoring an optional `.K`
+ *  list accessor — the TS mirror of engine `deref_var_value`
+ *  (engine/syntax/types.py). ListVar: bare -> `items.join(sep)`; `.K` ->
+ *  `items[K]` or "" when out of range. A plain string behaves as a 1-element
+ *  list (`.0` == itself, `.K` > 0 == ""). null/undefined -> "". */
+export function applyVarAccessor(
+  value: ResolvedValue | null | undefined,
+  index: number | undefined,
+): string {
+  if (value == null) return "";
+  if (isListVarValue(value)) {
+    if (index != null) {
+      return index >= 0 && index < value.items.length ? value.items[index] : "";
+    }
+    return value.items.join(value.sep);
+  }
+  if (index != null) return index === 0 ? value : "";
+  return value;
+}
+
 export interface RichToken {
   kind: TokenKind;
   start: number;
