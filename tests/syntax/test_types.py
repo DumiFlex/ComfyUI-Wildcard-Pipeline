@@ -20,6 +20,35 @@ def test_token_dataclass_shape():
     assert tok.meta == {}
 
 
+def test_listvar_str_joins_items():
+    """SP2a: str(ListVar) joins with sep (NOT the dataclass repr) so a list
+    value that leaks into a plain str() context renders as the user-facing
+    joined string rather than `ListVar(items=[...], sep=...)`."""
+    assert str(st.ListVar(items=["red", "blue"], sep=", ")) == "red, blue"
+    assert str(st.ListVar(items=[], sep=", ")) == ""
+
+
+def test_split_var_accessor_separates_base_and_index():
+    assert st.split_var_accessor("mood.0") == ("mood", 0)
+    assert st.split_var_accessor("mood.12") == ("mood", 12)
+    assert st.split_var_accessor("mood") == ("mood", None)
+    # Not an `ident.digits` shape -> returned whole, no index.
+    assert st.split_var_accessor("weird.name") == ("weird.name", None)
+    assert st.split_var_accessor("") == ("", None)
+
+
+def test_deref_var_value_honors_listvar_and_accessor():
+    lv = st.ListVar(items=["a", "b"], sep="/")
+    assert st.deref_var_value(lv, None) == "a/b"
+    assert st.deref_var_value(lv, 0) == "a"
+    assert st.deref_var_value(lv, 5) == ""  # out of range -> ""
+    # Plain string behaves as a 1-element list.
+    assert st.deref_var_value("x", None) == "x"
+    assert st.deref_var_value("x", 0) == "x"
+    assert st.deref_var_value("x", 1) == ""
+    assert st.deref_var_value(None, None) == ""
+
+
 def test_unknown_ref_error_carries_uuid():
     err = st.UnknownRefError("a4f7b2e1")
     assert err.uuid == "a4f7b2e1"

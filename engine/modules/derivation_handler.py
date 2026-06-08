@@ -19,6 +19,7 @@ from engine.modules import build_resolve_ctx
 from engine.modules._seed import derive_module_rng
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+from engine.syntax.types import deref_var_value, split_var_accessor
 
 _VALID_OPS = {
     "equals", "not_equals", "contains", "matches",
@@ -33,25 +34,34 @@ _VALID_OPS = {
 _VALID_MODES = {"replace", "append", "prepend"}
 
 
-def _ctx_get(ctx: Any, name: str) -> str:
+def _ctx_get_raw(ctx: Any, name: str) -> Any:
+    """Read the RAW stored value for `name` (may be a ListVar) through the
+    callable-getter -> dict-lookup indirection. Missing / error -> None."""
     if ctx is None:
-        return ""
+        return None
     getter = getattr(ctx, "get", None)
     if callable(getter):
         try:
-            value = getter(name, "")
+            return getter(name, None)
         except TypeError:
             try:
-                value = getter(name)
+                return getter(name)
             except Exception:
-                return ""
-        return "" if value is None else str(value)
+                return None
     try:
         if name in ctx:  # type: ignore[operator]
-            return str(ctx[name])  # type: ignore[index]
+            return ctx[name]  # type: ignore[index]
     except Exception:
-        return ""
-    return ""
+        return None
+    return None
+
+
+def _ctx_get(ctx: Any, name: str) -> str:
+    """Read `name` as a string, honoring a `.K` list accessor and folding a
+    ListVar to its joined value (SP2a): `$mood.0` splits to base `mood` +
+    index 0. The fold/accessor contract lives in deref_var_value."""
+    base, index = split_var_accessor(name)
+    return deref_var_value(_ctx_get_raw(ctx, base), index)
 
 
 def _ctx_has(ctx: Any, name: str) -> bool:
@@ -66,6 +76,7 @@ def _ctx_has(ctx: Any, name: str) -> bool:
     """
     if ctx is None:
         return False
+    name = split_var_accessor(name)[0]  # SP2a: presence checks the base var
     # Engine ctx is a dict in tests + at runtime; check `__contains__`
     # before falling back to a getter probe so we get the cheap path.
     try:
@@ -91,6 +102,7 @@ def _ctx_has(ctx: Any, name: str) -> bool:
 def _ctx_set(ctx: Any, name: str, value: str) -> None:
     if ctx is None:
         return
+    name = split_var_accessor(name)[0]  # SP2a: writing $x.K targets the base var
     setter = getattr(ctx, "set", None)
     if callable(setter):
         setter(name, value)

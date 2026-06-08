@@ -80,6 +80,44 @@ def test_resolve_first_matching_branch_wins():
     assert ctx["tone"] == "bright"
 
 
+def test_condition_equals_reads_listvar_as_joined_value():
+    """SP2a: a multi-pick var bound as a ListVar must compare as its joined
+    string, not the dataclass repr (the repr never matched a real value)."""
+    from engine.syntax.types import ListVar
+    ctx = _ctx(mood=ListVar(["calm", "bright"], ", "))
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "mood", "op": "equals", "value": "calm, bright"},
+        "action": {"target_var": "tone", "mode": "replace", "value": "ok"},
+    }])]}
+    out = DerivationHandler.resolve(payload, instance={}, ctx=ctx)
+    assert out == {"tone": "ok"}
+
+
+def test_condition_accessor_indexes_listvar():
+    """SP2a: `$mood.0` as a condition var reads index 0 of the list."""
+    from engine.syntax.types import ListVar
+    ctx = _ctx(mood=ListVar(["calm", "bright"], ", "))
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "mood.0", "op": "equals", "value": "calm"},
+        "action": {"target_var": "tone", "mode": "replace", "value": "ok"},
+    }])]}
+    out = DerivationHandler.resolve(payload, instance={}, ctx=ctx)
+    assert out == {"tone": "ok"}
+
+
+def test_append_mode_reads_listvar_target_as_joined_not_repr():
+    """append/prepend onto a ListVar-valued target joins it first instead of
+    concatenating onto the dataclass repr."""
+    from engine.syntax.types import ListVar
+    ctx = _ctx(tone=ListVar(["a", "b"], "-"))
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "missing", "op": "not_equals", "value": "y"},
+        "action": {"target_var": "tone", "mode": "append", "value": "Z"},
+    }])]}
+    out = DerivationHandler.resolve(payload, instance={}, ctx=ctx)
+    assert out == {"tone": "a-bZ"}
+
+
 def test_resolve_else_fires_when_nothing_matches():
     ctx = _ctx(mood="neutral")
     payload = {"rules": [_rule(

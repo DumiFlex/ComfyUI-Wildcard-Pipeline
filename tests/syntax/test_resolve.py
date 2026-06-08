@@ -8,8 +8,8 @@ from typing import Any
 import pytest
 
 from engine.syntax import resolve_text
-from engine.syntax.resolve import ListVar, pick_k_unique
-from engine.syntax.types import SurfaceKind
+from engine.syntax.resolve import pick_k_unique
+from engine.syntax.types import ListVar, SurfaceKind
 
 
 @dataclass
