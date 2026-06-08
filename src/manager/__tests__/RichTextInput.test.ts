@@ -709,6 +709,37 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  it("unsettled $var renders as plain text in the editor — no inline highlight, only the chip colors", async () => {
+    // User feedback (2026-06-09): a half-typed `$var` needs no separate
+    // colour — the absence of a chip already signals "not committed yet".
+    // After an edit re-renders the raw token through textAtomHtml, it must
+    // NOT carry the `.wp-rt-var` inline highlight. Settled chips keep their
+    // green; the read-only preview is unaffected.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", multiline: true, varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const hostEl = host.element as HTMLElement;
+    const span = hostEl.querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$moodx";
+    await host.trigger("input");
+    // Backspace the trailing "x" — triggers applyAtoms → textAtomHtml re-render.
+    const range = document.createRange();
+    range.selectNodeContents(hostEl);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await host.trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    // Raw "$mood" survived as text — not chipified, not inline-highlighted.
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(hostEl.innerHTML).not.toContain("wp-rt-var");
+    expect((hostEl.textContent ?? "").replace(/​/g, "")).toBe("$mood");
+    wrap.unmount();
+  });
+
   it("typing $mood.0 does not chip prematurely on the dot; settles on the next boundary", async () => {
     // Symptom #1 regression: `.` was a settle delimiter, so `$mood` chipped
     // the instant the user typed `.`, stranding the accessor. `.` is no

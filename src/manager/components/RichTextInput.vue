@@ -428,25 +428,25 @@ function parseForSurface(text: string): Atom[] {
 const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
 let lastEmittedValue = props.modelValue || "";
 
-/** Surface-aware text-atom HTML: tokenises the atom's raw text and
- *  emits colored sub-spans for inline syntax (brace blocks, escapes,
- *  unsettled `$name` / `@{uuid}`). The `collapsedKinds` argument
- *  neutralises whichever kinds the surface treats as literal so users
- *  don't see misleading var/ref styling on tokens the engine won't
- *  expand. Empty atoms render a single ZWSP so the caret has a
- *  landing position.
+/** Text-atom HTML: tokenises the atom's raw text and emits colored
+ *  sub-spans for inline syntax (brace blocks, multi-select, weights,
+ *  escapes). Empty atoms render a single ZWSP so the caret has a landing
+ *  position.
  *
- *  Surface → collapse:
- *    wildcard     → vars literal (refs chipify)
- *    fixed_values → both literal (only brace/multi/escape color)
- *    others       → refs literal (vars chipify) */
+ *  `$name` / `@{uuid}` are ALWAYS collapsed to plain text here (both kinds
+ *  passed to `inlineTokenHtml`). Rationale (user feedback 2026-06-09): an
+ *  UNSETTLED token — raw text mid-edit, not yet a chip — needs no separate
+ *  colour. The absence of a chip already signals "not committed"; a violet
+ *  `.wp-rt-var` / magenta `.wp-rt-ref` inline highlight only competes with
+ *  the settled-chip palette (RefChip is the sole var/ref colour). This is
+ *  surface-independent: on every surface, a chippable token that hasn't
+ *  settled reads as plain text and a settled one reads as a chip.
+ *
+ *  Inline `{a|b}` brace / multi / weight / escape colouring is untouched —
+ *  those aren't chippable tokens, so their highlight IS the only signal. */
 function textAtomHtml(text: string): string {
   if (!text) return ZWSP;
-  const collapsed: ReadonlyArray<"var" | "ref"> =
-    props.surface === "wildcard" ? ["var"]
-    : props.surface === "fixed_values" ? ["var", "ref"]
-    : ["ref"];
-  return inlineTokenHtml(text, collapsed);
+  return inlineTokenHtml(text, ["var", "ref"]);
 }
 
 watch(() => props.modelValue, (next) => {
