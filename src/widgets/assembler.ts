@@ -146,6 +146,7 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "enabled_options",
   "option_weights",
   "category_filter",
+  "exclude_null",
   "mode",
   "pinned_option_id",
   "locked_seed",

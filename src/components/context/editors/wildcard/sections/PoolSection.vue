@@ -204,6 +204,36 @@ function toggleAdvanced(): void {
   if (advanced.value) draft.value = filterExpr.value;
 }
 
+/* Insert-at-cursor palette for the advanced editor (#7) — mirrors the SPA
+ * SubcategoryFilterPicker so the user sees which sub-categories + operators
+ * are available instead of guessing the grammar. */
+const exprInput = ref<HTMLInputElement | null>(null);
+const OPERATORS = ["and", "or", "not", "(", ")"] as const;
+
+/** Splice `token` at the caret (or over the selection), padding with a
+ *  single space so adjacent tokens stay parseable, then re-validate +
+ *  commit. Re-focuses and restores the caret after the inserted token. */
+function insertToken(token: string): void {
+  const el = exprInput.value;
+  const current = draft.value;
+  const selStart = el?.selectionStart ?? current.length;
+  const selEnd = el?.selectionEnd ?? current.length;
+  const before = current.slice(0, selStart);
+  const after = current.slice(selEnd);
+  const needLead = before.length > 0 && !/\s$/.test(before);
+  const needTrail = after.length > 0 && !/^\s/.test(after);
+  const insert = (needLead ? " " : "") + token + (needTrail ? " " : "");
+  draft.value = before + insert + after;
+  onDraftInput();
+  const caret = (before + insert).length;
+  void Promise.resolve().then(() => {
+    const e = exprInput.value;
+    if (!e) return;
+    e.focus();
+    e.setSelectionRange(caret, caret);
+  });
+}
+
 /* ── Exclude null ───────────────────────────────────────────────────── */
 
 const excludeNull = computed(() => instance.value.exclude_null === true);
@@ -274,7 +304,7 @@ const skewedTowards = computed(() => {
         class="pool__group"
         :data-test="`pool-group-${group.axis}`"
       >
-        <span class="pool__group-name">{{ group.axis }}</span>
+        <span class="pool__group-name" :style="{ color: axisHue(group.axis) }">{{ group.axis }}</span>
         <div class="pool__chips">
           <button
             v-for="cat in group.tags"
@@ -288,6 +318,7 @@ const skewedTowards = computed(() => {
             :aria-checked="isTagTicked(cat)"
             @click="onPillClick(cat)"
           >
+            <span v-if="isTagTicked(cat)" class="cat-chip__check" aria-hidden="true">✓</span>
             {{ cat }}
             <span class="cat-chip__count">{{ categoryOptionCount(cat) }}</span>
           </button>
@@ -302,6 +333,7 @@ const skewedTowards = computed(() => {
     <!-- Advanced mode — boolean expression editor (§4.1 grammar). -->
     <div v-else class="pool__advanced">
       <input
+        ref="exprInput"
         v-model="draft"
         type="text"
         aria-label="Sub-category filter expression"
@@ -326,15 +358,51 @@ const skewedTowards = computed(() => {
           {{ draftMatchCount }} of {{ totalCount }} match
         </span>
       </div>
+      <!-- Insert-at-cursor palette (#7): grouped sub-categories + operators
+           so the user sees what they can type, like the SPA ref-filter. -->
+      <div v-if="subCategories.length > 0" class="pool__palette" data-test="pool-palette">
+        <div
+          v-for="group in pillGroups"
+          :key="group.axis"
+          class="pool__palette-group"
+        >
+          <span class="pool__palette-axis" :style="{ color: axisHue(group.axis) }">{{ group.axis }}</span>
+          <button
+            v-for="cat in group.tags"
+            :key="cat"
+            type="button"
+            class="pool__ins-chip"
+            :style="{ '--chip-hue': axisHue(group.axis) }"
+            :data-test="`pool-ins-${cat}`"
+            @click="insertToken(cat)"
+          >{{ cat }}</button>
+        </div>
+        <div class="pool__palette-ops">
+          <button
+            v-for="op in OPERATORS"
+            :key="op"
+            type="button"
+            class="pool__ins-chip pool__ins-chip--op"
+            @click="insertToken(op)"
+          >{{ op }}</button>
+        </div>
+      </div>
     </div>
 
+    <!-- Only shown when the wildcard actually has a null option to exclude
+         (#5). Native @change on the input is the source of truth (#4) — the
+         old label @click.prevent fought the checkbox's own toggle, so the
+         box never reflected the new state. -->
     <label
+      v-if="hasNullOption"
       class="pool__exclude-null"
-      :class="{ 'pool__exclude-null--hint': !hasNullOption }"
       data-test="pool-exclude-null"
-      @click.prevent="setExcludeNull(!excludeNull)"
     >
-      <input type="checkbox" :checked="excludeNull" tabindex="-1" />
+      <input
+        type="checkbox"
+        :checked="excludeNull"
+        @change="setExcludeNull(($event.target as HTMLInputElement).checked)"
+      />
       <i class="pi pi-ban" aria-hidden="true" />
       <span>Exclude null option</span>
     </label>
@@ -436,7 +504,9 @@ const skewedTowards = computed(() => {
   align-items: center;
   gap: 5px;
   padding: 4px 9px;
-  border: 1px solid var(--wp-border);
+  /* Faint axis-hue border so a group's chips read as a coloured cluster
+   * even when unselected (#9). */
+  border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 30%, var(--wp-border));
   border-radius: 999px;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
@@ -444,11 +514,16 @@ const skewedTowards = computed(() => {
   background: var(--wp-bg-deep, var(--wp-bg));
 }
 .cat-chip:hover { border-color: var(--chip-hue, var(--wp-border-soft, var(--wp-border))); }
+/* Selected: a solid hue border + 30% fill + bold + leading ✓ so "on" reads
+ * at a glance for ANY hue — the old 14% tint vanished against the grey
+ * ungrouped hue, which read as a dim, not a selection (#6). */
 .cat-chip--on {
-  border-color: color-mix(in srgb, var(--chip-hue, var(--wp-accent)) 60%, transparent);
-  color: var(--chip-hue, var(--wp-accent-text, var(--wp-text)));
-  background: color-mix(in srgb, var(--chip-hue, var(--wp-accent)) 14%, transparent);
+  border-color: var(--chip-hue, var(--wp-accent));
+  color: var(--wp-text);
+  background: color-mix(in srgb, var(--chip-hue, var(--wp-accent)) 30%, transparent);
+  font-weight: 600;
 }
+.cat-chip__check { font-size: 9px; line-height: 1; }
 .cat-chip__count {
   font: 9px var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
@@ -526,6 +601,52 @@ const skewedTowards = computed(() => {
   font: 9px var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
 }
+/* Insert-at-cursor palette under the advanced expression input (#7). */
+.pool__palette {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
+}
+.pool__palette-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.pool__palette-axis {
+  flex: 0 0 auto;
+  min-width: 40px;
+  font: 600 8px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.pool__palette-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
+}
+.pool__ins-chip {
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 35%, var(--wp-border));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wp-text-muted, var(--wp-text2));
+  font: 10px var(--wp-font-sans);
+  cursor: pointer;
+}
+.pool__ins-chip:hover {
+  border-color: var(--chip-hue, var(--wp-accent));
+  color: var(--wp-text);
+}
+.pool__ins-chip--op {
+  font-family: var(--wp-font-mono);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
 .pool__exclude-null {
   display: inline-flex;
   align-items: center;
@@ -536,9 +657,6 @@ const skewedTowards = computed(() => {
   cursor: pointer;
 }
 .pool__exclude-null .pi { font-size: 10px; }
-/* No null option to exclude on this wildcard — keep the control present
- * (it round-trips a stored flag) but dim it so it reads as inert. */
-.pool__exclude-null--hint { opacity: 0.55; }
 .pool__opts {
   display: flex;
   flex-direction: column;

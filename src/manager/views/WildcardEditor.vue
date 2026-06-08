@@ -362,6 +362,15 @@ function chipStyle(tag: string): Record<string, string> {
   return { "--chip-hue": tagHue(tag) };
 }
 
+/** Hue for a whole group box, keyed by axis NAME (vs `tagHue`, keyed by a
+ *  member tag). Drives the coloured group header + left accent so each axis
+ *  reads as a distinct colour cluster (#8). OTHER_AXIS stays neutral. */
+function axisHue(axis: string): string {
+  if (axis === OTHER_AXIS) return "var(--wp-text-dim, var(--wp-text3))";
+  const idx = Object.keys(tagGroups.value).indexOf(axis);
+  return AXIS_HUES[(idx < 0 ? 0 : idx) % AXIS_HUES.length];
+}
+
 /** How many options carry this tag — the pill's `(count)` badge. */
 function tagUsageCount(tag: string): number {
   return options.value.filter((o) => (o.sub_categories ?? []).includes(tag)).length;
@@ -1267,6 +1276,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             :key="group.axis"
             class="subcat-group"
             :class="{ 'subcat-group--drop': dragOverAxis === group.axis && draggedTag !== null }"
+            :style="{ '--group-hue': axisHue(group.axis) }"
             data-test="subcat-group"
             @dragover.prevent="onGroupDragOver(group.axis)"
             @dragleave="onGroupDragLeave(group.axis)"
@@ -1720,6 +1730,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 }
 .subcat-group {
   border: 1px solid var(--wp-border);
+  /* Coloured left accent keyed to the axis hue so each group reads as a
+   * distinct cluster at a glance (#8). Ungrouped (--group-hue = text-dim)
+   * stays neutral. */
+  border-left: 3px solid color-mix(in srgb, var(--group-hue, var(--wp-border)) 60%, var(--wp-border));
   border-radius: var(--wp-radius);
   background: var(--wp-bg-2);
   padding: var(--wp-space-4);
@@ -1738,10 +1752,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
 }
 .subcat-group__name {
   font-size: var(--wp-text-xs);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--wp-text-dim);
+  color: color-mix(in srgb, var(--group-hue, var(--wp-text-dim)) 80%, var(--wp-text));
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--wp-radius-sm);
@@ -1791,9 +1805,9 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   align-items: center;
   gap: 6px;
   padding: 3px 4px 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--chip-hue) 45%, var(--wp-border));
+  border: 1px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--chip-hue) 12%, var(--wp-bg-1));
+  background: color-mix(in srgb, var(--chip-hue) 17%, var(--wp-bg-1));
   font-size: var(--wp-text-sm);
   line-height: 1;
 }
@@ -2077,8 +2091,17 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   border-radius: 4px;
   color: var(--chip-hue);
 }
+/* Selected row: tint the whole toggle + bold it + fill the check box so
+ * the "on" state reads at a glance, independent of the (possibly grey)
+ * axis hue — the prior 22%-tint-on-the-box-only was near-invisible. */
+.opt-tags__toggle.is-on {
+  background: color-mix(in srgb, var(--chip-hue) 18%, var(--wp-bg-2));
+  color: var(--wp-text);
+  font-weight: 600;
+}
 .opt-tags__toggle.is-on .opt-tags__toggle-box {
-  background: color-mix(in srgb, var(--chip-hue) 22%, transparent);
+  background: var(--chip-hue);
   border-color: var(--chip-hue);
+  color: var(--wp-bg-1);
 }
 </style>

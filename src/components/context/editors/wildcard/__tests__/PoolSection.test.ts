@@ -58,6 +58,13 @@ describe("PoolSection grouped quick pills", () => {
     expect(w.find('[data-test="expr-input"]').exists()).toBe(true);
   });
 
+  it("advanced palette inserts a sub-category token at the cursor (#7)", async () => {
+    const w = mount(PoolSection, { props: { module } });
+    await w.get('[data-test="pool-advanced"]').trigger("click");
+    await w.get('[data-test="pool-ins-feline"]').trigger("click");
+    expect(lastPatch(w).instance?.category_filter).toBe("feline");
+  });
+
   it("ticking two tags in the same group ORs them inside parens", async () => {
     const w = mount(PoolSection, { props: { module } });
     await w.get('[data-test="cat-chip-feline"]').trigger("click");
@@ -155,18 +162,33 @@ describe("PoolSection advanced expression editor", () => {
 });
 
 describe("PoolSection exclude-null toggle", () => {
+  // The toggle only renders when the wildcard has a null option (#5), so
+  // append one to the fixture for the toggle/reflect cases.
+  function withNullOption(m: ModuleEntry): ModuleEntry {
+    (m.payload as { options: Array<Record<string, unknown>> }).options.push({
+      id: "n", value: "", weight: 1, is_null: true,
+    });
+    return m;
+  }
+
   it("emits exclude_null=true when toggled on", async () => {
-    const w = mount(PoolSection, { props: { module: makeModule() } });
-    await w.get('[data-test="pool-exclude-null"]').trigger("click");
+    const w = mount(PoolSection, { props: { module: withNullOption(makeModule()) } });
+    // Native change on the checkbox is the source of truth (#4).
+    await w.get('[data-test="pool-exclude-null"] input').setValue(true);
     expect(lastPatch(w).instance?.exclude_null).toBe(true);
   });
 
   it("reflects an existing exclude_null instance value", () => {
     const w = mount(PoolSection, {
-      props: { module: makeModule({ instance: { exclude_null: true } }) },
+      props: { module: withNullOption(makeModule({ instance: { exclude_null: true } })) },
     });
     const cb = w.get<HTMLInputElement>('[data-test="pool-exclude-null"] input').element;
     expect(cb.checked).toBe(true);
+  });
+
+  it("hides the toggle entirely when the wildcard has no null option (#5)", () => {
+    const w = mount(PoolSection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="pool-exclude-null"]').exists()).toBe(false);
   });
 });
 

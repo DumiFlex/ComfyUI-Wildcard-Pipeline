@@ -28,6 +28,7 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         # (keeps the parity guard green); the engine resolver already
         # reads it directly.
         "category_filter": "string",
+        "exclude_null": "boolean",
         "locked_seed": "number",
         "internal": "boolean",
         # `mode` and `pinned_option_id` removed in v2 — resolve mode is

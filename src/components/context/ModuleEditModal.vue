@@ -141,7 +141,7 @@ function onConfirmDialogCancel(): void {
  * it's still on v1 and doesn't separate runtime from overrides.
  */
 const RESET_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]> = {
-  wildcard: ["enabled_options", "option_weights", "category_filter"],
+  wildcard: ["enabled_options", "option_weights", "category_filter", "exclude_null"],
   fixed_values: ["values_overrides", "enabled_options"],
   combine: ["template_override", "variable_binding"],
   derivation: [
