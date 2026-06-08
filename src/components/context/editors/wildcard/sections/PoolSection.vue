@@ -513,6 +513,12 @@ const skewedTowards = computed(() => {
 
     <div class="pool__summary" data-test="pool-summary">
       <strong>{{ enabledCount }} of {{ totalCount }}</strong> enabled
+      <template v-if="multiActive">
+        <!-- SP2a: surface the pick count so the per-option % reads as a
+             per-draw share, not "chance this is the sole pick". -->
+        <span class="pool__summary-dot">·</span>
+        picks <strong data-test="pool-summary-picks">{{ pickMin }}–{{ pickMax }}</strong>
+      </template>
       <template v-if="skewedTowards">
         <span class="pool__summary-dot">·</span>
         skewed toward <strong>{{ skewedTowards }}</strong>

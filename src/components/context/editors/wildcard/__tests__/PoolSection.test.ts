@@ -84,6 +84,20 @@ describe("PoolSection pick-count (SP2a)", () => {
     const cb = w.get('[data-test="pool-exclude-null"] input');
     expect((cb.element as HTMLInputElement).disabled).toBe(true);
   });
+
+  it("pool summary surfaces the pick range when multi-pick (SP2a)", () => {
+    const w = mount(PoolSection, {
+      props: { module: makeModule({ instance: { pick_min: 1, pick_max: 3 } } as Partial<ModuleEntry>) },
+    });
+    const picks = w.find('[data-test="pool-summary-picks"]');
+    expect(picks.exists()).toBe(true);
+    expect(picks.text()).toBe("1–3");
+  });
+
+  it("pool summary omits the pick range in single-pick mode", () => {
+    const w = mount(PoolSection, { props: { module: makeModule() } });
+    expect(w.find('[data-test="pool-summary-picks"]').exists()).toBe(false);
+  });
 });
 
 describe("PoolSection grouped quick pills", () => {
