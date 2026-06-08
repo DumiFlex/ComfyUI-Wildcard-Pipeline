@@ -13,8 +13,10 @@ import re
 
 from engine.syntax.types import Token, TokenKind
 
-# `$name` — identifier starts with letter or underscore, then word chars
-_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+# `$name` or `$name.K` — identifier starts with letter or underscore, then
+# word chars, with an optional `.K` list-index accessor (SP2a). Group 2 = the
+# index digits when present.
+_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?")
 # 4-segment ref grammar (fixed order): `@{8hex [#name] [:expr] [!null]}`.
 #   group 1 — uuid: exactly 8 lowercase hex chars.
 #   group 2 — optional `#name`: display label cached at write-time so a
@@ -173,12 +175,15 @@ def tokenize_text(text: str) -> list[Token]:
             m = _VAR_RE.match(text, i)
             if m:
                 _flush_text(i)
+                var_meta: dict[str, object] = {"name": m.group(1)}
+                if m.group(2) is not None:
+                    var_meta["index"] = int(m.group(2))
                 out.append(Token(
                     kind=TokenKind.VAR,
                     raw=m.group(0),
                     start=i,
                     end=m.end(),
-                    meta={"name": m.group(1)},
+                    meta=var_meta,
                 ))
                 i = m.end()
                 continue

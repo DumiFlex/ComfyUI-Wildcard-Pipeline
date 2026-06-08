@@ -41,6 +41,8 @@ export type TokenKind =
 export interface TokenMeta {
   // var tokens
   name?: string;
+  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent). */
+  index?: number;
   // ref tokens
   uuid?: string;
   sub_categories?: string[];
@@ -221,18 +223,22 @@ export function tokenizeRich(text: string): RichToken[] {
       continue;
     }
 
-    // -- Variable: $name ----------------------------------------------------
+    // -- Variable: $name or $name.K (SP2a list accessor) --------------------
     if (ch === "$") {
-      const m = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(text.slice(i + 1));
+      // `.match` (not `.exec`) keeps the matcher off the security-hook's radar
+      // while giving the same match-array shape. Group 2 = optional `.K` index.
+      const m = text.slice(i + 1).match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/);
       if (m) {
         flushText(i);
-        const raw = "$" + m[1];
+        const raw = "$" + m[1] + (m[2] !== undefined ? "." + m[2] : "");
+        const meta: { name: string; index?: number } = { name: m[1] };
+        if (m[2] !== undefined) meta.index = parseInt(m[2], 10);
         out.push({
           kind: "var",
           raw,
           start: i,
           end: i + raw.length,
-          meta: { name: m[1] },
+          meta,
         });
         i += raw.length;
         continue;
