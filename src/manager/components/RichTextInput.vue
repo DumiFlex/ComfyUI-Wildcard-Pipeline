@@ -1297,7 +1297,10 @@ function readHostAsText(): string {
         // from the legacy `subCategories` body).
         out += serialiseRefAtom(atom);
       } else if (atom.kind === "var") {
-        out += "$" + atom.name;
+        // SP2a: keep the `.K` list accessor (matches serialiseAtomsLocal +
+        // atomicEditorModel.serialise). Dropping it here silently rewrote
+        // `$mood.0` -> `$mood` on every host re-read (input / blur / settle).
+        out += "$" + atom.name + (atom.index != null ? "." + atom.index : "");
       }
       continue;
     }
@@ -1343,7 +1346,11 @@ function onHostInput(ev?: Event): void {
   }
 }
 
-const SETTLE_DELIMITERS = /[\s,;:./()[\]{}!?]/;
+// NB: `.` is deliberately NOT a settle delimiter (SP2a). A var's `.K` list
+// accessor (`$mood.0`) types the `.` before the digit; settling on `.` would
+// chipify `$mood` prematurely and strand the accessor. `.` settles one
+// boundary later (on the following space/comma/etc) instead.
+const SETTLE_DELIMITERS = /[\s,;:/()[\]{}!?]/;
 
 /** Re-parse the host's raw text into atoms, preserving the caret in
  *  raw-text space. Chipifies any complete `$name` / `@{uuid}` tokens
@@ -1769,7 +1776,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     // would be eaten whole by a single Backspace — user reported.
     const chipRegex = props.surface === "wildcard"
       ? /(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})$/
-      : /(\$[A-Za-z_][A-Za-z0-9_]*)$/;
+      : /(\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?)$/;  // SP2a: `(?:\.\d+)?` = `.K` accessor
     const chipMatch = before.match(chipRegex);
     if (chipMatch) {
       // Escape-boundary guard: end-anchored regex scans backwards and
@@ -1828,7 +1835,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
     const after = rawText.slice(rawCaret);
     const chipRegex = props.surface === "wildcard"
       ? /^(@\{[0-9a-f]{8}(?:#[^#:}@{]*)?(?::[^}]*)?\})/
-      : /^(\$[A-Za-z_][A-Za-z0-9_]*)/;
+      : /^(\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?)/;  // SP2a: `(?:\.\d+)?` = `.K` accessor
     const chipMatch = after.match(chipRegex);
     if (chipMatch) {
       // Escape-boundary guard (mirror of Backspace path): the chip

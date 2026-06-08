@@ -539,6 +539,74 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
+  // --- SP2a: $var.K list-accessor chip stability ---
+
+  it("preserves the .K accessor when a $mood.0 chip round-trips through readHostAsText", async () => {
+    // Bug A regression: readHostAsText dropped atom.index, so any edit that
+    // re-read the host (input/blur/settle) silently rewrote `$mood.0`→`$mood`.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "a $mood.0 b", surface: "combine", varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const spans = (host.element as HTMLElement).querySelectorAll(".wp-rt__text");
+    const trailing = spans[spans.length - 1];
+    trailing.textContent = " bz";
+    await host.trigger("input");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("a $mood.0 bz");
+    wrap.unmount();
+  });
+
+  it("Backspace after a $mood.0 chip deletes the whole accessor atomically", async () => {
+    // Bug B regression: the chip-delete regex stopped at the identifier, so
+    // `$mood.0` fell through to single-char delete (removing `0`→`$mood.`).
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "a $mood.0 b", surface: "combine", varSuggestions: ["mood"] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    const spans = host.querySelectorAll(".wp-rt__text");
+    const trailing = spans[spans.length - 1];
+    const tn = trailing.firstChild;
+    const range = document.createRange();
+    if (tn) range.setStart(tn, 0);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    if (tn) sel?.addRange(range);
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("a  b");
+    wrap.unmount();
+  });
+
+  it("typing $mood.0 does not chip prematurely on the dot; settles on the next boundary", async () => {
+    // Symptom #1 regression: `.` was a settle delimiter, so `$mood` chipped
+    // the instant the user typed `.`, stranding the accessor. `.` is no
+    // longer a settle char — the token waits for the digit + a real boundary,
+    // then chips as a single `$mood.0`.
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "", surface: "combine", varSuggestions: [] },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host");
+    const span = (host.element as HTMLElement).querySelector(".wp-rt__text") as HTMLElement;
+    span.textContent = "$mood.";
+    await host.trigger("input", { inputType: "insertText", data: "." });
+    expect(wrap.findAll(".wp-refchip--var")).toHaveLength(0);  // no premature chip
+    span.textContent = "$mood.0 ";
+    await host.trigger("input", { inputType: "insertText", data: " " });
+    await flushPromises();
+    const chips = wrap.findAll(".wp-refchip--var");
+    expect(chips.length).toBe(1);
+    expect(chips[0].text()).toContain("$mood.0");
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("$mood.0 ");
+    wrap.unmount();
+  });
+
   it.skip("OBSOLETE — arrow keys defer to native browser chip-skip handling", () => {
     // The previous implementation preventDefaulted arrow keys at chip
     // boundaries and tried to position the caret manually. Live QA
