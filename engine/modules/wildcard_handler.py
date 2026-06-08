@@ -45,6 +45,19 @@ _MAX_IDENT_LEN = 64
 # site at line ~376 unchanged.
 
 
+def _coerce_pick_int(value: Any, default: int) -> int:
+    """SP2a: coerce a pick-count field (`pick_min`/`pick_max`) to int, falling
+    back to `default` on junk. The engine is reachable by hand-built and legacy
+    instances, so a non-numeric value must degrade to single-pick rather than
+    raise out of resolve() — mirrors the locked_seed coercion guard."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _pick_weighted(options: list[dict[str, Any]], rng) -> dict[str, Any] | None:
     """Pick one option weighted by `weight`. Uses rng (no module-global random)."""
     if not options:
@@ -96,6 +109,23 @@ def _apply_constraint_to_options(
     # Primary tag = first of sub_categories (SP1 stopgap; SP3 multiplies).
     src_subs = source_pick.get("sub_categories") or []
     src_sub = src_subs[0] if src_subs else None
+
+    # SP2a guard: a multi-pick SOURCE recorded a `values` list (>1) + a UNION
+    # of every pick's tags, but this applier still keys the matrix on a single
+    # primary tag (src_sub) and exceptions on the literal joined value. So only
+    # the first picked option's tag drives the matrix, and value-pair
+    # exceptions never match the joined `src_value`. Warn once (not per option)
+    # so the user isn't silently misled; true per-pick application is SP3.
+    src_values = source_pick.get("values")
+    if (
+        isinstance(src_values, list)
+        and len(src_values) > 1
+        and adjustment_warnings is not None
+    ):
+        adjustment_warnings.append({
+            "type": "constraint_source_multi_pick",
+            "src_values": list(src_values),
+        })
 
     # Index exceptions by (source_value, target_value) for O(1) lookup.
     # Empty string is a valid key — it's the null-option marker (a
@@ -532,8 +562,8 @@ class WildcardHandler(ModuleHandler):
         # the multi-pick pool (exclude_null is single-pick-only); "maybe
         # nothing" is min=0. (1, 1) falls through to the single-pick path
         # below unchanged — same RNG draws, so existing locked seeds reproduce.
-        raw_min = int(instance["pick_min"]) if instance.get("pick_min") is not None else 1
-        raw_max = int(instance["pick_max"]) if instance.get("pick_max") is not None else raw_min
+        raw_min = _coerce_pick_int(instance.get("pick_min"), 1)
+        raw_max = _coerce_pick_int(instance.get("pick_max"), raw_min)
         lo = max(0, min(raw_min, raw_max))
         hi = max(lo, raw_max)
         if not (lo == 1 and hi == 1):

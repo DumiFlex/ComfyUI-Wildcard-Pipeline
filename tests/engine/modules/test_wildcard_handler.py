@@ -119,6 +119,53 @@ def test_single_pick_default_binds_string():
     assert isinstance(out["c"], str)
 
 
+def test_constraint_source_multi_pick_emits_warning():
+    """SP2a guard: when a constraint SOURCE was a multi-pick (recorded a
+    `values` list of >1), the applier only honors the first tag and can't
+    match value-pair exceptions, so it must surface a warning. Full per-pick
+    constraint application is deferred to SP3."""
+    from engine.modules.wildcard_handler import _apply_constraint_to_options
+
+    opts = [{"id": "t1", "value": "x", "weight": 1, "sub_categories": ["a"]}]
+    constraint = {"matrix": {}, "exceptions": []}
+
+    warns: list = []
+    multi_src = {
+        "value": "red, blue", "values": ["red", "blue"],
+        "sub_categories": ["warm", "cool"],
+    }
+    _apply_constraint_to_options(opts, constraint, multi_src, warns)
+    assert any(w["type"] == "constraint_source_multi_pick" for w in warns)
+
+    # Single-pick source (no `values` list) must NOT warn.
+    warns2: list = []
+    single_src = {"value": "red", "sub_categories": ["warm"]}
+    _apply_constraint_to_options(opts, constraint, single_src, warns2)
+    assert not any(w["type"] == "constraint_source_multi_pick" for w in warns2)
+
+
+def test_multi_pick_non_numeric_fields_dont_crash():
+    """SP2a hardening: junk pick_min/pick_max (hand-built or legacy instance)
+    must degrade, never raise a ValueError/TypeError out of resolve()."""
+    from engine.syntax.types import ListVar
+
+    # Both junk -> defaults collapse to (1, 1) -> single-pick string.
+    out = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": "abc", "pick_max": []},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out["c"], str)
+
+    # Junk min + valid max=3 -> min defaults to 1 -> multi (1, 3) still engages.
+    out2 = WildcardHandler.resolve(
+        _payload(list(_MULTI)),
+        instance={"variable_binding": "c", "pick_min": "xyz", "pick_max": 3},
+        ctx=_ctx(seed=42),
+    )
+    assert isinstance(out2["c"], ListVar)
+
+
 def test_multi_pick_min_zero_can_be_empty():
     from engine.syntax.types import ListVar
     out = WildcardHandler.resolve(
