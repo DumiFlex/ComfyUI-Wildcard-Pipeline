@@ -15,7 +15,7 @@ import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
-import { applyVarAccessor } from "../../../../../widgets/richTokenize";
+import { applyVarAccessor, type ResolvedValue } from "../../../../../widgets/richTokenize";
 
 // Async-import the rich-text editor so the chunk is split into its own
 // asset and only pulled in when the combine instance modal opens. Bundle
@@ -35,7 +35,7 @@ const props = withDefaults(
      *  with `$var` substitutions visible at edit time so users see the
      *  same string the assembler will read. Empty map = preview pane
      *  hidden (nothing to substitute). */
-    upstreamResolved?: Record<string, string>;
+    upstreamResolved?: Record<string, ResolvedValue>;
     /** Vars produced by other modules in the SAME Context node. */
     siblingVars?: string[];
   }>(),

@@ -277,4 +277,17 @@ describe("combine TemplateSection", () => {
     expect(pane.text()).toBe("red hat");
     expect(pane.find(".tpl-tok--var-resolved").text()).toBe("red");
   });
+
+  it("indexes a list-valued $mood.0 in the resolved preview (SP2a)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({ payload: { output_var: "out", template: "$mood.0 | $mood" } }),
+        upstreamResolved: { mood: { items: ["serene", "sleepy"], sep: ", " } },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    // `$mood.0` -> first item "serene"; bare `$mood` -> joined list. The whole
+    // list never leaks into the `.0` slot.
+    expect(pane.text()).toBe("serene | serene, sleepy");
+  });
 });

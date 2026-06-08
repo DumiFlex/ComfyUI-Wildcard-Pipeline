@@ -7,6 +7,7 @@ import {
   emptyContextValue, newModuleId, newRowUid,
   type ContextWidgetValue, type ModuleEntry,
 } from "../../widgets/_shared";
+import { type ResolvedValue } from "../../widgets/richTokenize";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
 import type { PairingBadge, RowPairings } from "../../extension/constraint-pairs";
 import {
@@ -99,13 +100,13 @@ const props = withDefaults(defineProps<{
    *  Drives the combine modal's live-preview pane so users see the
    *  template with vars substituted (e.g. `red portrait` instead of
    *  `$style portrait`) at edit time. Optional for headless mounts. */
-  upstreamResolved?: Record<string, string>;
+  upstreamResolved?: Record<string, ResolvedValue>;
   /** Per-module resolved reader — given a moduleId, returns the map of
    *  vars visible from that module's perspective (upstream chain +
    *  earlier siblings, excluding the module itself). Modal uses this
    *  for the combine live preview because static `upstreamResolved`
    *  alone misses sibling bindings produced in the same node. */
-  localResolvedReader?: (moduleId?: string) => Record<string, string>;
+  localResolvedReader?: (moduleId?: string) => Record<string, ResolvedValue>;
   /** Wildcard module uuids reachable upstream of this node. Used by
    *  the constraint-ordering scanner to validate constraint
    *  source/target references — sources in the upstream chain are
@@ -701,7 +702,7 @@ const editingModuleViaOptionPairs = computed<Map<string, PairingBadge[]>>(() => 
  *  prop when the per-module reader isn't wired (legacy mounts /
  *  headless tests). Recomputed on every editingIdx change so the
  *  preview pane reflects the right perspective. */
-const resolvedForEditing = computed<Record<string, string>>(() => {
+const resolvedForEditing = computed<Record<string, ResolvedValue>>(() => {
   const m = editingModule.value;
   if (props.localResolvedReader && m) {
     return props.localResolvedReader(m.id);

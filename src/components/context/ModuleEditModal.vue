@@ -2,6 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
+import { type ResolvedValue } from "../../widgets/richTokenize";
 import {
   INSTANCE_FIELDS_PER_KIND,
   type InstanceFieldKey,
@@ -25,7 +26,7 @@ const props = defineProps<{
   upstreamVars?: string[];
   /** Resolved upstream `$name → value` map. Combine modal uses this
    *  to render a live preview pane with vars substituted. */
-  upstreamResolved?: Record<string, string>;
+  upstreamResolved?: Record<string, ResolvedValue>;
   /** Variable names defined by OTHER modules in the same node. */
   siblingVars?: string[];
   /** Other modules in the same WP_Context node — used by the constraint

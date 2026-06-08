@@ -91,7 +91,7 @@ interface UpstreamSnapshot {
   chain: unknown[][];
   /** Sync fallback: client-side option-[0] resolution. Shown until
    *  the API resolves OR when the API is unreachable. */
-  fallbackResolved: Record<string, string>;
+  fallbackResolved: Record<string, ResolvedValue>;
   /** Bindings contributed by upstream WP_ContextInjector nodes. The
    *  preview API doesn't simulate injectors — these keys must come
    *  from the static fallback even when api results are available,
@@ -312,7 +312,7 @@ export function mountHelper(node: AssemblerNode) {
               }
             } catch { /* malformed, treat as empty */ }
           }
-          const fallbackResolved: Record<string, string> = {};
+          const fallbackResolved: Record<string, ResolvedValue> = {};
           for (const [k, v] of Object.entries(rawResolved)) {
             if (k.startsWith("__")) continue;
             if (internalNames.has(k)) continue;

@@ -12,6 +12,7 @@
  * override, locked seed, hide-from-prompt.
  */
 import { computed } from "vue";
+import { type ResolvedValue } from "../../../../widgets/richTokenize";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import TemplateSection from "./sections/TemplateSection.vue";
@@ -30,7 +31,7 @@ const props = withDefaults(
     upstreamVars?: string[];
     /** Resolved upstream-var snapshot — drives the TemplateSection's
      *  live preview pane with substituted values. */
-    upstreamResolved?: Record<string, string>;
+    upstreamResolved?: Record<string, ResolvedValue>;
     /** Sibling var names produced by other modules in this same Context
      *  node. Combined with upstreamVars to populate the dropdown. */
     siblingVars?: string[];

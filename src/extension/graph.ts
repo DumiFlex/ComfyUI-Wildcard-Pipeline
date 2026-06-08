@@ -4,7 +4,7 @@ import {
   parseWidgetJson,
   type ContextWidgetValue,
 } from "../widgets/_shared";
-import { applyVarAccessor } from "../widgets/richTokenize";
+import { applyVarAccessor, type ResolvedValue } from "../widgets/richTokenize";
 // probability.ts is a pure (no-Vue) module despite its path — reused here so
 // the static multi-pick representative mirrors the engine pool exactly.
 import {
@@ -314,7 +314,7 @@ function pipelineUpstreamOf(
 export function collectUpstreamResolved(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
-): Record<string, string> {
+): Record<string, ResolvedValue> {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
   const chain: LiteNodeLike[] = [];
@@ -350,7 +350,7 @@ export function collectLocalResolvedForModule(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
   excludeModuleId?: string,
-): Record<string, string> {
+): Record<string, ResolvedValue> {
   // Step 1: pull upstream-only resolution as the base ctx.
   const ctx = collectUpstreamResolved(rootGraph, node);
 
@@ -779,7 +779,7 @@ interface MinimalWildcard {
   var_binding?: string;
 }
 
-function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
+function resolveChainStatic(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
   // First pass: collect every wildcard payload across the whole chain
   // into one `id → payload` catalog so `@{}` refs inside option values
   // can resolve to picked-but-not-yet-walked siblings as well as
@@ -835,7 +835,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
   // never fire). Bypass routes input → output topologically; the
   // walker already gets that for free because the link still points
   // at the bypassed node — we just skip its OWN contributions.
-  const ctx: Record<string, string> = {};
+  const ctx: Record<string, ResolvedValue> = {};
   for (let i = chain.length - 1; i >= 0; i--) {
     const n = chain[i];
     if (isSkippedMode(n)) continue;
@@ -923,7 +923,7 @@ function resolveChainStatic(chain: LiteNodeLike[]): Record<string, string> {
 }
 
 function writeBindings(
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
   m: ContextWidgetValue["modules"][number],
   catalog: Map<string, MinimalWildcard>,
 ): void {
@@ -1015,7 +1015,10 @@ function writeBindings(
         for (let i = 0; i < n; i++) {
           items.push(expandValue(String(pool[i].value ?? ""), ctx, catalog, 0));
         }
-        ctx[binding] = items.join(sep);
+        // Bind a STRUCTURED ListVar (not a pre-joined string) so a downstream
+        // `$mood.0` can index the first item — `applyVarAccessor` joins it for
+        // a bare `$mood`. Pre-joining lost the per-index access.
+        ctx[binding] = { items, sep };
       }
     }
     return;
@@ -1081,18 +1084,21 @@ function writeBindings(
 
 function matchDerivationCondition(
   cond: { var?: string; op?: string; value?: string } | undefined,
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
 ): boolean {
   if (!cond) return false;
   const varName = cond.var ?? "";
   const op = cond.op ?? "";
   const value = cond.value ?? "";
-  // Presence-check ops short-circuit before reading the stored value.
+  // SP2a: normalise the stored value to its string form (a multi-pick var is
+  // a ListVar — join it; mirrors engine derivation_handler) so the string ops
+  // below never run on an object.
+  const actual = applyVarAccessor(ctx[varName], undefined);
+  // Presence-check ops short-circuit on key presence + non-empty value.
   if (op === "exists") return varName in ctx;
   if (op === "not_exists") return !(varName in ctx);
-  if (op === "is_set") return varName in ctx && ctx[varName] !== "";
-  if (op === "is_unset") return !(varName in ctx) || ctx[varName] === "";
-  const actual = ctx[varName] ?? "";
+  if (op === "is_set") return varName in ctx && actual !== "";
+  if (op === "is_unset") return !(varName in ctx) || actual === "";
   if (op === "equals") return actual === value;
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);
@@ -1104,7 +1110,7 @@ function matchDerivationCondition(
 
 function applyDerivationAction(
   action: { target_var?: string; mode?: string; value?: string } | undefined,
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
   catalog: Map<string, MinimalWildcard>,
 ): void {
   if (!action) return;
@@ -1113,14 +1119,17 @@ function applyDerivationAction(
   const mode = action.mode ?? "replace";
   const raw = action.value ?? "";
   const newValue = expandValue(raw, ctx, catalog, 0);
+  // SP2a: read the existing target value in string form (join a ListVar)
+  // before append/prepend so we never concatenate onto "[object Object]".
+  const cur = applyVarAccessor(ctx[target], undefined);
   if (mode === "replace") ctx[target] = newValue;
-  else if (mode === "append") ctx[target] = (ctx[target] ?? "") + newValue;
-  else if (mode === "prepend") ctx[target] = newValue + (ctx[target] ?? "");
+  else if (mode === "append") ctx[target] = cur + newValue;
+  else if (mode === "prepend") ctx[target] = newValue + cur;
 }
 
 function expandValue(
   raw: string,
-  ctx: Record<string, string>,
+  ctx: Record<string, ResolvedValue>,
   catalog: Map<string, MinimalWildcard>,
   depth: number,
 ): string {

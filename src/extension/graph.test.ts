@@ -678,9 +678,10 @@ describe("collectLocalResolvedForModule", () => {
       },
     ]);
     const result = collectLocalResolvedForModule(graph, ctx);
-    // Static preview isn't seed-faithful — show the first N joined (runtime
-    // rolls a seeded N via the engine; the API preview shows the real roll).
-    expect(result.mood).toBe("red / blue");
+    // Static preview isn't seed-faithful — bind a STRUCTURED ListVar of the
+    // first N options so downstream `.K` can index it (runtime rolls a seeded
+    // N via the engine; the API preview shows the real roll).
+    expect(result.mood).toEqual({ items: ["red", "blue"], sep: " / " });
   });
 
   it("multi-pick representative mirrors the engine pool — drops null + filtered options (SP2a)", () => {
@@ -700,7 +701,30 @@ describe("collectLocalResolvedForModule", () => {
     // Pool after the engine filter: null dropped, only "warm" survives
     // (serene + fierce; sleepy is cold) — NOT the raw first-N (which leaked
     // the null's "" leading comma + the filtered-out sleepy).
-    expect(result.mood).toBe("serene, fierce");
+    expect(result.mood).toEqual({ items: ["serene", "fierce"], sep: ", " });
+  });
+
+  it("a combine $mood.0 indexes the first picked item, not the whole list (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        instance: { pick_min: 1, pick_max: 3, pick_separator: ", " },
+        payload: { var_binding: "mood", options: [
+          { id: "a", value: "serene", sub_categories: [] },
+          { id: "b", value: "sleepy", sub_categories: [] },
+          { id: "c", value: "fierce", sub_categories: [] },
+        ] },
+      },
+      {
+        id: "cb000001", type: "combine", enabled: true, meta: { name: "" }, entries: [],
+        payload: { template: "$mood.0 + $mood", output_var: "scene" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // mood = ListVar([serene, sleepy, fierce]). `$mood.0` -> "serene" (first
+    // item); bare `$mood` -> the joined list. Previously `$mood.0` wrongly
+    // showed the whole joined list (the bug the user reported).
+    expect(result.scene).toBe("serene + serene, sleepy, fierce");
   });
 
   it("resolves a $style.0 accessor in a combine template without leaking the .K literal (SP2a)", () => {

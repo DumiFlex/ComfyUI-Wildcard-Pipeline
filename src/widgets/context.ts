@@ -20,15 +20,23 @@ import {
 import { collectCrossNodePairingsFull } from "../extension/cross-node-pairings";
 import type { PairingBadge, RowPairings } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
+import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 
 /** Shallow-equal map comparator for `reactiveFromGraph` so the
  *  upstream-resolved snapshot only triggers a re-render when its
- *  contents actually change (not just object identity). */
-function stringMapEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+ *  contents actually change (not just object identity). SP2a: values may be
+ *  a `ListVarValue` object (multi-pick) — compare by string form so a freshly
+ *  rebuilt list with identical contents doesn't churn the snapshot each poll. */
+function stringMapEqual(
+  a: Record<string, ResolvedValue>,
+  b: Record<string, ResolvedValue>,
+): boolean {
   if (a === b) return true;
   const ak = Object.keys(a);
   if (ak.length !== Object.keys(b).length) return false;
-  for (const k of ak) if (a[k] !== b[k]) return false;
+  for (const k of ak) {
+    if (applyVarAccessor(a[k], undefined) !== applyVarAccessor(b[k], undefined)) return false;
+  }
   return true;
 }
 
@@ -302,7 +310,7 @@ export function create(node: ContextNode, inputName: string) {
        *  binding). Drives the combine modal's live-preview pane.
        *  Function (vs static prop) because the answer depends on
        *  which module the modal is currently editing. */
-      function localResolvedReader(moduleId?: string): Record<string, string> {
+      function localResolvedReader(moduleId?: string): Record<string, ResolvedValue> {
         const startGraph =
           (node as unknown as { graph?: LiteGraphLike }).graph
           ?? (app.graph as unknown as LiteGraphLike);
