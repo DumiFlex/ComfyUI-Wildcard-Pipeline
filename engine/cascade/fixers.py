@@ -37,6 +37,7 @@ import sqlite3
 from typing import Any
 
 from engine.db.repositories import BundleRepository, ModuleRepository
+from engine.syntax.subcat_filter import ParseError as _ParseError
 from engine.syntax.subcat_filter import parse as _parse_subcat
 from engine.syntax.subcat_filter import reads_as as _reads_as
 
@@ -98,6 +99,24 @@ def _expr_tags(ast: dict[str, Any] | None) -> set[str]:
 
     walk(ast)
     return out
+
+
+def collect_tags(expr: str | None) -> set[str]:
+    """Distinct sub-category tags referenced by a filter *expr* string.
+
+    Mirror of TS ``collectTags`` (src/manager/cascade/subcatExprCascade.ts).
+    Empty or malformed expressions yield the empty set — the caller simply
+    won't link the ref; ``validate_expression`` surfaces real syntax errors
+    elsewhere. Used by the discovery scan so a rename/delete of any one tag
+    finds every ref whose boolean filter mentions it (negated tags count).
+    """
+    if not expr or not expr.strip():
+        return set()
+    try:
+        ast = _parse_subcat(expr)
+    except _ParseError:
+        return set()
+    return _expr_tags(ast)
 
 
 def _ref_expr_pattern(wildcard_id: str) -> re.Pattern[str]:

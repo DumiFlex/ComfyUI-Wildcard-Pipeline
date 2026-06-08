@@ -17,6 +17,7 @@ import re
 import sqlite3
 from typing import Any
 
+from engine.cascade.fixers import collect_tags
 from engine.db.repositories import ModuleRepository
 
 # 4-segment ref: ``@{8hex [#name] [:expr] [!null]}`` — uuid + optional
@@ -152,13 +153,15 @@ def _scan_subcat(
                 v = opt.get("value")
                 if not isinstance(v, str):
                     continue
-                # NOTE (SP1): `sub` is now the raw `:expr` segment, not a
-                # bare subcat. Equality still detects simple `@{uuid:warm}`
-                # refs; boolean-expression refs (`@{uuid:warm or cold}`)
-                # that *contain* the renamed/deleted tag are matched at the
-                # token level in Chunk E (cascade boolean-expr rewriting).
+                # SP1: `sub` is the raw `:expr` segment (the 4-segment regex
+                # already split `!null` into the null group). A boolean filter
+                # like `warm or cold` references multiple tags, so parse it and
+                # test tag membership — the same set the fixer rewrites
+                # (engine/cascade/fixers.py). Exact-string equality would miss
+                # every multi-tag / negated / parenthesized filter and make the
+                # preview undercount what the apply actually changes.
                 for uid, _name, sub, _null in _REF_REGEX.findall(v):
-                    if uid == wildcard_id and sub == subcat_name:
+                    if uid == wildcard_id and subcat_name in collect_tags(sub):
                         out.append(_ref_entry("wildcard", m, f"options[{idx}].value"))
                         break
 

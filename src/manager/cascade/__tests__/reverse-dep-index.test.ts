@@ -204,6 +204,40 @@ describe("reverse-dep-index", () => {
     expect(combineVarRefsTo(idx, "vibe").length).toBeGreaterThan(0);
   });
 
+  it("indexes every tag of a v2 boolean ref filter (multi-tag OR + !null)", () => {
+    // `@{mood:warm or intense!null}` references TWO sub-categories. The
+    // discovery index must key per-tag so rename/delete of either finds
+    // this ref. The `!null` marker is not a tag and must not leak in.
+    const v2Lib: LibraryFixture = {
+      wildcards: [
+        { id: "aaaaaaaa", name: "mood", payload: { sub_categories: ["warm", "intense"], options: [] } },
+        { id: "bbbbbbbb", name: "user", payload: { options: [
+          { id: "u1", value: "see @{aaaaaaaa:warm or intense!null} now", weight: 1 },
+        ] } },
+      ],
+      fixed_values: [], combines: [], derivations: [], constraints: [], bundles: [], categories: [],
+    };
+    const idx = buildIndex(v2Lib);
+    expect(subcatRefsTo(idx, "aaaaaaaa", "warm").map((r) => r.from_id)).toContain("bbbbbbbb");
+    expect(subcatRefsTo(idx, "aaaaaaaa", "intense").map((r) => r.from_id)).toContain("bbbbbbbb");
+    expect(subcatRefsTo(idx, "aaaaaaaa", "null")).toHaveLength(0);
+    expect(subcatRefsTo(idx, "aaaaaaaa", "warm or intense!null")).toHaveLength(0);
+  });
+
+  it("indexes the tag inside a negated v2 ref filter", () => {
+    const v2Lib: LibraryFixture = {
+      wildcards: [
+        { id: "aaaaaaaa", name: "mood", payload: { sub_categories: ["warm"], options: [] } },
+        { id: "bbbbbbbb", name: "user", payload: { options: [
+          { id: "u1", value: "x @{aaaaaaaa:not warm} y", weight: 1 },
+        ] } },
+      ],
+      fixed_values: [], combines: [], derivations: [], constraints: [], bundles: [], categories: [],
+    };
+    const idx = buildIndex(v2Lib);
+    expect(subcatRefsTo(idx, "aaaaaaaa", "warm").map((r) => r.from_id)).toContain("bbbbbbbb");
+  });
+
   it("category refs collected from category_id field", () => {
     const idxLib: LibraryFixture = {
       wildcards: [{ id: "11111111", name: "w", payload: { options: [] }, category_id: "cat1" }],

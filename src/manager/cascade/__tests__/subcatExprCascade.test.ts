@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 
-import { removeSubcatFromExpr, renameSubcatInExpr } from "../subcatExprCascade";
+import {
+  collectTags,
+  removeSubcatFromExpr,
+  renameSubcatInExpr,
+} from "../subcatExprCascade";
 
 describe("subcat expr cascade", () => {
   it("rename rewrites the token, preserving structure", () => {
@@ -28,5 +32,26 @@ describe("subcat expr cascade", () => {
   it("empty expression is a no-op", () => {
     expect(renameSubcatInExpr("", "a", "b")).toBe("");
     expect(removeSubcatFromExpr("", "a")).toBe("");
+  });
+});
+
+describe("collectTags", () => {
+  it("collects every distinct tag across operators", () => {
+    expect(collectTags("warm or intense").sort()).toEqual(["intense", "warm"]);
+    expect(collectTags("(red or pink) and not cold").sort())
+      .toEqual(["cold", "pink", "red"]);
+  });
+
+  it("collects the tag inside a negation", () => {
+    expect(collectTags("not warm")).toEqual(["warm"]);
+  });
+
+  it("dedupes repeated tags", () => {
+    expect(collectTags("warm or warm")).toEqual(["warm"]);
+  });
+
+  it("returns no tags for an empty or malformed expression", () => {
+    expect(collectTags("")).toEqual([]);
+    expect(collectTags("warm and")).toEqual([]); // parse error → no tags
   });
 });

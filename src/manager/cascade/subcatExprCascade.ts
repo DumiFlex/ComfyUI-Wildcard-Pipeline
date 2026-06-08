@@ -26,6 +26,37 @@ function mapTags(n: Ast, fn: (t: string) => string | null): Ast | null {
   return kids.length === 1 ? kids[0] : { op: n.op, kids };
 }
 
+/**
+ * Collect the distinct sub-category tags referenced by a filter expression.
+ * Used by the reverse-dependency index so a rename/delete of any single tag
+ * finds every ref whose boolean filter mentions it. Negated tags count — a
+ * `not warm` filter still depends on `warm`. A malformed expression yields no
+ * tags (the index simply won't link it; the validator surfaces the error).
+ */
+export function collectTags(expr: string): string[] {
+  let ast: Ast | null;
+  try {
+    ast = parse(expr);
+  } catch {
+    return [];
+  }
+  if (!ast) return [];
+  const out = new Set<string>();
+  const walk = (n: Ast): void => {
+    if ("tag" in n) {
+      out.add(n.tag);
+      return;
+    }
+    if (n.op === "not") {
+      walk(n.x);
+      return;
+    }
+    n.kids.forEach(walk);
+  };
+  walk(ast);
+  return [...out];
+}
+
 export function renameSubcatInExpr(expr: string, from: string, to: string): string {
   const ast = parse(expr);
   if (!ast) return "";
