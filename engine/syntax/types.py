@@ -53,6 +53,19 @@ class Token:
     meta: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class ListVar:
+    """A list-valued variable plus the separator used to join it for a bare
+    ``$name`` reference (SP2a multi-select). Produced only by a multi-select
+    wildcard; exists only inside one resolution pass — never persisted or
+    published. ``$name`` renders ``sep.join(items)``; ``$name.K`` indexes
+    (0-based; out-of-range -> "").
+    """
+
+    items: list[str]
+    sep: str
+
+
 @runtime_checkable
 class ResolveContext(Protocol):
     """Interface the resolver depends on. Construct via build_resolve_ctx in
@@ -67,8 +80,10 @@ class ResolveContext(Protocol):
     developer_mode: bool
     warnings: list[dict[str, Any]]
 
-    def get_var(self, name: str) -> str | None:
-        """Return the bound value of `name`, or None if unbound."""
+    def get_var(self, name: str) -> str | ListVar | None:
+        """Return the bound value of `name`, or None if unbound. A
+        multi-select wildcard binds a ``ListVar`` (SP2a); everything else
+        binds a ``str``."""
         ...
 
     def get_module(self, uuid: str) -> dict[str, Any] | None:

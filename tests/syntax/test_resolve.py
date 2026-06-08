@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from engine.syntax import resolve_text
-from engine.syntax.resolve import pick_k_unique
+from engine.syntax.resolve import ListVar, pick_k_unique
 from engine.syntax.types import SurfaceKind
 
 
@@ -28,7 +28,7 @@ class _FakeCtx:
     surface: SurfaceKind = "combine"
     developer_mode: bool = False
     warnings: list[dict[str, Any]] = field(default_factory=list)
-    _vars: dict[str, str] = field(default_factory=dict)
+    _vars: dict[str, Any] = field(default_factory=dict)
     _modules: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def get_var(self, name: str) -> str | None:
@@ -63,6 +63,37 @@ def test_pick_k_unique_seed_deterministic():
     a = pick_k_unique(["a", "b", "c"], [1.0, 2.0, 3.0], 2, random.Random(7))
     b = pick_k_unique(["a", "b", "c"], [1.0, 2.0, 3.0], 2, random.Random(7))
     assert a == b
+
+
+# --- list-backed variables + $x.K accessor (SP2a Chunk C) ---
+
+def test_resolve_listvar_bare_joins_with_sep():
+    ctx = _ctx(_vars={"c": ListVar(["red", "blue"], ", ")})
+    assert resolve_text("$c", ctx) == "red, blue"
+
+
+def test_resolve_listvar_accessor_indexes():
+    ctx = _ctx(_vars={"c": ListVar(["red", "blue"], ", ")})
+    assert resolve_text("$c.0", ctx) == "red"
+    assert resolve_text("$c.1", ctx) == "blue"
+
+
+def test_resolve_listvar_accessor_out_of_range_is_empty():
+    ctx = _ctx(_vars={"c": ListVar(["red"], ", ")})
+    assert resolve_text("$c.5", ctx) == ""
+
+
+def test_resolve_string_var_acts_as_one_element_list():
+    ctx = _ctx(_vars={"name": "Alice"})
+    assert resolve_text("$name", ctx) == "Alice"
+    assert resolve_text("$name.0", ctx) == "Alice"
+    assert resolve_text("$name.1", ctx) == ""
+
+
+def test_resolve_empty_listvar_renders_empty():
+    ctx = _ctx(_vars={"c": ListVar([], ", ")})
+    assert resolve_text("$c", ctx) == ""
+    assert resolve_text("$c.0", ctx) == ""
 
 
 def test_resolve_empty_string():

@@ -38,8 +38,12 @@ class _RuntimeResolveContext:
     _consumed: set[str] = field(default_factory=set)
 
     def get_var(self, name: str) -> str | None:
+        # SP2a: return the raw stored value (may be a ListVar from a
+        # multi-select wildcard); the resolver formats it. Typed str | None
+        # for the Protocol — a ListVar flows through at runtime via the
+        # Any-valued vars dict, and the resolver narrows on isinstance.
         if name in self._vars:
-            return str(self._vars[name])
+            return self._vars[name]
         return None
 
     def get_module(self, uuid: str) -> dict[str, Any] | None:

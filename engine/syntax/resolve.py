@@ -13,6 +13,7 @@ from engine.syntax.subcat_filter import parse as _parse_subcat
 from engine.syntax.tokenize import tokenize_text
 from engine.syntax.types import (
     CycleDetectedError,
+    ListVar,
     RecursionLimitExceeded,
     RefOutOfSurfaceError,
     ResolveContext,
@@ -116,7 +117,18 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
             message=f"Unknown variable ${name}",
         )
         return ""
-    return str(value)
+    # SP2a list accessor: `$name` joins a ListVar with its separator;
+    # `$name.K` indexes (0-based, out-of-range -> ""). A plain string behaves
+    # as a 1-element list so `$str.0` == `$str` and `$str.1` == "".
+    index = tok.meta.get("index")
+    if isinstance(value, ListVar):
+        if index is not None:
+            return value.items[index] if 0 <= index < len(value.items) else ""
+        return value.sep.join(value.items)
+    s = str(value)
+    if index is not None:
+        return s if index == 0 else ""
+    return s
 
 
 def _push_warning(ctx: ResolveContext, **fields) -> None:
