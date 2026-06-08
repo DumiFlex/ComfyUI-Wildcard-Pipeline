@@ -298,7 +298,7 @@ function fmtPct(p: number): string {
   >
     <span
       class="opt__check"
-      :class="{ 'opt__check--on': enabled }"
+      :class="{ 'opt__check--on': enabled && !nullDisabledInMulti }"
       data-test="opt-check"
       role="checkbox"
       :aria-checked="enabled"
@@ -311,7 +311,7 @@ function fmtPct(p: number): string {
            (8×8 inside 14px box) without the icon-font's intrinsic
            line-height inflating the glyph past the box edge. -->
       <svg
-        v-if="enabled"
+        v-if="enabled && !nullDisabledInMulti"
         class="opt__check-tick"
         width="8"
         height="8"
@@ -490,7 +490,10 @@ function fmtPct(p: number): string {
 /* Category-filtered rows are read-only — the chip controls them.
  * Show a "not-allowed" cursor + slight opacity so the user knows the
  * per-option checkbox is intentionally inert in this state. */
-.opt--filtered .opt__check {
+/* Any locked checkbox — category-filtered OR the null row in multi-pick —
+ * reads as intentionally inert: not-allowed cursor + dimmed. Keyed on
+ * aria-disabled so both lock reasons share one rule. */
+.opt__check[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -536,6 +539,13 @@ function fmtPct(p: number): string {
 .opt--off .opt__name {
   color: var(--wp-text-dim, var(--wp-text3));
   text-decoration: line-through;
+}
+/* The null chip is `display: inline-flex`, so the ancestor line-through on
+ * `.opt__name` doesn't cross into it — strike it explicitly so a disabled
+ * null row (e.g. excluded from a multi-pick pool) reads as cut-out. */
+.opt--off .opt__null-chip {
+  text-decoration: line-through;
+  opacity: 0.7;
 }
 /* Inline-syntax chips inside option values. Matches the SPA's
  * `wp-refchip` palette + icon prefix so an `@nestedName` reads the

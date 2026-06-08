@@ -309,6 +309,11 @@ describe("OptionRow", () => {
       });
       expect(w.classes()).toContain("opt--off");
       expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("true");
+      // The checkbox must not READ as checked — the bug was the glyph + tick
+      // bound to `enabled` alone, leaving a filled blue box on the disabled
+      // null row in multi-pick.
+      expect(w.find('[data-test="opt-check"]').classes()).not.toContain("opt__check--on");
+      expect(w.find(".opt__check-tick").exists()).toBe(false);
     });
 
     it("null row stays interactive when not multiActive", () => {
@@ -324,5 +329,8 @@ describe("OptionRow", () => {
       props: { option: baseOption, allOptions, instance: {}, multiActive: true },
     });
     expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("false");
+    // Not over-gated: a real (enabled, non-null) option keeps its checked
+    // glyph even while a sibling null row is locked out of the multi pool.
+    expect(w.find('[data-test="opt-check"]').classes()).toContain("opt__check--on");
   });
 });

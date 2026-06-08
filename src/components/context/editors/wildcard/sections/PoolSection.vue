@@ -553,14 +553,26 @@ const skewedTowards = computed(() => {
   color: var(--wp-text-dim, var(--wp-text3));
 }
 .pool__pick-num {
+  /* Match the per-option weight stepper (.opt__weight): same height, border,
+   * radius + suppressed native spin arrows so the two number inputs read as
+   * one control family instead of a bare browser <input type=number>. */
   width: 44px;
-  padding: 2px 4px;
+  height: 22px;
+  padding: 0 6px;
   font: 11px var(--wp-font-mono);
-  background: var(--wp-bg-soft, var(--wp-bg));
+  background: var(--wp-bg);
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: 2px;
   color: var(--wp-text);
+  text-align: right;
+  -moz-appearance: textfield;
 }
+.pool__pick-num::-webkit-outer-spin-button,
+.pool__pick-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.pool__pick-num:focus { outline: none; border-color: var(--wp-accent); }
 .pool__pick-dash { color: var(--wp-text-dim, var(--wp-text3)); }
 .pool__pick-sep {
   flex: 1;
