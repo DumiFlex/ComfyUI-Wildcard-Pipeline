@@ -18,7 +18,7 @@
  *     mean it (empty options array, empty matrix). Reads as amber.
  */
 import type { BundleRow, ModuleRow } from "../api/types";
-import { tokenizeRich, type RichToken } from "../../widgets/richTokenize";
+import { tokenizeRich, varBaseName, type RichToken } from "../../widgets/richTokenize";
 import { validateExpression } from "../parsing/subcatFilter";
 
 export type ValidationSeverity = "error" | "warn";
@@ -298,11 +298,17 @@ function validateDerivation(
         action?: { target_var?: unknown; value?: unknown };
       };
       const condVar = b.condition?.var;
-      if (typeof condVar === "string" && condVar.length > 0 && !vars.has(condVar)) {
-        issues.push({
-          severity: "warn",
-          message: `Rule ${ri + 1} branch ${bi + 1}: $${condVar} not bound`,
-        });
+      if (typeof condVar === "string" && condVar.length > 0) {
+        // SP2a: a `.K` list accessor resolves against the base var, so
+        // `$mood.0` checks `mood` — not a phantom `mood.0` binding. Message
+        // keeps the raw `$${condVar}` so the user sees what they typed.
+        const condBase = varBaseName(condVar);
+        if (condBase.length > 0 && !vars.has(condBase)) {
+          issues.push({
+            severity: "warn",
+            message: `Rule ${ri + 1} branch ${bi + 1}: $${condVar} not bound`,
+          });
+        }
       }
       const condValue = b.condition?.value;
       if (typeof condValue === "string") {

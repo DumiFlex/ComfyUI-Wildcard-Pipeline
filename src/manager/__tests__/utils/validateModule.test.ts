@@ -27,6 +27,14 @@ function mkConstraint(id: string, name: string, payload: Record<string, unknown>
     version: 1, created_at: "", updated_at: "",
   };
 }
+function mkDerivation(id: string, name: string, rules: unknown[]): ModuleRow {
+  return {
+    id, name, type: "derivation",
+    description: "", category_id: null, tags: [], is_favorite: false,
+    payload: { rules }, payload_hash: "0".repeat(64),
+    version: 1, created_at: "", updated_at: "",
+  };
+}
 
 describe("validateModule - wildcards", () => {
   it("flags empty options array as warn", () => {
@@ -179,6 +187,40 @@ describe("validateModule - inline brace syntax", () => {
     });
     const issues = validateModule(referrer, [producer, referrer]);
     expect(issues.some((i) => /not bound/i.test(i.message))).toBe(false);
+  });
+});
+
+describe("validateModule - derivations", () => {
+  it("treats $mood.0 (SP2a accessor) as a reference to the bound $mood var", () => {
+    // The derivation condition `var: "mood.0"` must validate against the
+    // BASE var `mood` (bound by the producer wildcard), not a phantom
+    // `mood.0` binding that would wrongly read as "not bound".
+    const producer = mkWildcard("aaaaaaaa", "mood", {
+      sub_categories: [], options: [], var_binding: "mood",
+    });
+    const deriv = mkDerivation("bbbbbbbb", "d", [{
+      id: "r1",
+      branches: [{
+        condition: { var: "mood.0", op: "equals", value: "calm" },
+        action: { target_var: "tone", mode: "replace", value: "x" },
+      }],
+    }]);
+    const issues = validateModule(deriv, [producer, deriv]);
+    expect(issues.some((i) => /not bound/i.test(i.message))).toBe(false);
+  });
+
+  it("still flags an unbound derivation condition var carrying an accessor", () => {
+    const deriv = mkDerivation("bbbbbbbb", "d", [{
+      id: "r1",
+      branches: [{
+        condition: { var: "ghost.0", op: "equals", value: "x" },
+        action: { target_var: "tone", mode: "replace", value: "y" },
+      }],
+    }]);
+    const issues = validateModule(deriv, [deriv]);
+    // Base name `ghost` is unbound -> warns, and the message shows the raw
+    // accessor the user typed.
+    expect(issues.some((i) => /\$ghost\.0 not bound/.test(i.message))).toBe(true);
   });
 });
 

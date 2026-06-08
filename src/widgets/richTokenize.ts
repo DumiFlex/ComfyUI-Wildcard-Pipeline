@@ -58,6 +58,15 @@ export interface TokenMeta {
   range?: string;
 }
 
+/** SP2a: reduce a var reference to its BASE name — drop an optional leading
+ *  `$` and an optional trailing `.K` list accessor. `$mood.0` -> `mood`;
+ *  `mood` -> `mood`; `weird.name` (non-digit suffix) -> unchanged. Used by
+ *  validation + conflict scanning so a `.K` accessor resolves against the
+ *  bound base var, not a phantom `mood.0`. */
+export function varBaseName(raw: string): string {
+  return raw.replace(/^\$/, "").replace(/\.\d+$/, "").trim();
+}
+
 export interface RichToken {
   kind: TokenKind;
   start: number;

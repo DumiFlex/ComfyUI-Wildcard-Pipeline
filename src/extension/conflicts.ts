@@ -5,6 +5,7 @@ import {
   type InjectorRowsValue,
   type ModuleEntry,
 } from "../widgets/_shared";
+import { varBaseName } from "../widgets/richTokenize";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -336,7 +337,7 @@ function varReadsOf(m: ModuleEntry): string[] {
     for (const br of rule.branches ?? []) {
       const v = br.condition?.var;
       if (typeof v === "string") {
-        const name = v.replace(/^\$/, "").trim();
+        const name = varBaseName(v);  // SP2a: `$mood.0` reads base `mood`
         if (name) out.push(name);
       }
     }

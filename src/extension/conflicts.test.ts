@@ -240,6 +240,41 @@ describe("scanConflicts — derivation var/template scanning", () => {
     ]);
   });
 
+  it("does not flag a $mood.0 accessor read when base mood is upstream (SP2a)", () => {
+    // `if $mood.0 == "calm"` reads index 0 of the list var `mood`; the base
+    // `mood` is upstream, so the read is satisfied — no missing-var conflict.
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "mood.0", op: "equals", value: "calm" },
+            action: { target_var: "tone", mode: "replace", value: "x" },
+          }],
+        }]),
+      ],
+    };
+    expect(scanConflicts(value, ["mood"])).toEqual([]);
+  });
+
+  it("flags a $ghost.0 accessor read by its BASE name when unbound (SP2a)", () => {
+    const value: ContextWidgetValue = {
+      version: 1,
+      modules: [
+        derivation("d1", [{
+          branches: [{
+            condition: { var: "ghost.0", op: "equals", value: "x" },
+            action: { target_var: "tone", mode: "replace", value: "y" },
+          }],
+        }]),
+      ],
+    };
+    // The conflict reports the BASE name `ghost`, not the raw `ghost.0`.
+    expect(scanConflicts(value, [])).toEqual([
+      { moduleId: "d1", variable: "ghost", type: "missing_template_variable", severity: "warning" },
+    ]);
+  });
+
   it("flags missing_template_variable when action.value template references unknown $var", () => {
     // action.value passes through resolve_text under derivation surface, so
     // `$style` inside MUST resolve at runtime — same gap as combine.
