@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from engine.syntax import resolve_text
+from engine.syntax.resolve import pick_k_unique
 from engine.syntax.types import SurfaceKind
 
 
@@ -39,6 +40,29 @@ class _FakeCtx:
 
 def _ctx(**kwargs) -> _FakeCtx:
     return _FakeCtx(**kwargs)
+
+
+# --- pick_k_unique (SP2a Chunk A: shared weighted-without-replacement core) ---
+
+def test_pick_k_unique_picks_k_without_replacement():
+    got = pick_k_unique(["a", "b", "c", "d"], [1.0, 1.0, 1.0, 1.0], 3, random.Random(42))
+    assert len(got) == 3
+    assert len(set(got)) == 3
+    assert set(got).issubset({"a", "b", "c", "d"})
+
+
+def test_pick_k_unique_clamps_k_to_pool():
+    assert sorted(pick_k_unique(["a", "b"], [1.0, 1.0], 5, random.Random(1))) == ["a", "b"]
+
+
+def test_pick_k_unique_zero_returns_empty():
+    assert pick_k_unique(["a", "b"], [1.0, 1.0], 0, random.Random(1)) == []
+
+
+def test_pick_k_unique_seed_deterministic():
+    a = pick_k_unique(["a", "b", "c"], [1.0, 2.0, 3.0], 2, random.Random(7))
+    b = pick_k_unique(["a", "b", "c"], [1.0, 2.0, 3.0], 2, random.Random(7))
+    assert a == b
 
 
 def test_resolve_empty_string():

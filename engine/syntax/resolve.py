@@ -211,6 +211,28 @@ def _weighted_pick_index(weights: list[float], rng) -> int:
     return len(weights) - 1
 
 
+def pick_k_unique(items, weights, k, rng):
+    """Pick ``k`` items from ``items`` without replacement, weighted by the
+    parallel ``weights`` list, returned in pick order. ``k`` is clamped to
+    ``len(items)``; ``k <= 0`` -> ``[]``.
+
+    Shared by the inline ``{N$$sep$$}`` block (``_resolve_multi_pick``) and by
+    multi-select wildcards (``wildcard_handler``). Draws from ``rng`` in the
+    same order the inline block always has, so seed behavior is unchanged.
+    """
+    n = min(max(0, k), len(items))
+    available_idx = list(range(len(items)))
+    available_w = list(weights)
+    chosen = []
+    for _ in range(n):
+        if not available_idx:
+            break
+        j = _weighted_pick_index(available_w, rng)
+        chosen.append(items[available_idx.pop(j)])
+        available_w.pop(j)
+    return chosen
+
+
 def _resolve_multi_pick(
     tok: Token,
     ctx: ResolveContext,
@@ -244,20 +266,10 @@ def _resolve_multi_pick(
     weights = [_parse_branch_weight(b) for b in branches]
     branch_values = [_strip_branch_weight(b) for b in branches]
 
-    chosen_indices: list[int] = []
-    available_indices = list(range(len(branches)))
-    available_weights = list(weights)
-
-    for _ in range(n_picks):
-        if not available_indices:
-            break
-        idx = _weighted_pick_index(available_weights, ctx.rng)
-        chosen_indices.append(available_indices.pop(idx))
-        available_weights.pop(idx)
+    chosen_values = pick_k_unique(branch_values, weights, n_picks, ctx.rng)
 
     resolved: list[str] = []
-    for idx in chosen_indices:
-        branch_text = branch_values[idx]
+    for branch_text in chosen_values:
         if not branch_text:
             resolved.append("")
             continue
