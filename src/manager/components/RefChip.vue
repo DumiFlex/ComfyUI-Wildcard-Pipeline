@@ -16,6 +16,8 @@ interface Props {
   kind: "ref" | "var";
   /** Display name. For unresolved refs this is empty; uuid is shown instead. */
   name: string;
+  /** SP2a list accessor for a var chip: `$name.K` (0-based). Ignored by refs. */
+  index?: number;
   /** UUID of the wildcard library entry (ref-kind only). */
   uuid?: string;
   /** True when the name resolved against the catalog / surface. False → render as red `?` chip. */
@@ -127,6 +129,8 @@ const filterTitle = computed<string | undefined>(() => {
 const showNoNull = computed(() => isRef.value && filter.value.excludeNull);
 
 const label = computed(() => {
+  // SP2a: a var chip may carry a `.K` list accessor (`$colors.0`); refs never do.
+  const idxSuffix = !isRef.value && props.index != null ? "." + props.index : "";
   if (!props.resolved) {
     // Unresolved refs prefer the cached `#name` (kept on the ref atom
     // from the `@{uuid#name}` syntax) so a broken reference still
@@ -136,9 +140,9 @@ const label = computed(() => {
     if (props.kind === "ref") {
       return props.name && props.name.length > 0 ? props.name : props.uuid;
     }
-    return props.name;
+    return props.name + idxSuffix;
   }
-  return (isRef.value ? "@" : "$") + props.name;
+  return (isRef.value ? "@" : "$") + props.name + idxSuffix;
 });
 
 /** Per-kind color CSS variable used as the chip's `--wp-refchip-tone`.

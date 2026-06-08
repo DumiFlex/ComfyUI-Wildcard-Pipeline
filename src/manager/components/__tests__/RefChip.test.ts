@@ -84,6 +84,21 @@ describe("RefChip base rendering", () => {
     expect(wrap.classes()).not.toContain("wp-refchip--unresolved");
   });
 
+  it("renders a var chip's .K list accessor as a single chip (SP2a)", () => {
+    const wrap = mount(RefChip, {
+      props: { kind: "var", name: "colors", index: 0, resolved: true },
+    });
+    expect(wrap.text()).toContain("$colors.0");
+  });
+
+  it("a ref chip ignores the index prop (no .K on refs)", () => {
+    const wrap = mount(RefChip, {
+      props: { kind: "ref", name: "color", uuid: "aabbccdd", resolved: true, index: 2 },
+    });
+    expect(wrap.text()).toContain("@color");
+    expect(wrap.text()).not.toContain(".2");
+  });
+
   it("renders ref kind with @name + purple palette", () => {
     const wrap = mount(RefChip, {
       props: { kind: "ref", name: "color", uuid: "aabbccdd", resolved: true },

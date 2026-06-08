@@ -114,7 +114,7 @@ function serialiseAtomsLocal(atoms: Atom[]): string {
   let out = "";
   for (const a of atoms) {
     if (a.kind === "text") out += a.text;
-    else if (a.kind === "var") out += "$" + a.name;
+    else if (a.kind === "var") out += "$" + a.name + (a.index != null ? "." + a.index : "");
     else out += serialiseRefAtom(a);
   }
   return out;
@@ -1909,6 +1909,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
           :expr="atom.kind === 'ref' ? chipFilterOf(atom).expr : ''"
           :exclude-null="atom.kind === 'ref' ? chipFilterOf(atom).excludeNull : false"
           :resolved="atomIsResolved(atom)"
+          :index="atom.kind === 'var' ? atom.index : undefined"
           :data-atom-index="idx"
           @click="(ev: MouseEvent) => onChipClick(idx, ev)"
         />

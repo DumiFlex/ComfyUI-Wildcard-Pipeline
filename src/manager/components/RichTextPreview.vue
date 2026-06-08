@@ -220,6 +220,7 @@ function textHtml(text: string): string {
         v-else-if="atom.kind === 'var'"
         :kind="'var'"
         :name="atom.name"
+        :index="atom.index"
         :sub-categories="[]"
         :resolved="atomIsResolved(atom)"
         class="wp-rt-var"

@@ -14,7 +14,12 @@ export interface RefAtom {
   subCategories: string[];
   name?: string;
 }
-export interface VarAtom { kind: "var"; name: string }
+export interface VarAtom {
+  kind: "var";
+  name: string;
+  /** SP2a list accessor: `$name.K` -> 0-based index K (omitted when absent). */
+  index?: number;
+}
 export type Atom = TextAtom | RefAtom | VarAtom;
 
 export function parse(text: string): Atom[] {
@@ -45,8 +50,10 @@ export function parse(text: string): Atom[] {
       out.push(refAtom);
     } else if (tok.kind === "var") {
       flush();
-      const name = (tok.meta as { name?: string } | undefined)?.name ?? "";
-      out.push({ kind: "var", name });
+      const meta = tok.meta as { name?: string; index?: number } | undefined;
+      const varAtom: VarAtom = { kind: "var", name: meta?.name ?? "" };
+      if (typeof meta?.index === "number") varAtom.index = meta.index;
+      out.push(varAtom);
     } else {
       // text / escape / dp-* — collapse back into the running text buffer
       textBuf += tok.raw;
@@ -60,7 +67,7 @@ export function serialise(atoms: Atom[]): string {
   let out = "";
   for (const a of atoms) {
     if (a.kind === "text") out += a.text;
-    else if (a.kind === "var") out += "$" + a.name;
+    else if (a.kind === "var") out += "$" + a.name + (a.index != null ? "." + a.index : "");
     else if (a.kind === "ref") {
       out += "@{" + a.uuid;
       if (a.name && a.name.length > 0) out += "#" + a.name;
