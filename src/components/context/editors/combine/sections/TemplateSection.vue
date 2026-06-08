@@ -15,6 +15,7 @@ import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
+import { applyVarAccessor } from "../../../../../widgets/richTokenize";
 
 // Async-import the rich-text editor so the chunk is split into its own
 // asset and only pulled in when the combine instance modal opens. Bundle
@@ -110,9 +111,15 @@ const resolvedTokens = computed<ResolvedToken[]>(() => {
           tokens.push({ text: tok.raw, kind: "var-unresolved", varName: tok.varName });
           break;
         }
-        const value = map[tok.varName];
-        if (typeof value === "string") {
-          tokens.push({ text: value, kind: "var-resolved", varName: tok.varName });
+        // SP2a: resolve via the shared accessor so `$mood.0` indexes (and a
+        // bare `$mood` joins a list) — the `.K` never strands as literal text.
+        // Presence is keyed on the base name, not the value's type.
+        if (Object.prototype.hasOwnProperty.call(map, tok.varName)) {
+          tokens.push({
+            text: applyVarAccessor(map[tok.varName], tok.index),
+            kind: "var-resolved",
+            varName: tok.varName,
+          });
         } else {
           tokens.push({ text: tok.raw, kind: "var-unresolved", varName: tok.varName });
         }

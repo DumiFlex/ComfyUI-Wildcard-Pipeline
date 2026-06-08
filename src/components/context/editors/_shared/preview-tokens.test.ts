@@ -31,6 +31,17 @@ describe("preview-tokens", () => {
       expect(tokenize("$x", "derivation")[0]).toMatchObject({ kind: "var", invalid: false });
       expect(tokenize("$x", "assembler")[0]).toMatchObject({ kind: "var", invalid: false });
     });
+
+    it("tokenizes a $mood.0 list accessor as ONE var token with index (SP2a)", () => {
+      const toks = tokenize("$mood.0", "combine");
+      expect(toks).toHaveLength(1);
+      expect(toks[0]).toMatchObject({ kind: "var", varName: "mood", index: 0, raw: "$mood.0" });
+    });
+
+    it("bare $mood has no index; $mood.12 captures a multi-digit index (SP2a)", () => {
+      expect(tokenize("$mood", "combine")[0].index).toBeUndefined();
+      expect(tokenize("$mood.12", "combine")[0]).toMatchObject({ varName: "mood", index: 12 });
+    });
   });
 
   describe("REF token", () => {

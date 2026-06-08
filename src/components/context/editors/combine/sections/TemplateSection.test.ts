@@ -262,4 +262,19 @@ describe("combine TemplateSection", () => {
     // Alt stays raw, $color resolves.
     expect(pane.text()).toBe("{red|blue} shiny");
   });
+
+  it("resolves a $color.0 list accessor without leaking the .K literal (SP2a)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({ payload: { output_var: "out", template: "$color.0 hat" } }),
+        upstreamResolved: { color: "red" },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.exists()).toBe(true);
+    // `$color.0` resolves via the shared accessor (string = 1-element list,
+    // `.0` == itself); the literal ".0" must NOT survive as a text token.
+    expect(pane.text()).toBe("red hat");
+    expect(pane.find(".tpl-tok--var-resolved").text()).toBe("red");
+  });
 });

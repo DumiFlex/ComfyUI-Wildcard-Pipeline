@@ -683,6 +683,26 @@ describe("collectLocalResolvedForModule", () => {
     expect(result.mood).toBe("red / blue");
   });
 
+  it("multi-pick representative mirrors the engine pool — drops null + filtered options (SP2a)", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "wc000001", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+        instance: { pick_min: 1, pick_max: 3, pick_separator: ", ", category_filter: "warm" },
+        payload: { var_binding: "mood", options: [
+          { id: "n", value: "", is_null: true, sub_categories: [] },
+          { id: "a", value: "serene", sub_categories: ["warm"] },
+          { id: "b", value: "sleepy", sub_categories: ["cold"] },
+          { id: "c", value: "fierce", sub_categories: ["warm"] },
+        ] },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    // Pool after the engine filter: null dropped, only "warm" survives
+    // (serene + fierce; sleepy is cold) — NOT the raw first-N (which leaked
+    // the null's "" leading comma + the filtered-out sleepy).
+    expect(result.mood).toBe("serene, fierce");
+  });
+
   it("resolves a $style.0 accessor in a combine template without leaking the .K literal (SP2a)", () => {
     const { ctx, graph } = singleNode([
       {

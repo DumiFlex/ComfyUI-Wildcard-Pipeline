@@ -5,6 +5,13 @@ import {
   type ContextWidgetValue,
 } from "../widgets/_shared";
 import { applyVarAccessor } from "../widgets/richTokenize";
+// probability.ts is a pure (no-Vue) module despite its path — reused here so
+// the static multi-pick representative mirrors the engine pool exactly.
+import {
+  isEnabled,
+  type InstanceLike,
+  type WildcardOption,
+} from "../components/context/editors/wildcard/probability";
 import { ensure as ensurePreviewLookup, lookup as previewLookup } from "./preview-resolver";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
@@ -975,7 +982,10 @@ function writeBindings(
   const p = (m.payload ?? {}) as Record<string, unknown>;
   if (m.type === "wildcard") {
     const binding = (p.var_binding as string | undefined)?.replace(/^\$/, "").trim();
-    const options = (p.options as Array<{ value?: string }> | undefined) ?? [];
+    const options =
+      (p.options as
+        | Array<{ value?: string; id?: string; sub_categories?: string[]; is_null?: boolean }>
+        | undefined) ?? [];
     if (binding && options.length > 0) {
       const inst = (m.instance ?? {}) as {
         pick_min?: unknown; pick_max?: unknown; pick_separator?: unknown;
@@ -992,13 +1002,18 @@ function writeBindings(
       } else {
         // SP2a multi-pick: the static resolver isn't seed-faithful (the engine
         // rolls N at random), so show a representative join of the first N
-        // options to convey the list shape. The API-backed preview shows the
-        // real seeded roll.
+        // options. Mirror the engine POOL via isEnabled — drop the null option
+        // + apply enabled_options + category_filter — so the preview never
+        // leaks null (a stray leading separator) or filtered-out options. The
+        // API-backed preview shows the real seeded roll.
+        const pool = options.filter((o) =>
+          isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike, true),
+        );
         const sep = typeof inst.pick_separator === "string" ? inst.pick_separator : ", ";
-        const n = Math.min(hi, options.length);
+        const n = Math.min(hi, pool.length);
         const items: string[] = [];
         for (let i = 0; i < n; i++) {
-          items.push(expandValue(String(options[i].value ?? ""), ctx, catalog, 0));
+          items.push(expandValue(String(pool[i].value ?? ""), ctx, catalog, 0));
         }
         ctx[binding] = items.join(sep);
       }
