@@ -190,6 +190,17 @@ describe("PoolSection exclude-null toggle", () => {
     const w = mount(PoolSection, { props: { module: makeModule() } });
     expect(w.find('[data-test="pool-exclude-null"]').exists()).toBe(false);
   });
+
+  it("toggling the null option row drives exclude_null, not enabled_options (#3)", async () => {
+    const w = mount(PoolSection, { props: { module: withNullOption(makeModule()) } });
+    // The appended null option renders as the last row; unchecking its box is
+    // the same control as "Exclude null", so it must flip exclude_null.
+    const checks = w.findAll('[data-test="opt-check"]');
+    await checks[checks.length - 1].trigger("click");
+    const patch = lastPatch(w);
+    expect(patch.instance?.exclude_null).toBe(true);
+    expect(patch.instance?.enabled_options).toBeUndefined();
+  });
 });
 
 describe("PoolSection option rows", () => {

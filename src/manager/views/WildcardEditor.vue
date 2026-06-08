@@ -292,6 +292,41 @@ const uuidToHasNull = computed<Map<string, boolean>>(() => {
   return out;
 });
 
+/** Per-wildcard option tag sets — each entry is one (non-null) option's
+ *  `sub_categories`. Drives the nested-ref picker's "N of M match" count so
+ *  the user can see when a filter would resolve empty instead of guessing (#2). */
+const uuidToOptionTagSets = computed<Map<string, string[][]>>(() => {
+  const out = new Map<string, string[][]>();
+  for (const mod of moduleStore.catalog) {
+    if (mod.type !== "wildcard") continue;
+    const opts = (mod.payload as { options?: unknown[] } | undefined)?.options;
+    const sets = Array.isArray(opts)
+      ? opts
+          .filter((o) => !(o as { is_null?: boolean } | null)?.is_null)
+          .map((o) => {
+            const sc = (o as { sub_categories?: unknown } | null)?.sub_categories;
+            return Array.isArray(sc)
+              ? sc.filter((s): s is string => typeof s === "string")
+              : [];
+          })
+      : [];
+    out.set(mod.id, sets);
+  }
+  return out;
+});
+
+/** Per-wildcard `tag_groups` axes — drives the picker's grouped insert
+ *  palette so a nested-ref filter shows the target's groups, not a flat list. */
+const uuidToTagGroups = computed<Map<string, Record<string, string[]>>>(() => {
+  const out = new Map<string, Record<string, string[]>>();
+  for (const mod of moduleStore.catalog) {
+    if (mod.type !== "wildcard") continue;
+    const tg = (mod.payload as { tag_groups?: unknown } | undefined)?.tag_groups;
+    out.set(mod.id, tg && typeof tg === "object" ? (tg as Record<string, string[]>) : {});
+  }
+  return out;
+});
+
 // Var-suggestions removed: wildcard option values don't support $name
 // substitution at runtime (only @{uuid} nested refs + {a|b|c} inline
 // choices). RichTextInput's surface="wildcard" gates the $-trigger
@@ -1482,6 +1517,8 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 :ref-suggestions="wcSuggestions"
                 :uuid-to-name="nameByUuid"
                 :uuid-to-sub-categories="uuidToSubCategories"
+                :uuid-to-option-tag-sets="uuidToOptionTagSets"
+                :uuid-to-tag-groups="uuidToTagGroups"
                 :uuid-to-has-null="uuidToHasNull"
                 :uuid-to-options-count="uuidToOptionsCount"
                 placeholder="value (type @ for nested wildcards · {a|b|c} for inline choices)"

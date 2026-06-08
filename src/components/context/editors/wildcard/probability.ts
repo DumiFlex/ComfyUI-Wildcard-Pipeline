@@ -43,14 +43,16 @@ export interface InstanceLike {
 }
 
 export function isEnabled(option: WildcardOption, instance: InstanceLike): boolean {
-  if (Array.isArray(instance.enabled_options) && !instance.enabled_options.includes(option.id)) {
-    return false;
-  }
-  // Null option intentionally has no sub-categories. Category filters are
-  // about narrowing the tag-bearing pool — the null option is an orthogonal
-  // "no-output" slot governed solely by `exclude_null`.
+  // Null option intentionally has no sub-categories. It's an orthogonal
+  // "no-output" slot governed SOLELY by `exclude_null` — neither
+  // `enabled_options` nor `category_filter` apply. Checked first so the
+  // per-row checkbox and the "Exclude null" toggle read the same flag and
+  // stay linked (#3).
   if (option.is_null) {
     return !instance.exclude_null;
+  }
+  if (Array.isArray(instance.enabled_options) && !instance.enabled_options.includes(option.id)) {
+    return false;
   }
   return matches(parse(instance.category_filter ?? ""), new Set(option.sub_categories ?? []));
 }

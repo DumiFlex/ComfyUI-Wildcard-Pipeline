@@ -244,7 +244,18 @@ function setExcludeNull(next: boolean): void {
 /* ── Option rows (unchanged behaviour) ──────────────────────────────── */
 
 function onOptionToggle(optionId: string): void {
-  const ids = allOptions.value.map((o) => o.id);
+  const toggled = allOptions.value.find((o) => o.id === optionId);
+  if (toggled?.is_null) {
+    // The null row's checkbox IS the "Exclude null" control — the engine
+    // governs the null slot solely via exclude_null. Drive that flag so the
+    // two controls stay in lockstep (#3) rather than writing a stale
+    // enabled_options entry the resolver ignores for the null slot.
+    setExcludeNull(!excludeNull.value);
+    return;
+  }
+  // enabled_options tracks only the tag-bearing (non-null) options; the null
+  // slot lives on exclude_null.
+  const ids = allOptions.value.filter((o) => !o.is_null).map((o) => o.id);
   const currentlyEnabled = instance.value.enabled_options;
   const enabledSet = new Set<string>(
     Array.isArray(currentlyEnabled) ? currentlyEnabled : ids,
@@ -253,7 +264,7 @@ function onOptionToggle(optionId: string): void {
   else enabledSet.add(optionId);
   // Preserve library order in the emitted array.
   const next = ids.filter((id) => enabledSet.has(id));
-  // Collapse to null when all options are enabled (= library default).
+  // Collapse to null when all non-null options are enabled (= library default).
   const collapsed = next.length === ids.length ? null : next;
   emit("update", patchInstance(props.module, "enabled_options", collapsed));
 }

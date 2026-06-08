@@ -28,6 +28,14 @@ describe("isEnabled multi-tag", () => {
     expect(isEnabled(nul, { exclude_null: true })).toBe(false);
   });
 
+  it("null option ignores enabled_options — only exclude_null gates it (#3)", () => {
+    const nul = { id: "n", value: "", weight: 1, is_null: true, sub_categories: [] };
+    // enabled_options excludes the null id, but the null slot is orthogonal:
+    // it stays enabled while exclude_null is false, and only drops when set.
+    expect(isEnabled(nul, { enabled_options: ["other"], exclude_null: false })).toBe(true);
+    expect(isEnabled(nul, { enabled_options: ["other"], exclude_null: true })).toBe(false);
+  });
+
   it("matches a multi-tag option against an AND across axes", () => {
     // Option carries both tags → satisfies "feline and warm".
     expect(isEnabled(opt(["feline", "warm"]), { category_filter: "feline and warm" })).toBe(true);
