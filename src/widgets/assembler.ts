@@ -147,6 +147,11 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "option_weights",
   "category_filter",
   "exclude_null",
+  // SP2a multi-select: changing the count range / separator alters which/how
+  // many options resolve + how they join, so the preview cache must refresh.
+  "pick_min",
+  "pick_max",
+  "pick_separator",
   "mode",
   "pinned_option_id",
   "locked_seed",

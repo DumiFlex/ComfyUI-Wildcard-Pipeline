@@ -31,6 +31,13 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "exclude_null": "boolean",
         "locked_seed": "number",
         "internal": "boolean",
+        # SP2a multi-select: per-instance count range (pick_min..pick_max; a
+        # range other than 1..1 resolves N options without replacement into a
+        # list-valued variable) + the separator used to join it for a bare
+        # `$var`. All local / unpublished, like the other instance overrides.
+        "pick_min": "number",
+        "pick_max": "number",
+        "pick_separator": "string",
         # `mode` and `pinned_option_id` removed in v2 — resolve mode is
         # implicit in pool state. Engine handler still reads them when
         # present in legacy snapshots; the schema validator now flags
@@ -146,4 +153,17 @@ def validate_instance(kind: str, instance: dict[str, Any]) -> list[str]:
             warnings.append(
                 f"{kind}.{field} type mismatch: expected {spec}, got {type(value).__name__}"
             )
+    # SP2a advisory soft-warns for the pick range (not type errors).
+    if kind == "wildcard":
+        pmin = instance.get("pick_min")
+        pmax = instance.get("pick_max")
+        nums = (int, float)
+        if (isinstance(pmin, nums) and not isinstance(pmin, bool)
+                and isinstance(pmax, nums) and not isinstance(pmax, bool)):
+            if pmin == 0 and pmax == 0:
+                warnings.append("wildcard pick range 0..0 — always empty (resolves to nothing)")
+            elif pmax < pmin:
+                warnings.append(
+                    f"wildcard.pick_max ({pmax}) is below pick_min ({pmin}) — clamped to pick_max"
+                )
     return warnings

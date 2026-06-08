@@ -13,6 +13,7 @@ export const KIND_TITLE: Record<string, string> = {
 export type InstanceFieldKey =
   | "variable_binding" | "enabled_options" | "option_weights" | "category_filter"
   | "exclude_null"
+  | "pick_min" | "pick_max" | "pick_separator"
   | "mode" | "pinned_option_id" | "locked_seed" | "internal" | "values_overrides"
   | "template_override"
   | "disabled_rule_ids"
@@ -44,6 +45,8 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     // legacy snapshots; UI never writes them.
     "variable_binding", "enabled_options",
     "option_weights", "category_filter", "exclude_null", "locked_seed", "internal",
+    // SP2a multi-select: count range + join separator (per-instance, local).
+    "pick_min", "pick_max", "pick_separator",
   ],
   fixed_values: ["values_overrides", "enabled_options", "locked_seed"],
   combine: ["template_override", "variable_binding", "locked_seed", "internal"],

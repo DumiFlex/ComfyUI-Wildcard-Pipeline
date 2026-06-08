@@ -31,6 +31,21 @@ def test_validate_instance_type_mismatch_warns():
     assert any("type mismatch" in w for w in warnings)
 
 
+def test_validate_instance_warns_on_always_empty_pick_range():
+    warnings = validate_instance("wildcard", {"pick_min": 0, "pick_max": 0})
+    assert any("always empty" in w.lower() for w in warnings)
+
+
+def test_validate_instance_warns_when_pick_max_below_pick_min():
+    warnings = validate_instance("wildcard", {"pick_min": 3, "pick_max": 1})
+    assert any("pick_max" in w for w in warnings)
+
+
+def test_validate_instance_valid_pick_range_is_clean():
+    warnings = validate_instance("wildcard", {"pick_min": 2, "pick_max": 4, "pick_separator": ", "})
+    assert warnings == []
+
+
 def test_validate_instance_ignores_underscore_namespace():
     inst = {"_ui": {"last_locked_seed": 42}, "__internal": "anything"}
     warnings = validate_instance("wildcard", inst)

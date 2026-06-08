@@ -8,6 +8,8 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       // docs/superpowers/specs/2026-05-08-instance-overrides-v2-design.md §6.1.
       "variable_binding", "enabled_options",
       "option_weights", "category_filter", "exclude_null", "locked_seed", "internal",
+      // SP2a multi-select (2026-06-08): per-instance count range + separator.
+      "pick_min", "pick_max", "pick_separator",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.fixed_values).toEqual([
       // `locked_seed` added in the combine + fixed_values syntax-parity
