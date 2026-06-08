@@ -601,6 +601,15 @@ export interface ModuleEntry {
      */
     exclude_null?: boolean;
     /**
+     * SP2a multi-select: pick N options (without replacement) per resolution
+     * into a list-valued variable. `pick_min`..`pick_max` is the count range
+     * (anything other than 1..1 activates multi-pick; min may be 0 for "maybe
+     * nothing"); `pick_separator` joins the list for a bare `$var`.
+     */
+    pick_min?: number;
+    pick_max?: number;
+    pick_separator?: string;
+    /**
      * Pick mode for this instance:
      *   - `random` / unset — weighted RNG (library default).
      *   - `subcategory`    — same as random engine-side; surfaces

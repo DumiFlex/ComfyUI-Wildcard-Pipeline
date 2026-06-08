@@ -241,6 +241,36 @@ function setExcludeNull(next: boolean): void {
   emit("update", patchInstance(props.module, "exclude_null", next));
 }
 
+/* ── Multi-select (SP2a) ─────────────────────────────────────────────── */
+const pickMin = computed(() =>
+  typeof instance.value.pick_min === "number" ? instance.value.pick_min : 1,
+);
+const pickMax = computed(() =>
+  typeof instance.value.pick_max === "number" ? instance.value.pick_max : 1,
+);
+const pickSeparator = computed(() =>
+  typeof instance.value.pick_separator === "string"
+    ? instance.value.pick_separator
+    : ", ",
+);
+/** Multi-pick active when the count range is anything other than 1..1. In
+ *  multi mode the null option leaves the pool (use Min 0 for "maybe
+ *  nothing"), so the null controls go inert. */
+const multiActive = computed(() => {
+  const lo = Math.max(0, Math.min(pickMin.value, pickMax.value));
+  const hi = Math.max(lo, pickMax.value);
+  return !(lo === 1 && hi === 1);
+});
+function setPickMin(next: number): void {
+  emit("update", patchInstance(props.module, "pick_min", Math.max(0, Math.floor(next || 0))));
+}
+function setPickMax(next: number): void {
+  emit("update", patchInstance(props.module, "pick_max", Math.max(0, Math.floor(next || 0))));
+}
+function setPickSeparator(next: string): void {
+  emit("update", patchInstance(props.module, "pick_separator", next));
+}
+
 /* ── Option rows (unchanged behaviour) ──────────────────────────────── */
 
 function onOptionToggle(optionId: string): void {
@@ -400,22 +430,63 @@ const skewedTowards = computed(() => {
       </div>
     </div>
 
+    <!-- SP2a multi-select: pick a count range (min..max). A range other than
+         1..1 resolves N options (without replacement) into a list variable;
+         the separator joins them for a bare `$var`. -->
+    <div class="pool__pick" data-test="pool-pick">
+      <span class="pool__pick-label">Pick</span>
+      <input
+        class="pool__pick-num"
+        type="number"
+        min="0"
+        :value="pickMin"
+        data-test="pool-pick-min"
+        aria-label="Minimum picks"
+        @input="setPickMin(Number(($event.target as HTMLInputElement).value))"
+      />
+      <span class="pool__pick-dash" aria-hidden="true">–</span>
+      <input
+        class="pool__pick-num"
+        type="number"
+        min="0"
+        :value="pickMax"
+        data-test="pool-pick-max"
+        aria-label="Maximum picks"
+        @input="setPickMax(Number(($event.target as HTMLInputElement).value))"
+      />
+      <input
+        v-if="pickMax > 1"
+        class="pool__pick-sep"
+        type="text"
+        :value="pickSeparator"
+        placeholder="separator"
+        data-test="pool-pick-sep"
+        aria-label="Join separator"
+        @input="setPickSeparator(($event.target as HTMLInputElement).value)"
+      />
+    </div>
+
     <!-- Only shown when the wildcard actually has a null option to exclude
          (#5). Native @change on the input is the source of truth (#4) — the
          old label @click.prevent fought the checkbox's own toggle, so the
-         box never reflected the new state. -->
+         box never reflected the new state. In multi-pick mode the null option
+         leaves the pool entirely, so this control goes inert (use Min 0). -->
     <label
       v-if="hasNullOption"
       class="pool__exclude-null"
+      :class="{ 'pool__exclude-null--off': multiActive }"
       data-test="pool-exclude-null"
     >
       <input
         type="checkbox"
         :checked="excludeNull"
+        :disabled="multiActive"
         @change="setExcludeNull(($event.target as HTMLInputElement).checked)"
       />
       <i class="pi pi-ban" aria-hidden="true" />
-      <span>Exclude null option</span>
+      <span>{{ multiActive
+        ? "Null excluded in multi-pick — use Min 0 for optional"
+        : "Exclude null option" }}</span>
     </label>
 
     <div class="pool__opts">
@@ -434,6 +505,7 @@ const skewedTowards = computed(() => {
         :instance="instance"
         :tag-groups="tagGroups"
         :pair-badges="viaOptionPairs.get(option.id) ?? []"
+        :multi-active="multiActive"
         @toggle="onOptionToggle"
         @weight="onOptionWeight"
       />
@@ -467,6 +539,40 @@ const skewedTowards = computed(() => {
   letter-spacing: 0.14em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
+/* SP2a multi-select pick-count control */
+.pool__pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+.pool__pick-label {
+  font: 600 9px var(--wp-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.pool__pick-num {
+  width: 44px;
+  padding: 2px 4px;
+  font: 11px var(--wp-font-mono);
+  background: var(--wp-bg-soft, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  color: var(--wp-text);
+}
+.pool__pick-dash { color: var(--wp-text-dim, var(--wp-text3)); }
+.pool__pick-sep {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  font: 11px var(--wp-font-mono);
+  background: var(--wp-bg-soft, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: 3px;
+  color: var(--wp-text);
+}
+.pool__exclude-null--off { opacity: 0.55; }
 .pool__adv-toggle {
   display: inline-flex;
   align-items: center;

@@ -302,5 +302,27 @@ describe("OptionRow", () => {
       });
       expect(w.classes()).toContain("opt--off");
     });
+
+    it("null row is disabled + non-toggleable when multiActive (SP2a)", () => {
+      const w = mount(OptionRow, {
+        props: { option: nullOpt, allOptions: [nullOpt], instance: {}, multiActive: true },
+      });
+      expect(w.classes()).toContain("opt--off");
+      expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("true");
+    });
+
+    it("null row stays interactive when not multiActive", () => {
+      const w = mount(OptionRow, {
+        props: { option: nullOpt, allOptions: [nullOpt], instance: {} },
+      });
+      expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("false");
+    });
+  });
+
+  it("real option row is unaffected by multiActive", () => {
+    const w = mount(OptionRow, {
+      props: { option: baseOption, allOptions, instance: {}, multiActive: true },
+    });
+    expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("false");
   });
 });

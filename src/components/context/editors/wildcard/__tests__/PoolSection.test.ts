@@ -42,6 +42,50 @@ function lastPatch(w: ReturnType<typeof mount>): Partial<ModuleEntry> {
   return updates[updates.length - 1][0] as Partial<ModuleEntry>;
 }
 
+describe("PoolSection pick-count (SP2a)", () => {
+  it("min stepper emits a pick_min update", async () => {
+    const w = mount(PoolSection, { props: { module: makeModule() } });
+    const min = w.get('[data-test="pool-pick-min"]');
+    (min.element as HTMLInputElement).value = "2";
+    await min.trigger("input");
+    expect(lastPatch(w).instance?.pick_min).toBe(2);
+  });
+
+  it("max stepper emits a pick_max update", async () => {
+    const w = mount(PoolSection, { props: { module: makeModule() } });
+    const max = w.get('[data-test="pool-pick-max"]');
+    (max.element as HTMLInputElement).value = "3";
+    await max.trigger("input");
+    expect(lastPatch(w).instance?.pick_max).toBe(3);
+  });
+
+  it("separator input appears only when max > 1", () => {
+    const single = mount(PoolSection, { props: { module: makeModule() } });
+    expect(single.find('[data-test="pool-pick-sep"]').exists()).toBe(false);
+    const multi = mount(PoolSection, {
+      props: { module: makeModule({ instance: { pick_min: 1, pick_max: 3 } } as Partial<ModuleEntry>) },
+    });
+    expect(multi.find('[data-test="pool-pick-sep"]').exists()).toBe(true);
+  });
+
+  it("disables exclude_null when multi-pick is active", () => {
+    const m = {
+      id: "x", type: "wildcard", enabled: true, meta: { name: "w" }, entries: [],
+      payload: {
+        var_binding: "w", sub_categories: [], tag_groups: {},
+        options: [
+          { id: "a", value: "cat", weight: 1, sub_categories: [] },
+          { id: "n", value: "", weight: 1, is_null: true, sub_categories: [] },
+        ],
+      },
+      instance: { pick_min: 0, pick_max: 2 },
+    } as unknown as ModuleEntry;
+    const w = mount(PoolSection, { props: { module: m } });
+    const cb = w.get('[data-test="pool-exclude-null"] input');
+    expect((cb.element as HTMLInputElement).disabled).toBe(true);
+  });
+});
+
 describe("PoolSection grouped quick pills", () => {
   it("ticking family=feline + temp=warm builds 'feline and warm'", async () => {
     const w = mount(PoolSection, { props: { module } });

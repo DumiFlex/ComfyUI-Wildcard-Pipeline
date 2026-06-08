@@ -32,8 +32,12 @@ const props = withDefaults(
      *  a neutral hue. Read-only on this surface (membership is edited
      *  in the SPA library editor, §4.3). */
     tagGroups?: Record<string, string[]>;
+    /** SP2a: the instance is in multi-pick mode (count range != 1..1). When
+     *  true the null option is excluded from the pool, so its row renders
+     *  disabled/greyed + non-toggleable. Real option rows are unaffected. */
+    multiActive?: boolean;
   }>(),
-  { pairBadges: () => [], tagGroups: () => ({}) },
+  { pairBadges: () => [], tagGroups: () => ({}), multiActive: false },
 );
 
 const emit = defineEmits<{
@@ -187,8 +191,18 @@ const overrideWeight = computed(
   () => typeof props.instance.option_weights?.[props.option.id] === "number",
 );
 
+/** SP2a: the null option leaves the pool in multi-pick mode, so its row is
+ *  inert. Only the null option is affected. */
+const nullDisabledInMulti = computed(
+  () => props.multiActive === true && props.option.is_null === true,
+);
+/** Combined "this row can't be toggled" signal for the checkbox. */
+const interactionLocked = computed(
+  () => filteredByCategory.value || nullDisabledInMulti.value,
+);
+
 function onToggle(): void {
-  if (filteredByCategory.value) return;
+  if (interactionLocked.value) return;
   emit("toggle", props.option.id);
 }
 
@@ -276,8 +290,8 @@ function fmtPct(p: number): string {
   <div
     class="opt"
     :class="{
-      'opt--on': enabled,
-      'opt--off': !enabled,
+      'opt--on': enabled && !nullDisabledInMulti,
+      'opt--off': !enabled || nullDisabledInMulti,
       'opt--weighted': overrideWeight,
       'opt--filtered': filteredByCategory,
     }"
@@ -288,8 +302,8 @@ function fmtPct(p: number): string {
       data-test="opt-check"
       role="checkbox"
       :aria-checked="enabled"
-      :aria-disabled="filteredByCategory"
-      :tabindex="filteredByCategory ? -1 : 0"
+      :aria-disabled="interactionLocked"
+      :tabindex="interactionLocked ? -1 : 0"
       @click="onToggle"
       @keydown.space.prevent="onToggle"
     >
