@@ -3,6 +3,7 @@
 import pytest
 
 from engine.cascade.fixers import (
+    _rewrite_var_in_string,
     fix_category_delete,
     fix_combine_output_var_rename,
     fix_subcat_delete,
@@ -15,6 +16,16 @@ from engine.db.repositories import (
     ModuleNotFound,
     ModuleRepository,
 )
+
+
+def test_rewrite_var_preserves_list_accessor():
+    """SP2a: renaming a var must keep a `.K` list accessor intact —
+    `$mood.0` -> `$vibe.0`. The word-boundary lookahead stops at the dot, so
+    the base renames and the accessor survives. A longer name that merely
+    starts with the renamed token is left alone."""
+    assert _rewrite_var_in_string("$mood.0 and $mood", "mood", "vibe") == "$vibe.0 and $vibe"
+    assert _rewrite_var_in_string("$mood.12 x", "mood", "vibe") == "$vibe.12 x"
+    assert _rewrite_var_in_string("$moodier", "mood", "vibe") == "$moodier"
 
 
 def test_fix_wildcard_delete_strips_constraints_but_preserves_bundle_snapshots(wp_db):

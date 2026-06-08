@@ -51,6 +51,33 @@ describe("DebugViewer", () => {
     expect(picksTab.text()).toMatch(/Picks\s*1/);
   });
 
+  it("renders a multi-select pick record's joined value + union tags (SP2a)", async () => {
+    const snap = JSON.stringify({
+      colors: "red, blue, green",
+      __wp_picks__: {
+        m1: {
+          value: "red, blue, green",
+          values: ["red", "blue", "green"],
+          sub_categories: ["warm", "cool"],
+        },
+      },
+      __wp_trace__: [
+        {
+          id: "m1",
+          type: "wildcard",
+          status: "ok",
+          seed: 1,
+          writes: [{ variable: "colors", value: "red, blue, green", source: "wildcard" }],
+        },
+      ],
+      __wp_warnings__: [],
+    });
+    const wrapper = mount(DebugViewer, { props: { snapshot: snap } });
+    await wrapper.findAll(".wp-dbg-tab")[2].trigger("click");
+    expect(wrapper.text()).toContain("red, blue, green");
+    expect(wrapper.text()).toContain("$colors");
+  });
+
   it("Warnings tab badge shows the warn count + warn-tone class", () => {
     const wrapper = mount(DebugViewer, { props: { snapshot: SAMPLE_SNAPSHOT } });
     const warnTab = wrapper.findAll(".wp-dbg-tab")[3];

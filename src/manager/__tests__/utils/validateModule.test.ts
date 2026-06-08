@@ -166,6 +166,20 @@ describe("validateModule - inline brace syntax", () => {
     const issues = validateModule(row, [row]);
     expect(issues.some((i) => /\$ghost/.test(i.message))).toBe(true);
   });
+
+  it("treats $colors.0 (SP2a accessor) as a reference to the bound $colors var", () => {
+    // The list accessor must validate against the BASE var name — not flag
+    // `colors.0` as an unbound variable.
+    const producer = mkWildcard("aaaaaaaa", "colors", {
+      sub_categories: [], options: [], var_binding: "colors",
+    });
+    const referrer = mkWildcard("bbbbbbbb", "ref", {
+      sub_categories: [],
+      options: [{ id: "o1", value: "uses $colors.0 here", weight: 1 }],
+    });
+    const issues = validateModule(referrer, [producer, referrer]);
+    expect(issues.some((i) => /not bound/i.test(i.message))).toBe(false);
+  });
 });
 
 describe("validateBundle", () => {
