@@ -353,6 +353,12 @@ export interface SnapshotShape {
     variable_binding: string;
     enabled_options: string[] | null;
     category_filter: string | null;
+    option_weights?: Record<string, number> | null;
+    exclude_null?: boolean | null;
+    // SP2a multi-select pick range + the separator that joins a bare `$var`.
+    pick_min?: number | null;
+    pick_max?: number | null;
+    pick_separator?: string | null;
   };
 }
 

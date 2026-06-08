@@ -27,7 +27,10 @@ async def test_snapshot_returns_frozen_shape(wp_client):
     assert snap["payload"] == {"options": []}
     assert snap["instance"] == {
         "variable_binding": None, "enabled_options": None, "category_filter": None,
-        "option_weights": None, "mode": None, "pinned_option_id": None,
+        "option_weights": None,
+        # SP2a multi-select + null toggle — part of the snapshot baseline.
+        "exclude_null": None, "pick_min": None, "pick_max": None, "pick_separator": None,
+        "mode": None, "pinned_option_id": None,
         "locked_seed": None, "internal": None,
         "disabled_rule_ids": None, "disabled_exception_keys": None,
         "disabled_matrix_cells": None,

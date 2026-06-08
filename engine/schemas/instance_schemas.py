@@ -34,7 +34,10 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         # SP2a multi-select: per-instance count range (pick_min..pick_max; a
         # range other than 1..1 resolves N options without replacement into a
         # list-valued variable) + the separator used to join it for a bare
-        # `$var`. All local / unpublished, like the other instance overrides.
+        # `$var`. Instance-local: NOT part of a standalone module's published
+        # payload — but bundle children freeze the whole instance as a
+        # snapshot, so a published bundle DOES carry them (intentional
+        # frozen-snapshot fidelity).
         "pick_min": "number",
         "pick_max": "number",
         "pick_separator": "string",
