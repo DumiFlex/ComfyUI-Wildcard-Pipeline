@@ -570,9 +570,20 @@ class WildcardHandler(ModuleHandler):
             pool = [o for o in options if not o.get("is_null")]
             weights = [max(0.0, float(o.get("weight", 1))) for o in pool]
             pool_n = len(pool)
-            lo_c, hi_c = min(lo, pool_n), min(hi, pool_n)
-            count = lo_c if lo_c == hi_c else lo_c + int(rng.random() * (hi_c - lo_c + 1))
-            picks = pick_k_unique(pool, weights, count, rng)
+            independent = bool(instance.get("pick_independent", False))
+            if independent:
+                # SP2c: independent multi-pick draws WITH replacement (repeats
+                # allowed), mirroring the inline `~` flag — so the count is the
+                # requested range and is NOT clamped to the pool size.
+                count = lo if lo == hi else lo + int(rng.random() * (hi - lo + 1))
+                picks = [
+                    p for p in (_pick_weighted(pool, rng) for _ in range(count))
+                    if p is not None
+                ]
+            else:
+                lo_c, hi_c = min(lo, pool_n), min(hi, pool_n)
+                count = lo_c if lo_c == hi_c else lo_c + int(rng.random() * (hi_c - lo_c + 1))
+                picks = pick_k_unique(pool, weights, count, rng)
             sep = instance.get("pick_separator")
             if not isinstance(sep, str):
                 sep = ", "

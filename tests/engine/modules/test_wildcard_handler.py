@@ -96,6 +96,42 @@ def test_multi_pick_binds_listvar_unique():
     assert len(set(out["c"].items)) == 2
 
 
+def test_multi_pick_independent_allows_repeats():
+    # SP2c: independent (with replacement) draws the FULL requested count even
+    # when it exceeds the pool size — 5 picks from a 2-option pool → 5 items.
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload([
+            {"id": "a", "value": "alpha", "weight": 1},
+            {"id": "b", "value": "beta", "weight": 1},
+        ]),
+        instance={
+            "variable_binding": "c", "pick_min": 5, "pick_max": 5,
+            "pick_independent": True, "pick_separator": ", ",
+        },
+        ctx=_ctx(seed=7),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert len(out["c"].items) == 5
+    assert all(v in ("alpha", "beta") for v in out["c"].items)
+
+
+def test_multi_pick_unique_clamps_to_pool():
+    # Default (unique): 5 requested from a 2-option pool clamps to 2 distinct.
+    from engine.syntax.types import ListVar
+    out = WildcardHandler.resolve(
+        _payload([
+            {"id": "a", "value": "alpha", "weight": 1},
+            {"id": "b", "value": "beta", "weight": 1},
+        ]),
+        instance={"variable_binding": "c", "pick_min": 5, "pick_max": 5, "pick_separator": ", "},
+        ctx=_ctx(seed=7),
+    )
+    assert isinstance(out["c"], ListVar)
+    assert len(out["c"].items) == 2
+    assert len(set(out["c"].items)) == 2
+
+
 def test_multi_pick_seed_deterministic():
     a = WildcardHandler.resolve(
         _payload(list(_MULTI)),
