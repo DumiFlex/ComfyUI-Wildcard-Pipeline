@@ -37,6 +37,33 @@ describe("atomicEditorModel.parse + serialise", () => {
     const atoms = parse("a @{notvalid} b");
     expect(atoms).toEqual([{ kind: "text", text: "a @{notvalid} b" }]);
   });
+
+  // --- SP2b: brace blocks decompose into scaffolding + inner chip atoms ---
+
+  it("decomposes a multi-block into scaffolding (blockColor=multi) + inner ref chip", () => {
+    const atoms = parse("{2$$, $$@{aabbccdd}|warm}");
+    expect(atoms.some((a) => a.kind === "ref" && a.uuid === "aabbccdd")).toBe(true);
+    expect(atoms.some((a) => a.kind === "text" && a.blockColor === "multi")).toBe(true);
+    expect(serialise(atoms)).toBe("{2$$, $$@{aabbccdd}|warm}");
+  });
+
+  it("decomposes a plain alternation (blockColor=alt) with var + ref arms", () => {
+    const atoms = parse("{$style|@{aabbccdd}}");
+    expect(atoms.some((a) => a.kind === "var" && a.name === "style")).toBe(true);
+    expect(atoms.some((a) => a.kind === "ref" && a.uuid === "aabbccdd")).toBe(true);
+    expect(atoms.some((a) => a.kind === "text" && a.blockColor === "alt")).toBe(true);
+    expect(serialise(atoms)).toBe("{$style|@{aabbccdd}}");
+  });
+
+  it("round-trips a range + independent multi-block", () => {
+    expect(serialise(parse("{2-4~$$, $$@{aabbccdd}|warm}"))).toBe("{2-4~$$, $$@{aabbccdd}|warm}");
+  });
+
+  it("a literal-only alternation keeps every arm as scaffolding (no chips)", () => {
+    const atoms = parse("{red|blue|green}");
+    expect(atoms.some((a) => a.kind === "ref" || a.kind === "var")).toBe(false);
+    expect(serialise(atoms)).toBe("{red|blue|green}");
+  });
 });
 
 describe("atomicEditorModel operations", () => {

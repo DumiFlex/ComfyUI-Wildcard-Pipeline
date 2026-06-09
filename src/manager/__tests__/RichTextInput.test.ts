@@ -1026,4 +1026,71 @@ describe("RichTextInput / RichTextPreview — useResolveWarnings merge", () => {
     expect(wrap.findAll(".wp-rt-warn-marker").length).toBe(1);
     wrap.unmount();
   });
+
+  // --- SP2b: brace-block decomposition renders V2 (continuous block-coloured
+  //     scaffolding text + inner @{uuid}/$var arms as chips) ---
+
+  it("renders an inner @{uuid} arm of a multi-block as a chip + scaffolding as block-coloured text (V2, no bg)", () => {
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "{2$$, $$@{aabbccdd}|warm}",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "hair"]]),
+      },
+    });
+    // The lone @{uuid} arm chips; the literal "warm" arm + braces/count/sep
+    // stay as scaffolding text.
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(1);
+    // Scaffolding renders via the V2 `.wp-rt-block-scaf` class (colour only).
+    const scaf = wrap.findAll(".wp-rt-block-scaf");
+    expect(scaf.length).toBeGreaterThan(0);
+    // dp-multi block → green ("multi") modifier.
+    expect(scaf.some((s) => s.classes().includes("wp-rt-block-scaf--multi"))).toBe(true);
+    // V2 drops the background-bearing `.wp-rt-dp-multi` span: scaffolding
+    // must not re-tokenise into one.
+    expect(wrap.findAll(".wp-rt-block-scaf .wp-rt-dp-multi").length).toBe(0);
+    expect(wrap.find(".wp-rt__host").text()).toContain("warm");
+  });
+
+  it("colours a plain alternation block amber ('alt') scaffolding", () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "{red|blue|green}", surface: "wildcard" },
+    });
+    // Literal-only alternation → no chips, all arms are scaffolding text.
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    const scaf = wrap.findAll(".wp-rt-block-scaf");
+    expect(scaf.length).toBeGreaterThan(0);
+    expect(scaf.some((s) => s.classes().includes("wp-rt-block-scaf--alt"))).toBe(true);
+  });
+
+  it("backspace right after an inner block chip deletes the chip whole, scaffolding intact", async () => {
+    // Wave-5 atom-direct delete treats a decomposed inner block chip as one
+    // cursor stop — Backspace removes the whole `@{uuid}` and leaves the
+    // braces/count/sep + sibling arm untouched.
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "{2$$, $$@{aabbccdd}|warm}",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "hair"]]),
+      },
+      attachTo: document.body,
+    });
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    // Caret at the start of the scaffolding text immediately AFTER the ref
+    // chip (the "|warm}" span — the last wp-rt__text span).
+    const textSpans = host.querySelectorAll(".wp-rt__text");
+    const after = textSpans[textSpans.length - 1];
+    const tn = after.firstChild;
+    const range = document.createRange();
+    if (tn) range.setStart(tn, 0);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    if (tn) sel?.addRange(range);
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("{2$$, $$|warm}");
+    wrap.unmount();
+  });
 });

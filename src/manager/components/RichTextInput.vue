@@ -27,8 +27,9 @@ import {
   replaceAtom,
   type Atom,
   type RefAtom,
+  type TextAtom,
 } from "./atomicEditorModel";
-import { inlineTokenHtml, splitRefFilter } from "../../widgets/richTokenize";
+import { escapeHtml, inlineTokenHtml, splitRefFilter } from "../../widgets/richTokenize";
 import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
@@ -402,7 +403,12 @@ function parseForSurface(text: string): Atom[] {
       const raw = a.kind === "var" ? "$" + a.name : serialiseRefAtom(a);
       const last = out[out.length - 1];
       if (last && last.kind === "text") {
-        out[out.length - 1] = { kind: "text", text: last.text + raw };
+        // A collapsed arm folds into its surrounding run and inherits that
+        // run's blockColor (SP2b: a brace-block arm stays block-coloured even
+        // when the surface renders it as literal scaffolding text).
+        out[out.length - 1] = last.blockColor
+          ? { kind: "text", text: last.text + raw, blockColor: last.blockColor }
+          : { kind: "text", text: last.text + raw };
       } else {
         out.push({ kind: "text", text: raw });
       }
@@ -416,8 +422,13 @@ function parseForSurface(text: string): Atom[] {
       continue;
     }
     const last = out[out.length - 1];
-    if (a.kind === "text" && last && last.kind === "text") {
-      out[out.length - 1] = { kind: "text", text: last.text + a.text };
+    // Only merge text atoms that share a blockColor — fusing a block's
+    // scaffolding ("multi"/"alt") with adjacent plain text (undefined) would
+    // bleed the block colour onto prose between two blocks (`{a|b} x {c|d}`).
+    if (a.kind === "text" && last && last.kind === "text" && last.blockColor === a.blockColor) {
+      out[out.length - 1] = a.blockColor
+        ? { kind: "text", text: last.text + a.text, blockColor: a.blockColor }
+        : { kind: "text", text: last.text + a.text };
     } else {
       out.push(a);
     }
@@ -447,6 +458,19 @@ let lastEmittedValue = props.modelValue || "";
 function textAtomHtml(text: string): string {
   if (!text) return ZWSP;
   return inlineTokenHtml(text, ["var", "ref"]);
+}
+
+/** HTML for one text atom. SP2b brace-block scaffolding (the braces, count,
+ *  `$$sep$$`, pipes, and literal arms a `{…}` block decomposes into) renders
+ *  its raw text ESCAPED but NOT re-tokenised — re-running the tokenizer on a
+ *  fragment like `{2$$, $$` would mis-read the `$$` sep delimiters as `$$`
+ *  escapes. The amber/green colour comes from the `.wp-rt-block-scaf--*`
+ *  wrapper class instead. Ordinary atoms keep the inline-token colouring
+ *  (weights, escapes) via `textAtomHtml`. Keeping the fast-path escape also
+ *  leaves the span's `firstChild` a text node, so caret math stays correct. */
+function renderTextAtom(atom: TextAtom): string {
+  if (atom.blockColor) return atom.text ? escapeHtml(atom.text) : ZWSP;
+  return textAtomHtml(atom.text);
 }
 
 watch(() => props.modelValue, (next) => {
@@ -1974,7 +1998,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
           v-else
           :data-atom-index="idx"
           class="wp-rt__text"
-          v-html="textAtomHtml(atom.text)"
+          :class="atom.blockColor
+            ? ['wp-rt-block-scaf', 'wp-rt-block-scaf--' + atom.blockColor]
+            : null"
+          v-html="renderTextAtom(atom)"
         ></span>
       </template>
     </div>

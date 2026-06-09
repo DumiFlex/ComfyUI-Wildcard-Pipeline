@@ -20,8 +20,8 @@
  */
 import { computed } from "vue";
 import RefChip from "./RefChip.vue";
-import { parse, type Atom } from "./atomicEditorModel";
-import { inlineTokenHtml } from "../../widgets/richTokenize";
+import { parse, type Atom, type TextAtom } from "./atomicEditorModel";
+import { escapeHtml, inlineTokenHtml } from "../../widgets/richTokenize";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 // Library fallback: when a `@{uuid}` ref isn't in the caller-supplied
@@ -196,6 +196,15 @@ function textHtml(text: string): string {
     : ["ref"];
   return inlineTokenHtml(text, collapsed);
 }
+
+/** HTML for one text atom — mirrors RichTextInput.renderTextAtom. SP2b
+ *  brace-block scaffolding renders raw-escaped (NOT re-tokenised, so the
+ *  `$$sep$$` delimiters aren't mis-coloured as escapes); the colour is on the
+ *  `.wp-rt-block-scaf--*` wrapper. Ordinary atoms keep inline-token colour. */
+function renderTextAtom(atom: TextAtom): string {
+  if (atom.blockColor) return atom.text ? escapeHtml(atom.text) : "";
+  return textHtml(atom.text);
+}
 </script>
 
 <template>
@@ -225,7 +234,14 @@ function textHtml(text: string): string {
         :resolved="atomIsResolved(atom)"
         class="wp-rt-var"
       />
-      <span v-else class="wp-rt-text wp-rtp__text" v-html="textHtml(atom.text)"></span>
+      <span
+        v-else
+        class="wp-rt-text wp-rtp__text"
+        :class="atom.blockColor
+          ? ['wp-rt-block-scaf', 'wp-rt-block-scaf--' + atom.blockColor]
+          : null"
+        v-html="renderTextAtom(atom)"
+      ></span>
     </template>
     <span
       v-for="w in effectiveWarnings"

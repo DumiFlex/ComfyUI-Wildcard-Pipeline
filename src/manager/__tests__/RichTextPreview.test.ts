@@ -91,4 +91,39 @@ describe("RichTextPreview", () => {
     const chip = w.find(".wp-refchip");
     expect(chip.classes()).toContain("wp-refchip--unresolved");
   });
+
+  // --- SP2b: brace-block decomposition mirrors the editor (V2) — inner
+  //     @{uuid}/$var arms chip (surface-gated), scaffolding is block-coloured
+  //     text. The preview must look identical to the editor at rest. ---
+
+  it("renders an inner @{uuid} arm of a multi-block as a chip + scaffolding as block-coloured text (V2)", () => {
+    const w = mount(RichTextPreview, {
+      props: {
+        value: "{2$$, $$@{c0f09840}|warm}",
+        surface: "wildcard",
+        uuidToName: new Map([["c0f09840", "hair"]]),
+      },
+    });
+    expect(w.findAll(".wp-refchip").length).toBe(1);
+    const scaf = w.findAll(".wp-rt-block-scaf");
+    expect(scaf.length).toBeGreaterThan(0);
+    expect(scaf.some((s) => s.classes().includes("wp-rt-block-scaf--multi"))).toBe(true);
+  });
+
+  it("chips an inner $var arm of a brace block + keeps literal arms as 'alt' scaffolding", () => {
+    // The preview chips every decomposed var/ref arm (its existing
+    // chip-everything policy; surface only dims ignored refs). A plain
+    // alternation block colours its scaffolding amber ("alt").
+    const w = mount(RichTextPreview, {
+      props: {
+        value: "{$style|warm}",
+        surface: "combine",
+        varSuggestions: ["style"],
+      },
+    });
+    expect(w.findAll(".wp-refchip--var").length).toBe(1);
+    const scaf = w.findAll(".wp-rt-block-scaf");
+    expect(scaf.length).toBeGreaterThan(0);
+    expect(scaf.some((s) => s.classes().includes("wp-rt-block-scaf--alt"))).toBe(true);
+  });
 });
