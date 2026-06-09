@@ -28,6 +28,21 @@ import { RESERVED } from "../parsing/subcatFilter";
 
 export const CURRENT_SCHEMA_VERSION = 2;
 
+/**
+ * Community catalog version for the SP2b nested multi-pick TEXT grammar
+ * (`{N-M~$$sep$$…}` — range count and/or the `~` independent flag).
+ *
+ * SP2b is NOT a structural shape change: a v2 payload is byte-identical in
+ * SHAPE to an SP2b one — only the free-text grammar inside string fields is
+ * new. So there is deliberately NO `migrateV2ToV3` and `CURRENT_SCHEMA_VERSION`
+ * stays 2 (the migration chain has nothing to do). The bump exists purely so
+ * the community catalog can refuse the new text to a pre-SP2b consumer whose
+ * tokenizer would mis-parse it (server-first rollout). Publish stamps THIS
+ * version only when the payload actually uses range/`~` — see
+ * `schemaVersionForPayload`.
+ */
+export const SP2B_SCHEMA_VERSION = 3;
+
 export interface MigrationOk<T> {
   ok: true;
   migrated: T;

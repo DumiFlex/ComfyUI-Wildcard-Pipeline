@@ -20,7 +20,7 @@
 
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
-import { CURRENT_SCHEMA_VERSION } from "./migrations";
+import { CURRENT_SCHEMA_VERSION, SP2B_SCHEMA_VERSION } from "./migrations";
 import { getValidator, type ModuleSubtype } from "@/validators";
 import { version as ENGINE_VERSION } from "../../../package.json";
 
@@ -49,6 +49,29 @@ export interface PublishBody {
   schema_version: number;
   producer_engine_version: string;
   changelog?: string;
+}
+
+/**
+ * SP2b nested-multi-pick marker: a `{N$$…}` multi-pick whose count is a RANGE
+ * (`N-M`) or that carries the `~` independent flag. A plain fixed-count
+ * `{N$$…}` is NOT SP2b (it predates this — SP2a). Mirror of the community
+ * publish-side scan (Alembic 0012): both ends key off the same text shape.
+ */
+const SP2B_MARKER_RE = /\{\d+(?:-\d+~?|~)\$\$/;
+
+/**
+ * Choose the community catalog `schema_version` to stamp for a payload:
+ * `SP2B_SCHEMA_VERSION` when the payload TEXT uses a range or the `~`
+ * independent flag, else `CURRENT_SCHEMA_VERSION`. Scans the whole serialised
+ * payload so the marker is found wherever text lives (wildcard option values,
+ * combine templates, bundle children). Stamping the lower version for plain
+ * payloads keeps pre-SP2b consumers able to install everything that doesn't
+ * actually use the new grammar.
+ */
+export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  return SP2B_MARKER_RE.test(JSON.stringify(payload))
+    ? SP2B_SCHEMA_VERSION
+    : CURRENT_SCHEMA_VERSION;
 }
 
 /**
@@ -87,7 +110,7 @@ export function buildPublishBody(input: {
     name: input.name,
     description: input.description,
     payload: input.payload,
-    schema_version: CURRENT_SCHEMA_VERSION,
+    schema_version: schemaVersionForPayload(input.payload),
     producer_engine_version: ENGINE_VERSION,
     changelog: input.changelog ?? "",
   };
