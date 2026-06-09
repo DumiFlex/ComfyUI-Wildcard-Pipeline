@@ -6,6 +6,7 @@ import {
   readsAs,
   validateExpression,
 } from "@/manager/parsing/subcatFilter";
+import WpCheck from "@/components/shared/WpCheck.vue";
 
 interface Props {
   /** Sub-categories declared by the picked wildcard's payload. Used as
@@ -153,20 +154,7 @@ function onApply(): void {
       class="wp-subcat-picker__null-row"
       data-test="subcat-exclude-null"
     >
-      <span
-        class="wp-check"
-        role="checkbox"
-        :aria-checked="excludeNull"
-        tabindex="0"
-        aria-label="Exclude null"
-        @click="excludeNull = !excludeNull"
-        @keydown.space.prevent="excludeNull = !excludeNull"
-        @keydown.enter.prevent="excludeNull = !excludeNull"
-      >
-        <svg v-if="excludeNull" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </span>
+      <WpCheck v-model="excludeNull" aria-label="Exclude null" />
       <i class="pi pi-ban" aria-hidden="true" />
       <span>Exclude null</span>
     </span>

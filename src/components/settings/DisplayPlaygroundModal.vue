@@ -36,6 +36,7 @@ import {
   type SettingKey,
 } from "./playground-store";
 import PlaygroundMockup from "./PlaygroundMockup.vue";
+import WpCheck from "@/components/shared/WpCheck.vue";
 
 type Density = "comfortable" | "compact" | "minimal";
 type Decoration = "full" | "minimal" | "off";
@@ -319,20 +320,7 @@ onBeforeUnmount(() => {
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Border highlights</span>
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="borderHighlight"
-                  tabindex="0"
-                  aria-label="Border highlights"
-                  @click="borderHighlight = !borderHighlight"
-                  @keydown.space.prevent="borderHighlight = !borderHighlight"
-                  @keydown.enter.prevent="borderHighlight = !borderHighlight"
-                >
-                  <svg v-if="borderHighlight" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                <WpCheck v-model="borderHighlight" aria-label="Border highlights" />
               </div>
             </fieldset>
 
@@ -340,37 +328,11 @@ onBeforeUnmount(() => {
               <legend class="wp-pg__group-title">Collapse &amp; focus</legend>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new modules by default</span>
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="collapsedByDefault"
-                  tabindex="0"
-                  aria-label="Collapse new modules by default"
-                  @click="collapsedByDefault = !collapsedByDefault"
-                  @keydown.space.prevent="collapsedByDefault = !collapsedByDefault"
-                  @keydown.enter.prevent="collapsedByDefault = !collapsedByDefault"
-                >
-                  <svg v-if="collapsedByDefault" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                <WpCheck v-model="collapsedByDefault" aria-label="Collapse new modules by default" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new bundles by default</span>
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="bundleCollapsedByDefault"
-                  tabindex="0"
-                  aria-label="Collapse new bundles by default"
-                  @click="bundleCollapsedByDefault = !bundleCollapsedByDefault"
-                  @keydown.space.prevent="bundleCollapsedByDefault = !bundleCollapsedByDefault"
-                  @keydown.enter.prevent="bundleCollapsedByDefault = !bundleCollapsedByDefault"
-                >
-                  <svg v-if="bundleCollapsedByDefault" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                <WpCheck v-model="bundleCollapsedByDefault" aria-label="Collapse new bundles by default" />
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Collapse stack mode</span>
@@ -381,20 +343,7 @@ onBeforeUnmount(() => {
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="focusMode"
-                  tabindex="0"
-                  aria-label="Focus mode (dim non-hovered)"
-                  @click="focusMode = !focusMode"
-                  @keydown.space.prevent="focusMode = !focusMode"
-                  @keydown.enter.prevent="focusMode = !focusMode"
-                >
-                  <svg v-if="focusMode" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                <WpCheck v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
               </div>
             </fieldset>
 
@@ -439,54 +388,15 @@ onBeforeUnmount(() => {
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Suppress info toasts</span>
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="suppressInfoToasts"
-                  tabindex="0"
-                  aria-label="Suppress info toasts"
-                  @click="suppressInfoToasts = !suppressInfoToasts"
-                  @keydown.space.prevent="suppressInfoToasts = !suppressInfoToasts"
-                  @keydown.enter.prevent="suppressInfoToasts = !suppressInfoToasts"
-                >
-                  <svg v-if="suppressInfoToasts" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                <WpCheck v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">New modules start disabled</span>
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="newModuleDisabled"
-                  tabindex="0"
-                  aria-label="New modules start disabled"
-                  @click="newModuleDisabled = !newModuleDisabled"
-                  @keydown.space.prevent="newModuleDisabled = !newModuleDisabled"
-                  @keydown.enter.prevent="newModuleDisabled = !newModuleDisabled"
-                >
-                  <svg v-if="newModuleDisabled" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                <WpCheck v-model="newModuleDisabled" aria-label="New modules start disabled" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Confirm destructive bundle actions</span>
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="confirmDestructiveBundle"
-                  tabindex="0"
-                  aria-label="Confirm destructive bundle actions"
-                  @click="confirmDestructiveBundle = !confirmDestructiveBundle"
-                  @keydown.space.prevent="confirmDestructiveBundle = !confirmDestructiveBundle"
-                  @keydown.enter.prevent="confirmDestructiveBundle = !confirmDestructiveBundle"
-                >
-                  <svg v-if="confirmDestructiveBundle" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                <WpCheck v-model="confirmDestructiveBundle" aria-label="Confirm destructive bundle actions" />
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Bundle master OFF behavior</span>

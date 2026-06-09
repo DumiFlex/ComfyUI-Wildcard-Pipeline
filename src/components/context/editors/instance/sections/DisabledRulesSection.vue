@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import WpCheck from "../../../../shared/WpCheck.vue";
 
 interface Rule {
   id: string;
@@ -75,21 +76,12 @@ function onClickReset(): void {
         :key="rule.id"
         class="wp-instance-row"
       >
-        <span
-          class="wp-check"
-          role="checkbox"
+        <WpCheck
           :data-test="`dr-cb-${rule.id}`"
-          :aria-checked="isDisabled(rule.id)"
+          :model-value="isDisabled(rule.id)"
           :aria-label="`disable rule ${rule.id}`"
-          tabindex="0"
-          @click="onToggle(rule.id, !isDisabled(rule.id))"
-          @keydown.space.prevent="onToggle(rule.id, !isDisabled(rule.id))"
-          @keydown.enter.prevent="onToggle(rule.id, !isDisabled(rule.id))"
-        >
-          <svg v-if="isDisabled(rule.id)" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </span>
+          @update:model-value="(v) => onToggle(rule.id, v)"
+        />
         <span class="wp-instance-row-id">{{ rule.id }}</span>
         <span class="wp-instance-row-value">{{ ruleLabel(rule) }}</span>
       </div>

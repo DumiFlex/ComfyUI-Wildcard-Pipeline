@@ -12,6 +12,7 @@ import {
   type Ast,
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
+import WpCheck from "../../../../shared/WpCheck.vue";
 
 interface OptionFull extends WildcardOption {
   value: string;
@@ -522,20 +523,11 @@ const skewedTowards = computed(() => {
       class="pool__allow-repeats"
       data-test="pool-allow-repeats"
     >
-      <span
-        class="wp-check"
-        role="checkbox"
-        :aria-checked="pickIndependent"
-        tabindex="0"
+      <WpCheck
+        :model-value="pickIndependent"
         aria-label="Allow repeats"
-        @click="setPickIndependent(!pickIndependent)"
-        @keydown.space.prevent="setPickIndependent(!pickIndependent)"
-        @keydown.enter.prevent="setPickIndependent(!pickIndependent)"
-      >
-        <svg v-if="pickIndependent" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </span>
+        @update:model-value="setPickIndependent"
+      />
       <i class="pi pi-replay" aria-hidden="true" />
       <span>Allow repeats</span>
     </span>
@@ -551,20 +543,12 @@ const skewedTowards = computed(() => {
       :class="{ 'pool__exclude-null--off': multiActive }"
       data-test="pool-exclude-null"
     >
-      <span
-        class="wp-check"
-        role="checkbox"
-        :aria-checked="excludeNull"
-        :aria-disabled="multiActive || undefined"
-        :tabindex="multiActive ? -1 : 0"
+      <WpCheck
+        :model-value="excludeNull"
+        :disabled="multiActive"
         aria-label="Exclude null option"
-        @click="!multiActive && setExcludeNull(!excludeNull)"
-        @keydown.space.prevent="!multiActive && setExcludeNull(!excludeNull)"
-      >
-        <svg v-if="excludeNull" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </span>
+        @update:model-value="setExcludeNull"
+      />
       <i class="pi pi-ban" aria-hidden="true" />
       <span>{{ multiActive
         ? "Null excluded in multi-pick — use Min 0 for optional"

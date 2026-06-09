@@ -18,6 +18,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { bundleHashes } from "./drift-store";
 import { api } from "../../manager/api/client";
 import type { BundleInstance } from "../../widgets/_shared";
+import WpCheck from "@/components/shared/WpCheck.vue";
 
 interface ChildPreview {
   name: string;
@@ -394,21 +395,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               data-test="pbtl-cascade"
             >
               <span class="wp-ptl-cascade__toggle">
-                <span
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="cascadeEnabled"
+                <WpCheck
+                  v-model="cascadeEnabled"
                   data-test="pbtl-cascade-toggle"
-                  tabindex="0"
                   aria-label="Restore missing references first"
-                  @click="cascadeEnabled = !cascadeEnabled"
-                  @keydown.space.prevent="cascadeEnabled = !cascadeEnabled"
-                  @keydown.enter.prevent="cascadeEnabled = !cascadeEnabled"
-                >
-                  <svg v-if="cascadeEnabled" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
+                />
                 <span>
                   Restore
                   <strong>{{ (cascadeScan?.missingModuleCount ?? 0) + (cascadeScan?.missingBundleCount ?? 0) }}</strong>
