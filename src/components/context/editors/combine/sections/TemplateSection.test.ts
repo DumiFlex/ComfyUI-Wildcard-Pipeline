@@ -245,7 +245,7 @@ describe("combine TemplateSection", () => {
     expect(unresolved.text()).toBe("$unknown");
   });
 
-  it("live preview leaves alternations + repeats raw (need RNG to resolve)", () => {
+  it("resolves an inline alternation deterministically (first branch) + $vars (#1)", () => {
     const w = mount(TemplateSection, {
       props: {
         module: makeModule({
@@ -259,8 +259,35 @@ describe("combine TemplateSection", () => {
     });
     const pane = w.find('[data-test="tpl-preview-resolved"]');
     expect(pane.exists()).toBe(true);
-    // Alt stays raw, $color resolves.
-    expect(pane.text()).toBe("{red|blue} shiny");
+    // Seedless preview → deterministic first branch. `$color` resolves.
+    expect(pane.text()).toBe("red shiny");
+  });
+
+  it("resolves a multi-pick to its first N branches joined by the separator (#1)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "{2$$, $$a|b|c}" },
+        }),
+        upstreamResolved: {},
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.exists()).toBe(true);
+    expect(pane.text()).toBe("a, b");
+  });
+
+  it("resolves $vars nested inside an inline branch (#1)", () => {
+    const w = mount(TemplateSection, {
+      props: {
+        module: makeModule({
+          payload: { output_var: "out", template: "{$mood|calm}" },
+        }),
+        upstreamResolved: { mood: "serene" },
+      },
+    });
+    const pane = w.find('[data-test="tpl-preview-resolved"]');
+    expect(pane.text()).toBe("serene");
   });
 
   it("resolves a $color.0 list accessor without leaking the .K literal (SP2a)", () => {

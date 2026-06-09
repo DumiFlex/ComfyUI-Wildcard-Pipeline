@@ -93,6 +93,42 @@ const previewTokens = computed<PreviewToken[]>(() =>
 // preview). The result is the closest static approximation of what
 // the assembler will read at runtime, so users can spot upstream-name
 // typos before queue time.
+/** Deterministic inline-block resolution for the seedless combine preview:
+ *  an alternation `{a|b}` resolves to its FIRST branch; a multi-pick
+ *  `{N$$sep$$a|b|c}` to its first `N` branches joined by the separator
+ *  (clamped to what's available). Nested `$vars` in the chosen branch(es)
+ *  resolve via the upstream map so the preview shows a concrete example
+ *  string instead of the literal `{a|b}`. Deterministic (not random) because
+ *  the preview has no seed; runtime resolution still rolls the real RNG. Refs
+ *  stay literal — combine never recurses into nested wildcards. */
+function resolveInlineText(s: string, map: Record<string, ResolvedValue>): string {
+  let out = "";
+  for (const tok of tokenize(s, "combine")) out += resolveInlineTok(tok, map);
+  return out;
+}
+function resolveInlineTok(tok: PreviewToken, map: Record<string, ResolvedValue>): string {
+  switch (tok.kind) {
+    case "var":
+      return !tok.invalid && tok.varName
+        && Object.prototype.hasOwnProperty.call(map, tok.varName)
+        ? applyVarAccessor(map[tok.varName], tok.index)
+        : tok.raw;
+    case "escape":
+      return tok.literal ?? "";
+    case "alt": {
+      const b = tok.branches ?? [];
+      return b.length > 0 ? resolveInlineText(b[0], map) : "";
+    }
+    case "repeat": {
+      const b = tok.branches ?? [];
+      const n = Math.max(0, Math.min(tok.count ?? 0, b.length));
+      return b.slice(0, n).map((br) => resolveInlineText(br, map)).join(tok.separator ?? "");
+    }
+    default:
+      return tok.raw; // text, ref (literal on combine)
+  }
+}
+
 interface ResolvedToken {
   text: string;
   /** Source kind so the renderer can color-code: `var-resolved` paints
@@ -129,10 +165,14 @@ const resolvedTokens = computed<ResolvedToken[]>(() => {
         tokens.push({ text: tok.literal ?? "", kind: "literal" });
         break;
       case "ref":
+        // Combine never recurses into nested wildcards — ref stays literal.
+        tokens.push({ text: tok.raw, kind: "literal" });
+        break;
       case "alt":
       case "repeat":
-        // Leave as raw — these need RNG / chain resolution.
-        tokens.push({ text: tok.raw, kind: "literal" });
+        // Resolve inline blocks deterministically so the preview shows a
+        // concrete example string instead of the literal `{a|b}`.
+        tokens.push({ text: resolveInlineTok(tok, map), kind: "literal" });
         break;
       case "text":
       default:
@@ -143,11 +183,13 @@ const resolvedTokens = computed<ResolvedToken[]>(() => {
   return tokens;
 });
 
-/** Show the live-preview pane only when the template references at
- *  least one upstream-resolvable var. No vars = nothing to substitute,
- *  pane stays hidden so the section doesn't grow unnecessarily. */
+/** Show the live-preview pane when there's something to resolve: an
+ *  upstream-resolvable var, OR an inline block (`{a|b}` / `{N$$…}`) that the
+ *  preview now expands deterministically. Otherwise stay hidden so the
+ *  section doesn't grow for a plain static template. */
 const hasResolvableVar = computed(() =>
-  resolvedTokens.value.some((t) => t.kind === "var-resolved"),
+  resolvedTokens.value.some((t) => t.kind === "var-resolved")
+  || previewTokens.value.some((t) => t.kind === "alt" || t.kind === "repeat"),
 );
 
 // Detected variables = VAR tokens (deduped, library order preserved).
