@@ -235,6 +235,56 @@ def test_resolve_ref_cycle_lenient():
     assert cycle_warnings[0]["detail"]["chain"] == ["a0000001", "b0000002", "a0000001"]
 
 
+# --- SP2b: range count + independent mode + lone-ref pool pick ---
+
+def _opts(*values):
+    return [{"value": v, "weight": 1} for v in values]
+
+
+def test_sp2b_independent_allows_repeats():
+    # `~` = independent: N fresh resolutions of the body; a 1-option pool
+    # repeats. (Generic independent path — resolve the chosen branch N times.)
+    ctx = _ctx(surface="wildcard",
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("x"))})
+    assert resolve_text("{3~$$, $$@{a4f7b2e1}}", ctx) == "x, x, x"
+
+
+def test_sp2b_unique_lone_ref_distinct_from_pool():
+    # No flag, lone ref, count>=2 → N DISTINCT options from the ref's pool.
+    ctx = _ctx(surface="wildcard", rng=random.Random(7),
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("a", "b", "c"))})
+    out = resolve_text("{2$$, $$@{a4f7b2e1}}", ctx).split(", ")
+    assert len(out) == 2 and len(set(out)) == 2
+
+
+def test_sp2b_unique_lone_ref_clamps_to_pool():
+    ctx = _ctx(surface="wildcard",
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("a", "b"))})
+    out = resolve_text("{5$$, $$@{a4f7b2e1}}", ctx).split(", ")
+    assert len(out) == 2  # clamped to pool size
+
+
+def test_sp2b_range_min_zero_can_be_empty():
+    ctx = _ctx(surface="wildcard", rng=random.Random(0),
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("x"))})
+    assert resolve_text("{0-0$$, $$@{a4f7b2e1}}", ctx) == ""
+
+
+def test_sp2b_single_pick_unchanged_regression():
+    # A fixed `{1$$…}` lone ref keeps the legacy single-pick path (seed safe).
+    ctx = _ctx(surface="wildcard",
+               _modules={"a4f7b2e1": _wc("a4f7b2e1", "c", _opts("x"))})
+    assert resolve_text("{1$$, $$@{a4f7b2e1}}", ctx) == "x"
+
+
+def test_sp2b_var_branches_resolve_in_combine():
+    # The §3.3 gap: vars inside a multi-block on the combine surface resolve.
+    ctx = _ctx(surface="combine", rng=random.Random(1),
+               _vars={"style": "bold", "mood": "calm", "tone": "warm"})
+    out = resolve_text("{2$$, $$$style|$mood|$tone}", ctx).split(", ")
+    assert len(out) == 2 and set(out) <= {"bold", "calm", "warm"}
+
+
 def test_resolve_ref_cycle_strict_raises():
     from engine.syntax import CycleDetectedError
     ctx = _ctx(

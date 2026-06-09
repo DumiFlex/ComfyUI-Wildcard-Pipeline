@@ -245,36 +245,72 @@ def _resolve_multi_pick(
     depth: int,
     visited: tuple[str, ...],
 ) -> str:
-    """Pick `count` branches without replacement, weighted, joined by `sep`.
+    """Resolve a multi-pick block, joined by `sep`.
 
-    Each chosen branch is recursively resolved.
+    SP2b: `count` is a range `[min, max]` (a fixed `{N$$}` has min==max), and
+    `independent` (the `~` flag) toggles unique-without-replacement (default)
+    vs N draws WITH replacement. A lone nested-ref body in unique mode draws N
+    DISTINCT options from the ref's filtered pool (a per-site SP2a). Each chosen
+    value is recursively resolved.
     """
     # Seedless assembler surface — see _resolve_inline_pick. Render verbatim
     # rather than freezing a deterministic seed-0 multi-pick.
     if ctx.surface == "assembler":
         return tok.raw
-    count: int = tok.meta.get("count", 0)
+    cmin: int = tok.meta.get("min", tok.meta.get("count", 0))
+    cmax: int = tok.meta.get("max", tok.meta.get("count", 0))
+    independent: bool = bool(tok.meta.get("independent", False))
     sep: str = tok.meta.get("sep", "")
     branches: list[str] = list(tok.meta.get("branches", []))
 
+    # Range count: a fixed N (min==max) does NOT draw from rng, so a `{N$$}`
+    # reproduces the pre-SP2b seed sequence byte-for-byte. A true range draws.
+    count = cmin if cmin == cmax else ctx.rng.randint(cmin, cmax)
     if count <= 0:
         return ""
 
-    # Clamp count to available branches (without-replacement constraint)
+    # Lone nested-ref body, unique mode, count>=2, wildcard surface → pick N
+    # DISTINCT options from the ref's filtered pool (per-site SP2a multi-select).
+    # count==1 stays on the legacy branch path below so its seed is unchanged.
+    if not independent and count >= 2 and len(branches) == 1 and ctx.surface == "wildcard":
+        bt = tokenize_text(branches[0])
+        if len(bt) == 1 and bt[0].kind == TokenKind.REF:
+            ref_tok = bt[0]
+            ref_uuid = ref_tok.meta.get("uuid", "")
+            pool = ref_option_pool(ref_tok, ctx)
+            if not pool:
+                return ""
+            values = [str(o.get("value", "")) for o in pool]
+            weights = [float(o.get("weight", 1) or 1) for o in pool]
+            chosen = pick_k_unique(values, weights, count, ctx.rng)
+            return sep.join(
+                _resolve_tokens(
+                    tokenize_text(v), ctx, depth=depth + 1, visited=visited + (ref_uuid,)
+                ) if v else ""
+                for v in chosen
+            )
+
+    weights = [_parse_branch_weight(b) for b in branches]
+    branch_values = [_strip_branch_weight(b) for b in branches]
+    resolved: list[str] = []
+
+    if independent:
+        # N draws WITH replacement over the branches; each resolved
+        # independently (a lone ref re-rolls every time → variety from nesting).
+        for _ in range(count):
+            j = _weighted_pick_index(weights, ctx.rng)
+            v = branch_values[j]
+            resolved.append(
+                _resolve_tokens(tokenize_text(v), ctx, depth=depth, visited=visited)
+                if v else ""
+            )
+        return sep.join(resolved)
+
+    # Unique over branches (legacy path, now range-aware): N distinct branches.
     n_picks = min(count, len(branches))
     if n_picks == 0:
         return ""
-
-    # Weighted without-replacement: branch weights default to 1; if a branch
-    # uses the `N::value` form (a feature of the inline-pick weight micro-syntax),
-    # the weight is parsed from the prefix. For simplicity, this implementation
-    # treats all branches as weight=1 unless they begin with `<int>::`.
-    weights = [_parse_branch_weight(b) for b in branches]
-    branch_values = [_strip_branch_weight(b) for b in branches]
-
     chosen_values = pick_k_unique(branch_values, weights, n_picks, ctx.rng)
-
-    resolved: list[str] = []
     for branch_text in chosen_values:
         if not branch_text:
             resolved.append("")
@@ -283,6 +319,99 @@ def _resolve_multi_pick(
         resolved.append(_resolve_tokens(nested, ctx, depth=depth, visited=visited))
 
     return sep.join(resolved)
+
+
+def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
+    """Filtered + constrained option pool a ``@{uuid[#name][:expr][!null]}`` ref
+    resolves against — catalog lookup, the ``:expr``/``!null`` sub-category
+    filter, and chain constraints. Shared by ``_resolve_ref`` (single weighted
+    pick) and the SP2b lone-ref multi-pick path.
+
+    Returns ``[]`` (pushing the same ``unknown_ref`` /
+    ``ref_subcategory_empty_pool`` warnings, and raising ``UnknownRefError`` in
+    strict mode for an unknown ref) when there is nothing to pick. Does NOT
+    apply the depth / cycle / surface guards — those stay in ``_resolve_ref``
+    and the multi-pick caller.
+    """
+    uuid = tok.meta.get("uuid", "")
+    module = ctx.get_module(uuid)
+    if module is None:
+        if ctx.strict:
+            raise UnknownRefError(uuid)
+        cached_name = tok.meta.get("name") if hasattr(tok, "meta") else None
+        _push_warning(
+            ctx,
+            type="unknown_ref",
+            severity="warn",
+            module_id="",
+            source_field="",
+            position=tok.start,
+            token_index=None,
+            detail={"uuid": uuid, "name": cached_name},
+            message=f"Unknown wildcard ref @{{{uuid}{'#' + cached_name if cached_name else ''}}}",
+        )
+        return []
+
+    payload_dict = module.get("payload")
+    if isinstance(payload_dict, dict):
+        options = list(payload_dict.get("options", []))
+    else:
+        options = list(module.get("options", []))
+
+    filter_expr = tok.meta.get("filter_expr")
+    exclude_null = bool(tok.meta.get("exclude_null"))
+    if (isinstance(filter_expr, str) and filter_expr.strip()) or exclude_null:
+        ast = _parse_subcat(filter_expr) if isinstance(filter_expr, str) else None
+        options = [
+            o for o in options
+            if isinstance(o, dict)
+            and (
+                (o.get("is_null") and not exclude_null)
+                or (
+                    not o.get("is_null")
+                    and _subcat_matches(ast, set(o.get("sub_categories") or []))
+                )
+            )
+        ]
+        if not options:
+            _push_warning(
+                ctx,
+                type="ref_subcategory_empty_pool",
+                severity="warn",
+                module_id="",
+                source_field="",
+                position=tok.start,
+                token_index=None,
+                detail={
+                    "uuid": uuid,
+                    "filter_expr": filter_expr,
+                    "exclude_null": exclude_null,
+                },
+                message=(
+                    f"@{{{uuid}:{filter_expr or ''}"
+                    f"{'!null' if exclude_null else ''}}} matched no options"
+                ),
+            )
+            return []
+
+    get_constraints = getattr(ctx, "get_constraints", None)
+    get_picks = getattr(ctx, "get_picks", None)
+    if callable(get_constraints) and callable(get_picks):
+        constraints = get_constraints()
+        if constraints:
+            from engine.modules._constraints import (
+                apply_constraints_for_target,
+                warn_excludes_all,
+            )
+            get_consumed = getattr(ctx, "get_consumed_constraints", None)
+            consumed = get_consumed() if callable(get_consumed) else set()
+            options, any_applied = apply_constraints_for_target(
+                options, uuid, constraints, get_picks(), ctx.warnings,
+                consumed=consumed,
+            )
+            if any_applied:
+                warn_excludes_all(options, uuid, ctx.warnings)
+    return options
 
 
 def _resolve_ref(
@@ -352,125 +481,12 @@ def _resolve_ref(
         )
         return ""
 
-    # Catalog lookup
-    module = ctx.get_module(uuid)
-    if module is None:
-        if ctx.strict:
-            raise UnknownRefError(uuid)
-        # Surface the cached `#name` from the ref token if the original
-        # syntax carried one (`@{uuid#name}`). Lets WP_Debug + RichTextPreview
-        # render a friendly label even when the target wildcard has been
-        # deleted from the library — same fallback chain RichTextPreview
-        # uses for unresolved chips elsewhere.
-        cached_name = tok.meta.get("name") if hasattr(tok, "meta") else None
-        _push_warning(
-            ctx,
-            type="unknown_ref",
-            severity="warn",
-            module_id="",
-            source_field="",
-            position=tok.start,
-            token_index=None,
-            detail={"uuid": uuid, "name": cached_name},
-            message=f"Unknown wildcard ref @{{{uuid}{'#' + cached_name if cached_name else ''}}}",
-        )
+    # Catalog lookup + `:expr`/`!null` filter + chain constraints, factored
+    # into ref_option_pool (shared with the SP2b lone-ref multi-pick path).
+    # The strict-unknown raise + the unknown / empty-pool warnings live there.
+    options = ref_option_pool(tok, ctx)
+    if not options:
         return ""
-
-    # Pick weighted option.
-    # Support both SnapshotEntry shape (payload.options, spec §2.4) and the
-    # legacy flat shape used by existing unit tests (options at top level).
-    payload_dict = module.get("payload")
-    if isinstance(payload_dict, dict):
-        options = list(payload_dict.get("options", []))
-    else:
-        options = list(module.get("options", []))
-
-    # Optional per-call sub-category filter: `@{uuid:warm,cool}` keeps
-    # only options whose `sub_category` is in the requested list. Same
-    # semantics as chain-level `instance.category_filter` but scoped to
-    # this specific ref, so a shared library wildcard (e.g. `@{color}`)
-    # can be narrowed differently at every call site without authoring
-    # separate library entries. Empty post-filter pool → empty string
-    # + warning so the user sees the unsatisfiable filter rather than
-    # silently falling through to the unfiltered list.
-    #
-    # Null semantics (inverted 2026-05-25): the wildcard's `is_null`
-    # option is INCLUDED by default. The `!null` marker EXCLUDES it.
-    # `:expr` is a boolean over the target option's tag set
-    # (`sub_categories`), parsed by the shared subcat_filter matcher —
-    # same semantics as instance.category_filter. The expression never
-    # applies to the null option; an untagged non-null option bypasses a
-    # bare-tag term but is kept by `not <tag>` (spec §3.4). So:
-    #   `@{uuid}`              → all options (incl. null)
-    #   `@{uuid:warm}`         → warm options + null
-    #   `@{uuid:warm!null}`    → warm options, null excluded
-    #   `@{uuid!null}`         → all non-null options
-    # Reserved words (incl. `null`) can't be real sub-cat names —
-    # WildcardHandler.validate_payload rejects them.
-    filter_expr = tok.meta.get("filter_expr")
-    exclude_null = bool(tok.meta.get("exclude_null"))
-    if (isinstance(filter_expr, str) and filter_expr.strip()) or exclude_null:
-        ast = _parse_subcat(filter_expr) if isinstance(filter_expr, str) else None
-        options = [
-            o for o in options
-            if isinstance(o, dict)
-            and (
-                (o.get("is_null") and not exclude_null)
-                or (
-                    not o.get("is_null")
-                    and _subcat_matches(ast, set(o.get("sub_categories") or []))
-                )
-            )
-        ]
-        if not options:
-            _push_warning(
-                ctx,
-                type="ref_subcategory_empty_pool",
-                severity="warn",
-                module_id="",
-                source_field="",
-                position=tok.start,
-                token_index=None,
-                detail={
-                    "uuid": uuid,
-                    "filter_expr": filter_expr,
-                    "exclude_null": exclude_null,
-                },
-                message=(
-                    f"@{{{uuid}:{filter_expr or ''}"
-                    f"{'!null' if exclude_null else ''}}} matched no options"
-                ),
-            )
-            return ""
-
-    # Apply chain-level constraints whose `target_wildcard_id` matches
-    # this nested ref's uuid. Pre-2026-05 only top-level wildcards saw
-    # constraints — nested `@{B}` from inside another wildcard's
-    # option value silently bypassed every rule, defeating composed
-    # pipelines. ResolveContext exposes `get_constraints` / `get_picks`
-    # for this path; both default to empty for hand-built resolve
-    # contexts in tests so the legacy fast path keeps working.
-    get_constraints = getattr(ctx, "get_constraints", None)
-    get_picks = getattr(ctx, "get_picks", None)
-    if callable(get_constraints) and callable(get_picks):
-        constraints = get_constraints()
-        if constraints:
-            from engine.modules._constraints import (
-                apply_constraints_for_target,
-                warn_excludes_all,
-            )
-            # First-instance one-shot semantic: thread the consumed
-            # set so this nested-ref resolve path participates in the
-            # same one-shot bookkeeping as top-level wildcard rolls.
-            # See docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md.
-            get_consumed = getattr(ctx, "get_consumed_constraints", None)
-            consumed = get_consumed() if callable(get_consumed) else set()
-            options, any_applied = apply_constraints_for_target(
-                options, uuid, constraints, get_picks(), ctx.warnings,
-                consumed=consumed,
-            )
-            if any_applied:
-                warn_excludes_all(options, uuid, ctx.warnings)
 
     chosen = _pick_weighted(options, ctx.rng)
     if chosen is None:
