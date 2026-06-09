@@ -58,15 +58,54 @@ const enabled = computed(() => isEnabled(props.option, props.instance, props.mul
  * row tokenizes — fires-and-forgets, the resolver picks up missing
  * names asynchronously and bumps `cacheVersion`.
  */
+/** SP2b: split a `{a|b}` / `{N$$sep$$…}` block into a flat run of scaffolding
+ *  fragments (kept as dp-brace/dp-multi tokens carrying braces / count /
+ *  `$$sep$$` / pipes / literal arms) + the inner `@{uuid}`/`$var` arms as their
+ *  own ref/var tokens. The render loop then chips inner refs/vars exactly like
+ *  top-level ones, instead of dumping the whole block as raw text. Mirrors the
+ *  SPA editor's decomposition (`manager/components/atomicEditorModel.parse`) so
+ *  the canvas reads identically. */
+function decomposeBlock(tok: RichToken): RichToken[] {
+  const meta = (tok.meta ?? {}) as {
+    branches?: string[]; min?: number; max?: number;
+    independent?: boolean; sep?: string; count?: number;
+  };
+  const branches = Array.isArray(meta.branches) ? meta.branches : [];
+  const frag = (raw: string): RichToken => ({ kind: tok.kind, raw, start: 0, end: 0 });
+  const out: RichToken[] = [];
+  if (tok.kind === "dp-multi") {
+    const cmin = meta.min ?? meta.count ?? 0;
+    const cmax = meta.max ?? meta.count ?? 0;
+    const countStr = cmin === cmax ? String(cmin) : `${cmin}-${cmax}`;
+    out.push(frag(`{${countStr}${meta.independent ? "~" : ""}$$${meta.sep ?? ""}$$`));
+  } else {
+    out.push(frag("{"));
+  }
+  branches.forEach((b, i) => {
+    if (i > 0) out.push(frag("|"));
+    for (const bt of tokenizeRich(b)) {
+      if (bt.kind === "ref" || bt.kind === "var") out.push(bt);
+      else out.push(frag(bt.raw));
+    }
+  });
+  out.push(frag("}"));
+  return out;
+}
+
 const tokens = computed<RichToken[]>(() => {
   void cacheVersion.value;
-  const toks = tokenizeRich(props.option.value ?? "");
-  const uuids = toks
+  const out: RichToken[] = [];
+  for (const t of tokenizeRich(props.option.value ?? "")) {
+    if (t.kind === "dp-brace" || t.kind === "dp-multi") out.push(...decomposeBlock(t));
+    else out.push(t);
+  }
+  // Resolve names for EVERY ref — including refs nested inside a block.
+  const uuids = out
     .filter((t) => t.kind === "ref")
     .map((t) => t.meta?.uuid)
     .filter((u): u is string => typeof u === "string");
   if (uuids.length > 0) ensure(uuids);
-  return toks;
+  return out;
 });
 
 function refDisplay(

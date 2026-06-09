@@ -50,7 +50,11 @@ const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?/y;
 // filter. Consumers below only use m[1] (uuid) — name + subcat are
 // preserved verbatim in m[0] for display.
 const REF_RE = /@\{([0-9a-f]{8})(?:#([^#:}@{]*))?(?::([^}]*))?\}/y;
-const DP_MULTI_RE = /\{(\d+)\$\$([^$]*)\$\$([^}]*)\}/y;
+// SP2b: accept a range count `N-M` and the `~` independent flag in the
+// multi-pick prefix so the canvas preview colours `{2-4~$$sep$$…}` too.
+// `count` parses the leading integer (the min) — enough for preview colouring
+// + the deterministic combine resolve.
+const DP_MULTI_RE = /\{(\d+(?:-\d+)?~?)\$\$([^$]*)\$\$([^}]*)\}/y;
 const DP_BRACE_RE = /\{([^{}]*\|[^{}]*)\}/y;
 
 function pushText(out: PreviewToken[], buf: string): void {

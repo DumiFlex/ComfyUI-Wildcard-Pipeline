@@ -29,6 +29,27 @@ describe("OptionRow", () => {
     expect(w.find('[data-test="opt-cat-warm"]').exists()).toBe(true);
   });
 
+  it("decomposes a {N$$…} block into scaffolding + an inner ref chip (SP2b #6)", () => {
+    _setForTests("ad00acd5", { name: "mood", varBinding: "mood" });
+    const opt = { id: "b1", value: "{2$$, $$@{ad00acd5}|warm}", weight: 1, sub_categories: [] };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    // The inner @{uuid} arm renders as a resolved ref chip, not raw uuid text.
+    const ref = w.find(".opt__tok--ref");
+    expect(ref.exists()).toBe(true);
+    expect(ref.text()).toContain("@mood");
+    expect(w.find(".opt__tok--multi").exists()).toBe(true); // scaffolding coloured
+    expect(w.find('[data-test="opt-name"]').text()).not.toContain("ad00acd5");
+  });
+
+  it("decomposes a plain {a|@{uuid}} alternation into an inner ref chip (SP2b #6)", () => {
+    _setForTests("ad00acd5", { name: "hair", varBinding: "hair" });
+    const opt = { id: "b2", value: "{warm|@{ad00acd5}}", weight: 1, sub_categories: [] };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    expect(w.find(".opt__tok--ref").exists()).toBe(true);
+    expect(w.find(".opt__tok--brace").exists()).toBe(true);
+    expect(w.find('[data-test="opt-name"]').text()).not.toContain("ad00acd5");
+  });
+
   it("checkbox is checked when enabled_options is null (library default)", () => {
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: {} },
