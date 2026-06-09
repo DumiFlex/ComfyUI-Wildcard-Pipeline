@@ -93,10 +93,17 @@ export function parse(text: string): Atom[] {
       out.push({ kind: "text", text: prefix, blockColor: color });
       branches.forEach((branch, bi) => {
         if (bi > 0) out.push({ kind: "text", text: "|", blockColor: color });
-        const bt = tokenizeRich(branch);
-        const inner = bt.length === 1 ? tokenToChipAtom(bt[0]) : null;
-        if (inner) out.push(inner);
-        else out.push({ kind: "text", text: branch, blockColor: color });
+        // Decompose each branch token-by-token: a ref/var token becomes its
+        // chip; everything else (literals AND surrounding whitespace) stays
+        // block-coloured scaffolding. An earlier "single token only" check
+        // dropped the chip whenever the branch carried whitespace — e.g.
+        // `{2$$, $$ $v|$w}` made ` $v` two tokens (space + var), so `$v`
+        // rendered as text instead of a chip.
+        for (const bt of tokenizeRich(branch)) {
+          const chip = bt.kind === "ref" || bt.kind === "var" ? tokenToChipAtom(bt) : null;
+          if (chip) out.push(chip);
+          else out.push({ kind: "text", text: bt.raw, blockColor: color });
+        }
       });
       out.push({ kind: "text", text: "}", blockColor: color });
     } else {

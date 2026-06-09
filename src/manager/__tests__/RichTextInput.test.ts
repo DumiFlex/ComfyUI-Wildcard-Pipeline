@@ -1094,11 +1094,10 @@ describe("RichTextInput / RichTextPreview — useResolveWarnings merge", () => {
     wrap.unmount();
   });
 
-  it("keeps brace-block scaffolding colour through an atom-direct edit (SP2b #3)", async () => {
-    // Regression: the Wave-5 atom-direct delete path rebuilt text atoms via
-    // readHostAsAtoms WITHOUT blockColor, so editing inside a block stripped
-    // the amber/green scaffolding colour until the next full re-parse. The
-    // colour must survive an edit.
+  it("drops block colour when an edit breaks the block — deleting the closing } (SP2b #3)", async () => {
+    // recolorBlocks re-derives the scaffolding colour from the live text after
+    // an atom-direct edit: deleting the `}` makes `{2$$, $$@{…}` no longer a
+    // valid block, so the scaffolding must de-colour (it is not a block).
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "{2$$, $$@{aabbccdd}}",
@@ -1116,11 +1115,36 @@ describe("RichTextInput / RichTextPreview — useResolveWarnings merge", () => {
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
-    // Backspace the trailing `}` — atom-direct, no re-parse.
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" }); // delete `}`
+    await flushPromises();
+    // Block broken → scaffolding no longer coloured.
+    expect(wrap.findAll(".wp-rt-block-scaf--multi").length).toBe(0);
+    wrap.unmount();
+  });
+
+  it("keeps block colour when an edit leaves the block valid (SP2b #3)", async () => {
+    const wrap = mount(RichTextInput, {
+      props: { modelValue: "{warm|cool}", surface: "wildcard" },
+      attachTo: document.body,
+    });
+    expect(wrap.findAll(".wp-rt-block-scaf--alt").length).toBeGreaterThan(0);
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    // Caret just BEFORE the closing `}` (offset 10 of "{warm|cool}").
+    const span = host.querySelector(".wp-rt__text") as HTMLElement;
+    const tn = span.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(tn, 10);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Backspace deletes the 'l' of "cool" → "{warm|coo}" — still a valid block.
     await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
     await flushPromises();
-    // The remaining `{2$$, $$` scaffolding keeps its block colour.
-    expect(wrap.findAll(".wp-rt-block-scaf--multi").length).toBeGreaterThan(0);
+    const events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("{warm|coo}");
+    expect(wrap.findAll(".wp-rt-block-scaf--alt").length).toBeGreaterThan(0);
     wrap.unmount();
   });
 });

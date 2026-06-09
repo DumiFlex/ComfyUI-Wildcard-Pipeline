@@ -64,6 +64,22 @@ describe("atomicEditorModel.parse + serialise", () => {
     expect(atoms.some((a) => a.kind === "ref" || a.kind === "var")).toBe(false);
     expect(serialise(atoms)).toBe("{red|blue|green}");
   });
+
+  it("chips a $var branch that carries leading whitespace (the space-before-$ case)", () => {
+    // `{2$$, $$ $variable1|$variable2}` — the leading space in the first arm
+    // makes ` $variable1` two tokens; the var must still chip, the space stays
+    // scaffolding.
+    const atoms = parse("{2$$, $$ $variable1|$variable2}");
+    expect(atoms.filter((a) => a.kind === "var" && /^variable[12]$/.test(a.name)).length).toBe(2);
+    expect(serialise(atoms)).toBe("{2$$, $$ $variable1|$variable2}");
+  });
+
+  it("decomposes a mixed branch (literal + ref) into scaffolding + chip", () => {
+    const atoms = parse("{warm @{aabbccdd} tone|cool}");
+    expect(atoms.some((a) => a.kind === "ref" && a.uuid === "aabbccdd")).toBe(true);
+    expect(atoms.some((a) => a.kind === "text" && /warm/.test(a.text))).toBe(true);
+    expect(serialise(atoms)).toBe("{warm @{aabbccdd} tone|cool}");
+  });
 });
 
 describe("atomicEditorModel operations", () => {
