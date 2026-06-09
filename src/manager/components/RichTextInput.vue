@@ -1089,13 +1089,20 @@ function readHostAsAtoms(): Atom[] {
   const host = hostEl.value;
   if (!host) return [{ kind: "text", text: "" }];
   const out: Atom[] = [];
-  const pushText = (t: string): void => {
+  // Carry the SP2b block-scaffolding colour through the atom-direct edit path:
+  // a `.wp-rt-block-scaf--*` span maps back to a TextAtom `blockColor`, so an
+  // edit (backspace/delete/type) inside a brace block doesn't strip the
+  // amber/green colour until the next full re-parse. Only text atoms sharing a
+  // blockColor merge.
+  const pushText = (t: string, blockColor?: "alt" | "multi"): void => {
     if (t.length === 0) return;
     const last = out[out.length - 1];
-    if (last && last.kind === "text") {
-      out[out.length - 1] = { kind: "text", text: last.text + t };
+    if (last && last.kind === "text" && last.blockColor === blockColor) {
+      out[out.length - 1] = blockColor
+        ? { kind: "text", text: last.text + t, blockColor }
+        : { kind: "text", text: last.text + t };
     } else {
-      out.push({ kind: "text", text: t });
+      out.push(blockColor ? { kind: "text", text: t, blockColor } : { kind: "text", text: t });
     }
   };
   for (const node of host.childNodes) {
@@ -1111,8 +1118,14 @@ function readHostAsAtoms(): Atom[] {
       else if (atom && atom.kind === "text") pushText(atom.text);
       continue;
     }
-    // wp-rt__text spans + any defensive fallback: read live text.
-    pushText((el.textContent ?? "").replace(ZWSP_RE, ""));
+    // wp-rt__text spans + any defensive fallback: read live text, preserving
+    // any block-scaffolding colour the span carries.
+    const blockColor = el.classList.contains("wp-rt-block-scaf--multi")
+      ? "multi"
+      : el.classList.contains("wp-rt-block-scaf--alt")
+        ? "alt"
+        : undefined;
+    pushText((el.textContent ?? "").replace(ZWSP_RE, ""), blockColor);
   }
   return out.length > 0 ? out : [{ kind: "text", text: "" }];
 }
@@ -1153,10 +1166,15 @@ function deleteRawRange(
     }
   }
   const out: Atom[] = [];
+  // Merge only text atoms that share a blockColor, and carry the colour
+  // through — so deleting inside a brace block keeps its scaffolding coloured
+  // (SP2b) instead of flattening to plain text until the next re-parse.
   const pushAtom = (a: Atom): void => {
     const last = out[out.length - 1];
-    if (a.kind === "text" && last && last.kind === "text") {
-      out[out.length - 1] = { kind: "text", text: last.text + a.text };
+    if (a.kind === "text" && last && last.kind === "text" && last.blockColor === a.blockColor) {
+      out[out.length - 1] = a.blockColor
+        ? { kind: "text", text: last.text + a.text, blockColor: a.blockColor }
+        : { kind: "text", text: last.text + a.text };
     } else {
       out.push(a);
     }
@@ -1171,7 +1189,11 @@ function deleteRawRange(
       const cutFrom = Math.max(0, lo - s.start);
       const cutTo = Math.min(atom.text.length, hi - s.start);
       const kept = atom.text.slice(0, cutFrom) + atom.text.slice(cutTo);
-      if (kept.length > 0) pushAtom({ kind: "text", text: kept });
+      if (kept.length > 0) {
+        pushAtom(atom.blockColor
+          ? { kind: "text", text: kept, blockColor: atom.blockColor }
+          : { kind: "text", text: kept });
+      }
       continue;
     }
     // Chip fully covered by [lo, hi) (widened above) — drop it.

@@ -1093,4 +1093,34 @@ describe("RichTextInput / RichTextPreview — useResolveWarnings merge", () => {
     expect(events[events.length - 1]?.[0]).toBe("{2$$, $$|warm}");
     wrap.unmount();
   });
+
+  it("keeps brace-block scaffolding colour through an atom-direct edit (SP2b #3)", async () => {
+    // Regression: the Wave-5 atom-direct delete path rebuilt text atoms via
+    // readHostAsAtoms WITHOUT blockColor, so editing inside a block stripped
+    // the amber/green scaffolding colour until the next full re-parse. The
+    // colour must survive an edit.
+    const wrap = mount(RichTextInput, {
+      props: {
+        modelValue: "{2$$, $$@{aabbccdd}}",
+        surface: "wildcard",
+        uuidToName: new Map([["aabbccdd", "hair"]]),
+      },
+      attachTo: document.body,
+    });
+    expect(wrap.findAll(".wp-rt-block-scaf--multi").length).toBeGreaterThan(0);
+    const host = wrap.find(".wp-rt__host").element as HTMLElement;
+    host.focus();
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    range.collapse(false); // caret at end
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    // Backspace the trailing `}` — atom-direct, no re-parse.
+    await wrap.find(".wp-rt__host").trigger("keydown", { key: "Backspace" });
+    await flushPromises();
+    // The remaining `{2$$, $$` scaffolding keeps its block colour.
+    expect(wrap.findAll(".wp-rt-block-scaf--multi").length).toBeGreaterThan(0);
+    wrap.unmount();
+  });
 });
