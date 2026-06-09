@@ -9,7 +9,8 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "variable_binding", "enabled_options",
       "option_weights", "category_filter", "exclude_null", "locked_seed", "internal",
       // SP2a multi-select (2026-06-08): per-instance count range + separator.
-      "pick_min", "pick_max", "pick_separator",
+      // SP2c: pick_independent (allow repeats / with replacement).
+      "pick_min", "pick_max", "pick_separator", "pick_independent",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.fixed_values).toEqual([
       // `locked_seed` added in the combine + fixed_values syntax-parity

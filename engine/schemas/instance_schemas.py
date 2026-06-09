@@ -41,6 +41,9 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "pick_min": "number",
         "pick_max": "number",
         "pick_separator": "string",
+        # SP2c: multi-pick draws WITH replacement (repeats allowed) when true,
+        # without (unique) when false/absent. Mirrors the inline `~` flag.
+        "pick_independent": "boolean",
         # `mode` and `pinned_option_id` removed in v2 — resolve mode is
         # implicit in pool state. Engine handler still reads them when
         # present in legacy snapshots; the schema validator now flags

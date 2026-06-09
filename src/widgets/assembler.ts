@@ -153,6 +153,7 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "pick_min",
   "pick_max",
   "pick_separator",
+  "pick_independent",
   "mode",
   "pinned_option_id",
   "locked_seed",

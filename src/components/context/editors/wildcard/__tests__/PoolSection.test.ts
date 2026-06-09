@@ -59,6 +59,20 @@ describe("PoolSection pick-count (SP2a)", () => {
     expect(lastPatch(w).instance?.pick_max).toBe(3);
   });
 
+  it("'Allow repeats' toggle hides for single-pick, shows for multi + emits pick_independent (SP2c)", async () => {
+    // Single-pick (default 1..1): toggle irrelevant → hidden.
+    const single = mount(PoolSection, { props: { module: makeModule() } });
+    expect(single.find('[data-test="pool-allow-repeats"]').exists()).toBe(false);
+    // Multi-pick (1..3): toggle shows; checking it emits pick_independent=true.
+    const w = mount(PoolSection, {
+      props: { module: makeModule({ instance: { pick_min: 1, pick_max: 3 } } as Partial<ModuleEntry>) },
+    });
+    const toggle = w.find('[data-test="pool-allow-repeats"]');
+    expect(toggle.exists()).toBe(true);
+    await toggle.find("input").setValue(true);
+    expect(lastPatch(w).instance?.pick_independent).toBe(true);
+  });
+
   it("clamps max UP to min when min is set above max (SP2a — no inverted range)", async () => {
     const w = mount(PoolSection, {
       props: { module: makeModule({ instance: { pick_min: 1, pick_max: 2 } } as Partial<ModuleEntry>) },

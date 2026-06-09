@@ -30,6 +30,7 @@ async def test_snapshot_returns_frozen_shape(wp_client):
         "option_weights": None,
         # SP2a multi-select + null toggle — part of the snapshot baseline.
         "exclude_null": None, "pick_min": None, "pick_max": None, "pick_separator": None,
+        "pick_independent": None,
         "mode": None, "pinned_option_id": None,
         "locked_seed": None, "internal": None,
         "disabled_rule_ids": None, "disabled_exception_keys": None,

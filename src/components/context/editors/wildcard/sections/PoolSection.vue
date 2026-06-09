@@ -286,6 +286,11 @@ function bumpPickMax(dir: 1 | -1): void {
 function setPickSeparator(next: string): void {
   emit("update", patchInstance(props.module, "pick_separator", next));
 }
+// SP2c: "Allow repeats" — multi-pick draws with replacement when true.
+const pickIndependent = computed(() => instance.value.pick_independent === true);
+function setPickIndependent(next: boolean): void {
+  emit("update", patchInstance(props.module, "pick_independent", next));
+}
 
 /* ── Option rows (unchanged behaviour) ──────────────────────────────── */
 
@@ -509,6 +514,22 @@ const skewedTowards = computed(() => {
         @input="setPickSeparator(($event.target as HTMLInputElement).value)"
       />
     </div>
+
+    <!-- SP2c: multi-pick "allow repeats" (independent / with replacement).
+         Only meaningful while multi-pick is active; off = unique picks. -->
+    <label
+      v-if="multiActive"
+      class="pool__allow-repeats"
+      data-test="pool-allow-repeats"
+    >
+      <input
+        type="checkbox"
+        :checked="pickIndependent"
+        @change="setPickIndependent(($event.target as HTMLInputElement).checked)"
+      />
+      <i class="pi pi-replay" aria-hidden="true" />
+      <span>Allow repeats</span>
+    </label>
 
     <!-- Only shown when the wildcard actually has a null option to exclude
          (#5). Native @change on the input is the source of truth (#4) — the
@@ -860,7 +881,8 @@ const skewedTowards = computed(() => {
   font-family: var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.pool__exclude-null {
+.pool__exclude-null,
+.pool__allow-repeats {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -869,7 +891,8 @@ const skewedTowards = computed(() => {
   color: var(--wp-text-muted, var(--wp-text2));
   cursor: pointer;
 }
-.pool__exclude-null .pi { font-size: 10px; }
+.pool__exclude-null .pi,
+.pool__allow-repeats .pi { font-size: 10px; }
 .pool__opts {
   display: flex;
   flex-direction: column;

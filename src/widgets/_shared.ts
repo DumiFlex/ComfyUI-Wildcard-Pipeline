@@ -609,6 +609,9 @@ export interface ModuleEntry {
     pick_min?: number;
     pick_max?: number;
     pick_separator?: string;
+    /** SP2c: multi-pick draws WITH replacement (repeats allowed) when true,
+     *  unique (without replacement) when false/absent. Mirrors inline `~`. */
+    pick_independent?: boolean;
     /**
      * Pick mode for this instance:
      *   - `random` / unset — weighted RNG (library default).

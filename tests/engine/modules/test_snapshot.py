@@ -60,6 +60,7 @@ def test_freeze_snapshot_includes_required_fields():
         "pick_min": None,
         "pick_max": None,
         "pick_separator": None,
+        "pick_independent": None,
         "mode": None,
         "pinned_option_id": None,
         "locked_seed": None,
