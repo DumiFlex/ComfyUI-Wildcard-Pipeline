@@ -884,13 +884,16 @@ const skewedTowards = computed(() => {
 }
 .pool__exclude-null,
 .pool__allow-repeats {
-  display: inline-flex;
+  /* Own row each (block-level flex, tight width) so the two toggles stack
+   * with their boxes left-aligned in a column — inline-flex let them share a
+   * line and align by baseline, which read as misaligned. */
+  display: flex;
+  width: fit-content;
   align-items: center;
   gap: 6px;
   margin-bottom: 12px;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
-  cursor: pointer;
 }
 .pool__exclude-null .pi,
 .pool__allow-repeats .pi { font-size: 10px; }
