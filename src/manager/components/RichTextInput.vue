@@ -34,6 +34,7 @@ import RefChip from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
+import { probeAutocomplete } from "../utils/autocompleteProbe";
 
 // --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
 //
@@ -625,31 +626,10 @@ watch(acItems, (items) => {
   if (acActive.value >= items.length) acActive.value = 0;
 });
 
-// --- Autocomplete probe: scan back from caret through `[a-zA-Z0-9_]` until
-//     we hit a `$` or `@` trigger (and bail if it's a `$$` / `@@` escape). ---
-function probeAutocomplete(str: string, caret: number): {
-  start: number;
-  query: string;
-  trigger: "$" | "@";
-} | null {
-  let i = caret - 1;
-  // SP2a: skip a trailing `.K` list accessor (digits then ONE dot, only when a
-  // word char precedes the dot) so `$mood.0<caret>` still resolves back to the
-  // `$` trigger and keeps the popover open — otherwise Enter falls through to a
-  // stray newline on the multiline (combine) surface and splits the token.
-  let j = i;
-  while (j >= 0 && /[0-9]/.test(str[j])) j--;
-  if (j < i && j >= 1 && str[j] === "." && /[A-Za-z0-9_]/.test(str[j - 1])) {
-    i = j - 1;
-  }
-  while (i >= 0 && /[a-zA-Z0-9_]/.test(str[i])) i--;
-  if (i < 0) return null;
-  const trigger = str[i];
-  if (trigger !== "$" && trigger !== "@") return null;
-  if (i > 0 && str[i - 1] === trigger) return null;       // mid-escape `$$x`
-  if (str[i + 1] === trigger) return null;                 // immediate `$$`
-  return { start: i, query: str.slice(i + 1, caret), trigger };
-}
+// Autocomplete trigger probe lives in `../utils/autocompleteProbe` (pure +
+// unit-tested). It scans back from the caret to the nearest `$` / `@` trigger
+// and uses `$`-run parity to tell a real `$var` start from a `$$` escape /
+// `$$sep$$` multi-pick delimiter.
 
 // --- Popup placement ---
 // Anchor to the wrapper's bounding box. We use the host's parent (`.wp-rt`)
