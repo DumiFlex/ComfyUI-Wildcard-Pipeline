@@ -69,7 +69,7 @@ describe("PoolSection pick-count (SP2a)", () => {
     });
     const toggle = w.find('[data-test="pool-allow-repeats"]');
     expect(toggle.exists()).toBe(true);
-    await toggle.find("input").setValue(true);
+    await toggle.find(".wp-check").trigger("click"); // shared Checkbox toggles on box-click
     expect(lastPatch(w).instance?.pick_independent).toBe(true);
   });
 
@@ -144,8 +144,9 @@ describe("PoolSection pick-count (SP2a)", () => {
       instance: { pick_min: 0, pick_max: 2 },
     } as unknown as ModuleEntry;
     const w = mount(PoolSection, { props: { module: m } });
-    const cb = w.get('[data-test="pool-exclude-null"] input');
-    expect((cb.element as HTMLInputElement).disabled).toBe(true);
+    // Inline wp-check span; locked state surfaces as aria-disabled.
+    const cb = w.get('[data-test="pool-exclude-null"] .wp-check');
+    expect(cb.attributes("aria-disabled")).toBe("true");
   });
 
   it("pool summary surfaces the pick range when multi-pick (SP2a)", () => {
@@ -294,8 +295,8 @@ describe("PoolSection exclude-null toggle", () => {
 
   it("emits exclude_null=true when toggled on", async () => {
     const w = mount(PoolSection, { props: { module: withNullOption(makeModule()) } });
-    // Native change on the checkbox is the source of truth (#4).
-    await w.get('[data-test="pool-exclude-null"] input').setValue(true);
+    // Clicking the shared Checkbox box toggles exclude_null (#4).
+    await w.get('[data-test="pool-exclude-null"] .wp-check').trigger("click");
     expect(lastPatch(w).instance?.exclude_null).toBe(true);
   });
 
@@ -303,8 +304,9 @@ describe("PoolSection exclude-null toggle", () => {
     const w = mount(PoolSection, {
       props: { module: withNullOption(makeModule({ instance: { exclude_null: true } })) },
     });
-    const cb = w.get<HTMLInputElement>('[data-test="pool-exclude-null"] input').element;
-    expect(cb.checked).toBe(true);
+    // "On" reads off aria-checked on the wp-check span.
+    const cb = w.get('[data-test="pool-exclude-null"] .wp-check');
+    expect(cb.attributes("aria-checked")).toBe("true");
   });
 
   it("hides the toggle entirely when the wildcard has no null option (#5)", () => {

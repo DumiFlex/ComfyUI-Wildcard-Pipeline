@@ -517,42 +517,59 @@ const skewedTowards = computed(() => {
 
     <!-- SP2c: multi-pick "allow repeats" (independent / with replacement).
          Only meaningful while multi-pick is active; off = unique picks. -->
-    <label
+    <span
       v-if="multiActive"
       class="pool__allow-repeats"
       data-test="pool-allow-repeats"
     >
-      <input
-        type="checkbox"
-        :checked="pickIndependent"
-        @change="setPickIndependent(($event.target as HTMLInputElement).checked)"
-      />
+      <span
+        class="wp-check"
+        role="checkbox"
+        :aria-checked="pickIndependent"
+        tabindex="0"
+        aria-label="Allow repeats"
+        @click="setPickIndependent(!pickIndependent)"
+        @keydown.space.prevent="setPickIndependent(!pickIndependent)"
+        @keydown.enter.prevent="setPickIndependent(!pickIndependent)"
+      >
+        <svg v-if="pickIndependent" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </span>
       <i class="pi pi-replay" aria-hidden="true" />
       <span>Allow repeats</span>
-    </label>
+    </span>
 
     <!-- Only shown when the wildcard actually has a null option to exclude
-         (#5). Native @change on the input is the source of truth (#4) — the
-         old label @click.prevent fought the checkbox's own toggle, so the
-         box never reflected the new state. In multi-pick mode the null option
-         leaves the pool entirely, so this control goes inert (use Min 0). -->
-    <label
+         (#5). In multi-pick mode the null option leaves the pool entirely, so
+         this control goes inert (use Min 0). The wp-check box is the toggle
+         (box-click); the row label text is non-interactive, matching the
+         per-option checkboxes. -->
+    <span
       v-if="hasNullOption"
       class="pool__exclude-null"
       :class="{ 'pool__exclude-null--off': multiActive }"
       data-test="pool-exclude-null"
     >
-      <input
-        type="checkbox"
-        :checked="excludeNull"
-        :disabled="multiActive"
-        @change="setExcludeNull(($event.target as HTMLInputElement).checked)"
-      />
+      <span
+        class="wp-check"
+        role="checkbox"
+        :aria-checked="excludeNull"
+        :aria-disabled="multiActive || undefined"
+        :tabindex="multiActive ? -1 : 0"
+        aria-label="Exclude null option"
+        @click="!multiActive && setExcludeNull(!excludeNull)"
+        @keydown.space.prevent="!multiActive && setExcludeNull(!excludeNull)"
+      >
+        <svg v-if="excludeNull" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </span>
       <i class="pi pi-ban" aria-hidden="true" />
       <span>{{ multiActive
         ? "Null excluded in multi-pick — use Min 0 for optional"
         : "Exclude null option" }}</span>
-    </label>
+    </span>
 
     <div class="pool__opts">
       <div class="pool__opt-head">

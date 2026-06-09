@@ -1623,12 +1623,22 @@ input, textarea, select { font: inherit; }
 }
 .wp-toggle-row__label { color: var(--wp-text-muted); }
 
-/* ---------- Checkbox ---------- */
+/* ---------- Checkbox ----------
+   Canonical geometry matches the wildcard pool's per-option box
+   (`.opt__check` in OptionRow.vue: 14px, 1.5px soft border, 3px radius, sunk
+   into `--wp-bg`). This is THE checkbox look for the whole app; the only
+   opt-outs are the custom toggle BUTTONS (internal flag, seed-lock).
+
+   Markup-agnostic on purpose: works for both the shared ui/Checkbox.vue
+   `<button data-checked>` and bare `<span role="checkbox" aria-checked>`
+   used inline in the size-sensitive embed tree (which avoids importing the
+   component to stay within the bundle budget). On-state fill stays at
+   accent-600 for the white-tick contrast audit. */
 .wp-check {
-  width: 16px; height: 16px;
-  border: 1px solid var(--wp-border-strong);
-  border-radius: 4px;
-  background: var(--wp-bg-2);
+  width: 14px; height: 14px;
+  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
+  border-radius: 3px;
+  background: var(--wp-bg);
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0; margin: 0;
   cursor: pointer;
@@ -1637,7 +1647,8 @@ input, textarea, select { font: inherit; }
   transition: background .12s, border-color .12s, color .12s;
   line-height: 0;
 }
-.wp-check[data-checked="true"] {
+.wp-check[data-checked="true"],
+.wp-check[aria-checked="true"] {
   background: var(--wp-accent-600);
   border-color: var(--wp-accent-500);
   color: #fff; /* audit-exempt: white checkmark on accent-600 background ≥4.5:1 both themes */
@@ -1653,8 +1664,9 @@ input, textarea, select { font: inherit; }
   border-color: var(--wp-accent-500);
   color: #fff; /* audit-exempt: white dash on accent-600 background ≥4.5:1 both themes */
 }
-.wp-check svg { width: 12px; height: 12px; display: block; }
-.wp-check:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-check svg { width: 9px; height: 9px; display: block; }
+.wp-check:disabled,
+.wp-check[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .wp-check:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 
 /* Inline checkbox wrapper (label + box) — min-height fills canonical hit-target. */
