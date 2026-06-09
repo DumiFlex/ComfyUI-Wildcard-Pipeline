@@ -260,7 +260,7 @@
       "input": "{2$$, $$red|blue|green}",
       "expected_tokens": [
         {"kind": "dp_multi", "raw": "{2$$, $$red|blue|green}", "start": 0, "end": 23,
-         "meta": {"count": 2, "sep": ", ", "branches": ["red", "blue", "green"]}}
+         "meta": {"min": 2, "max": 2, "independent": false, "count": 2, "sep": ", ", "branches": ["red", "blue", "green"]}}
       ]
     },
     {
@@ -268,7 +268,23 @@
       "input": "{3$$$$a|b|c}",
       "expected_tokens": [
         {"kind": "dp_multi", "raw": "{3$$$$a|b|c}", "start": 0, "end": 12,
-         "meta": {"count": 3, "sep": "", "branches": ["a", "b", "c"]}}
+         "meta": {"min": 3, "max": 3, "independent": false, "count": 3, "sep": "", "branches": ["a", "b", "c"]}}
+      ]
+    },
+    {
+      "name": "multi_pick_range_independent",
+      "input": "{2-4~$$, $$a|b|c}",
+      "expected_tokens": [
+        {"kind": "dp_multi", "raw": "{2-4~$$, $$a|b|c}", "start": 0, "end": 17,
+         "meta": {"min": 2, "max": 4, "independent": true, "count": 4, "sep": ", ", "branches": ["a", "b", "c"]}}
+      ]
+    },
+    {
+      "name": "multi_pick_lone_ref",
+      "input": "{3$$, $$@{aabbccdd}}",
+      "expected_tokens": [
+        {"kind": "dp_multi", "raw": "{3$$, $$@{aabbccdd}}", "start": 0, "end": 20,
+         "meta": {"min": 3, "max": 3, "independent": false, "count": 3, "sep": ", ", "branches": ["@{aabbccdd}"]}}
       ]
     },
     {

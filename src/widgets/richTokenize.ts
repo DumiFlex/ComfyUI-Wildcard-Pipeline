@@ -53,6 +53,11 @@ export interface TokenMeta {
   // dp-multi tokens
   count?: number;
   sep?: string;
+  /** SP2b: count range — `min`==`max` for a fixed `{N$$}`, `min<max` for a
+   *  `{N-M$$}` range. `independent` is the `~` flag (repeats allowed). */
+  min?: number;
+  max?: number;
+  independent?: boolean;
   // dp-weight tokens (type kept for compat; not emitted)
   weight?: number;
   range?: string;
@@ -167,9 +172,11 @@ function splitTopLevelPipes(s: string): string[] {
   return parts;
 }
 
-// Multi-pick prefix: {N$$sep$$ - N is one or more digits, sep can be empty.
-// Applied against the whole raw block including the leading `{`.
-const MULTI_PREFIX_RE = /^\{(\d+)\$\$([\s\S]*?)\$\$/;
+// Multi-pick prefix: {N$$sep$$ or {N-M~$$sep$$ — group 1 is the count (fixed
+// `N` or a `N-M` range), group 2 is the optional `~` independent flag (absent
+// = unique), group 3 is the separator. Applied against the whole raw block
+// including the leading `{`. SP2b.
+const MULTI_PREFIX_RE = /^\{(\d+(?:-\d+)?)(~?)\$\$([\s\S]*?)\$\$/;
 
 /**
  * Try to scan a `{...}` block starting at `text[start]` (must be `{`).
@@ -181,7 +188,7 @@ const MULTI_PREFIX_RE = /^\{(\d+)\$\$([\s\S]*?)\$\$/;
 function scanBraceBlock(
   text: string,
   start: number,
-): [number, string[], number | null, string | null] | null {
+): [number, string[], [number, number, boolean] | null, string | null] | null {
   const n = text.length;
   if (start >= n || text[start] !== "{") return null;
 
@@ -205,13 +212,20 @@ function scanBraceBlock(
   const raw = text.slice(start, endIndex);
   const multiMatch = MULTI_PREFIX_RE.exec(raw);
   if (multiMatch) {
-    const count = parseInt(multiMatch[1], 10);
-    const sep = multiMatch[2];
+    const countRaw = multiMatch[1];                 // "N" or "N-M"
+    const independent = multiMatch[2] === "~";      // SP2b: repeats allowed
+    const sep = multiMatch[3];
     // Prefix length excluding the leading `{`
     const prefixLen = multiMatch[0].length - 1;
     const rest = body.slice(prefixLen);
     const branches = splitTopLevelPipes(rest);
-    return [endIndex, branches, count, sep];
+    const [lo, hi] = countRaw.includes("-")
+      ? countRaw.split("-")
+      : [countRaw, countRaw];
+    let cmin = parseInt(lo, 10);
+    let cmax = parseInt(hi, 10);
+    if (cmin > cmax) { const t = cmin; cmin = cmax; cmax = t; }
+    return [endIndex, branches, [cmin, cmax, independent], sep];
   }
 
   // Plain pick: must contain at least one top-level `|`
@@ -345,12 +359,15 @@ export function tokenizeRich(text: string): RichToken[] {
             meta: { branches },
           });
         } else {
+          const [cmin, cmax, independent] = count;
           out.push({
             kind: "dp-multi",
             raw: text.slice(i, endIndex),
             start: i,
             end: endIndex,
-            meta: { count, sep: sep ?? "", branches },
+            // `count` kept == max for back-compat; min/max carry the range,
+            // independent carries the `~` flag (SP2b). Mirrors the Python meta.
+            meta: { min: cmin, max: cmax, independent, count: cmax, sep: sep ?? "", branches },
           });
         }
         i = endIndex;

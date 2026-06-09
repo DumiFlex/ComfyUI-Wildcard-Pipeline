@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.syntax import Token, tokenize_text
+from engine.syntax import Token, TokenKind, tokenize_text
 
 CORPUS_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "syntax-corpus.json"
 
@@ -77,3 +77,25 @@ def test_tokenize_unicode_preserved():
     s = "🎨 $color {red|blue|绿}"
     toks = tokenize_text(s)
     assert "".join(t.raw for t in toks) == s
+
+
+def test_multi_prefix_range_and_independent():
+    # SP2b: `{N-M~$$sep$$...}` — count range + the independent (`~`) flag.
+    toks = tokenize_text("{2-4~$$, $$a|b|c}")
+    multi = [t for t in toks if t.kind == TokenKind.DP_MULTI]
+    assert len(multi) == 1
+    m = multi[0].meta
+    assert m["min"] == 2 and m["max"] == 4
+    assert m["independent"] is True
+    assert m["sep"] == ", "
+    assert m["branches"] == ["a", "b", "c"]
+
+
+def test_multi_prefix_fixed_count_backcompat():
+    # A fixed `{N$$...}` collapses to min==max, independent False, and keeps
+    # the legacy `count` key (== max) so existing readers don't break.
+    m = [
+        t for t in tokenize_text("{3$$, $$a|b}") if t.kind == TokenKind.DP_MULTI
+    ][0].meta
+    assert m["min"] == 3 and m["max"] == 3 and m["independent"] is False
+    assert m.get("count", 3) == 3

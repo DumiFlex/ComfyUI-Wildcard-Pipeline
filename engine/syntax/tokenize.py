@@ -37,8 +37,10 @@ _VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?")
 _REF_RE = re.compile(
     r"@\{([0-9a-f]{8})(?:#([^#:}@{!]*))?(?::([^}!]*))?(?:!([^}]*))?\}"
 )
-# Multi-pick prefix: {N$$sep$$ where N is one or more digits and sep can be empty.
-_MULTI_PREFIX_RE = re.compile(r"^\{(\d+)\$\$(.*?)\$\$", flags=re.DOTALL)
+# Multi-pick prefix: {N$$sep$$ or {N-M~$$sep$$ — group 1 is the count (a fixed
+# `N` or a `N-M` range), group 2 is the optional `~` independent flag (repeats
+# allowed; absent = unique), group 3 is the separator (may be empty). SP2b.
+_MULTI_PREFIX_RE = re.compile(r"^\{(\d+(?:-\d+)?)(~?)\$\$(.*?)\$\$", flags=re.DOTALL)
 
 
 def _split_top_level_pipes(s: str) -> list[str]:
@@ -60,7 +62,7 @@ def _split_top_level_pipes(s: str) -> list[str]:
 
 def _scan_brace_block(
     text: str, start: int
-) -> tuple[int, list[str], int | None, str | None] | None:
+) -> tuple[int, list[str], tuple[int, int, bool] | None, str | None] | None:
     """Try to scan a `{...}` block starting at `text[start] == '{'`.
 
     Returns:
@@ -103,13 +105,21 @@ def _scan_brace_block(
     body_with_braces = "{" + body  # match against `{N$$sep$$...`
     multi_match = _MULTI_PREFIX_RE.match(body_with_braces)
     if multi_match:
-        count = int(multi_match.group(1))
-        sep = multi_match.group(2)
+        count_raw = multi_match.group(1)            # "N" or "N-M"
+        independent = multi_match.group(2) == "~"   # SP2b: repeats allowed
+        sep = multi_match.group(3)
         # Body remaining after the prefix is the branch list
         prefix_len = multi_match.end() - 1  # subtract the leading `{` we added
         rest = body[prefix_len:]
         branches = _split_top_level_pipes(rest)
-        return (end_index, branches, count, sep)
+        if "-" in count_raw:
+            lo, hi = count_raw.split("-", 1)
+            cmin, cmax = int(lo), int(hi)
+        else:
+            cmin = cmax = int(count_raw)
+        if cmin > cmax:                             # normalize a swapped range
+            cmin, cmax = cmax, cmin
+        return (end_index, branches, (cmin, cmax, independent), sep)
 
     # Single-pick: must contain at least one top-level `|`
     branches = _split_top_level_pipes(body)
@@ -234,12 +244,18 @@ def tokenize_text(text: str) -> list[Token]:
                         meta={"branches": branches},
                     ))
                 else:
+                    cmin, cmax, independent = count
                     out.append(Token(
                         kind=TokenKind.DP_MULTI,
                         raw=text[i:end_index],
                         start=i,
                         end=end_index,
-                        meta={"count": count, "sep": sep, "branches": branches},
+                        # `count` kept == max for back-compat readers; min/max
+                        # carry the range, independent carries the `~` flag (SP2b).
+                        meta={
+                            "min": cmin, "max": cmax, "independent": independent,
+                            "count": cmax, "sep": sep, "branches": branches,
+                        },
                     ))
                 i = end_index
                 continue
