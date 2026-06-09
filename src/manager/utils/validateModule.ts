@@ -20,6 +20,23 @@
 import type { BundleRow, ModuleRow } from "../api/types";
 import { tokenizeRich, varBaseName, type RichToken } from "../../widgets/richTokenize";
 import { validateExpression } from "../parsing/subcatFilter";
+import { VALID_IDENTIFIER_RE } from "./slug";
+
+/** A produced-var NAME must be a clean `$varname` identifier
+ *  (`[A-Za-z_][A-Za-z0-9_]*`). Anything else — a comma, space, or other
+ *  punctuation — can never be referenced as `$name`: the tokenizer won't
+ *  match it and the rich-text editor's settle delimiters (`,;:/(){}[]!?`
+ *  + whitespace) would split it. Mirrors the engine's `_IDENT_RE`
+ *  payload check (Python ≡ TS). Returns true when a NON-EMPTY name is
+ *  invalid (the empty case is reported separately as a "missing" warn). */
+function isInvalidVarName(name: string): boolean {
+  return name.length > 0 && !VALID_IDENTIFIER_RE.test(name);
+}
+
+/** Shared error message for an invalid produced-var name. */
+function invalidVarNameMessage(label: string, name: string): string {
+  return `${label} "$${name}" is not a valid name — use letters, digits, underscores; no leading digit`;
+}
 
 export type ValidationSeverity = "error" | "warn";
 
@@ -142,7 +159,10 @@ function validateWildcard(
   vars: Set<string>,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const p = (row.payload ?? {}) as { options?: unknown[] };
+  const p = (row.payload ?? {}) as { options?: unknown[]; var_binding?: unknown };
+  if (typeof p.var_binding === "string" && isInvalidVarName(p.var_binding)) {
+    issues.push({ severity: "error", message: invalidVarNameMessage("Variable binding", p.var_binding) });
+  }
   const opts = Array.isArray(p.options) ? p.options : [];
   if (opts.length === 0) {
     issues.push({ severity: "warn", message: "No options - resolves to empty string" });
@@ -257,6 +277,8 @@ function validateCombine(
   }
   if (typeof p.output_var !== "string" || p.output_var.length === 0) {
     issues.push({ severity: "warn", message: "Output variable name missing" });
+  } else if (isInvalidVarName(p.output_var)) {
+    issues.push({ severity: "error", message: invalidVarNameMessage("Output variable", p.output_var) });
   }
   if (typeof p.template === "string") {
     for (const ref of extractRefs(p.template)) {
@@ -350,6 +372,11 @@ function validateFixedValues(row: ModuleRow): ValidationIssue[] {
     const val = v as { name?: unknown };
     if (typeof val.name !== "string" || val.name.length === 0) {
       issues.push({ severity: "warn", message: `Value ${i + 1}: variable name missing` });
+    } else if (isInvalidVarName(val.name)) {
+      issues.push({
+        severity: "error",
+        message: `Value ${i + 1}: ${invalidVarNameMessage("name", val.name)}`,
+      });
     }
   }
   return issues;

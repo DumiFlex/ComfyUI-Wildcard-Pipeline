@@ -20,3 +20,13 @@ export function toIdentifier(input: string): string {
 
 export const VALID_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
+/** Strip every character that can't appear in a `$varname` identifier
+ *  (anything outside `[A-Za-z0-9_]`). Editor binding/name inputs call
+ *  this on keystroke so a comma, space, or other rich-text settle
+ *  delimiter can never enter a produced-var name. Does NOT repair a
+ *  leading digit (that's a position, not a stray char) — `validateModule`
+ *  + the server's `validate_identifier` flag that case. */
+export function stripNonIdentifierChars(raw: string): string {
+  return (raw ?? "").replace(/[^a-zA-Z0-9_]/g, "");
+}
+

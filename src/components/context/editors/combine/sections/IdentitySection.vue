@@ -10,6 +10,7 @@
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
+import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
 
 const props = withDefaults(
   defineProps<{
@@ -86,7 +87,12 @@ function onNameInput(ev: Event): void {
 }
 
 function onBindingInput(ev: Event): void {
-  const raw = (ev.target as HTMLInputElement).value;
+  const el = ev.target as HTMLInputElement;
+  // Strip non-identifier chars on keystroke (the binding becomes a `$var`);
+  // force the DOM so the controlled input stays in lock-step. See wildcard
+  // IdentitySection for the rationale.
+  const raw = stripNonIdentifierChars(el.value);
+  if (el.value !== raw) el.value = raw;
   emit("update", patchInstance(props.module, "variable_binding", raw.length > 0 ? raw : null));
 }
 

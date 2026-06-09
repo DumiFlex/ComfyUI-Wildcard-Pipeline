@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
+import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
 
 const props = withDefaults(
   defineProps<{
@@ -80,7 +81,12 @@ function onNameInput(ev: Event): void {
 }
 
 function onBindingInput(ev: Event): void {
-  const raw = (ev.target as HTMLInputElement).value;
+  const el = ev.target as HTMLInputElement;
+  // A binding becomes a `$var`; strip any non-identifier char (comma,
+  // space, punctuation) on keystroke so junk can't enter the name. Force
+  // the DOM to the sanitized value so the controlled input can't diverge.
+  const raw = stripNonIdentifierChars(el.value);
+  if (el.value !== raw) el.value = raw;
   // Don't auto-clear on exact library match — that snaps the input
   // back to empty mid-typing when users want a name that starts with
   // the library default (e.g. "backdrop" → typing "backdrop-test").

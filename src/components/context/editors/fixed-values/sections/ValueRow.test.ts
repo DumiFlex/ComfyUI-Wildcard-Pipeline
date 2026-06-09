@@ -48,6 +48,25 @@ describe("ValueRow", () => {
     expect(w.emitted("update")?.[0]).toEqual(["v1", { value: "50mm" }]);
   });
 
+  it("strips comma + punctuation from the name on input (value names must be identifiers)", async () => {
+    // The name becomes a `$var`; only identifier chars allowed. The VALUE
+    // field (below) is free-form and must NOT be sanitized.
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const input = w.find<HTMLInputElement>('[data-test="row-name"]');
+    input.element.value = "cam,era;lens!";
+    await input.trigger("input");
+    expect(w.emitted("update")?.[0]).toEqual(["v1", { name: "cameralens" }]);
+    expect(input.element.value).toBe("cameralens");
+  });
+
+  it("does NOT strip punctuation from the value field (values are free-form)", async () => {
+    const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
+    const input = w.find<HTMLInputElement>('[data-test="row-value"]');
+    input.element.value = "85mm, f/1.8!";
+    await input.trigger("input");
+    expect(w.emitted("update")?.[0]).toEqual(["v1", { value: "85mm, f/1.8!" }]);
+  });
+
   it("library row with no override is plain (no --mod, no reset button)", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib } });
     expect(w.find('[data-test="row-name-wrap"]').classes()).not.toContain("row__name-wrap--mod");

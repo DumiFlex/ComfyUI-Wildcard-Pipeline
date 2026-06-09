@@ -224,6 +224,76 @@ describe("validateModule - derivations", () => {
   });
 });
 
+describe("validateModule - variable name grammar", () => {
+  // A produced var name must be a clean identifier (letters/digits/underscore,
+  // no leading digit) — anything else can never be referenced as `$name`
+  // (the tokenizer + the editor's settle delimiters `,;:/(){}[]!?`+space all
+  // break on it). The editors block it at input; this is the catch-all that
+  // also flags bad names arriving via import / embed override / legacy data.
+  function mkCombine(id: string, payload: Record<string, unknown>): ModuleRow {
+    return {
+      id, name: "c", type: "combine",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload, payload_hash: "0".repeat(64),
+      version: 1, created_at: "", updated_at: "",
+    };
+  }
+  function mkFixed(id: string, values: unknown[]): ModuleRow {
+    return {
+      id, name: "f", type: "fixed_values",
+      description: "", category_id: null, tags: [], is_favorite: false,
+      payload: { values }, payload_hash: "0".repeat(64),
+      version: 1, created_at: "", updated_at: "",
+    };
+  }
+
+  it("combine: flags output_var containing a comma as error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "$x", output_var: "scene,bad" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("combine: a clean output_var raises no name-grammar error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "portrait", output_var: "scene" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => /not a valid name/i.test(i.message))).toBe(false);
+  });
+
+  it("combine: empty output_var stays a single 'missing' warn, no grammar error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "portrait", output_var: "" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => /not a valid name/i.test(i.message))).toBe(false);
+    expect(issues.some((i) => i.severity === "warn" && /missing/i.test(i.message))).toBe(true);
+  });
+
+  it("combine: flags a leading-digit output_var as error", () => {
+    const row = mkCombine("aaaaaaaa", { template: "x", output_var: "3scene" });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("wildcard: flags var_binding containing punctuation as error", () => {
+    const row = mkWildcard("aaaaaaaa", "w", {
+      options: [{ id: "o1", value: "red", weight: 1 }],
+      sub_categories: [], var_binding: "mood;bad",
+    });
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("fixed_values: flags a value name containing a comma as error", () => {
+    const row = mkFixed("aaaaaaaa", [{ id: "v1", name: "col,or", value: "red" }]);
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => i.severity === "error" && /not a valid name/i.test(i.message))).toBe(true);
+  });
+
+  it("fixed_values: a clean value name raises no grammar error", () => {
+    const row = mkFixed("aaaaaaaa", [{ id: "v1", name: "color", value: "red" }]);
+    const issues = validateModule(row, [row]);
+    expect(issues.some((i) => /not a valid name/i.test(i.message))).toBe(false);
+  });
+});
+
 describe("validateBundle", () => {
   it("flags bundle with no children as warn", () => {
     const b: BundleRow = {
