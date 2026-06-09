@@ -72,9 +72,8 @@ describe("SubcategoryFilterPicker — interaction details", () => {
 
   it("round-trips the exclude-null flag in the applied filter", async () => {
     const w = mountIt({ initialExpr: "warm", hasNullOption: true });
-    const cb = w.get<HTMLInputElement>('[data-test="subcat-exclude-null"] input');
-    cb.element.checked = true;
-    await cb.trigger("change");
+    const cb = w.get('[data-test="subcat-exclude-null"] .wp-check');
+    await cb.trigger("click");
     await w.get('[data-test="picker-apply"]').trigger("click");
     const ev = w.emitted("apply")!;
     expect(ev[ev.length - 1]).toEqual([{ expr: "warm", excludeNull: true }]);
@@ -82,8 +81,8 @@ describe("SubcategoryFilterPicker — interaction details", () => {
 
   it("seeds the exclude-null checkbox from initialExcludeNull", () => {
     const w = mountIt({ hasNullOption: true, initialExcludeNull: true });
-    const cb = w.get<HTMLInputElement>('[data-test="subcat-exclude-null"] input');
-    expect(cb.element.checked).toBe(true);
+    const cb = w.get('[data-test="subcat-exclude-null"] .wp-check');
+    expect(cb.attributes("aria-checked")).toBe("true");
   });
 
   it("omits the exclude-null row when hasNullOption is false", () => {

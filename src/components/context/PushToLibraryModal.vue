@@ -395,14 +395,24 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               <ul class="wp-ptl-bundles__list">
                 <li v-for="b in bundles" :key="b.id">{{ b.name }}</li>
               </ul>
-              <label class="wp-ptl-checkbox">
-                <input
-                  v-model="propagate"
-                  type="checkbox"
+              <span class="wp-ptl-checkbox">
+                <span
+                  class="wp-check"
+                  role="checkbox"
+                  :aria-checked="propagate"
                   data-test="ptl-propagate"
-                />
+                  tabindex="0"
+                  aria-label="Propagate update to those bundles"
+                  @click="propagate = !propagate"
+                  @keydown.space.prevent="propagate = !propagate"
+                  @keydown.enter.prevent="propagate = !propagate"
+                >
+                  <svg v-if="propagate" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
                 Propagate update to those bundles
-              </label>
+              </span>
             </div>
 
             <div v-if="siblings > 1" class="wp-ptl-note wp-ptl-note--warn" data-test="ptl-siblings">

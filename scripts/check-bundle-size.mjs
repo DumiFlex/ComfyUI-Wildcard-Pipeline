@@ -152,7 +152,18 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // across the lazy ContextWidget chunk; entry stays put. Approved with the
 // SP1 multi-tag + boolean-filter feature (docs/superpowers/specs/
 // 2026-06-06-wildcard-multi-subcategory-boolean-filter-design.md §4.2).
-const TOTAL_LIMIT = 405 * 1024;     // 405 KB
+// Bumped 405 -> 407 KB on 2026-06-10 for the app-wide checkbox restyle.
+// Every checkmark box now uses the shared `.wp-check` look (the wildcard
+// pool's per-option box). The global rule is markup-agnostic, so inline
+// `<span role="checkbox" aria-checked>` controls match the ui/Checkbox
+// `<button>` without importing the component into the size-sensitive embed
+// tree. The leftover native `<input type=checkbox>` controls
+// (DisabledRulesSection, SubcategoryFilterPicker, Push/PushBundleToLibrary,
+// DisplayPlaygroundModal ×7) were converted to those spans; ~0.8 KB net gzip
+// across the lazy ContextWidget + settings chunks. Entry stays slim (well
+// under 30 KB). Toggle SWITCHES (row-enable sliders, internal flag, seed-
+// lock) are intentionally untouched.
+const TOTAL_LIMIT = 407 * 1024;     // 407 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

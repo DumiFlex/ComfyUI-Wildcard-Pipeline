@@ -32,14 +32,13 @@ function emitList(ids: string[]): void {
   emit("update:modelValue", ids);
 }
 
-function onToggle(id: string, ev: Event): void {
-  const checked = (ev.target as HTMLInputElement).checked;
+function onToggle(id: string, next: boolean): void {
   const current = new Set(props.modelValue ?? []);
-  if (checked) current.add(id);
+  if (next) current.add(id);
   else current.delete(id);
   // Preserve library order in emitted array.
-  const next = props.library.map((r) => r.id).filter((rid) => current.has(rid));
-  emitList(next);
+  const ordered = props.library.map((r) => r.id).filter((rid) => current.has(rid));
+  emitList(ordered);
 }
 
 function ruleLabel(rule: Rule): string {
@@ -71,20 +70,29 @@ function onClickReset(): void {
       </button>
     </div>
     <div class="wp-instance-section-body wp-instance-section-body-col">
-      <label
+      <div
         v-for="rule in library"
         :key="rule.id"
         class="wp-instance-row"
       >
-        <input
-          type="checkbox"
+        <span
+          class="wp-check"
+          role="checkbox"
           :data-test="`dr-cb-${rule.id}`"
-          :checked="isDisabled(rule.id)"
-          @change="(ev) => onToggle(rule.id, ev)"
-        />
+          :aria-checked="isDisabled(rule.id)"
+          :aria-label="`disable rule ${rule.id}`"
+          tabindex="0"
+          @click="onToggle(rule.id, !isDisabled(rule.id))"
+          @keydown.space.prevent="onToggle(rule.id, !isDisabled(rule.id))"
+          @keydown.enter.prevent="onToggle(rule.id, !isDisabled(rule.id))"
+        >
+          <svg v-if="isDisabled(rule.id)" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
         <span class="wp-instance-row-id">{{ rule.id }}</span>
         <span class="wp-instance-row-value">{{ ruleLabel(rule) }}</span>
-      </label>
+      </div>
     </div>
   </section>
 </template>
