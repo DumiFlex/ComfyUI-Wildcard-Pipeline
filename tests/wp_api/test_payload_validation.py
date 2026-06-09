@@ -80,6 +80,7 @@ async def test_post_accepts_valid_payload_for_each_kind(wp_client, type_id):
     ("wildcard", {"options": [{"id": "o1", "value": "x", "weight": -3}]}),  # negative weight
     ("wildcard", {"options": [{"id": "o1", "value": "x", "weight": "heavy"}]}),  # weight not number
     ("wildcard", {"options": [], "var_binding": "0_bad_ident"}),  # bad identifier
+    ("wildcard", {"options": [], "var_binding": "out,fit"}),  # comma (settle delimiter)
     # New post-2026-05 hardening — see QA report
     # empty binding
     ("wildcard", {
@@ -107,6 +108,7 @@ async def test_post_accepts_valid_payload_for_each_kind(wp_client, type_id):
     # fixed_values
     ("fixed_values", {"values": "not-an-array"}),
     ("fixed_values", {"values": [{"id": "v1", "name": "1_bad_ident", "value": "x"}]}),
+    ("fixed_values", {"values": [{"id": "v1", "name": "col,or", "value": "x"}]}),  # comma in name
     ("fixed_values", {"values": [{"id": "v1", "name": "mood", "value": 99}]}),  # value not str
     # dunder reserved
     ("fixed_values", {"values": [{"id": "v1", "name": "__internal", "value": "x"}]}),
@@ -119,6 +121,7 @@ async def test_post_accepts_valid_payload_for_each_kind(wp_client, type_id):
     # combine
     ("combine", {"template": "hello"}),  # missing output_var
     ("combine", {"template": "hi", "output_var": "0bad"}),  # bad identifier
+    ("combine", {"template": "hi", "output_var": "sce,ne"}),  # comma in output_var
     ("combine", {"template": 42, "output_var": "phrase"}),  # template not str
     ("combine", {"template": "", "output_var": "phrase"}),  # empty template
     ("combine", {"template": "hi", "output_var": "__internal"}),  # dunder reserved
