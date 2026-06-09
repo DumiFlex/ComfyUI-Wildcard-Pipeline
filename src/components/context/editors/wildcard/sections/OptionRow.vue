@@ -121,7 +121,12 @@ function refDisplay(
   const hit = lookup(uuid);
   if (hit?.varBinding && hit.varBinding.trim()) return `@${hit.varBinding.trim()}`;
   if (hit?.name && hit.name.trim()) return `@${hit.name.trim()}`;
-  if (cachedName && cachedName.trim()) return `@${cachedName.trim()}`;
+  if (cachedName && cachedName.trim()) {
+    // Drop a leaked `!null` exclude-null marker so the label reads `@mood`,
+    // not `@mood!null` (the marker surfaces as the ban icon instead).
+    const clean = cachedName.split("!")[0].trim();
+    return `@${clean || cachedName.trim()}`;
+  }
   return raw;
 }
 
@@ -152,25 +157,32 @@ function refFilter(tok: RichToken): RefFilterInfo {
   const cached = _refFilterMemo.get(tok);
   if (cached) return cached;
   const subs = tok.meta?.sub_categories;
-  let info: RefFilterInfo;
-  if (!Array.isArray(subs) || subs.length === 0) {
-    info = { hasExpr: false, excludeNull: false, isFiltered: false, title: "" };
+  let expr = "";
+  let excludeNull = false;
+  if (Array.isArray(subs) && subs.length > 0) {
+    ({ expr, excludeNull } = splitRefFilter(subs.join(",")));
   } else {
-    const { expr, excludeNull } = splitRefFilter(subs.join(","));
-    let reads = "";
-    if (expr) {
-      try { reads = readsAs(parse(expr)); } catch { reads = expr; }
-    }
-    const parts: string[] = [];
-    if (reads) parts.push(reads);
-    if (excludeNull) parts.push("null excluded");
-    info = {
-      hasExpr: expr.length > 0,
-      excludeNull,
-      isFiltered: expr.length > 0 || excludeNull,
-      title: parts.join(" · "),
-    };
+    // Exclude-null-only form `@{uuid#name!null}`: with no `:expr` the lexer
+    // has no `:` to stop the name capture, so `!null` leaks into the name.
+    // Peel it here (mirrors the SPA RefChip's 4-segment lift) so the chip
+    // still shows the "null excluded" ban mark.
+    const name = typeof tok.meta?.name === "string" ? tok.meta.name : "";
+    const bang = name.indexOf("!");
+    if (bang >= 0) excludeNull = name.slice(bang + 1) === "null";
   }
+  let reads = "";
+  if (expr) {
+    try { reads = readsAs(parse(expr)); } catch { reads = expr; }
+  }
+  const parts: string[] = [];
+  if (reads) parts.push(reads);
+  if (excludeNull) parts.push("null excluded");
+  const info: RefFilterInfo = {
+    hasExpr: expr.length > 0,
+    excludeNull,
+    isFiltered: expr.length > 0 || excludeNull,
+    title: parts.join(" · "),
+  };
   _refFilterMemo.set(tok, info);
   return info;
 }

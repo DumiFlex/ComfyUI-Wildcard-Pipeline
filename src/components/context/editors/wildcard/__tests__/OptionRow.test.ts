@@ -41,6 +41,20 @@ describe("OptionRow", () => {
     expect(w.find('[data-test="opt-name"]').text()).not.toContain("ad00acd5");
   });
 
+  it("shows the null-excluded ban mark on an inner ref carrying !null (SP2b #1)", () => {
+    _setForTests("ad00acd5", { name: "mood", varBinding: "mood" });
+    const opt = { id: "b3", value: "{3$$, $$@{ad00acd5#mood!null}}", weight: 1, sub_categories: [] };
+    const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
+    const ref = w.find(".opt__tok--ref");
+    expect(ref.exists()).toBe(true);
+    // The leaked `!null` is detected → ban (null-excluded) indicator shows.
+    expect(ref.find(".opt__tok-filter").exists()).toBe(true);
+    expect(ref.find(".opt__tok-nonull").exists()).toBe(true);
+    // Label is the clean name, not `@mood!null`.
+    expect(ref.text()).toContain("@mood");
+    expect(ref.text()).not.toContain("!null");
+  });
+
   it("decomposes a plain {a|@{uuid}} alternation into an inner ref chip (SP2b #6)", () => {
     _setForTests("ad00acd5", { name: "hair", varBinding: "hair" });
     const opt = { id: "b2", value: "{warm|@{ad00acd5}}", weight: 1, sub_categories: [] };
