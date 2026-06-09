@@ -2210,10 +2210,11 @@ input, textarea, select { font: inherit; }
 .wp-rt-dp-brace { color: var(--wp-kind-derivation); font-weight: 600; }
 .wp-rt-dp-pipe { color: var(--wp-kind-derivation); opacity: 0.65; }
 .wp-rt-dp-multi {
-  /* multi-candidate group — uses --wp-rt-token-good (green); light override below */
+  /* multi-candidate group — uses --wp-rt-token-good (green); light override below.
+     SP2b V2: colour only, NO background/box — kept in sync with the scoped rule
+     in manager/styles/rich-text.css (a stray background here was the source of a
+     leftover green box behind multi-pick blocks). */
   color: var(--wp-rt-token-good);
-  background: var(--wp-rt-token-good-bg);
-  border-radius: 3px;
   font-weight: 500;
 }
 .wp-rt-dp-weight {

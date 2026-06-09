@@ -616,12 +616,11 @@ function fmtPct(p: number): string {
 }
 /* `{N$$sep$$a|b|c}` multi-pick block — distinct teal/green tone so users
  * can tell it apart from the plain brace block at a glance. Matches the
- * SPA `wp-rt-dp-multi` palette (`--wp-rt-token-good`). */
+ * SPA `wp-rt-dp-multi` palette (`--wp-rt-token-good`). SP2b V2: colour only,
+ * NO background / box (continuous block-coloured text) — same treatment the
+ * SPA editor + preview now use for brace-block scaffolding. */
 .opt__tok--multi {
   color: var(--wp-rt-token-good, #4ad4c4);
-  background: var(--wp-rt-token-good-bg, color-mix(in srgb, #4ad4c4 14%, transparent));
-  border-radius: 3px;
-  padding: 0 3px;
   font-weight: 500;
 }
 .opt__tok--escape {
