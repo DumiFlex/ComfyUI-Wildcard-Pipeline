@@ -24,13 +24,27 @@ export interface SyntaxFlags {
   refTargets: string[];
 }
 
-/** Pull `@{8hex}` ref-token UUIDs out of a single value string via `tokenizeRich`. */
+/** Pull `@{8hex}` ref-token UUIDs out of a single value string via `tokenizeRich`.
+ *
+ * SP2b: a `{a|b}` / `{N$$sep$$…}` block is ONE token (`dp-brace` / `dp-multi`)
+ * whose arms live as raw strings in `meta.branches` — a `@{uuid}` nested in an
+ * arm is therefore NOT a top-level `ref` token. Recurse into every branch so a
+ * ref used inside a block (e.g. `{3$$, $$@{uuid}}`) still counts as a nested
+ * ref and produces a dependency-graph edge. */
 function refsInValue(value: string): string[] {
   if (!value) return [];
   const out: string[] = [];
-  for (const tok of tokenizeRich(value)) {
-    if (tok.kind === "ref" && tok.meta?.uuid) out.push(tok.meta.uuid);
-  }
+  const scan = (text: string): void => {
+    for (const tok of tokenizeRich(text)) {
+      if (tok.kind === "ref" && tok.meta?.uuid) {
+        out.push(tok.meta.uuid);
+      } else if (tok.kind === "dp-brace" || tok.kind === "dp-multi") {
+        const branches = Array.isArray(tok.meta?.branches) ? tok.meta.branches : [];
+        for (const b of branches) if (typeof b === "string") scan(b);
+      }
+    }
+  };
+  scan(value);
   return out;
 }
 
