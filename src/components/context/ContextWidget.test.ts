@@ -2147,3 +2147,123 @@ describe("ContextWidget bundle MOD detection", () => {
     bundleHashes.value = null; // restore
   });
 });
+
+// ── Node label header chip (SP3 P7 T18) ────────────────────────────────────
+// A small editable chip in the node header surfaces the per-WP_Context
+// `node_label` so cross-node UI (constraint reach pick-list, pair popovers)
+// can name WHICH node a target instance lives in. Empty → auto default
+// (the upstream→downstream letter the walker assigns, surfaced via
+// chainModules; falls back to "A" for a lone node). Editing it persists
+// into value.node_label through the same deep-watch onChange the module
+// edits use.
+
+describe("ContextWidget node label chip", () => {
+  it("renders [data-test=node-label] in the header showing the persisted label", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 7000,
+        initialJson: JSON.stringify({ version: 1, modules: [], node_label: "Base layer" }),
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find('[data-test="node-label"]');
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain("Base layer");
+    wrapper.unmount();
+  });
+
+  it("falls back to the auto default letter 'A' when node_label is empty", () => {
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 7001,
+        initialJson: '{"version":1,"modules":[]}',
+        upstreamVars: [],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find('[data-test="node-label"]');
+    expect(chip.exists()).toBe(true);
+    // Lone node, no chainModules prop → default letter A.
+    expect(chip.text()).toContain("A");
+    wrapper.unmount();
+  });
+
+  it("surfaces the walker-assigned letter from chainModules as the default", () => {
+    // chainModules carries this node's letter (rowKey `${nodeId}#...`).
+    // The chip reads it so its default matches what downstream UI sees.
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 7002,
+        initialJson: '{"version":1,"modules":[]}',
+        upstreamVars: [],
+        chainModules: [
+          { id: "up", rowKey: "9#up-uid", type: "wildcard", payload: {}, nodeLabel: "A" },
+          { id: "own", rowKey: "7002#own-uid", type: "wildcard", payload: {}, nodeLabel: "B" },
+        ],
+        onChange: () => {},
+      },
+    });
+    const chip = wrapper.find('[data-test="node-label"]');
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain("B");
+    wrapper.unmount();
+  });
+
+  it("editing the chip persists into value.node_label via onChange", async () => {
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 7003,
+        initialJson: '{"version":1,"modules":[]}',
+        upstreamVars: [],
+        onChange,
+      },
+    });
+    onChange.mockClear();
+
+    // Activate the inline editor (double-click the chip), type a label,
+    // commit on Enter.
+    const chip = wrapper.find('[data-test="node-label"]');
+    await chip.trigger("dblclick");
+    const input = wrapper.find('[data-test="node-label-input"]');
+    expect(input.exists()).toBe(true);
+    await input.setValue("Detail pass");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+
+    expect(onChange).toHaveBeenCalled();
+    const calls = onChange.mock.calls;
+    const last = calls[calls.length - 1][0] as string;
+    expect(JSON.parse(last).node_label).toBe("Detail pass");
+    wrapper.unmount();
+  });
+
+  it("commits the label on blur as well as Enter", async () => {
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 7004,
+        initialJson: '{"version":1,"modules":[]}',
+        upstreamVars: [],
+        onChange,
+      },
+    });
+    onChange.mockClear();
+
+    const chip = wrapper.find('[data-test="node-label"]');
+    await chip.trigger("dblclick");
+    const input = wrapper.find('[data-test="node-label-input"]');
+    await input.setValue("Via blur");
+    await input.trigger("blur");
+    await flushPromises();
+
+    expect(onChange).toHaveBeenCalled();
+    const blurCalls = onChange.mock.calls;
+    const last = blurCalls[blurCalls.length - 1][0] as string;
+    expect(JSON.parse(last).node_label).toBe("Via blur");
+    wrapper.unmount();
+  });
+});

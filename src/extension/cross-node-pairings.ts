@@ -69,17 +69,63 @@ function extractModules(node: LiteNodeLike): ModuleEntry[] {
   return v.modules;
 }
 
+/** Read a Context node's persisted `node_label` from its `wp_modules`
+ *  widget. Returns the trimmed label, or `undefined` when unset / blank
+ *  so the caller can fall back to the auto letter. Parses the same
+ *  widget JSON `extractModules` does — cheap (one parse) and tolerant of
+ *  malformed payloads (returns undefined). */
+function nodeLabelOf(node: LiteNodeLike): string | undefined {
+  const raw = widgetValue(node, "wp_modules");
+  const v = parseWidgetJson<ContextWidgetValue>(
+    typeof raw === "string" ? raw : "",
+    { version: 1, modules: [] },
+  );
+  const label = typeof v.node_label === "string" ? v.node_label.trim() : "";
+  return label.length > 0 ? label : undefined;
+}
+
+/** Auto upstream→downstream letter for the node at walk position
+ *  `index` (0 → "A", 1 → "B", …). Past 26 nodes it wraps to two-letter
+ *  spreadsheet-style names (AA, AB, …) so labels stay unique on
+ *  pathologically long chains. */
+export function autoNodeLetter(index: number): string {
+  let n = index;
+  let out = "";
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}
+
 /**
  * Flatten the upstream + own + downstream Context chain into a single
  * `ChainModule[]` ready for `computePairings`. Each entry carries a
  * graph-wide-unique `rowKey` so pairings work across duplicate library
  * instances + across Context-node boundaries.
+ *
+ * Every flattened module is also tagged with `nodeLabel` — its source
+ * Context node's user-set `node_label`, or an auto upstream→downstream
+ * letter (A, B, C…) when unset. The letter is assigned by walk position
+ * (upstream-first, then own, then downstream), so it stays stable + reads
+ * left-to-right along the pipeline. Cross-node UI reads this to name
+ * WHICH node a target instance lives in.
  */
 export function collectFullChainModules(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): ChainModule[] {
   const out: ChainModule[] = [];
+  // Walk-position counter shared across upstream → own → downstream so the
+  // auto letters run A, B, C… in pipeline order regardless of which nodes
+  // carry an explicit label.
+  let nodeIndex = 0;
+  function labelForNode(n: LiteNodeLike): string {
+    const explicit = nodeLabelOf(n);
+    const letter = autoNodeLetter(nodeIndex);
+    nodeIndex++;
+    return explicit ?? letter;
+  }
 
   // Upstream chain — already returns ContextWidgetValue.modules arrays
   // upstream-first. We need the matching node ids for rowKey, but the
@@ -90,19 +136,22 @@ export function collectFullChainModules(
   const upstreamMods = collectUpstreamChain(rootGraph, node) as ModuleEntry[][];
   const upstreamNodes = upstreamContextNodes(rootGraph, node);
   for (let i = 0; i < Math.min(upstreamMods.length, upstreamNodes.length); i++) {
-    const nId = upstreamNodes[i].id;
+    const upNode = upstreamNodes[i];
+    const nodeLabel = labelForNode(upNode);
     for (const m of upstreamMods[i]) {
       out.push({
         id: m.id,
-        rowKey: rowKey(nId, m),
+        rowKey: rowKey(upNode.id, m),
         type: m.type,
         payload: (m.payload ?? {}) as Record<string, unknown>,
         displayName: m.meta?.name,
+        nodeLabel,
       });
     }
   }
 
   // Own node's modules.
+  const ownLabel = labelForNode(node);
   for (const m of extractModules(node)) {
     out.push({
       id: m.id,
@@ -110,11 +159,13 @@ export function collectFullChainModules(
       type: m.type,
       payload: (m.payload ?? {}) as Record<string, unknown>,
       displayName: m.meta?.name,
+      nodeLabel: ownLabel,
     });
   }
 
   // Downstream chain.
   for (const dn of collectDownstreamContextNodes(rootGraph, node)) {
+    const nodeLabel = labelForNode(dn);
     for (const m of extractModules(dn)) {
       out.push({
         id: m.id,
@@ -122,6 +173,7 @@ export function collectFullChainModules(
         type: m.type,
         payload: (m.payload ?? {}) as Record<string, unknown>,
         displayName: m.meta?.name,
+        nodeLabel,
       });
     }
   }

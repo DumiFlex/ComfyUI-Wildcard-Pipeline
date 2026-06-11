@@ -3682,6 +3682,73 @@ const enabledCount = computed(() => {
   return value.value.modules.filter((m) => isModuleEffectivelyEnabled(m, bundleEnabled)).length;
 });
 
+// ── Node label chip ────────────────────────────────────────────────────────
+// A small editable chip in the header surfaces this WP_Context node's
+// identity (`value.node_label`) so cross-node UI — the constraint reach
+// pick-list + pair popovers built in later phases — can name WHICH node a
+// target instance lives in. When the user hasn't named the node, the chip
+// shows the same auto upstream→downstream letter the cross-node walker
+// assigns, kept in sync by reading it off the `chainModules` prop.
+
+/** Auto default label = the letter the walker stamped onto THIS node's
+ *  modules. `chainModules` is keyed graph-wide via `${nodeId}#${_uid}`
+ *  rowKeys, so the first entry whose rowKey starts with our nodeId carries
+ *  our node's `nodeLabel`. Falls back to "A" for a lone / headless node
+ *  with no chain (matches the walker's first-position letter). */
+const defaultNodeLabel = computed<string>(() => {
+  const prefix = `${props.nodeId}#`;
+  const mine = (props.chainModules ?? []).find((m) => m.rowKey.startsWith(prefix));
+  return mine?.nodeLabel ?? "A";
+});
+
+/** What the chip renders: the user-set label when present, else the auto
+ *  default letter. */
+const displayNodeLabel = computed<string>(() => {
+  const explicit = value.value.node_label?.trim();
+  return explicit && explicit.length > 0 ? explicit : defaultNodeLabel.value;
+});
+
+const editingLabel = ref(false);
+const labelDraft = ref("");
+const labelInputEl = ref<HTMLInputElement | null>(null);
+
+/** Enter inline-edit: seed the draft with the CURRENT label (the explicit
+ *  one if set, otherwise the auto default so the user edits from the
+ *  visible value rather than an empty box) + focus/select on next tick. */
+function startLabelEdit(): void {
+  labelDraft.value = value.value.node_label?.trim() || defaultNodeLabel.value;
+  editingLabel.value = true;
+  void nextTick(() => {
+    labelInputEl.value?.focus();
+    labelInputEl.value?.select();
+  });
+}
+
+/** Commit the draft into `value.node_label` (deep-watch fires onChange so
+ *  the workflow JSON persists). A draft equal to the auto default is still
+ *  stored verbatim — the user explicitly chose it, and the walker only
+ *  fills the default when the field is ABSENT, so round-tripping "A" keeps
+ *  the chip showing "A" without surprise. Empty draft clears the override
+ *  (deletes the field) so the chip reverts to the auto letter. */
+function commitLabelEdit(): void {
+  if (!editingLabel.value) return;
+  editingLabel.value = false;
+  const next = labelDraft.value.trim();
+  const prev = value.value.node_label ?? "";
+  if (next === prev) return; // no-op — don't churn onChange
+  if (next.length === 0) {
+    // Clear the override → revert to auto default.
+    const { node_label: _drop, ...rest } = value.value;
+    value.value = { ...rest };
+    return;
+  }
+  value.value = { ...value.value, node_label: next };
+}
+
+function cancelLabelEdit(): void {
+  editingLabel.value = false;
+}
+
 /** Toolbar bulk actions — wrappers so the toolbar template stays compact. */
 function collapseAll(): void { setAllCollapsed(true); }
 function expandAll(): void { setAllCollapsed(false); }
@@ -4667,6 +4734,43 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
     :data-mode-label="isMuted ? muteLabel : undefined"
     @dragleave="onContainerLeave"
   >
+    <!-- Node identity strip. A small editable chip naming THIS WP_Context
+         node (value.node_label, or the auto upstream→downstream letter when
+         unset). Cross-node UI (constraint reach pick-list, pair popovers)
+         reads node_label to say WHICH node a target lives in. Sits above the
+         toolbar/hero so it shows in every state without touching their
+         layout. Double-click (or click the edit affordance) → inline input;
+         commit on Enter/blur, cancel on Escape. -->
+    <div class="wp-node-id">
+      <span class="wp-node-id__tag">node</span>
+      <button
+        v-if="!editingLabel"
+        type="button"
+        class="wp-node-id__chip"
+        data-test="node-label"
+        :title="`Name this Context node — referenced by cross-node constraint UI. (${displayNodeLabel})`"
+        @click="startLabelEdit"
+        @dblclick="startLabelEdit"
+      >
+        <span class="wp-node-id__text">{{ displayNodeLabel }}</span>
+        <i class="pi pi-pencil wp-node-id__edit" aria-hidden="true" />
+      </button>
+      <input
+        v-else
+        ref="labelInputEl"
+        v-model="labelDraft"
+        type="text"
+        class="wp-node-id__input"
+        data-test="node-label-input"
+        aria-label="Context node label"
+        maxlength="40"
+        placeholder="node label"
+        @keydown.enter.prevent="commitLabelEdit"
+        @keydown.esc.prevent="cancelLabelEdit"
+        @blur="commitLabelEdit"
+      >
+    </div>
+
     <!-- Corrupt-workflow recovery panel (5.6). Surfaces when JSON parse fails
          or returns a non-object. View raw exposes the bad payload so users
          can copy it out before resetting. -->
@@ -5813,6 +5917,50 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 .wp-w-toolbar-label { font: 500 11px/1 var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text3)); text-transform: lowercase; letter-spacing: 0.02em; }
 .wp-w-count { font: 500 11px/1 var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); padding: 2px 6px; background: var(--wp-bg-deep, var(--wp-bg)); border-radius: var(--wp-radius, 4px); }
 .wp-w-toolbar-spacer { flex: 1; }
+
+/* ── Node identity chip (SP3 P7) ────────────────────────────────────────
+ * A small, unobtrusive header strip naming this WP_Context node. Amber
+ * accent (matches the design proposal); sits above the toolbar/hero in a
+ * compact row so it never disturbs their layout. */
+.wp-node-id { display: flex; align-items: center; gap: 6px; padding: 2px 0 4px; }
+.wp-node-id__tag {
+  font: 500 10px/1 var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-dim, var(--wp-text3));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.wp-node-id__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  padding: 2px 8px;
+  font: 600 11px/1.2 var(--wp-font-sans, sans-serif);
+  color: var(--wp-amber, #fbbf24);
+  background: var(--wp-amber-bg, rgba(251, 191, 36, 0.12));
+  border: 1px solid var(--wp-amber, #fbbf24);
+  border-radius: var(--wp-radius-sm, 4px);
+  cursor: text;
+  transition: background var(--wp-motion-quick, 120ms) ease, border-color var(--wp-motion-quick, 120ms) ease;
+}
+.wp-node-id__chip:hover { background: var(--wp-amber, #fbbf24); color: var(--wp-bg, #1e1e1e); }
+.wp-node-id__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-node-id__edit { font-size: 10px; opacity: 0.7; cursor: pointer; }
+.wp-node-id__chip:hover .wp-node-id__edit { opacity: 1; }
+.wp-node-id__input {
+  max-width: 220px;
+  padding: 2px 8px;
+  font: 600 11px/1.2 var(--wp-font-sans, sans-serif);
+  color: var(--wp-text, #ddd);
+  background: var(--wp-bg-2, var(--wp-bg2));
+  border: 1px solid var(--wp-amber, #fbbf24);
+  border-radius: var(--wp-radius-sm, 4px);
+  outline: none;
+}
 
 /* ── Generic button system (Task 10) ────────────────────────────────────
  * .wp-btn--icon-sm (Task 9) already exists for inline card actions;

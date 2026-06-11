@@ -98,6 +98,14 @@ export interface ChainModule {
    *  hold its own modules-list mirror. Optional — tests + legacy
    *  callers may omit. */
   displayName?: string;
+  /** Identity of the WP_Context node this module was flattened from —
+   *  the node's user-set `node_label`, or an auto upstream→downstream
+   *  letter (A, B, C…) when unset. Stamped by `collectFullChainModules`
+   *  so cross-node UI (constraint reach pick-list, pair popovers) can
+   *  name WHICH node a target instance lives in. Purely additive /
+   *  presentation-only; the pairing math never reads it. Optional —
+   *  tests + legacy callers may omit. */
+  nodeLabel?: string;
 }
 
 /** When a pair lands on a wildcard that doesn't match the target uuid
