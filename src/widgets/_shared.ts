@@ -518,6 +518,28 @@ export type ModuleEntryKind =
   | "derivation"
   | "constraint";
 
+/** SP3 reach selector — decides which downstream instances of a
+ *  constraint's `target_wildcard_id` it covers. Mirrors the engine's
+ *  `target_select` (`engine/modules/_constraints.py`):
+ *   - `all`   — every downstream target occurrence (default when absent).
+ *   - `first` — only the 1st encounter (per-constraint hit counter == 1).
+ *   - `next`  — the first `count` encounters (hit counter <= count).
+ *   - `pick`  — the explicitly-listed occurrences. A `direct` pick names
+ *     a top-level instance by its per-instance `uid`; a `nested` pick
+ *     names a one-hop carrier occurrence by `(carrier_uid, option_id)`.
+ *
+ *  Lives at instance level on the constraint (`payload.target_select` /
+ *  the `instance.target_select` override). Shape is engine-validated;
+ *  the type-only schema treats it as an opaque `dict`. */
+export interface TargetSelect {
+  mode: "first" | "next" | "all" | "pick";
+  count?: number;
+  picks?: Array<
+    | { kind: "direct"; uid: string }
+    | { kind: "nested"; carrier_uid: string; option_id: string }
+  >;
+}
+
 export interface ModuleEntry {
   /**
    * For library-picked modules: the canonical 8-hex uuid (matches the

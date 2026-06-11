@@ -1,36 +1,49 @@
 /**
  * Compute pairing badges for the constraint + target-instance UI.
  *
- * Each constraint is paired with the downstream target wildcard
- * instance it will claim at runtime (per the 2026-05-24 first-instance
- * one-shot semantic). The returned map keys are row uids (NOT module
- * ids — duplicate library instances share a module id but each row has
- * its own `_uid`) and the values are
- * `{ number, targetUuid, colorIndex, isOrphan }`:
+ * SP3 REACH MODEL. The pre-2026-05 design had each constraint
+ * EXCLUSIVELY claim the first downstream target instance (one-shot,
+ * `break` after claiming). The engine moved to a reach model
+ * (`engine/modules/_constraints.py::apply_constraints_for_target`): each
+ * constraint carries `target_select = {mode:"first"|"next"|"all"|"pick"}`
+ * (default `all`) deciding which downstream target instances it covers,
+ * and MULTIPLE constraints can cover ONE instance. This badge layer
+ * mirrors that statically over the flattened `modules` chain.
  *
- *   - Constraint module row → badge of its claimed target instance, OR
- *     an orphan badge (`isOrphan: true`) if no downstream instance is
- *     available — the user still sees the slot it would have occupied
- *     in the sequence so the chain semantic stays visible.
- *   - Target instance module row → matching badge from the constraint
- *     that claimed it.
- *   - Targets WITHOUT a paired constraint never get a badge.
+ * The returned map keys are row uids (NOT module ids — duplicate library
+ * instances share a module id but each row has its own `_uid`). Values
+ * are `RowPairings`:
  *
- * The `colorIndex` (1..8) is hashed from the target uuid via the same
- * djb2 used for nested-ref token coloring (`varColorIndex` in
- * `components/shared/var-color.ts`). Distinct target wildcards get
- * distinct colors so two co-existing pair sets (e.g. mood pairs vs
- * style pairs) read at a glance without their numbers colliding.
+ *   - `contributors` (authoritative): every constraint whose reach covers
+ *     THIS target-instance row, in per-target `#N` registration order.
+ *   - `direct`: the constraint row's own badge (carrying its `reach`), OR
+ *     — for a target/carrier row — a back-compat mirror of
+ *     `contributors[0]` (the flat `computePairings` map + the legacy
+ *     single-`#N` chip read this). An orphan constraint badge
+ *     (`isOrphan: true`) signals its selector covered ZERO downstream
+ *     instances; the user still sees the slot in the sequence.
+ *   - `viaInbound`: badges where this row is the CARRIER (its options host
+ *     nested `@{uuid}` refs the reach travels through).
  *
- * Pure data — no Vue / DOM imports. Pairs are assigned in chain order,
- * one [1], [2], … sequence per target uuid. The walker that produces
- * the input `modules` array is responsible for splicing in upstream +
- * downstream WP_Context modules so pairings work cross-node.
+ * The `colorIndex` (1..8) is hashed from `senderRowKey + ':' + targetUuid`
+ * via the same djb2 used for nested-ref token coloring (`varColorIndex`
+ * in `components/shared/var-color.ts`) — a constraint + the rows it
+ * covers share a color; distinct (sender, target) pairs spread across the
+ * palette.
  *
- * See `docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md`.
+ * Pure data — no Vue / DOM imports. Constraints are numbered in chain
+ * order, one [1], [2], … sequence per target uuid. The walker that
+ * produces the input `modules` array is responsible for splicing in
+ * upstream + downstream WP_Context modules so pairings work cross-node.
+ *
+ * See `docs/superpowers/specs/2026-05-24-constraint-first-instance-design.md`
+ * (original one-shot design, superseded by the SP3 reach selector).
  */
 
 import { varColorIndex } from "../components/shared/var-color";
+import type { TargetSelect } from "../widgets/_shared";
+
+export type { TargetSelect };
 
 // Mirrors the engine tokenize.py + dep-graph.ts twin. Uuid is captured;
 // name + subcat segments are non-capturing because the via-carrier
@@ -145,9 +158,10 @@ export interface PairingBadge {
   number: number;
   targetUuid: string;
   colorIndex: number;
-  /** Constraint slot whose downstream target instance is missing.
-   *  Renders with a `?` indicator on the constraint row; no badge gets
-   *  attached to any target row (because there isn't one). */
+  /** Constraint slot whose reach selector covered ZERO downstream target
+   *  instances. Renders with a `!`/`?` indicator on the constraint row;
+   *  no contributor badge gets attached to any target row (there's
+   *  nothing to cover). */
   isOrphan: boolean;
   /** Set on BOTH the sender's badge AND the carrier's badge when the
    *  pair is reached via a nested `@{uuid}` ref rather than a direct
@@ -155,6 +169,14 @@ export interface PairingBadge {
    *  pointing at the carrier + affected options. Undefined for the
    *  legacy direct-target case. */
   via?: PairingVia;
+  /** SP3 reach selector — set ONLY on the SENDER (constraint) row's
+   *  `direct` badge, copied from the constraint's `target_select`
+   *  (default `{mode:"all"}` when the payload omits it). Tells the
+   *  renderer which downstream instances this constraint covers (all /
+   *  first / next N / explicit picks) so the sender chip can annotate
+   *  its reach. Undefined on contributor / carrier badges — only the
+   *  originating constraint carries its own reach. */
+  reach?: TargetSelect;
 }
 
 /** What a carrier scan found: the option ids whose `value` reaches
@@ -164,6 +186,82 @@ export interface PairingBadge {
 interface CarrierMatch {
   optionIds: string[];
   routeChain: string[] | null;
+}
+
+/** Build the `PairingVia` describing how a constraint reaches its target
+ *  through `carrier`'s nested `@{uuid}` ref(s). Pulls the carrier's
+ *  display name (var_binding `$name` > meta name > library name, leading
+ *  `$` stripped) so the popover can read "Via nested ref in @backdrop"
+ *  without its own module lookup. Shared by the sender badge + the
+ *  carrier's inbound/contributor badges so all three agree. */
+function carrierViaFor(
+  carrier: ChainModule,
+  match: CarrierMatch,
+  targetUuid: string,
+): PairingVia {
+  const carrierPayload = carrier.payload as { var_binding?: string; name?: string };
+  const rawBinding = carrierPayload.var_binding?.trim();
+  const carrierName =
+    (rawBinding ? rawBinding.replace(/^\$+/, "") : "")
+    || carrier.displayName?.trim()
+    || carrierPayload.name?.trim()
+    || undefined;
+  return {
+    carrierRowKey: carrier.rowKey,
+    carrierName,
+    optionIds: match.optionIds,
+    // routeChain is non-null whenever optionIds is non-empty.
+    routeChain: match.routeChain ?? [targetUuid],
+  };
+}
+
+/** Does `sel` cover the `n`-th encounter of a target instance whose
+ *  identity is `directUid` (top-level) or `(carrierUid, optionId)`
+ *  (nested-via-carrier)? Mirrors the engine's coverage test in
+ *  `apply_constraints_for_target` + `_occurrence_matches`:
+ *    - `all`   → every encounter.
+ *    - `first` → only n === 1.
+ *    - `next`  → n <= count (count coerced, default 1).
+ *    - `pick`  → the encounter's identity is in `picks` (direct uid for
+ *      top-level encounters; carrier_uid + option_id for nested ones).
+ *  `optionIds` carries the carrier's matching option ids so a nested
+ *  `pick` matches when ANY of them is listed (the engine fires per chosen
+ *  option; statically we cover the carrier if any carried option is
+ *  picked). */
+function reachCovers(
+  sel: TargetSelect,
+  n: number,
+  directUid: string | null,
+  carrierUid: string | null,
+  optionIds: readonly string[],
+): boolean {
+  switch (sel.mode) {
+    case "first":
+      return n === 1;
+    case "next": {
+      const cnt = Number.isFinite(Number(sel.count)) ? Number(sel.count) : 1;
+      return n <= cnt;
+    }
+    case "pick": {
+      const picks = Array.isArray(sel.picks) ? sel.picks : [];
+      for (const p of picks) {
+        if (!p || typeof p !== "object") continue;
+        if (carrierUid === null) {
+          if (p.kind === "direct" && p.uid === directUid) return true;
+        } else if (
+          p.kind === "nested"
+          && p.carrier_uid === carrierUid
+          && optionIds.includes(p.option_id)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+    default:
+      // "all" + any unknown mode → cover everything (engine's else branch).
+      return true;
+  }
 }
 
 /** Find every option in a carrier module whose `value` reaches
@@ -219,22 +317,32 @@ function carrierOptionIdsFor(
 }
 
 /** Bundle of pair data the renderer needs per row:
- *  - `direct`: the row's primary pair badge (constraint's own pair OR
- *    a directly-claimed target's badge). Same shape the renderer used
- *    before via-nested support landed.
+ *  - `direct`: the row's primary pair badge. For a constraint row it's
+ *    the constraint's own badge (carrying `reach`). For a target /
+ *    carrier row it's a back-compat convenience mirror of
+ *    `contributors[0]` — the FIRST constraint covering this instance —
+ *    so the flat `computePairings` map + the legacy single-`#N` chip
+ *    keep working unchanged. New code should read `contributors`.
  *  - `viaInbound`: pair badges where this row is the CARRIER (its
- *    options host nested refs the pair reaches through). Multiple
- *    constraints can land here so this is always a list. Empty when
- *    nothing routes through this row.
+ *    options host nested refs one or more constraints reach their target
+ *    through). Drives the collapsed `↪×N` chip. Empty when nothing
+ *    routes through this row.
+ *  - `contributors` (SP3): EVERY constraint whose reach selector covers
+ *    THIS target-instance row, in per-target registration (`#N`) order.
+ *    The SP3 mark-all model lets multiple constraints cover one instance
+ *    (no exclusive claim), so this is the authoritative per-row list the
+ *    next-task badge layer renders. Empty (default `[]`) on rows no
+ *    constraint covers — including every constraint/source/non-target
+ *    row.
  *
- * Renderer reads both: direct → existing `#N` chip; viaInbound → the
- * collapsed `↪×N` chip with popover. Sender rows that target via a
- * nested ref still go through `direct` with `direct.via` set, so the
- * constraint module itself only renders one badge.
+ * Sender rows that target via a nested ref still go through `direct` with
+ * `direct.via` set, so the constraint module itself only renders one
+ * badge.
  */
 export interface RowPairings {
   direct: PairingBadge | null;
   viaInbound: PairingBadge[];
+  contributors: PairingBadge[];
 }
 
 export function computePairings(modules: ChainModule[]): Map<string, PairingBadge> {
@@ -251,7 +359,7 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
   function ensure(rowKey: string): RowPairings {
     let entry = out.get(rowKey);
     if (!entry) {
-      entry = { direct: null, viaInbound: [] };
+      entry = { direct: null, viaInbound: [], contributors: [] };
       out.set(rowKey, entry);
     }
     return entry;
@@ -293,109 +401,125 @@ export function computePairingsFull(modules: ChainModule[]): Map<string, RowPair
   }
 
   for (const [targetUuid, cns] of constraintsByTarget) {
-    // Each constraint claims the next unclaimed downstream target
-    // slot. Slots = top-level chain modules at index > constraint's
-    // index whose id matches the target uuid. Solo cases (1 constraint
-    // + 1 target) also get badges so the user sees the pairing
-    // sequence — clarity beats minimalism here.
-    const claimedRowKeys = new Set<string>();
-    let badgeNumber = 0;
-    // Color hashed from `senderRowKey + ':' + targetUuid`. Each pair
-    // gets a key that is unique to its (sender, target) combination, so:
-    //   - two constraints targeting the SAME wildcard land on different
-    //     palette buckets (collision rate ~1/8 vs ~certain with the old
-    //     target-only hash),
-    //   - two constraints targeting DIFFERENT wildcards no longer collide
-    //     just because their target uuids happen to hash to the same
-    //     bucket on 8 slots (the screenshot bug — `hair_style` + `style`
-    //     both ending up `c2`),
-    //   - the sender's badge + its matched receiver/carrier badge still
-    //     share a color because both are stamped from the same key in
-    //     the same iteration of this loop.
-    function colorFor(senderRowKey: string): number {
-      return varColorIndex(`${senderRowKey}:${targetUuid}`);
-    }
-    for (const cn of cns) {
-      const cnIdx = modules.findIndex((m) => m.rowKey === cn.rowKey);
-      if (cnIdx < 0) continue;
-      // Single forward scan — first match WINS, regardless of route.
-      // Previous code preferred direct targets over via-nested even when
-      // a via-nested target came earlier in the chain. That was wrong:
-      // the engine fires constraints against the first downstream
-      // instance it encounters at run time (whether the source is a
-      // standalone wildcard instance or appears inside a carrier's
-      // `@{uuid}` ref), so the badge model must match.
-      let claimedTarget: ChainModule | null = null;
-      let viaCarrier: ChainModule | null = null;
-      let viaOptionIds: string[] = [];
-      let viaRouteChain: string[] = [];
-      for (let j = cnIdx + 1; j < modules.length; j++) {
-        const d = modules[j];
-        // Direct match: a downstream wildcard whose id is the target uuid.
-        if (d.type === "wildcard" && d.id === targetUuid && !claimedRowKeys.has(d.rowKey)) {
-          claimedTarget = d;
-          break;
-        }
-        // Nested match: a downstream carrier with an option value that
-        // reaches `@{targetUuid}` directly OR transitively (through that
-        // ref's own options, to any depth). Carriers aren't marked as
-        // claimed (multiple constraints can route through them).
-        const match = carrierOptionIdsFor(d, targetUuid, lookup);
-        if (match.optionIds.length > 0) {
-          viaCarrier = d;
-          viaOptionIds = match.optionIds;
-          // routeChain is non-null whenever optionIds is non-empty.
-          viaRouteChain = match.routeChain ?? [targetUuid];
-          break;
-        }
-      }
-      badgeNumber++;
-      const colorIndex = colorFor(cn.rowKey);
-      if (claimedTarget !== null) {
-        // Direct downstream target — original first-instance path.
-        claimedRowKeys.add(claimedTarget.rowKey);
-        ensure(cn.rowKey).direct = { number: badgeNumber, targetUuid, colorIndex, isOrphan: false };
-        ensure(claimedTarget.rowKey).direct = { number: badgeNumber, targetUuid, colorIndex, isOrphan: false };
-        continue;
-      }
-      if (viaCarrier !== null) {
-        const carrierPayload = viaCarrier.payload as {
-          var_binding?: string;
-          name?: string;
-        };
-        // Priority: var_binding (canonical `$name`) > meta display name
-        // (e.g. "backdrop") > library payload name. UI prefixes with `@`
-        // when rendering; the leading `$` from a var_binding gets
-        // stripped so the popover reads `@backdrop` uniformly.
-        const rawBinding = carrierPayload.var_binding?.trim();
-        const carrierName =
-          (rawBinding ? rawBinding.replace(/^\$+/, "") : "")
-          || viaCarrier.displayName?.trim()
-          || carrierPayload.name?.trim()
-          || undefined;
-        const via: PairingVia = {
-          carrierRowKey: viaCarrier.rowKey,
-          carrierName,
-          optionIds: viaOptionIds,
-          routeChain: viaRouteChain,
-        };
-        // Sender (constraint) row — its primary badge carries `via`
-        // so the renderer knows to flip on the ↪ glyph + popover.
-        ensure(cn.rowKey).direct = {
-          number: badgeNumber, targetUuid, colorIndex, isOrphan: false, via,
-        };
-        // Carrier wildcard — append to viaInbound so the row picks up
-        // the collapsed ↪×N chip. Stacks naturally for multiple
-        // constraints routed through the same carrier.
-        ensure(viaCarrier.rowKey).viaInbound.push({
-          number: badgeNumber, targetUuid, colorIndex, isOrphan: false, via,
-        });
-        continue;
-      }
+    // SP3 mark-all reach. Pre-2026-05 each constraint EXCLUSIVELY claimed
+    // the first downstream target instance (number it, `break`). The
+    // engine moved to a REACH model (`apply_constraints_for_target`):
+    // every constraint whose `target_select` covers a firing target
+    // instance applies — multiple constraints can cover ONE instance, and
+    // one constraint can cover MANY. We mirror that statically:
+    //   1. Assign each constraint a stable `#N` (registration order in
+    //      this target group), color, parsed selector, and chain index.
+    //   2. Walk the chain ONCE in execution order. At each downstream
+    //      target encounter (a direct top-level instance OR a transitive
+    //      carrier), bump every upstream constraint's per-constraint hit
+    //      counter and test coverage; push a contributor badge onto the
+    //      encounter row for each covering constraint (no claim/break).
+    //   3. A constraint is an orphan iff its selector covered ZERO
+    //      encounters. The sender badge carries `reach` + (the first
+    //      covered carrier's) `via`.
+    //
+    // Color hashed from `senderRowKey + ':' + targetUuid` so two
+    // constraints on the SAME target land on distinct palette buckets and
+    // a constraint + the rows it covers share a color (same key, same
+    // pass). Distinct target uuids don't share a `#N` sequence.
+    const colorFor = (senderRowKey: string): number =>
+      varColorIndex(`${senderRowKey}:${targetUuid}`);
 
-      // Orphan — no downstream instance AND no via-nested carrier.
-      // Constraint still gets a slot so the user sees the sequence.
-      ensure(cn.rowKey).direct = { number: badgeNumber, targetUuid, colorIndex, isOrphan: true };
+    interface Sender {
+      cn: ChainModule;
+      number: number;
+      colorIndex: number;
+      reach: TargetSelect;
+      chainIdx: number;
+      hits: number;
+      coveredAny: boolean;
+      firstVia: PairingVia | null;
+    }
+    const senders: Sender[] = [];
+    for (const cn of cns) {
+      const chainIdx = modules.findIndex((m) => m.rowKey === cn.rowKey);
+      if (chainIdx < 0) continue;
+      const rawSel = (cn.payload as { target_select?: unknown }).target_select;
+      // Default `{mode:"all"}` mirrors the engine default for an absent
+      // selector. Trust the validated shape; fall back on anything odd.
+      const reach: TargetSelect =
+        rawSel && typeof rawSel === "object"
+          ? (rawSel as TargetSelect)
+          : { mode: "all" };
+      senders.push({
+        cn,
+        number: senders.length + 1,
+        colorIndex: colorFor(cn.rowKey),
+        reach,
+        chainIdx,
+        hits: 0,
+        coveredAny: false,
+        firstVia: null,
+      });
+    }
+
+    // Single execution-order walk. Each encounter (direct instance or
+    // carrier) is one hit per upstream constraint, exactly like the
+    // engine calls `apply_constraints_for_target` once per firing target.
+    for (let j = 0; j < modules.length; j++) {
+      const d = modules[j];
+      const isDirect = d.type === "wildcard" && d.id === targetUuid;
+      // A direct top-level instance is never also scanned as a carrier;
+      // otherwise probe for a transitive carrier of this target.
+      const match = isDirect ? null : carrierOptionIdsFor(d, targetUuid, lookup);
+      const carrierMatch = match && match.optionIds.length > 0 ? match : null;
+      if (!isDirect && !carrierMatch) continue;
+
+      // Carrier identity for `pick`/`via`; direct identity is the row key
+      // (the static stand-in for the engine's per-instance uid).
+      const via = carrierMatch ? carrierViaFor(d, carrierMatch, targetUuid) : null;
+      const directUid = isDirect ? d.rowKey : null;
+      const carrierUid = carrierMatch ? d.rowKey : null;
+      const optionIds = carrierMatch ? carrierMatch.optionIds : [];
+
+      for (const s of senders) {
+        // Reach is downstream-relative: a constraint only sees target
+        // encounters AFTER its own module ran (engine: it isn't in
+        // `__wp_constraints__` until then).
+        if (s.chainIdx >= j) continue;
+        s.hits += 1;
+        if (!reachCovers(s.reach, s.hits, directUid, carrierUid, optionIds)) continue;
+        s.coveredAny = true;
+        if (via && s.firstVia === null) s.firstVia = via;
+        const badge: PairingBadge = {
+          number: s.number,
+          targetUuid,
+          colorIndex: s.colorIndex,
+          isOrphan: false,
+          ...(via ? { via } : {}),
+        };
+        ensure(d.rowKey).contributors.push(badge);
+        // Carrier rows also feed the collapsed `↪×N` inbound chip.
+        if (via) ensure(d.rowKey).viaInbound.push(badge);
+      }
+    }
+
+    // Finalise each sender's own `direct` badge: number + reach + orphan
+    // state + (first covered carrier's) via.
+    for (const s of senders) {
+      ensure(s.cn.rowKey).direct = {
+        number: s.number,
+        targetUuid,
+        colorIndex: s.colorIndex,
+        isOrphan: !s.coveredAny,
+        reach: s.reach,
+        ...(s.firstVia ? { via: s.firstVia } : {}),
+      };
+    }
+  }
+
+  // Back-compat for the flat `computePairings` map + the legacy single
+  // `#N` chip: a target/carrier row's `direct` mirrors its FIRST
+  // contributor. Sender rows already set `direct` above; never overwrite
+  // them (a constraint row has no contributors of its own).
+  for (const entry of out.values()) {
+    if (entry.direct === null && entry.contributors.length > 0) {
+      entry.direct = entry.contributors[0];
     }
   }
   return out;
